@@ -99,15 +99,6 @@ export const usePlayerStore = defineStore("player", () => {
    */
   const playbackSpeed = useConfig<number>("settings.audio.playbackSpeed", 1.0)
 
-  /**
-   * Source-mix level (0 = original, 1 = clean), persisted globally with a
-   * default of 0 ("plays original"). Applies only to tracks that have both
-   * an `original` and a `clean` audio version. `sourceMixAvailable` gates the
-   * floating-player slide; it's recomputed on every open / queue transition.
-   */
-  const sourceMixLevel = useConfig<number>("settings.audio.sourceMixLevel", 0)
-  const sourceMixAvailable = ref(false)
-
   const SKIP_DELTA_MS = 15000
 
   const open = computed(() => trackId.value !== null)
@@ -226,20 +217,12 @@ export const usePlayerStore = defineStore("player", () => {
     playing.value = isPlaying
     itemId.value = id
 
-    // Recompute source-mix availability for the track we advanced to — the
-    // FloatingPlayer slide is gated on this, and a queue transition can move
-    // between a both-versions track and a single-source one.
-    const mixAudios = cmd.variant.audios
-    sourceMixAvailable.value =
-      !!mixAudios.find((a) => a.kind === "original") && !!mixAudios.find((a) => a.kind === "clean")
-
     // Re-push the user's mix + speed. Native re-applies per item while it
     // owns the session, but after a cold restore (service killed & rebuilt)
     // the engine is back at defaults and JS is the only place that still
-    // knows the user's choices — so re-assert them here. All calls are
+    // knows the user's choices — so re-assert them here. Both calls are
     // idempotent and cheap.
     applyMix()
-    applySourceMix()
     applyPlaybackSpeed()
 
     // Continuous playback should carry an open, player-mirroring transcript
@@ -323,13 +306,6 @@ export const usePlayerStore = defineStore("player", () => {
   }
   watch(playbackSpeed, applyPlaybackSpeed)
 
-  /** Push the source-mix level to the engine. No-op on the native side when
-   *  the current item has no clean source; re-applied after each open(). */
-  function applySourceMix(): void {
-    void app.audioPlayer.setSourceMix(clamp01(sourceMixLevel.value))
-  }
-  watch(sourceMixLevel, applySourceMix)
-
   async function skipBack(): Promise<void> {
     if (!open.value) return
     await app.audioPlayer.seekBy(-SKIP_DELTA_MS)
@@ -408,31 +384,9 @@ export const usePlayerStore = defineStore("player", () => {
     )
     if (stale()) return { ok: true, value: undefined }
 
-    // Source-mix: if this variant has BOTH an original and a clean version,
-    // play the original as the primary (slider default 0 = original) and pass
-    // the clean as the secondary for the live crossfade. Otherwise single
-    // source as before (cmd.audio = the preferred playable pick).
-    const audios = cmd.variant.audios
-    const originalAudio = audios.find((a) => a.kind === "original")
-    const cleanAudio = audios.find((a) => a.kind === "clean")
-    const hasSourceMix = !!originalAudio && !!cleanAudio
-    const primaryAudio = hasSourceMix ? originalAudio! : cmd.audio
-    sourceMixAvailable.value = hasSourceMix
-
-    const downloads = useDownloadStore()
-    const localUrl = await downloads.ensureDownloaded(cmd.trackId, primaryAudio.path)
+    const localUrl = await useDownloadStore().ensureDownloaded(cmd.trackId, cmd.audio.path)
     if (stale()) return { ok: true, value: undefined }
-    const url = localUrl ?? app.storagePublicUrl.get(primaryAudio.path)
-
-    let secondaryUrl: string | undefined
-    if (hasSourceMix && cleanAudio) {
-      // Best-effort local copy; stream from CDN until it lands.
-      const cleanLocal = await downloads.ensureSecondaryDownloaded(cmd.trackId, cleanAudio.path)
-      if (stale()) return { ok: true, value: undefined }
-      secondaryUrl = cleanLocal ?? app.storagePublicUrl.get(cleanAudio.path)
-    }
-    // Sources in priority order: [0] = what plays, [1] = the crossfade source.
-    const audioUrls = secondaryUrl ? [url, secondaryUrl] : [url]
+    const url = localUrl ?? app.storagePublicUrl.get(cmd.audio.path)
 
     // Continuous playback (Pro): hand the whole playlist tail to the native
     // engine so it can auto-advance on its own — including in the
@@ -447,8 +401,8 @@ export const usePlayerStore = defineStore("player", () => {
         const queue = await usePlaylistStore().buildQueueFrom(cmd.itemId, args.preferredLanguage)
         const startIndex = queue.findIndex((q) => q.itemId === cmd.itemId)
         if (queue.length > 0 && startIndex >= 0) {
-          // Use the just-ensured (downloaded) sources for the start item.
-          queue[startIndex] = { ...queue[startIndex], audios: audioUrls }
+          // Use the just-ensured (downloaded) URL for the start item.
+          queue[startIndex] = { ...queue[startIndex], url }
           currentQueue = queue
           queueActive = true
           await app.audioPlayer.setQueue(queue, startIndex, resumeMs)
@@ -460,7 +414,7 @@ export const usePlayerStore = defineStore("player", () => {
         queueActive = false
         await app.audioPlayer.open({
           itemId: cmd.itemId,
-          audios: audioUrls,
+          url,
           title: cmd.title,
           author: cmd.authorName,
         })
@@ -470,7 +424,6 @@ export const usePlayerStore = defineStore("player", () => {
       // playback rate. (Native re-applies on each queue advance too.)
       applyMix()
       applyPlaybackSpeed()
-      applySourceMix()
       // The queue path starts playback at `resumeMs` itself; the
       // single-track path seeks + plays explicitly.
       if (!queueActive) {
@@ -604,8 +557,6 @@ export const usePlayerStore = defineStore("player", () => {
     itemId,
     mixPosition,
     playbackSpeed,
-    sourceMixLevel,
-    sourceMixAvailable,
     open,
     openTrack,
     togglePause,
