@@ -100,7 +100,13 @@ function pickDiscovery(): void {
   previewLectures.value = shuffled(search.rows.value).slice(0, PREVIEW_LECTURES_LIMIT)
 }
 
-watch([collectionGroups, allCollections, search.rows], pickDiscovery, { immediate: true })
+// Depend on the row COUNT, not the rows array: the mapped rows recompute a new
+// array on every download/playback store tick, and watching the array itself
+// re-ran the shuffle dozens of times a second (remounting the cards). The count
+// only changes when results actually load, so the sample stays stable.
+watch([collectionGroups, allCollections, () => search.rows.value.length], pickDiscovery, {
+  immediate: true,
+})
 onIonViewWillEnter(pickDiscovery)
 
 function onSelectCollection(id: string): void {
