@@ -268,6 +268,7 @@ export default {
   proactiveSessionTitleNextShloka: "পরবর্তী শ্লোকের উপর লেকচার",
   proactiveSessionTitleUnfinishedLecture: "অসম্পূর্ণ লেকচার",
   proactiveSessionTitleInactivity: "আপনার সাধনায় ফিরে আসুন",
+  proactiveSessionTitleWeeklyDigest: "আপনার সপ্তাহ",
   proactiveInactivityWelcomeBody:
     "অনেকদিন হয়ে গেল। নতুন লেকচার অপেক্ষা করছে — আপনার লাইব্রেরি খুলুন এবং যেখানে থেমেছিলেন সেখান থেকে শুরু করুন।",
 

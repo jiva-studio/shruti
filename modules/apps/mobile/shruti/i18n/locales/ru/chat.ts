@@ -268,6 +268,7 @@ export default {
   proactiveSessionTitleNextShloka: "Лекция по следующему стиху",
   proactiveSessionTitleUnfinishedLecture: "Незаконченная лекция",
   proactiveSessionTitleInactivity: "Вернись к практике",
+  proactiveSessionTitleWeeklyDigest: "Итоги недели",
 
   // Статичный текст сессии возврата (`inactivity`). Эскалация — на
   // уведомлениях, а сама сессия несёт одно тёплое приветствие, готовое

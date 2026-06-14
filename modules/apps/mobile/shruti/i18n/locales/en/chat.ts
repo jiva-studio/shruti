@@ -268,6 +268,7 @@ export default {
   proactiveSessionTitleNextShloka: "Lecture on the next verse",
   proactiveSessionTitleUnfinishedLecture: "Unfinished lecture",
   proactiveSessionTitleInactivity: "Return to your practice",
+  proactiveSessionTitleWeeklyDigest: "Your week",
 
   // Static body for the `inactivity` re-engagement session. The escalating
   // copy lives on the notifications; the chat session itself carries one

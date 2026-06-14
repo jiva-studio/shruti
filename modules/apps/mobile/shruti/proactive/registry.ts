@@ -64,8 +64,10 @@ const BUNDLED_DEFAULTS: ProactiveRuleConfig[] = [
     mode: "pre_baked",
     prep_window_hours: 12,
     refresh_if_older_than_hours: 6,
+    // No `session_title_template`: the handler emits a localised
+    // `sessionTitleOverride` (a static English template here would leak
+    // into non-English chats as the session header).
     session_strategy: "new_session",
-    session_title_template: "Weekly progress",
     cooldown_hours: 144,
     eligibility: [
       { predicate: "total_listened_seconds_at_least", value: 1800 },

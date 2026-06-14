@@ -271,6 +271,7 @@ export default {
   proactiveSessionTitleNextShloka: "Vortrag zum nächsten Vers",
   proactiveSessionTitleUnfinishedLecture: "Unbeendeter Vortrag",
   proactiveSessionTitleInactivity: "Zurück zu deiner Praxis",
+  proactiveSessionTitleWeeklyDigest: "Deine Woche",
   proactiveInactivityWelcomeBody:
     "Du warst eine Weile weg. Frische Vorträge warten schon — öffne deine Bibliothek und höre dort weiter, wo du aufgehört hast.",
 

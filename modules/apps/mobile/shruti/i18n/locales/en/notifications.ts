@@ -24,6 +24,8 @@ export default {
   chatAnswerReadyBody: "Your answer is ready.",
   // Toast shown when a proactive message appears while the app is in the
   // foreground (its background delivery is a separate scheduled notification).
+  // Title is the fallback toast header for sessions without their own title.
+  proactiveNewMessageTitle: "New message",
   proactiveNewMessageToast: "Sadhu has a new message for you.",
   // Action button on the in-app toast — opens the chat session.
   openButton: "Open",
