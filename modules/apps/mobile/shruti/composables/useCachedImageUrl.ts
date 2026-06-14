@@ -8,20 +8,22 @@ export interface UseCachedImageUrlReturn {
 
 /**
  * Resolve a remote image URL to a locally-cached one via the shared
- * `IRemoteFilesStorage` ("fetch once, then serve from CacheStorage on web /
- * Filesystem on native"). Used for collection covers so they're downloaded
- * a single time and reused across sessions instead of re-fetched from S3 on
- * every render.
+ * `IRemoteFilesStorage`. The file bytes are cached (CacheStorage on web,
+ * Filesystem on native) so they're fetched from S3 once; note that on web
+ * `get()` mints a fresh `blob:` object URL on every call (even a cache hit),
+ * which is why we revoke the previous one.
  *
  * `src` starts `undefined` (caller shows its placeholder), becomes the cached
  * URL on success, and falls back to the raw remote URL if caching fails so the
- * image still appears. Any `blob:` object URL it mints is revoked on
+ * image still appears. A generation token guards against a slow earlier
+ * resolve landing after a newer url change; any `blob:` URL is revoked on
  * url-change / unmount to avoid leaks.
  */
 export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedImageUrlReturn {
   const { filesStorage } = useShruti()
   const src = ref<string | undefined>(undefined)
   let objectUrl: string | undefined
+  let token = 0
 
   function revoke(): void {
     if (objectUrl?.startsWith("blob:")) URL.revokeObjectURL(objectUrl)
@@ -29,17 +31,23 @@ export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedIma
   }
 
   async function load(url: string | undefined): Promise<void> {
+    const current = ++token
     revoke()
     src.value = undefined
     if (!url) return
     try {
       const local = await filesStorage.get(url)
+      if (current !== token) {
+        // A newer url arrived while we were fetching — drop this result.
+        if (local.startsWith("blob:")) URL.revokeObjectURL(local)
+        return
+      }
       objectUrl = local
       src.value = local
     } catch {
       // Caching failed (offline first-load, transient 5xx). Show the remote
       // URL directly rather than a broken/placeholder tile.
-      src.value = url
+      if (current === token) src.value = url
     }
   }
 
