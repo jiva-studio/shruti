@@ -15,7 +15,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "seekBy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMix", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setSourceMix", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setProgressInterval", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "onProgressChanged", returnType: CAPPluginReturnCallback),
@@ -35,10 +34,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private struct QueueEntry {
         let itemId: String
         let url: URL
-        /// Optional denoised "clean" source. When present the item is built
-        /// from an AVMutableComposition of both tracks and blended live via
-        /// the source-mix tap.
-        let secondaryURL: URL?
         let title: String
         let author: String
         /// Known duration in seconds (from JS), used to report a
@@ -93,10 +88,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// callbacks dereference, so a setMix() call hits whatever item
     /// is currently in flight.
     private let stereoMixTap = StereoMixTap()
-
-    /// Source-mix tap (original↔clean). Owns the shared live level updated by
-    /// setSourceMix; attached per source-mode AVPlayerItem composition.
-    private let sourceMixTap = SourceMixTap()
 
     /// AVPlayer.rate has dual meaning: `0` = paused, anything > 0 means
     /// actively playing at that speed. We can't write `player.rate =
@@ -274,8 +265,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Public API: single-track convenience (one play path)
 
     @objc func open(_ call: CAPPluginCall) {
-        let audios = (call.getArray("audios") ?? []).compactMap { $0 as? String }
-        guard let urlString = audios.first, URL(string: urlString) != nil else {
+        guard let urlString = call.getString("url"), URL(string: urlString) != nil else {
             call.reject("Invalid URL provided")
             return
         }
@@ -284,10 +274,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let itemId = call.getString("itemId") ?? ""
 
         // open() is a queue of length 1 — there is ONE native play path.
-        // audios[0] = primary, audios[1] = optional crossfade source.
-        let item = QueueItemSpec(itemId: itemId, url: urlString,
-                                 secondaryUrl: audios.count > 1 ? audios[1] : nil,
-                                 title: title, author: author, duration: nil)
+        let item = QueueItemSpec(itemId: itemId, url: urlString, title: title, author: author, duration: nil)
         replaceQueue(with: [item], startIndex: 0, startPosition: 0)
         call.resolve()
     }
@@ -372,7 +359,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private struct QueueItemSpec {
         let itemId: String
         let url: String
-        let secondaryUrl: String?
         let title: String
         let author: String
         let duration: Double?
@@ -380,17 +366,13 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func parseQueueItem(_ raw: Any) -> QueueItemSpec? {
         guard let dict = raw as? [String: Any] else { return nil }
-        let audios = (dict["audios"] as? [Any])?.compactMap { $0 as? String } ?? []
         guard let itemId = dict["itemId"] as? String,
-              let url = audios.first,
+              let url = dict["url"] as? String,
               !url.isEmpty else { return nil }
         let title = dict["title"] as? String ?? "Unknown Title"
         let author = dict["author"] as? String ?? "Unknown Artist"
         let duration = (dict["duration"] as? NSNumber)?.doubleValue
-        // audios[0] = primary, audios[1] = optional crossfade source.
-        let secondaryUrl = audios.count > 1 ? audios[1] : nil
-        return QueueItemSpec(itemId: itemId, url: url, secondaryUrl: secondaryUrl,
-                             title: title, author: author, duration: duration)
+        return QueueItemSpec(itemId: itemId, url: url, title: title, author: author, duration: duration)
     }
 
     /// Tear down the existing AVQueuePlayer and build a fresh one from
@@ -406,7 +388,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             newEntries.append(QueueEntry(
                 itemId: spec.itemId,
                 url: url,
-                secondaryURL: spec.secondaryUrl.flatMap { URL(string: $0) },
                 title: spec.title,
                 author: spec.author,
                 knownDuration: spec.duration
@@ -461,16 +442,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// time-domain pitch algorithm, wired with a status observer for
     /// failure handling. Records the item↔itemId mapping.
     private func makePlayerItem(for entry: QueueEntry) -> AVPlayerItem {
-        // Source-mode: a clean version exists → play both tracks of one
-        // composition (inherent sample sync) blended by the source-mix tap.
-        if let cleanURL = entry.secondaryURL,
-           let mixItem = makeSourceMixItem(original: entry.url, clean: cleanURL) {
-            mixItem.audioTimePitchAlgorithm = .timeDomain
-            itemIdByItem[ObjectIdentifier(mixItem)] = entry.itemId
-            observeItemStatus(mixItem)
-            return mixItem
-        }
-
         let asset = AVURLAsset(url: entry.url)
         let item = AVPlayerItem(asset: asset)
         // The stereo-mix tap + audioMix are PER AVPlayerItem — attach a
@@ -489,43 +460,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return item
     }
 
-    /// Build a single AVPlayerItem from a composition of the original + clean
-    /// audio (both on one timeline → one clock → sample-synchronized), with a
-    /// per-track gain audioMix for the live source-mix crossfade. Returns nil
-    /// if either asset lacks an audio track (caller falls back to single source).
-    private func makeSourceMixItem(original: URL, clean: URL) -> AVPlayerItem? {
-        let composition = AVMutableComposition()
-        let origAsset = AVURLAsset(url: original)
-        let cleanAsset = AVURLAsset(url: clean)
-        guard
-            let origTrack = origAsset.tracks(withMediaType: .audio).first,
-            let cleanTrack = cleanAsset.tracks(withMediaType: .audio).first,
-            let compOrig = composition.addMutableTrack(
-                withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid),
-            let compClean = composition.addMutableTrack(
-                withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-        else { return nil }
-
-        // Original is the master timeline; clamp clean to it (mp3 re-encode can
-        // shift a few ms — never let clean drive the clock/duration).
-        let duration = origAsset.duration
-        do {
-            try compOrig.insertTimeRange(
-                CMTimeRange(start: .zero, duration: duration), of: origTrack, at: .zero)
-            let cleanDuration = CMTimeMinimum(duration, cleanAsset.duration)
-            try compClean.insertTimeRange(
-                CMTimeRange(start: .zero, duration: cleanDuration), of: cleanTrack, at: .zero)
-        } catch {
-            return nil
-        }
-
-        let item = AVPlayerItem(asset: composition)
-        if let mix = sourceMixTap.makeAudioMix(originalTrack: compOrig, cleanTrack: compClean) {
-            item.audioMix = mix
-        }
-        return item
-    }
-
     /// Append items to the tail of the live queue. Inserts each new
     /// AVPlayerItem after the current last one so AVQueuePlayer keeps
     /// auto-advancing into them.
@@ -536,7 +470,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             newEntries.append(QueueEntry(
                 itemId: spec.itemId,
                 url: url,
-                secondaryURL: spec.secondaryUrl.flatMap { URL(string: $0) },
                 title: spec.title,
                 author: spec.author,
                 knownDuration: spec.duration
@@ -912,14 +845,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let enabled = call.getBool("enabled") ?? false
         let ratio = Float(call.getDouble("ratio") ?? 0.5)
         stereoMixTap.setMix(enabled: enabled, ratio: ratio)
-        call.resolve()
-    }
-
-    @objc func setSourceMix(_ call: CAPPluginCall) {
-        // 0 = original, 1 = clean. Live — the per-track taps read this on the
-        // audio thread. No-op for single-source items (no source-mix taps).
-        let level = Float(call.getDouble("level") ?? 0)
-        sourceMixTap.setLevel(level)
         call.resolve()
     }
 

@@ -1,9 +1,7 @@
 import { onBeforeUnmount, ref, type Ref } from "vue"
 
 export interface UseVerticalCarouselOptions {
-  /** Number of pages, or a getter when the count can change at runtime
-   *  (e.g. an extra slide that appears only for some tracks). */
-  readonly pageCount: number | (() => number)
+  readonly pageCount: number
   /** Index to land on when the consumer mounts. Clamped to pageCount-1. */
   readonly initialPage?: number
   /** Returns the element whose height is the per-page travel distance. */
@@ -48,9 +46,7 @@ const OUT_OF_BOUNDS_RESISTANCE = 0.3 // multiplier for off-axis drag beyond firs
 export function useVerticalCarousel(
   options: UseVerticalCarouselOptions
 ): UseVerticalCarouselReturn {
-  const count = (): number =>
-    typeof options.pageCount === "function" ? options.pageCount() : options.pageCount
-  const initial = clamp(options.initialPage ?? 0, 0, count() - 1)
+  const initial = clamp(options.initialPage ?? 0, 0, options.pageCount - 1)
   const page = ref<number>(initial)
   const dragOffset = ref<number>(0)
   const pointerId = ref<number | null>(null)
@@ -91,7 +87,7 @@ export function useVerticalCarousel(
     // last page.
     let offset = dy
     if (page.value === 0 && dy > 0) offset = dy * OUT_OF_BOUNDS_RESISTANCE
-    if (page.value === count() - 1 && dy < 0) {
+    if (page.value === options.pageCount - 1 && dy < 0) {
       offset = dy * OUT_OF_BOUNDS_RESISTANCE
     }
     dragOffset.value = offset
@@ -104,7 +100,7 @@ export function useVerticalCarousel(
       const h = viewport?.getBoundingClientRect().height ?? 0
       if (h > 0) {
         const ratio = dragOffset.value / h
-        if (ratio < -PAGE_SWITCH_THRESHOLD && page.value < count() - 1) page.value += 1
+        if (ratio < -PAGE_SWITCH_THRESHOLD && page.value < options.pageCount - 1) page.value += 1
         else if (ratio > PAGE_SWITCH_THRESHOLD && page.value > 0) page.value -= 1
       }
       lastGestureWasVertical = true

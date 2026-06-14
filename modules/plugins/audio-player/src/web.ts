@@ -9,7 +9,6 @@ import type {
   QueueTransition,
   SeekByParams,
   SetMixParams,
-  SetSourceMixParams,
   SetPlaybackRateParams,
   SetProgressIntervalParams,
   SetQueueParams,
@@ -71,25 +70,6 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
   private sumGain: GainNode | null = null
   private mixActive = false
 
-  // Source-mix: blend the original recording with its denoised "clean"
-  // version. Both stream through their own <audio> element into a gain node;
-  // the AudioContext sums them at the destination. The clean element is
-  // created lazily and reused for the page lifetime (createMediaElementSource
-  // may run only once per element). Kept sample-aligned by a drift watch on
-  // the primary's `timeupdate`. Mutually exclusive with channel-mix (setMix):
-  // source-mode tracks are mono, channel-mix targets stereo dual-content.
-  private audioSecondary: HTMLAudioElement | null = null
-  private secondarySource: MediaElementAudioSourceNode | null = null
-  private originalGain: GainNode | null = null
-  private cleanGain: GainNode | null = null
-  private sourceMixActive = false
-  /** 0 = original, 1 = clean. Persisted across tracks; applied when a
-   *  source-mode track is loaded. Default 0 (plays original). */
-  private sourceMixLevel = 0
-  /** Max allowed gap (s) between the two heads before we resync the clean
-   *  element to the original. ~1 frame at 24fps; inaudible for speech. */
-  private static readonly DRIFT_TOLERANCE_SEC = 0.08
-
 
   constructor () {
     this.audio.preload = "metadata"
@@ -115,59 +95,6 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
       if (this.queue.length === 0) return
       void this.advance("auto")
     })
-
-    // Keep the clean element locked to the original. Two streaming media
-    // elements have independent playback heads, so they can drift; nudge
-    // the clean one back whenever the gap exceeds the tolerance. Web-only —
-    // native uses single-clock graphs that never drift.
-    this.audio.addEventListener("timeupdate", () => {
-      const sec = this.audioSecondary
-      if (!this.sourceMixActive || !sec) return
-      if (sec.readyState < 1 || this.audio.readyState < 1) return
-      if (Math.abs(sec.currentTime - this.audio.currentTime) >
-          AudioPlayerPluginWeb.DRIFT_TOLERANCE_SEC) {
-        sec.currentTime = this.audio.currentTime
-      }
-    })
-  }
-
-  /** Lazily create the reusable clean-source element + its graph node.
-   *  Idempotent; the element is reused across tracks (only `.src` changes). */
-  private ensureSecondaryElement(): HTMLAudioElement {
-    if (this.audioSecondary) return this.audioSecondary
-    const el = new Audio()
-    el.preload = "metadata"
-    el.crossOrigin = "anonymous"
-    el.preservesPitch = true
-    ;(el as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true
-    ;(el as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true
-    this.audioSecondary = el
-    return el
-  }
-
-  /** Point the clean element at `url` and route both sources through the
-   *  source-mix graph. No-op-safe if the AudioContext can't be created. */
-  private setupSecondary(url: string): void {
-    const sec = this.ensureSecondaryElement()
-    sec.pause()
-    sec.removeAttribute("src")
-    sec.load()
-    sec.src = url
-    sec.load()
-    sec.currentTime = this.audio.currentTime
-    sec.playbackRate = this.audio.playbackRate
-    this.enableSourceMix()
-  }
-
-  /** Stop and detach the clean source, returning the primary to its plain
-   *  (passthrough / channel-mix) routing. Element is kept for reuse. */
-  private teardownSecondary(): void {
-    if (this.audioSecondary) {
-      this.audioSecondary.pause()
-      this.audioSecondary.removeAttribute("src")
-      this.audioSecondary.load()
-    }
-    this.disableSourceMix()
   }
 
   /** Record a transition into the in-memory journal and push it to any
@@ -205,11 +132,9 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     this.pendingSeekSec = positionSec > 0 ? positionSec : null
     this.audio.removeAttribute("src")
     this.audio.load()
-    this.audio.src = item.audios[0]
+    this.audio.src = item.url
     this.audio.load()
     this.currentItemId = item.itemId
-    if (item.audios[1]) this.setupSecondary(item.audios[1])
-    else this.teardownSecondary()
     if (autoplay) await this.play()
   }
 
@@ -262,7 +187,6 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
       this.intervalId = null
     }
     this.audio.pause()
-    this.audioSecondary?.pause()
     this.callback = null
     this.currentItemId = null
     this.pendingSeekSec = null
@@ -280,15 +204,13 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     this.pendingSeekSec = null
     this.audio.removeAttribute("src")
     this.audio.load()
-    this.audio.src = params.audios[0]
+    this.audio.src = params.url
     this.audio.load()
     this.currentItemId = params.itemId
     // Single-track open: no queue, so `ended` won't auto-advance.
     this.queue = []
     this.queueIndex = 0
     this.currentFromSec = 0
-    if (params.audios[1]) this.setupSecondary(params.audios[1])
-    else this.teardownSecondary()
   }
 
   async setQueue(params: SetQueueParams): Promise<void> {
@@ -339,20 +261,14 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     if (this.audioCtx && this.audioCtx.state === "suspended") {
       await this.audioCtx.resume()
     }
-    if (this.sourceMixActive && this.audioSecondary) {
-      this.audioSecondary.currentTime = this.audio.currentTime
-      await Promise.all([this.audio.play(), this.audioSecondary.play()])
-    } else {
-      await this.audio.play()
-    }
+    await this.audio.play();
   }
 
   async togglePause(): Promise<void> {
     if (this.audio.paused) {
-      await this.play()
+      await this.audio.play();
     } else {
-      this.audio.pause()
-      this.audioSecondary?.pause()
+      this.audio.pause();
     }
   }
 
@@ -367,15 +283,6 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     } else {
       this.pendingSeekSec = options.position
     }
-    this.syncSecondaryTime(options.position)
-  }
-
-  /** Mirror a target position onto the clean element (best-effort; the
-   *  drift watch corrects any residual gap once both have metadata). */
-  private syncSecondaryTime(positionSec: number): void {
-    const sec = this.audioSecondary
-    if (!this.sourceMixActive || !sec) return
-    if (sec.readyState >= 1) sec.currentTime = positionSec
   }
 
   async stop(): Promise<void> {
@@ -384,7 +291,6 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     this.audio.removeAttribute("src")
     this.audio.load()
     this.currentItemId = null;
-    this.teardownSecondary()
   }
 
   async seekBy(options: SeekByParams): Promise<void> {
@@ -398,7 +304,6 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     const dur = this.audio.duration
     const upper = Number.isFinite(dur) ? dur : Number.POSITIVE_INFINITY
     this.audio.currentTime = Math.min(upper, Math.max(0, next))
-    this.syncSecondaryTime(this.audio.currentTime)
   }
 
   async setPlaybackRate(params: SetPlaybackRateParams): Promise<void> {
@@ -407,7 +312,6 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     if (rate < 0.25) rate = 0.25
     if (rate > 4) rate = 4
     this.audio.playbackRate = rate
-    if (this.audioSecondary) this.audioSecondary.playbackRate = rate
   }
 
   async setProgressInterval(params: SetProgressIntervalParams): Promise<void> {
@@ -446,10 +350,6 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
    * first time setMix() runs and reused for the lifetime of the page.
    */
   async setMix(params: SetMixParams): Promise<void> {
-    // Channel-mix and source-mix are mutually exclusive (clean is mono).
-    // A source-mode track owns the graph routing — ignore channel-mix then.
-    if (this.sourceMixActive) return
-
     const ratio = clamp01(params.ratio)
     const enabled = params.enabled
 
@@ -496,36 +396,16 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     }
   }
 
-  async setSourceMix(params: SetSourceMixParams): Promise<void> {
-    this.sourceMixLevel = clamp01(params.level)
-    // Live crossfade if a clean source is loaded; otherwise the level is
-    // just remembered and applied when a source-mode track opens.
-    if (this.sourceMixActive) this.applySourceGains(this.sourceMixLevel)
-  }
-
-  /** Create the AudioContext + the primary media-source node and wire the
-   *  passthrough edge (source → destination). Idempotent. Returns null when
-   *  Web Audio is unavailable. The single `createMediaElementSource(this.audio)`
-   *  lives here so both the channel-mix and source-mix graphs share it. */
-  private ensureCtx(): AudioContext | null {
-    if (this.audioCtx && this.mediaSource) return this.audioCtx
+  private ensureGraph(): void {
+    if (this.audioCtx) return
     const Ctor: typeof AudioContext | undefined =
       typeof AudioContext !== "undefined" ? AudioContext :
       // Safari < 14.1 still ships the prefixed name.
       (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (!Ctor) return null
-    const ctx = this.audioCtx ?? new Ctor()
+    if (!Ctor) return
+    const ctx = new Ctor()
     this.audioCtx = ctx
-    if (!this.mediaSource) {
-      this.mediaSource = ctx.createMediaElementSource(this.audio)
-      this.mediaSource.connect(ctx.destination) // passthrough until a mode flips it
-    }
-    return ctx
-  }
-
-  private ensureGraph(): void {
-    const ctx = this.ensureCtx()
-    if (!ctx || !this.mediaSource || this.splitter) return
+    this.mediaSource = ctx.createMediaElementSource(this.audio)
     this.splitter = ctx.createChannelSplitter(2)
     this.leftGain = ctx.createGain()
     this.rightGain = ctx.createGain()
@@ -544,59 +424,8 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     this.rightGain.connect(this.sumGain)
     // sumGain is *not* connected to destination yet; the passthrough
     // edge is what's audible. setMix(enabled:true) flips this.
-    this.mixActive = false
-  }
-
-  /** Route both sources through the source-mix graph:
-   *    this.audio       → originalGain ┐
-   *    this.audioSecondary → cleanGain ┴→ destination   (ctx sums them)
-   *  Replaces the primary's passthrough edge while active. */
-  private enableSourceMix(): void {
-    const ctx = this.ensureCtx()
-    if (!ctx || !this.mediaSource || !this.audioSecondary) return
-    if (!this.originalGain) this.originalGain = ctx.createGain()
-    if (!this.cleanGain) this.cleanGain = ctx.createGain()
-    if (!this.secondarySource) {
-      this.secondarySource = ctx.createMediaElementSource(this.audioSecondary)
-      this.secondarySource.connect(this.cleanGain)
-    }
-    if (this.sourceMixActive) {
-      this.applySourceGains(this.sourceMixLevel, 0)
-      return
-    }
-    // Tear down whatever the primary was routed through.
-    try { this.mediaSource.disconnect(ctx.destination) } catch { /* not connected */ }
-    if (this.mixActive && this.sumGain) {
-      try { this.sumGain.disconnect(ctx.destination) } catch { /* not connected */ }
-      this.mixActive = false
-    }
-    this.mediaSource.connect(this.originalGain)
-    this.originalGain.connect(ctx.destination)
-    this.cleanGain.connect(ctx.destination)
-    this.applySourceGains(this.sourceMixLevel, 0)
-    this.sourceMixActive = true
-  }
-
-  /** Restore the primary to its plain passthrough routing. */
-  private disableSourceMix(): void {
-    this.sourceMixActive = false
-    const ctx = this.audioCtx
-    if (!ctx || !this.mediaSource) return
-    try { this.originalGain?.disconnect(ctx.destination) } catch { /* */ }
-    try { this.cleanGain?.disconnect(ctx.destination) } catch { /* */ }
-    try { this.mediaSource.disconnect(this.originalGain as AudioNode) } catch { /* */ }
     this.mediaSource.connect(ctx.destination)
-  }
-
-  /** Set the crossfade gains. original = 1−level, clean = level. The two
-   *  sources are near-identical (clean is the denoised original), so they're
-   *  highly correlated → linear gains sum to ~constant loudness (no sqrt).
-   *  Ramped over ~`tc`·3 s to avoid zipper noise on a dragging slider. */
-  private applySourceGains(level: number, tc = 0.015): void {
-    if (!this.audioCtx || !this.originalGain || !this.cleanGain) return
-    const now = this.audioCtx.currentTime
-    this.originalGain.gain.setTargetAtTime(1 - level, now, tc)
-    this.cleanGain.gain.setTargetAtTime(level, now, tc)
+    this.mixActive = false
   }
 
   onProgressChanged(
