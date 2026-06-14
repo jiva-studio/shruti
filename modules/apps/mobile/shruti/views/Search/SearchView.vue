@@ -3,7 +3,11 @@
     <div v-for="g in topGroups" :key="g.id" class="collection-group">
       <IonListHeader>
         <IonLabel>{{ g.name }}</IonLabel>
-        <IonButton :aria-label="$t('search.collections.seeAll')" @click="openGroup(g.id)">
+        <IonButton
+          class="no-ripple"
+          :aria-label="$t('search.collections.seeAll')"
+          @click="openGroup(g.id)"
+        >
           <IconChevronRight :size="20" />
         </IonButton>
       </IonListHeader>
@@ -13,7 +17,11 @@
     <template v-if="otherCollections.length">
       <IonListHeader>
         <IonLabel>{{ $t("search.collections.others") }}</IonLabel>
-        <IonButton :aria-label="$t('search.collections.seeAll')" @click="openAllCollections">
+        <IonButton
+          class="no-ripple"
+          :aria-label="$t('search.collections.seeAll')"
+          @click="openAllCollections"
+        >
           <IconChevronRight :size="20" />
         </IonButton>
       </IonListHeader>
@@ -29,7 +37,11 @@
 
     <IonListHeader>
       <IonLabel>{{ $t("search.popularLecturesTitle") }}</IonLabel>
-      <IonButton :aria-label="$t('search.collections.seeAll')" @click="openTracks">
+      <IonButton
+        class="no-ripple"
+        :aria-label="$t('search.collections.seeAll')"
+        @click="openTracks"
+      >
         <IconChevronRight :size="20" />
       </IonButton>
     </IonListHeader>
