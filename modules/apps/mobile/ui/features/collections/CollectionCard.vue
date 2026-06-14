@@ -2,15 +2,17 @@
   <button
     type="button"
     class="collection-card"
-    :class="{ 'is-placeholder': !coverUrl }"
+    :class="{ 'is-placeholder': !loaded, 'is-loaded': loaded }"
     @click="emit('click')"
   >
-    <CachedImage :url="coverUrl" :alt="name" />
+    <CachedImage :url="coverUrl" :alt="name" @loaded="loaded = true" />
+    <span class="scrim" aria-hidden="true" />
     <span class="name">{{ name }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue"
 import { CachedImage } from "@ui/primitives/index.js"
 
 /**
@@ -21,6 +23,11 @@ import { CachedImage } from "@ui/primitives/index.js"
  *
  * The cover (a `CachedImage` fill layer) is out of flow over a fixed-size
  * tile, so the name stays pinned to the bottom and never jumps while it loads.
+ *
+ * Until the cover has decoded we keep the solid placeholder tile and hide the
+ * bottom scrim — the scrim only makes sense over an actual image, and on the
+ * plain tile it would read as a stray dark band. Both reveal together once the
+ * `CachedImage` reports `loaded`.
  */
 defineProps<{
   name: string
@@ -29,6 +36,8 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{ (e: "click"): void }>()
+
+const loaded = ref(false)
 </script>
 
 <style scoped>
@@ -55,13 +64,32 @@ const emit = defineEmits<{ (e: "click"): void }>()
   transform: scale(0.97);
 }
 
-/* No cover yet → warm saffron→coffee tile in the cream palette. */
+/* Cover not decoded yet (or none published) → flat warm coffee tile, so the
+   card never flashes a broken/empty image. Fixed tone (not a theme var, which
+   inverts) so the overlaid cream name stays legible in both themes, and shared
+   verbatim with CollectionListItem's thumb so the two cards match. */
 .collection-card.is-placeholder {
-  background: linear-gradient(
-    135deg,
-    rgba(var(--ion-color-primary-rgb), 0.55),
-    rgba(var(--ion-color-tertiary-rgb), 0.7)
-  );
+  background: #6f4e37;
+}
+
+/* Readability scrim behind the name — only over an actual cover. Fades in with
+   the image (matching CachedImage's 200ms fade), hidden over the placeholder. */
+.scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 60%;
+  /* Warm espresso, not stark black. Fixed tones (not theme vars, which invert)
+     so the overlay stays legible over any cover in both themes. */
+  background: linear-gradient(to top, rgba(61, 43, 31, 0.72), rgba(61, 43, 31, 0));
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+
+.collection-card.is-loaded .scrim {
+  opacity: 1;
 }
 
 .name {
@@ -74,11 +102,8 @@ const emit = defineEmits<{ (e: "click"): void }>()
   font-size: 13px;
   line-height: 1.25;
   font-weight: 600;
-  /* Warm cream text on a warm espresso scrim — matches the palette instead of
-     stark white-on-black. Fixed tones (not theme vars, which invert) so the
-     overlay stays legible over any cover in both themes. */
+  /* Warm cream text — legible over both the scrim and the placeholder tile. */
   color: #f4ebdd;
-  background: linear-gradient(to top, rgba(61, 43, 31, 0.72), rgba(61, 43, 31, 0));
   /* Two-line clamp so long names don't overrun the tile. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
