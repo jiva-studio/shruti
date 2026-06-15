@@ -8,6 +8,7 @@ import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
+import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import router from "@shruti/router/index.js"
@@ -79,6 +80,7 @@ export function useTranscriptDialogController(
   const app = useShruti()
   const transcriptStore = useTranscriptStore()
   const player = usePlayerStore()
+  const playlist = usePlaylistStore()
   const dictionaries = useDictionariesStore()
   const notesStore = useNotesStore()
   const chatStore = useChatStore()
@@ -350,11 +352,17 @@ export function useTranscriptDialogController(
     }
     const track = hydration.track.value
     if (!track) return
-    await player.openTrack({
+    // Preview mode: load this track and start at the chapter. Pass the
+    // playlist item id (resume/queue persistence) and the author entity
+    // (system-player label), mirroring how the player is opened elsewhere.
+    const result = await player.openTrack({
       track,
       preferredLanguage: hydration.activeLanguages.value[0],
+      author: hydration.authorEntity.value,
+      itemId: playlist.getEntryByTrackId(track.id)?.item.id,
       resumeFromMs: ms,
     })
+    if (!result.ok) loader.error.value = `Could not start playback: ${result.error}`
   }
 
   // Selection lifecycle. The two events are mutually exclusive — opening
