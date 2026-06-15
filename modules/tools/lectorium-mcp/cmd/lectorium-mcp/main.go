@@ -36,6 +36,7 @@ import (
 	librarymedia "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/media"
 	librarypublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/publish"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/normalize"
+	outlineuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/outline"
 	reviewuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/review"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
@@ -65,6 +66,7 @@ import (
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/canonical"
 	openaicompatmeta "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/openaicompat"
+	openaicompatoutline "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/outline/openaicompat"
 	reviewreg "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
 	openaicompatreview "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review/openaicompat"
 	throttledreview "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review/throttled"
@@ -81,6 +83,7 @@ import (
 	alignpdfport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
 	glossaryport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/glossary"
+	outlineport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
 	s3port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/sentencesplit"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/worker"
@@ -338,6 +341,23 @@ func main() {
 		log.Fatalf("title extractor: %v", err)
 	}
 
+	// Outline generator (track.transcript.outline / pipeline.run op=outline) —
+	// Gemini via OpenRouter; disabled (nil) when cfg.Outline.APIKey is empty.
+	var outlineGen outlineport.Generator
+	if cfg.Outline.APIKey != "" {
+		g, err := openaicompatoutline.New(openaicompatoutline.Config{
+			Endpoint:  cfg.Outline.Endpoint,
+			APIKey:    cfg.Outline.APIKey,
+			Model:     cfg.Outline.Model,
+			MaxTokens: cfg.Outline.MaxTokens,
+			Reasoning: cfg.Outline.Reasoning,
+		})
+		if err != nil {
+			log.Fatalf("outline generator: %v", err)
+		}
+		outlineGen = g
+	}
+
 	// FuzzyIndex prefilters dict candidates for the LLM resolver via
 	// trigram-overlap matching against the live catalog. Replaces the
 	// old dict_resolution_cache (which persistently mapped query → id
@@ -492,6 +512,11 @@ func main() {
 			Transcribers: transcribeRegistry,
 		},
 		AlignPDF: alignPDFUC,
+		Outline: outlineuc.UseCase{
+			Transcripts: transcriptStore,
+			LLM:         outlineGen,
+			Catalog:     sqlitecatalog.NewLazy(currentDBPath),
+		},
 		RefreshTitle: titleuc.UseCase{
 			Registry:    registry,
 			Transcripts: transcriptStore,

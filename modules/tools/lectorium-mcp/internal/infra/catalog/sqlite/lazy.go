@@ -190,6 +190,17 @@ func (l *Lazy) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.Vari
 	}
 	return markModified(l.Path)
 }
+func (l *Lazy) SetVariantOutline(ctx context.Context, trackID, language, outline, description string) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.SetVariantOutline(ctx, trackID, language, outline, description); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
 func (l *Lazy) DeleteTrackVariant(ctx context.Context, trackID, language string) error {
 	r, err := l.open(ctx)
 	if err != nil {
