@@ -36,8 +36,6 @@ from lectorium_chat.domain import UserContext
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 from lectorium_chat.domain.ports.embedder import EmbedderPort
-from lectorium_chat.domain.ports.outline_cache import OutlineCache
-from lectorium_chat.domain.ports.transcript_storage import TranscriptStorage
 
 # Side-effect imports — each module calls `register_tool(...)` at the
 # bottom. Imports stay explicit so a missing one is a static error
@@ -106,8 +104,6 @@ def bind_repositories(
     *,
     chunk_repo: ChunkRepository,
     catalog_repo: CatalogRepository,
-    transcript_storage: TranscriptStorage,
-    outline_cache: OutlineCache,
     embedder: EmbedderPort,
 ) -> None:
     """Inject infrastructure adapters into the registered tool callables.
@@ -144,11 +140,7 @@ def bind_repositories(
         "source_resolve":        {"catalog_repo": catalog_repo},
         "location_resolve":      {"catalog_repo": catalog_repo},
         "tag_resolve":           {"catalog_repo": catalog_repo},
-        "track_outline_get":     {
-            "catalog_repo": catalog_repo,
-            "transcript_storage": transcript_storage,
-            "outline_cache": outline_cache,
-        },
+        "track_outline_get":     {"catalog_repo": catalog_repo},
         "track_pdf_generate":    {"catalog_repo": catalog_repo},
     }
     for name, kwargs in bindings.items():

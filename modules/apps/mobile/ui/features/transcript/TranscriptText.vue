@@ -7,30 +7,36 @@
     @selected="onSelected"
     @pick-start="emit('pickStart')"
   >
-    <p
-      v-for="(group, groupIdx) in groups"
-      :key="groupIdx"
-      :class="{ prompter: true, paragraph: isActiveGroup(group) }"
-    >
-      <Timestamp
-        v-if="group.blocks[0]?.block.start && group.blocks[0].block.type !== 'verse:text'"
-        :start="group.blocks[0]?.block.start"
-        :duration="duration"
-        :show-remaining="enableActiveProminence !== false"
-      />
-      <TranscriptBlockRenderer
-        v-for="(block, blockIdx) in group.blocks"
-        :key="blockIdx"
-        :block="block"
-        :position="position"
-        :display-speaker-icon="displaySpeakerIcons"
-        :should-highlight-current="shouldHighlightCurrentSentence"
-        :is-first-in-group="blockIdx === 0"
-        :selection-range="selectionRange"
-        @seek="(pos) => emit('seek', pos)"
-        @note-tapped="(payload) => emit('noteTapped', payload)"
-      />
-    </p>
+    <template v-for="(group, groupIdx) in groups" :key="groupIdx">
+      <h2
+        v-if="group.heading"
+        class="chapter-heading"
+        :data-heading-start="group.headingStartMs"
+        @click="onHeadingTap(group.headingStartMs)"
+      >
+        {{ group.heading }}
+      </h2>
+      <p :class="{ prompter: true, paragraph: isActiveGroup(group) }">
+        <Timestamp
+          v-if="group.blocks[0]?.block.start && group.blocks[0].block.type !== 'verse:text'"
+          :start="group.blocks[0]?.block.start"
+          :duration="duration"
+          :show-remaining="enableActiveProminence !== false"
+        />
+        <TranscriptBlockRenderer
+          v-for="(block, blockIdx) in group.blocks"
+          :key="blockIdx"
+          :block="block"
+          :position="position"
+          :display-speaker-icon="displaySpeakerIcons"
+          :should-highlight-current="shouldHighlightCurrentSentence"
+          :is-first-in-group="blockIdx === 0"
+          :selection-range="selectionRange"
+          @seek="(pos) => emit('seek', pos)"
+          @note-tapped="(payload) => emit('noteTapped', payload)"
+        />
+      </p>
+    </template>
   </TextSelector>
 </template>
 
@@ -63,6 +69,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   seek: [position: number]
+  /** An inline chapter heading was tapped — start playback there + scroll. */
+  chapterSeek: [startMs: number]
   textSelected: [event: TextSelectedEvent]
   /** Re-emitted from TranscriptBlockRenderer when a highlighted span is tapped. */
   noteTapped: [event: NoteTappedEvent]
@@ -76,6 +84,12 @@ const { selectionRange, applySelectionRange, clearSelection, buildSelectedPayloa
     groups,
     position,
   })
+
+// Inline chapter heading tapped — distinct from a block seek: the dialog
+// turns this into seek + play + scroll-to-heading.
+function onHeadingTap(startMs: number | undefined): void {
+  if (startMs !== undefined) emit("chapterSeek", startMs)
+}
 
 function onSelecting(start: number, end: number): void {
   applySelectionRange(start, end)
@@ -101,6 +115,16 @@ defineExpose({ clearSelection })
   text-justify: inter-word;
   hyphens: auto;
   -moz-hyphens: auto;
+}
+
+.chapter-heading {
+  text-align: center;
+  margin: 1.6em 0 0.2em;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--lectorium-immersive-text, #fff);
+  cursor: pointer;
 }
 
 span {

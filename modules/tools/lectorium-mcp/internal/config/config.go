@@ -25,6 +25,7 @@ type Config struct {
 	Review     Review     `yaml:"review"`
 	Resolver   Resolver   `yaml:"resolver"`
 	Metadata   Metadata   `yaml:"metadata"`
+	Outline    Outline    `yaml:"outline"`
 	Images     Images     `yaml:"images"`
 }
 
@@ -222,6 +223,18 @@ type Metadata struct {
 	Model      string `yaml:"model"`
 	MaxTokens  int    `yaml:"max_tokens"`
 	PromptPath string `yaml:"prompt_path"`
+}
+
+// Outline configures lecture outline + description generation via an
+// OpenAI-compatible model (Gemini through OpenRouter). When APIKey is empty the
+// feature is disabled (track.transcript.outline / pipeline.run op=outline
+// return a clear error).
+type Outline struct {
+	Endpoint  string `yaml:"endpoint"`
+	APIKey    string `yaml:"api_key"`
+	Model     string `yaml:"model"`
+	MaxTokens int    `yaml:"max_tokens"`
+	Reasoning string `yaml:"reasoning,omitempty"`
 }
 
 // ProviderOptions describes one OpenAI-compatible review provider entry.

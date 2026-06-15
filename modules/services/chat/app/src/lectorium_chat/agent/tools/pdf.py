@@ -14,6 +14,7 @@ model as audio cuts: the chat turn doesn't wait on PDF generation.
 from __future__ import annotations
 
 import asyncio
+import json
 import secrets
 from typing import Any, Callable
 
@@ -61,13 +62,44 @@ async def _resolve_one(
     track = await catalog_repo.get_track(track_id, lang=effective_lang)
     if track is None:
         return {"track_id": track_id, "error": "track_not_found"}
-    return _wire(track, effective_lang, transcript_path)
+    outline_raw, _ = await catalog_repo.get_outline(track_id, effective_lang)
+    return _wire(track, effective_lang, transcript_path, _outline_for_wire(outline_raw))
 
 
-def _wire(track: Track, lang: str, transcript_key: str) -> dict[str, Any]:
+def _outline_for_wire(raw: str | None) -> list[dict[str, Any]]:
+    """Parse the catalog outline JSON ([{title,start,end}] ms) into the wire
+    list share-transcript renders as the PDF table of contents. [] on
+    absent/malformed (the PDF then renders without a TOC)."""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for e in parsed:
+        if not isinstance(e, dict):
+            continue
+        title = (e.get("title") or "").strip()
+        start = e.get("start")
+        if not title or not isinstance(start, (int, float)):
+            continue
+        item: dict[str, Any] = {"title": title, "start": int(start)}
+        end = e.get("end")
+        if isinstance(end, (int, float)):
+            item["end"] = int(end)
+        out.append(item)
+    return out
+
+
+def _wire(
+    track: Track, lang: str, transcript_key: str, outline: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Per-track share-card row. Carries everything share-transcript needs to
-    render (cover metadata + the transcript S3 key) — no pre-rendered URL;
-    the client triggers the render on tap."""
+    render (cover metadata + the transcript S3 key + the outline TOC) — no
+    pre-rendered URL; the client triggers the render on tap."""
     return {
         "track_id": track.id,
         "lang": lang,
@@ -86,6 +118,7 @@ def _wire(track: Track, lang: str, transcript_key: str) -> dict[str, Any]:
         ],
         "tags": list(track.tag_names),
         "transcript_key": transcript_key,
+        "outline": outline,
     }
 
 

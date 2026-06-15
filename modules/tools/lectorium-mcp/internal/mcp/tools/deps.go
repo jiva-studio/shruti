@@ -10,6 +10,7 @@ import (
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/extractmeta"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/ingest"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/normalize"
+	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/outline"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/review"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
@@ -36,6 +37,7 @@ type Deps struct {
 	Review              review.UseCase
 	AlignPDF            alignpdf.UseCase
 	RefreshTitle        title.UseCase
+	Outline             outline.UseCase
 	Commit              commit.UseCase
 	SetTrackMetadata    commit.SetTrackMetadataUseCase
 	AudioTag            audiotag.UseCase

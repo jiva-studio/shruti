@@ -51,14 +51,18 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO track_variants (track_id, language, title,
-			transcript_path, transcript_kind, sort_reference)
-		VALUES (?, ?, ?, ?, ?, ?)
+			transcript_path, transcript_kind, sort_reference, outline, description)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(track_id, language) DO UPDATE SET
 			title           = excluded.title,
 			transcript_path = excluded.transcript_path,
 			transcript_kind = excluded.transcript_kind,
-			sort_reference  = excluded.sort_reference`,
-		v.TrackID, v.Language, v.Title, v.TranscriptPath, v.TranscriptKind, v.SortReference)
+			sort_reference  = excluded.sort_reference,
+			outline         = COALESCE(excluded.outline, outline),
+			description     = COALESCE(excluded.description, description)`,
+		v.TrackID, v.Language, v.Title, v.TranscriptPath, v.TranscriptKind, v.SortReference,
+		sql.NullString{String: v.Outline, Valid: v.Outline != ""},
+		sql.NullString{String: v.Description, Valid: v.Description != ""})
 	if err != nil {
 		return fmt.Errorf("upsert track_variants: %w", err)
 	}

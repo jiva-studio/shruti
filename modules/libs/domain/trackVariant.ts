@@ -24,6 +24,10 @@ export interface TrackVariant {
    */
   readonly audio: TrackAudio | null
   readonly transcript: TrackTranscriptRef | null
+  /** Chapter outline (table of contents), or null when not generated. */
+  readonly outline: readonly TrackOutlineChapter[] | null
+  /** Short lecture description / overview, or null when not generated. */
+  readonly description: string | null
 }
 
 export interface TrackAudio {
@@ -49,4 +53,13 @@ export interface TrackTranscriptRef {
   /** Full path from the bucket root to the JSON transcript. */
   readonly path: string
   readonly kind: TrackVariantKind
+}
+
+/** One outline chapter: a heading spanning [startMs, endMs). */
+export interface TrackOutlineChapter {
+  readonly title: string
+  /** Chapter start in milliseconds. */
+  readonly startMs: number
+  /** Chapter end in milliseconds (next chapter's start; last = duration). */
+  readonly endMs: number
 }

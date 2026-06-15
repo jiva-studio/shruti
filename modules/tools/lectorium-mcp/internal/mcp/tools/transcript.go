@@ -162,6 +162,66 @@ func RegisterTranscriptReview(s *server.MCPServer, deps Deps) {
 	})
 }
 
+func RegisterTranscriptOutline(s *server.MCPServer, deps Deps) {
+	const kind = "track.transcript.outline"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription(
+			"Generate a lecture outline (coarse chapter headings with start+end "+
+				"timecodes) and a short description from the reviewed transcript, and "+
+				"write both onto the committed catalog variant (track_variants.outline / "+
+				".description). The whole transcript goes to the LLM in one pass. "+
+				"Async: returns a run_id; poll via runs.status / runs.wait. For BATCH use "+
+				"pipeline.run op=outline selector=…."),
+		mcp.WithString("track_id", mcp.Required()),
+		mcp.WithString("language", mcp.Required()),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if deps.Runner == nil {
+			return envelope.Err(kind, envelope.CodeInternal, "runner not initialized", nil), nil
+		}
+		if deps.Outline.LLM == nil {
+			return envelope.Err(kind, envelope.CodeDependencyFailed, "outline generation not configured (set config outline.api_key + outline.model)", nil), nil
+		}
+		tid, err := req.RequireString("track_id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		id, err := track.NewId(tid)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		lang, err := req.RequireString("language")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+			Kind:        run.KindTranscriptOutline,
+			Cancellable: true,
+			Init: run.Run{
+				Targets:  []string{string(id)},
+				Progress: run.Progress{FilesTotal: 1},
+			},
+			WorkFn: func(workCtx context.Context, report runner.ProgressFn) (json.RawMessage, error) {
+				res, err := deps.Outline.Run(workCtx, id, lang)
+				if err != nil {
+					return nil, err
+				}
+				report(run.Progress{FilesTotal: 1, FilesDone: 1})
+				return json.Marshal(res)
+			},
+		})
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+		}
+		return envelope.Run(kind, runDispatch{
+			Id:            runId,
+			Kind:          string(run.KindTranscriptOutline),
+			State:         string(run.StateQueued),
+			AcceptedCount: 1,
+		}), nil
+	})
+}
+
 // parseModelsCSV splits a comma-separated list of model aliases, trimming
 // whitespace and dropping empties. Empty input yields nil.
 func parseModelsCSV(s string) []string {
