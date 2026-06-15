@@ -48,6 +48,7 @@ import (
 	adminconfigrt "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/adminconfig/runtime"
 	pythonalign "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/alignpdf/python"
 	openaicompatattribtranslate "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/attributiontranslate/openaicompat"
+	fsartifact "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
 	fsaudio "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/audiostore/fs"
 	resolverchain "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/chain"
 	exactresolver "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/exact"
@@ -66,6 +67,7 @@ import (
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/metadata/canonical"
 	openaicompatmeta "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/metadata/openaicompat"
+	fsoutline "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/outline/fs"
 	openaicompatoutline "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/outline/openaicompat"
 	reviewreg "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/review"
 	openaicompatreview "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/review/openaicompat"
@@ -163,7 +165,50 @@ func main() {
 		Fallback: llmExtractor,
 	}
 
-	transcriptStore := fstranscript.New(cfg.Out)
+	// S3 targets for publish + immediate artifact upload. AWS is required
+	// (read+write); Yandex is mirror. Built up front so artifact stores (which
+	// write+upload private artifacts as they're produced) share the same
+	// uploaders as the publish path.
+	var publishTargets []s3port.Uploader
+	if cfg.S3.AWS.Bucket != "" {
+		aws, err := awss3.New(ctx, awss3.Target{
+			Name:            "aws",
+			Bucket:          cfg.S3.AWS.Bucket,
+			Region:          cfg.S3.AWS.Region,
+			Endpoint:        cfg.S3.AWS.Endpoint,
+			AccessKeyID:     cfg.S3.AWS.AccessKeyID,
+			SecretAccessKey: cfg.S3.AWS.SecretAccessKey,
+			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[s3:aws] init failed (catalog_publish will error): %v\n", err)
+		} else {
+			publishTargets = append(publishTargets, aws)
+		}
+	}
+	if cfg.S3.Yandex.Bucket != "" {
+		ya, err := awss3.New(ctx, awss3.Target{
+			Name:            "yandex",
+			Bucket:          cfg.S3.Yandex.Bucket,
+			Region:          cfg.S3.Yandex.Region,
+			Endpoint:        cfg.S3.Yandex.Endpoint,
+			AccessKeyID:     cfg.S3.Yandex.AccessKeyID,
+			SecretAccessKey: cfg.S3.Yandex.SecretAccessKey,
+			ForcePathStyle:  cfg.S3.Yandex.ForcePathStyle,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[s3:yandex] init failed: %v\n", err)
+		} else {
+			publishTargets = append(publishTargets, ya)
+		}
+	}
+
+	// One artifact writer for all private per-track textual artifacts: writes
+	// the lake copy AND uploads to the S3 targets above under the artifacts/
+	// prefix, in one call. Lake-only when no bucket is configured.
+	artifactWriter := fsartifact.New(cfg.Out, publishTargets...)
+
+	transcriptStore := fstranscript.New(cfg.Out, artifactWriter)
 
 	// trackSelector resolves track.Selector against the same SQLite handle
 	// the registry uses, so reads land on the same connection pool and
@@ -504,6 +549,7 @@ func main() {
 			OutDir:          cfg.Out,
 			InDir:           cfg.In,
 			DefaultLanguage: cfg.DefaultLanguage,
+			Artifacts:       artifactWriter,
 		},
 		Transcribe: transcribe.UseCase{
 			Registry:     registry,
@@ -516,6 +562,7 @@ func main() {
 			Transcripts: transcriptStore,
 			LLM:         outlineGen,
 			Catalog:     sqlitecatalog.NewLazy(currentDBPath),
+			Granular:    fsoutline.New(artifactWriter),
 		},
 		RefreshTitle: titleuc.UseCase{
 			Registry:    registry,
@@ -619,40 +666,6 @@ func main() {
 	pool := worker.New(deps.Pipeline, *workers, 0)
 	deps.Pool = pool
 
-	// S3 targets for publish. AWS is required (read+write); Yandex is mirror.
-	var publishTargets []s3port.Uploader
-	if cfg.S3.AWS.Bucket != "" {
-		aws, err := awss3.New(ctx, awss3.Target{
-			Name:            "aws",
-			Bucket:          cfg.S3.AWS.Bucket,
-			Region:          cfg.S3.AWS.Region,
-			Endpoint:        cfg.S3.AWS.Endpoint,
-			AccessKeyID:     cfg.S3.AWS.AccessKeyID,
-			SecretAccessKey: cfg.S3.AWS.SecretAccessKey,
-			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:aws] init failed (catalog_publish will error): %v\n", err)
-		} else {
-			publishTargets = append(publishTargets, aws)
-		}
-	}
-	if cfg.S3.Yandex.Bucket != "" {
-		ya, err := awss3.New(ctx, awss3.Target{
-			Name:            "yandex",
-			Bucket:          cfg.S3.Yandex.Bucket,
-			Region:          cfg.S3.Yandex.Region,
-			Endpoint:        cfg.S3.Yandex.Endpoint,
-			AccessKeyID:     cfg.S3.Yandex.AccessKeyID,
-			SecretAccessKey: cfg.S3.Yandex.SecretAccessKey,
-			ForcePathStyle:  cfg.S3.Yandex.ForcePathStyle,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:yandex] init failed: %v\n", err)
-		} else {
-			publishTargets = append(publishTargets, ya)
-		}
-	}
 	deps.Publish = catalogpublish.UseCase{
 		OutDir:          cfg.Out,
 		SupportedScheme: catalog.SupportedDBScheme,
