@@ -1,13 +1,13 @@
 <template>
   <IonModal :is-open="open" class="track-sheet" @did-dismiss="onDismiss">
+    <IonButton class="close-button" fill="clear" :aria-label="t('app.close')" @click="onDismiss">
+      <IconX slot="icon-only" :size="16" />
+    </IonButton>
     <div class="sheet-header">
       <div class="sheet-heading">
         <h2 class="sheet-title">{{ title }}</h2>
         <p v-if="author" class="author">{{ author }}</p>
       </div>
-      <IonButton class="close-button" fill="clear" :aria-label="t('app.close')" @click="onDismiss">
-        <IconX slot="icon-only" :size="16" />
-      </IonButton>
     </div>
     <IonContent>
       <div class="sheet-body">
@@ -27,10 +27,11 @@
     <IonFooter class="ion-no-border">
       <div class="sheet-actions">
         <IonButton fill="clear" class="act share-btn" @click="onShare">
+          <IconShare slot="start" :size="18" />
           {{ t("search.actions.share") }}
           <span v-if="!isSubscribed" class="pro">PRO</span>
         </IonButton>
-        <IonButton class="act" @click="onAddToPlaylist">
+        <IonButton class="act add-btn" @click="onAddToPlaylist">
           <IconPlaylistAdd slot="start" :size="18" />
           {{ t("search.actions.addToPlaylist") }}
         </IonButton>
@@ -43,7 +44,7 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
-import { IconHash, IconPlaylistAdd, IconX } from "@tabler/icons-vue"
+import { IconHash, IconPlaylistAdd, IconShare, IconX } from "@tabler/icons-vue"
 import { loadTrackDetail } from "@lib/application/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode } from "@lib/domain/core.js"
@@ -163,10 +164,9 @@ function onShare(): void {
 
 <style scoped>
 .sheet-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
   padding: 14px 16px 10px;
+  /* leave room for the absolutely-positioned close button */
+  padding-right: 52px;
   background: var(--ion-background-color, #fff);
 }
 
@@ -204,14 +204,16 @@ function onShare(): void {
   opacity: 0.55;
 }
 
-
 .sheet-heading {
   flex: 1;
   min-width: 0;
 }
 
 .close-button {
-  flex: none;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
   width: 26px;
   height: 26px;
   min-height: 26px;
@@ -260,8 +262,18 @@ function onShare(): void {
 }
 
 .act {
+  position: relative;
   margin: 0;
   --box-shadow: none;
+}
+
+/* Icon pinned to the left edge; the label stays centred in the button. */
+.act [slot="start"] {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
 }
 
 .share-btn {
