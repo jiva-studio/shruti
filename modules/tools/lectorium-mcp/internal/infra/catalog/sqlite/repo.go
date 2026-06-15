@@ -277,11 +277,13 @@ func (r *Repo) GetVariant(ctx context.Context, trackID, language string) (catalo
 	row := r.db.QueryRowContext(ctx, `
 		SELECT track_id, language, title,
 		       COALESCE(transcript_path,''), COALESCE(transcript_kind,''),
-		       sort_reference
+		       sort_reference,
+		       COALESCE(outline,''), COALESCE(description,'')
 		FROM track_variants WHERE track_id = ? AND language = ?`, trackID, language)
 	var v catalog.VariantRow
 	if err := row.Scan(&v.TrackID, &v.Language, &v.Title,
-		&v.TranscriptPath, &v.TranscriptKind, &v.SortReference); err != nil {
+		&v.TranscriptPath, &v.TranscriptKind, &v.SortReference,
+		&v.Outline, &v.Description); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return catalog.VariantRow{}, false, nil
 		}
