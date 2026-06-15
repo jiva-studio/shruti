@@ -201,6 +201,17 @@ func (l *Lazy) SetVariantOutline(ctx context.Context, trackID, language, outline
 	}
 	return markModified(l.Path)
 }
+func (l *Lazy) SetTrackTopics(ctx context.Context, trackID string, weights map[string]float64) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.SetTrackTopics(ctx, trackID, weights); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
 func (l *Lazy) DeleteTrackVariant(ctx context.Context, trackID, language string) error {
 	r, err := l.open(ctx)
 	if err != nil {
