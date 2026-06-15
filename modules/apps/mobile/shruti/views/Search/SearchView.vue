@@ -3,6 +3,10 @@
     <template v-if="recommendedRows.length">
       <IonListHeader>
         <IonLabel>{{ $t("search.recommendedForYou") }}</IonLabel>
+        <IonButton class="no-ripple all-lectures" @click="openTracks">
+          {{ $t("search.allLectures") }}
+          <IconChevronRight :size="15" />
+        </IonButton>
       </IonListHeader>
       <TracksList :rows="recommendedRows" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
@@ -48,23 +52,12 @@
       />
     </template>
 
-    <div v-for="s in topicShelves" :key="s.topicId" class="collection-group">
+    <template v-if="topicCards.length">
       <IonListHeader>
-        <IonLabel>{{ s.title }}</IonLabel>
-        <IonButton
-          class="no-ripple"
-          :aria-label="$t('search.collections.seeAllNamed', { name: s.name })"
-          @click="openTopic(s.topicId)"
-        >
-          <IconChevronRight :size="20" />
-        </IonButton>
+        <IonLabel>{{ $t("search.topics") }}</IonLabel>
       </IonListHeader>
-      <TracksList :rows="s.rows" @select="onSelectTrack">
-        <template #state="{ state, progressPct }">
-          <TrackStateIndicator :state="state" :progress="progressPct" />
-        </template>
-      </TracksList>
-    </div>
+      <CollectionsCarousel :items="topicCards" @select="openTopic" />
+    </template>
 
     <template v-if="previewLectures.length">
       <IonListHeader>
@@ -96,6 +89,7 @@ import { AppPage } from "@ui/primitives/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { CollectionsCarousel, CollectionListItem } from "@ui/features/collections/index.js"
+import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useRecommendationsStore } from "@shruti/stores/useRecommendationsStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
@@ -125,18 +119,14 @@ const { groups: collectionGroups, allCollections } = useCollectionGroups(appLang
 // "Recommended for you" picks + per-hot-topic shelves, derived on-device from
 // the listening profile (see useRecommendationsStore). SHELF_PREVIEW caps the
 // inline rows; "see all" opens the full topic-tracks view.
-const SHELF_PREVIEW = 4
 const recommendedRows = mapper.mapRows(() => recommendations.recommended, { context: "discovery" })
-const topicShelves = computed(() =>
+const topicCards = computed(() =>
   recommendations.shelves.map((s) => {
-    const name = dictionaries.topicNamesById.get(s.topicId) ?? s.topicId
+    const cover = dictionaries.topicCoverById.get(s.topicId)
     return {
-      topicId: s.topicId,
-      name,
-      title: recommendations.hasHistory
-        ? t("search.becauseListenedAbout", { topic: name })
-        : name,
-      rows: s.tracks.slice(0, SHELF_PREVIEW).map((tr) => mapper.toUiRow(tr)),
+      id: s.topicId,
+      name: dictionaries.topicShortNamesById.get(s.topicId) ?? s.topicId,
+      coverUrl: cover ? resolveAssetUrl(cover) : undefined,
     }
   })
 )
@@ -229,10 +219,37 @@ ion-list-header ion-label {
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--ion-text-color);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 ion-list-header ion-button {
   --color: var(--ion-color-medium);
+}
+
+ion-list-header ion-button.all-lectures {
+  --background: var(--ion-color-step-800, #3d2b1f);
+  --background-activated: var(--ion-color-step-700, #51392a);
+  --color: #f4ebdd;
+  --border-radius: 12px;
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --padding-start: 10px;
+  --padding-end: 10px;
+  height: 26px;
+  min-height: 26px;
+  margin-inline-end: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+ion-list-header ion-button.all-lectures :deep(svg) {
+  margin-inline-start: 3px;
+  margin-inline-end: -2px;
 }
 
 :deep(ion-list) {

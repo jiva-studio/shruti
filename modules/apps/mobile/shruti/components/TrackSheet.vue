@@ -13,7 +13,11 @@
       <div class="sheet-body">
         <LectureOverview class="overview" :description="description" :chapters="chapters">
           <div v-if="topicChips.length" class="topic-chips">
-            <span v-for="(name, i) in topicChips" :key="i" class="topic-chip">#{{ name }}</span>
+            <span v-for="(name, i) in visibleChips" :key="i" class="topic-chip">
+              <IconHash :size="11" class="chip-hash" />
+              {{ name }}
+            </span>
+            <span v-if="overflowCount" class="topic-chip more">+{{ overflowCount }}</span>
           </div>
         </LectureOverview>
       </div>
@@ -39,7 +43,7 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
-import { IconPlaylistAdd, IconX } from "@tabler/icons-vue"
+import { IconHash, IconPlaylistAdd, IconX } from "@tabler/icons-vue"
 import { loadTrackDetail } from "@lib/application/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode } from "@lib/domain/core.js"
@@ -97,9 +101,12 @@ const variant = computed(
 const description = computed(() => variant.value?.description ?? null)
 const chapters = computed<readonly TrackOutlineChapter[]>(() => variant.value?.outline ?? [])
 
+const VISIBLE_CHIPS = 4
 const topicChips = computed<string[]>(() =>
-  (track.value?.topicIds ?? []).map((id) => dictionaries.topicNamesById.get(id) ?? id)
+  (track.value?.topicIds ?? []).map((id) => dictionaries.topicShortNamesById.get(id) ?? id)
 )
+const visibleChips = computed(() => topicChips.value.slice(0, VISIBLE_CHIPS))
+const overflowCount = computed(() => Math.max(0, topicChips.value.length - VISIBLE_CHIPS))
 
 watch(
   () => sheet.trackId,
@@ -175,19 +182,28 @@ function onShare(): void {
 .topic-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 8px;
+  gap: 5px 6px;
   margin: 0 0 16px;
 }
 
 .topic-chip {
-  font-size: 13px;
-  line-height: 1.4;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 1.3;
   color: var(--ion-color-medium-shade, #666);
   background: var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
-  padding: 3px 9px;
-  border-radius: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
   white-space: nowrap;
 }
+
+.chip-hash {
+  flex: none;
+  opacity: 0.55;
+}
+
 
 .sheet-heading {
   flex: 1;

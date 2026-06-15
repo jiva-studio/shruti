@@ -40,9 +40,10 @@ type DictMinter interface {
 	Create(ctx context.Context, kind catalog.Kind, names, shortNames map[string]string) (string, error)
 }
 
-// ClusterNamer names one cluster of headings in ru + en (offline LLM call).
+// ClusterNamer names one cluster of headings (full + short) in each requested
+// language (offline LLM call). Languages are passed in, not assumed.
 type ClusterNamer interface {
-	NameCluster(ctx context.Context, sampleTitles []string) (nameRu, nameEn string, err error)
+	NameCluster(ctx context.Context, sampleTitles, languages []string) (domaintopics.Names, error)
 }
 
 // VocabReader / VocabWriter persist the centroid vocabulary artifact.

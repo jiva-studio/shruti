@@ -69,6 +69,21 @@ func ensureTopicsTables(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("apply %q: %w", s, err)
 		}
 	}
+	// Additive per-topic columns (same scheme): a short display name for tight
+	// surfaces (chips, shelf headers) and a generated cover key. Older binaries
+	// ignore them; mobile reads them when present.
+	for _, col := range []string{"short_name", "cover"} {
+		has, err := columnExists(ctx, db, "topics", col)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := db.ExecContext(ctx,
+				fmt.Sprintf(`ALTER TABLE topics ADD COLUMN %s TEXT`, col)); err != nil {
+				return fmt.Errorf("add topics.%s: %w", col, err)
+			}
+		}
+	}
 	return nil
 }
 

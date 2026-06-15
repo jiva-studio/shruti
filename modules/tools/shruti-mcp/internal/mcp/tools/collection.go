@@ -7,8 +7,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncover"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
@@ -18,7 +18,7 @@ import (
 // create). Cover is zero/disabled when image generation isn't configured.
 type CollectionCRUDDeps struct {
 	UseCase collectioncrud.UseCase
-	Cover   collectioncover.UseCase
+	Cover   covergen.UseCase
 }
 
 // RegisterCollectionCRUD registers all 12 collection tools:

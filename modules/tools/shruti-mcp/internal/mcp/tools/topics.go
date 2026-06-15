@@ -8,6 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runner"
 	topicsapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/topics"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
@@ -24,10 +25,12 @@ type TopicsWriter interface {
 // TopicsDeps wires the `topics.*` / `track.topics.*` tools. Catalog backs the
 // manual track.topics.set; Build/Assign are the offline vocabulary build and
 // per-track assignment (disabled when the embeddings client isn't configured).
+// Cover generates topic cover art (disabled when image generation isn't wired).
 type TopicsDeps struct {
 	Catalog TopicsWriter
 	Build   topicsapp.BuildUseCase
 	Assign  topicsapp.AssignUseCase
+	Cover   covergen.UseCase
 }
 
 // topicsConfigured reports whether the embedding-backed build/assign are wired
@@ -37,6 +40,7 @@ func (d TopicsDeps) topicsConfigured() bool { return d.Assign.Embed != nil }
 // RegisterTopics registers the topic vocabulary + membership tools.
 func RegisterTopics(s *server.MCPServer, deps Deps) {
 	registerTrackTopicsSet(s, deps.Topics)
+	registerTopicCoverGenerate(s, deps.Topics)
 	registerTopicsBuild(s, deps)
 	registerTrackTopicsAssign(s, deps)
 }
@@ -179,5 +183,34 @@ func registerTrackTopicsAssign(s *server.MCPServer, deps Deps) {
 		return envelope.Run(kind, runDispatch{
 			Id: runId, Kind: string(run.KindTopicsAssign), State: string(run.StateQueued), AcceptedCount: 1,
 		}), nil
+	})
+}
+
+// registerTopicCoverGenerate exposes `topic.cover.generate`: generate (or
+// regenerate) one topic's cover from its full name and store the key.
+func registerTopicCoverGenerate(s *server.MCPServer, deps TopicsDeps) {
+	const kind = "topic.cover.generate"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription("Generate (or regenerate) a topic's cover image from its full name via the "+
+			"configured image model, upload it to S3 (public/topics/<id>/cover.jpg), and set the cover "+
+			"key on the topic. Pass extra_prompt to steer the art."),
+		mcp.WithString("id", mcp.Required()),
+		mcp.WithString("language", mcp.Description("Locale whose name seeds the prompt (en fallback).")),
+		mcp.WithString("extra_prompt", mcp.Description("Optional extra prompt fragment appended to steer the generation.")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		if !deps.Cover.Enabled() {
+			return envelope.Err(kind, envelope.CodeInvalidArgument,
+				"image generation is not configured (set images.api_key)", nil), nil
+		}
+		key, err := deps.Cover.Generate(ctx, id, req.GetString("language", ""), req.GetString("extra_prompt", ""))
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
+		}
+		return envelope.Result(kind, map[string]any{"id": id, "cover": key}), nil
 	})
 }

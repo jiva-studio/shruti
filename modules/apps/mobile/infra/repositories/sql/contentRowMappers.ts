@@ -80,9 +80,15 @@ export function rowToTag(rows: readonly TagRow[]): Tag {
 }
 
 export function rowToTopic(rows: readonly TopicRow[]): Topic {
-  const byLanguage = new Map<string, string>()
-  for (const r of rows) byLanguage.set(r.language, r.full_name)
-  return { id: rows[0].id, names: byLanguage }
+  const names = new Map<string, string>()
+  const shortNames = new Map<string, string>()
+  let cover: string | null = null
+  for (const r of rows) {
+    names.set(r.language, r.full_name)
+    if (r.short_name) shortNames.set(r.language, r.short_name)
+    if (!cover && r.cover) cover = r.cover
+  }
+  return { id: rows[0].id, names, shortNames, cover }
 }
 
 /**

@@ -30,11 +30,11 @@ func (k Kind) IDPrefix() string {
 
 // DictEntry is one dictionary row collapsed across locales.
 //   Names      : language → full_name (one row per locale in DB)
-//   ShortName  : language → short_name (sources only)
+//   ShortName  : language → short_name (sources and topics)
 type DictEntry struct {
 	Id        string
 	Names     map[string]string
-	ShortName map[string]string // populated only when Kind == KindSource
+	ShortName map[string]string // populated for KindSource and KindTopic
 }
 
 // ListOpts is shared by *_list tools.
