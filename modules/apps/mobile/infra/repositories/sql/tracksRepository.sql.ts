@@ -325,6 +325,14 @@ function buildFilterClauses(filters: TrackListFilters): {
     )
     params.push(...filters.tagIds)
   }
+  if (filters.topicIds?.length) {
+    clauses.push(
+      `t.id IN (SELECT track_id FROM track_topics WHERE topic_id IN (${filters.topicIds
+        .map(() => "?")
+        .join(", ")}))`
+    )
+    params.push(...filters.topicIds)
+  }
   if (filters.languageCodes?.length) {
     clauses.push(
       `t.id IN (SELECT track_id FROM track_variants WHERE language IN (${filters.languageCodes
