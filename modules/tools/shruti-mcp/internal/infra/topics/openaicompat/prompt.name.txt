@@ -1,0 +1,12 @@
+You are given several lecture topic headings that an embedding model grouped into one cluster. They are different wordings of the SAME underlying theme.
+
+Produce one canonical name for the theme, in Russian and English.
+
+Rules:
+1. 1-3 words, a noun phrase naming the THEME (e.g. "Карма" / "Karma", "Святое имя" / "The Holy Name", "Душа и тело" / "Soul and Body"). Sentence case.
+2. Cover the common thread of the whole list, not one outlier heading.
+3. No quotation marks, emoji, punctuation marks, "Prabhupada", "lecture about", or clickbait.
+4. The Russian and English names must mean the same thing.
+
+Return ONLY a JSON object, no markdown, no commentary:
+{"ru": "...", "en": "..."}
