@@ -62,6 +62,12 @@ async function applyContentSchemaForTests(db: IDatabase): Promise<void> {
     tag_id   TEXT,
     PRIMARY KEY (track_id, tag_id)
   )`)
+  await db.execute(`CREATE TABLE track_topics (
+    track_id TEXT,
+    topic_id TEXT,
+    weight   REAL,
+    PRIMARY KEY (track_id, topic_id)
+  )`)
   await db.execute(`CREATE TABLE locations (
     id        TEXT NOT NULL,
     language  TEXT NOT NULL,
