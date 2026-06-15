@@ -28,6 +28,8 @@ function track(variants: Array<{ language: string; title: string }>): Track {
       audios: [],
       audio: null,
       transcript: null,
+      outline: null,
+      description: null,
     })),
   }
 }
