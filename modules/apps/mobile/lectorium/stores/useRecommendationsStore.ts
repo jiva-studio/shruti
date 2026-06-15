@@ -1,36 +1,40 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TopicId } from "@lib/domain/core.js"
 
-/** One hot-topic shelf: the topic plus its highest-weight tracks (unheard). */
+/** One hot-topic shelf: the topic plus a few of its tracks the user hasn't
+ *  heard and hasn't queued. */
 export interface TopicShelf {
   readonly topicId: TopicId
   readonly tracks: readonly Track[]
 }
 
-// Listening window that shapes the taste profile, and the fan-out sizes.
+// Listening window that shapes the taste profile.
 const HISTORY_WINDOW_MS = 180 * 24 * 60 * 60 * 1000
-const HOT_TOPICS = 6
+// The user's most-listened topics, shown lower down as "title + lectures"
+// shelves (the cover carousel up top is any topics, derived in the view).
+const SHELF_TOPICS = 3
 const SHELF_SIZE = 12
 const RECOMMENDED_SIZE = 3
 
 /**
  * On-device recommender state. From the user's listening history it derives a
- * taste profile (topic affinity = Σ weight × listened seconds), then surfaces
- * the user's hot topics as shelves and a "Recommended for you" pick — always
- * excluding already-heard tracks. With no history it cold-starts on the first
- * topics so the surfaces are never empty.
+ * taste profile (topic affinity = Σ weight × listened seconds), surfaces the
+ * three most-listened topics as shelves and a "Recommended for you" pick. Every
+ * discovery surface excludes tracks the user already heard or already queued in
+ * the playlist. With no history it cold-starts on the first topics so nothing is
+ * empty.
  */
 export const useRecommendationsStore = defineStore("recommendations", () => {
   const app = useLectorium()
+  const playlist = usePlaylistStore()
 
   const recommended = ref<readonly Track[]>([])
   const shelves = ref<readonly TopicShelf[]>([])
-  /** True when the profile was built from real listening history (drives the
-   *  "Recommended for you" header and the per-shelf "because you listened"
-   *  framing vs a plain topic header on cold start). */
+  /** True when the profile was built from real listening history. */
   const hasHistory = ref<boolean>(false)
   const isLoading = ref<boolean>(false)
   let loaded = false
@@ -39,6 +43,7 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
     isLoading.value = true
     try {
       const repos = app.repositories()
+      await playlist.ensureLoaded()
       const now = Date.now()
       const heard = await repos.listeningSessions.getTracksListenedInRange(
         now - HISTORY_WINDOW_MS,
@@ -46,8 +51,12 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
       )
       const secondsByTrack = new Map(heard.map((h) => [h.trackId, h.listenedSeconds]))
       const heardIds = new Set(heard.map((h) => h.trackId))
+      // Discovery never resurfaces what the user already heard or already has in
+      // their playlist (queued or completed). `excluded` covers heard +
+      // completed; playlist.hasTrack() covers anything currently queued.
+      const excluded = new Set<string>([...heardIds, ...playlist.completedTrackIds])
 
-      let hotTopics: TopicId[]
+      let hotTopics: TopicId[] = []
       if (heardIds.size > 0) {
         const weights = await repos.topics.weightsForTracks([...heardIds])
         const affinity = new Map<TopicId, number>()
@@ -57,26 +66,23 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
         }
         hotTopics = [...affinity.entries()]
           .sort((a, b) => b[1] - a[1])
-          .slice(0, HOT_TOPICS)
+          .slice(0, SHELF_TOPICS)
           .map(([id]) => id)
-        hasHistory.value = hotTopics.length > 0
-      } else {
-        hotTopics = []
-        hasHistory.value = false
       }
+      hasHistory.value = hotTopics.length > 0
 
       // Cold start (or no topics matched the heard tracks): fall back to the
-      // first topics so the browse shelves still populate.
+      // first topics so the shelves still populate.
       if (hotTopics.length === 0) {
         const all = await repos.topics.listAll()
-        hotTopics = all.slice(0, HOT_TOPICS).map((t) => t.id)
+        hotTopics = all.slice(0, SHELF_TOPICS).map((t) => t.id)
       }
 
       const shelfList: TopicShelf[] = []
       const topPicks: string[] = []
       for (const topicId of hotTopics) {
         const ids = (await repos.topics.topTrackIds(topicId, SHELF_SIZE)).filter(
-          (id) => !heardIds.has(id)
+          (id) => !excluded.has(id) && !playlist.hasTrack(id)
         )
         if (ids.length === 0) continue
         const byId = await repos.tracks.getByIds(ids)
@@ -87,7 +93,7 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
       }
       shelves.value = shelfList
 
-      // "Recommended for you" = the top pick from each hot topic, deduped.
+      // "Recommended for you" = the top unheard pick from each hot topic, deduped.
       const recIds = [...new Set(topPicks)].slice(0, RECOMMENDED_SIZE)
       const recById = await repos.tracks.getByIds(recIds)
       recommended.value = recIds

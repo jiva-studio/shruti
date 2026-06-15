@@ -29,6 +29,13 @@
       <CollectionsCarousel :items="g.collections" @select="onSelectCollection" />
     </div>
 
+    <template v-if="topicCards.length">
+      <IonListHeader>
+        <IonLabel>{{ $t("search.topics") }}</IonLabel>
+      </IonListHeader>
+      <CollectionsCarousel :items="topicCards" hashtag @select="onSelectTopic" />
+    </template>
+
     <template v-if="otherCollections.length">
       <IonListHeader>
         <IonLabel>{{ $t("search.collections.others") }}</IonLabel>
@@ -52,12 +59,23 @@
       />
     </template>
 
-    <template v-if="topicCards.length">
+    <div v-for="s in topicShelves" :key="s.topicId" class="collection-group">
       <IonListHeader>
-        <IonLabel>{{ $t("search.topics") }}</IonLabel>
+        <IonLabel><span class="hash">#</span>{{ s.name }}</IonLabel>
+        <IonButton
+          class="no-ripple"
+          :aria-label="$t('search.collections.seeAllNamed', { name: s.name })"
+          @click="onSelectTopic(s.topicId)"
+        >
+          <IconChevronRight :size="20" />
+        </IonButton>
       </IonListHeader>
-      <CollectionsCarousel :items="topicCards" @select="openTopic" />
-    </template>
+      <TracksList :rows="s.rows" @select="onSelectTrack">
+        <template #state="{ state, progressPct }">
+          <TrackStateIndicator :state="state" :progress="progressPct" />
+        </template>
+      </TracksList>
+    </div>
 
     <template v-if="previewLectures.length">
       <IonListHeader>
@@ -81,7 +99,6 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
-import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
 import { IonButton, IonLabel, IonListHeader, onIonViewWillEnter } from "@ionic/vue"
 import { IconChevronRight } from "@tabler/icons-vue"
@@ -108,7 +125,6 @@ import type { TrackId } from "@lib/domain/core.js"
 const player = usePlayerStore()
 const router = useRouter()
 const app = useLectorium()
-const { t } = useI18n()
 const appLanguage = useAppLanguage()
 const mapper = useTrackUiStateMapper()
 const trackActions = useTrackActionSheet()
@@ -120,18 +136,37 @@ const { groups: collectionGroups, allCollections } = useCollectionGroups(appLang
 // the listening profile (see useRecommendationsStore). SHELF_PREVIEW caps the
 // inline rows; "see all" opens the full topic-tracks view.
 const recommendedRows = mapper.mapRows(() => recommendations.recommended, { context: "discovery" })
+
+// Topics are shown two ways: a cover carousel ("Темы") of any six topics up top,
+// and — lower down — the user's three most-listened topics as title + lectures
+// shelves. The carousel skips the three shelf topics so nothing repeats.
+const CAROUSEL_TOPICS = 6
+const SHELF_PREVIEW = 3
+const shelfTopicIds = computed(() => new Set(recommendations.shelves.map((s) => s.topicId)))
 const topicCards = computed(() =>
-  recommendations.shelves.map((s) => {
-    const cover = dictionaries.topicCoverById.get(s.topicId)
-    return {
-      id: s.topicId,
-      name: dictionaries.topicShortNamesById.get(s.topicId) ?? s.topicId,
-      coverUrl: cover ? resolveAssetUrl(cover) : undefined,
-    }
-  })
+  dictionaries.topicsSorted
+    .filter((topic) => !shelfTopicIds.value.has(topic.id))
+    .slice(0, CAROUSEL_TOPICS)
+    .map((topic) => {
+      const cover = dictionaries.topicCoverById.get(topic.id)
+      return {
+        id: topic.id,
+        name: dictionaries.topicShortNamesById.get(topic.id) ?? topic.id,
+        coverUrl: cover ? resolveAssetUrl(cover) : undefined,
+      }
+    })
+)
+const topicShelves = computed(() =>
+  recommendations.shelves.map((s) => ({
+    topicId: s.topicId,
+    name: dictionaries.topicNamesById.get(s.topicId) ?? s.topicId,
+    rows: s.tracks.slice(0, SHELF_PREVIEW).map((tr) => mapper.toUiRow(tr)),
+  }))
 )
 
-function openTopic(topicId: string): void {
+// Topic and collection cards navigate to the shared detail page (same
+// component, different kind).
+function onSelectTopic(topicId: string): void {
   void router.push({ name: "topic-tracks", params: { topicId } })
 }
 
@@ -223,6 +258,11 @@ ion-list-header ion-label {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+ion-list-header ion-label .hash {
+  color: var(--ion-color-medium, #999);
+  margin-inline-end: 2px;
 }
 
 ion-list-header ion-button {

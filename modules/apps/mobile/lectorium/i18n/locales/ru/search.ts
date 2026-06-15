@@ -8,6 +8,7 @@ export default {
   lecturesTitle: "Лекции",
   recommendedForYou: "Рекомендовано вам",
   allLectures: "Все лекции",
+  topics: "Темы",
   actions: {
     addToPlaylist: "Добавить в плейлист",
     openTranscript: "Открыть транскрипт",
