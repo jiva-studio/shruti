@@ -8,6 +8,7 @@ const (
 	KindLocation Kind = "location"
 	KindSource   Kind = "source"
 	KindTag      Kind = "tag"
+	KindTopic    Kind = "topic"
 )
 
 // IDPrefix returns the per-kind ID prefix per docs/repos/lectorium/db/ids.md.
@@ -21,6 +22,8 @@ func (k Kind) IDPrefix() string {
 		return "source_"
 	case KindTag:
 		return "tag_"
+	case KindTopic:
+		return "topic_"
 	}
 	return ""
 }

@@ -29,6 +29,46 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureTrackVariantOutlineColumns(ctx, db); err != nil {
 		return fmt.Errorf("ensure track_variant outline columns: %w", err)
 	}
+	if err := ensureTopicsTables(ctx, db); err != nil {
+		return fmt.Errorf("ensure topics tables: %w", err)
+	}
+	return nil
+}
+
+// ensureTopicsTables creates the recommender's topic vocabulary + membership
+// tables when missing:
+//   - topics       : the localization dictionary (one row per language),
+//     shaped like `tags` so the generic dictcrud path drives it;
+//   - track_topics : language-agnostic membership of a track in a topic, with a
+//     salience weight (a track covers several topics, each weighted).
+//
+// Additive tables under the SAME scheme (20260614) — no new `migrations` row,
+// mirroring the additive outline columns. Older binaries simply never query
+// them; the topics-capable client always pairs (via the scheme gate) with a DB
+// that has them. Idempotent.
+func ensureTopicsTables(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS topics (
+			id         TEXT NOT NULL,
+			language   TEXT NOT NULL,
+			full_name  TEXT NOT NULL,
+			PRIMARY KEY (id, language)
+		)`,
+		`CREATE TABLE IF NOT EXISTS track_topics (
+			track_id   TEXT NOT NULL,
+			topic_id   TEXT NOT NULL,
+			weight     REAL NOT NULL,
+			PRIMARY KEY (track_id, topic_id)
+		)`,
+		// Reverse lookup for the "tracks by topic" shelf: highest-weight first.
+		`CREATE INDEX IF NOT EXISTS idx_track_topics_topic
+			ON track_topics(topic_id, weight DESC)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("apply %q: %w", s, err)
+		}
+	}
 	return nil
 }
 

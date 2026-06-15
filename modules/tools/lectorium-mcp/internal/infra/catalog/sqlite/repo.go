@@ -80,6 +80,8 @@ func dictTable(k catalog.Kind) (string, error) {
 		return "sources", nil
 	case catalog.KindTag:
 		return "tags", nil
+	case catalog.KindTopic:
+		return "topics", nil
 	}
 	return "", fmt.Errorf("unknown kind %q", k)
 }
