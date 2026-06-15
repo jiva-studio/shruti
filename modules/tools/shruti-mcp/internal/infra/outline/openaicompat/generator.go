@@ -1,0 +1,230 @@
+// Package openaicompatoutline generates a lecture outline (coarse chapter
+// headings with timecodes) and a short description via an OpenAI-compatible
+// upstream (Gemini through OpenRouter). It ports the two-pass approach used by
+// the chat service's outline tool: one granular pass over the WHOLE transcript,
+// then a collapse pass that merges the fine list into a handful of chapters.
+package openaicompatoutline
+
+import (
+	"context"
+	_ "embed"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	outlineport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/outline"
+)
+
+//go:embed prompt.outline.txt
+var outlineSystemPrompt string
+
+//go:embed prompt.merge.txt
+var mergeSystemPrompt string
+
+//go:embed prompt.description.txt
+var descriptionSystemPrompt string
+
+const (
+	// maxChapters is the ceiling the collapse pass merges down to. The fine
+	// pass is deliberately granular (its count is unstable across runs); the
+	// final count emerges from the content, not a clock.
+	maxChapters = 8
+	// maxMergePasses bounds the collapse loop so a stubborn merge can't spin.
+	maxMergePasses = 5
+)
+
+type Generator struct {
+	Client    *openaicompat.Client
+	Model     string
+	MaxTokens int
+	Reasoning string
+}
+
+type Config struct {
+	Endpoint  string
+	APIKey    string
+	Model     string
+	MaxTokens int
+	Reasoning string
+}
+
+func New(cfg Config) (*Generator, error) {
+	if cfg.Model == "" {
+		return nil, fmt.Errorf("openai-compat outline generator: model is empty")
+	}
+	cli, err := openaicompat.New(openaicompat.Options{Endpoint: cfg.Endpoint, APIKey: cfg.APIKey})
+	if err != nil {
+		return nil, fmt.Errorf("openai-compat outline generator: %w", err)
+	}
+	max := cfg.MaxTokens
+	if max == 0 {
+		max = 2048
+	}
+	return &Generator{Client: cli, Model: cfg.Model, MaxTokens: max, Reasoning: cfg.Reasoning}, nil
+}
+
+func (g *Generator) Outline(ctx context.Context, lectureText, lang string) ([]outlineport.Item, error) {
+	sys := strings.ReplaceAll(outlineSystemPrompt, "__LANG__", lang)
+	res, err := g.Client.Run(ctx, openaicompat.Call{
+		Model:       g.Model,
+		MaxTokens:   g.MaxTokens,
+		System:      sys,
+		User:        lectureText,
+		Temperature: ptr(0.2),
+		Reasoning:   g.Reasoning,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("outline llm: %w", err)
+	}
+	items, err := parseItems(res.Text)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("outline: empty result")
+	}
+	sortByStart(items)
+
+	// Collapse the granular list into a handful of coarse chapters. A failed or
+	// non-shrinking merge keeps the finer outline rather than losing it.
+	for passes := 0; len(items) > maxChapters && passes < maxMergePasses; passes++ {
+		before := len(items)
+		merged, err := g.merge(ctx, items, lang)
+		if err != nil || len(merged) == 0 {
+			break
+		}
+		sortByStart(merged)
+		items = merged
+		if len(items) >= before {
+			break
+		}
+	}
+	return items, nil
+}
+
+func (g *Generator) merge(ctx context.Context, items []outlineport.Item, lang string) ([]outlineport.Item, error) {
+	sys := strings.ReplaceAll(mergeSystemPrompt, "__LANG__", lang)
+	sys = strings.ReplaceAll(sys, "__MAX_CHAPTERS__", strconv.Itoa(maxChapters))
+	var b strings.Builder
+	for _, it := range items {
+		fmt.Fprintf(&b, "[%s] %s\n", fmtTS(it.StartMs), it.Title)
+	}
+	res, err := g.Client.Run(ctx, openaicompat.Call{
+		Model:       g.Model,
+		MaxTokens:   g.MaxTokens,
+		System:      sys,
+		User:        b.String(),
+		Temperature: ptr(0.2),
+		Reasoning:   g.Reasoning,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return parseItems(res.Text)
+}
+
+func (g *Generator) Description(ctx context.Context, lectureText, lang string) (string, error) {
+	sys := strings.ReplaceAll(descriptionSystemPrompt, "__LANG__", lang)
+	res, err := g.Client.Run(ctx, openaicompat.Call{
+		Model:       g.Model,
+		MaxTokens:   g.MaxTokens,
+		System:      sys,
+		User:        lectureText,
+		Temperature: ptr(0.3),
+		Reasoning:   g.Reasoning,
+	})
+	if err != nil {
+		return "", fmt.Errorf("description llm: %w", err)
+	}
+	return strings.TrimSpace(openaicompat.StripFences(res.Text)), nil
+}
+
+// parseItems decodes the LLM's JSON array of {start,title}. start may be a
+// "MM:SS"/"HH:MM:SS" string (the prompt's contract) or a numeric ms value.
+func parseItems(raw string) ([]outlineport.Item, error) {
+	cleaned := openaicompat.StripFences(raw)
+	var parsed []struct {
+		Start   json.RawMessage `json:"start"`
+		StartMs json.RawMessage `json:"start_ms"`
+		Title   string          `json:"title"`
+	}
+	if err := json.Unmarshal([]byte(cleaned), &parsed); err != nil {
+		return nil, fmt.Errorf("outline: parse llm json: %w", err)
+	}
+	out := make([]outlineport.Item, 0, len(parsed))
+	for _, it := range parsed {
+		title := strings.TrimSpace(it.Title)
+		if title == "" {
+			continue
+		}
+		ms, ok := parseStart(it.Start)
+		if !ok {
+			ms, ok = parseStart(it.StartMs)
+		}
+		if !ok {
+			continue
+		}
+		out = append(out, outlineport.Item{Title: title, StartMs: ms})
+	}
+	return out, nil
+}
+
+func parseStart(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, false
+	}
+	var n float64
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return int64(n), true
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return parseTS(s), true
+	}
+	return 0, false
+}
+
+func sortByStart(items []outlineport.Item) {
+	sort.SliceStable(items, func(i, j int) bool { return items[i].StartMs < items[j].StartMs })
+}
+
+func fmtTS(ms int64) string {
+	if ms < 0 {
+		ms = 0
+	}
+	s := ms / 1000
+	h := s / 3600
+	m := (s % 3600) / 60
+	sec := s % 60
+	if h > 0 {
+		return fmt.Sprintf("%02d:%02d:%02d", h, m, sec)
+	}
+	return fmt.Sprintf("%02d:%02d", m, sec)
+}
+
+func parseTS(ts string) int64 {
+	parts := strings.Split(strings.TrimSpace(ts), ":")
+	nums := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		n, err := strconv.ParseInt(strings.TrimSpace(p), 10, 64)
+		if err != nil {
+			return 0
+		}
+		nums = append(nums, n)
+	}
+	switch len(nums) {
+	case 2:
+		return (nums[0]*60 + nums[1]) * 1000
+	case 3:
+		return (nums[0]*3600 + nums[1]*60 + nums[2]) * 1000
+	default:
+		return 0
+	}
+}
+
+func ptr(f float64) *float64 { return &f }
+
+var _ outlineport.Generator = (*Generator)(nil)

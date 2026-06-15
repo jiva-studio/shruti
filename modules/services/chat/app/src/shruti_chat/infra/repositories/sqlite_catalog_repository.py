@@ -890,6 +890,26 @@ def _get_collection_sync(
         return None
 
 
+def _get_outline_sync(
+    db_path: Path, track_id: str, lang: str,
+) -> tuple[str | None, str | None]:
+    """Read the precomputed outline JSON + description for one (track,
+    language) from the published catalog. Returns (None, None) when absent or
+    when an older snapshot predates the columns (transition window)."""
+    with _catalog_conn(db_path) as conn:
+        try:
+            row = conn.execute(
+                "SELECT outline, description FROM track_variants "
+                "WHERE track_id = ? AND language = ?",
+                (track_id, lang),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None, None
+    if row is None:
+        return None, None
+    return row["outline"], row["description"]
+
+
 class SqliteCatalogRepository:
     def __init__(self, *, catalog_db_path: Path) -> None:
         self._db_path = catalog_db_path
@@ -923,6 +943,13 @@ class SqliteCatalogRepository:
     async def filter_existing_track_ids(self, track_ids: list[str]) -> list[str]:
         return await asyncio.to_thread(
             _filter_existing_track_ids_sync, self._db_path, track_ids,
+        )
+
+    async def get_outline(
+        self, track_id: str, lang: str,
+    ) -> tuple[str | None, str | None]:
+        return await asyncio.to_thread(
+            _get_outline_sync, self._db_path, track_id, lang,
         )
 
     async def resolve_transcript_path(

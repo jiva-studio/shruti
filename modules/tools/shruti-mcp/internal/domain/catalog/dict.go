@@ -78,6 +78,12 @@ type VariantRow struct {
 	TranscriptPath string
 	TranscriptKind string
 	SortReference  *string
+
+	// Outline is the lecture's section table-of-contents as a JSON array of
+	// {title,start,end} (ms), generated from the reviewed transcript. "" = none.
+	Outline string
+	// Description is a short per-locale overview of the lecture. "" = none.
+	Description string
 }
 
 // Audio kind discriminators for track_audio rows.

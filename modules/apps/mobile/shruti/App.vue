@@ -29,6 +29,8 @@
       :available-languages="dialog.availableLanguages.value"
       :title="dialog.title.value"
       :author="dialog.author.value"
+      :description="dialog.description.value"
+      :chapters="dialog.chapters.value"
       :position="dialog.position.value"
       :duration="dialog.duration.value"
       :allow-multiple-languages="dialog.allowMultipleLanguages.value"
@@ -41,6 +43,7 @@
       :error-message="dialog.error.value"
       :has-no-transcripts="dialog.hasNoTranscripts.value"
       @seek="dialog.onSeek"
+      @chapter-seek="dialog.onChapterSeek"
       @text-selected="dialog.onTextSelected"
       @note-tapped="dialog.onNoteTapped"
       @pick-start="dialog.onPickStart"
@@ -60,6 +63,7 @@
       @action="onSelectionPopoverAction"
       @dismissed="onSelectionPopoverDismissed"
     />
+    <TrackSheet />
   </IonApp>
 </template>
 
@@ -72,6 +76,7 @@ import { FILES_STORAGE_KEY } from "@ui/primitives/index.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
+import TrackSheet from "@shruti/components/TrackSheet.vue"
 import type { SelectionActionEvent } from "@shruti/composables/transcript/useTranscriptSelectionActions.js"
 import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
