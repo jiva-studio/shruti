@@ -101,7 +101,8 @@ func registerTopicsBuild(s *server.MCPServer, deps Deps) {
 			"artifacts: embed the headings, cluster them into ~K topics, name each cluster (ru/en) "+
 			"and mint a topics dict entry, then write the centroids artifact. Does NOT assign tracks "+
 			"— run pipeline.run op=topics afterwards. One-time / on re-cluster. Async: returns a "+
-			"run_id; poll via runs.status / runs.wait."))
+			"run_id; poll via runs.status / runs.wait."),
+		mcp.WithNumber("k", mcp.Description("Override the number of topic clusters (default from config; lower for small training corpora).")))
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		if deps.Runner == nil {
 			return envelope.Err(kind, envelope.CodeInternal, "runner not initialized", nil), nil
@@ -109,12 +110,16 @@ func registerTopicsBuild(s *server.MCPServer, deps Deps) {
 		if !deps.Topics.topicsConfigured() {
 			return envelope.Err(kind, envelope.CodeDependencyFailed, "topics not configured (set config embed.api_key + embed.model + outline.* for naming)", nil), nil
 		}
+		build := deps.Topics.Build
+		if v, ok := req.GetArguments()["k"].(float64); ok && int(v) > 0 {
+			build.K = int(v)
+		}
 		runId, err := deps.Runner.Submit(ctx, runner.Spec{
 			Kind:        run.KindTopicsBuild,
 			Cancellable: true,
 			Init:        run.Run{Progress: run.Progress{FilesTotal: 1}},
 			WorkFn: func(workCtx context.Context, report runner.ProgressFn) (json.RawMessage, error) {
-				res, err := deps.Topics.Build.Run(workCtx)
+				res, err := build.Run(workCtx)
 				if err != nil {
 					return nil, err
 				}
