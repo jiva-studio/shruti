@@ -19,9 +19,13 @@
  *                     the session list (the row's `chat_sessions`
  *                     entry exists).
  *   - `row-prepped` — a row transitioned to `ready` or `degraded`.
- *                     This is the moment the badge / per-session dot
- *                     should appear, since `listUnseenSessionIds`
- *                     filters by `prep_state IN ('ready','degraded')`.
+ *                     The badge / per-session dot appears here ONLY for
+ *                     rows already past their `visible_at`, since
+ *                     `listUnseenSessionIds` gates on
+ *                     `prep_state IN ('ready','degraded')` AND
+ *                     `visible_at <= now`. A row prepped ahead of its
+ *                     visibility moment surfaces on a later refresh
+ *                     (tick / resume) once `visible_at` has arrived.
  *   - `replan`      — external state that affects the notification
  *                     planner changed (e.g. the daily-reminder Settings
  *                     toggle). The scheduler re-runs a tick so the

@@ -158,6 +158,46 @@ describe("proactiveStateRepository — seen_at semantics", () => {
     expect(unseen).toEqual(["session-unseen-ready"])
   })
 
+  it("listUnseenSessionIds hides ready+unseen rows whose visible_at is still in the future", async () => {
+    await seedSession(db, "session-now")
+    await seedSession(db, "session-future")
+
+    const nowSec = Math.floor(Date.now() / 1000)
+
+    // ready + unseen + already visible → should appear
+    await repo.create({
+      chatMessageId: "m-now" as ChatMessageId,
+      sessionId: "session-now" as ChatSessionId,
+      role: "assistant",
+      content: "",
+      createdAt: 1700000000000,
+      visibleAt: nowSec - 3600,
+      notify: false,
+      ruleKind: "holiday",
+      ruleDate: "2026-05-18",
+      prepState: "ready",
+    })
+
+    // ready + unseen but visible_at an hour out → must NOT light the
+    // badge yet (the message itself is still gated out of the thread by
+    // listBySession), even though prep already finished.
+    await repo.create({
+      chatMessageId: "m-future" as ChatMessageId,
+      sessionId: "session-future" as ChatSessionId,
+      role: "assistant",
+      content: "",
+      createdAt: 1700000000000,
+      visibleAt: nowSec + 3600,
+      notify: true,
+      ruleKind: "weekly_digest",
+      ruleDate: "2026-05-19",
+      prepState: "ready",
+    })
+
+    const unseen = await repo.listUnseenSessionIds()
+    expect(unseen).toEqual(["session-now"])
+  })
+
   it("markSeen is idempotent — second call doesn't overwrite the earlier timestamp", async () => {
     await seedSession(db, "session-c")
     await repo.create({
