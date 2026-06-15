@@ -9,10 +9,11 @@ import (
 
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
-	fstranscript "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcriptstore/fs"
-	reviewreg "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
+	fsartifact "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
 	sqliteregistry "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
+	reviewreg "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
+	fstranscript "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcriptstore/fs"
 	reviewport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
 )
 
@@ -61,7 +62,7 @@ func setUp(t *testing.T) (UseCase, track.Id, string) {
 	}
 	t.Cleanup(func() { reg.Close() })
 
-	store := fstranscript.New(dir)
+	store := fstranscript.New(dir, fsartifact.New(dir))
 	id, _, err := reg.UpsertFile(ctx, track.SourceFile{Path: "/x.mp3", SHA256: "a", Size: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +112,7 @@ func TestReviewFreezesTimestamps(t *testing.T) {
 	}
 
 	// Read back the reviewed file and verify timestamps came verbatim from raw.
-	store := fstranscript.New(dir)
+	store := fstranscript.New(dir, fsartifact.New(dir))
 	raw, err := store.ReadRaw(ctx, id, "ru")
 	if err != nil {
 		t.Fatal(err)
@@ -224,7 +225,7 @@ func TestReviewCrossChunkSentenceMerge(t *testing.T) {
 		t.Fatalf("review: %v", err)
 	}
 
-	store := fstranscript.New(dir)
+	store := fstranscript.New(dir, fsartifact.New(dir))
 	body, err := readFile(store.PublicTranscriptPath(id, "ru"))
 	if err != nil {
 		t.Fatal(err)
