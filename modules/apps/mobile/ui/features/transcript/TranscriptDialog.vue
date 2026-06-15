@@ -19,6 +19,14 @@
 
       <TranscriptDialogHeader :title="title" :author="author" />
 
+      <LectureOverview
+        v-if="description || (chapters && chapters.length > 0)"
+        class="overview"
+        :description="description ?? null"
+        :chapters="chapters ?? []"
+        @pick="(ms: number) => emit('seek', ms)"
+      />
+
       <LanguageSelector
         v-if="availableLanguages.length > 1"
         v-model:active="activeLanguages"
@@ -60,18 +68,24 @@ import { computed, useTemplateRef } from "vue"
 import { IonButton, IonContent, IonModal } from "@ionic/vue"
 import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
+import LectureOverview from "@ui/components/LectureOverview.vue"
 import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
 import TranscriptDialogHeader from "./TranscriptDialogHeader.vue"
 import { useTranscriptAutoScroll } from "./useTranscriptAutoScroll.js"
 import TranscriptStatus from "./TranscriptStatus.vue"
 import TranscriptText, { type TextSelectedEvent, type NoteTappedEvent } from "./TranscriptText.vue"
 import type { UiTranscriptBlocksGroup, UiTranscriptLanguage } from "./types.js"
+import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 
 const props = defineProps<{
   blockGroups: readonly UiTranscriptBlocksGroup[]
   availableLanguages: readonly UiTranscriptLanguage[]
   title: string
   author: string
+  /** Lecture description shown above the transcript (null/absent → hidden). */
+  description?: string | null
+  /** Chapter outline shown above the transcript; a tap emits `seek`. */
+  chapters?: readonly TrackOutlineChapter[]
   position: number
   duration: number
   allowMultipleLanguages: boolean
