@@ -17,6 +17,7 @@ export interface PersistedFilters {
   locationIds: readonly string[]
   sourceIds: readonly string[]
   tagIds: readonly string[]
+  topicIds: readonly string[]
   duration: readonly DurationFilterId[]
   sort: SortMethod | undefined
   /** Date-range edges — `"YYYY"` / `"YYYY-MM"` or undefined for open ends. */
@@ -30,6 +31,7 @@ const EMPTY: PersistedFilters = {
   locationIds: [],
   sourceIds: [],
   tagIds: [],
+  topicIds: [],
   duration: [],
   sort: undefined,
   dateFrom: undefined,
@@ -49,6 +51,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
   const locationIds = ref<readonly string[]>([])
   const sourceIds = ref<readonly string[]>([])
   const tagIds = ref<readonly string[]>([])
+  const topicIds = ref<readonly string[]>([])
   const duration = ref<readonly DurationFilterId[]>([])
   const sort = ref<PersistedFilters["sort"]>(undefined)
   const dateFrom = ref<string | undefined>(undefined)
@@ -66,6 +69,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
         locationIds.value = parsed.locationIds ?? EMPTY.locationIds
         sourceIds.value = parsed.sourceIds ?? EMPTY.sourceIds
         tagIds.value = parsed.tagIds ?? EMPTY.tagIds
+        topicIds.value = parsed.topicIds ?? EMPTY.topicIds
         duration.value = parsed.duration ?? EMPTY.duration
         sort.value = parsed.sort ?? EMPTY.sort
         dateFrom.value = parsed.dateFrom ?? EMPTY.dateFrom
@@ -96,6 +100,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
       locationIds: locationIds.value,
       sourceIds: sourceIds.value,
       tagIds: tagIds.value,
+      topicIds: topicIds.value,
       duration: duration.value,
       sort: sort.value,
       dateFrom: dateFrom.value,
@@ -129,6 +134,11 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     await persist()
   }
 
+  async function setTopics(ids: readonly string[]): Promise<void> {
+    topicIds.value = ids
+    await persist()
+  }
+
   async function setDuration(ids: readonly DurationFilterId[]): Promise<void> {
     duration.value = ids
     await persist()
@@ -155,6 +165,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     locationIds.value = []
     sourceIds.value = []
     tagIds.value = []
+    topicIds.value = []
     duration.value = []
     sort.value = undefined
     dateFrom.value = undefined
@@ -175,6 +186,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     locationIds.value = []
     sourceIds.value = []
     tagIds.value = []
+    topicIds.value = []
     duration.value = []
     sort.value = undefined
     dateFrom.value = undefined
@@ -188,6 +200,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     locationIds,
     sourceIds,
     tagIds,
+    topicIds,
     duration,
     sort,
     dateFrom,
@@ -199,6 +212,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     setLocations,
     setSources,
     setTags,
+    setTopics,
     setDuration,
     setSort,
     setDateFrom,
