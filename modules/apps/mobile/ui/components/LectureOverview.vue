@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n"
-import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
+import type { UiOutlineChapter } from "./types.js"
 
 /**
  * Shared lecture overview: a short description followed by a list of chapters
@@ -34,7 +34,7 @@ import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 const props = withDefaults(
   defineProps<{
     description: string | null
-    chapters: readonly TrackOutlineChapter[]
+    chapters: readonly UiOutlineChapter[]
     interactive?: boolean
   }>(),
   { interactive: false }
@@ -47,7 +47,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-function onChapterTap(ch: TrackOutlineChapter): void {
+function onChapterTap(ch: UiOutlineChapter): void {
   if (props.interactive) emit("seek", ch.startMs)
 }
 
