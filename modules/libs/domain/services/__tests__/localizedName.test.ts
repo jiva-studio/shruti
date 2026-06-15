@@ -20,6 +20,7 @@ function track(variants: Array<{ language: string; title: string }>): Track {
     hidden: false,
     references: [],
     tagIds: [],
+    topicIds: [],
     variants: variants.map((v) => ({
       trackId: "t" as TrackId,
       language: v.language as Track["variants"][number]["language"],

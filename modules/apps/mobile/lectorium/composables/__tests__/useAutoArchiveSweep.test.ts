@@ -16,6 +16,7 @@ function track(id: string, durationMs: number): Track {
     hidden: false,
     references: [],
     tagIds: [],
+    topicIds: [],
     variants: [
       {
         trackId: id as TrackId,

@@ -11,6 +11,7 @@ import { createSqlLocationRepository } from "./locationsRepository.sql.js"
 import { createSqlSourceRepository } from "./sourcesRepository.sql.js"
 import { createSqlLanguageRepository } from "./languagesRepository.sql.js"
 import { createSqlTagRepository } from "./tagsRepository.sql.js"
+import { createSqlTopicRepository } from "./topicsRepository.sql.js"
 import { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
 import { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
 import { createSqlProactiveStateRepository } from "./proactiveStateRepository.sql.js"
@@ -28,6 +29,7 @@ export { createSqlLocationRepository } from "./locationsRepository.sql.js"
 export { createSqlSourceRepository } from "./sourcesRepository.sql.js"
 export { createSqlLanguageRepository } from "./languagesRepository.sql.js"
 export { createSqlTagRepository } from "./tagsRepository.sql.js"
+export { createSqlTopicRepository } from "./topicsRepository.sql.js"
 export { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
 export { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
 export { createSqlProactiveStateRepository } from "./proactiveStateRepository.sql.js"
@@ -48,6 +50,7 @@ export interface SqlAppRepositories {
   readonly sources: ReturnType<typeof createSqlSourceRepository>
   readonly languages: ReturnType<typeof createSqlLanguageRepository>
   readonly tags: ReturnType<typeof createSqlTagRepository>
+  readonly topics: ReturnType<typeof createSqlTopicRepository>
   readonly notes: ReturnType<typeof createSqlNoteRepository>
   readonly playlistItems: ReturnType<typeof createSqlPlaylistItemRepository>
   readonly listeningSessions: ReturnType<typeof createSqlListeningSessionRepository>
@@ -86,6 +89,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     sources: createSqlSourceRepository(deps.contentDb),
     languages: createSqlLanguageRepository(deps.contentDb),
     tags: createSqlTagRepository(deps.contentDb),
+    topics: createSqlTopicRepository(deps.contentDb),
     notes: createSqlNoteRepository(deps.userDb),
     playlistItems: createSqlPlaylistItemRepository(deps.userDb),
     listeningSessions: createSqlListeningSessionRepository(deps.userDb),

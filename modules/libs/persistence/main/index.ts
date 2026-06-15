@@ -36,6 +36,12 @@ export interface TagRow {
   readonly full_name: string
 }
 
+export interface TopicRow {
+  readonly id: string
+  readonly language: string
+  readonly full_name: string
+}
+
 export interface TrackRow {
   readonly id: string
   /** nullable — legacy content sometimes has no author metadata */
@@ -96,6 +102,12 @@ export interface TrackReferenceRow {
 export interface TrackTagRow {
   readonly track_id: string
   readonly tag_id: string
+}
+
+export interface TrackTopicRow {
+  readonly track_id: string
+  readonly topic_id: string
+  readonly weight: number
 }
 
 export interface MigrationRow {
