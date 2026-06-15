@@ -63,7 +63,7 @@ import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
-import LectureOverview from "@shruti/components/LectureOverview.vue"
+import LectureOverview from "@ui/components/LectureOverview.vue"
 
 const { t } = useI18n()
 const app = useShruti()

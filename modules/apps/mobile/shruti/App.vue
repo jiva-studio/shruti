@@ -29,6 +29,8 @@
       :available-languages="dialog.availableLanguages.value"
       :title="dialog.title.value"
       :author="dialog.author.value"
+      :description="dialog.description.value"
+      :chapters="dialog.chapters.value"
       :position="dialog.position.value"
       :duration="dialog.duration.value"
       :allow-multiple-languages="dialog.allowMultipleLanguages.value"
