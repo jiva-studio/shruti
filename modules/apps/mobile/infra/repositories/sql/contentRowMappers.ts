@@ -4,6 +4,7 @@ import type { Location } from "@lib/domain/location.js"
 import type { Reference } from "@lib/domain/reference.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Tag } from "@lib/domain/tag.js"
+import type { Topic } from "@lib/domain/topic.js"
 import type { Track } from "@lib/domain/track.js"
 import type {
   TrackAudio,
@@ -19,10 +20,12 @@ import type {
   LocationRow,
   SourceRow,
   TagRow,
+  TopicRow,
   TrackAudioRow,
   TrackReferenceRow,
   TrackRow,
   TrackTagRow,
+  TrackTopicRow,
   TrackVariantRow,
 } from "@lib/persistence/main"
 
@@ -74,6 +77,18 @@ export function rowToTag(rows: readonly TagRow[]): Tag {
   const byLanguage = new Map<string, string>()
   for (const r of rows) byLanguage.set(r.language, r.full_name)
   return { id: rows[0].id, names: byLanguage }
+}
+
+export function rowToTopic(rows: readonly TopicRow[]): Topic {
+  const names = new Map<string, string>()
+  const shortNames = new Map<string, string>()
+  let cover: string | null = null
+  for (const r of rows) {
+    names.set(r.language, r.full_name)
+    if (r.short_name) shortNames.set(r.language, r.short_name)
+    if (!cover && r.cover) cover = r.cover
+  }
+  return { id: rows[0].id, names, shortNames, cover }
 }
 
 /**
@@ -155,6 +170,7 @@ export interface TrackAssemblyParts {
   audios: readonly TrackAudioRow[]
   references: readonly TrackReferenceRow[]
   tags: readonly TrackTagRow[]
+  topics: readonly TrackTopicRow[]
 }
 
 export function rowToTrack(parts: TrackAssemblyParts): Track {
@@ -170,6 +186,11 @@ export function rowToTrack(parts: TrackAssemblyParts): Track {
       tokens: r.tokens.length > 0 ? r.tokens.split(".") : [],
     }))
   const tagIds = parts.tags.filter((t) => t.track_id === track.id).map((t) => t.tag_id)
+  const topicIds = parts.topics
+    .filter((t) => t.track_id === track.id)
+    .slice()
+    .sort((a, b) => b.weight - a.weight)
+    .map((t) => t.topic_id)
   return {
     id: track.id,
     authorId: track.author_id,
@@ -178,6 +199,7 @@ export function rowToTrack(parts: TrackAssemblyParts): Track {
     hidden: track.hidden !== 0,
     references,
     tagIds,
+    topicIds,
     variants,
   }
 }

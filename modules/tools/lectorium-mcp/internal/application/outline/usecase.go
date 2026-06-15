@@ -28,10 +28,22 @@ type CatalogWriter interface {
 	SetVariantOutline(ctx context.Context, trackID, language, outline, description string) error
 }
 
+// GranularStore persists the private, offline-only granular outline artifact
+// (the pre-collapse fine heading list, each with a derived [start,end) span)
+// for the topic-vocabulary pipeline. It is NOT published to the client catalog.
+// Optional: a nil GranularStore disables the write (the published coarse
+// outline is unaffected).
+type GranularStore interface {
+	WriteGranularOutline(ctx context.Context, id track.Id, language string, granularJSON []byte) error
+}
+
 type UseCase struct {
 	Transcripts transcriptport.Store
 	LLM         outlineport.Generator
 	Catalog     CatalogWriter
+	// Granular (optional) receives the fine pre-collapse headings as a private
+	// artifact. nil = skip.
+	Granular GranularStore
 }
 
 // Entry is one stored outline heading: title + [start,end) span in ms. Mirrors
@@ -61,15 +73,29 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 		return Result{}, fmt.Errorf("no transcript text for %s/%s", id, language)
 	}
 
-	items, err := uc.LLM.Outline(ctx, lectureText, language)
+	res, err := uc.LLM.Outline(ctx, lectureText, language)
 	if err != nil {
 		return Result{}, err
 	}
-	entries := buildEntries(items, duration)
+	entries := buildEntries(res.Coarse, duration)
 
 	desc, err := uc.LLM.Description(ctx, lectureText, language)
 	if err != nil {
 		return Result{}, err
+	}
+
+	// Persist the granular pass as a private offline artifact BEFORE the catalog
+	// write, so a granular-write failure surfaces as a clean re-runnable per-track
+	// failure rather than leaving a published outline without its topic precursor.
+	if uc.Granular != nil {
+		granular := buildEntries(res.Granular, duration)
+		granularJSON, err := json.Marshal(granular)
+		if err != nil {
+			return Result{}, fmt.Errorf("marshal granular outline: %w", err)
+		}
+		if err := uc.Granular.WriteGranularOutline(ctx, id, language, granularJSON); err != nil {
+			return Result{}, fmt.Errorf("write granular outline: %w", err)
+		}
 	}
 
 	outlineJSON, err := json.Marshal(entries)

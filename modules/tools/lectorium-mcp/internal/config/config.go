@@ -26,6 +26,7 @@ type Config struct {
 	Resolver   Resolver   `yaml:"resolver"`
 	Metadata   Metadata   `yaml:"metadata"`
 	Outline    Outline    `yaml:"outline"`
+	Embed      Embed      `yaml:"embed"`
 	Images     Images     `yaml:"images"`
 }
 
@@ -237,6 +238,20 @@ type Outline struct {
 	Reasoning string `yaml:"reasoning,omitempty"`
 }
 
+// Embed configures the text-embeddings endpoint used by the topic build/assign
+// (clustering outline headings into canonical topics). OpenAI-compatible
+// (text-embedding-3-small via OpenRouter/OpenAI). When APIKey is empty the
+// topic tools are disabled (topics.build / track.topics.assign return a clear
+// error). Dimensions trims the vector (256 is plenty for clustering); batch
+// caps inputs per HTTP call.
+type Embed struct {
+	Endpoint   string `yaml:"endpoint,omitempty"`
+	APIKey     string `yaml:"api_key"`
+	Model      string `yaml:"model"`
+	Dimensions int    `yaml:"dimensions,omitempty"`
+	BatchSize  int    `yaml:"batch_size,omitempty"`
+}
+
 // ProviderOptions describes one OpenAI-compatible review provider entry.
 // All review providers go through the same /v1/chat/completions adapter —
 // only the upstream URL, key, and model id differ. Used as-is for resolver
@@ -330,7 +345,7 @@ func (c *Config) applyDefaults() {
 		c.Images.Model = "google/gemini-2.5-flash-image"
 	}
 	if c.Images.Style == "" {
-		c.Images.Style = "Devotional illustration in the Gaudiya Vaishnava (Hare Krishna / ISKCON) tradition. Warm palette of saffron, cream and soft gold; gentle painterly digital art; serene and uplifting; soft golden-hour light. Full-bleed square 1:1 composition that fills the entire frame edge to edge — no border, no frame, no margin, no vignette. Absolutely no text, words or letters. Avoid Buddhist and generic new-age imagery — no Buddha, no buddhist temples; depict Vaishnava devotees with tilak and dhoti/sari where people appear."
+		c.Images.Style = "Devotional illustration in the Gaudiya Vaishnava (Hare Krishna / ISKCON) tradition. Warm palette of saffron, cream and soft gold; gentle painterly digital art; serene and uplifting; soft golden-hour light. Full-bleed square 1:1 composition that COMPLETELY fills the frame edge to edge — absolutely no white border, no frame, no margin, no rounded corners, no vignette, no passe-partout. Absolutely no text, words or letters. Every Vaishnava person wears authentic Gaudiya Vaishnava tilaka: two thin vertical pale clay-yellow (gopi-chandana) lines painted on the forehead that come together at the bridge of the nose forming a narrow U/V shape, with a small tulasi-leaf mark at the base on the nose — never horizontal Shaivite lines, never a single dot. Devotees wear dhoti or sari. Avoid Buddhist and generic new-age imagery — no Buddha, no buddhist temples."
 	}
 	if c.FFmpeg.Bin == "" {
 		c.FFmpeg.Bin = "ffmpeg"

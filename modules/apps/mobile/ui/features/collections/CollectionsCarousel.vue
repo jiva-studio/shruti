@@ -5,6 +5,7 @@
       :key="c.id"
       :name="c.name"
       :cover-url="c.coverUrl"
+      :hashtag="hashtag"
       @click="emit('select', c.id)"
     />
   </div>
@@ -24,7 +25,7 @@ export interface CarouselItem {
   readonly coverUrl?: string
 }
 
-defineProps<{ items: readonly CarouselItem[] }>()
+defineProps<{ items: readonly CarouselItem[]; hashtag?: boolean }>()
 const emit = defineEmits<{ (e: "select", id: string): void }>()
 </script>
 
@@ -34,9 +35,10 @@ const emit = defineEmits<{ (e: "select", id: string): void }>()
   gap: 14px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  /* Side insets so the first/last cards aren't flush to the screen edges. */
-  padding: 6px 20px 14px;
-  scroll-padding-inline: 20px;
+  /* Side insets aligned with the section header text (16px) so the first card
+     lines up with the title above it. */
+  padding: 0 16px 14px;
+  scroll-padding-inline: 16px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }

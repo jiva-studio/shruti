@@ -2,6 +2,8 @@
   <div class="lecture-overview">
     <p v-if="description" class="description">{{ description }}</p>
 
+    <slot />
+
     <template v-if="chapters.length > 0">
       <h3 class="contents-title">{{ t("transcript.contents") }}</h3>
       <ul class="chapters">
@@ -110,7 +112,7 @@ function formatMs(ms: number): string {
 
 .time {
   flex: none;
-  align-self: flex-start;
+  align-self: center;
   padding: 2px 7px;
   border-radius: 6px;
   background: var(--ion-color-step-550, rgba(0, 0, 0, 0.55));

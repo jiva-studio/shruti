@@ -64,4 +64,14 @@ defineEmits<{ select: [trackId: string] }>()
 .details {
   transition: all 1s ease;
 }
+
+/* Tighter rows; the divider between rows is a list-level <RowDivider>. */
+.track {
+  --min-height: 0;
+}
+
+.track ion-label {
+  margin-top: 7px;
+  margin-bottom: 7px;
+}
 </style>

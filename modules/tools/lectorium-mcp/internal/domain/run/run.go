@@ -31,6 +31,8 @@ const (
 	KindTranscriptAlignPDF Kind = "transcript_align_pdf"
 	KindTranscriptOutline  Kind = "transcript_outline"
 	KindLibraryImport      Kind = "library_import"
+	KindTopicsBuild        Kind = "topics_build"
+	KindTopicsAssign       Kind = "topics_assign"
 )
 
 // Long-running per-track tools (transcript_review, transcript_create,

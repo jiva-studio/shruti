@@ -29,6 +29,7 @@ const mkTrack = (variants: readonly TrackVariant[]): Track => ({
   hidden: false,
   references: [],
   tagIds: [],
+  topicIds: [],
   variants,
 })
 

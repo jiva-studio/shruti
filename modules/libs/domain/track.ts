@@ -1,4 +1,4 @@
-import type { AuthorId, IsoDate, LocationId, TrackId, TagId } from "./core.js"
+import type { AuthorId, IsoDate, LocationId, TrackId, TagId, TopicId } from "./core.js"
 import type { Reference } from "./reference.js"
 import type { TrackVariant } from "./trackVariant.js"
 
@@ -16,6 +16,8 @@ export interface Track {
   readonly hidden: boolean
   readonly references: readonly Reference[]
   readonly tagIds: readonly TagId[]
+  /** Canonical recommender topics, ordered by descending weight. */
+  readonly topicIds: readonly TopicId[]
   readonly variants: readonly TrackVariant[]
 }
 

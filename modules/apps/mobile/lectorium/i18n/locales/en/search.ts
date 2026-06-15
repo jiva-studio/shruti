@@ -5,6 +5,10 @@ export default {
   filtersSheetTitle: "Filters",
   filtersReset: "Reset",
   lecturesTitle: "Lectures",
+  recommendedForYou: "Recommendations",
+  allLectures: "All lectures",
+  topicsSection: "Lectures on various topics",
+  topics: "Topics",
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",
@@ -32,6 +36,7 @@ export default {
     authors: "Authors",
     sources: "Sources",
     tags: "Tags",
+    topics: "Topics",
     locations: "Locations",
     languages: "Languages",
     duration: "Durations",

@@ -1,4 +1,11 @@
-import type { AuthorId, LanguageCode, LocationId, SourceId, TagId } from "@lib/domain/core.js"
+import type {
+  AuthorId,
+  LanguageCode,
+  LocationId,
+  SourceId,
+  TagId,
+  TopicId,
+} from "@lib/domain/core.js"
 import { durationFilterBounds, type DurationFilterId } from "@lib/domain/durationFilters.js"
 import { dateRangeBounds, type DateBound } from "@lib/domain/dateFilters.js"
 import type { ITrackRepository, TrackListFilters } from "@lib/domain/ports/trackRepository.js"
@@ -13,6 +20,7 @@ export interface SearchAndFilterTracksInput {
   readonly locationIds?: readonly LocationId[]
   readonly sourceIds?: readonly SourceId[]
   readonly tagIds?: readonly TagId[]
+  readonly topicIds?: readonly TopicId[]
   readonly durationFilter?: DurationFilterId
   /** Coarse date-range bounds, each `"YYYY"` / `"YYYY-MM"` or absent. */
   readonly dateFrom?: DateBound
@@ -35,6 +43,7 @@ function buildFilters(input: SearchAndFilterTracksInput): TrackListFilters {
     languageCodes: input.languageCodes,
     sourceIds: input.sourceIds,
     tagIds: input.tagIds,
+    topicIds: input.topicIds,
     durationMinMs: duration?.minMs,
     durationMaxMs: duration?.maxMs,
     dateGte: dates.gte,
