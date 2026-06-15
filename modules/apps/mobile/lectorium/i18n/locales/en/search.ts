@@ -5,6 +5,8 @@ export default {
   filtersSheetTitle: "Filters",
   filtersReset: "Reset",
   lecturesTitle: "Lectures",
+  recommendedForYou: "Recommended for you",
+  becauseListenedAbout: "Because you listened about {topic}",
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",

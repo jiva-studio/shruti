@@ -1,5 +1,16 @@
 <template>
   <AppPage :reserve-bottom-space="player.open">
+    <template v-if="recommendedRows.length">
+      <IonListHeader>
+        <IonLabel>{{ $t("search.recommendedForYou") }}</IonLabel>
+      </IonListHeader>
+      <TracksList :rows="recommendedRows" @select="onSelectTrack">
+        <template #state="{ state, progressPct }">
+          <TrackStateIndicator :state="state" :progress="progressPct" />
+        </template>
+      </TracksList>
+    </template>
+
     <div v-for="g in topGroups" :key="g.id" class="collection-group">
       <IonListHeader>
         <IonLabel>{{ g.name }}</IonLabel>
@@ -37,6 +48,24 @@
       />
     </template>
 
+    <div v-for="s in topicShelves" :key="s.topicId" class="collection-group">
+      <IonListHeader>
+        <IonLabel>{{ s.title }}</IonLabel>
+        <IonButton
+          class="no-ripple"
+          :aria-label="$t('search.collections.seeAllNamed', { name: s.name })"
+          @click="openTopic(s.topicId)"
+        >
+          <IconChevronRight :size="20" />
+        </IonButton>
+      </IonListHeader>
+      <TracksList :rows="s.rows" @select="onSelectTrack">
+        <template #state="{ state, progressPct }">
+          <TrackStateIndicator :state="state" :progress="progressPct" />
+        </template>
+      </TracksList>
+    </div>
+
     <template v-if="previewLectures.length">
       <IonListHeader>
         <IonLabel>{{ $t("search.lecturesTitle") }}</IonLabel>
@@ -59,6 +88,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
 import { IonButton, IonLabel, IonListHeader, onIonViewWillEnter } from "@ionic/vue"
 import { IconChevronRight } from "@tabler/icons-vue"
@@ -67,6 +97,8 @@ import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { CollectionsCarousel, CollectionListItem } from "@ui/features/collections/index.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
+import { useRecommendationsStore } from "@lectorium/stores/useRecommendationsStore.js"
+import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
 import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
@@ -82,10 +114,36 @@ import type { TrackId } from "@lib/domain/core.js"
 const player = usePlayerStore()
 const router = useRouter()
 const app = useLectorium()
+const { t } = useI18n()
 const appLanguage = useAppLanguage()
 const mapper = useTrackUiStateMapper()
 const trackActions = useTrackActionSheet()
+const recommendations = useRecommendationsStore()
+const dictionaries = useDictionariesStore()
 const { groups: collectionGroups, allCollections } = useCollectionGroups(appLanguage)
+
+// "Recommended for you" picks + per-hot-topic shelves, derived on-device from
+// the listening profile (see useRecommendationsStore). SHELF_PREVIEW caps the
+// inline rows; "see all" opens the full topic-tracks view.
+const SHELF_PREVIEW = 4
+const recommendedRows = mapper.mapRows(() => recommendations.recommended, { context: "discovery" })
+const topicShelves = computed(() =>
+  recommendations.shelves.map((s) => {
+    const name = dictionaries.topicNamesById.get(s.topicId) ?? s.topicId
+    return {
+      topicId: s.topicId,
+      name,
+      title: recommendations.hasHistory
+        ? t("search.becauseListenedAbout", { topic: name })
+        : name,
+      rows: s.tracks.slice(0, SHELF_PREVIEW).map((tr) => mapper.toUiRow(tr)),
+    }
+  })
+)
+
+function openTopic(topicId: string): void {
+  void router.push({ name: "topic-tracks", params: { topicId } })
+}
 
 const topGroups = computed(() => collectionGroups.value.slice(0, 2))
 const OTHER_COLLECTIONS_LIMIT = 4
@@ -141,6 +199,8 @@ watch(appLanguage, (language) => void loadLecturePool(language), { immediate: tr
 onIonViewWillEnter(() => {
   pickOtherCollections()
   pickLectures()
+  void dictionaries.ensureLoaded()
+  void recommendations.ensureLoaded()
 })
 
 async function onSelectTrack(trackId: string): Promise<void> {

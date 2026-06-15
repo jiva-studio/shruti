@@ -73,6 +73,12 @@ const routes: RouteRecordRaw[] = [
         props: true,
       },
       {
+        path: "search/topic/:topicId",
+        name: "topic-tracks",
+        component: () => import("@lectorium/views/Topic/TopicTracksView.vue"),
+        props: true,
+      },
+      {
         path: "search/collections",
         name: "collections",
         component: () => import("@lectorium/views/Collection/CollectionListView.vue"),
