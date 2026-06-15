@@ -26,6 +26,9 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureAuthorProfileColumns(ctx, db); err != nil {
 		return fmt.Errorf("ensure author profile columns: %w", err)
 	}
+	if err := ensureTrackVariantOutlineColumns(ctx, db); err != nil {
+		return fmt.Errorf("ensure track_variant outline columns: %w", err)
+	}
 	return nil
 }
 
@@ -89,6 +92,30 @@ func ensureAuthorProfileColumns(ctx context.Context, db *sql.DB) error {
 			if _, err := db.ExecContext(ctx,
 				fmt.Sprintf(`ALTER TABLE authors ADD COLUMN %s TEXT`, col)); err != nil {
 				return fmt.Errorf("add authors.%s: %w", col, err)
+			}
+		}
+	}
+	return nil
+}
+
+// ensureTrackVariantOutlineColumns adds the per-variant lecture-overview columns
+// when missing:
+//   - outline     : JSON array of {title,start,end} section headings (ms),
+//     generated from the reviewed transcript;
+//   - description : a short per-locale overview of the lecture.
+//
+// Additive ALTERs under the same scheme — older mobile binaries ignore the new
+// columns, newer ones read them. Idempotent: a no-op once present.
+func ensureTrackVariantOutlineColumns(ctx context.Context, db *sql.DB) error {
+	for _, col := range []string{"outline", "description"} {
+		has, err := columnExists(ctx, db, "track_variants", col)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := db.ExecContext(ctx,
+				fmt.Sprintf(`ALTER TABLE track_variants ADD COLUMN %s TEXT`, col)); err != nil {
+				return fmt.Errorf("add track_variants.%s: %w", col, err)
 			}
 		}
 	}
