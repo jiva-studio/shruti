@@ -181,16 +181,25 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
 
     async listUnseenSessionIds(): Promise<readonly ChatSessionId[]> {
       // A session is "unseen" while at least one proactive_state row
-      // tied to it has `seen_at IS NULL` AND its prep_state is
+      // tied to it has `seen_at IS NULL`, its prep_state is
       // ready/degraded (pending rows are still being prepped — we
-      // don't want the dot to flash before the body is even written).
+      // don't want the dot to flash before the body is even written),
+      // AND its `visible_at` moment has arrived. The visibility gate is
+      // the same one `listBySession` applies to the message itself — a
+      // row prepped ahead of time (e.g. a holiday card built the night
+      // before) stays hidden from the thread until `visible_at`, so the
+      // badge MUST stay dark until then too. Without this gate the dot
+      // (and tab badge + foreground toast derived from it) lights the
+      // moment prep finishes, sending the user into a session whose
+      // proactive message isn't on screen yet.
       // `chatStore.openSession` calls `markSeen` to clear the flag.
       const rows = await db.query<{ session_id: string }>(
         `SELECT DISTINCT m.session_id
            FROM chat_messages_proactive_state p
            JOIN chat_messages m ON m.id = p.chat_message_id
           WHERE p.prep_state IN ('ready', 'degraded')
-            AND p.seen_at IS NULL`
+            AND p.seen_at IS NULL
+            AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))`
       )
       return rows.map((r) => r.session_id as ChatSessionId)
     },
