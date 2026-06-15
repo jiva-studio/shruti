@@ -9,7 +9,8 @@
           v-for="(ch, i) in chapters"
           :key="i"
           class="chapter"
-          @click="emit('pick', ch.startMs)"
+          :class="{ interactive }"
+          @click="onChapterTap(ch)"
         >
           <span class="time">{{ formatMs(ch.startMs) }}</span>
           <span class="chapter-title">{{ ch.title }}</span>
@@ -24,30 +25,42 @@ import { useI18n } from "vue-i18n"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 
 /**
- * Shared lecture overview: a short description followed by a tappable list of
- * chapters (timecode + title). Reused by the per-track bottom sheet and the
- * transcript reader header. Purely presentational — the parent decides what a
- * chapter tap does (play from there, or seek the open transcript) via `pick`.
+ * Shared lecture overview: a short description followed by a list of chapters
+ * (timecode + title). By default the rows are purely informational; pass
+ * `interactive` (the transcript reader does) to make each row tappable — it
+ * then emits `seek` with the chapter's start (ms). The bottom sheet leaves it
+ * off, so the rows stay static there.
  */
-defineProps<{
-  description: string | null
-  chapters: readonly TrackOutlineChapter[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    description: string | null
+    chapters: readonly TrackOutlineChapter[]
+    interactive?: boolean
+  }>(),
+  { interactive: false }
+)
 
 const emit = defineEmits<{
-  /** A chapter row was tapped; payload is its start position in ms. */
-  pick: [startMs: number]
+  /** A chapter row was tapped (only when `interactive`); payload is start ms. */
+  seek: [startMs: number]
 }>()
 
 const { t } = useI18n()
 
+function onChapterTap(ch: TrackOutlineChapter): void {
+  if (props.interactive) emit("seek", ch.startMs)
+}
+
+// Zero-padded mm:ss (h:mm:ss past an hour) so the column lines up:
+// 00:00 / 04:28 / 16:07 / 1:02:03.
 function formatMs(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
-  const mm = h > 0 ? String(m).padStart(2, "0") : String(m)
-  return h > 0 ? `${h}:${mm}:${String(s).padStart(2, "0")}` : `${mm}:${String(s).padStart(2, "0")}`
+  const mm = String(m).padStart(2, "0")
+  const ss = String(s).padStart(2, "0")
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
 }
 </script>
 
@@ -77,31 +90,35 @@ function formatMs(ms: number): string {
   list-style: none;
   margin: 0;
   padding: 0;
+  padding-inline-start: 0;
 }
 
 .chapter {
   display: flex;
   gap: 12px;
   align-items: baseline;
-  padding: 11px 0;
+  padding: 4px 0;
+}
+
+.chapter.interactive {
   cursor: pointer;
-  border-bottom: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
 }
 
-.chapter:last-child {
-  border-bottom: none;
-}
-
-.chapter:active {
+.chapter.interactive:active {
   opacity: 0.6;
 }
 
 .time {
   flex: none;
-  min-width: 46px;
+  align-self: flex-start;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--ion-color-step-550, rgba(0, 0, 0, 0.55));
+  color: #fff;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
-  color: var(--ion-color-primary, #3880ff);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .chapter-title {

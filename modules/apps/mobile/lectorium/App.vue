@@ -43,6 +43,7 @@
       :error-message="dialog.error.value"
       :has-no-transcripts="dialog.hasNoTranscripts.value"
       @seek="dialog.onSeek"
+      @chapter-seek="dialog.onChapterSeek"
       @text-selected="dialog.onTextSelected"
       @note-tapped="dialog.onNoteTapped"
       @pick-start="dialog.onPickStart"
