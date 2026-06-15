@@ -60,6 +60,7 @@
       @action="onSelectionPopoverAction"
       @dismissed="onSelectionPopoverDismissed"
     />
+    <TrackSheet />
   </IonApp>
 </template>
 
@@ -72,6 +73,7 @@ import { FILES_STORAGE_KEY } from "@ui/primitives/index.js"
 import { useTrackMetadataFields } from "@lectorium/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
+import TrackSheet from "@lectorium/components/TrackSheet.vue"
 import type { SelectionActionEvent } from "@lectorium/composables/transcript/useTranscriptSelectionActions.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
