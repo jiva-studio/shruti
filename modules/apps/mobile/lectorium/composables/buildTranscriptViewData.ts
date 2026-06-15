@@ -1,6 +1,7 @@
 import type { LanguageCode, NoteId } from "@lib/domain/core.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Transcript } from "@lib/domain/transcript.js"
+import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type {
   UiTranscriptBlockRaw,
   UiTranscriptBlockView,
@@ -52,6 +53,13 @@ export interface BuildTranscriptViewDataOpts {
    * Omitted / empty means no historic highlights — used in preview mode.
    */
   readonly notes?: readonly NoteRange[]
+  /**
+   * Outline chapters (ms). When present, the transcript is split at every
+   * chapter start: the block that first reaches a chapter's `startMs` opens
+   * a fresh paragraph group tagged with that chapter's `heading`, so the
+   * reader can render an inline heading there. Empty / omitted → no splits.
+   */
+  readonly chapters?: readonly TrackOutlineChapter[]
 }
 
 /**
@@ -70,6 +78,16 @@ export function buildTranscriptViewData(
   let current: UiTranscriptBlockView[] = []
   let lastSpeaker: string | undefined = undefined
   let charsAccum = 0
+
+  // Outline chapters sorted by start; `chapterIdx` walks forward as blocks
+  // advance in time. `currentHeading` is the chapter that opened the group
+  // being accumulated — it gets stamped onto that group when it flushes.
+  const chapterList = (opts.chapters ?? [])
+    .filter((c) => Number.isFinite(c.startMs))
+    .slice()
+    .sort((a, b) => a.startMs - b.startMs)
+  let chapterIdx = 0
+  let currentHeading: { title: string; startMs: number } | undefined = undefined
 
   const lang: LanguageCode = opts.lang ?? "en"
   const sourcesById = opts.sourcesById
@@ -107,16 +125,40 @@ export function buildTranscriptViewData(
   }
 
   const flush = () => {
-    if (current.length > 0) groups.push({ blocks: current })
+    if (current.length > 0) {
+      groups.push({
+        blocks: current,
+        heading: currentHeading?.title,
+        headingStartMs: currentHeading?.startMs,
+      })
+    }
     current = []
     lastSpeaker = undefined
     charsAccum = 0
+    // The heading belongs to the group just flushed; the next group starts
+    // headless until another chapter boundary opens one.
+    currentHeading = undefined
   }
 
   for (const block of transcript.blocks) {
     if (block.type === "paragraph") {
       flush()
       continue
+    }
+
+    // Outline boundary: if this block is the first to reach the next
+    // chapter's start, close the running paragraph and open a fresh group
+    // tagged with that chapter (even if the boundary lands mid-paragraph —
+    // the chapter wins and starts a new block here). Multiple chapters that
+    // fall before this block collapse to the last one.
+    let triggered: { title: string; startMs: number } | undefined
+    while (chapterIdx < chapterList.length && block.start >= chapterList[chapterIdx].startMs) {
+      triggered = { title: chapterList[chapterIdx].title, startMs: chapterList[chapterIdx].startMs }
+      chapterIdx++
+    }
+    if (triggered) {
+      flush()
+      currentHeading = triggered
     }
 
     // Threshold check BEFORE the push: if adding this sentence would
@@ -184,6 +226,19 @@ export function buildTranscriptViewData(
   }
 
   flush()
+
+  // Trailing chapter(s) whose start lands after the last block's start never
+  // triggered a split (no later block to cross the boundary). Attach the last
+  // such chapter to the final group so it still renders a heading + scroll
+  // anchor instead of silently vanishing from the reader.
+  if (chapterIdx < chapterList.length && groups.length > 0) {
+    const last = groups[groups.length - 1]
+    if (last.heading === undefined) {
+      const ch = chapterList[chapterList.length - 1]
+      groups[groups.length - 1] = { ...last, heading: ch.title, headingStartMs: ch.startMs }
+    }
+  }
+
   return groups
 }
 

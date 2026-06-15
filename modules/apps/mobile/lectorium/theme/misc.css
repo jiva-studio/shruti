@@ -73,3 +73,12 @@ ion-toast::part(header) {
   font-weight: 600;
 }
 
+/* Strip the Material press feedback (ripple + activated/hover/focus tint)
+   from an ion-button — for plain icon affordances like section-header
+   chevrons where the splash looks heavy. */
+.no-ripple {
+  --ripple-color: transparent;
+  --background-activated: transparent;
+  --background-hover: transparent;
+  --background-focused: transparent;
+}

@@ -106,6 +106,7 @@ export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
     `CREATE TABLE IF NOT EXISTS media_items (
        id         TEXT PRIMARY KEY,
        track_id   TEXT NOT NULL,
+       kind       TEXT NOT NULL DEFAULT 'original',
        state      TEXT NOT NULL,
        local_path TEXT,
        created_at INTEGER NOT NULL

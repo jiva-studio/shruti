@@ -40,7 +40,7 @@
         <ActivitySection :days="heatmapDays" />
       </template>
       <PlaylistSection
-        :rows="rows"
+        :items="playlistItems"
         :empty-header="$t('home.playlistIsEmpty')"
         :empty-message="emptyMessage"
         :empty-image="emptyImage"
@@ -54,7 +54,11 @@
           </SectionHeader>
         </template>
         <template #empty-footer>
-          <PlaylistStarterPacks :packs="starterPacks" :disabled="addingPack" @pick="onPickPack" />
+          <PlaylistStarterPacks
+            :packs="featuredCollections"
+            :disabled="addingCollection"
+            @pick="onPickCollection"
+          />
         </template>
       </PlaylistSection>
     </template>
@@ -89,12 +93,13 @@ import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useDurationFormatter } from "@lectorium/composables/useDurationFormatter.js"
-import { useStarterPacks } from "@lectorium/composables/useStarterPacks.js"
+import { useCollections } from "@lectorium/composables/useCollections.js"
 import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
 import { addTracksToPlaylist } from "@lib/application"
 import { useHomeController } from "./HomeView.controller.js"
+import { usePlaylistGroups } from "./usePlaylistGroups.js"
 
 const { t } = useI18n()
 const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
@@ -242,31 +247,34 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   await e.target.complete()
 }
 
-// Empty-state starter packs: chip set + tap → batch playlist.add.
-// Sourced from the catalog DB (packs / pack_tracks); the composable
-// returns [] when the bundled current.db predates the schema, so the
-// empty-state degrades to the pre-feature look on older builds.
+// Empty-state suggestions: featured-collection chips + tap → batch
+// playlist.add. The composable returns [] when the bundled current.db
+// predates the schema, so the empty-state degrades to the pre-feature look
+// on older builds.
 const playlist = usePlaylistStore()
 const appLanguage = useAppLanguage()
+// Derive collection groups (accordions) from the flat playlist rows.
+const { items: playlistItems } = usePlaylistGroups(rows, appLanguage)
 const toast = useToast()
-const { packs: starterPacks } = useStarterPacks(appLanguage)
-const addingPack = ref(false)
+const { collections: featuredCollections } = useCollections(appLanguage)
+const addingCollection = ref(false)
 
-// Append the "or pick from the suggestions below" call-to-action only
-// when at least one starter pack made it out of the catalog DB — keeps
-// the original message intact on old bundled DBs that predate the
-// `packs` schema.
+// Append the "or pick from the suggestions below" call-to-action only when
+// at least one featured collection made it out of the catalog DB — keeps the
+// original message intact on old bundled DBs that predate the schema.
 const emptyMessage = computed(() =>
-  starterPacks.value.length > 0 ? t("home.tapToAddTracksWithPacks") : t("home.tapToAddTracks")
+  featuredCollections.value.length > 0
+    ? t("home.tapToAddTracksWithPacks")
+    : t("home.tapToAddTracks")
 )
 
-async function onPickPack(packId: string): Promise<void> {
-  const pack = starterPacks.value.find((p) => p.id === packId)
-  if (!pack || pack.trackIds.length === 0) return
-  addingPack.value = true
+async function onPickCollection(collectionId: string): Promise<void> {
+  const collection = featuredCollections.value.find((p) => p.id === collectionId)
+  if (!collection || collection.trackIds.length === 0) return
+  addingCollection.value = true
   try {
     const result = await addTracksToPlaylist(
-      { trackIds: [...pack.trackIds] },
+      { trackIds: [...collection.trackIds] },
       { playlist: { add: (id) => playlist.add(id) } }
     )
     if (!result.ok) {
@@ -275,7 +283,7 @@ async function onPickPack(packId: string): Promise<void> {
   } catch {
     void toast.error(t("home.starterPacks.error"))
   } finally {
-    addingPack.value = false
+    addingCollection.value = false
   }
 }
 </script>

@@ -71,13 +71,25 @@ func (uc SetTrackMetadataUseCase) Run(ctx context.Context, in SetTrackMetadataIn
 	if err != nil {
 		return err
 	}
+	// Audio versions are not edited here — reload and pass them through so
+	// SaveTrack (which replaces them in full) doesn't wipe them.
+	audios, err := uc.Catalog.GetAudios(ctx, string(in.TrackId), in.Language)
+	if err != nil {
+		return err
+	}
 	if v.TrackID == "" {
 		v.TrackID = string(in.TrackId)
 		v.Language = in.Language
-		v.AudioKind = "edited"
 		v.TranscriptKind = "generated"
-		v.AudioPath = fmt.Sprintf("public/tracks/%s/audio/original.mp3", string(in.TrackId))
 		v.TranscriptPath = fmt.Sprintf("public/tracks/%s/transcripts/%s.json", string(in.TrackId), in.Language)
+	}
+	if len(audios) == 0 {
+		audios = []domaincatalog.AudioRow{{
+			TrackID:  string(in.TrackId),
+			Language: in.Language,
+			Kind:     domaincatalog.AudioKindOriginal,
+			Path:     fmt.Sprintf("public/tracks/%s/audio/original.mp3", string(in.TrackId)),
+		}}
 	}
 	if in.AuthorID != nil {
 		t.AuthorID = *in.AuthorID
@@ -120,7 +132,7 @@ func (uc SetTrackMetadataUseCase) Run(ctx context.Context, in SetTrackMetadataIn
 		}
 	}
 	v.SortReference = buildSortReference(refs, primaryShort)
-	return uc.Catalog.SaveTrack(ctx, t, v, refs)
+	return uc.Catalog.SaveTrack(ctx, t, v, audios, refs)
 }
 
 func patchMetadataPayload(raw []byte, in SetTrackMetadataInput) ([]byte, error) {

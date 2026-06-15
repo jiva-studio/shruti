@@ -11,28 +11,49 @@ import (
 
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	fsartifact "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
 	transcriptport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 )
 
 type Store struct {
 	OutDir string
+	// art writes the private transcript artifacts (raw/review/chunk) to the lake
+	// AND uploads them to S3 in one call. The public reviewed transcript stays on
+	// the local-only path below (it rides the full sync / publish, not this).
+	art *fsartifact.Writer
 }
 
-func New(outDir string) *Store { return &Store{OutDir: outDir} }
+func New(outDir string, art *fsartifact.Writer) *Store {
+	return &Store{OutDir: outDir, art: art}
+}
+
+// Provider-agnostic filename: today the bytes come from Parakeet, yesterday
+// Whisper, tomorrow whatever. The on-disk shape is what matters, not the engine.
+// The *Key funcs return the forward-slash relative artifact key (lake path and
+// S3 object key are the same under OutDir); the *Path funcs are the absolute
+// lake paths used for reads.
+func (s *Store) rawKey(id track.Id, lang string) string {
+	return fmt.Sprintf("artifacts/tracks/%s/transcripts/%s/raw.json", string(id), lang)
+}
+
+func (s *Store) reviewSessionKey(id track.Id, lang string) string {
+	return fmt.Sprintf("artifacts/tracks/%s/transcripts/%s/review.json", string(id), lang)
+}
+
+func (s *Store) reviewChunkKey(id track.Id, lang string, chunkIndex int) string {
+	return fmt.Sprintf("artifacts/tracks/%s/transcripts/%s/chunk_%04d.json", string(id), lang, chunkIndex)
+}
 
 func (s *Store) rawPath(id track.Id, lang string) string {
-	// Provider-agnostic filename: today the bytes come from Parakeet,
-	// yesterday Whisper, tomorrow whatever. The on-disk shape is what
-	// matters, not the engine that produced it.
-	return filepath.Join(s.OutDir, "artifacts", "tracks", string(id), "transcripts", lang, "raw.json")
+	return filepath.Join(s.OutDir, filepath.FromSlash(s.rawKey(id, lang)))
 }
 
 func (s *Store) reviewSessionPath(id track.Id, lang string) string {
-	return filepath.Join(s.OutDir, "artifacts", "tracks", string(id), "transcripts", lang, "review.json")
+	return filepath.Join(s.OutDir, filepath.FromSlash(s.reviewSessionKey(id, lang)))
 }
 
 func (s *Store) reviewChunkPath(id track.Id, lang string, chunkIndex int) string {
-	return filepath.Join(s.OutDir, "artifacts", "tracks", string(id), "transcripts", lang, fmt.Sprintf("chunk_%04d.json", chunkIndex))
+	return filepath.Join(s.OutDir, filepath.FromSlash(s.reviewChunkKey(id, lang, chunkIndex)))
 }
 
 func (s *Store) PublicTranscriptPath(id track.Id, lang string) string {
@@ -49,7 +70,7 @@ func (s *Store) WriteRaw(ctx context.Context, id track.Id, lang string, raw tran
 	if err != nil {
 		return err
 	}
-	return atomicWrite(s.rawPath(id, lang), body)
+	return s.art.Write(ctx, s.rawKey(id, lang), body)
 }
 
 func (s *Store) ReadRaw(ctx context.Context, id track.Id, lang string) (transcript.Raw, error) {
@@ -65,7 +86,7 @@ func (s *Store) ReadRaw(ctx context.Context, id track.Id, lang string) (transcri
 }
 
 func (s *Store) WriteReviewSession(ctx context.Context, id track.Id, lang string, sessionJSON []byte) error {
-	return atomicWrite(s.reviewSessionPath(id, lang), sessionJSON)
+	return s.art.Write(ctx, s.reviewSessionKey(id, lang), sessionJSON)
 }
 
 func (s *Store) ReadReviewSession(ctx context.Context, id track.Id, lang string) ([]byte, error) {
@@ -73,7 +94,7 @@ func (s *Store) ReadReviewSession(ctx context.Context, id track.Id, lang string)
 }
 
 func (s *Store) WriteReviewChunk(ctx context.Context, id track.Id, lang string, chunkIndex int, chunkJSON []byte) error {
-	return atomicWrite(s.reviewChunkPath(id, lang, chunkIndex), chunkJSON)
+	return s.art.Write(ctx, s.reviewChunkKey(id, lang, chunkIndex), chunkJSON)
 }
 
 func (s *Store) ReadReviewChunk(ctx context.Context, id track.Id, lang string, chunkIndex int) ([]byte, error) {

@@ -1,31 +1,19 @@
-"""get_track_outline — lazy outline generation + cache.
+"""track_outline_get — serve a precomputed lecture outline from the catalog.
 
-Flow per (track_id, lang):
-1. Catalog → resolve transcript path + effective lang (lang fallback).
-2. OutlineCache → HEAD; if hit, GET and return.
-3. TranscriptStorage → fetch transcript; LLM → generate outline.
-4. OutlineCache → PUT (conditional); on race, refetch.
-
-Outline is an INTERNAL artifact — the mobile app does not read it from
-CDN. The chat-agent reads and writes it; payload is delivered to the
-client inline via the SSE `outline` event plus an `[outline:track_id]`
-marker emitted by the LLM.
+The outline (chapter headings) and description are generated offline by
+lectorium-mcp and published in the catalog DB (track_variants.outline /
+.description). This tool only READS them and emits the `outline` action for
+the client — it never calls an LLM. Lecture-outline generation lives in the
+mcp, not here.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
-from collections import defaultdict
-from datetime import datetime, timezone
 from typing import Any, Callable
 
-from lectorium_chat.agent import llm
 from lectorium_chat.agent.tools._registry import ToolDef, register_tool
-from lectorium_chat.config import Settings, get_settings
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
-from lectorium_chat.domain.ports.outline_cache import OutlineCache, OutlineCacheConflict
-from lectorium_chat.domain.ports.transcript_storage import TranscriptStorage
 from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -38,294 +26,29 @@ def _noop_yield(_type: str, _data: dict[str, Any]) -> None:
     """Fallback when this tool is invoked outside the agent loop (tests)."""
 
 
-# Per-(track_id, lang) async locks. Two concurrent /chat requests in the
-# same worker process that both ask for an outline of the same track will
-# serialize through this lock — the second one re-HEADs cache inside the
-# critical section and reads the freshly-written artifact rather than
-# paying for a redundant gemini-flash call.
-#
-# Cross-process races (two workers, two pods) are caught by the
-# conditional PUT below (`if_none_match=True`).
-_OUTLINE_LOCKS: defaultdict[tuple[str, str], asyncio.Lock] = defaultdict(
-    asyncio.Lock
-)
-
-
-# Language-neutral template — `{lang}` is the opaque transcript locale
-# code (e.g. "ru", "en", "uk"). The titles must be written in that language;
-# we don't enumerate languages here so a new locale needs no code change.
-_OUTLINE_PROMPT = """You list the topics of one lecture from its time-coded transcript.
-
-Rules:
-1. Return a JSON array of objects: {{"start": "MM:SS" or "HH:MM:SS", "title": "..."}}, one per distinct topic, in chronological order. Be granular — emit a new item whenever the topic shifts. A later pass merges these into chapters, so don't worry about the count.
-2. title is 3-6 words written in the language with code `{lang}`, sentence case, describing the TOPIC discussed in that segment. Not a quotation.
-3. start is a real timecode from the transcript (copy from the [MM:SS] / [HH:MM:SS] markers at the start of lines — don't invent).
-4. Don't restate the same topic across items.
-5. FORBIDDEN: quote marks, emoji, exclamation/question marks in titles, clickbait phrasing, "Prabhupada explains" / "The lecture about" prefixes — write the topic itself.
-
-Return ONLY a valid JSON array. No wrapper object, no markdown, no commentary."""
-
-
-def _outline_system_prompt(lang: str) -> str:
-    return _OUTLINE_PROMPT.format(lang=lang)
-
-
-# Hard ceiling on chapters. The fine pass above is deliberately granular and
-# its count is unstable (often 30–150 items for the same lecture across runs);
-# we don't fight that — `_collapse` merges consecutive topics into <= this many
-# chapters, repeating up to _MAX_MERGE_PASSES times. The final count emerges
-# from the content (a one-theme talk collapses to ~3, a wide-ranging one to
-# ~8) instead of a clock or a prompt the model ignores.
-_MAX_CHAPTERS = 8
-_MAX_MERGE_PASSES = 5
-
-_MERGE_PROMPT = """You merge a fine-grained list of lecture topics into a few coarse chapters.
-
-Input: an ordered list of topics, one per line as "[MM:SS] topic".
-
-Rules:
-1. Group CONSECUTIVE topics that share a broader theme into one chapter. Keep the order, cover everything, never reorder or drop a span.
-2. Output 3-{max_chapters} chapters total. Fewer is better — if the lecture circles one theme, return fewer.
-3. Each chapter: {{"start": "<timecode of the FIRST topic in that group>", "title": "..."}}. title is a 3-6 word theme in language `{lang}`, sentence case, covering the WHOLE group — not a single sub-topic, not a quotation.
-4. FORBIDDEN: quote marks, emoji, exclamation/question marks in titles, clickbait phrasing, "Prabhupada explains" / "The lecture about" prefixes.
-
-Return ONLY a valid JSON array. No wrapper object, no markdown, no commentary."""
-
-
-def _fmt_ts(ms: int) -> str:
-    s = ms // 1000
-    h = s // 3600
-    m = (s % 3600) // 60
-    sec = s % 60
-    return f"{h:02d}:{m:02d}:{sec:02d}" if h else f"{m:02d}:{sec:02d}"
-
-
-def _parse_ts(ts: str) -> int:
-    parts = [int(p) for p in ts.split(":")]
-    if len(parts) == 2:
-        h, (m, s) = 0, parts
-    elif len(parts) == 3:
-        h, m, s = parts
-    else:
-        return 0
-    return (h * 3600 + m * 60 + s) * 1000
-
-
-def _build_user_prompt(transcript: dict) -> str:
-    lines: list[str] = []
-    for b in transcript.get("blocks") or []:
-        if b.get("type") == "paragraph":
-            continue
-        text = b.get("text")
-        if isinstance(text, list):
-            text = " ".join(text)
-        if not isinstance(text, str) or not text.strip():
-            continue
-        lines.append(f"[{_fmt_ts(b['start'])}] {text.strip()}")
-    return "Транскрипт лекции:\n\n" + "\n".join(lines)
-
-
-def _strip_json_fence(s: str) -> str:
-    """Models sometimes wrap output in ```json ... ``` despite instructions."""
-    t = s.strip()
-    if t.startswith("```"):
-        t = t.lstrip("`")
-        if t.lower().startswith("json"):
-            t = t[4:]
-        t = t.lstrip("\n")
-        if t.endswith("```"):
-            t = t[:-3]
-    return t.strip()
-
-
-def _items_from_llm_json(raw: str) -> list[dict[str, Any]]:
-    parsed = json.loads(_strip_json_fence(raw))
+def _items_from_outline(raw: str | None) -> list[dict[str, Any]]:
+    """Parse the stored outline JSON ([{title,start,end}] ms) into the client
+    action shape ([{start_ms, title}]). Returns [] on any malformed/absent
+    value — the caller treats an empty list as "no outline"."""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        log.warning("outline_parse_failed")
+        return []
     if not isinstance(parsed, list):
-        raise ValueError("outline llm response is not a list")
-    out: list[dict[str, Any]] = []
-    for it in parsed:
-        if not isinstance(it, dict):
+        return []
+    items: list[dict[str, Any]] = []
+    for entry in parsed:
+        if not isinstance(entry, dict):
             continue
-        start_raw = it.get("start") or it.get("start_ms")
-        title = (it.get("title") or "").strip()
-        if not title:
+        title = (entry.get("title") or "").strip()
+        start = entry.get("start")
+        if not title or not isinstance(start, (int, float)):
             continue
-        if isinstance(start_raw, int):
-            start_ms = start_raw
-        elif isinstance(start_raw, str):
-            start_ms = _parse_ts(start_raw)
-        else:
-            continue
-        out.append({"start_ms": start_ms, "title": title})
-    return out
-
-
-async def _collapse(
-    items: list[dict[str, Any]], lang: str, settings: Settings
-) -> list[dict[str, Any]]:
-    """One merge pass: fold the topic list into a handful of coarse chapters.
-    Returns the input unchanged on any failure — a fine-grained outline beats
-    none."""
-    listing = "\n".join(f"[{_fmt_ts(i['start_ms'])}] {i['title']}" for i in items)
-    try:
-        resp = await llm.acompletion(
-            model=settings.llm_outline,
-            messages=[
-                {"role": "system", "content": _MERGE_PROMPT.format(max_chapters=_MAX_CHAPTERS, lang=lang)},
-                {"role": "user", "content": listing},
-            ],
-            temperature=0.2,
-        )
-        merged = _items_from_llm_json(resp.choices[0].message.content or "")
-        return merged or items
-    except Exception as exc:  # noqa: BLE001 — a failed merge must not lose the outline
-        log.warning("outline_merge_failed", lang=lang, error=str(exc))
-        return items
-
-
-async def _generate_outline(
-    track_id: str,
-    transcript_path: str,
-    effective_lang: str,
-    transcript_storage: TranscriptStorage,
-) -> dict[str, Any]:
-    """Run the LLM on a resolved transcript. Caller passes the
-    transcript path + the language of THAT transcript (which may differ
-    from the originally requested lang — see
-    CatalogRepository.resolve_transcript_path) so the outline prompt is
-    paired with the right language."""
-    s = get_settings()
-    transcript = await transcript_storage.fetch(transcript_path)
-    user_prompt = _build_user_prompt(transcript)
-
-    resp = await llm.acompletion(
-        model=s.llm_outline,
-        messages=[
-            {"role": "system", "content": _outline_system_prompt(effective_lang)},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
-    )
-    text = resp.choices[0].message.content or ""
-    items = _items_from_llm_json(text)
-    if not items:
-        raise RuntimeError("outline_empty")
-    items.sort(key=lambda i: i["start_ms"])
-    passes = 0
-    while len(items) > _MAX_CHAPTERS and passes < _MAX_MERGE_PASSES:
-        before = len(items)
-        items = await _collapse(items, effective_lang, s)
-        items.sort(key=lambda i: i["start_ms"])
-        passes += 1
-        if len(items) >= before:  # no progress — don't spin on a stubborn merge
-            break
-    return {
-        "trackId": track_id,
-        "language": effective_lang,
-        "model": s.llm_outline,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "items": items,
-    }
-
-
-async def _cache_get_silent(
-    cache: OutlineCache, track_id: str, lang: str, where: str,
-) -> dict[str, Any] | None:
-    try:
-        return await cache.get(track_id, lang)
-    except Exception as exc:
-        log.warning(where, track_id=track_id, lang=lang, error=str(exc))
-        return None
-
-
-async def _cache_head_silent(
-    cache: OutlineCache, track_id: str, lang: str, where: str,
-) -> bool:
-    try:
-        return await cache.head(track_id, lang)
-    except Exception as exc:
-        log.warning(where, track_id=track_id, lang=lang, error=str(exc))
-        return False
-
-
-async def ensure_outline_payload(
-    track_id: str,
-    transcript_path: str,
-    effective_lang: str,
-    *,
-    transcript_storage: TranscriptStorage,
-    outline_cache: OutlineCache,
-) -> dict[str, Any] | None:
-    """Resolve the outline payload for one track — cache or cold-path.
-
-    Inputs are pre-resolved by the caller (so a caller that already
-    looked up `transcript_path` / `effective_lang` doesn't pay for a
-    second catalog lookup). On any failure the function returns `None`
-    so the caller can render its artifact without an outline rather
-    than fail loudly. Concurrent generation for the same key is
-    serialised by `_OUTLINE_LOCKS`; cross-process races are caught by
-    the conditional PUT.
-    """
-    payload: dict[str, Any] | None = None
-    if await _cache_head_silent(
-        outline_cache, track_id, effective_lang, "outline_head_failed",
-    ):
-        payload = await _cache_get_silent(
-            outline_cache, track_id, effective_lang, "outline_get_failed",
-        )
-    if payload is not None:
-        return payload
-
-    async with _OUTLINE_LOCKS[(track_id, effective_lang)]:
-        if await _cache_head_silent(
-            outline_cache, track_id, effective_lang,
-            "outline_head_failed_in_lock",
-        ):
-            payload = await _cache_get_silent(
-                outline_cache, track_id, effective_lang,
-                "outline_get_failed_in_lock",
-            )
-        if payload is not None:
-            return payload
-
-        try:
-            payload = await _generate_outline(
-                track_id, transcript_path, effective_lang, transcript_storage,
-            )
-        except Exception as exc:
-            log.warning(
-                "outline_generate_failed",
-                track_id=track_id, lang=effective_lang, error=str(exc),
-            )
-            return None
-
-        # Conditional PUT — refuses to overwrite if another worker
-        # (different pod / process) wrote the artifact while we were
-        # running gemini-flash. On loss, refetch theirs.
-        try:
-            await outline_cache.put(
-                track_id, effective_lang, payload, if_none_match=True,
-            )
-        except OutlineCacheConflict:
-            log.info(
-                "outline_put_lost_race",
-                track_id=track_id, lang=effective_lang,
-            )
-            refreshed = await _cache_get_silent(
-                outline_cache, track_id, effective_lang,
-                "outline_get_after_race_failed",
-            )
-            if refreshed is not None:
-                payload = refreshed
-        except Exception as exc:
-            # Persist failure isn't fatal — return the freshly-generated
-            # payload anyway, so the caller's hot artifact gets the
-            # outline even if the next request has to regenerate.
-            log.warning(
-                "outline_put_failed",
-                track_id=track_id, lang=effective_lang, error=str(exc),
-            )
-        return payload
+        items.append({"start_ms": int(start), "title": title})
+    return items
 
 
 async def get_track_outline(
@@ -334,40 +57,23 @@ async def get_track_outline(
     *,
     yield_event: YieldEvent = _noop_yield,
     catalog_repo: CatalogRepository,
-    transcript_storage: TranscriptStorage,
-    outline_cache: OutlineCache,
 ) -> dict[str, Any]:
-    """Return outline items + emit `outline` side-event for the client.
+    """Return the precomputed outline items + emit the `outline` action.
 
-    `lang` is the user's preferred outline language; the actual transcript
-    we read from may be in a different language if the requested one
-    isn't available for this track (e.g. English-only lecture asked for
-    in a Russian session). The cache key + emitted payload use the
-    effective transcript language so subsequent requests in either
-    language land on the same artifact.
-    """
-    transcript_path, effective_lang = await catalog_repo.resolve_transcript_path(
+    `lang` is the user's preferred outline language; we read the variant for
+    the effective transcript language (the requested one may not exist for
+    this track — same fallback as the transcript)."""
+    _, effective_lang = await catalog_repo.resolve_transcript_path(
         track_id, requested_lang=lang,
     )
-    if not transcript_path:
+    outline_raw, _description = await catalog_repo.get_outline(track_id, effective_lang)
+    items = _items_from_outline(outline_raw)
+    if not items:
         return {
-            "error": "transcript_unavailable",
-            "track_id": track_id,
-            "lang": lang,
-        }
-
-    payload = await ensure_outline_payload(
-        track_id, transcript_path, effective_lang,
-        transcript_storage=transcript_storage, outline_cache=outline_cache,
-    )
-    if payload is None:
-        return {
-            "error": "outline_empty",
+            "error": "outline_unavailable",
             "track_id": track_id,
             "lang": effective_lang,
         }
-
-    items = payload.get("items") or []
     yield_event(
         "action",
         {
@@ -388,7 +94,7 @@ register_tool(ToolDef(
     fn=get_track_outline,
     emits_events=True,
     description=(
-        "Generate (or fetch cached) outline for a track: a few coarse chapter-like "
+        "Fetch the precomputed outline for a track: a few coarse chapter-like "
         "items with timecodes (start_ms) and titles. Use when the user asks "
         "for a summary, the contents of a lecture, or 'recap what I just "
         "listened to'. After calling, embed the marker '[outline:<track_id>]' "

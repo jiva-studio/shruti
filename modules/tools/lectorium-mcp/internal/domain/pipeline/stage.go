@@ -19,12 +19,14 @@ const (
 	OpAlignPDF      Op = "align_pdf"
 	OpAudit         Op = "audit"
 	OpTitlesRefresh Op = "titles_refresh"
+	OpOutline       Op = "outline"
+	OpTopics        Op = "topics"
 )
 
 // IsValidOp reports whether s is one of the recognised Op values.
 func IsValidOp(s Op) bool {
 	switch s {
-	case OpPipeline, OpAudioTag, OpAlignPDF, OpAudit, OpTitlesRefresh:
+	case OpPipeline, OpAudioTag, OpAlignPDF, OpAudit, OpTitlesRefresh, OpOutline, OpTopics:
 		return true
 	}
 	return false

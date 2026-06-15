@@ -53,7 +53,7 @@ func RegisterPipelineRun(s *server.MCPServer, deps Deps) {
 		mcp.WithObject("selector", mcp.Description(
 			"track.Selector — see tracks_select for the full schema. Empty "+
 				"object selects everything in the lake + registry up to limit.")),
-		mcp.WithString("op", mcp.Description("Operation: pipeline (default) | audio_tag | align_pdf | audit | titles_refresh.")),
+		mcp.WithString("op", mcp.Description("Operation: pipeline (default) | audio_tag | align_pdf | audit | titles_refresh | outline | topics.")),
 		mcp.WithBoolean("force", mcp.Description("op=pipeline only: reset all stages of the touched tracks before running.")),
 		mcp.WithString("up_to", mcp.Description("op=pipeline only: stop after this stage. Values: ingested, normalized, metadata, transcribed, reviewed, committed (default).")),
 		mcp.WithString("from", mcp.Description("op=pipeline only: starting stage. Mutually exclusive with only. Resets the named stage + dependents to Pending before running.")),
@@ -69,7 +69,7 @@ func RegisterPipelineRun(s *server.MCPServer, deps Deps) {
 		op := pipeline.Op(req.GetString("op", string(pipeline.OpPipeline)))
 		if !pipeline.IsValidOp(op) {
 			return envelope.Err(kind, envelope.CodeInvalidArgument,
-				fmt.Sprintf("op %q invalid; allowed: pipeline | audio_tag | align_pdf | audit | titles_refresh", op),
+				fmt.Sprintf("op %q invalid; allowed: pipeline | audio_tag | align_pdf | audit | titles_refresh | outline | topics", op),
 				nil), nil
 		}
 
@@ -89,6 +89,10 @@ func RegisterPipelineRun(s *server.MCPServer, deps Deps) {
 			return dispatchAudit(ctx, deps, kind, sel, req)
 		case pipeline.OpTitlesRefresh:
 			return dispatchTitlesRefresh(ctx, deps, kind, sel)
+		case pipeline.OpOutline:
+			return dispatchOutline(ctx, deps, kind, sel)
+		case pipeline.OpTopics:
+			return dispatchTopics(ctx, deps, kind, sel)
 		}
 		return envelope.Err(kind, envelope.CodeInternal, "unreachable op switch", nil), nil
 	})
@@ -305,9 +309,11 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterTrackIngest(s, deps)
 	RegisterTrackStatus(s, deps)
 	RegisterAudioNormalize(s, deps)
+	RegisterAudioDenoise(s, deps)
 	RegisterMetadataExtract(s, deps)
 	RegisterTranscriptCreate(s, deps)
 	RegisterTranscriptReview(s, deps)
+	RegisterTranscriptOutline(s, deps)
 	RegisterTranscriptAlignPDF(s, deps)
 	RegisterProviderList(s, deps)
 	RegisterRunsList(s, deps)
@@ -322,7 +328,10 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterAuditSummary(s, deps)
 	RegisterAuditTrack(s, deps)
 	RegisterDictCRUD(s, deps.DictCRUD)
-	RegisterPackCRUD(s, deps.PackCRUD)
+	RegisterTopics(s, deps)
+	RegisterCollectionCRUD(s, deps.CollectionCRUD)
+	RegisterCollectionGroupCRUD(s, deps.CollectionGroupCRUD)
+	RegisterAuthorProfile(s, deps.AuthorProfile)
 	RegisterCatalogRefresh(s, deps.Catalog)
 	RegisterCatalogStatus(s, deps.Catalog)
 	RegisterCatalogPublish(s, deps)

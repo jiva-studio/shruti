@@ -8,7 +8,7 @@
     :animate-speed="750"
     :start-color="`var(--ion-color-${color})`"
     :stop-color="`var(--ion-color-${color})`"
-    inner-stroke-color="var(--ion-color-light)"
+    inner-stroke-color="rgba(var(--ion-color-primary-rgb), 0.22)"
   />
 </template>
 

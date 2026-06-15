@@ -1,6 +1,6 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { MediaItemId, TrackId } from "@lib/domain/core.js"
-import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
+import type { MediaAudioKind, MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { MediaItemRow } from "@lib/persistence/user"
 import { mutate, queryMany, queryOne } from "@kit/persistence"
@@ -11,11 +11,14 @@ const newMediaItemId = createIdGenerator("media")
 
 export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepository {
   return {
-    async getByTrack(trackId: TrackId): Promise<MediaItem | null> {
+    async getByTrack(
+      trackId: TrackId,
+      kind: MediaAudioKind = "original"
+    ): Promise<MediaItem | null> {
       return queryOne<MediaItemRow, MediaItem>(
         db,
-        "SELECT * FROM media_items WHERE track_id = ? LIMIT 1",
-        [trackId],
+        "SELECT * FROM media_items WHERE track_id = ? AND kind = ? LIMIT 1",
+        [trackId, kind],
         rowToMediaItem
       )
     },
@@ -32,9 +35,10 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
     async upsert(
       trackId: TrackId,
       state: MediaItemState,
-      localPath: string | null
+      localPath: string | null,
+      kind: MediaAudioKind = "original"
     ): Promise<MediaItem> {
-      const existing = await this.getByTrack(trackId)
+      const existing = await this.getByTrack(trackId, kind)
       if (existing) {
         await mutate(db, "UPDATE media_items SET state = ?, local_path = ? WHERE id = ?", [
           state,
@@ -47,11 +51,11 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
       const now = Date.now()
       await mutate(
         db,
-        `INSERT INTO media_items (id, track_id, state, local_path, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id, trackId, state, localPath, now]
+        `INSERT INTO media_items (id, track_id, kind, state, local_path, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, trackId, kind, state, localPath, now]
       )
-      return { id, trackId, state, localPath, createdAt: now }
+      return { id, trackId, kind, state, localPath, createdAt: now }
     },
 
     async deleteByTrack(trackId: TrackId): Promise<void> {

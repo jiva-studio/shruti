@@ -8,6 +8,7 @@ const (
 	KindLocation Kind = "location"
 	KindSource   Kind = "source"
 	KindTag      Kind = "tag"
+	KindTopic    Kind = "topic"
 )
 
 // IDPrefix returns the per-kind ID prefix per docs/repos/lectorium/db/ids.md.
@@ -21,17 +22,19 @@ func (k Kind) IDPrefix() string {
 		return "source_"
 	case KindTag:
 		return "tag_"
+	case KindTopic:
+		return "topic_"
 	}
 	return ""
 }
 
 // DictEntry is one dictionary row collapsed across locales.
 //   Names      : language → full_name (one row per locale in DB)
-//   ShortName  : language → short_name (sources only)
+//   ShortName  : language → short_name (sources and topics)
 type DictEntry struct {
 	Id        string
 	Names     map[string]string
-	ShortName map[string]string // populated only when Kind == KindSource
+	ShortName map[string]string // populated for KindSource and KindTopic
 }
 
 // ListOpts is shared by *_list tools.
@@ -75,11 +78,30 @@ type VariantRow struct {
 	TrackID        string
 	Language       string
 	Title          string
-	AudioPath      string
-	AudioFilesize  int64
-	AudioDuration  int64 // ms
-	AudioKind      string
 	TranscriptPath string
 	TranscriptKind string
 	SortReference  *string
+
+	// Outline is the lecture's section table-of-contents as a JSON array of
+	// {title,start,end} (ms), generated from the reviewed transcript. "" = none.
+	Outline string
+	// Description is a short per-locale overview of the lecture. "" = none.
+	Description string
+}
+
+// Audio kind discriminators for track_audio rows.
+const (
+	AudioKindOriginal = "original" // the source/published recording
+	AudioKindClean    = "clean"    // denoised version produced by the denoiser
+)
+
+// AudioRow is one (track, language, kind) row in track_audio — a single audio
+// version of a variant. A variant can have several (original, clean, …).
+type AudioRow struct {
+	TrackID  string
+	Language string
+	Kind     string // AudioKindOriginal | AudioKindClean | …
+	Path     string // relative key, e.g. public/tracks/{id}/audio/original.mp3
+	Filesize int64
+	Duration int64 // ms
 }

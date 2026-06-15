@@ -36,6 +36,14 @@ export interface TagRow {
   readonly full_name: string
 }
 
+export interface TopicRow {
+  readonly id: string
+  readonly language: string
+  readonly full_name: string
+  readonly short_name?: string | null
+  readonly cover?: string | null
+}
+
 export interface TrackRow {
   readonly id: string
   /** nullable — legacy content sometimes has no author metadata */
@@ -50,11 +58,6 @@ export interface TrackVariantRow {
   readonly track_id: string
   readonly language: string
   readonly title: string
-  readonly audio_path: string | null
-  readonly audio_filesize: number | null
-  /** Audio duration in **milliseconds**. */
-  readonly audio_duration: number | null
-  readonly audio_kind: string | null
   readonly transcript_path: string | null
   readonly transcript_kind: string | null
   /**
@@ -67,6 +70,27 @@ export interface TrackVariantRow {
    * Conversations) — consumer sorts those last via `NULLS LAST`.
    */
   readonly sort_reference: string | null
+  /**
+   * Per-lecture section outline as a JSON array string:
+   * `[{ "title": string, "start": number, "end": number }, ...]` in ms.
+   * NULL until generated. Stored raw; the row mapper parses it.
+   */
+  readonly outline: string | null
+  /** Short per-locale lecture description / overview. NULL until generated. */
+  readonly description: string | null
+}
+
+/** One audio version of a (track, language) variant — see the track_audio table. */
+export interface TrackAudioRow {
+  readonly track_id: string
+  readonly language: string
+  /** "original" | "clean" | … */
+  readonly kind: string
+  /** Full path from the bucket root. */
+  readonly path: string
+  readonly filesize: number | null
+  /** Audio duration in **milliseconds**. */
+  readonly duration: number | null
 }
 
 export interface TrackReferenceRow {
@@ -80,6 +104,12 @@ export interface TrackReferenceRow {
 export interface TrackTagRow {
   readonly track_id: string
   readonly tag_id: string
+}
+
+export interface TrackTopicRow {
+  readonly track_id: string
+  readonly topic_id: string
+  readonly weight: number
 }
 
 export interface MigrationRow {

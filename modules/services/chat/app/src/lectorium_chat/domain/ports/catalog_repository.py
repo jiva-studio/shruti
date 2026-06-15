@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Literal, Protocol
 
-from lectorium_chat.domain.entities import ResolvedEntity, Track
+from lectorium_chat.domain.entities import Collection, ResolvedEntity, Track
 
 
 ResolveKind = Literal["author", "source", "location", "tag"]
@@ -85,6 +85,20 @@ class CatalogRepository(Protocol):
     ) -> list[ResolvedEntity]:
         ...
 
+    async def search_collections(
+        self, query: str | None, *, lang: str | None, limit: int = 10,
+    ) -> list[Collection]:
+        """Find collections (curated track groups / seminars) by name, or the
+        featured set when `query` is None. Per-locale via `lang`."""
+        ...
+
+    async def get_collection(
+        self, collection_id: str, *, lang: str | None = None,
+    ) -> Collection | None:
+        """One collection with its ordered track membership, in `lang`
+        (en fallback). None when unknown or the catalog predates the schema."""
+        ...
+
     async def get_author_names(
         self,
         author_ids: list[str],
@@ -107,6 +121,15 @@ class CatalogRepository(Protocol):
         ("ru"→"Русский", "sr-Latn"→"Srpski"). None when unknown. Used so the
         synthesizer's language directive names the language instead of passing
         a bare code the LLM mis-resolves."""
+        ...
+
+    async def get_outline(
+        self, track_id: str, lang: str,
+    ) -> tuple[str | None, str | None]:
+        """Return (outline_json, description) for one (track, language), or
+        (None, None) when absent. outline_json is the raw JSON array
+        [{title,start,end}] (ms) generated and published by lectorium-mcp;
+        chat only reads it (it does not generate outlines)."""
         ...
 
     def invalidate_cache(self) -> None:
