@@ -19,16 +19,18 @@ import (
 	alignpdfuc "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/audiodenoise"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/authorprofile"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncover"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/authorprofile"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectiongroupcrud"
 	configpublish "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/configpublish"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
 	catalogproactive "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
 	catalogregions "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/regions"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/topiccover"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/commit"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/ingest"
@@ -42,11 +44,13 @@ import (
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/selecttracks"
 	titleuc "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/title"
+	topicsapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/topics"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/transcribe"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/config"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	adminconfigrt "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/adminconfig/runtime"
 	pythonalign "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/alignpdf/python"
+	fsartifact "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
 	openaicompatattribtranslate "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/attributiontranslate/openaicompat"
 	fsaudio "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/audiostore/fs"
 	resolverchain "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/chain"
@@ -54,18 +58,20 @@ import (
 	openaicompatresolver "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/openaicompat"
 	sqlitecatalog "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
 	httpcdn "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/cdn/http"
+	execdenoise "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/denoise/exec"
 	openaicompattranslate "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/dicttranslate/openaicompat"
+	openaicompatembed "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/embed/openaicompat"
 	osfs "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/fs/os"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
 	sha256hash "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/hashing/sha256"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
 	openrouterimage "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/imagegen/openrouter"
 	sqliteregistry "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
-	execdenoise "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/denoise/exec"
 	sqlitelibrary "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/metadata/canonical"
 	openaicompatmeta "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/metadata/openaicompat"
+	fsoutline "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/outline/fs"
 	openaicompatoutline "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/outline/openaicompat"
 	reviewreg "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/review"
 	openaicompatreview "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/review/openaicompat"
@@ -75,6 +81,8 @@ import (
 	razdelsplit "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/sentencesplit/razdel"
 	id3v2tagger "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/tagger/id3v2"
 	openaicompattitle "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/title/openaicompat"
+	fstopics "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/topics/fs"
+	openaicompattopics "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/topics/openaicompat"
 	transcribereg "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/transcribe"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/transcribe/transcriberservice"
 	fstranscript "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/transcriptstore/fs"
@@ -163,7 +171,50 @@ func main() {
 		Fallback: llmExtractor,
 	}
 
-	transcriptStore := fstranscript.New(cfg.Out)
+	// S3 targets for publish + immediate artifact upload. AWS is required
+	// (read+write); Yandex is mirror. Built up front so artifact stores (which
+	// write+upload private artifacts as they're produced) share the same
+	// uploaders as the publish path.
+	var publishTargets []s3port.Uploader
+	if cfg.S3.AWS.Bucket != "" {
+		aws, err := awss3.New(ctx, awss3.Target{
+			Name:            "aws",
+			Bucket:          cfg.S3.AWS.Bucket,
+			Region:          cfg.S3.AWS.Region,
+			Endpoint:        cfg.S3.AWS.Endpoint,
+			AccessKeyID:     cfg.S3.AWS.AccessKeyID,
+			SecretAccessKey: cfg.S3.AWS.SecretAccessKey,
+			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[s3:aws] init failed (catalog_publish will error): %v\n", err)
+		} else {
+			publishTargets = append(publishTargets, aws)
+		}
+	}
+	if cfg.S3.Yandex.Bucket != "" {
+		ya, err := awss3.New(ctx, awss3.Target{
+			Name:            "yandex",
+			Bucket:          cfg.S3.Yandex.Bucket,
+			Region:          cfg.S3.Yandex.Region,
+			Endpoint:        cfg.S3.Yandex.Endpoint,
+			AccessKeyID:     cfg.S3.Yandex.AccessKeyID,
+			SecretAccessKey: cfg.S3.Yandex.SecretAccessKey,
+			ForcePathStyle:  cfg.S3.Yandex.ForcePathStyle,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[s3:yandex] init failed: %v\n", err)
+		} else {
+			publishTargets = append(publishTargets, ya)
+		}
+	}
+
+	// One artifact writer for all private per-track textual artifacts: writes
+	// the lake copy AND uploads to the S3 targets above under the artifacts/
+	// prefix, in one call. Lake-only when no bucket is configured.
+	artifactWriter := fsartifact.New(cfg.Out, publishTargets...)
+
+	transcriptStore := fstranscript.New(cfg.Out, artifactWriter)
 
 	// trackSelector resolves track.Selector against the same SQLite handle
 	// the registry uses, so reads land on the same connection pool and
@@ -367,6 +418,64 @@ func main() {
 	// dictcrud mutations land or when an explicit Rebuild is called.
 	fuzzyIndex := sqlitecatalog.NewFuzzyIndex(sqlitecatalog.NewLazy(currentDBPath))
 
+	// Shared dict CRUD use case — used by the generic dict tools and reused by
+	// the topic build (to mint topic_<nanoid> entries while naming clusters).
+	dictCRUDUC := dictcrud.UseCase{
+		Catalog:    sqlitecatalog.NewLazy(currentDBPath),
+		FuzzyIndex: fuzzyIndex,
+		Minter:     minter,
+	}
+
+	// Topic recommender (topics.build / track.topics.assign / pipeline.run
+	// op=topics): a text-embeddings client + an LLM cluster namer. Both gated on
+	// cfg.Embed.APIKey (and the outline LLM config, reused for naming). The
+	// granular outline artifacts and the centroid vocabulary share artifactWriter.
+	outlineArtifacts := fsoutline.New(artifactWriter)
+	topicCentroids := fstopics.New(artifactWriter)
+	topicsDeps := tools.TopicsDeps{Catalog: sqlitecatalog.NewLazy(currentDBPath)}
+	if cfg.Embed.APIKey != "" && cfg.Outline.APIKey != "" {
+		embedClient, err := openaicompatembed.New(openaicompatembed.Config{
+			Endpoint:   cfg.Embed.Endpoint,
+			APIKey:     cfg.Embed.APIKey,
+			Model:      cfg.Embed.Model,
+			Dimensions: cfg.Embed.Dimensions,
+			BatchSize:  cfg.Embed.BatchSize,
+		})
+		if err != nil {
+			log.Fatalf("embeddings client: %v", err)
+		}
+		// Cluster naming reuses the outline LLM (Flash-Lite class).
+		topicNamer, err := openaicompattopics.New(openaicompattopics.Config{
+			Endpoint:  cfg.Outline.Endpoint,
+			APIKey:    cfg.Outline.APIKey,
+			Model:     cfg.Outline.Model,
+			MaxTokens: 200,
+			Reasoning: cfg.Outline.Reasoning,
+		})
+		if err != nil {
+			log.Fatalf("topic namer: %v", err)
+		}
+		topicsDeps.Build = topicsapp.BuildUseCase{
+			Granular:    outlineArtifacts,
+			Embed:       embedClient,
+			Namer:       topicNamer,
+			Dict:        dictCRUDUC,
+			Vocab:       topicCentroids,
+			K:           150,
+			Iters:       25,
+			Seed:        42,
+			MaxDistance: 0.45,
+			Samples:     12,
+		}
+		topicsDeps.Assign = topicsapp.AssignUseCase{
+			Embed:    embedClient,
+			Granular: outlineArtifacts,
+			Vocab:    topicCentroids,
+			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+			Langs:    []string{"ru", "en"},
+		}
+	}
+
 	// Generic helpers used by ingest (sha256 of source) and commit (file
 	// existence checks). Defined here so the application layer never
 	// touches os.* directly.
@@ -428,9 +537,11 @@ func main() {
 		assetUploader = up
 	}
 
-	// Collection cover generation (optional — disabled when images.api_key is
-	// empty). Uploads generated covers to the AWS bucket at generate time.
-	var coverGen collectioncover.UseCase
+	// Cover generation (optional — disabled when images.api_key is empty).
+	// One generic covergen engine, parametrized per entity (collection / topic)
+	// by a thin Repo adapter and an S3 key prefix. Uploads generated covers to
+	// the AWS bucket at generate time.
+	var coverGen, topicCoverGen covergen.UseCase
 	if cfg.Images.APIKey != "" && assetUploader != nil {
 		imgClient, err := openrouterimage.New(openrouterimage.Config{
 			Endpoint: cfg.Images.Endpoint,
@@ -440,13 +551,22 @@ func main() {
 		if err != nil {
 			log.Fatalf("image generator: %v", err)
 		}
-		coverGen = collectioncover.UseCase{
-			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+		coverGen = covergen.UseCase{
+			Repo:     collectioncover.Repo{Catalog: sqlitecatalog.NewLazy(currentDBPath)},
+			Prefix:   "public/collections",
+			Images:   imgClient,
+			Uploader: assetUploader,
+			Style:    cfg.Images.Style,
+		}
+		topicCoverGen = covergen.UseCase{
+			Repo:     topiccover.Repo{Catalog: sqlitecatalog.NewLazy(currentDBPath)},
+			Prefix:   "public/topics",
 			Images:   imgClient,
 			Uploader: assetUploader,
 			Style:    cfg.Images.Style,
 		}
 	}
+	topicsDeps.Cover = topicCoverGen
 
 	// Author avatar/bio (avatar upload disabled when no S3 bucket; bio set
 	// works regardless since it only writes the catalog DB).
@@ -504,6 +624,7 @@ func main() {
 			OutDir:          cfg.Out,
 			InDir:           cfg.In,
 			DefaultLanguage: cfg.DefaultLanguage,
+			Artifacts:       artifactWriter,
 		},
 		Transcribe: transcribe.UseCase{
 			Registry:     registry,
@@ -516,6 +637,7 @@ func main() {
 			Transcripts: transcriptStore,
 			LLM:         outlineGen,
 			Catalog:     sqlitecatalog.NewLazy(currentDBPath),
+			Granular:    outlineArtifacts,
 		},
 		RefreshTitle: titleuc.UseCase{
 			Registry:    registry,
@@ -568,12 +690,9 @@ func main() {
 		Runs:         runRegistry,
 		Runner:       runRunner,
 		DictCRUD: tools.DictCRUDDeps{
-			UseCase: dictcrud.UseCase{
-				Catalog:    sqlitecatalog.NewLazy(currentDBPath),
-				FuzzyIndex: fuzzyIndex,
-				Minter:     minter,
-			},
+			UseCase: dictCRUDUC,
 		},
+		Topics: topicsDeps,
 		CollectionCRUD: tools.CollectionCRUDDeps{
 			UseCase: collectioncrud.UseCase{
 				Catalog: sqlitecatalog.NewLazy(currentDBPath),
@@ -619,40 +738,6 @@ func main() {
 	pool := worker.New(deps.Pipeline, *workers, 0)
 	deps.Pool = pool
 
-	// S3 targets for publish. AWS is required (read+write); Yandex is mirror.
-	var publishTargets []s3port.Uploader
-	if cfg.S3.AWS.Bucket != "" {
-		aws, err := awss3.New(ctx, awss3.Target{
-			Name:            "aws",
-			Bucket:          cfg.S3.AWS.Bucket,
-			Region:          cfg.S3.AWS.Region,
-			Endpoint:        cfg.S3.AWS.Endpoint,
-			AccessKeyID:     cfg.S3.AWS.AccessKeyID,
-			SecretAccessKey: cfg.S3.AWS.SecretAccessKey,
-			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:aws] init failed (catalog_publish will error): %v\n", err)
-		} else {
-			publishTargets = append(publishTargets, aws)
-		}
-	}
-	if cfg.S3.Yandex.Bucket != "" {
-		ya, err := awss3.New(ctx, awss3.Target{
-			Name:            "yandex",
-			Bucket:          cfg.S3.Yandex.Bucket,
-			Region:          cfg.S3.Yandex.Region,
-			Endpoint:        cfg.S3.Yandex.Endpoint,
-			AccessKeyID:     cfg.S3.Yandex.AccessKeyID,
-			SecretAccessKey: cfg.S3.Yandex.SecretAccessKey,
-			ForcePathStyle:  cfg.S3.Yandex.ForcePathStyle,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[s3:yandex] init failed: %v\n", err)
-		} else {
-			publishTargets = append(publishTargets, ya)
-		}
-	}
 	deps.Publish = catalogpublish.UseCase{
 		OutDir:          cfg.Out,
 		SupportedScheme: catalog.SupportedDBScheme,

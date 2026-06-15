@@ -67,6 +67,7 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
         locationIds: options.filters.value.locations,
         sourceIds: options.filters.value.sources,
         tagIds: options.filters.value.tags,
+        topicIds: options.filters.value.topics,
         durationFilter: options.filters.value.duration as DurationFilterId | undefined,
         dateFrom: options.filters.value.dateFrom,
         dateTo: options.filters.value.dateTo,

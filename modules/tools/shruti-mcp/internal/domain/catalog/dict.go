@@ -8,6 +8,7 @@ const (
 	KindLocation Kind = "location"
 	KindSource   Kind = "source"
 	KindTag      Kind = "tag"
+	KindTopic    Kind = "topic"
 )
 
 // IDPrefix returns the per-kind ID prefix per docs/repos/shruti/db/ids.md.
@@ -21,17 +22,19 @@ func (k Kind) IDPrefix() string {
 		return "source_"
 	case KindTag:
 		return "tag_"
+	case KindTopic:
+		return "topic_"
 	}
 	return ""
 }
 
 // DictEntry is one dictionary row collapsed across locales.
 //   Names      : language → full_name (one row per locale in DB)
-//   ShortName  : language → short_name (sources only)
+//   ShortName  : language → short_name (sources and topics)
 type DictEntry struct {
 	Id        string
 	Names     map[string]string
-	ShortName map[string]string // populated only when Kind == KindSource
+	ShortName map[string]string // populated for KindSource and KindTopic
 }
 
 // ListOpts is shared by *_list tools.

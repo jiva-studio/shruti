@@ -1,11 +1,13 @@
 <template>
-  <template v-for="item in items" :key="itemKey(item)">
-    <PlaylistRow
-      v-if="item.kind === 'track'"
-      :row="item.row"
-      @click="emit('click', $event)"
-      @delete="emit('delete', $event)"
-    />
+  <template v-for="(item, index) in items" :key="itemKey(item)">
+    <template v-if="item.kind === 'track'">
+      <PlaylistRow
+        :row="item.row"
+        @click="emit('click', $event)"
+        @delete="emit('delete', $event)"
+      />
+      <RowDivider v-if="items[index + 1]?.kind === 'track'" />
+    </template>
     <div v-else class="collection-group">
       <TrackListItem
         class="group-header"
@@ -14,25 +16,28 @@
         :author="item.author"
         :references="EMPTY"
         :tags="EMPTY"
+        :config="GROUP_HEADER_META"
       >
         <template #state>
           <RadialIndicator slot="end" :value="groupProgress(item.rows)" color="medium" />
         </template>
       </TrackListItem>
-      <PlaylistRow
-        v-for="row in item.rows"
-        :key="row.id"
-        :row="row"
-        @click="emit('click', $event)"
-        @delete="emit('delete', $event)"
-      />
+      <template v-for="row in item.rows" :key="row.id">
+        <RowDivider />
+        <PlaylistRow :row="row" @click="emit('click', $event)" @delete="emit('delete', $event)" />
+      </template>
     </div>
   </template>
 </template>
 
 <script setup lang="ts">
 import RadialIndicator from "@ui/components/tracks/state/RadialIndicator.vue"
-import { TrackListItem, type UiTrackRow } from "@ui/components/tracks/list/index.js"
+import {
+  TrackListItem,
+  type TrackMetaConfig,
+  type UiTrackRow,
+} from "@ui/components/tracks/list/index.js"
+import RowDivider from "@ui/components/RowDivider.vue"
 import PlaylistRow from "./PlaylistRow.vue"
 import type { PlaylistRenderItem } from "./types.js"
 
@@ -55,6 +60,13 @@ const emit = defineEmits<{
 
 // Stable empty arrays for the header's (unused) reference/tag chip props.
 const EMPTY: readonly string[] = []
+
+// A collection group header always shows its author as the subtitle, regardless
+// of the user's track-metadata settings — it's the only meta a group has.
+const GROUP_HEADER_META: TrackMetaConfig = {
+  top: null,
+  bottom: [{ field: "author", enabled: true }],
+}
 
 /**
  * Overall listening progress (0–100) across a group's lectures: a completed

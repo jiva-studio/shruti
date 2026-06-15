@@ -56,6 +56,7 @@ const mkTrack = (id: string): Track => ({
   hidden: false,
   references: [],
   tagIds: [],
+  topicIds: [],
   variants: [],
 })
 

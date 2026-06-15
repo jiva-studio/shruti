@@ -7,6 +7,7 @@ export type FiltersModel = {
   locations?: string[]
   sources?: string[]
   tags?: string[]
+  topics?: string[]
   duration?: string
   sort?: string
   /** Coarse date-range edges. Each is `"YYYY"` or `"YYYY-MM"`, or absent
@@ -15,7 +16,13 @@ export type FiltersModel = {
   dateTo?: string
 }
 
-export type MultiSectionKey = "authors" | "languages" | "locations" | "sources" | "tags"
+export type MultiSectionKey =
+  | "authors"
+  | "languages"
+  | "locations"
+  | "sources"
+  | "tags"
+  | "topics"
 export type SingleSectionKey = "duration" | "sort"
 export type DateSectionKey = "dates"
 
