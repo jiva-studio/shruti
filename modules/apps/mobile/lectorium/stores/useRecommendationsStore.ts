@@ -14,7 +14,7 @@ export interface TopicShelf {
 const HISTORY_WINDOW_MS = 180 * 24 * 60 * 60 * 1000
 const HOT_TOPICS = 6
 const SHELF_SIZE = 12
-const RECOMMENDED_SIZE = 6
+const RECOMMENDED_SIZE = 3
 
 /**
  * On-device recommender state. From the user's listening history it derives a

@@ -1,22 +1,23 @@
 <template>
   <IonModal :is-open="open" class="track-sheet" @did-dismiss="onDismiss">
-    <IonContent class="ion-padding">
-      <div class="sheet-header">
-        <div class="sheet-heading">
-          <h2 class="sheet-title">{{ title }}</h2>
-          <p v-if="author" class="author">{{ author }}</p>
-        </div>
-        <IonButton
-          class="close-button"
-          fill="clear"
-          :aria-label="t('app.close')"
-          @click="onDismiss"
-        >
-          <IconX slot="icon-only" :size="16" />
-        </IonButton>
+    <div class="sheet-header">
+      <div class="sheet-heading">
+        <h2 class="sheet-title">{{ title }}</h2>
+        <p v-if="author" class="author">{{ author }}</p>
       </div>
-      <LectureOverview class="overview" :description="description" :chapters="chapters" />
-      <SimilarTracksRow v-if="track" :track="track" @select="onSelectSimilar" />
+      <IonButton class="close-button" fill="clear" :aria-label="t('app.close')" @click="onDismiss">
+        <IconX slot="icon-only" :size="16" />
+      </IonButton>
+    </div>
+    <IonContent>
+      <div class="sheet-body">
+        <LectureOverview class="overview" :description="description" :chapters="chapters">
+          <div v-if="topicChips.length" class="topic-chips">
+            <span v-for="(name, i) in topicChips" :key="i" class="topic-chip">#{{ name }}</span>
+          </div>
+        </LectureOverview>
+      </div>
+      <SimilarTracksRow v-if="track" :track="track" />
     </IonContent>
 
     <IonFooter class="ion-no-border">
@@ -41,7 +42,7 @@ import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
 import { IconPlaylistAdd, IconX } from "@tabler/icons-vue"
 import { loadTrackDetail } from "@lib/application/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
-import type { LanguageCode, TrackId } from "@lib/domain/core.js"
+import type { LanguageCode } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
@@ -53,6 +54,7 @@ import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
+import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import LectureOverview from "@ui/components/LectureOverview.vue"
 import SimilarTracksRow from "@lectorium/components/SimilarTracksRow.vue"
 
@@ -60,6 +62,7 @@ const { t } = useI18n()
 const app = useLectorium()
 const appLanguage = useAppLanguage()
 const sheet = useTrackSheetStore()
+const dictionaries = useDictionariesStore()
 const purchases = usePurchasesStore()
 const paywall = usePaywallStore()
 const overlays = useOverlaysStore()
@@ -94,6 +97,10 @@ const variant = computed(
 const description = computed(() => variant.value?.description ?? null)
 const chapters = computed<readonly TrackOutlineChapter[]>(() => variant.value?.outline ?? [])
 
+const topicChips = computed<string[]>(() =>
+  (track.value?.topicIds ?? []).map((id) => dictionaries.topicNamesById.get(id) ?? id)
+)
+
 watch(
   () => sheet.trackId,
   async (id) => {
@@ -106,6 +113,7 @@ watch(
     }
     overlays.actionSheetOpen = true
     void app.haptics.impact("light")
+    void dictionaries.ensureLoaded()
     const repos = app.repositories()
     const detail = await loadTrackDetail(
       { trackId: id },
@@ -124,11 +132,6 @@ watch(
 
 function onDismiss(): void {
   sheet.close()
-}
-
-// Re-point the sheet at a similar track; the trackId watcher reloads its detail.
-function onSelectSimilar(id: TrackId): void {
-  sheet.open(id)
 }
 
 function onAddToPlaylist(): void {
@@ -156,10 +159,34 @@ function onShare(): void {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 14px 16px 10px;
+  background: var(--ion-background-color, #fff);
 }
 
 .overview {
-  margin-top: 16px;
+  margin-top: 0;
+}
+
+.sheet-body {
+  padding: var(--ion-padding, 16px);
+  padding-bottom: 0;
+}
+
+.topic-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 0 0 16px;
+}
+
+.topic-chip {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ion-color-medium-shade, #666);
+  background: var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
+  padding: 3px 9px;
+  border-radius: 12px;
+  white-space: nowrap;
 }
 
 .sheet-heading {
