@@ -36,6 +36,38 @@ const (
 	maxMergePasses = 5
 )
 
+// outlineResponseFormat forces the granular/merge passes to emit a structured
+// JSON object {"items":[{start,title}]} instead of free-form text. Cheap models
+// (gemini-flash) otherwise drift into echoing the transcript's "[MM:SS] title"
+// line format, which is not JSON at all. A root object (not a bare array) is
+// used because not every upstream accepts a top-level array in json_schema.
+var outlineResponseFormat = json.RawMessage(`{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "lecture_outline",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start", "title"],
+            "properties": {
+              "start": {"type": "string"},
+              "title": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}`)
+
 type Generator struct {
 	Client    *openaicompat.Client
 	Model     string
@@ -81,12 +113,13 @@ func (g *Generator) Outline(ctx context.Context, lectureText, lang string) (outl
 func (g *Generator) granular(ctx context.Context, lectureText, lang string) ([]outlineport.Item, error) {
 	sys := strings.ReplaceAll(outlineSystemPrompt, "__LANG__", lang)
 	res, err := g.Client.Run(ctx, openaicompat.Call{
-		Model:       g.Model,
-		MaxTokens:   g.MaxTokens,
-		System:      sys,
-		User:        lectureText,
-		Temperature: ptr(0.2),
-		Reasoning:   g.Reasoning,
+		Model:          g.Model,
+		MaxTokens:      g.MaxTokens,
+		System:         sys,
+		User:           lectureText,
+		Temperature:    ptr(0.2),
+		Reasoning:      g.Reasoning,
+		ResponseFormat: outlineResponseFormat,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("outline llm: %w", err)
@@ -131,12 +164,13 @@ func (g *Generator) merge(ctx context.Context, items []outlineport.Item, lang st
 		fmt.Fprintf(&b, "[%s] %s\n", fmtTS(it.StartMs), it.Title)
 	}
 	res, err := g.Client.Run(ctx, openaicompat.Call{
-		Model:       g.Model,
-		MaxTokens:   g.MaxTokens,
-		System:      sys,
-		User:        b.String(),
-		Temperature: ptr(0.2),
-		Reasoning:   g.Reasoning,
+		Model:          g.Model,
+		MaxTokens:      g.MaxTokens,
+		System:         sys,
+		User:           b.String(),
+		Temperature:    ptr(0.2),
+		Reasoning:      g.Reasoning,
+		ResponseFormat: outlineResponseFormat,
 	})
 	if err != nil {
 		return nil, err
@@ -164,12 +198,21 @@ func (g *Generator) Description(ctx context.Context, lectureText, lang string) (
 // "MM:SS"/"HH:MM:SS" string (the prompt's contract) or a numeric ms value.
 func parseItems(raw string) ([]outlineport.Item, error) {
 	cleaned := openaicompat.StripFences(raw)
-	var parsed []struct {
+	type item struct {
 		Start   json.RawMessage `json:"start"`
 		StartMs json.RawMessage `json:"start_ms"`
 		Title   string          `json:"title"`
 	}
-	if err := json.Unmarshal([]byte(cleaned), &parsed); err != nil {
+	// Structured output returns the object {"items":[...]}; a bare array is
+	// still accepted so the parser survives a provider that ignores
+	// response_format.
+	var parsed []item
+	var wrapper struct {
+		Items []item `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(cleaned), &wrapper); err == nil && wrapper.Items != nil {
+		parsed = wrapper.Items
+	} else if err := json.Unmarshal([]byte(cleaned), &parsed); err != nil {
 		return nil, fmt.Errorf("outline: parse llm json: %w", err)
 	}
 	out := make([]outlineport.Item, 0, len(parsed))
