@@ -63,7 +63,7 @@ import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
-import LectureOverview from "@lectorium/components/LectureOverview.vue"
+import LectureOverview from "@ui/components/LectureOverview.vue"
 
 const { t } = useI18n()
 const app = useLectorium()

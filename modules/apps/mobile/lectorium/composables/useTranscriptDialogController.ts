@@ -1,5 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
 import type { LanguageCode } from "@lib/domain/core.js"
+import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type { Note } from "@lib/domain/note.js"
 import type { NoteShareContext } from "@lib/application/formatNoteShare.js"
 import { useLectorium } from "@lectorium/lectorium.js"
@@ -32,6 +33,8 @@ export interface TranscriptDialogState {
   readonly isOpen: Ref<boolean>
   readonly title: Ref<string>
   readonly author: Ref<string>
+  readonly description: ComputedRef<string | null>
+  readonly chapters: ComputedRef<readonly TrackOutlineChapter[]>
   readonly availableLanguages: ComputedRef<readonly UiTranscriptLanguage[]>
   readonly activeLanguages: Ref<readonly LanguageCode[]>
   readonly blockGroups: ComputedRef<readonly UiTranscriptBlocksGroup[]>
@@ -346,10 +349,27 @@ export function useTranscriptDialogController(
     void app.haptics.impact("light")
   }
 
+  // Lecture overview (description + chapter outline) for the displayed
+  // language, rendered at the top of the transcript — the same data the track
+  // bottom-sheet shows. Falls back to the playable variant when the active
+  // language has no own variant.
+  const overviewVariant = computed(() => {
+    const track = hydration.track.value
+    if (!track) return null
+    const lang = hydration.activeLanguages.value[0]
+    return track.variants.find((v) => v.language === lang) ?? pickPlayableVariant(track)
+  })
+  const description = computed<string | null>(() => overviewVariant.value?.description ?? null)
+  const chapters = computed<readonly TrackOutlineChapter[]>(
+    () => overviewVariant.value?.outline ?? []
+  )
+
   return {
     isOpen,
     title: hydration.title,
     author: hydration.author,
+    description,
+    chapters,
     availableLanguages,
     activeLanguages: hydration.activeLanguages as Ref<readonly LanguageCode[]>,
     blockGroups,
