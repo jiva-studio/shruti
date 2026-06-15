@@ -19,9 +19,9 @@ import (
 	alignpdfuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/alignpdf"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/audiodenoise"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/audiotag"
+	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/authorprofile"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/collectioncover"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/collectioncrud"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/authorprofile"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/collectiongroupcrud"
 	configpublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configpublish"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/dictcrud"
@@ -42,27 +42,29 @@ import (
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/selecttracks"
 	titleuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/title"
+	topicsapp "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/topics"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/transcribe"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/config"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 	adminconfigrt "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/adminconfig/runtime"
 	pythonalign "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/alignpdf/python"
-	openaicompatattribtranslate "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/attributiontranslate/openaicompat"
 	fsartifact "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
+	openaicompatattribtranslate "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/attributiontranslate/openaicompat"
 	fsaudio "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/audiostore/fs"
 	resolverchain "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/resolver/chain"
 	exactresolver "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/resolver/exact"
 	openaicompatresolver "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/resolver/openaicompat"
 	sqlitecatalog "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite"
 	httpcdn "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/cdn/http"
+	execdenoise "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/denoise/exec"
 	openaicompattranslate "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/dicttranslate/openaicompat"
+	openaicompatembed "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/embed/openaicompat"
 	osfs "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/fs/os"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/glossary"
 	sha256hash "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/hashing/sha256"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
 	openrouterimage "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/imagegen/openrouter"
 	sqliteregistry "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
-	execdenoise "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/denoise/exec"
 	sqlitelibrary "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/library/sqlite"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/canonical"
@@ -77,6 +79,8 @@ import (
 	razdelsplit "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/sentencesplit/razdel"
 	id3v2tagger "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/tagger/id3v2"
 	openaicompattitle "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/title/openaicompat"
+	fstopics "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/topics/fs"
+	openaicompattopics "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/topics/openaicompat"
 	transcribereg "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcribe"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcribe/transcriberservice"
 	fstranscript "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcriptstore/fs"
@@ -412,6 +416,64 @@ func main() {
 	// dictcrud mutations land or when an explicit Rebuild is called.
 	fuzzyIndex := sqlitecatalog.NewFuzzyIndex(sqlitecatalog.NewLazy(currentDBPath))
 
+	// Shared dict CRUD use case — used by the generic dict tools and reused by
+	// the topic build (to mint topic_<nanoid> entries while naming clusters).
+	dictCRUDUC := dictcrud.UseCase{
+		Catalog:    sqlitecatalog.NewLazy(currentDBPath),
+		FuzzyIndex: fuzzyIndex,
+		Minter:     minter,
+	}
+
+	// Topic recommender (topics.build / track.topics.assign / pipeline.run
+	// op=topics): a text-embeddings client + an LLM cluster namer. Both gated on
+	// cfg.Embed.APIKey (and the outline LLM config, reused for naming). The
+	// granular outline artifacts and the centroid vocabulary share artifactWriter.
+	outlineArtifacts := fsoutline.New(artifactWriter)
+	topicCentroids := fstopics.New(artifactWriter)
+	topicsDeps := tools.TopicsDeps{Catalog: sqlitecatalog.NewLazy(currentDBPath)}
+	if cfg.Embed.APIKey != "" && cfg.Outline.APIKey != "" {
+		embedClient, err := openaicompatembed.New(openaicompatembed.Config{
+			Endpoint:   cfg.Embed.Endpoint,
+			APIKey:     cfg.Embed.APIKey,
+			Model:      cfg.Embed.Model,
+			Dimensions: cfg.Embed.Dimensions,
+			BatchSize:  cfg.Embed.BatchSize,
+		})
+		if err != nil {
+			log.Fatalf("embeddings client: %v", err)
+		}
+		// Cluster naming reuses the outline LLM (Flash-Lite class).
+		topicNamer, err := openaicompattopics.New(openaicompattopics.Config{
+			Endpoint:  cfg.Outline.Endpoint,
+			APIKey:    cfg.Outline.APIKey,
+			Model:     cfg.Outline.Model,
+			MaxTokens: 200,
+			Reasoning: cfg.Outline.Reasoning,
+		})
+		if err != nil {
+			log.Fatalf("topic namer: %v", err)
+		}
+		topicsDeps.Build = topicsapp.BuildUseCase{
+			Granular:    outlineArtifacts,
+			Embed:       embedClient,
+			Namer:       topicNamer,
+			Dict:        dictCRUDUC,
+			Vocab:       topicCentroids,
+			K:           150,
+			Iters:       25,
+			Seed:        42,
+			MaxDistance: 0.45,
+			Samples:     12,
+		}
+		topicsDeps.Assign = topicsapp.AssignUseCase{
+			Embed:    embedClient,
+			Granular: outlineArtifacts,
+			Vocab:    topicCentroids,
+			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+			Langs:    []string{"ru", "en"},
+		}
+	}
+
 	// Generic helpers used by ingest (sha256 of source) and commit (file
 	// existence checks). Defined here so the application layer never
 	// touches os.* directly.
@@ -562,7 +624,7 @@ func main() {
 			Transcripts: transcriptStore,
 			LLM:         outlineGen,
 			Catalog:     sqlitecatalog.NewLazy(currentDBPath),
-			Granular:    fsoutline.New(artifactWriter),
+			Granular:    outlineArtifacts,
 		},
 		RefreshTitle: titleuc.UseCase{
 			Registry:    registry,
@@ -615,15 +677,9 @@ func main() {
 		Runs:         runRegistry,
 		Runner:       runRunner,
 		DictCRUD: tools.DictCRUDDeps{
-			UseCase: dictcrud.UseCase{
-				Catalog:    sqlitecatalog.NewLazy(currentDBPath),
-				FuzzyIndex: fuzzyIndex,
-				Minter:     minter,
-			},
+			UseCase: dictCRUDUC,
 		},
-		Topics: tools.TopicsDeps{
-			Catalog: sqlitecatalog.NewLazy(currentDBPath),
-		},
+		Topics: topicsDeps,
 		CollectionCRUD: tools.CollectionCRUDDeps{
 			UseCase: collectioncrud.UseCase{
 				Catalog: sqlitecatalog.NewLazy(currentDBPath),

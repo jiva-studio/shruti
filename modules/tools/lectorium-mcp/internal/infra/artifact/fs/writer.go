@@ -58,6 +58,13 @@ func (w *Writer) Write(ctx context.Context, relKey string, body []byte) error {
 	return nil
 }
 
+// Read returns the lake copy of an artifact. The S3 copies are mirrors; the
+// lake under OutDir is the working source on the mcp host (where the topic
+// build/assign run). Returns os.ErrNotExist when absent.
+func (w *Writer) Read(relKey string) ([]byte, error) {
+	return os.ReadFile(filepath.Join(w.OutDir, filepath.FromSlash(relKey)))
+}
+
 func contentType(relKey string) string {
 	if strings.HasSuffix(relKey, ".json") {
 		return "application/json"

@@ -26,6 +26,7 @@ type Config struct {
 	Resolver   Resolver   `yaml:"resolver"`
 	Metadata   Metadata   `yaml:"metadata"`
 	Outline    Outline    `yaml:"outline"`
+	Embed      Embed      `yaml:"embed"`
 	Images     Images     `yaml:"images"`
 }
 
@@ -235,6 +236,20 @@ type Outline struct {
 	Model     string `yaml:"model"`
 	MaxTokens int    `yaml:"max_tokens"`
 	Reasoning string `yaml:"reasoning,omitempty"`
+}
+
+// Embed configures the text-embeddings endpoint used by the topic build/assign
+// (clustering outline headings into canonical topics). OpenAI-compatible
+// (text-embedding-3-small via OpenRouter/OpenAI). When APIKey is empty the
+// topic tools are disabled (topics.build / track.topics.assign return a clear
+// error). Dimensions trims the vector (256 is plenty for clustering); batch
+// caps inputs per HTTP call.
+type Embed struct {
+	Endpoint   string `yaml:"endpoint,omitempty"`
+	APIKey     string `yaml:"api_key"`
+	Model      string `yaml:"model"`
+	Dimensions int    `yaml:"dimensions,omitempty"`
+	BatchSize  int    `yaml:"batch_size,omitempty"`
 }
 
 // ProviderOptions describes one OpenAI-compatible review provider entry.
