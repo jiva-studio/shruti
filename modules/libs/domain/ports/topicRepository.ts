@@ -15,4 +15,11 @@ export interface ITopicRepository {
   weightsForTracks(trackIds: readonly TrackId[]): Promise<readonly TrackTopicWeight[]>
   /** Track ids carrying a topic, highest weight first (the topic shelf). */
   topTrackIds(topicId: TopicId, limit: number): Promise<readonly TrackId[]>
+  /** Tracks most similar to a seed by topic overlap (scored by the neighbour's
+   *  summed weight on the shared topics), excluding the seed. Highest first. */
+  similarTrackIds(
+    topicIds: readonly TopicId[],
+    excludeTrackId: TrackId,
+    limit: number
+  ): Promise<readonly TrackId[]>
 }

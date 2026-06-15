@@ -36,5 +36,24 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
       )
       return rows.map((r) => r.track_id)
     },
+
+    async similarTrackIds(
+      topicIds: readonly TopicId[],
+      excludeTrackId: TrackId,
+      limit: number
+    ): Promise<readonly TrackId[]> {
+      if (topicIds.length === 0) return []
+      const placeholders = topicIds.map(() => "?").join(", ")
+      const rows = await contentDb.query<{ track_id: string }>(
+        `SELECT track_id
+           FROM track_topics
+          WHERE topic_id IN (${placeholders}) AND track_id != ?
+          GROUP BY track_id
+          ORDER BY SUM(weight) DESC
+          LIMIT ?`,
+        [...topicIds, excludeTrackId, limit]
+      )
+      return rows.map((r) => r.track_id)
+    },
   }
 }
