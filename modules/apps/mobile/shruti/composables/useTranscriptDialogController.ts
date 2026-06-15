@@ -63,6 +63,9 @@ export interface TranscriptDialogState {
   readonly lastNoteTappedEvent: Ref<ExistingNoteSelection | undefined>
   onClose(): void
   onSeek(positionMs: number): void
+  /** Chapter tapped: seek + start/resume playback (loading the track first
+   *  when the transcript was opened in preview mode). */
+  onChapterSeek(positionMs: number): Promise<void>
   onTextSelected(event: TextSelectedEvent): void
   onNoteTapped(event: NoteTappedEvent): void
   onSelectionAction(event: SelectionActionEvent): Promise<void>
@@ -244,12 +247,29 @@ export function useTranscriptDialogController(
   // default after eyeballing 30-min lectures (~5-10 paragraphs each).
   const paragraphChars = useConfig<number>("settings.transcript.paragraphChars", 350)
 
+  // Lecture overview (description + chapter outline) for the displayed
+  // language, rendered at the top of the transcript — the same data the track
+  // bottom-sheet shows. Falls back to the playable variant when the active
+  // language has no own variant. Declared before `blockGroups` because the
+  // builder splits the transcript at these chapter boundaries.
+  const overviewVariant = computed(() => {
+    const track = hydration.track.value
+    if (!track) return null
+    const lang = hydration.activeLanguages.value[0]
+    return track.variants.find((v) => v.language === lang) ?? pickPlayableVariant(track)
+  })
+  const description = computed<string | null>(() => overviewVariant.value?.description ?? null)
+  const chapters = computed<readonly TrackOutlineChapter[]>(
+    () => overviewVariant.value?.outline ?? []
+  )
+
   const blockGroups = computed(() =>
     buildTranscriptViewData(loader.transcript.value, {
       paragraphChars: paragraphChars.value,
       sourcesById: dictionaries.sourcesById,
       lang: appLanguage.value,
       notes: notesForTrack.value,
+      chapters: chapters.value,
     })
   )
   // Preview mode (Search → Open transcript with no track playing, or a
@@ -318,6 +338,25 @@ export function useTranscriptDialogController(
     void player.seek(Math.round(positionMs))
   }
 
+  // Chapter tapped (outline row or inline heading). Unlike a plain seek this
+  // is an explicit "take me here and play": jump + ensure playback. In
+  // preview mode the track isn't loaded yet, so start it from the chapter.
+  async function onChapterSeek(positionMs: number): Promise<void> {
+    const ms = Math.max(0, Math.round(positionMs))
+    if (mirrorsActivePlayer.value) {
+      await player.seek(ms)
+      if (!player.playing) await player.togglePause()
+      return
+    }
+    const track = hydration.track.value
+    if (!track) return
+    await player.openTrack({
+      track,
+      preferredLanguage: hydration.activeLanguages.value[0],
+      resumeFromMs: ms,
+    })
+  }
+
   // Selection lifecycle. The two events are mutually exclusive — opening
   // one always clears the other — so the popover's `selection`/`existing`
   // props never both light up at once.
@@ -349,21 +388,6 @@ export function useTranscriptDialogController(
     void app.haptics.impact("light")
   }
 
-  // Lecture overview (description + chapter outline) for the displayed
-  // language, rendered at the top of the transcript — the same data the track
-  // bottom-sheet shows. Falls back to the playable variant when the active
-  // language has no own variant.
-  const overviewVariant = computed(() => {
-    const track = hydration.track.value
-    if (!track) return null
-    const lang = hydration.activeLanguages.value[0]
-    return track.variants.find((v) => v.language === lang) ?? pickPlayableVariant(track)
-  })
-  const description = computed<string | null>(() => overviewVariant.value?.description ?? null)
-  const chapters = computed<readonly TrackOutlineChapter[]>(
-    () => overviewVariant.value?.outline ?? []
-  )
-
   return {
     isOpen,
     title: hydration.title,
@@ -386,6 +410,7 @@ export function useTranscriptDialogController(
     lastNoteTappedEvent,
     onClose,
     onSeek,
+    onChapterSeek,
     onTextSelected,
     onNoteTapped,
     onSelectionAction,
