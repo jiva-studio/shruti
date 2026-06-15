@@ -5,6 +5,7 @@
       :key="c.id"
       :name="c.name"
       :cover-url="c.coverUrl"
+      :hashtag="hashtag"
       @click="emit('select', c.id)"
     />
   </div>
@@ -24,7 +25,7 @@ export interface CarouselItem {
   readonly coverUrl?: string
 }
 
-defineProps<{ items: readonly CarouselItem[] }>()
+defineProps<{ items: readonly CarouselItem[]; hashtag?: boolean }>()
 const emit = defineEmits<{ (e: "select", id: string): void }>()
 </script>
 

@@ -7,6 +7,7 @@ export default {
   lecturesTitle: "Lectures",
   recommendedForYou: "Recommended for you",
   allLectures: "All lectures",
+  topics: "Topics",
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",

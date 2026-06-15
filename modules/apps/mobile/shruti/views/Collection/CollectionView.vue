@@ -5,11 +5,11 @@
         <IonButtons slot="start">
           <IonBackButton default-href="/tabs/search" />
         </IonButtons>
-        <IonTitle :style="{ opacity: titleOpacity }">{{ detail?.name ?? "" }}</IonTitle>
+        <IonTitle :style="{ opacity: titleOpacity }">{{ title }}</IonTitle>
         <IonButtons slot="end">
           <IonButton
             class="no-ripple"
-            :disabled="adding || !detail || detail.trackIds.length === 0"
+            :disabled="adding || trackIds.length === 0"
             :aria-label="t('search.collections.addAll')"
             @click="onAdd"
           >
@@ -22,15 +22,15 @@
     <IonContent :fullscreen="true" :scroll-events="true" @ionScroll="onScroll">
       <div class="hero" :style="{ opacity: heroOpacity }">
         <div class="hero-media" :style="{ transform: `translateY(${heroShift}px)` }">
-          <CachedImage v-if="coverUrl" :url="coverUrl" :alt="detail?.name" />
+          <CachedImage v-if="coverUrl" :url="coverUrl" :alt="title" />
         </div>
         <span class="hero-scrim" aria-hidden="true" />
         <div class="hero-caption">
-          <h1 class="hero-title">{{ detail?.name ?? "" }}</h1>
+          <h1 class="hero-title">{{ title }}</h1>
         </div>
       </div>
 
-      <p v-if="detail?.description" class="description">{{ detail.description }}</p>
+      <p v-if="description" class="description">{{ description }}</p>
 
       <TracksList :rows="rows" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
@@ -62,34 +62,42 @@ import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
 import { addTracksToPlaylist } from "@lib/application"
 import { useToast } from "@kit/composables"
-import type { TrackId } from "@lib/domain/core.js"
+import type { TopicId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
-import type { CollectionDetail } from "@infra/repositories/sql/index.js"
 
-const props = defineProps<{ id: string }>()
+// One detail page for any track-bearing entity: a collection or a recommender
+// topic. The `kind` (from the route) selects how the header + tracks load; the
+// hero / toolbar / "add all" chrome is shared.
+const props = defineProps<{ id: string; kind?: "collection" | "topic" }>()
 
 const { t } = useI18n()
 const app = useShruti()
 const playlist = usePlaylistStore()
+const dictionaries = useDictionariesStore()
 const toast = useToast()
 const mapper = useTrackUiStateMapper()
 const trackActions = useTrackActionSheet()
 const appLanguage = useAppLanguage()
 
-const detail = ref<CollectionDetail | null>(null)
+const TOPIC_TRACKS = 50
+
+const title = ref("")
+const description = ref<string | null>(null)
+const coverKey = ref<string | null>(null)
+const trackIds = ref<readonly string[]>([])
 const tracks = ref<readonly Track[]>([])
 const adding = ref(false)
 
+const coverUrl = computed(() => (coverKey.value ? resolveAssetUrl(coverKey.value) : undefined))
 const rows = mapper.mapRows(() => tracks.value, { context: "discovery" })
 
 const HERO_HEIGHT = 240
-const coverUrl = computed(() => (detail.value?.cover ? resolveAssetUrl(detail.value.cover) : undefined))
-
 const scrollTop = ref(0)
 function onScroll(e: CustomEvent<{ scrollTop: number }>): void {
   scrollTop.value = e.detail.scrollTop
@@ -107,28 +115,40 @@ const toolbarStyle = computed(() => ({
   "--background": `rgba(var(--ion-background-color-rgb), ${titleOpacity.value})`,
 }))
 
-async function load(id: string, locale: string): Promise<void> {
-  detail.value = null
+async function load(kind: string, id: string, locale: string): Promise<void> {
+  title.value = ""
+  description.value = null
+  coverKey.value = null
+  trackIds.value = []
   tracks.value = []
   try {
     const repos = app.repositories()
-    const d = await repos.collections.getCollection(id, locale)
-    detail.value = d
-    if (!d || d.trackIds.length === 0) return
-    const byId = await repos.tracks.getByIds([...d.trackIds])
-    tracks.value = d.trackIds
-      .map((tid) => byId.get(tid))
-      .filter((tr): tr is Track => tr !== undefined)
+    let ids: readonly string[] = []
+    if (kind === "topic") {
+      await dictionaries.ensureLoaded()
+      title.value = dictionaries.topicNamesById.get(id) ?? id
+      coverKey.value = dictionaries.topicCoverById.get(id) ?? null
+      ids = await repos.topics.topTrackIds(id as TopicId, TOPIC_TRACKS)
+    } else {
+      const d = await repos.collections.getCollection(id, locale)
+      if (!d) return
+      title.value = d.name
+      description.value = d.description || null
+      coverKey.value = d.cover || null
+      ids = d.trackIds
+    }
+    trackIds.value = ids
+    if (ids.length === 0) return
+    const byId = await repos.tracks.getByIds([...ids])
+    tracks.value = ids.map((tid) => byId.get(tid)).filter((tr): tr is Track => tr !== undefined)
   } catch (err) {
-    console.warn("[collection] load failed", err)
-    detail.value = null
-    tracks.value = []
+    console.warn("[detail] load failed", err)
   }
 }
 
 watch(
-  () => [props.id, appLanguage.value] as const,
-  ([id, locale]) => void load(id, locale),
+  () => [props.id, props.kind ?? "collection", appLanguage.value] as const,
+  ([id, kind, locale]) => void load(kind, id, locale),
   { immediate: true }
 )
 
@@ -137,7 +157,7 @@ async function onSelectTrack(trackId: string): Promise<void> {
 }
 
 async function onAdd(): Promise<void> {
-  const count = detail.value?.trackIds.length ?? 0
+  const count = trackIds.value.length
   if (count === 0) return
   const alert = await alertController.create({
     header: t("search.collections.addAll"),
@@ -151,11 +171,11 @@ async function onAdd(): Promise<void> {
 }
 
 async function performAdd(): Promise<void> {
-  if (!detail.value || detail.value.trackIds.length === 0) return
+  if (trackIds.value.length === 0) return
   adding.value = true
   try {
     const result = await addTracksToPlaylist(
-      { trackIds: [...detail.value.trackIds] },
+      { trackIds: [...trackIds.value] },
       { playlist: { add: (id) => playlist.add(id) } }
     )
     if (!result.ok) void toast.error(t("search.collections.addError"))
