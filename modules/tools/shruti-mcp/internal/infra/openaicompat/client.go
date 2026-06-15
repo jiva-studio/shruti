@@ -65,6 +65,10 @@ type Call struct {
 	User        string
 	Temperature *float64
 	Reasoning   string // ReasoningDefault | ReasoningOff | ReasoningOn
+	// ResponseFormat, when set, is sent verbatim as the request's
+	// `response_format` field (e.g. an OpenRouter json_schema structured-output
+	// spec). Leave nil for free-form text completions.
+	ResponseFormat json.RawMessage
 }
 
 // Result carries the assistant text plus per-call accounting that the
@@ -83,12 +87,13 @@ type Result struct {
 }
 
 type chatRequest struct {
-	Model       string            `json:"model"`
-	Messages    []chatMessage     `json:"messages"`
-	Temperature float64           `json:"temperature,omitempty"`
-	MaxTokens   int               `json:"max_tokens,omitempty"`
-	Stream      bool              `json:"stream"`
-	Reasoning   *reasoningOptions `json:"reasoning,omitempty"`
+	Model          string            `json:"model"`
+	Messages       []chatMessage     `json:"messages"`
+	Temperature    float64           `json:"temperature,omitempty"`
+	MaxTokens      int               `json:"max_tokens,omitempty"`
+	Stream         bool              `json:"stream"`
+	Reasoning      *reasoningOptions `json:"reasoning,omitempty"`
+	ResponseFormat json.RawMessage   `json:"response_format,omitempty"`
 }
 
 type chatMessage struct {
@@ -184,6 +189,7 @@ func (c *Client) Run(ctx context.Context, call Call) (Result, error) {
 		body.Temperature = *call.Temperature
 	}
 	body.Reasoning = reasoningFromString(call.Reasoning)
+	body.ResponseFormat = call.ResponseFormat
 
 	raw, err := json.Marshal(body)
 	if err != nil {
