@@ -14,6 +14,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
 	sqliteregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 )
 
 // TestIngestThenNormalize ingests /tmp/lake/in/test.mp3 and verifies that the
@@ -59,7 +60,7 @@ func TestIngestThenNormalize(t *testing.T) {
 		t.Fatalf("normalize: %v", err)
 	}
 
-	canonical := audio.PublicAudioPath(res.TrackId)
+	canonical := audio.PublicAudioPath(res.TrackId, audioport.VersionOriginal)
 	stat, err := os.Stat(canonical)
 	if err != nil {
 		t.Fatalf("canonical missing: %v", err)

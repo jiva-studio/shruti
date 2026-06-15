@@ -94,11 +94,13 @@ function makeTrack(id: string, durationMs = 600_000): Track {
     hidden: false,
     references: [],
     tagIds: [],
+    topicIds: [],
     variants: [
       {
         trackId: id as TrackId,
         language: "en",
         title: id,
+        audios: [{ path: `audio/${id}.mp3`, filesize: null, duration: durationMs, kind: "original" }],
         audio: { path: `audio/${id}.mp3`, filesize: null, duration: durationMs, kind: "original" },
         transcript: null,
       },

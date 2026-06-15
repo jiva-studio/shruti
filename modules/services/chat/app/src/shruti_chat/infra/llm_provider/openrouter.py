@@ -178,7 +178,7 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
     base = {
         settings.llm_default,
         settings.llm_fallback,
-        settings.llm_outline,
+        settings.llm_cheap,
         settings.llm_query_planner,
         settings.llm_synthesis_planner,
         settings.llm_conclusion_writer,

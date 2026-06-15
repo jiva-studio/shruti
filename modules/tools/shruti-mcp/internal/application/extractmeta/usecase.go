@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	fsartifact "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
 	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/dicttranslate"
@@ -41,6 +41,9 @@ type UseCase struct {
 	OutDir          string
 	InDir           string // input lake root (same cfg.In as tools.Deps.InDir); used to compute relPath for the extractor
 	DefaultLanguage string // fallback when meta.Languages is empty (used as the locale of an auto-created dict row)
+	// Artifacts writes the meta.json sidecar to the lake and uploads it to S3 in
+	// one call (private artifacts/ prefix).
+	Artifacts *fsartifact.Writer
 
 	// runMemo dedups LLM calls for repeated raw strings within a single
 	// MCP-process lifetime (e.g. 1568 EN tracks all carrying author "Srila
@@ -138,7 +141,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, srcPath string) (res Res
 	}
 
 	// 2. Audio probe on the canonical file.
-	audioPath := uc.Audio.PublicAudioPath(id)
+	audioPath := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 	info, err := uc.Probe.Probe(ctx, audioPath)
 	if err != nil {
 		return Result{}, fmt.Errorf("ffprobe %s: %w (run audio_normalize first?)", audioPath, err)
@@ -193,13 +196,10 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, srcPath string) (res Res
 		})
 	}
 
-	// 4. Persist meta.json sidecar.
-	metaDir := filepath.Join(uc.OutDir, "artifacts", "tracks", string(id))
-	if err := os.MkdirAll(metaDir, 0o755); err != nil {
-		return Result{}, err
-	}
+	// 4. Persist meta.json sidecar (lake + S3).
 	body, _ := json.MarshalIndent(res, "", "  ")
-	if err := atomicWrite(filepath.Join(metaDir, "meta.json"), body); err != nil {
+	metaKey := fmt.Sprintf("artifacts/tracks/%s/meta.json", string(id))
+	if err := uc.Artifacts.Write(ctx, metaKey, body); err != nil {
 		return Result{}, err
 	}
 
@@ -494,14 +494,6 @@ func asResolve(kind, query string, r catalogport.ResolveResponse) Resolve {
 		Provider:   r.Provider,
 		Reasoning:  r.Reasoning,
 	}
-}
-
-func atomicWrite(path string, body []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
 }
 
 // avoid unused import in extreme cases

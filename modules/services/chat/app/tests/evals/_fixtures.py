@@ -41,8 +41,6 @@ from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
-from shruti_chat.infra.storage.s3_outline_cache import S3OutlineCache
-from shruti_chat.infra.storage.s3_transcript_storage import S3TranscriptStorage
 from shruti_chat.observability.logging import setup_logging
 from tests.evals.observation import TurnObservation
 from tests.evals.observer import install_capture_processor, observe_turn
@@ -232,14 +230,10 @@ async def _build_once() -> EvalChatClient:
         router=EmbeddingTableRouter(dim=s.embed_dim),
     )
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)
-    transcript_storage = S3TranscriptStorage(settings=s)
-    outline_cache = S3OutlineCache(settings=s)
 
     bind_repositories(
         chunk_repo=chunk_repo,
         catalog_repo=catalog_repo,
-        transcript_storage=transcript_storage,
-        outline_cache=outline_cache,
         embedder=embedder,
     )
 

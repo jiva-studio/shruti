@@ -5,7 +5,15 @@ import type { Language } from "@lib/domain/language.js"
 import type { Location } from "@lib/domain/location.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Tag } from "@lib/domain/tag.js"
-import type { AuthorId, LanguageCode, LocationId, SourceId, TagId } from "@lib/domain/core.js"
+import type { Topic } from "@lib/domain/topic.js"
+import type {
+  AuthorId,
+  LanguageCode,
+  LocationId,
+  SourceId,
+  TagId,
+  TopicId,
+} from "@lib/domain/core.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 
@@ -27,6 +35,7 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
   const locations = ref<readonly Location[]>([])
   const sources = ref<readonly Source[]>([])
   const tags = ref<readonly Tag[]>([])
+  const topics = ref<readonly Topic[]>([])
   const languages = ref<readonly Language[]>([])
   /** Distinct catalog years (newest first) for the date-range filter. */
   const years = ref<readonly number[]>([])
@@ -41,13 +50,14 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     error.value = null
     try {
       const repos = app.repositories()
-      const [authorList, languageList, locationList, sourceList, tagList, yearList] =
+      const [authorList, languageList, locationList, sourceList, tagList, topicList, yearList] =
         await Promise.all([
           repos.authors.listAll(),
           repos.languages.listWithTracks(),
           repos.locations.listAll(),
           repos.sources.listAll(),
           repos.tags.listAll(),
+          repos.topics.listAll(),
           repos.tracks.listYears(),
         ])
       authors.value = authorList
@@ -55,6 +65,7 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
       locations.value = locationList
       sources.value = sourceList
       tags.value = tagList
+      topics.value = topicList
       years.value = yearList
       loaded = true
     } catch (err) {
@@ -86,6 +97,42 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
       const name = t.names.get(lang) ?? t.names.values().next().value ?? t.id
       out.set(t.id, name)
     }
+    return out
+  })
+  const topicsById = computed<ReadonlyMap<TopicId, Topic>>(
+    () => new Map(topics.value.map((t) => [t.id, t]))
+  )
+  /** Topic-id → localised display name in the active UI language (recommender
+   *  topic chips / shelf headers). Falls back to the first locale, then id. */
+  const topicNamesById = computed<ReadonlyMap<string, string>>(() => {
+    const lang = appLanguage.value
+    const out = new Map<string, string>()
+    for (const t of topics.value) {
+      const name = t.names.get(lang) ?? t.names.values().next().value ?? t.id
+      out.set(t.id, name)
+    }
+    return out
+  })
+  /** Topic-id → short display label in the active UI language (chips, shelf
+   *  headers). Falls back to the full name when no short one exists. */
+  const topicShortNamesById = computed<ReadonlyMap<string, string>>(() => {
+    const lang = appLanguage.value
+    const out = new Map<string, string>()
+    for (const t of topics.value) {
+      const short =
+        t.shortNames.get(lang) ??
+        t.shortNames.values().next().value ??
+        t.names.get(lang) ??
+        t.names.values().next().value ??
+        t.id
+      out.set(t.id, short)
+    }
+    return out
+  })
+  /** Topic-id → cover asset key (language-neutral), present only once generated. */
+  const topicCoverById = computed<ReadonlyMap<string, string>>(() => {
+    const out = new Map<string, string>()
+    for (const t of topics.value) if (t.cover) out.set(t.id, t.cover)
     return out
   })
   const languagesByCode = computed<ReadonlyMap<LanguageCode, Language>>(
@@ -125,11 +172,19 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     )
   })
 
+  const topicsSorted = computed<readonly Topic[]>(() => {
+    const lang = appLanguage.value
+    return [...topics.value].sort((a, b) =>
+      (a.names.get(lang) ?? a.id).localeCompare(b.names.get(lang) ?? b.id)
+    )
+  })
+
   return {
     authors,
     locations,
     sources,
     tags,
+    topics,
     languages,
     years,
     authorsById,
@@ -137,11 +192,16 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     sourcesById,
     tagsById,
     tagNamesById,
+    topicsById,
+    topicNamesById,
+    topicShortNamesById,
+    topicCoverById,
     languagesByCode,
     authorsSorted,
     locationsSorted,
     sourcesSorted,
     tagsSorted,
+    topicsSorted,
     isLoading,
     error,
     ensureLoaded,

@@ -1,0 +1,69 @@
+// Package audiodenoise produces the denoised "clean" mp3 for a committed track
+// and registers it as a track_audio kind=clean row, so the app can offer the
+// original↔clean source-mix. Mirrors the normalize/audiotag local-tool pattern:
+// it works on the on-disk out/ tree; the asset-push pipeline ships clean.mp3 to
+// S3 the same way it ships original.mp3.
+package audiodenoise
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	denoiserport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/denoiser"
+)
+
+type UseCase struct {
+	Audio    audioport.Store
+	Probe    audioport.Probe
+	Denoiser denoiserport.Denoiser
+	Catalog  catalogport.CommitRepository
+}
+
+type Result struct {
+	TrackId    track.Id `json:"track_id"`
+	Language   string   `json:"language"`
+	CleanPath  string   `json:"clean_path"`
+	DurationMs int64    `json:"duration_ms"`
+	SizeBytes  int64    `json:"size_bytes"`
+}
+
+// Run denoises out/public/tracks/{id}/audio/original.mp3 → clean.mp3, probes it,
+// and upserts a track_audio kind=clean row for (id, language) pointing at the
+// canonical relative key. Idempotent: re-running overwrites the file + row.
+func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result, error) {
+	in := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
+	out := uc.Audio.PublicAudioPath(id, audioport.VersionClean)
+
+	if err := uc.Denoiser.Denoise(ctx, in, out); err != nil {
+		return Result{}, err
+	}
+	info, err := uc.Probe.Probe(ctx, out)
+	if err != nil {
+		return Result{}, fmt.Errorf("probe clean: %w", err)
+	}
+
+	relPath := fmt.Sprintf("public/tracks/%s/audio/clean.mp3", string(id))
+	row := catalog.AudioRow{
+		TrackID:  string(id),
+		Language: language,
+		Kind:     catalog.AudioKindClean,
+		Path:     relPath,
+		Filesize: info.SizeBytes,
+		Duration: info.DurationMs,
+	}
+	if err := uc.Catalog.UpsertAudio(ctx, row); err != nil {
+		return Result{}, fmt.Errorf("register clean audio: %w", err)
+	}
+
+	return Result{
+		TrackId:    id,
+		Language:   language,
+		CleanPath:  relPath,
+		DurationMs: info.DurationMs,
+		SizeBytes:  info.SizeBytes,
+	}, nil
+}

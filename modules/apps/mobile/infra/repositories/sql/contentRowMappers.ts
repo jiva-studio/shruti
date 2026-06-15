@@ -4,17 +4,28 @@ import type { Location } from "@lib/domain/location.js"
 import type { Reference } from "@lib/domain/reference.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Tag } from "@lib/domain/tag.js"
+import type { Topic } from "@lib/domain/topic.js"
 import type { Track } from "@lib/domain/track.js"
-import type { TrackVariant, TrackVariantKind } from "@lib/domain/trackVariant.js"
+import type {
+  TrackAudio,
+  TrackAudioKind,
+  TrackOutlineChapter,
+  TrackVariant,
+  TrackVariantKind,
+} from "@lib/domain/trackVariant.js"
+import { pickPlayableAudio } from "@lib/domain/trackVariant.js"
 import type {
   AuthorRow,
   LanguageRow,
   LocationRow,
   SourceRow,
   TagRow,
+  TopicRow,
+  TrackAudioRow,
   TrackReferenceRow,
   TrackRow,
   TrackTagRow,
+  TrackTopicRow,
   TrackVariantRow,
 } from "@lib/persistence/main"
 
@@ -30,6 +41,12 @@ function narrowVariantKind(raw: string | null): TrackVariantKind | null {
   if (raw === null) return null
   if (raw === "original" || raw === "generated" || raw === "edited") return raw
   throw new Error(`Invalid track_variant kind: ${raw}`)
+}
+
+// Audio kind is a display-preference field; an unexpected value must not crash
+// list hydration, so fall back to "original" rather than throwing.
+function narrowAudioKind(raw: string): TrackAudioKind {
+  return raw === "clean" ? "clean" : "original"
 }
 
 export function rowToAuthor(rows: readonly AuthorRow[]): Author {
@@ -62,6 +79,18 @@ export function rowToTag(rows: readonly TagRow[]): Tag {
   return { id: rows[0].id, names: byLanguage }
 }
 
+export function rowToTopic(rows: readonly TopicRow[]): Topic {
+  const names = new Map<string, string>()
+  const shortNames = new Map<string, string>()
+  let cover: string | null = null
+  for (const r of rows) {
+    names.set(r.language, r.full_name)
+    if (r.short_name) shortNames.set(r.language, r.short_name)
+    if (!cover && r.cover) cover = r.cover
+  }
+  return { id: rows[0].id, names, shortNames, cover }
+}
+
 /**
  * Fold a list of dict rows (which may contain rows for many ids) into a
  * map `id → entity`. Used by `listAll()` implementations.
@@ -81,39 +110,74 @@ export function foldDictRows<R extends { id: string }, E>(
   return result
 }
 
-export function rowToTrackVariant(row: TrackVariantRow): TrackVariant {
+export function rowToTrackVariant(
+  row: TrackVariantRow,
+  audioRows: readonly TrackAudioRow[]
+): TrackVariant {
+  const audios: TrackAudio[] = audioRows
+    .filter((a) => a.track_id === row.track_id && a.language === row.language)
+    .map((a) => ({
+      path: a.path,
+      filesize: a.filesize,
+      // DB and domain are both in milliseconds.
+      duration: a.duration ?? null,
+      kind: narrowAudioKind(a.kind),
+    }))
   return {
     trackId: row.track_id,
     language: row.language,
     title: row.title,
-    audio: row.audio_path
-      ? {
-          path: row.audio_path,
-          filesize: row.audio_filesize,
-          // DB and domain are both in milliseconds.
-          duration: row.audio_duration ?? null,
-          kind: narrowVariantKind(row.audio_kind) ?? "original",
-        }
-      : null,
+    audios,
+    audio: pickPlayableAudio(audios),
     transcript: row.transcript_path
       ? {
           path: row.transcript_path,
           kind: narrowVariantKind(row.transcript_kind) ?? "original",
         }
       : null,
+    outline: parseOutline(row.outline),
+    description: row.description ?? null,
+  }
+}
+
+/**
+ * Parse the catalog's raw outline JSON (`[{title,start,end}]` in ms) into the
+ * domain chapter shape. Returns null on absent/malformed input.
+ */
+function parseOutline(raw: string | null): readonly TrackOutlineChapter[] | null {
+  if (!raw) return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    const out: TrackOutlineChapter[] = []
+    for (const e of parsed) {
+      if (e == null || typeof e !== "object") continue
+      const title = typeof e.title === "string" ? e.title.trim() : ""
+      const start = typeof e.start === "number" ? e.start : null
+      if (!title || start == null) continue
+      const end = typeof e.end === "number" ? e.end : start
+      out.push({ title, startMs: start, endMs: end })
+    }
+    return out.length > 0 ? out : null
+  } catch {
+    return null
   }
 }
 
 export interface TrackAssemblyParts {
   track: TrackRow
   variants: readonly TrackVariantRow[]
+  audios: readonly TrackAudioRow[]
   references: readonly TrackReferenceRow[]
   tags: readonly TrackTagRow[]
+  topics: readonly TrackTopicRow[]
 }
 
 export function rowToTrack(parts: TrackAssemblyParts): Track {
   const { track } = parts
-  const variants = parts.variants.filter((v) => v.track_id === track.id).map(rowToTrackVariant)
+  const variants = parts.variants
+    .filter((v) => v.track_id === track.id)
+    .map((v) => rowToTrackVariant(v, parts.audios))
   const references: Reference[] = parts.references
     .filter((r) => r.track_id === track.id)
     .sort((a, b) => a.ref_idx - b.ref_idx)
@@ -122,6 +186,11 @@ export function rowToTrack(parts: TrackAssemblyParts): Track {
       tokens: r.tokens.length > 0 ? r.tokens.split(".") : [],
     }))
   const tagIds = parts.tags.filter((t) => t.track_id === track.id).map((t) => t.tag_id)
+  const topicIds = parts.topics
+    .filter((t) => t.track_id === track.id)
+    .slice()
+    .sort((a, b) => b.weight - a.weight)
+    .map((t) => t.topic_id)
   return {
     id: track.id,
     authorId: track.author_id,
@@ -130,6 +199,7 @@ export function rowToTrack(parts: TrackAssemblyParts): Track {
     hidden: track.hidden !== 0,
     references,
     tagIds,
+    topicIds,
     variants,
   }
 }

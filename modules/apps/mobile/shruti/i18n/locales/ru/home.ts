@@ -6,6 +6,7 @@ export default {
   starterPacks: {
     error: "Не удалось добавить лекции",
   },
+  collectionMoreAuthors: "{author} и другие",
   subscriptionNag: {
     title: "Поддержите проект",
     description:

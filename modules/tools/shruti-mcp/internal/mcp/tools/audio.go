@@ -11,6 +11,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 )
 
 func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {
@@ -49,7 +50,7 @@ func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {
 					SourcePath string `json:"source_path"`
 				}{
 					TrackId:    string(id),
-					AudioPath:  deps.Normalize.Audio.PublicAudioPath(id),
+					AudioPath:  deps.Normalize.Audio.PublicAudioPath(id, audioport.VersionOriginal),
 					SourcePath: deps.Normalize.Audio.SourceArtifactPath(id),
 				})
 			},
@@ -60,6 +61,57 @@ func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {
 		return envelope.Run(kind, runDispatch{
 			Id:            runId,
 			Kind:          string(run.KindAudioNormalize),
+			State:         string(run.StateQueued),
+			AcceptedCount: 1,
+		}), nil
+	})
+}
+
+func RegisterAudioDenoise(s *server.MCPServer, deps Deps) {
+	const kind = "track.audio.denoise"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription("Denoise the committed original.mp3 into clean.mp3 (run audio-denoiser locally) and register a track_audio kind=clean row so the app can offer the original↔clean source-mix. clean.mp3 ships to S3 via the normal asset push. Async: returns a run_id; poll via runs.status / runs.wait."),
+		mcp.WithString("track_id", mcp.Required(), mcp.Description("Track id.")),
+		mcp.WithString("language", mcp.Required(), mcp.Description("Variant language (the clean row is written for this locale).")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if deps.Runner == nil {
+			return envelope.Err(kind, envelope.CodeInternal, "runner not initialized", nil), nil
+		}
+		tid, err := req.RequireString("track_id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		language, err := req.RequireString("language")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		id, err := track.NewId(tid)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+			Kind:        run.KindAudioDenoise,
+			Cancellable: true,
+			Init: run.Run{
+				Targets:  []string{string(id)},
+				Progress: run.Progress{FilesTotal: 1},
+			},
+			WorkFn: func(workCtx context.Context, report runner.ProgressFn) (json.RawMessage, error) {
+				res, err := deps.AudioDenoise.Run(workCtx, id, language)
+				if err != nil {
+					return nil, err
+				}
+				report(run.Progress{FilesTotal: 1, FilesDone: 1})
+				return json.Marshal(res)
+			},
+		})
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+		}
+		return envelope.Run(kind, runDispatch{
+			Id:            runId,
+			Kind:          string(run.KindAudioDenoise),
 			State:         string(run.StateQueued),
 			AcceptedCount: 1,
 		}), nil

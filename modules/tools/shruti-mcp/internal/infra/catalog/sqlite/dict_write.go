@@ -33,7 +33,7 @@ func (r *Repo) CreateDictImpl(ctx context.Context, kind catalog.Kind, e catalog.
 	for lang, name := range e.Names {
 		var stmt string
 		var args []any
-		if kind == catalog.KindSource {
+		if kind == catalog.KindSource || kind == catalog.KindTopic {
 			stmt = fmt.Sprintf(`INSERT INTO %s (id, language, full_name, short_name) VALUES (?, ?, ?, ?)`, tbl)
 			args = []any{id, lang, name, e.ShortName[lang]}
 		} else {
@@ -61,7 +61,7 @@ func (r *Repo) UpdateDictLocaleImpl(ctx context.Context, kind catalog.Kind, id, 
 	}
 	defer tx.Rollback()
 
-	if kind == catalog.KindSource {
+	if kind == catalog.KindSource || kind == catalog.KindTopic {
 		_, err = tx.ExecContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s (id, language, full_name, short_name) VALUES (?, ?, ?, ?)
 			ON CONFLICT(id, language) DO UPDATE SET

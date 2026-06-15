@@ -16,11 +16,13 @@ function track(id: string, durationMs: number): Track {
     hidden: false,
     references: [],
     tagIds: [],
+    topicIds: [],
     variants: [
       {
         trackId: id as TrackId,
         language: "en" as Track["variants"][number]["language"],
         title: id,
+        audios: [{ path: "", filesize: null, duration: durationMs, kind: "original" }],
         audio: {
           path: "",
           filesize: null,
@@ -28,6 +30,8 @@ function track(id: string, durationMs: number): Track {
           kind: "original",
         },
         transcript: null,
+        outline: null,
+        description: null,
       },
     ],
   }
