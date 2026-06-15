@@ -7,7 +7,7 @@
   >
     <CachedImage :url="coverUrl" :alt="name" @loaded="loaded = true" />
     <span class="scrim" aria-hidden="true" />
-    <span class="name">{{ name }}</span>
+    <span class="name"><span v-if="hashtag" class="hash">#</span>{{ name }}</span>
   </button>
 </template>
 
@@ -30,6 +30,8 @@ defineProps<{
   name: string
   /** Remote cover image URL, or undefined to keep the placeholder tile. */
   coverUrl?: string
+  /** Prefix the name with a "#" — used when the card is a topic, not a collection. */
+  hashtag?: boolean
 }>()
 
 const emit = defineEmits<{ (e: "click"): void }>()
@@ -105,5 +107,10 @@ const loaded = ref(false)
 
 .collection-card.is-loaded .name {
   color: #f4ebdd;
+}
+
+.hash {
+  opacity: 0.6;
+  margin-inline-end: 1px;
 }
 </style>
