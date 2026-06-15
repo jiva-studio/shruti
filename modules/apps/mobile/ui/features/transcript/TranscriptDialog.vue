@@ -22,9 +22,10 @@
       <LectureOverview
         v-if="description || (chapters && chapters.length > 0)"
         class="overview"
+        interactive
         :description="description ?? null"
         :chapters="chapters ?? []"
-        @pick="(ms: number) => emit('seek', ms)"
+        @seek="onChapterTap"
       />
 
       <LanguageSelector
@@ -53,6 +54,7 @@
         "
         :enable-active-prominence="enableActiveProminence !== false"
         @seek="(pos) => emit('seek', pos)"
+        @chapter-seek="onChapterTap"
         @text-selected="(e) => emit('textSelected', e)"
         @note-tapped="(e) => emit('noteTapped', e)"
         @pick-start="emit('pickStart')"
@@ -64,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef } from "vue"
+import { computed, nextTick, useTemplateRef } from "vue"
 import { IonButton, IonContent, IonModal } from "@ionic/vue"
 import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
@@ -116,6 +118,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   seek: [position: number]
+  /** A chapter (top widget or inline heading) was tapped — the controller
+   *  starts playback from `startMs`; the dialog scrolls to the heading. */
+  chapterSeek: [startMs: number]
   /** Drag-select finished — payload describes the selected range. The
    *  app-level `TranscriptSelectionPopover` watches this to open. */
   textSelected: [event: TextSelectedEvent]
@@ -159,6 +164,31 @@ const { onModalPresented } = useTranscriptAutoScroll({
   position: () => props.position,
   autoScroll: () => props.autoScroll ?? false,
 })
+
+// Chapter tapped (overview row or inline heading): ask the controller to
+// start playback from the chapter, then scroll the reader so the heading
+// sits near the top — independent of the Pro auto-scroll setting.
+function onChapterTap(startMs: number): void {
+  emit("chapterSeek", startMs)
+  void scrollToChapter(startMs)
+}
+
+async function scrollToChapter(startMs: number): Promise<void> {
+  await nextTick()
+  const contentEl = contentRef.value?.$el as
+    | (HTMLElement & { getScrollElement?: () => Promise<HTMLElement> })
+    | undefined
+  if (!contentEl?.getScrollElement) return
+  const scrollEl = await contentEl.getScrollElement()
+  const heading = contentEl.querySelector<HTMLElement>(`[data-heading-start="${startMs}"]`)
+  if (!heading) return
+  // Small top gap so the heading isn't flush against the safe-area edge.
+  const target =
+    scrollEl.scrollTop +
+    (heading.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top) -
+    12
+  scrollEl.scrollTo({ top: Math.max(0, target), behavior: "smooth" })
+}
 </script>
 
 <style scoped>
@@ -173,6 +203,14 @@ ion-modal ion-content {
 
 ion-modal ion-toolbar {
   --background: var(--shruti-immersive-background);
+}
+
+.overview {
+  /* IonContent has no default content padding in the immersive reader, so
+     the description + chapters would otherwise run edge-to-edge. Match the
+     transcript body's 16px gutter. */
+  display: block;
+  padding-inline: 16px;
 }
 
 .transcript-text {
