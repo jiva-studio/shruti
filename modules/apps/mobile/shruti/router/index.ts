@@ -73,6 +73,12 @@ const routes: RouteRecordRaw[] = [
         props: true,
       },
       {
+        path: "search/topic/:topicId",
+        name: "topic-tracks",
+        component: () => import("@shruti/views/Topic/TopicTracksView.vue"),
+        props: true,
+      },
+      {
         path: "search/collections",
         name: "collections",
         component: () => import("@shruti/views/Collection/CollectionListView.vue"),
