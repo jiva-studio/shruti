@@ -8,6 +8,7 @@ import type { Track } from "@lib/domain/track.js"
 import type {
   TrackAudio,
   TrackAudioKind,
+  TrackOutlineChapter,
   TrackVariant,
   TrackVariantKind,
 } from "@lib/domain/trackVariant.js"
@@ -119,6 +120,32 @@ export function rowToTrackVariant(
           kind: narrowVariantKind(row.transcript_kind) ?? "original",
         }
       : null,
+    outline: parseOutline(row.outline),
+    description: row.description ?? null,
+  }
+}
+
+/**
+ * Parse the catalog's raw outline JSON (`[{title,start,end}]` in ms) into the
+ * domain chapter shape. Returns null on absent/malformed input.
+ */
+function parseOutline(raw: string | null): readonly TrackOutlineChapter[] | null {
+  if (!raw) return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    const out: TrackOutlineChapter[] = []
+    for (const e of parsed) {
+      if (e == null || typeof e !== "object") continue
+      const title = typeof e.title === "string" ? e.title.trim() : ""
+      const start = typeof e.start === "number" ? e.start : null
+      if (!title || start == null) continue
+      const end = typeof e.end === "number" ? e.end : start
+      out.push({ title, startMs: start, endMs: end })
+    }
+    return out.length > 0 ? out : null
+  } catch {
+    return null
   }
 }
 
