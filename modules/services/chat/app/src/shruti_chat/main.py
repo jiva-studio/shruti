@@ -46,8 +46,6 @@ from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
 from shruti_chat.infra.cache.redis_kv_cache import RedisKVCache
 from shruti_chat.infra.cache.tiered_kv_cache import TieredKVCache
 from shruti_chat.infra.auth.jwt_verifier import JwtVerifier
-from shruti_chat.infra.storage.s3_outline_cache import S3OutlineCache
-from shruti_chat.infra.storage.s3_transcript_storage import S3TranscriptStorage
 from shruti_chat.observability.bootstrap import bootstrap_score_configs
 from shruti_chat.observability.langfuse_client import (
     LANGFUSE_PROMPT_NAMES,
@@ -129,8 +127,6 @@ async def lifespan(app: FastAPI):
         kv_cache=(kv_cache if s.cache_enabled else None),
     )
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)
-    transcript_storage = S3TranscriptStorage(settings=s)
-    outline_cache = S3OutlineCache(settings=s)
     if not s.redis_url:
         raise RuntimeError("REDIS_URL is required for the rate-limit store")
     rate_limit_store = RedisRateLimitStore(s.redis_url)
@@ -188,8 +184,6 @@ async def lifespan(app: FastAPI):
         embedder=embedder,
         chunk_repo=chunk_repo,
         catalog_repo=catalog_repo,
-        transcript_storage=transcript_storage,
-        outline_cache=outline_cache,
         rate_limiter=rate_limiter,
         jwt_verifier=jwt_verifier,
         kv_cache=kv_cache,
@@ -206,8 +200,6 @@ async def lifespan(app: FastAPI):
     bind_repositories(
         chunk_repo=chunk_repo,
         catalog_repo=catalog_repo,
-        transcript_storage=transcript_storage,
-        outline_cache=outline_cache,
         embedder=embedder,
     )
 
