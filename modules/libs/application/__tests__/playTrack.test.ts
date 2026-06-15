@@ -16,6 +16,8 @@ const mkVariant = (lang: LanguageCode, hasAudio: boolean): TrackVariant => {
     audios: audio ? [audio] : [],
     audio,
     transcript: null,
+    outline: null,
+    description: null,
   }
 }
 

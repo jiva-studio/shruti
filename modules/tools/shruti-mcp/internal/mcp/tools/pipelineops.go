@@ -212,6 +212,19 @@ func dispatchTitlesRefresh(ctx context.Context, deps Deps, kind string, sel sele
 		})
 }
 
+// dispatchOutline handles op=outline — generate the outline + description for
+// matched (track, language) pairs and write them onto the catalog variant.
+func dispatchOutline(ctx context.Context, deps Deps, kind string, sel selectorDomain) (*mcp.CallToolResult, error) {
+	if deps.Outline.LLM == nil {
+		return envelope.Err(kind, envelope.CodeDependencyFailed, "outline generation not configured (set config outline.api_key + outline.model)", nil), nil
+	}
+	return submitFanOutRun(ctx, deps, kind, run.KindTranscriptOutline, sel,
+		func(ctx context.Context, id track.Id, lang string) error {
+			_, err := deps.Outline.Run(ctx, id, lang)
+			return err
+		})
+}
+
 // dispatchAudit handles op=audit — corpus walk + aggregator.
 // Empty selector = whole corpus. Top-N cap defaults to 50; callers can
 // pass a `top` arg.

@@ -134,7 +134,7 @@ async def title(
     async def _call_llm() -> str:
         try:
             resp = await llm.acompletion(
-                model=settings.llm_outline,  # gemini-2.0-flash — cheap and fast
+                model=settings.llm_cheap,  # gemini-2.0-flash — cheap and fast
                 messages=[
                     {"role": "system", "content": sys_msg},
                     {"role": "user", "content": convo},
@@ -158,7 +158,7 @@ async def title(
             key_parts={
                 "convo": convo,
                 "lang": body.lang,
-                "model": settings.llm_outline,
+                "model": settings.llm_cheap,
             },
             ttl_s=TTL_30D,
             factory=_call_llm,

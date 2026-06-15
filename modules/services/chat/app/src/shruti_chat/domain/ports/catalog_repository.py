@@ -123,6 +123,15 @@ class CatalogRepository(Protocol):
         a bare code the LLM mis-resolves."""
         ...
 
+    async def get_outline(
+        self, track_id: str, lang: str,
+    ) -> tuple[str | None, str | None]:
+        """Return (outline_json, description) for one (track, language), or
+        (None, None) when absent. outline_json is the raw JSON array
+        [{title,start,end}] (ms) generated and published by shruti-mcp;
+        chat only reads it (it does not generate outlines)."""
+        ...
+
     def invalidate_cache(self) -> None:
         """Hook for the indexer to call after the catalog DB swaps."""
         ...

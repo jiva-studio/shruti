@@ -10,6 +10,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/ingest"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/normalize"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/outline"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/review"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
@@ -36,6 +37,7 @@ type Deps struct {
 	Review              review.UseCase
 	AlignPDF            alignpdf.UseCase
 	RefreshTitle        title.UseCase
+	Outline             outline.UseCase
 	Commit              commit.UseCase
 	SetTrackMetadata    commit.SetTrackMetadataUseCase
 	AudioTag            audiotag.UseCase

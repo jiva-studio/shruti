@@ -15,6 +15,12 @@ export interface RenderTranscriptReference {
   readonly tokens?: string | null
 }
 
+export interface RenderTranscriptOutlineItem {
+  readonly title: string
+  readonly startMs: number
+  readonly endMs: number
+}
+
 export interface RenderTranscriptRequest {
   readonly trackId: string
   /** Transcript language (drives labels, outline, and the output key). */
@@ -29,6 +35,9 @@ export interface RenderTranscriptRequest {
   readonly location?: string | null
   readonly references?: readonly RenderTranscriptReference[]
   readonly tags?: readonly string[]
+  /** Chapter outline ([{title,startMs,endMs}]) rendered as the PDF table of
+   *  contents. Absent/empty → no TOC. */
+  readonly outline?: readonly RenderTranscriptOutlineItem[] | null
 }
 
 export interface RenderTranscriptResponse {

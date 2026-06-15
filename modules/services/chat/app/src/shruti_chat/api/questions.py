@@ -198,7 +198,7 @@ async def questions(
     user_msg = _format_user_prompt(body.focus, body.lang)
 
     raw = await run_oneshot(
-        model=settings.llm_outline,  # same cheap one-shot model as /title
+        model=settings.llm_cheap,  # same cheap one-shot model as /title
         system_prompt=sys_msg,
         user_prompt=user_msg,
         # Some variety — questions should differ on retry, otherwise the

@@ -39,11 +39,6 @@ class Settings:
     # S3 GET — defence in depth against probing sibling prefixes.
     source_key_prefix: str
 
-    # LLM (outline / TOC generation). Same model + key as chat so the
-    # outline cache key (model tag) matches and artifacts are shared.
-    openrouter_api_key: str
-    llm_outline: str
-
     def public_url(self, key: str) -> str:
         if self.s3_public_base:
             return self.s3_public_base.rstrip("/") + "/" + key
@@ -77,6 +72,4 @@ def load() -> Settings:
         s3_endpoint_url=endpoint,
         s3_public_base=public_base,
         source_key_prefix=_env("SOURCE_KEY_PREFIX", "public/tracks/"),
-        openrouter_api_key=_env("OPENROUTER_API_KEY"),
-        llm_outline=_env("LLM_OUTLINE_MODEL", "openrouter/google/gemini-2.5-flash-lite"),
     )

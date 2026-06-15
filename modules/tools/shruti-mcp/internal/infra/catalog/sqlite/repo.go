@@ -277,11 +277,13 @@ func (r *Repo) GetVariant(ctx context.Context, trackID, language string) (catalo
 	row := r.db.QueryRowContext(ctx, `
 		SELECT track_id, language, title,
 		       COALESCE(transcript_path,''), COALESCE(transcript_kind,''),
-		       sort_reference
+		       sort_reference,
+		       COALESCE(outline,''), COALESCE(description,'')
 		FROM track_variants WHERE track_id = ? AND language = ?`, trackID, language)
 	var v catalog.VariantRow
 	if err := row.Scan(&v.TrackID, &v.Language, &v.Title,
-		&v.TranscriptPath, &v.TranscriptKind, &v.SortReference); err != nil {
+		&v.TranscriptPath, &v.TranscriptKind, &v.SortReference,
+		&v.Outline, &v.Description); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return catalog.VariantRow{}, false, nil
 		}
@@ -389,6 +391,23 @@ func (r *Repo) DeleteDict(ctx context.Context, kind catalog.Kind, id string) err
 func (r *Repo) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, audios []catalog.AudioRow, refs []catalog.TrackReference) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
 		return r.SaveTrackImpl(ctx, t, v, audios, refs)
+	})
+}
+
+// SetVariantOutline writes the generated outline JSON + description onto an
+// existing (track, language) variant via a targeted UPDATE — it touches neither
+// title/audio/refs nor the FTS row, so it's safe to run post-commit over the
+// corpus. Empty values store NULL. A no-op (0 rows) when the variant isn't
+// committed yet.
+func (r *Repo) SetVariantOutline(ctx context.Context, trackID, language, outline, description string) error {
+	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
+		_, err := r.db.ExecContext(ctx, `
+			UPDATE track_variants SET outline = ?, description = ?
+			WHERE track_id = ? AND language = ?`,
+			sql.NullString{String: outline, Valid: outline != ""},
+			sql.NullString{String: description, Valid: description != ""},
+			trackID, language)
+		return err
 	})
 }
 func (r *Repo) DeleteTrackVariant(ctx context.Context, trackID, language string) error {

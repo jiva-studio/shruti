@@ -29,6 +29,8 @@ function track(id: string, durationMs: number): Track {
           kind: "original",
         },
         transcript: null,
+        outline: null,
+        description: null,
       },
     ],
   }
