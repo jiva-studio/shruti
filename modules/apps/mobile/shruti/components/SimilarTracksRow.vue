@@ -41,7 +41,11 @@ async function load(track: Track): Promise<void> {
   }
 }
 
-watch(() => props.track, (track) => void load(track), { immediate: true })
+watch(
+  () => props.track,
+  (track) => void load(track),
+  { immediate: true }
+)
 </script>
 
 <style scoped>

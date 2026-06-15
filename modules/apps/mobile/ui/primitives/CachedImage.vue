@@ -32,7 +32,10 @@ const { src } = useCachedImageUrl(toRef(props, "url"))
 const loaded = ref(false)
 
 // Re-arm the fade (and the parent's scrim) when the source changes.
-watch(() => props.url, () => (loaded.value = false))
+watch(
+  () => props.url,
+  () => (loaded.value = false)
+)
 
 function onLoad() {
   loaded.value = true
