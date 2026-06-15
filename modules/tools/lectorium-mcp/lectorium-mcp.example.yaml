@@ -259,3 +259,16 @@ metadata:
   api_key:    ${OPENROUTER_API_KEY}
   model:      anthropic/claude-sonnet-4.6
   max_tokens: 1024
+
+# Outline + description generation (track.transcript.outline / pipeline.run
+# op=outline). The whole reviewed transcript goes to the model in one pass:
+# a granular topic pass + collapse to <=8 chapters, plus a short description.
+# Same OpenAI-compatible adapter as review/metadata. Leave api_key empty to
+# disable the feature. Gemini flash balances cost and quality across the
+# 2-3 calls per lecture; bump to a pro model if outline quality needs it.
+outline:
+  endpoint:   https://openrouter.ai/api/v1
+  api_key:    ${OPENROUTER_API_KEY}
+  model:      google/gemini-3-flash-preview
+  max_tokens: 2048
+  reasoning:  off
