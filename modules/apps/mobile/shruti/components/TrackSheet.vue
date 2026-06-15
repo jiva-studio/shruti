@@ -16,6 +16,7 @@
         </IonButton>
       </div>
       <LectureOverview class="overview" :description="description" :chapters="chapters" />
+      <SimilarTracksRow v-if="track" :track="track" @select="onSelectSimilar" />
     </IonContent>
 
     <IonFooter class="ion-no-border">
@@ -40,7 +41,7 @@ import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
 import { IconPlaylistAdd, IconX } from "@tabler/icons-vue"
 import { loadTrackDetail } from "@lib/application/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
-import type { LanguageCode } from "@lib/domain/core.js"
+import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
@@ -53,6 +54,7 @@ import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
 import LectureOverview from "@ui/components/LectureOverview.vue"
+import SimilarTracksRow from "@shruti/components/SimilarTracksRow.vue"
 
 const { t } = useI18n()
 const app = useShruti()
@@ -122,6 +124,11 @@ watch(
 
 function onDismiss(): void {
   sheet.close()
+}
+
+// Re-point the sheet at a similar track; the trackId watcher reloads its detail.
+function onSelectSimilar(id: TrackId): void {
+  sheet.open(id)
 }
 
 function onAddToPlaylist(): void {
