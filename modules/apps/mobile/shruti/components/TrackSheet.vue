@@ -22,7 +22,7 @@
       <div class="sheet-actions">
         <IonButton fill="clear" class="act share-btn" @click="onShare">
           {{ t("search.actions.share") }}
-          <span class="pro">PRO</span>
+          <span v-if="!isSubscribed" class="pro">PRO</span>
         </IonButton>
         <IonButton class="act" @click="onAddToPlaylist">
           <IconPlaylistAdd slot="start" :size="18" />

@@ -25,6 +25,9 @@ export interface UseTranscriptHydrationOptions {
 export interface UseTranscriptHydrationReturn {
   title: Ref<string>
   author: Ref<string>
+  /** The hydrated author domain entity (for the system-player label when
+   *  starting playback from the transcript). `null` until resolved. */
+  authorEntity: Readonly<Ref<Author | null>>
   /**
    * The hydrated domain `Track`, exposed so consumers can read
    * track-level fields not surfaced as separate refs (date, location id,
@@ -114,6 +117,7 @@ export function useTranscriptHydration(
   return {
     title,
     author,
+    authorEntity: authorEntity as Readonly<Ref<Author | null>>,
     track: trackEntity as Readonly<Ref<Track | null>>,
     availableLanguages,
     activeLanguages,
