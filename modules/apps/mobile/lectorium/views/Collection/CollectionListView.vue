@@ -12,14 +12,15 @@
     <IonContent :fullscreen="true">
       <p v-if="description" class="group-description">{{ description }}</p>
       <div class="list">
-        <CollectionListItem
-          v-for="c in collections"
-          :key="c.id"
-          :name="c.name"
-          :cover-url="c.coverUrl"
-          :description="c.description"
-          @click="openCollection(c.id)"
-        />
+        <template v-for="(c, index) in collections" :key="c.id">
+          <CollectionListItem
+            :name="c.name"
+            :cover-url="c.coverUrl"
+            :description="c.description"
+            @click="openCollection(c.id)"
+          />
+          <RowDivider v-if="index < collections.length - 1" />
+        </template>
       </div>
     </IonContent>
   </IonPage>
@@ -32,6 +33,7 @@ import { useRouter } from "vue-router"
 import { IonBackButton, IonButtons, IonContent, IonPage, IonTitle, IonToolbar } from "@ionic/vue"
 import { FlatHeader } from "@ui/primitives/index.js"
 import { CollectionListItem } from "@ui/features/collections/index.js"
+import RowDivider from "@ui/components/RowDivider.vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { resolveAssetUrl } from "@lectorium/services/regionsRegistry.js"
@@ -95,6 +97,7 @@ watch(
 )
 
 function openCollection(id: string): void {
+  void app.haptics.impact("light")
   void router.push({ name: "collection", params: { id } })
 }
 </script>

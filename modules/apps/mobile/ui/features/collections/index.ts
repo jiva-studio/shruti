@@ -1,3 +1,6 @@
 export { default as CollectionCard } from "./CollectionCard.vue"
 export { default as CollectionsCarousel } from "./CollectionsCarousel.vue"
+export { default as SectionHeader } from "./SectionHeader.vue"
+export { default as CarouselSection } from "./CarouselSection.vue"
+export { default as TileSection } from "./TileSection.vue"
 export { default as CollectionListItem } from "./CollectionListItem.vue"

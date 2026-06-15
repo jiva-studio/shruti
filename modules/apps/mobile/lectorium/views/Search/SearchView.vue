@@ -1,13 +1,8 @@
 <template>
   <AppPage :reserve-bottom-space="player.open">
+    <div class="page-top" aria-hidden="true" />
     <template v-if="recommendedRows.length">
-      <IonListHeader>
-        <IonLabel>{{ $t("search.recommendedForYou") }}</IonLabel>
-        <IonButton class="no-ripple all-lectures" @click="openTracks">
-          {{ $t("search.allLectures") }}
-          <IconChevronRight :size="15" />
-        </IonButton>
-      </IonListHeader>
+      <SectionHeader :title="$t('search.recommendedForYou')" />
       <TracksList :rows="recommendedRows" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
           <TrackStateIndicator :state="state" :progress="progressPct" />
@@ -15,61 +10,56 @@
       </TracksList>
     </template>
 
-    <div v-for="g in topGroups" :key="g.id" class="collection-group">
-      <IonListHeader>
-        <IonLabel>{{ g.name }}</IonLabel>
-        <IonButton
-          class="no-ripple"
-          :aria-label="$t('search.collections.seeAllNamed', { name: g.name })"
-          @click="openGroup(g.id)"
-        >
-          <IconChevronRight :size="20" />
-        </IonButton>
-      </IonListHeader>
-      <CollectionsCarousel :items="g.collections" @select="onSelectCollection" />
-    </div>
+    <CarouselSection
+      v-for="g in topGroups"
+      :key="g.id"
+      :title="g.name"
+      :items="g.collections"
+      see-all
+      :see-all-label="$t('search.collections.seeAllNamed', { name: g.name })"
+      @select="onSelectCollection"
+      @more="openGroup(g.id)"
+    />
 
-    <template v-if="topicCards.length">
-      <IonListHeader>
-        <IonLabel>{{ $t("search.topics") }}</IonLabel>
-      </IonListHeader>
-      <CollectionsCarousel :items="topicCards" hashtag @select="onSelectTopic" />
-    </template>
+    <TileSection
+      v-if="topicTiles.length"
+      :title="$t('search.topicsSection')"
+      :items="topicTiles"
+      :min-tile="100"
+      hashtag
+      @select="onSelectTopic"
+    />
 
     <template v-if="otherCollections.length">
-      <IonListHeader>
-        <IonLabel>{{ $t("search.collections.others") }}</IonLabel>
-        <IonButton
-          class="no-ripple"
-          :aria-label="
-            $t('search.collections.seeAllNamed', { name: $t('search.collections.others') })
-          "
-          @click="openAllCollections"
-        >
-          <IconChevronRight :size="20" />
-        </IonButton>
-      </IonListHeader>
-      <CollectionListItem
-        v-for="c in otherCollections"
-        :key="c.id"
-        :name="c.name"
-        :cover-url="c.coverUrl"
-        :description="c.description"
-        @click="onSelectCollection(c.id)"
+      <SectionHeader
+        :title="$t('search.collections.others')"
+        see-all
+        :see-all-label="
+          $t('search.collections.seeAllNamed', { name: $t('search.collections.others') })
+        "
+        @more="openAllCollections"
       />
+      <div class="flush-list">
+        <template v-for="(c, index) in otherCollections" :key="c.id">
+          <CollectionListItem
+            :name="c.name"
+            :cover-url="c.coverUrl"
+            :description="c.description"
+            @click="onSelectCollection(c.id)"
+          />
+          <RowDivider v-if="index < otherCollections.length - 1" />
+        </template>
+      </div>
     </template>
 
-    <div v-for="s in topicShelves" :key="s.topicId" class="collection-group">
-      <IonListHeader>
-        <IonLabel><span class="hash">#</span>{{ s.name }}</IonLabel>
-        <IonButton
-          class="no-ripple"
-          :aria-label="$t('search.collections.seeAllNamed', { name: s.name })"
-          @click="onSelectTopic(s.topicId)"
-        >
-          <IconChevronRight :size="20" />
-        </IonButton>
-      </IonListHeader>
+    <div v-for="s in topicShelves" :key="s.topicId">
+      <SectionHeader
+        :title="s.name"
+        hashtag
+        see-all
+        :see-all-label="$t('search.collections.seeAllNamed', { name: s.name })"
+        @more="onSelectTopic(s.topicId)"
+      />
       <TracksList :rows="s.rows" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
           <TrackStateIndicator :state="state" :progress="progressPct" />
@@ -78,16 +68,14 @@
     </div>
 
     <template v-if="previewLectures.length">
-      <IonListHeader>
-        <IonLabel>{{ $t("search.lecturesTitle") }}</IonLabel>
-        <IonButton
-          class="no-ripple"
-          :aria-label="$t('search.collections.seeAllNamed', { name: $t('search.lecturesTitle') })"
-          @click="openTracks"
-        >
-          <IconChevronRight :size="20" />
-        </IonButton>
-      </IonListHeader>
+      <SectionHeader :title="$t('search.lecturesTitle')">
+        <template #action>
+          <IonButton class="no-ripple all-lectures" @click="openTracks">
+            {{ $t("search.allLectures") }}
+            <IconChevronRight :size="15" />
+          </IonButton>
+        </template>
+      </SectionHeader>
       <TracksList :rows="previewLectures" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
           <TrackStateIndicator :state="state" :progress="progressPct" />
@@ -100,12 +88,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useRouter } from "vue-router"
-import { IonButton, IonLabel, IonListHeader, onIonViewWillEnter } from "@ionic/vue"
+import { IonButton, onIonViewWillEnter } from "@ionic/vue"
 import { IconChevronRight } from "@tabler/icons-vue"
 import { AppPage } from "@ui/primitives/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
-import { CollectionsCarousel, CollectionListItem } from "@ui/features/collections/index.js"
+import {
+  SectionHeader,
+  CarouselSection,
+  TileSection,
+  CollectionListItem,
+} from "@ui/features/collections/index.js"
+import RowDivider from "@ui/components/RowDivider.vue"
 import { resolveAssetUrl } from "@lectorium/services/regionsRegistry.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useRecommendationsStore } from "@lectorium/stores/useRecommendationsStore.js"
@@ -137,16 +131,16 @@ const { groups: collectionGroups, allCollections } = useCollectionGroups(appLang
 // inline rows; "see all" opens the full topic-tracks view.
 const recommendedRows = mapper.mapRows(() => recommendations.recommended, { context: "discovery" })
 
-// Topics are shown two ways: a cover carousel ("Темы") of any six topics up top,
-// and — lower down — the user's three most-listened topics as title + lectures
-// shelves. The carousel skips the three shelf topics so nothing repeats.
-const CAROUSEL_TOPICS = 6
+// Topics are shown two ways: a grid of tiles ("Темы") of any few topics, and —
+// lower down — the user's three most-listened topics as title + lectures
+// shelves. The grid skips the three shelf topics so nothing repeats.
+const TOPIC_TILES = 6
 const SHELF_PREVIEW = 3
-const shelfTopicIds = computed(() => new Set(recommendations.shelves.map((s) => s.topicId)))
-const topicCards = computed(() =>
-  dictionaries.topicsSorted
-    .filter((topic) => !shelfTopicIds.value.has(topic.id))
-    .slice(0, CAROUSEL_TOPICS)
+const topicTiles = ref<{ id: string; name: string; coverUrl?: string }[]>([])
+function pickTopicTiles(): void {
+  const inShelves = new Set(recommendations.shelves.map((s) => s.topicId))
+  topicTiles.value = shuffled(dictionaries.topics.filter((t) => !inShelves.has(t.id)))
+    .slice(0, TOPIC_TILES)
     .map((topic) => {
       const cover = dictionaries.topicCoverById.get(topic.id)
       return {
@@ -155,7 +149,7 @@ const topicCards = computed(() =>
         coverUrl: cover ? resolveAssetUrl(cover) : undefined,
       }
     })
-)
+}
 const topicShelves = computed(() =>
   recommendations.shelves.map((s) => ({
     topicId: s.topicId,
@@ -167,6 +161,7 @@ const topicShelves = computed(() =>
 // Topic and collection cards navigate to the shared detail page (same
 // component, different kind).
 function onSelectTopic(topicId: string): void {
+  void app.haptics.impact("light")
   void router.push({ name: "topic-tracks", params: { topicId } })
 }
 
@@ -220,10 +215,15 @@ async function loadLecturePool(language: string): Promise<void> {
 
 watch([collectionGroups, allCollections], pickOtherCollections, { immediate: true })
 watch(appLanguage, (language) => void loadLecturePool(language), { immediate: true })
+// Re-pick the random topic tiles once the vocabulary / shelves are loaded.
+watch(() => [dictionaries.topics.length, recommendations.shelves.length] as const, pickTopicTiles, {
+  immediate: true,
+})
 
 onIonViewWillEnter(() => {
   pickOtherCollections()
   pickLectures()
+  pickTopicTiles()
   void dictionaries.ensureLoaded()
   void recommendations.ensureLoaded()
 })
@@ -233,6 +233,7 @@ async function onSelectTrack(trackId: string): Promise<void> {
 }
 
 function onSelectCollection(id: string): void {
+  void app.haptics.impact("light")
   void router.push({ name: "collection", params: { id } })
 }
 
@@ -250,29 +251,15 @@ function openTracks(): void {
 </script>
 
 <style scoped>
-ion-list-header ion-label {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--ion-text-color);
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.page-top {
+  height: 8px;
 }
 
-ion-list-header ion-label .hash {
-  color: var(--ion-color-medium, #999);
-  margin-inline-end: 2px;
-}
-
-ion-list-header ion-button {
-  --color: var(--ion-color-medium);
-}
-
-ion-list-header ion-button.all-lectures {
+.all-lectures {
   --background: var(--ion-color-step-800, #3d2b1f);
   --background-activated: var(--ion-color-step-700, #51392a);
   --color: #f4ebdd;
+  --box-shadow: none;
   --border-radius: 12px;
   --padding-top: 0;
   --padding-bottom: 0;
@@ -280,20 +267,28 @@ ion-list-header ion-button.all-lectures {
   --padding-end: 10px;
   height: 26px;
   min-height: 26px;
-  margin-inline-end: 4px;
+  margin: 0;
   font-size: 11px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0.01em;
 }
 
-ion-list-header ion-button.all-lectures :deep(svg) {
+.all-lectures :deep(svg) {
   margin-inline-start: 3px;
   margin-inline-end: -2px;
 }
 
+/* Every section's content sits the same 6px below its SectionHeader: the
+   header owns the gap (its 6px bottom padding) and each content type's own
+   intrinsic top is cancelled so nothing adds to it. */
 :deep(ion-list) {
   --padding-top: 0;
   padding-top: 0;
+  margin-top: -7px; /* cancel the first track row's 7px label margin */
+}
+
+.flush-list {
+  margin-top: -8px; /* cancel the first collection row's 8px top padding */
 }
 </style>

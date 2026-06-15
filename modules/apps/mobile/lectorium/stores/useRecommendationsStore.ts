@@ -93,8 +93,21 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
       }
       shelves.value = shelfList
 
-      // "Recommended for you" = the top unheard pick from each hot topic, deduped.
-      const recIds = [...new Set(topPicks)].slice(0, RECOMMENDED_SIZE)
+      // "Recommended for you": with history, the top unheard pick from each hot
+      // topic. With nothing to personalise on (cold start), just three random
+      // unheard lectures from the shelf pool so the section is never short.
+      let recPool: string[]
+      if (hasHistory.value) {
+        recPool = [...new Set(topPicks)]
+      } else {
+        const all = [...new Set(shelfList.flatMap((s) => s.tracks.map((t) => t.id)))]
+        for (let i = all.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[all[i], all[j]] = [all[j], all[i]]
+        }
+        recPool = all
+      }
+      const recIds = recPool.slice(0, RECOMMENDED_SIZE)
       const recById = await repos.tracks.getByIds(recIds)
       recommended.value = recIds
         .map((id) => recById.get(id))

@@ -32,7 +32,10 @@
 
       <p v-if="description" class="description">{{ description }}</p>
 
-      <TracksList :rows="rows" @select="onSelectTrack">
+      <div v-if="loading" class="detail-loading">
+        <IonSpinner name="crescent" />
+      </div>
+      <TracksList v-else :rows="rows" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
           <TrackStateIndicator :state="state" :progress="progressPct" />
         </template>
@@ -52,6 +55,7 @@ import {
   IonContent,
   IonHeader,
   IonPage,
+  IonSpinner,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue"
@@ -93,6 +97,7 @@ const coverKey = ref<string | null>(null)
 const trackIds = ref<readonly string[]>([])
 const tracks = ref<readonly Track[]>([])
 const adding = ref(false)
+const loading = ref(false)
 
 const coverUrl = computed(() => (coverKey.value ? resolveAssetUrl(coverKey.value) : undefined))
 const rows = mapper.mapRows(() => tracks.value, { context: "discovery" })
@@ -116,6 +121,7 @@ const toolbarStyle = computed(() => ({
 }))
 
 async function load(kind: string, id: string, locale: string): Promise<void> {
+  loading.value = true
   title.value = ""
   description.value = null
   coverKey.value = null
@@ -143,6 +149,8 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
     tracks.value = ids.map((tid) => byId.get(tid)).filter((tr): tr is Track => tr !== undefined)
   } catch (err) {
     console.warn("[detail] load failed", err)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -271,5 +279,12 @@ async function performAdd(): Promise<void> {
   font-size: 14px;
   line-height: 1.5;
   color: var(--ion-color-medium-shade);
+}
+
+.detail-loading {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+  color: var(--ion-color-medium);
 }
 </style>
