@@ -11,6 +11,7 @@ const mkTrack = (over: Partial<Track> & Pick<Track, "id">): Track => ({
   hidden: false,
   references: [],
   tagIds: [],
+  topicIds: [],
   variants: [],
   ...over,
 })

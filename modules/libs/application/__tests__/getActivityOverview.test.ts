@@ -94,6 +94,7 @@ function makeTrack(id: string, durationMs = 600_000): Track {
     hidden: false,
     references: [],
     tagIds: [],
+    topicIds: [],
     variants: [
       {
         trackId: id as TrackId,
