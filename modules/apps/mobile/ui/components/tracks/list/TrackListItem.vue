@@ -64,4 +64,27 @@ defineEmits<{ select: [trackId: string] }>()
 .details {
   transition: all 1s ease;
 }
+
+/* Tighter rows with a soft divider that fades out at both ends (like the chat
+   topic separator). */
+.track {
+  --min-height: 0;
+  position: relative;
+}
+
+.track::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.07), transparent);
+  pointer-events: none;
+}
+
+.track ion-label {
+  margin-top: 7px;
+  margin-bottom: 7px;
+}
 </style>
