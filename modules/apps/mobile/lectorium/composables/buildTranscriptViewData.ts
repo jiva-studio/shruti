@@ -226,6 +226,19 @@ export function buildTranscriptViewData(
   }
 
   flush()
+
+  // Trailing chapter(s) whose start lands after the last block's start never
+  // triggered a split (no later block to cross the boundary). Attach the last
+  // such chapter to the final group so it still renders a heading + scroll
+  // anchor instead of silently vanishing from the reader.
+  if (chapterIdx < chapterList.length && groups.length > 0) {
+    const last = groups[groups.length - 1]
+    if (last.heading === undefined) {
+      const ch = chapterList[chapterList.length - 1]
+      groups[groups.length - 1] = { ...last, heading: ch.title, headingStartMs: ch.startMs }
+    }
+  }
+
   return groups
 }
 

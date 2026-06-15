@@ -167,10 +167,12 @@ const { onModalPresented } = useTranscriptAutoScroll({
 
 // Chapter tapped (overview row or inline heading): ask the controller to
 // start playback from the chapter, then scroll the reader so the heading
-// sits near the top — independent of the Pro auto-scroll setting.
+// sits near the top. When Pro auto-scroll is on it already force-follows the
+// resulting seek to the active block — let it own the scroll so the two
+// don't fight (a double smooth-scroll janks on iOS WebKit).
 function onChapterTap(startMs: number): void {
   emit("chapterSeek", startMs)
-  void scrollToChapter(startMs)
+  if (!props.autoScroll) void scrollToChapter(startMs)
 }
 
 async function scrollToChapter(startMs: number): Promise<void> {
