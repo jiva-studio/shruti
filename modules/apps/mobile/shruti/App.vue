@@ -60,6 +60,7 @@
       @action="onSelectionPopoverAction"
       @dismissed="onSelectionPopoverDismissed"
     />
+    <TrackSheet />
   </IonApp>
 </template>
 
@@ -72,6 +73,7 @@ import { FILES_STORAGE_KEY } from "@ui/primitives/index.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
+import TrackSheet from "@shruti/components/TrackSheet.vue"
 import type { SelectionActionEvent } from "@shruti/composables/transcript/useTranscriptSelectionActions.js"
 import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"

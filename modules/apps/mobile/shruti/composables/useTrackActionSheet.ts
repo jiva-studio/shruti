@@ -1,97 +1,25 @@
-import { useI18n } from "vue-i18n"
-import { actionSheetController } from "@ionic/vue"
 import type { TrackId } from "@lib/domain/core.js"
-import { useShruti } from "@shruti/shruti.js"
-import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
-import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
-import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
-import { useTutorialStore } from "@shruti/stores/useTutorialStore.js"
-import { useAddToPlaylist } from "./useAddToPlaylist.js"
-import { useShareTrack } from "./useShareTrack.js"
+import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
 
 export interface UseTrackActionSheetReturn {
   present: (trackId: TrackId) => Promise<void>
 }
 
 /**
- * Per-track ActionSheet on the Search list. Uses the imperative
- * `actionSheetController` so SearchView stays free of sheet boilerplate
- * (no `isOpen` ref, no `<IonActionSheet>` block, no buttons computed).
- *
- * Transcript availability is resolved once before presenting so the
- * "Open transcript" button renders in its final disabled/enabled state
- * — Ionic's controller doesn't let us mutate buttons after the fact.
+ * Opens the per-track detail bottom sheet (`<TrackSheet>`, mounted at the app
+ * root). Kept as a composable with the original `present(trackId)` signature so
+ * the Search / Collection call sites stay unchanged; the actual content —
+ * lecture title, description, chapter outline, add-to-playlist, share — lives in
+ * `TrackSheet.vue`, driven by `useTrackSheetStore`. Replaces the old imperative
+ * Ionic action sheet (whose "Open transcript" button is dropped — the
+ * FloatingPlayer / transcript reader own that flow now).
  */
 export function useTrackActionSheet(): UseTrackActionSheetReturn {
-  const { t } = useI18n()
-  const app = useShruti()
-  const transcriptStore = useTranscriptStore()
-  const tutorial = useTutorialStore()
-  const overlays = useOverlaysStore()
-  const purchases = usePurchasesStore()
-  const paywall = usePaywallStore()
-  const { addToPlaylist } = useAddToPlaylist()
-  const { presentShareMenu } = useShareTrack()
+  const sheet = useTrackSheetStore()
 
-  async function present(trackId: TrackId): Promise<void> {
-    void app.haptics.impact("light")
-    let hasTranscripts: boolean
-    try {
-      const langs = await app.repositories().transcripts.availableLanguages(trackId)
-      hasTranscripts = langs.length > 0
-    } catch {
-      // On error leave the button enabled — the dialog has its own error UI.
-      hasTranscripts = true
-    }
-
-    const sheet = await actionSheetController.create({
-      buttons: [
-        {
-          text: t("search.actions.addToPlaylist"),
-          handler: () => {
-            void addToPlaylist(trackId)
-          },
-        },
-        {
-          text: t("search.actions.openTranscript"),
-          disabled: !hasTranscripts,
-          handler: () => {
-            // Explicit user tap on a transcript action — mark the
-            // transcript as discovered so the FloatingPlayer pulse cue
-            // stops inviting on subsequent opens.
-            void tutorial.dismiss("transcriptOpened")
-            transcriptStore.show(trackId)
-          },
-        },
-        {
-          text: t("search.actions.share"),
-          // Pro feature. The "PRO" pill always shows as a CSS ::after
-          // (Ionic buttons can't host a Vue component) — see theme/misc.css
-          // `.action-sheet-pro`. Non-subscribers get the paywall on tap.
-          cssClass: "action-sheet-pro",
-          handler: () => {
-            if (!purchases.isSubscribed) {
-              paywall.requestOpen("shareTranscript")
-              return
-            }
-            // Opens a second action sheet with the per-format share
-            // options (PDF / text / audio); each row resolves its own
-            // availability there.
-            void presentShareMenu(trackId)
-          },
-        },
-        {
-          text: t("app.close"),
-          role: "cancel",
-        },
-      ],
-    })
-    overlays.actionSheetOpen = true
-    void sheet.onDidDismiss().then(() => {
-      overlays.actionSheetOpen = false
-    })
-    await sheet.present()
+  function present(trackId: TrackId): Promise<void> {
+    sheet.open(trackId)
+    return Promise.resolve()
   }
 
   return { present }
