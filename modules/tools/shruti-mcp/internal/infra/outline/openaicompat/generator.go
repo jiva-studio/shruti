@@ -66,7 +66,19 @@ func New(cfg Config) (*Generator, error) {
 	return &Generator{Client: cli, Model: cfg.Model, MaxTokens: max, Reasoning: cfg.Reasoning}, nil
 }
 
-func (g *Generator) Outline(ctx context.Context, lectureText, lang string) ([]outlineport.Item, error) {
+func (g *Generator) Outline(ctx context.Context, lectureText, lang string) (outlineport.OutlineResult, error) {
+	granular, err := g.granular(ctx, lectureText, lang)
+	if err != nil {
+		return outlineport.OutlineResult{}, err
+	}
+	coarse := g.collapse(ctx, granular, lang)
+	return outlineport.OutlineResult{Granular: granular, Coarse: coarse}, nil
+}
+
+// granular runs the first pass over the WHOLE transcript and returns the fine
+// heading list (chronological). Its count is deliberately unstable across runs;
+// the coarse chapter count emerges later from the content, not a clock.
+func (g *Generator) granular(ctx context.Context, lectureText, lang string) ([]outlineport.Item, error) {
 	sys := strings.ReplaceAll(outlineSystemPrompt, "__LANG__", lang)
 	res, err := g.Client.Run(ctx, openaicompat.Call{
 		Model:       g.Model,
@@ -87,9 +99,15 @@ func (g *Generator) Outline(ctx context.Context, lectureText, lang string) ([]ou
 		return nil, fmt.Errorf("outline: empty result")
 	}
 	sortByStart(items)
+	return items, nil
+}
 
-	// Collapse the granular list into a handful of coarse chapters. A failed or
-	// non-shrinking merge keeps the finer outline rather than losing it.
+// collapse merges the granular list down to a handful of coarse chapters. A
+// failed or non-shrinking merge keeps the finer outline rather than losing it.
+// It does not mutate the input slice, so the granular pass survives intact for
+// the offline topic artifact.
+func (g *Generator) collapse(ctx context.Context, granular []outlineport.Item, lang string) []outlineport.Item {
+	items := append([]outlineport.Item(nil), granular...)
 	for passes := 0; len(items) > maxChapters && passes < maxMergePasses; passes++ {
 		before := len(items)
 		merged, err := g.merge(ctx, items, lang)
@@ -102,7 +120,7 @@ func (g *Generator) Outline(ctx context.Context, lectureText, lang string) ([]ou
 			break
 		}
 	}
-	return items, nil
+	return items
 }
 
 func (g *Generator) merge(ctx context.Context, items []outlineport.Item, lang string) ([]outlineport.Item, error) {
