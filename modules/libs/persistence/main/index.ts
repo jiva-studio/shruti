@@ -40,6 +40,8 @@ export interface TopicRow {
   readonly id: string
   readonly language: string
   readonly full_name: string
+  readonly short_name?: string | null
+  readonly cover?: string | null
 }
 
 export interface TrackRow {

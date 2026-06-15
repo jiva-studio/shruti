@@ -212,6 +212,25 @@ func (l *Lazy) SetTrackTopics(ctx context.Context, trackID string, weights map[s
 	}
 	return markModified(l.Path)
 }
+func (l *Lazy) SetTopicCover(ctx context.Context, id, cover string) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.SetTopicCover(ctx, id, cover); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+func (l *Lazy) GetTopicName(ctx context.Context, id, language string) (string, bool, error) {
+	r, err := l.open(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	defer r.Close()
+	return r.GetTopicName(ctx, id, language)
+}
 func (l *Lazy) DeleteTrackVariant(ctx context.Context, trackID, language string) error {
 	r, err := l.open(ctx)
 	if err != nil {

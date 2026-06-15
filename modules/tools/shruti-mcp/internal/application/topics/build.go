@@ -53,8 +53,11 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 	}
 
 	// Gather distinct cleaned headings across the whole corpus (dedup so each
-	// distinct topic phrase is embedded once).
+	// distinct topic phrase is embedded once). Also collect the distinct content
+	// languages present — the namer produces a name in each of them, so no
+	// locale is hardcoded.
 	seen := map[string]struct{}{}
+	langSeen := map[string]struct{}{}
 	var titles []string
 	read := 0
 	for _, ref := range refs {
@@ -66,6 +69,9 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 			return BuildResult{}, fmt.Errorf("read granular %s/%s: %w", ref.TrackID, ref.Language, err)
 		}
 		read++
+		if l := strings.TrimSpace(ref.Language); l != "" {
+			langSeen[l] = struct{}{}
+		}
 		for _, e := range entries {
 			t := cleanTitle(e.Title)
 			if t == "" {
@@ -80,6 +86,11 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 	if len(titles) < uc.K {
 		return BuildResult{}, fmt.Errorf("only %d distinct headings for k=%d — lower k or generate more outlines", len(titles), uc.K)
 	}
+	languages := make([]string, 0, len(langSeen))
+	for l := range langSeen {
+		languages = append(languages, l)
+	}
+	sort.Strings(languages)
 
 	vecs, err := uc.Embed.Embed(ctx, titles)
 	if err != nil {
@@ -104,11 +115,11 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 	}
 	for c := 0; c < k; c++ {
 		samples := representatives(members[c], norm, res.Centroids[c], titles, uc.Samples)
-		ru, en, err := uc.Namer.NameCluster(ctx, samples)
+		names, err := uc.Namer.NameCluster(ctx, samples, languages)
 		if err != nil {
 			return BuildResult{}, fmt.Errorf("name cluster %d: %w", c, err)
 		}
-		id, err := uc.Dict.Create(ctx, catalog.KindTopic, map[string]string{"ru": ru, "en": en}, nil)
+		id, err := uc.Dict.Create(ctx, catalog.KindTopic, names.Full, names.Short)
 		if err != nil {
 			return BuildResult{}, fmt.Errorf("create topic %d: %w", c, err)
 		}
