@@ -62,6 +62,14 @@ export interface TrackVariantRow {
    * Conversations) — consumer sorts those last via `NULLS LAST`.
    */
   readonly sort_reference: string | null
+  /**
+   * Per-lecture section outline as a JSON array string:
+   * `[{ "title": string, "start": number, "end": number }, ...]` in ms.
+   * NULL until generated. Stored raw; the row mapper parses it.
+   */
+  readonly outline: string | null
+  /** Short per-locale lecture description / overview. NULL until generated. */
+  readonly description: string | null
 }
 
 /** One audio version of a (track, language) variant — see the track_audio table. */
