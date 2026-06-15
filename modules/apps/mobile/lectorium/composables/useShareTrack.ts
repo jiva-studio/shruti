@@ -94,7 +94,15 @@ export function useShareTrack(): UseShareTrackReturn {
   > {
     const track = await app.repositories().tracks.getById(trackId)
     if (!track) {
-      return { title: null, author: null, date: null, location: null, references: [], tags: [], outline: null }
+      return {
+        title: null,
+        author: null,
+        date: null,
+        location: null,
+        references: [],
+        tags: [],
+        outline: null,
+      }
     }
     const references = track.references.map((r) => {
       const src = dicts.sourcesById.get(r.sourceId)

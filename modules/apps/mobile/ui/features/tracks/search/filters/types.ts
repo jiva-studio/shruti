@@ -16,13 +16,7 @@ export type FiltersModel = {
   dateTo?: string
 }
 
-export type MultiSectionKey =
-  | "authors"
-  | "languages"
-  | "locations"
-  | "sources"
-  | "tags"
-  | "topics"
+export type MultiSectionKey = "authors" | "languages" | "locations" | "sources" | "tags" | "topics"
 export type SingleSectionKey = "duration" | "sort"
 export type DateSectionKey = "dates"
 
