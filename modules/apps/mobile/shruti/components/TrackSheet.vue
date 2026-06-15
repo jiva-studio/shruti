@@ -1,30 +1,37 @@
 <template>
   <IonModal :is-open="open" class="track-sheet" @did-dismiss="onDismiss">
-    <IonContent class="ion-padding">
-      <div class="sheet-header">
-        <div class="sheet-heading">
-          <h2 class="sheet-title">{{ title }}</h2>
-          <p v-if="author" class="author">{{ author }}</p>
-        </div>
-        <IonButton
-          class="close-button"
-          fill="clear"
-          :aria-label="t('app.close')"
-          @click="onDismiss"
-        >
-          <IconX slot="icon-only" :size="16" />
-        </IonButton>
+    <IonButton class="close-button" fill="clear" :aria-label="t('app.close')" @click="onDismiss">
+      <IconX slot="icon-only" :size="16" />
+    </IonButton>
+    <div class="sheet-header">
+      <div class="sheet-heading">
+        <h2 class="sheet-title">{{ title }}</h2>
+        <p v-if="author" class="author">{{ author }}</p>
       </div>
-      <LectureOverview class="overview" :description="description" :chapters="chapters" />
+    </div>
+    <IonContent>
+      <div class="sheet-body">
+        <LectureOverview class="overview" :description="description" :chapters="chapters">
+          <div v-if="topicChips.length" class="topic-chips">
+            <span v-for="(name, i) in visibleChips" :key="i" class="topic-chip">
+              <IconHash :size="11" class="chip-hash" />
+              {{ name }}
+            </span>
+            <span v-if="overflowCount" class="topic-chip more">+{{ overflowCount }}</span>
+          </div>
+        </LectureOverview>
+      </div>
+      <SimilarTracksRow v-if="track" :track="track" />
     </IonContent>
 
     <IonFooter class="ion-no-border">
       <div class="sheet-actions">
         <IonButton fill="clear" class="act share-btn" @click="onShare">
+          <IconShare slot="start" :size="18" />
           {{ t("search.actions.share") }}
           <span v-if="!isSubscribed" class="pro">PRO</span>
         </IonButton>
-        <IonButton class="act" @click="onAddToPlaylist">
+        <IonButton class="act add-btn" @click="onAddToPlaylist">
           <IconPlaylistAdd slot="start" :size="18" />
           {{ t("search.actions.addToPlaylist") }}
         </IonButton>
@@ -37,7 +44,7 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
-import { IconPlaylistAdd, IconX } from "@tabler/icons-vue"
+import { IconHash, IconPlaylistAdd, IconShare, IconX } from "@tabler/icons-vue"
 import { loadTrackDetail } from "@lib/application/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode } from "@lib/domain/core.js"
@@ -52,12 +59,15 @@ import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
+import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import LectureOverview from "@ui/components/LectureOverview.vue"
+import SimilarTracksRow from "@shruti/components/SimilarTracksRow.vue"
 
 const { t } = useI18n()
 const app = useShruti()
 const appLanguage = useAppLanguage()
 const sheet = useTrackSheetStore()
+const dictionaries = useDictionariesStore()
 const purchases = usePurchasesStore()
 const paywall = usePaywallStore()
 const overlays = useOverlaysStore()
@@ -92,6 +102,13 @@ const variant = computed(
 const description = computed(() => variant.value?.description ?? null)
 const chapters = computed<readonly TrackOutlineChapter[]>(() => variant.value?.outline ?? [])
 
+const VISIBLE_CHIPS = 4
+const topicChips = computed<string[]>(() =>
+  (track.value?.topicIds ?? []).map((id) => dictionaries.topicShortNamesById.get(id) ?? id)
+)
+const visibleChips = computed(() => topicChips.value.slice(0, VISIBLE_CHIPS))
+const overflowCount = computed(() => Math.max(0, topicChips.value.length - VISIBLE_CHIPS))
+
 watch(
   () => sheet.trackId,
   async (id) => {
@@ -104,6 +121,7 @@ watch(
     }
     overlays.actionSheetOpen = true
     void app.haptics.impact("light")
+    void dictionaries.ensureLoaded()
     const repos = app.repositories()
     const detail = await loadTrackDetail(
       { trackId: id },
@@ -146,13 +164,44 @@ function onShare(): void {
 
 <style scoped>
 .sheet-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  padding: 14px 16px 10px;
+  /* leave room for the absolutely-positioned close button */
+  padding-right: 52px;
+  background: var(--ion-background-color, #fff);
 }
 
 .overview {
-  margin-top: 16px;
+  margin-top: 0;
+}
+
+.sheet-body {
+  padding: var(--ion-padding, 16px);
+  padding-bottom: 0;
+}
+
+.topic-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 6px;
+  margin: 0 0 16px;
+}
+
+.topic-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--ion-color-medium-shade, #666);
+  background: var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.chip-hash {
+  flex: none;
+  opacity: 0.55;
 }
 
 .sheet-heading {
@@ -161,7 +210,10 @@ function onShare(): void {
 }
 
 .close-button {
-  flex: none;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
   width: 26px;
   height: 26px;
   min-height: 26px;
@@ -210,8 +262,18 @@ function onShare(): void {
 }
 
 .act {
+  position: relative;
   margin: 0;
   --box-shadow: none;
+}
+
+/* Icon pinned to the left edge; the label stays centred in the button. */
+.act [slot="start"] {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
 }
 
 .share-btn {

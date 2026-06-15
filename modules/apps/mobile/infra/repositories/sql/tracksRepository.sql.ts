@@ -12,6 +12,7 @@ import type {
   TrackReferenceRow,
   TrackRow,
   TrackTagRow,
+  TrackTopicRow,
   TrackVariantRow,
 } from "@lib/persistence/main"
 import { rowToTrack } from "./contentRowMappers.js"
@@ -134,7 +135,7 @@ async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promi
   const ids = tracks.map((t) => t.id)
   const placeholders = ids.map(() => "?").join(", ")
 
-  const [variants, audios, references, tags] = await Promise.all([
+  const [variants, audios, references, tags, topics] = await Promise.all([
     contentDb.query<TrackVariantRow>(
       `SELECT * FROM track_variants WHERE track_id IN (${placeholders})`,
       ids
@@ -151,9 +152,13 @@ async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promi
       `SELECT * FROM track_tags WHERE track_id IN (${placeholders})`,
       ids
     ),
+    contentDb.query<TrackTopicRow>(
+      `SELECT * FROM track_topics WHERE track_id IN (${placeholders})`,
+      ids
+    ),
   ])
 
-  return tracks.map((track) => rowToTrack({ track, variants, audios, references, tags }))
+  return tracks.map((track) => rowToTrack({ track, variants, audios, references, tags, topics }))
 }
 
 /**
@@ -319,6 +324,14 @@ function buildFilterClauses(filters: TrackListFilters): {
         .join(", ")}))`
     )
     params.push(...filters.tagIds)
+  }
+  if (filters.topicIds?.length) {
+    clauses.push(
+      `t.id IN (SELECT track_id FROM track_topics WHERE topic_id IN (${filters.topicIds
+        .map(() => "?")
+        .join(", ")}))`
+    )
+    params.push(...filters.topicIds)
   }
   if (filters.languageCodes?.length) {
     clauses.push(
