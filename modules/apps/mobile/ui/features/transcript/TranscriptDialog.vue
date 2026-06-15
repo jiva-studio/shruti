@@ -77,7 +77,7 @@ import { useTranscriptAutoScroll } from "./useTranscriptAutoScroll.js"
 import TranscriptStatus from "./TranscriptStatus.vue"
 import TranscriptText, { type TextSelectedEvent, type NoteTappedEvent } from "./TranscriptText.vue"
 import type { UiTranscriptBlocksGroup, UiTranscriptLanguage } from "./types.js"
-import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
+import type { UiOutlineChapter } from "@ui/components/types.js"
 
 const props = defineProps<{
   blockGroups: readonly UiTranscriptBlocksGroup[]
@@ -87,7 +87,7 @@ const props = defineProps<{
   /** Lecture description shown above the transcript (null/absent → hidden). */
   description?: string | null
   /** Chapter outline shown above the transcript; a tap emits `seek`. */
-  chapters?: readonly TrackOutlineChapter[]
+  chapters?: readonly UiOutlineChapter[]
   position: number
   duration: number
   allowMultipleLanguages: boolean
