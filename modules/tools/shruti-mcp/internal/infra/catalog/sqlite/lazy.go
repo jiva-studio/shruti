@@ -93,6 +93,27 @@ func (l *Lazy) GetVariant(ctx context.Context, trackID, language string) (catalo
 	return r.GetVariant(ctx, trackID, language)
 }
 
+func (l *Lazy) GetAudios(ctx context.Context, trackID, language string) ([]catalog.AudioRow, error) {
+	r, err := l.open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return r.GetAudios(ctx, trackID, language)
+}
+
+func (l *Lazy) UpsertAudio(ctx context.Context, a catalog.AudioRow) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.UpsertAudio(ctx, a); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+
 func (l *Lazy) GetReferences(ctx context.Context, trackID string) ([]catalog.TrackReference, error) {
 	r, err := l.open(ctx)
 	if err != nil {
@@ -158,16 +179,57 @@ func (l *Lazy) DeleteDict(ctx context.Context, kind catalog.Kind, id string) err
 	}
 	return markModified(l.Path)
 }
-func (l *Lazy) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, refs []catalog.TrackReference) error {
+func (l *Lazy) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, audios []catalog.AudioRow, refs []catalog.TrackReference) error {
 	r, err := l.open(ctx)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	if err := r.SaveTrack(ctx, t, v, refs); err != nil {
+	if err := r.SaveTrack(ctx, t, v, audios, refs); err != nil {
 		return err
 	}
 	return markModified(l.Path)
+}
+func (l *Lazy) SetVariantOutline(ctx context.Context, trackID, language, outline, description string) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.SetVariantOutline(ctx, trackID, language, outline, description); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+func (l *Lazy) SetTrackTopics(ctx context.Context, trackID string, weights map[string]float64) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.SetTrackTopics(ctx, trackID, weights); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+func (l *Lazy) SetTopicCover(ctx context.Context, id, cover string) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.SetTopicCover(ctx, id, cover); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+func (l *Lazy) GetTopicName(ctx context.Context, id, language string) (string, bool, error) {
+	r, err := l.open(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	defer r.Close()
+	return r.GetTopicName(ctx, id, language)
 }
 func (l *Lazy) DeleteTrackVariant(ctx context.Context, trackID, language string) error {
 	r, err := l.open(ctx)

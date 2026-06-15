@@ -129,6 +129,18 @@ class Track:
 
 
 @dataclass(frozen=True, slots=True)
+class Collection:
+    """One collection (a curated, ordered group of tracks — e.g. a seminar),
+    in a single locale. `track_ids` is the ordered membership for that locale."""
+
+    id: str
+    name: str
+    description: str
+    cover: str
+    track_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ResolvedEntity:
     id: str
     full_name: str

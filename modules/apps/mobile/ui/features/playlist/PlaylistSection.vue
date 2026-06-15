@@ -1,7 +1,7 @@
 <template>
-  <template v-if="rows.length > 0">
+  <template v-if="items.length > 0">
     <slot name="header" />
-    <PlaylistItems :rows="rows" @click="emit('click', $event)" @delete="emit('delete', $event)" />
+    <PlaylistItems :items="items" @click="emit('click', $event)" @delete="emit('delete', $event)" />
   </template>
   <PageSticker
     v-else
@@ -20,8 +20,8 @@
 <script setup lang="ts">
 import { useRouter } from "vue-router"
 import { PageSticker } from "@ui/primitives/index.js"
-import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 import PlaylistItems from "./PlaylistItems.vue"
+import type { PlaylistRenderItem } from "./types.js"
 
 const router = useRouter()
 
@@ -32,7 +32,7 @@ function onNavigate(to: string | undefined): void {
 }
 
 defineProps<{
-  rows: readonly UiTrackRow[]
+  items: readonly PlaylistRenderItem[]
   emptyHeader: string
   emptyMessage: string
   emptyImage: string

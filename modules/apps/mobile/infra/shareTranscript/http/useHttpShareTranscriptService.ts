@@ -32,6 +32,13 @@ export function useHttpShareTranscriptService(getBaseUrl: () => string): IShareT
         }))
       }
       if (req.tags && req.tags.length > 0) body.tags = req.tags
+      if (req.outline && req.outline.length > 0) {
+        body.outline = req.outline.map((ch) => ({
+          title: ch.title,
+          start: ch.startMs,
+          end: ch.endMs,
+        }))
+      }
 
       const response = await fetch(`${base}/pdf`, {
         method: "POST",

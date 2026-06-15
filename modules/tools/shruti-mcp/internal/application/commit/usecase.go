@@ -181,7 +181,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 	}
 
 	// 3. Audio invariants — file exists, duration > 0, bytes > 0.
-	audioPath := uc.Audio.PublicAudioPath(id)
+	audioPath := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 	if ok, err := uc.FS.Exists(ctx, audioPath); err != nil {
 		res.Invalid = append(res.Invalid, fmt.Sprintf("audio: stat failed at %s: %v", audioPath, err))
 	} else if !ok {
@@ -256,18 +256,22 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 		TrackID:        string(id),
 		Language:       language,
 		Title:          strings.TrimSpace(meta.Title),
-		AudioPath:      uc.Transcripts.PublicTranscriptKey(id, language) + ".__audio_path_placeholder__", // overridden below
-		AudioFilesize:  meta.Audio.SizeBytes,
-		AudioDuration:  meta.Audio.DurationMs,
-		AudioKind:      "edited",
 		TranscriptPath: uc.Transcripts.PublicTranscriptKey(id, language),
 		TranscriptKind: "generated",
 		SortReference:  sortRef,
 	}
-	// audio_path canonical key.
-	variantRow.AudioPath = fmt.Sprintf("public/tracks/%s/audio/original.mp3", string(id))
+	// The published recording is the 'original' audio version. The denoiser
+	// adds a 'clean' track_audio row later.
+	audios := []domaincatalog.AudioRow{{
+		TrackID:  string(id),
+		Language: language,
+		Kind:     domaincatalog.AudioKindOriginal,
+		Path:     fmt.Sprintf("public/tracks/%s/audio/original.mp3", string(id)),
+		Filesize: meta.Audio.SizeBytes,
+		Duration: meta.Audio.DurationMs,
+	}}
 
-	if err := uc.Catalog.SaveTrack(ctx, trackRow, variantRow, resolvedRefs); err != nil {
+	if err := uc.Catalog.SaveTrack(ctx, trackRow, variantRow, audios, resolvedRefs); err != nil {
 		return uc.fail(ctx, id, stageKey, fmt.Errorf("catalog SaveTrack: %w", err))
 	}
 

@@ -83,8 +83,8 @@ describe("downloadMedia", () => {
     }
     expect(transfer).toHaveBeenCalledTimes(1)
     expect(transfer).toHaveBeenCalledWith(`https://a.example.com/${PATH}`, expect.any(Function))
-    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null)
-    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/1")
+    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original")
+    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/1", "original")
   })
 
   it("falls back to the next candidate when the active server's transfer throws", async () => {
@@ -117,8 +117,8 @@ describe("downloadMedia", () => {
     // the second candidate succeeded, so the user never sees a flash
     // of failed UI.
     expect(upsert).toHaveBeenCalledTimes(2)
-    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null)
-    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/from-b")
+    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original")
+    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/from-b", "original")
   })
 
   it("returns transfer-failed only after every candidate is exhausted", async () => {
@@ -145,7 +145,7 @@ describe("downloadMedia", () => {
     // Both candidates were tried before we gave up.
     expect(transfer).toHaveBeenNthCalledWith(1, `https://a.example.com/${PATH}`, expect.any(Function))
     expect(transfer).toHaveBeenNthCalledWith(2, `https://b.example.com/${PATH}`, expect.any(Function))
-    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "failed", null)
+    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "failed", null, "original")
   })
 
   it("returns no-candidates when the candidate list is empty", async () => {
@@ -270,8 +270,8 @@ describe("downloadMedia", () => {
     // Crucially, no third "failed" upsert — bytes are on disk and we don't
     // want to lie about that on retry.
     expect(upsert).toHaveBeenCalledTimes(2)
-    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null)
-    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/1")
+    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original")
+    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/1", "original")
   })
 
   it("still returns transfer-failed when the failed-marker upsert also throws", async () => {

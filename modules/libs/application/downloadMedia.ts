@@ -1,5 +1,5 @@
 import type { TrackId } from "@lib/domain/core.js"
-import type { MediaItem } from "@lib/domain/mediaItem.js"
+import type { MediaAudioKind, MediaItem } from "@lib/domain/mediaItem.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
@@ -21,6 +21,8 @@ export interface DownloadMediaInput {
    * on failure.
    */
   readonly candidates: readonly CdnServer[]
+  /** Which audio version is being fetched. Defaults to "original". */
+  readonly kind?: MediaAudioKind
 }
 
 /**
@@ -84,6 +86,7 @@ export async function downloadMedia(
   onProgress?: (pct: number) => void
 ): Promise<Result<DownloadMediaSuccess, DownloadMediaError>> {
   if (input.candidates.length === 0) return err("no-candidates")
+  const kind = input.kind ?? "original"
 
   // Check-and-claim the "downloading" slot atomically. Two simultaneous
   // taps on the same track race here; the unit-of-work serialises them,
@@ -94,12 +97,12 @@ export async function downloadMedia(
     | { kind: "cached"; mediaItem: MediaItem }
     | { kind: "claimed" }
   const claim = await deps.unitOfWork.run<Claim>(async () => {
-    const existing = await deps.mediaItems.getByTrack(input.trackId)
+    const existing = await deps.mediaItems.getByTrack(input.trackId, kind)
     if (existing?.state === "downloading") return { kind: "busy" }
     if (existing?.state === "ready" && existing.localPath) {
       return { kind: "cached", mediaItem: existing }
     }
-    await deps.mediaItems.upsert(input.trackId, "downloading", null)
+    await deps.mediaItems.upsert(input.trackId, "downloading", null, kind)
     return { kind: "claimed" }
   })
 
@@ -144,7 +147,7 @@ export async function downloadMedia(
     // Best-effort mark "failed"; if the upsert itself rejects we don't
     // want a second exception masking the original transfer failure.
     try {
-      await deps.mediaItems.upsert(input.trackId, "failed", null)
+      await deps.mediaItems.upsert(input.trackId, "failed", null, kind)
     } catch {
       /* swallow — surfacing the transfer error matters more */
     }
@@ -156,7 +159,7 @@ export async function downloadMedia(
   // failure — Retry has different semantics for the two: a persist
   // retry should not re-download megabytes that are already cached.
   try {
-    const saved = await deps.mediaItems.upsert(input.trackId, "ready", localUrl)
+    const saved = await deps.mediaItems.upsert(input.trackId, "ready", localUrl, kind)
     return ok({ mediaItem: saved, server: workingServer })
   } catch {
     return err("persist-failed")

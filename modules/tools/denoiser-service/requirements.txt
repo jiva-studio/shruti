@@ -1,0 +1,17 @@
+# HTTP service
+fastapi
+uvicorn
+pydantic>=2
+# S3 upload
+boto3
+# denoise algorithm (denoise_mp3.py) — keep in sync with ../audio-denoiser/requirements.txt
+pyrnnoise
+av==15.0.0
+pydub
+soundfile
+numpy
+scipy
+tqdm
+# NOTE: the default `deepfilternet` strategy uses the standalone `deep-filter`
+# binary (no torch / no Python deps) — provision it via $DEEP_FILTER_BIN, PATH,
+# or next to denoise_mp3.py. See github.com/Rikorose/DeepFilterNet releases.

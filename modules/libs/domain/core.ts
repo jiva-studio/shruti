@@ -12,6 +12,7 @@ export type AuthorId = string
 export type LocationId = string
 export type SourceId = string
 export type TagId = string
+export type TopicId = string
 export type NoteId = string
 export type PlaylistItemId = string
 export type MediaItemId = string

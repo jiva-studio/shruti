@@ -25,9 +25,7 @@ from shruti_chat.domain.ports.kv_cache import KVCache
 from shruti_chat.domain.ports.llm_provider import LLMPort
 from shruti_chat.domain.ports.idempotency_store import IdempotencyStore
 from shruti_chat.domain.ports.turn_store import TurnStore
-from shruti_chat.domain.ports.outline_cache import OutlineCache
 from shruti_chat.domain.ports.reranker import RerankerPort
-from shruti_chat.domain.ports.transcript_storage import TranscriptStorage
 from shruti_chat.domain.ports.translation import TranslationService
 
 
@@ -38,8 +36,6 @@ class AppDeps:
     embedder: EmbedderPort
     chunk_repo: ChunkRepository
     catalog_repo: CatalogRepository
-    transcript_storage: TranscriptStorage
-    outline_cache: OutlineCache
     rate_limiter: RateLimiter
     jwt_verifier: JwtVerifier
     kv_cache: KVCache

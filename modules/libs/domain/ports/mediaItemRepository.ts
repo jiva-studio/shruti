@@ -1,10 +1,18 @@
 import type { MediaItemId, TrackId } from "../core.js"
-import type { MediaItem, MediaItemState } from "../mediaItem.js"
+import type { MediaAudioKind, MediaItem, MediaItemState } from "../mediaItem.js"
 
 export interface IMediaItemRepository {
-  getByTrack(trackId: TrackId): Promise<MediaItem | null>
+  /** Fetch one version's row. `kind` defaults to "original". */
+  getByTrack(trackId: TrackId, kind?: MediaAudioKind): Promise<MediaItem | null>
   listReady(): Promise<readonly MediaItem[]>
-  upsert(trackId: TrackId, state: MediaItemState, localPath: string | null): Promise<MediaItem>
+  /** Upsert one version's row. `kind` defaults to "original". */
+  upsert(
+    trackId: TrackId,
+    state: MediaItemState,
+    localPath: string | null,
+    kind?: MediaAudioKind
+  ): Promise<MediaItem>
+  /** Remove ALL versions (original + clean) of a track. */
   deleteByTrack(trackId: TrackId): Promise<void>
   deleteById(id: MediaItemId): Promise<void>
   clearAll(): Promise<void>

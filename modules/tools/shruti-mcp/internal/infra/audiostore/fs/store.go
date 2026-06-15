@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	audioport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 )
 
 // Store implements audio.Store on top of the local filesystem rooted at outDir.
@@ -24,8 +25,8 @@ func (s *Store) SourceArtifactPath(id track.Id) string {
 	return filepath.Join(s.outDir, "artifacts", "tracks", string(id), "audio", "source.mp3")
 }
 
-func (s *Store) PublicAudioPath(id track.Id) string {
-	return filepath.Join(s.outDir, "public", "tracks", string(id), "audio", "original.mp3")
+func (s *Store) PublicAudioPath(id track.Id, version audioport.Version) string {
+	return filepath.Join(s.outDir, "public", "tracks", string(id), "audio", string(version)+".mp3")
 }
 
 // MoveSourceFromInput moves srcPath into the artifact path. On the same
@@ -114,7 +115,7 @@ func (s *Store) AdoptSiblingPDF(ctx context.Context, id track.Id, mp3SrcPath str
 }
 
 func (s *Store) AtomicWritePublic(ctx context.Context, id track.Id, src io.Reader) error {
-	return atomicWrite(s.PublicAudioPath(id), src)
+	return atomicWrite(s.PublicAudioPath(id, audioport.VersionOriginal), src)
 }
 
 func atomicWrite(dst string, src io.Reader) error {

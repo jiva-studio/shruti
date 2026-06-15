@@ -5,6 +5,11 @@ export default {
   filtersButton: "Фильтры",
   filtersSheetTitle: "Фильтры",
   filtersReset: "Сбросить",
+  lecturesTitle: "Лекции",
+  recommendedForYou: "Рекомендации",
+  allLectures: "Все лекции",
+  topics: "Темы",
+  topicsSection: "Лекции на различные темы",
   actions: {
     addToPlaylist: "Добавить в плейлист",
     openTranscript: "Открыть транскрипт",
@@ -31,7 +36,8 @@ export default {
     sort: "Порядок",
     authors: "Авторы",
     sources: "Источники",
-    tags: "Темы",
+    tags: "Теги",
+    topics: "Темы",
     locations: "Локации",
     languages: "Языки",
     duration: "Длительность",
@@ -49,5 +55,16 @@ export default {
     sortByDateDesc: "По дате (новые сверху)",
     sortByDateAsc: "По дате (старые сверху)",
     sortByReference: "По шлоке",
+  },
+  collections: {
+    addAll: "Добавить коллекцию",
+    trackCount: "Лекций: {count}",
+    addError: "Не удалось добавить коллекцию",
+    addConfirm:
+      "Добавить {count} лекцию в плейлист? | Добавить {count} лекции в плейлист? | Добавить {count} лекций в плейлист?",
+    others: "Другие коллекции",
+    all: "Все коллекции",
+    seeAll: "Показать все",
+    seeAllNamed: "Показать все: {name}",
   },
 }

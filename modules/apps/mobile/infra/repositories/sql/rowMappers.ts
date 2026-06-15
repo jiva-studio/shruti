@@ -66,6 +66,7 @@ export function rowToMediaItem(row: MediaItemRow): MediaItem {
   return {
     id: row.id,
     trackId: row.track_id,
+    kind: row.kind === "clean" ? "clean" : "original",
     state: narrowMediaState(row.state),
     localPath: row.local_path,
     createdAt: row.created_at,

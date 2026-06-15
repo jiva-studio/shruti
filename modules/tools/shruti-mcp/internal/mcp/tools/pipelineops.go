@@ -212,6 +212,37 @@ func dispatchTitlesRefresh(ctx context.Context, deps Deps, kind string, sel sele
 		})
 }
 
+// dispatchOutline handles op=outline — generate the outline + description for
+// matched (track, language) pairs and write them onto the catalog variant.
+func dispatchOutline(ctx context.Context, deps Deps, kind string, sel selectorDomain) (*mcp.CallToolResult, error) {
+	if deps.Outline.LLM == nil {
+		return envelope.Err(kind, envelope.CodeDependencyFailed, "outline generation not configured (set config outline.api_key + outline.model)", nil), nil
+	}
+	return submitFanOutRun(ctx, deps, kind, run.KindTranscriptOutline, sel,
+		func(ctx context.Context, id track.Id, lang string) error {
+			_, err := deps.Outline.Run(ctx, id, lang)
+			return err
+		})
+}
+
+// dispatchTopics handles op=topics — assign weighted topics to matched tracks.
+// Assignment is per-TRACK (it reads every language's granular itself), so the
+// per-(track,lang) fan-out is deduped to the first pair seen for each track.
+func dispatchTopics(ctx context.Context, deps Deps, kind string, sel selectorDomain) (*mcp.CallToolResult, error) {
+	if !deps.Topics.topicsConfigured() {
+		return envelope.Err(kind, envelope.CodeDependencyFailed, "topics not configured (set config embed.api_key + embed.model)", nil), nil
+	}
+	var seen sync.Map
+	return submitFanOutRun(ctx, deps, kind, run.KindTopicsAssign, sel,
+		func(ctx context.Context, id track.Id, _ string) error {
+			if _, dup := seen.LoadOrStore(id, struct{}{}); dup {
+				return nil // already assigned this track via another language pair
+			}
+			_, err := deps.Topics.Assign.Run(ctx, id)
+			return err
+		})
+}
+
 // dispatchAudit handles op=audit — corpus walk + aggregator.
 // Empty selector = whole corpus. Top-N cap defaults to 50; callers can
 // pass a `top` arg.

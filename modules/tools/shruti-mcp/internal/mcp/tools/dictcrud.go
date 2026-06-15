@@ -25,6 +25,7 @@ func RegisterDictCRUD(s *server.MCPServer, deps DictCRUDDeps) {
 		{catalog.KindLocation, "location"},
 		{catalog.KindSource, "source"},
 		{catalog.KindTag, "tag"},
+		{catalog.KindTopic, "topic"},
 	} {
 		registerCreate(s, deps, k.kind, k.prefix)
 		registerUpdate(s, deps, k.kind, k.prefix)

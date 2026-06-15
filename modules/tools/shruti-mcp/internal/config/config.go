@@ -20,10 +20,25 @@ type Config struct {
 	CDN        CDN        `yaml:"cdn"`
 	S3         S3         `yaml:"s3"`
 	FFmpeg     FFmpeg     `yaml:"ffmpeg"`
+	Denoiser   Denoiser   `yaml:"denoiser"`
 	Transcribe Transcribe `yaml:"transcribe"`
 	Review     Review     `yaml:"review"`
 	Resolver   Resolver   `yaml:"resolver"`
 	Metadata   Metadata   `yaml:"metadata"`
+	Outline    Outline    `yaml:"outline"`
+	Embed      Embed      `yaml:"embed"`
+	Images     Images     `yaml:"images"`
+}
+
+// Images configures collection-cover generation via an OpenRouter-compatible
+// image model. When APIKey is empty the feature is disabled (collection.create
+// won't auto-generate and collection.cover.generate returns a clear error).
+type Images struct {
+	Endpoint string `yaml:"endpoint,omitempty"`
+	APIKey   string `yaml:"api_key,omitempty"`
+	Model    string `yaml:"model,omitempty"`
+	// Style is appended to every prompt so all covers share one look.
+	Style string `yaml:"style,omitempty"`
 }
 
 type CDN struct {
@@ -46,6 +61,12 @@ type S3Target struct {
 
 type FFmpeg struct {
 	Bin string `yaml:"bin"`
+}
+
+// Denoiser configures the audio-denoiser subprocess used by track.audio.denoise.
+type Denoiser struct {
+	PythonBin string `yaml:"python_bin"` // interpreter with the denoise deps; default "python3"
+	Script    string `yaml:"script"`     // path to audio-denoiser/denoise_mp3.py
 }
 
 // Transcribe configures the transcription stage. Multiple providers can be
@@ -75,21 +96,21 @@ type Review struct {
 	// mode (raw). Lookup falls back to "*" when a language isn't
 	// explicitly listed.
 	Default     map[string][]Attempt `yaml:"default"`
-	ChunkSize   int                 `yaml:"chunk_size"`
-	Overlap     int                 `yaml:"overlap"`
-	Retries     int                 `yaml:"retries"`
-	Concurrency int                 `yaml:"concurrency"`
+	ChunkSize   int                  `yaml:"chunk_size"`
+	Overlap     int                  `yaml:"overlap"`
+	Retries     int                  `yaml:"retries"`
+	Concurrency int                  `yaml:"concurrency"`
 	// MaxConcurrentLLM caps total in-flight LLM calls across the worker
 	// pool. Without this, workers × Concurrency can fan out beyond the
 	// API tier's RPM budget.
-	MaxConcurrentLLM int                        `yaml:"max_concurrent_llm"`
+	MaxConcurrentLLM int `yaml:"max_concurrent_llm"`
 	// NoiseFilterThreshold drops the text of raw segments whose Whisper
 	// confidence is below this cutoff before they reach the LLM (0 =
 	// disabled). 0.20 catches whisper hallucinations on noise/silence
 	// (digits, isolated dots, quote-soup) without risking real speech.
 	NoiseFilterThreshold float64                    `yaml:"noise_filter_threshold"`
 	Hybrid               HybridOptions              `yaml:"hybrid"`
-	Providers        map[string]ProviderOptions `yaml:"providers"`
+	Providers            map[string]ProviderOptions `yaml:"providers"`
 	// Sentencer optionally configures a deterministic sentence splitter
 	// (razdel subprocess). When script is set, the review usecase uses
 	// it to compute sentence boundaries from the corrected text instead
@@ -205,6 +226,32 @@ type Metadata struct {
 	PromptPath string `yaml:"prompt_path"`
 }
 
+// Outline configures lecture outline + description generation via an
+// OpenAI-compatible model (Gemini through OpenRouter). When APIKey is empty the
+// feature is disabled (track.transcript.outline / pipeline.run op=outline
+// return a clear error).
+type Outline struct {
+	Endpoint  string `yaml:"endpoint"`
+	APIKey    string `yaml:"api_key"`
+	Model     string `yaml:"model"`
+	MaxTokens int    `yaml:"max_tokens"`
+	Reasoning string `yaml:"reasoning,omitempty"`
+}
+
+// Embed configures the text-embeddings endpoint used by the topic build/assign
+// (clustering outline headings into canonical topics). OpenAI-compatible
+// (text-embedding-3-small via OpenRouter/OpenAI). When APIKey is empty the
+// topic tools are disabled (topics.build / track.topics.assign return a clear
+// error). Dimensions trims the vector (256 is plenty for clustering); batch
+// caps inputs per HTTP call.
+type Embed struct {
+	Endpoint   string `yaml:"endpoint,omitempty"`
+	APIKey     string `yaml:"api_key"`
+	Model      string `yaml:"model"`
+	Dimensions int    `yaml:"dimensions,omitempty"`
+	BatchSize  int    `yaml:"batch_size,omitempty"`
+}
+
 // ProviderOptions describes one OpenAI-compatible review provider entry.
 // All review providers go through the same /v1/chat/completions adapter —
 // only the upstream URL, key, and model id differ. Used as-is for resolver
@@ -291,8 +338,20 @@ func (c *Config) applyDefaults() {
 	if c.S3.Yandex.Endpoint == "" {
 		c.S3.Yandex.Endpoint = "https://storage.yandexcloud.net"
 	}
+	if c.Images.Endpoint == "" {
+		c.Images.Endpoint = "https://openrouter.ai/api/v1"
+	}
+	if c.Images.Model == "" {
+		c.Images.Model = "google/gemini-2.5-flash-image"
+	}
+	if c.Images.Style == "" {
+		c.Images.Style = "Devotional illustration in the Gaudiya Vaishnava (Hare Krishna / ISKCON) tradition. Warm palette of saffron, cream and soft gold; gentle painterly digital art; serene and uplifting; soft golden-hour light. Full-bleed square 1:1 composition that COMPLETELY fills the frame edge to edge — absolutely no white border, no frame, no margin, no rounded corners, no vignette, no passe-partout. Absolutely no text, words or letters. Every Vaishnava person wears authentic Gaudiya Vaishnava tilaka: two thin vertical pale clay-yellow (gopi-chandana) lines painted on the forehead that come together at the bridge of the nose forming a narrow U/V shape, with a small tulasi-leaf mark at the base on the nose — never horizontal Shaivite lines, never a single dot. Devotees wear dhoti or sari. Avoid Buddhist and generic new-age imagery — no Buddha, no buddhist temples."
+	}
 	if c.FFmpeg.Bin == "" {
 		c.FFmpeg.Bin = "ffmpeg"
+	}
+	if c.Denoiser.PythonBin == "" {
+		c.Denoiser.PythonBin = "python3"
 	}
 	if c.Transcribe.Default == "" {
 		c.Transcribe.Default = "transcriber-service"

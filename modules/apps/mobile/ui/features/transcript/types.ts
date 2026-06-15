@@ -59,6 +59,14 @@ export interface UiTranscriptBlockView {
 
 export interface UiTranscriptBlocksGroup {
   readonly blocks: UiTranscriptBlockView[]
+  /**
+   * Outline chapter title that begins at this paragraph. Set on the first
+   * group whose blocks cross a chapter's start time, so the reader can
+   * render a heading inline above the paragraph. Absent on every other group.
+   */
+  readonly heading?: string
+  /** Start time (ms) of that chapter — lets a tap on the heading seek there. */
+  readonly headingStartMs?: number
 }
 
 /** @deprecated alias kept while existing consumers migrate to groups. */
