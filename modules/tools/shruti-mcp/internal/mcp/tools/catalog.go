@@ -152,4 +152,5 @@ func RegisterCatalogReadTools(s *server.MCPServer, deps CatalogDeps) {
 	registerDictRead(s, deps, catalog.KindLocation, "location")
 	registerDictRead(s, deps, catalog.KindSource, "source")
 	registerDictRead(s, deps, catalog.KindTag, "tag")
+	registerDictRead(s, deps, catalog.KindTopic, "topic")
 }

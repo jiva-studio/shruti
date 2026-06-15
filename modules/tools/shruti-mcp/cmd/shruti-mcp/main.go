@@ -621,6 +621,9 @@ func main() {
 				Minter:     minter,
 			},
 		},
+		Topics: tools.TopicsDeps{
+			Catalog: sqlitecatalog.NewLazy(currentDBPath),
+		},
 		CollectionCRUD: tools.CollectionCRUDDeps{
 			UseCase: collectioncrud.UseCase{
 				Catalog: sqlitecatalog.NewLazy(currentDBPath),
