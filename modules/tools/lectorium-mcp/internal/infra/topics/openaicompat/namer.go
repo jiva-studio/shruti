@@ -1,6 +1,7 @@
 // Package openaicompattopics names topic clusters via an OpenAI-compatible LLM
 // (Gemini Flash-Lite through OpenRouter) — one short call per cluster turning a
-// handful of representative headings into a canonical ru/en topic name.
+// handful of representative headings into a canonical topic name (full + short)
+// in each requested language.
 package openaicompattopics
 
 import (
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	domaintopics "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/topics"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
 )
 
@@ -45,15 +47,21 @@ func New(cfg Config) (*Namer, error) {
 	return &Namer{client: cli, model: cfg.Model, maxTokens: max, reasoning: cfg.Reasoning}, nil
 }
 
-// NameCluster returns a canonical ru/en name for one cluster of headings.
-func (n *Namer) NameCluster(ctx context.Context, sampleTitles []string) (string, string, error) {
+// NameCluster names one cluster of headings in every requested language,
+// returning a full and (optional) short name per language. The languages are
+// passed in (derived from the corpus) so no locale is hardcoded.
+func (n *Namer) NameCluster(ctx context.Context, sampleTitles, languages []string) (domaintopics.Names, error) {
 	if len(sampleTitles) == 0 {
-		return "", "", fmt.Errorf("name cluster: no sample titles")
+		return domaintopics.Names{}, fmt.Errorf("name cluster: no sample titles")
 	}
-	user := strings.Join(sampleTitles, "\n")
+	if len(languages) == 0 {
+		return domaintopics.Names{}, fmt.Errorf("name cluster: no target languages")
+	}
+	user := fmt.Sprintf("Languages (codes): %s\n\nHeadings:\n%s",
+		strings.Join(languages, ", "), strings.Join(sampleTitles, "\n"))
 	var out struct {
-		Ru string `json:"ru"`
-		En string `json:"en"`
+		Full  map[string]string `json:"full"`
+		Short map[string]string `json:"short"`
 	}
 	temp := 0.2
 	if _, err := n.client.RunJSON(ctx, openaicompat.Call{
@@ -64,11 +72,21 @@ func (n *Namer) NameCluster(ctx context.Context, sampleTitles []string) (string,
 		Temperature: &temp,
 		Reasoning:   n.reasoning,
 	}, &out); err != nil {
-		return "", "", fmt.Errorf("name cluster llm: %w", err)
+		return domaintopics.Names{}, fmt.Errorf("name cluster llm: %w", err)
 	}
-	ru, en := strings.TrimSpace(out.Ru), strings.TrimSpace(out.En)
-	if ru == "" || en == "" {
-		return "", "", fmt.Errorf("name cluster: empty ru/en in response")
+	names := domaintopics.Names{
+		Full:  make(map[string]string, len(languages)),
+		Short: make(map[string]string, len(languages)),
 	}
-	return ru, en, nil
+	for _, lang := range languages {
+		full := strings.TrimSpace(out.Full[lang])
+		if full == "" {
+			return domaintopics.Names{}, fmt.Errorf("name cluster: missing full name for %q", lang)
+		}
+		names.Full[lang] = full
+		if short := strings.TrimSpace(out.Short[lang]); short != "" {
+			names.Short[lang] = short
+		}
+	}
+	return names, nil
 }

@@ -3,6 +3,14 @@
 // These never reach the client catalog; they live in a private artifact.
 package topics
 
+// Names is one cluster's canonical name across locales: a full name (always
+// present for every requested language) and an optional shorter display name
+// for tight surfaces. Both are language → text maps — no locale is special.
+type Names struct {
+	Full  map[string]string
+	Short map[string]string
+}
+
 // Centroid is one canonical topic's cluster center in embedding space, keyed by
 // the topic's catalog id (topic_<nanoid>). The vector matches the configured
 // embedding model/dim.

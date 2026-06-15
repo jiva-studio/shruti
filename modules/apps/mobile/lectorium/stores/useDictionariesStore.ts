@@ -113,6 +113,28 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     }
     return out
   })
+  /** Topic-id → short display label in the active UI language (chips, shelf
+   *  headers). Falls back to the full name when no short one exists. */
+  const topicShortNamesById = computed<ReadonlyMap<string, string>>(() => {
+    const lang = appLanguage.value
+    const out = new Map<string, string>()
+    for (const t of topics.value) {
+      const short =
+        t.shortNames.get(lang) ??
+        t.shortNames.values().next().value ??
+        t.names.get(lang) ??
+        t.names.values().next().value ??
+        t.id
+      out.set(t.id, short)
+    }
+    return out
+  })
+  /** Topic-id → cover asset key (language-neutral), present only once generated. */
+  const topicCoverById = computed<ReadonlyMap<string, string>>(() => {
+    const out = new Map<string, string>()
+    for (const t of topics.value) if (t.cover) out.set(t.id, t.cover)
+    return out
+  })
   const languagesByCode = computed<ReadonlyMap<LanguageCode, Language>>(
     () => new Map(languages.value.map((l) => [l.code, l]))
   )
@@ -172,6 +194,8 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     tagNamesById,
     topicsById,
     topicNamesById,
+    topicShortNamesById,
+    topicCoverById,
     languagesByCode,
     authorsSorted,
     locationsSorted,

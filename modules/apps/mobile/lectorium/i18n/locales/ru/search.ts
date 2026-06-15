@@ -7,7 +7,7 @@ export default {
   filtersReset: "Сбросить",
   lecturesTitle: "Лекции",
   recommendedForYou: "Рекомендовано вам",
-  becauseListenedAbout: "Потому что вы слушали про {topic}",
+  allLectures: "Все лекции",
   actions: {
     addToPlaylist: "Добавить в плейлист",
     openTranscript: "Открыть транскрипт",
