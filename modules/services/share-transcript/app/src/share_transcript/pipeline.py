@@ -22,7 +22,6 @@ from typing import Any
 
 from share_transcript.config import Settings
 from share_transcript.meta import TrackMeta
-from share_transcript.outline import ensure_outline
 from share_transcript.render import render_transcript_pdf
 from share_transcript.s3 import S3
 
@@ -58,10 +57,12 @@ async def _render_and_store(
     meta: TrackMeta,
     lang: str,
     transcript_key: str,
+    outline: dict[str, Any] | None,
     s3: S3,
     settings: Settings,
 ) -> None:
-    """Background leg: fetch transcript, ensure outline, render, upload.
+    """Background leg: fetch transcript, render with the supplied outline,
+    upload.
 
     Best-effort — a failure is logged and the object simply never appears,
     so the client's poll times out and surfaces a retryable error. Runs
@@ -69,7 +70,6 @@ async def _render_and_store(
     """
     try:
         transcript = await s3.get_json(transcript_key)
-        outline = await ensure_outline(meta.id, lang, transcript, s3, settings)
         pdf_bytes = await asyncio.to_thread(
             render_transcript_pdf,
             track=meta,
@@ -87,6 +87,7 @@ async def prepare_pdf(
     meta: TrackMeta,
     lang: str,
     transcript_key: str,
+    outline: dict[str, Any] | None = None,
     s3: S3,
     settings: Settings,
 ) -> dict[str, Any]:
@@ -106,7 +107,7 @@ async def prepare_pdf(
     pdf_key = S3.pdf_key(meta.id, lang)
     if pdf_key not in _inflight:
         task = asyncio.create_task(
-            _render_and_store(meta, lang, transcript_key, s3, settings)
+            _render_and_store(meta, lang, transcript_key, outline, s3, settings)
         )
         _inflight[pdf_key] = task
         task.add_done_callback(lambda _t, k=pdf_key: _inflight.pop(k, None))

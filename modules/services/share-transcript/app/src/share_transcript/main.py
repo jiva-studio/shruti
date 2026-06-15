@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from share_transcript import config, llm
+from share_transcript import config
 from share_transcript.meta import TrackMeta
 from share_transcript.pipeline import TranscriptUnavailable, prepare_pdf
 from share_transcript.render.fonts import register_fonts
@@ -31,7 +31,6 @@ log = logging.getLogger("share_transcript")
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO)
     settings = config.load()
-    llm.configure(settings)
     # Register the bundled TTFs once so the first request doesn't pay it.
     register_fonts()
     app.state.settings = settings
@@ -62,6 +61,12 @@ class RefIn(BaseModel):
     tokens: str | None = None
 
 
+class OutlineItemIn(BaseModel):
+    title: str
+    start: int  # milliseconds
+    end: int | None = None
+
+
 class PdfRequest(BaseModel):
     track_id: str = Field(min_length=1)
     # Any catalog language code (the transcript's effective lang) — labels
@@ -77,6 +82,10 @@ class PdfRequest(BaseModel):
     location_id: str | None = None
     references: list[RefIn] = []
     tags: list[str] = []
+    # Precomputed lecture outline (chapter headings) from the catalog, rendered
+    # as the PDF table of contents. Empty = no TOC. share-transcript does not
+    # generate outlines — the caller (which has them from the catalog) supplies.
+    outline: list[OutlineItemIn] = []
 
 
 class PdfResponse(BaseModel):
@@ -108,11 +117,19 @@ async def pdf(body: PdfRequest, response: Response) -> PdfResponse:
         raise HTTPException(status_code=400, detail={"code": "bad_transcript_key"})
 
     meta = TrackMeta.from_wire(body.model_dump())
+    # Shape the catalog outline ([{title,start,end}]) into the renderer's
+    # contract ({items: [{start_ms, title}]}); None when the caller sent none.
+    outline = (
+        {"items": [{"start_ms": it.start, "title": it.title} for it in body.outline]}
+        if body.outline
+        else None
+    )
     try:
         result = await prepare_pdf(
             meta=meta,
             lang=body.lang,
             transcript_key=body.transcript_key,
+            outline=outline,
             s3=s3,
             settings=settings,
         )
