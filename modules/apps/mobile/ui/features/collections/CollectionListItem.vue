@@ -1,5 +1,5 @@
 <template>
-  <button type="button" class="collection-row" @click="emit('click')">
+  <button type="button" class="collection-row ion-activatable" @click="emit('click')">
     <span class="thumb">
       <CachedImage :url="coverUrl" :alt="name" />
     </span>
@@ -7,11 +7,12 @@
       <h3 class="name">{{ name }}</h3>
       <p v-if="description" class="desc">{{ description }}</p>
     </IonLabel>
+    <IonRippleEffect />
   </button>
 </template>
 
 <script setup lang="ts">
-import { IonLabel } from "@ionic/vue"
+import { IonLabel, IonRippleEffect } from "@ionic/vue"
 import { CachedImage } from "@ui/primitives/index.js"
 
 /**
@@ -32,6 +33,7 @@ const emit = defineEmits<{ (e: "click"): void }>()
 
 <style scoped>
 .collection-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -41,12 +43,9 @@ const emit = defineEmits<{ (e: "click"): void }>()
   background: transparent;
   text-align: left;
   padding: 8px 16px;
+  overflow: hidden;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-}
-
-.collection-row:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
 }
 
 .thumb {

@@ -6,9 +6,10 @@ export default {
   filtersSheetTitle: "Фильтры",
   filtersReset: "Сбросить",
   lecturesTitle: "Лекции",
-  recommendedForYou: "Рекомендовано вам",
+  recommendedForYou: "Рекомендации",
   allLectures: "Все лекции",
   topics: "Темы",
+  topicsSection: "Лекции на различные темы",
   actions: {
     addToPlaylist: "Добавить в плейлист",
     openTranscript: "Открыть транскрипт",

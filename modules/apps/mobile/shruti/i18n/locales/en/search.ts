@@ -5,8 +5,9 @@ export default {
   filtersSheetTitle: "Filters",
   filtersReset: "Reset",
   lecturesTitle: "Lectures",
-  recommendedForYou: "Recommended for you",
+  recommendedForYou: "Recommendations",
   allLectures: "All lectures",
+  topicsSection: "Lectures on various topics",
   topics: "Topics",
   actions: {
     addToPlaylist: "Add to playlist",
