@@ -1,4 +1,12 @@
-import type { AuthorId, LanguageCode, LocationId, SourceId, TagId, TrackId } from "../core.js"
+import type {
+  AuthorId,
+  LanguageCode,
+  LocationId,
+  SourceId,
+  TagId,
+  TopicId,
+  TrackId,
+} from "../core.js"
 import type { SortMethod } from "../sortMethods.js"
 import type { Track } from "../track.js"
 
@@ -8,6 +16,8 @@ export interface TrackListFilters {
   readonly languageCodes?: readonly LanguageCode[]
   readonly sourceIds?: readonly SourceId[]
   readonly tagIds?: readonly TagId[]
+  /** Filter by recommender topics: a track matches if it carries ANY (union). */
+  readonly topicIds?: readonly TopicId[]
   /** Filter by track duration (ms): inclusive-exclusive. */
   readonly durationMinMs?: number
   readonly durationMaxMs?: number

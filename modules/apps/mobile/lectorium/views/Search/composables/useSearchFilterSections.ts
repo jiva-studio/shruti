@@ -9,6 +9,7 @@ import IconLanguages from "@ui/features/tracks/search/filters/icons/IconLanguage
 import IconLocations from "@ui/features/tracks/search/filters/icons/IconLocations.vue"
 import IconSources from "@ui/features/tracks/search/filters/icons/IconSources.vue"
 import IconTags from "@ui/features/tracks/search/filters/icons/IconTags.vue"
+import IconTopics from "@ui/features/tracks/search/filters/icons/IconTopics.vue"
 import IconClock from "@ui/features/tracks/search/filters/icons/IconClock.vue"
 import IconSort from "@ui/features/tracks/search/filters/icons/IconSort.vue"
 import IconDates from "@ui/features/tracks/search/filters/icons/IconDates.vue"
@@ -59,6 +60,13 @@ export function useSearchFilterSections(): UseSearchFilterSectionsReturn {
     dictionaries.tagsSorted.map((tag) => ({
       id: tag.id,
       title: tag.names.get(appLanguage.value) ?? tag.id,
+    }))
+  )
+
+  const topicsItems = computed<SelectorDialogItem[]>(() =>
+    dictionaries.topicsSorted.map((topic) => ({
+      id: topic.id,
+      title: topic.names.get(appLanguage.value) ?? topic.id,
     }))
   )
 
@@ -125,6 +133,14 @@ export function useSearchFilterSections(): UseSearchFilterSectionsReturn {
       title: t("search.filters.tags"),
       icon: IconTags,
       items: tagsItems.value,
+    },
+    {
+      kind: "multi",
+      key: "topics",
+      model: "topics",
+      title: t("search.filters.topics"),
+      icon: IconTopics,
+      items: topicsItems.value,
     },
     {
       kind: "date",

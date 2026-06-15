@@ -32,6 +32,7 @@ export default {
     authors: "Authors",
     sources: "Sources",
     tags: "Tags",
+    topics: "Topics",
     locations: "Locations",
     languages: "Languages",
     duration: "Durations",
