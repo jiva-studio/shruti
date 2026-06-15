@@ -393,6 +393,23 @@ func (r *Repo) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.Vari
 		return r.SaveTrackImpl(ctx, t, v, audios, refs)
 	})
 }
+
+// SetVariantOutline writes the generated outline JSON + description onto an
+// existing (track, language) variant via a targeted UPDATE — it touches neither
+// title/audio/refs nor the FTS row, so it's safe to run post-commit over the
+// corpus. Empty values store NULL. A no-op (0 rows) when the variant isn't
+// committed yet.
+func (r *Repo) SetVariantOutline(ctx context.Context, trackID, language, outline, description string) error {
+	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
+		_, err := r.db.ExecContext(ctx, `
+			UPDATE track_variants SET outline = ?, description = ?
+			WHERE track_id = ? AND language = ?`,
+			sql.NullString{String: outline, Valid: outline != ""},
+			sql.NullString{String: description, Valid: description != ""},
+			trackID, language)
+		return err
+	})
+}
 func (r *Repo) DeleteTrackVariant(ctx context.Context, trackID, language string) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
 		return r.DeleteTrackVariantImpl(ctx, trackID, language)
