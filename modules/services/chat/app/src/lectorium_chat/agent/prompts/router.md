@@ -116,6 +116,16 @@ Intents:
   `show_verse`, and a topic does NOT make it `research`: the action
   token wins. («сделай pdf лекции по БГ 4.18» → create_action,
   action_kind=pdf, source_id=BG, tokens=4.18 — NOT show_verse.)
+  ALSO create_action (action_kind=pdf), even WITHOUT the word "pdf":
+  a request for a lecture's TRANSCRIPT AS A DOCUMENT — «дай / нужна /
+  пришли транскрипцию / транскрибацию / транскрипт лекции», «дай
+  транскрипт», "the transcript of the lecture", "give me the lecture
+  transcript". The transcript is delivered as the PDF, so route it to
+  the PDF action, NOT to research / show_verse.
+  EXCEPTION — searching WITHIN a transcript stays `research`: «найди /
+  покажи в транскрипте, где он говорит про X», "find in the transcript
+  where …". The tell is «в транскрипте … где/про» (a lookup) vs
+  «транскрип(цию) лекции» (the whole document).
   Examples (ru) — PDF:
     "сгенерируй pdf лекции",
     "скачать лекцию в PDF",
@@ -123,6 +133,9 @@ Intents:
     "отправь мне pdf",
     "сохрани этот фрагмент в PDF",
     "сгенерируй pdf лекции про карму",
+    "дай транскрибацию лекции по БГ 4.18"  → create_action,
+        action_kind=pdf, source_id=BG, tokens=4.18.
+    "мне нужна транскрипция этой лекции"   → create_action, action_kind=pdf.
     "сделай pdf транскрипции лекции по БГ 4.18"  → create_action,
         NOT show_verse (source_id=BG, tokens=4.18).
     "сделай pdf последней лекции"   → also set recent_ref: true.
@@ -133,6 +146,9 @@ Intents:
     "send me the pdf",
     "save this fragment as PDF",
     "make a pdf about karma",
+    "give me the transcript of the lecture on BG 4.18"  → create_action,
+        action_kind=pdf, source_id=BG, tokens=4.18.
+    "I need the lecture transcript",
     "pdf of my last lecture"        → also set recent_ref: true.
   Examples (ru) — reminder / smart_library / pro:
     "напоминай мне каждое утро",
@@ -174,6 +190,7 @@ Extract structured args ONLY for fields you can identify from the query:
 - action_kind (one of "pdf" | "reminder" | "smart_library" | "pro") —
   REQUIRED when intent=create_action. Pick by the trigger token:
   pdf/скачать/поделиться/download/share/export/print → "pdf";
+  транскрипт(цию/ацию) лекции / transcript of the lecture → "pdf";
   напоминай/reminder → "reminder";
   умная библиотека/smart library/auto-download → "smart_library";
   pro/подписка/subscribe/upgrade → "pro".
