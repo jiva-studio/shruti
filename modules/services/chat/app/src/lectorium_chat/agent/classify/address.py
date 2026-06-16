@@ -61,6 +61,14 @@ _STOP_RE = re.compile(
 
 # Confidence floor for a fuzzy book match (resolve() returns 0..1).
 _BOOK_CONF_FLOOR = 0.70
+# A bare reference is just "<book> <number>" — a short book name or abbrev.
+# When the query carries MORE words than that around the number, the user is
+# almost certainly not asking for the raw verse ("сделай pdf лекции по БГ 4.18",
+# "лекции по БГ 4.18", "make a pdf of BG 4.18") — so we defer to the LLM router,
+# which reads the real intent across ALL languages without us enumerating verbs.
+# Book names/abbrevs are ≤2 tokens once structural words (глава/стих/лила/…) are
+# stripped: "БГ", "Бхагавад-гита", "Шримад Бхагаватам", "ЧЧ Мадхья".
+_MAX_BARE_BOOK_TOKENS = 2
 # Below this many characters we don't even try (a stray "2.13" inside chatter
 # is still fine — this only guards truly empty input).
 _MIN_CHARS = 2
@@ -73,6 +81,7 @@ class ParsedRef:
     booktext: str            # the non-numeric, non-stopword remainder (may be "")
     ref_candidates: list[str]  # normalized token strings to try, e.g. ["2.13"]
     has_question: bool
+    book_token_count: int    # alpha word tokens in booktext (surrounding-text size)
     has_alpha: bool          # booktext contains letters (a book was named)
 
 
@@ -125,6 +134,7 @@ def parse_ref(query: str) -> ParsedRef | None:
         booktext=booktext,
         ref_candidates=_ref_candidates(numstr),
         has_question=bool(_QUESTION_RE.search(norm)),
+        book_token_count=sum(1 for t in booktext.split() if re.search(r"[^\W\d_]", t)),
         has_alpha=bool(re.search(r"[^\W\d_]", booktext)),
     )
 
@@ -151,6 +161,11 @@ async def decide(
         return None
     if parsed.has_question:
         return None  # "что значит BG 2.13" → research
+    if parsed.book_token_count > _MAX_BARE_BOOK_TOKENS:
+        # Lots of text around the number → not a bare verse lookup. Defer to
+        # the LLM router so it reads the intent ("сделай pdf …", "лекции по …")
+        # in whatever language the user used.
+        return None
 
     if parsed.booktext:
         cands = await resolve_book(parsed.booktext)

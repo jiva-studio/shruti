@@ -51,6 +51,19 @@ def test_parse_question_gate() -> None:
     assert parse_ref("что значит BG 2.13").has_question is True
 
 
+def test_parse_counts_surrounding_tokens() -> None:
+    # Bare references — just book (+ structural word) + number.
+    assert parse_ref("БГ 2.13").book_token_count == 1
+    assert parse_ref("Бхагавад-гита 4.18").book_token_count == 1
+    assert parse_ref("Мадхья лила 17.80").book_token_count == 1  # "лила" stripped
+    assert parse_ref("Шримад Бхагаватам 1.2.6").book_token_count == 2
+    # Verbose requests in any language — a bunch of words around the number.
+    assert parse_ref("сделай pdf лекции по БГ 4.18").book_token_count > 2
+    assert parse_ref("зроби pdf по БГ 4.18").book_token_count > 2
+    assert parse_ref("make a pdf of BG 4.18").book_token_count > 2
+    assert parse_ref("лекции по БГ 4.18").book_token_count > 2
+
+
 def test_parse_strips_structural_words() -> None:
     # "лила" between book and number must not pollute the book text.
     assert parse_ref("Мадхья лила 17.80").booktext == "Мадхья"
@@ -122,6 +135,25 @@ async def test_decide_question_defers() -> None:
     p = parse_ref("что значит BG 2.13")
     fakes = _fakes({"BG": [("src_bg", 1.0)]}, {("src_bg", "2.13")})
     assert await decide(p, **fakes) is None
+
+
+@pytest.mark.asyncio
+async def test_decide_verbose_query_defers() -> None:
+    """«сделай pdf лекции по БГ 4.18» — the verse resolves and exists, but the
+    number is buried in a bunch of surrounding words, so this is not a bare
+    verse lookup. Defer to the LLM router (which reads the intent in any
+    language → create_action → gathers lectures → PDF card) instead of
+    short-circuiting to show_verse and stranding the request. Language-neutral:
+    no verb list — "зроби pdf …" / "make a pdf of …" defer the same way."""
+    fakes = _fakes(
+        {"сделай pdf лекции по БГ": [("src_bg", 1.0)], "БГ": [("src_bg", 1.0)]},
+        {("src_bg", "4.18")},
+    )
+    assert await decide(parse_ref("сделай pdf лекции по БГ 4.18"), **fakes) is None
+    # Even a non-action verbose phrasing ("lectures on BG 4.18") defers — it's
+    # find_track, not show_verse, and the router decides that.
+    fakes2 = _fakes({"лекции по БГ": [("src_bg", 1.0)]}, {("src_bg", "4.18")})
+    assert await decide(parse_ref("лекции по БГ 4.18"), **fakes2) is None
 
 
 @pytest.mark.asyncio
