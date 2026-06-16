@@ -11,6 +11,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
+import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { currentLocale, setLocale, type SupportedLocale } from "@lectorium/i18n/index.js"
 import router from "@lectorium/router/index.js"
 import type { TrackId, LanguageCode } from "@lib/domain/core.js"
@@ -51,6 +52,7 @@ interface LectoriumDebugApi {
   navigateTo(path: string): Promise<void>
   openChatSession(sessionId: string): Promise<void>
   openTranscript(trackId: string): Promise<void>
+  openTrackSheet(trackId: string): void
   setPlayerState(trackId: string, positionMs: number): Promise<void>
   setLocale(loc: SupportedLocale): void
 }
@@ -84,6 +86,13 @@ export function installDebugApi(): void {
 
     async openTranscript(trackId: string): Promise<void> {
       useTranscriptStore().show(trackId as TrackId)
+    },
+
+    // Open the per-track detail bottom sheet (`<TrackSheet>`, mounted at the
+    // app root) the same way a track-row tap does — drive the store directly
+    // so the screenshot captures the unified add-to-playlist / share dialog.
+    openTrackSheet(trackId: string): void {
+      useTrackSheetStore().open(trackId as TrackId)
     },
 
     async setPlayerState(trackId: string, positionMs: number): Promise<void> {

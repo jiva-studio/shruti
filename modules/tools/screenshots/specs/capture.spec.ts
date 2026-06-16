@@ -3,7 +3,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { scenarios, type Scenario } from "../scenarios.js"
-import { verseBodyCache, citeTranscriptCache } from "../generate-fixtures/chat.js"
+import { contentLanguageFor, parseProject, type CaptureLocale } from "../config.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TOOL_ROOT = path.resolve(__dirname, "..")
@@ -28,16 +28,14 @@ const DB_SCHEME: number = (JSON.parse(fs.readFileSync(DB_SCHEME_PATH, "utf-8")) 
  *  arbitrary; we just append `000000`. */
 const CONTENT_DB_VERSION = Number(`${DB_SCHEME}000000`)
 
-type Device = "phone" | "iphone67" | "ipad13" | "surfaceduo"
-
 interface ProjectInfo {
-  code: "en" | "ru"
-  device: Device
+  code: CaptureLocale
+  device: string
 }
 
 function projectInfo(name: string): ProjectInfo {
-  const [device, code] = name.split("-") as [Device, "en" | "ru"]
-  return { device, code }
+  const { device, code } = parseProject(name)
+  return { device, code: code as CaptureLocale }
 }
 
 /* ---------------------- network interception ----------------------- */
@@ -61,6 +59,11 @@ async function interceptContent(page: Page): Promise<void> {
 
   const fakeConfig = JSON.stringify({
     databases: [{ version: CONTENT_DB_VERSION, scheme: Number(String(CONTENT_DB_VERSION).slice(0, 8)) }],
+    // Master kill switch for the proactive subsystem (useProactiveScheduler) —
+    // without it the scheduler ticks on boot, generates an "enable reminder"
+    // session from the seeded activity, and drops a "Sadhu has a new message"
+    // banner on top of the discovery / home screenshots.
+    proactive: { master_enabled: false },
   })
   await page.route("**/public/config.json", (route) => {
     route.fulfill({ status: 200, contentType: "application/json", body: fakeConfig })
@@ -105,11 +108,13 @@ async function interceptContent(page: Page): Promise<void> {
  * Same source ID for both locales — `sources.id` is shared, only the
  * localized name row varies by `language`.
  */
-async function preseedSearchFilter(page: Page, code: "en" | "ru"): Promise<void> {
+async function preseedSearchFilter(page: Page, code: CaptureLocale): Promise<void> {
   const BG_SOURCE_ID = "source_dsicuBsFvinZ"
   const filters = {
     authorIds: [],
-    languageCodes: [code],
+    // Filter by the CONTENT language (en/ru), not the UI locale — a UI locale
+    // without its own audio still shows a populated library.
+    languageCodes: [contentLanguageFor(code)],
     locationIds: [],
     sourceIds: [BG_SOURCE_ID],
     tagIds: [],
@@ -129,59 +134,22 @@ async function preseedSearchFilter(page: Page, code: "en" | "ru"): Promise<void>
 }
 
 /**
- * Pre-seed the verse-body cache so the chat scenario's `[verse:…]`
- * markers render as full sanskrit + IAST + translation blocks rather
- * than chip placeholders. The live app populates this cache from the
- * server's `verse_payload` SSE event the first time a verse is cited;
- * with no real chat server in the capture run we have to seed it
- * directly. Same `CapacitorStorage.` localStorage prefix as the search
- * filter preseed, same `STORAGE_KEY` (`lectorium.verse_body_cache.v1`)
- * the store reads at hydrate time.
+ * Park the Home "enable reminders" notifications nag in its 14-day cooldown so
+ * it doesn't dominate the Home screenshot. `useConfig` binds to Capacitor
+ * Preferences (web → `localStorage` under the `CapacitorStorage.` prefix), so
+ * stamping `home.notificationsNag.dismissedAt` to "just now" makes
+ * `showNotificationsNag` evaluate false on first paint.
  */
-async function preseedVerseBodyCache(page: Page): Promise<void> {
-  const now = Date.now()
-  const serialised: Record<string, unknown> = {}
-  for (const [key, body] of Object.entries(verseBodyCache)) {
-    serialised[key] = { ...body, touchedAt: now }
-  }
+async function preseedDismissedNags(page: Page): Promise<void> {
   await page.addInitScript(
     ({ value }: { value: string }) => {
       try {
-        localStorage.setItem("CapacitorStorage.lectorium.verse_body_cache.v1", value)
+        localStorage.setItem("CapacitorStorage.home.notificationsNag.dismissedAt", value)
       } catch {
-        // unavailable origin — non-fatal, the VerseCard falls back to
-        // its inline chip placeholder.
+        // unavailable origin — non-fatal, the banner just shows.
       }
     },
-    { value: JSON.stringify(serialised) }
-  )
-}
-
-/**
- * Pre-seed the cite-transcript cache so the chat scenario's `[cite:…]`
- * markers render as the full excerpt card (player + quote + author /
- * title / date) instead of the small chip fallback. The live app fills
- * this from the server's `cite_transcript` SSE event; with no chat
- * server in the capture run we seed it directly. Same `CapacitorStorage.`
- * prefix + `STORAGE_KEY` (`lectorium.cite_transcript_cache.v1`) and
- * `{ text, touchedAt }` entry shape that useCiteTranscriptStore reads.
- */
-async function preseedCiteTranscriptCache(page: Page): Promise<void> {
-  const now = Date.now()
-  const serialised: Record<string, unknown> = {}
-  for (const [key, text] of Object.entries(citeTranscriptCache)) {
-    serialised[key] = { text, touchedAt: now }
-  }
-  await page.addInitScript(
-    ({ value }: { value: string }) => {
-      try {
-        localStorage.setItem("CapacitorStorage.lectorium.cite_transcript_cache.v1", value)
-      } catch {
-        // unavailable origin — non-fatal, CitationCard falls back to
-        // its inline chip.
-      }
-    },
-    { value: JSON.stringify(serialised) }
+    { value: JSON.stringify(Date.now()) }
   )
 }
 
@@ -191,7 +159,7 @@ async function preseedCiteTranscriptCache(page: Page): Promise<void> {
  * `open()` and creates an empty DB only when the key is missing — so a
  * pre-seeded blob is picked up transparently and migrations no-op.
  */
-async function preseedUserDb(page: Page, code: "en" | "ru"): Promise<void> {
+async function preseedUserDb(page: Page, code: CaptureLocale): Promise<void> {
   const fixturePath = path.resolve(FIXTURES_DIR, `user-${code}.db`)
   if (!fs.existsSync(fixturePath)) {
     throw new Error(
@@ -234,12 +202,11 @@ const KILL_ANIMATIONS_CSS = `
 
 /* ------------------------------ boot ------------------------------- */
 
-async function boot(page: Page, code: "en" | "ru"): Promise<void> {
+async function boot(page: Page, code: CaptureLocale): Promise<void> {
   await interceptContent(page)
   await preseedUserDb(page, code)
   await preseedSearchFilter(page, code)
-  await preseedVerseBodyCache(page)
-  await preseedCiteTranscriptCache(page)
+  await preseedDismissedNags(page)
 
   await page.goto(`/?locale=${code}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
@@ -271,7 +238,7 @@ for (const scenario of scenarios) {
     await navigateToRoute(page, scenario.route)
 
     if (scenario.beforeCapture) {
-      await scenario.beforeCapture(page)
+      await scenario.beforeCapture(page, code)
     }
 
     await page.locator(scenario.waitFor).first().waitFor({ state: "visible", timeout: 30_000 })

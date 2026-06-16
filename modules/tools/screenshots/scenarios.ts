@@ -1,11 +1,12 @@
 import type { Page } from "@playwright/test"
+import { contentLanguageFor, type CaptureLocale } from "./config.js"
 
 export interface Scenario {
   name: string
-  route: "/tabs/home" | "/tabs/search" | "/tabs/notes" | "/tabs/chat"
+  route: "/tabs/home" | "/tabs/search" | "/tabs/search/tracks" | "/tabs/notes" | "/tabs/chat"
   waitFor: string
   settle?: number
-  beforeCapture?: (page: Page) => Promise<void>
+  beforeCapture?: (page: Page, code: CaptureLocale) => Promise<void>
 }
 
 /** Stable session id seeded by generate-fixtures/seedChat for the
@@ -27,6 +28,7 @@ declare global {
         navigateTo: (path: string) => Promise<void>
         openChatSession: (sessionId: string) => Promise<void>
         openTranscript: (trackId: string) => Promise<void>
+        openTrackSheet: (trackId: string) => void
         setPlayerState: (trackId: string, positionMs: number) => Promise<void>
         setLocale: (loc: "en" | "ru") => void
       }
@@ -128,21 +130,83 @@ async function openSearchFilters(page: Page): Promise<void> {
     .waitFor({ state: "visible", timeout: 10_000 })
 }
 
+async function settleDiscoveryCovers(page: Page): Promise<void> {
+  // Collection / topic covers resolve through an ASYNC local image cache: the
+  // <img> only mounts once its cached URL is ready, then fades in on load, and
+  // the card flips `.is-loaded`. So a fixed delay (or an `img.complete` check —
+  // a not-yet-mounted cover isn't even in the DOM) leaves tiles blank. Instead
+  // poll the loaded-cover count and only proceed once it has STOPPED growing
+  // for a beat — adapts to a slow cache without guessing a duration.
+  await page
+    .waitForFunction(
+      () => {
+        const w = window as unknown as { __covN?: number; __covAt?: number }
+        const n = document.querySelectorAll(".collection-card.is-loaded").length
+        const now = performance.now()
+        if (n !== w.__covN) {
+          w.__covN = n
+          w.__covAt = now
+          return false
+        }
+        // Settled: count unchanged for 1.2s and at least one cover is in.
+        return n > 0 && now - (w.__covAt ?? now) >= 1200
+      },
+      null,
+      { timeout: 15_000, polling: 200 }
+    )
+    .catch(() => {
+      // Best-effort: capture whatever loaded rather than failing the scenario.
+    })
+}
+
+/** Track whose detail sheet we open for the `08_track` scenario, keyed by
+ *  CONTENT language (the only two that exist). RU has a rich lecture
+ *  (description + chapter outline + topic chips); EN lectures carry no
+ *  outline/description/topics in the catalog yet, so the EN sheet shows title +
+ *  author + the share / add-to-playlist actions only. A UI locale without its
+ *  own audio resolves to the English demo via contentLanguageFor. */
+const SHEET_DEMO_TRACK: Record<"en" | "ru", string> = {
+  en: "track_0M6TgFqYKo01",
+  // Short description (~5 lines) + 4-chapter outline + topic chips, so the
+  // whole sheet — description, chips and "Содержание" — fits above the fold.
+  ru: "track_9ociWb0Sh2St",
+}
+
+async function openTrackSheet(page: Page, code: CaptureLocale): Promise<void> {
+  // Open the unified per-track bottom sheet (<TrackSheet>) the same way a
+  // track-row tap does — there's no gesture to script reliably under the
+  // dev-server DI race, so drive useTrackSheetStore directly via the debug
+  // bridge. The sheet loads its detail (description / outline / topics)
+  // asynchronously; waiting for the pinned footer actions means the modal has
+  // finished presenting, and `settle` covers the detail round-trip.
+  await page.evaluate(
+    (trackId) => window.__lectorium!.debug!.openTrackSheet(trackId),
+    SHEET_DEMO_TRACK[contentLanguageFor(code)]
+  )
+  await page
+    .locator("ion-modal.track-sheet .sheet-actions")
+    .waitFor({ state: "visible", timeout: 10_000 })
+}
+
 export const scenarios: Scenario[] = [
   {
     name: "01_home",
     route: "/tabs/home",
-    // Heatmap mounts only when the playlist has tracks → seed must
-    // populate `playlist_items` first (see generate-fixtures/seedPlaylist.ts).
-    waitFor: ".activity-heatmap",
+    // Activity card mounts only when the playlist has tracks / there's seeded
+    // activity → seed must populate `playlist_items` first (see
+    // generate-fixtures/seedPlaylist.ts).
+    waitFor: ".activity-card",
     settle: 600,
     // Park the floating player mid-playback so the screenshot shows the
     // app has an active player (and the bottom row renders its radial).
     beforeCapture: openHomeWithPlayer,
   },
   {
+    // The flat, filterable catalog list — the old "search" page, now reached
+    // via Search → "All lectures" and living at /tabs/search/tracks (the
+    // /tabs/search root is the new discovery/browse page, see 07_search).
     name: "02_library",
-    route: "/tabs/search",
+    route: "/tabs/search/tracks",
     waitFor: ".track",
     settle: 600,
   },
@@ -177,12 +241,35 @@ export const scenarios: Scenario[] = [
     beforeCapture: openDemoChatSession,
   },
   {
+    // The filters bottom-sheet lives on the catalog list (TracksView), not the
+    // discovery root — open it there.
     name: "06_filters",
-    route: "/tabs/search",
+    route: "/tabs/search/tracks",
     // Wait for the open filters sheet's content (the list of dimensions),
     // not just the modal host, so the sheet has finished presenting.
     waitFor: "ion-modal.filters-sheet .view",
     settle: 700,
     beforeCapture: openSearchFilters,
+  },
+  {
+    // The redesigned discovery/browse page: "recommended for you", collection
+    // carousels (groups), a topic-tile grid, and lecture shelves. Wait for the
+    // first collection carousel so the curated structure is on-screen; the
+    // longer settle lets the remote cover images paint.
+    name: "07_search",
+    route: "/tabs/search",
+    waitFor: ".carousel-section .collection-card",
+    settle: 600,
+    beforeCapture: settleDiscoveryCovers,
+  },
+  {
+    // The unified per-track detail bottom sheet (<TrackSheet>) that opens when a
+    // track is tapped: title, description, chapter outline, topic chips, and the
+    // share / add-to-playlist actions. Opened over the catalog list.
+    name: "08_track",
+    route: "/tabs/search/tracks",
+    waitFor: "ion-modal.track-sheet .sheet-actions",
+    settle: 700,
+    beforeCapture: openTrackSheet,
   },
 ]

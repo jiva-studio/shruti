@@ -3,6 +3,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { scenarios } from "../scenarios.js"
+import { parseProject } from "../config.js"
 import titlesRaw from "../frame/titles.json" with { type: "json" }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -11,16 +12,9 @@ const TEMPLATE_URL = pathToFileURL(path.resolve(TOOL_ROOT, "frame/template.html"
 
 const titles = titlesRaw as Record<string, Record<string, string>>
 
-type Device = "phone" | "iphone67" | "ipad13" | "surfaceduo"
-
-function projectInfo(name: string): { device: Device; code: "en" | "ru" } {
-  const [device, code] = name.split("-") as [Device, "en" | "ru"]
-  return { device, code }
-}
-
 for (const scenario of scenarios) {
   test(`frame ${scenario.name}`, async ({ page }, testInfo) => {
-    const { device, code } = projectInfo(testInfo.project.name)
+    const { device, code } = parseProject(testInfo.project.name)
     const rawPath = path.resolve(TOOL_ROOT, `out/raw/${device}-${code}/${scenario.name}.png`)
     if (!fs.existsSync(rawPath)) {
       throw new Error(`Missing raw ${rawPath}. Run \`npm run capture\` first.`)
@@ -29,7 +23,9 @@ for (const scenario of scenarios) {
     fs.mkdirSync(path.dirname(outPath), { recursive: true })
 
     const title = titles[scenario.name]?.[code]
-    if (!title) throw new Error(`No title for ${scenario.name}/${code}`)
+    // A locale with no headline yet (newly added, translations pending) is
+    // skipped rather than failing the whole framing run.
+    test.skip(!title, `No headline for ${scenario.name}/${code} — add it to frame/titles.json`)
 
     const shotUrl = pathToFileURL(rawPath).toString()
     const url = `${TEMPLATE_URL}?device=${device}&title=${encodeURIComponent(title)}&shot=${encodeURIComponent(shotUrl)}`

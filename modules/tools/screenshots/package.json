@@ -5,9 +5,7 @@
   "scripts": {
     "capture": "playwright test specs/capture.spec.ts",
     "frame": "playwright test specs/frame.spec.ts",
-    "generate-user-fixture": "npm run generate-user-fixture:en && npm run generate-user-fixture:ru",
-    "generate-user-fixture:en": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/generate-fixtures/index.ts -- --locale=en",
-    "generate-user-fixture:ru": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/generate-fixtures/index.ts -- --locale=ru"
+    "generate-user-fixture": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/generate-fixtures/index.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0"
