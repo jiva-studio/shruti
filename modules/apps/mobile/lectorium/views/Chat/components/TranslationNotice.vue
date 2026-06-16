@@ -34,8 +34,9 @@ const emit = defineEmits<{
   gap: 5px;
   margin: -4px 2px 10px;
   font-size: 11px;
+  /* --ion-color-medium already reads as muted; no opacity on top (it would
+     also dim the actionable toggle button nested inside). */
   color: var(--ion-color-medium);
-  opacity: 0.5;
 }
 .translation-notice__toggle {
   padding: 0;

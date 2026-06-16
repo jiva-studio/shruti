@@ -60,17 +60,22 @@ function onLanguageClicked(language: string) {
 }
 
 .language {
-  transition: all 1s;
-  background-color: #a0e060;
-  border-radius: 5px;
-  padding: 5px;
+  transition: all 0.25s ease;
+  /* Fixed tones: the transcript reader is always dark, so theme step
+     colours (which invert) can't be used here. */
+  background-color: rgba(192, 184, 168, 0.12);
+  color: var(--lectorium-immersive-text, #c0b8a8);
+  border-radius: 999px;
+  padding: 5px 12px;
 }
 
 .language-inactive {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 .language-active {
+  background-color: var(--ion-color-primary);
+  color: var(--ion-color-primary-contrast);
   opacity: 1;
   scale: 1.05;
 }
