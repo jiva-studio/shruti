@@ -43,49 +43,29 @@
 
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
-import { useRoute, useRouter } from "vue-router"
+import { useRouter } from "vue-router"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
-import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { useProactiveInboxBadge } from "@lectorium/composables/useProactiveInboxBadge.js"
 import IconAppSadhu from "@lectorium/views/Chat/components/IconAppSadhu.vue"
 
-const route = useRoute()
 const router = useRouter()
-const chat = useChatStore()
 
 /**
- * Tapping the chat tab must ALWAYS reopen the last session; a brand-new chat
- * is started from the header "+" button only.
+ * Tapping the chat tab ALWAYS opens the chat home (the session list / empty
+ * state) — never the last session or a proactive dialog. A session is opened
+ * explicitly from the list; a new chat is the same home.
  *
- * The broken case is a tap on the *already-active* chat tab: Ionic's default
- * then calls `resetTab("chat")`, which walks history back to the tab root
- * (`/tabs/chat`, no `?session=`) — i.e. the empty chat home — bouncing the
- * user off their session onto a blank page. We intercept that one case and
- * re-assert the last session instead. When the chat tab is NOT active we do
- * nothing and let Ionic's `changeTab()` restore the tab's last route (which
- * already lands on the last session).
- *
- * `@click.capture` + `stopImmediatePropagation()` runs before — and fully
- * suppresses — IonTabButton's own bubble-phase click handler (the resetTab
- * path) for this one element.
+ * We intercept the tab button's own click (capture + stopImmediatePropagation)
+ * so Ionic can't run its default `changeTab()`/`resetTab()`, which would
+ * restore the tab's last route (carrying `?session=`) and reopen a session.
+ * Instead we navigate to the bare chat root; ChatView shows the home when
+ * there's no `?session=` query.
  */
 function onChatTabClick(ev: MouseEvent): void {
-  // `route` (injected current-route) is transiently undefined while Ionic
-  // tears down / transitions the persistently-mounted TabsLayout, so guard
-  // the read — same precaution as the proactive-badge watchers (d027cbe4).
-  // Without it, tapping the chat tab to reopen a session throws
-  // `Cannot read properties of undefined (reading 'name')`, the reopen
-  // (router.replace below) never runs, and the session hangs on a spinner.
-  if (route?.name !== "chat") return
-  const lastId = chat.activeSessionId ?? chat.sessions[0]?.id ?? null
-  if (lastId == null) return // no session yet — let Ionic open the empty home
   ev.stopImmediatePropagation()
   ev.preventDefault()
-  const current = typeof route.query.session === "string" ? route.query.session : null
-  if (current !== lastId) {
-    void router.replace({ name: "chat", query: { session: lastId } })
-  }
+  void router.replace({ name: "chat", query: {} })
 }
 
 // Tracks the current share job (audio or video). When isRunning flips to
