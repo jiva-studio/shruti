@@ -34,8 +34,14 @@ async def test_resolve_from_catalog_gather() -> None:
     ref_b = aliases.alias_track("track_B")
     state = {
         "tool_results": [
-            {"ref": ref_a, "type": "lecture", "title": "БГ 4.18 lecture"},
-            {"ref": ref_b, "type": "lecture", "title": "another"},
+            # tracks_list returns a LIST of rows, appended as ONE element —
+            # the resolver must flatten it (the bug this guards).
+            [
+                {"ref": ref_a, "type": "lecture", "title": "БГ 4.18 lecture"},
+                {"ref": ref_b, "type": "lecture", "title": "another"},
+            ],
+            # catalog_worker's spurious track_pdf_generate error (a bare dict).
+            {"error": "tool_not_available"},
         ],
     }
     refs = await _resolve_pdf_track_refs(state, _ctx(aliases))
@@ -65,7 +71,8 @@ async def test_dedup_by_track_and_cap() -> None:
     dup2 = aliases.alias_track("track_X")
     many = [aliases.alias_track(f"track_{i}") for i in range(_MAX_PDF_BATCH + 3)]
     state = {
-        "tool_results": [{"ref": r, "type": "lecture"} for r in (dup1, dup2, *many)],
+        # one tracks_list element holding all the rows
+        "tool_results": [[{"ref": r, "type": "lecture"} for r in (dup1, dup2, *many)]],
     }
     refs = await _resolve_pdf_track_refs(state, _ctx(aliases))
     ids = aliases.dealias_many(refs)
