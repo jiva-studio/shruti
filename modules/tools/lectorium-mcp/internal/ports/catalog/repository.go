@@ -63,6 +63,11 @@ type TrackRepository interface {
 	// track.audio.denoise to add a 'clean' row next to the 'original'.
 	UpsertAudio(ctx context.Context, a catalog.AudioRow) error
 
+	// UpsertAudios is the bulk form of UpsertAudio (one transaction) — used to
+	// register thousands of out-of-band versions (e.g. batch-denoised clean
+	// files) in a single call.
+	UpsertAudios(ctx context.Context, rows []catalog.AudioRow) error
+
 	// DeleteTrackVariant removes one (track, language) variant + its
 	// FTS rows. If the last variant of a track is removed, also removes
 	// the tracks row + references.

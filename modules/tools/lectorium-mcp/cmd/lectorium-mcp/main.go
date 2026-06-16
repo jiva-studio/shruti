@@ -39,6 +39,7 @@ import (
 	librarypublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/publish"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/normalize"
 	outlineuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/outline"
+	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/registeraudio"
 	reviewuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/review"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
@@ -602,6 +603,9 @@ func main() {
 			Probe:    ffTool,
 			Denoiser: execdenoise.New(cfg.Denoiser.PythonBin, cfg.Denoiser.Script),
 			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+		},
+		RegisterAudio: registeraudio.UseCase{
+			Catalog: sqlitecatalog.NewLazy(currentDBPath),
 		},
 		Catalog: tools.CatalogDeps{
 			Refresh: catalogrefresh.UseCase{
