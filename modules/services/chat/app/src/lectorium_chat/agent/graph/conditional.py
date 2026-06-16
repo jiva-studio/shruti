@@ -137,18 +137,25 @@ def route_after_router(state: ChatState) -> str:
             return "action_worker"
         if _has_track_anchor(state):
             return "action_worker"
-        # «сделай PDF последней лекции» — no current_track / focus, but
-        # the user IS pointing at a concrete track: their last-played one.
-        # The action worker resolves it itself via user_tracks_list (it
-        # now carries that tool), so go straight there — no pre-action
-        # search. Routing this to research_worker is the #46 bug: it
-        # semantic-searches for "the last lecture" and returns junk cards.
+        # A named scripture reference or metadata anchor («pdf лекции по
+        # БГ 4.18», «pdf утренних прогулок 1976 Бомбей») is a concrete
+        # corpus target. Gather those lectures by reference FIRST so the
+        # action_worker — which has no search tools of its own — receives
+        # real track_ids. This must win over `recent_ref`: a spurious
+        # recent_ref (e.g. a follow-up «pdf, который вы обещали») would
+        # otherwise shortcut to an empty listening-history lookup and the
+        # PDF card would have nothing to render.
+        if _has_catalog_hint(state):
+            return "catalog_worker"
+        # «сделай PDF последней лекции» — no named anchor, just a deictic
+        # pointer at the user's own history; the action worker resolves it
+        # itself via user_tracks_list. Routing this to research_worker is
+        # the #46 bug: it semantic-searches for "the last lecture" and
+        # returns junk cards.
         if _is_recent_ref(state):
             return "action_worker"
-        # PDF without an anchor: we DO need to gather tracks first.
-        # Catalog hints (author/source/date/…) → deterministic path;
-        # otherwise the query is topic-based → semantic research.
-        return "catalog_worker" if _has_catalog_hint(state) else "research_worker"
+        # Topic-only PDF («pdf про карму») → semantic gather.
+        return "research_worker"
     if intent == "research":
         # «перескажи последнюю / прошлую лекцию» — a deictic reference to
         # the user's own history, not a corpus topic. Only the catalog

@@ -179,6 +179,26 @@ def test_create_action_pdf_recent_ref_anchor_still_short_path() -> None:
     assert route_after_router(state) == "action_worker"
 
 
+def test_create_action_pdf_catalog_hint_beats_recent_ref() -> None:
+    """«pdf транскрипции лекции по БГ 4.18» where a follow-up rewrite also
+    (spuriously) set recent_ref. A named scripture reference is a concrete
+    corpus target, so gather those lectures by reference via catalog_worker
+    rather than short-pathing to an empty listening-history lookup. The
+    action_worker has no search tools of its own — without this it would
+    call track_pdf_generate with no track_ids and the PDF card would be
+    empty (the «и где файл?» bug)."""
+    state = {
+        "intent": "create_action",
+        "extracted_args": {
+            "action_kind": "pdf",
+            "source_id": "BG",
+            "tokens": "4.18",
+            "recent_ref": True,
+        },
+    }
+    assert route_after_router(state) == "catalog_worker"
+
+
 # ── deictic "this / current lecture" (current_ref) — #4 ────────────
 
 
