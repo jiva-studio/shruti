@@ -94,6 +94,11 @@ const loaded = ref(false)
      warm cream (fixed tone, doesn't invert) so it stays legible over the image. */
   color: var(--ion-text-color);
   transition: color 200ms ease;
+  /* Wrap only between whole words — never mid-word. keep-all also stops the
+     default break AFTER a hyphen, which otherwise splits the hyphenated terms
+     this content is full of ("Бхагавад-гита", "Шримад-Бхагаватам"). */
+  overflow-wrap: normal;
+  word-break: keep-all;
   /* Two-line clamp so long names don't overrun the tile. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
