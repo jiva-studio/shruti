@@ -11,6 +11,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/ingest"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/normalize"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/outline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/registeraudio"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/review"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
@@ -32,6 +33,7 @@ type Deps struct {
 	Ingest              ingest.UseCase
 	Normalize           normalize.UseCase
 	AudioDenoise        audiodenoise.UseCase
+	RegisterAudio       registeraudio.UseCase
 	Metadata            extractmeta.UseCase
 	Transcribe          transcribe.UseCase
 	Review              review.UseCase

@@ -7,6 +7,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/registeraudio"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
@@ -64,6 +65,32 @@ func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {
 			State:         string(run.StateQueued),
 			AcceptedCount: 1,
 		}), nil
+	})
+}
+
+func RegisterAudioRegister(s *server.MCPServer, deps Deps) {
+	const kind = "track.audio.register"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription("Bulk-register track_audio rows for ALREADY-existing audio files on S3 — no processing, no denoise. Records out-of-band versions (e.g. clean.mp3 produced by the batch denoiser) into the catalog in ONE transaction. `items` is a JSON array of {track_id, language, kind, size_bytes?, duration_ms?}; size/duration default to the variant's 'original' row when omitted. Sync. Run catalog.publish afterwards to make it live."),
+		mcp.WithString("items", mcp.Required(), mcp.Description("JSON array: [{\"track_id\":\"track_..\",\"language\":\"en\",\"kind\":\"clean\",\"size_bytes\":123,\"duration_ms\":456}, ...]")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		raw, err := req.RequireString("items")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		var items []registeraudio.Item
+		if err := json.Unmarshal([]byte(raw), &items); err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, "items: "+err.Error(), nil), nil
+		}
+		if len(items) == 0 {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, "items is empty", nil), nil
+		}
+		res, err := deps.RegisterAudio.RunBulk(ctx, items)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
+		}
+		return envelope.Result(kind, res), nil
 	})
 }
 

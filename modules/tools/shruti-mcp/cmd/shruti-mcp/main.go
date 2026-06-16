@@ -39,6 +39,7 @@ import (
 	librarypublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/publish"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/normalize"
 	outlineuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/outline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/registeraudio"
 	reviewuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/review"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
@@ -602,6 +603,9 @@ func main() {
 			Probe:    ffTool,
 			Denoiser: execdenoise.New(cfg.Denoiser.PythonBin, cfg.Denoiser.Script),
 			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+		},
+		RegisterAudio: registeraudio.UseCase{
+			Catalog: sqlitecatalog.NewLazy(currentDBPath),
 		},
 		Catalog: tools.CatalogDeps{
 			Refresh: catalogrefresh.UseCase{
