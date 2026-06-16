@@ -1,13 +1,34 @@
+/* Rubik — a substantial sans with softly rounded corners (no serifs), heavier
+   on the page than Inter's squared geometry or Nunito's lighter humanist cut.
+   Cyrillic + Latin ship as separate subsets; the Cyrillic face carries a
+   unicode-range so RU headlines pick it up, the Latin face (no range) covers
+   everything else. */
 @font-face {
-  font-family: "Inter";
-  src: url("fonts/Inter-Regular.ttf") format("truetype");
+  font-family: "Rubik";
+  src: url("fonts/rubik-cyrillic-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Rubik";
+  src: url("fonts/rubik-cyrillic-700-normal.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Rubik";
+  src: url("fonts/rubik-latin-400-normal.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: block;
 }
 @font-face {
-  font-family: "Inter";
-  src: url("fonts/Inter-Bold.ttf") format("truetype");
+  font-family: "Rubik";
+  src: url("fonts/rubik-latin-700-normal.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: block;
@@ -19,7 +40,7 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: "Inter", sans-serif;
+  font-family: "Rubik", sans-serif;
   /* Shruti brand palette: --ion-background-color (#faf5ea) +
    * --ion-border-color (#e8ddc8). The framed art reads as a continuation
    * of the app's cream surface, not a foreign blue rectangle. */
@@ -38,8 +59,13 @@ html, body {
 }
 
 #title {
-  width: 92%;
-  margin-top: 2.8vh;
+  /* Never wider than the narrowest device frame below (ipad/tablet phone is
+     82vw) so the headline can't spill past the device edges. */
+  width: 82vw;
+  margin: 1.8vh auto 0;
+  /* Reserve two lines so single- and two-line headlines occupy the same band
+     and the gap above the device stays consistent across scenarios. */
+  min-height: 2.4em;
   font-weight: 700;
   text-align: center;
   letter-spacing: -0.015em;
@@ -47,12 +73,12 @@ html, body {
   text-wrap: balance;
 }
 
-.device-phone #title { font-size: 3.6vh; }
-.device-tablet7 #title { font-size: 4.4vh; }
-.device-tablet10 #title { font-size: 3.8vh; }
-.device-iphone67 #title { font-size: 3.6vh; }
-.device-ipad13 #title { font-size: 3.8vh; }
-.device-surfaceduo #title { font-size: 4.2vh; margin-top: 1.6vh; }
+.device-phone #title { font-size: 3.5vh; }
+.device-tablet7 #title { font-size: 4.0vh; }
+.device-tablet10 #title { font-size: 3.5vh; }
+.device-iphone67 #title { font-size: 3.5vh; }
+.device-ipad13 #title { font-size: 3.6vh; }
+.device-surfaceduo #title { font-size: 3.2vh; margin-top: 1.2vh; }
 
 .phone {
   position: absolute;

@@ -14,7 +14,7 @@ npx playwright install chromium
 # 2. stage the content DB (one-time; not committed)
 cp ../../../../resources/lake-out/artifacts/catalog/current.db fixtures/content.db
 
-# 3. generate the user DB fixtures (EN + RU)
+# 3. generate the user DB fixtures (one per CAPTURE_LOCALES entry)
 npm run generate-user-fixture
 
 # 4. capture raw screenshots
@@ -38,26 +38,45 @@ installed). Production builds tree-shake the bridge entirely.
 | Name | Route | What it shows |
 |------|-------|---------------|
 | `01_home` | `/tabs/home` | Activity heatmap (90+ days seeded) + "Up Next" playlist |
-| `02_library` | `/tabs/search` | Catalog browse mode — real tracks with metadata |
+| `02_library` | `/tabs/search/tracks` | Flat, filterable catalog list (Bhagavad-gita, sorted by reference) |
 | `03_notes` | `/tabs/notes` | 4 bookmarks anchored to real transcript sentences |
 | `04_transcript` | TranscriptDialog | Mid-playback transcript with `.current` and `.highlighted` blocks |
-| `05_chat` | `/tabs/chat/<id>` | Sadhu chat answering "What is the soul?" — full verse card (BG 2.20) + citation chip |
+| `05_chat` | `/tabs/chat?session=<id>` | Sadhu chat answering "What is the soul?" — full verse card (BG 2.20) + citation chip |
+| `06_filters` | `/tabs/search/tracks` | Filters bottom-sheet over the catalog list (author/source/place/tag/duration/sort) |
+| `07_search` | `/tabs/search` | Discovery/browse page — recommendations, collection carousels, topic tiles, lecture shelves |
+| `08_track` | TrackSheet | Per-track detail bottom-sheet — description, chapter outline, topic chips, share / add-to-playlist |
+
+> Audio/transcripts/outlines exist only in `en` + `ru`. UI locales without
+> their own audio fall back to English content (see `contentLanguageFor` in
+> `config.ts`). `08_track` is rich in `ru` but title-only in `en` (EN lectures
+> carry no description/outline/topics in the catalog yet), and the `07_search`
+> "Recommended" row surfaces RU lectures under an EN UI for the same reason.
 
 Per scenario: `scenarios.ts` — selectors + optional `beforeCapture` hook.
+
+## Locales & devices
+
+Both are data-driven from `config.ts` — `CAPTURE_LOCALES` and `DEVICES`. The
+Playwright projects (`${device}-${locale}`), capture, fixtures, and framing are
+all derived from those two lists. To add a locale: append it to
+`CAPTURE_LOCALES` (must be one of the app's `SUPPORTED_LOCALES`), add its
+headlines to `frame/titles.json`, and run `npm run generate-user-fixture`
+(a locale with no headline yet is skipped at the framing stage, not an error).
 
 ## Adding a scenario
 
 1. Pick a route, a CSS selector that exists when the page is ready.
 2. Add an entry to `scenarios.ts`.
-3. (Optional) Add a `beforeCapture` hook that drives the app into the
-   target state via `window.__shruti.debug` (see `services/debug/index.ts`).
+3. (Optional) Add a `beforeCapture(page, code)` hook that drives the app into
+   the target state via `window.__shruti.debug` (see `services/debug/index.ts`).
 4. Add an entry to `frame/titles.json` with the localized headline.
 
 ## Layout
 
 ```
 package.json                 # 3 scripts: capture / frame / generate-user-fixture
-playwright.config.ts         # vite webServer + 2 projects (phone-en, phone-ru)
+playwright.config.ts         # vite webServer + projects generated from config.ts
+config.ts                    # CAPTURE_LOCALES + DEVICES — locale/device source of truth
 scenarios.ts                 # scenario definitions (single source of truth)
 fixtures/
   content.db                 # local mirror of catalog/current.db (gitignored)
@@ -78,6 +97,5 @@ out/                         # all generated artifacts (gitignored)
 
 ## Out of scope (next iteration)
 
-- Android tablet 7"/10" + iOS iPhone 6.7"/iPad 13"
 - Fastlane lane wiring + `metadata/android/<lc>/images/...` staging
 - Play Console upload via `supply`

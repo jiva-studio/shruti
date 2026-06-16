@@ -1,5 +1,6 @@
 import { defineConfig } from "@playwright/test"
 import { execSync } from "child_process"
+import { CAPTURE_LOCALES, DEVICES, localeTag, projectName } from "./config.js"
 
 function findChrome(): string | undefined {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH
@@ -24,50 +25,36 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   webServer: {
-    command: "cd ../../apps/mobile && npm run dev:screenshots",
-    port: 11001,
+    // Dedicated port (NOT the app's usual 11001) so a worktree dev server left
+    // running on 11001 can't be silently reused — that server lacks
+    // VITE_DEBUG_API=true, so the debug bridge never installs and every
+    // scenario times out at boot. `--port` here overrides the script's default.
+    command: "cd ../../apps/mobile && npm run dev:screenshots -- --port 11099",
+    port: 11099,
     reuseExistingServer: !process.env.CI,
     timeout: 90_000,
   },
   use: {
-    baseURL: "http://localhost:11001",
+    baseURL: "http://localhost:11099",
     launchOptions: { executablePath: findChrome() },
     viewport: { width: 412, height: 892 },
     deviceScaleFactor: 3,
     colorScheme: "light",
     headless: true,
   },
-  projects: [
-    // Android phone: 412×892 × DPR 3 → 1236×2676 PNG (Play `phoneScreenshots`).
-    { name: "phone-en", use: { locale: "en-US" } },
-    { name: "phone-ru", use: { locale: "ru-RU" } },
-    // iPhone 6.7": 430×932 × DPR 3 → 1290×2796 PNG (App Store iPhone 6.7").
-    {
-      name: "iphone67-en",
-      use: { locale: "en-US", viewport: { width: 430, height: 932 }, deviceScaleFactor: 3 },
-    },
-    {
-      name: "iphone67-ru",
-      use: { locale: "ru-RU", viewport: { width: 430, height: 932 }, deviceScaleFactor: 3 },
-    },
-    // iPad Pro 13": 1024×1366 × DPR 2 → 2048×2732 PNG (App Store iPad 13").
-    {
-      name: "ipad13-en",
-      use: { locale: "en-US", viewport: { width: 1024, height: 1366 }, deviceScaleFactor: 2 },
-    },
-    {
-      name: "ipad13-ru",
-      use: { locale: "ru-RU", viewport: { width: 1024, height: 1366 }, deviceScaleFactor: 2 },
-    },
-    // Surface Duo single screen: 540×720 × DPR 2.5 → 1350×1800 PNG
-    // (Play Console foldable / large-screen form factor).
-    {
-      name: "surfaceduo-en",
-      use: { locale: "en-US", viewport: { width: 540, height: 720 }, deviceScaleFactor: 2.5 },
-    },
-    {
-      name: "surfaceduo-ru",
-      use: { locale: "ru-RU", viewport: { width: 540, height: 720 }, deviceScaleFactor: 2.5 },
-    },
-  ],
+  // One project per (device × locale), generated from config.ts. Device sizes:
+  //   phone      412×892  ×3   → 1236×2676 (Play phoneScreenshots)
+  //   iphone67   430×932  ×3   → 1290×2796 (App Store 6.7")
+  //   ipad13    1024×1366 ×2   → 2048×2732 (App Store iPad 13")
+  //   surfaceduo 540×720  ×2.5 → 1350×1800 (Play large-screen)
+  projects: DEVICES.flatMap((d) =>
+    CAPTURE_LOCALES.map((code) => ({
+      name: projectName(d.code, code),
+      use: {
+        locale: localeTag(code),
+        viewport: { width: d.width, height: d.height },
+        deviceScaleFactor: d.dpr,
+      },
+    }))
+  ),
 })
