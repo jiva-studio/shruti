@@ -110,6 +110,7 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 
 	voc := domaintopics.Vocabulary{
 		Dim:         len(norm[0]),
+		EmbedModel:  uc.Embed.Model(),
 		MaxDistance: uc.MaxDistance,
 		Centroids:   make([]domaintopics.Centroid, 0, k),
 	}

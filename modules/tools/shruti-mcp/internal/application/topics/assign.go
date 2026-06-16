@@ -38,6 +38,15 @@ func (uc AssignUseCase) Run(ctx context.Context, id track.Id) (AssignResult, err
 	if len(voc.Centroids) == 0 {
 		return AssignResult{}, fmt.Errorf("topic vocabulary is empty — run topics.build first")
 	}
+	// The vocabulary's centroids live in the embedding space of the model that
+	// built it. Assigning with a different model silently dot-products vectors
+	// from two spaces over their shorter prefix — plausible but meaningless
+	// topics, no error. Refuse it: a config drift means rebuild the vocabulary.
+	if voc.EmbedModel != "" && voc.EmbedModel != uc.Embed.Model() {
+		return AssignResult{}, fmt.Errorf(
+			"vocabulary built with embedding model %q but assign configured for %q — rebuild with topics.build",
+			voc.EmbedModel, uc.Embed.Model())
+	}
 	centroids, topicIDs := centroidVectors(voc)
 	minSim := 1 - voc.MaxDistance
 
@@ -62,6 +71,11 @@ func (uc AssignUseCase) Run(ctx context.Context, id track.Id) (AssignResult, err
 		vecs, err := uc.Embed.Embed(ctx, titles)
 		if err != nil {
 			return AssignResult{}, fmt.Errorf("embed %s/%s: %w", id, lang, err)
+		}
+		if len(vecs) > 0 && len(vecs[0]) != voc.Dim {
+			return AssignResult{}, fmt.Errorf(
+				"embedding dimension %d does not match vocabulary dimension %d — rebuild with topics.build",
+				len(vecs[0]), voc.Dim)
 		}
 		per := langWeights(entries, normalizeAll(vecs), centroids, topicIDs, minSim)
 		mergeMax(merged, per)

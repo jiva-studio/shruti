@@ -6,7 +6,6 @@ import type {
   UiTranscriptBlockRaw,
   UiTranscriptBlockView,
   UiTranscriptBlocksGroup,
-  UiTranscriptLanguage,
 } from "@ui/features/transcript/index.js"
 import { formatReference, formatReferenceFull } from "@lib/domain/services/references.js"
 
@@ -240,19 +239,4 @@ export function buildTranscriptViewData(
   }
 
   return groups
-}
-
-/**
- * Given a list of LanguageCodes currently available for the track, build
- * the UI mirror list expected by LanguageSelector. Falls back to the
- * code when we have no localised name.
- */
-export function buildTranscriptLanguages(
-  codes: readonly string[],
-  resolve?: (code: string) => { name?: string; icon?: string }
-): readonly UiTranscriptLanguage[] {
-  return codes.map((code) => {
-    const meta = resolve?.(code)
-    return { code, name: meta?.name ?? code.toUpperCase(), icon: meta?.icon }
-  })
 }

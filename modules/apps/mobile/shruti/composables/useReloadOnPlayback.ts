@@ -37,6 +37,10 @@ export function useReloadOnPlayback(
         void reload()
       } else if (!prev && next) {
         stopPolling()
+        // Load once immediately (covers mounting while playback is already
+        // active — otherwise the surface shows stale data until the first
+        // interval tick) and then poll.
+        void reload()
         pollHandle = setInterval(() => void reload(), intervalMs)
       }
     },

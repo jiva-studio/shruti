@@ -434,45 +434,52 @@ func main() {
 	topicCentroids := fstopics.New(artifactWriter)
 	topicsDeps := tools.TopicsDeps{Catalog: sqlitecatalog.NewLazy(currentDBPath)}
 	if cfg.Embed.APIKey != "" && cfg.Outline.APIKey != "" {
-		embedClient, err := openaicompatembed.New(openaicompatembed.Config{
+		embedClient, embErr := openaicompatembed.New(openaicompatembed.Config{
 			Endpoint:   cfg.Embed.Endpoint,
 			APIKey:     cfg.Embed.APIKey,
 			Model:      cfg.Embed.Model,
 			Dimensions: cfg.Embed.Dimensions,
 			BatchSize:  cfg.Embed.BatchSize,
 		})
-		if err != nil {
-			log.Fatalf("embeddings client: %v", err)
-		}
 		// Cluster naming reuses the outline LLM (Flash-Lite class).
-		topicNamer, err := openaicompattopics.New(openaicompattopics.Config{
-			Endpoint:  cfg.Outline.Endpoint,
-			APIKey:    cfg.Outline.APIKey,
-			Model:     cfg.Outline.Model,
-			MaxTokens: 200,
-			Reasoning: cfg.Outline.Reasoning,
-		})
-		if err != nil {
-			log.Fatalf("topic namer: %v", err)
+		var topicNamer *openaicompattopics.Namer
+		var namerErr error
+		if embErr == nil {
+			topicNamer, namerErr = openaicompattopics.New(openaicompattopics.Config{
+				Endpoint:  cfg.Outline.Endpoint,
+				APIKey:    cfg.Outline.APIKey,
+				Model:     cfg.Outline.Model,
+				MaxTokens: 200,
+				Reasoning: cfg.Outline.Reasoning,
+			})
 		}
-		topicsDeps.Build = topicsapp.BuildUseCase{
-			Granular:    outlineArtifacts,
-			Embed:       embedClient,
-			Namer:       topicNamer,
-			Dict:        dictCRUDUC,
-			Vocab:       topicCentroids,
-			K:           150,
-			Iters:       25,
-			Seed:        42,
-			MaxDistance: 0.45,
-			Samples:     12,
-		}
-		topicsDeps.Assign = topicsapp.AssignUseCase{
-			Embed:    embedClient,
-			Granular: outlineArtifacts,
-			Vocab:    topicCentroids,
-			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
-			Langs:    []string{"ru", "en"},
+		// A misconfigured embed/namer (e.g. embed.model unset) disables only the
+		// topic tools — it must not take the whole MCP server down.
+		switch {
+		case embErr != nil:
+			log.Printf("topic recommender disabled: embeddings client: %v", embErr)
+		case namerErr != nil:
+			log.Printf("topic recommender disabled: topic namer: %v", namerErr)
+		default:
+			topicsDeps.Build = topicsapp.BuildUseCase{
+				Granular:    outlineArtifacts,
+				Embed:       embedClient,
+				Namer:       topicNamer,
+				Dict:        dictCRUDUC,
+				Vocab:       topicCentroids,
+				K:           150,
+				Iters:       25,
+				Seed:        42,
+				MaxDistance: 0.45,
+				Samples:     12,
+			}
+			topicsDeps.Assign = topicsapp.AssignUseCase{
+				Embed:    embedClient,
+				Granular: outlineArtifacts,
+				Vocab:    topicCentroids,
+				Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+				Langs:    []string{"ru", "en"},
+			}
 		}
 	}
 

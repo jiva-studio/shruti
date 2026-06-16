@@ -82,9 +82,6 @@ const regions = ref<readonly CdnServer[]>(withDev(SERVERS))
 
 let prefs: IPreferences | null = null
 
-/** Reactive list for UI (e.g. the Settings server picker). */
-export const regionsRef = regions
-
 /** Current region list. Always non-empty (bootstrap seed never cleared). */
 export function getRegions(): readonly CdnServer[] {
   return regions.value

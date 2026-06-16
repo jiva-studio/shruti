@@ -68,6 +68,3 @@ export interface UiTranscriptBlocksGroup {
   /** Start time (ms) of that chapter — lets a tap on the heading seek there. */
   readonly headingStartMs?: number
 }
-
-/** @deprecated alias kept while existing consumers migrate to groups. */
-export type UiTranscriptBlock = UiTranscriptBlockRaw

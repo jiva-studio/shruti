@@ -188,8 +188,23 @@ export const usePurchasesStore = defineStore("purchases", () => {
     }
   }
 
-  async function init(): Promise<void> {
-    if (ready.value) return
+  // Single-flight: app bootstrap and a paywall mount can both call init() in
+  // the same frame. The `ready` guard only flips AFTER the awaits, so without
+  // this both would proceed and register duplicate appStateChange /
+  // onCustomerInfoChanged listeners (leaking one, storming refreshTokens on
+  // resume). Coalesce concurrent callers onto one run.
+  let initPromise: Promise<void> | null = null
+
+  function init(): Promise<void> {
+    if (ready.value) return Promise.resolve()
+    if (initPromise) return initPromise
+    initPromise = doInit().finally(() => {
+      initPromise = null
+    })
+    return initPromise
+  }
+
+  async function doInit(): Promise<void> {
     const purchases = useShruti().purchases
     if (!purchases.available) {
       ready.value = true
