@@ -72,7 +72,7 @@ import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMap
 import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
 import { addTracksToPlaylist } from "@lib/application"
 import { useToast } from "@kit/composables"
-import type { TopicId, TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, TopicId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 
 // One detail page for any track-bearing entity: a collection or a recommender
@@ -134,7 +134,7 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
       await dictionaries.ensureLoaded()
       title.value = dictionaries.topicNamesById.get(id) ?? id
       coverKey.value = dictionaries.topicCoverById.get(id) ?? null
-      ids = await repos.topics.topTrackIds(id as TopicId, TOPIC_TRACKS)
+      ids = await repos.topics.topTrackIds(id as TopicId, locale as LanguageCode, TOPIC_TRACKS)
     } else {
       const d = await repos.collections.getCollection(id, locale)
       if (!d) return

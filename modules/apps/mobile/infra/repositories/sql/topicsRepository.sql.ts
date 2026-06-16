@@ -1,5 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
-import type { TopicId, TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, TopicId, TrackId } from "@lib/domain/core.js"
 import type { Topic } from "@lib/domain/topic.js"
 import type { ITopicRepository, TrackTopicWeight } from "@lib/domain/ports/topicRepository.js"
 import type { TopicRow, TrackTopicRow } from "@lib/persistence/main"
@@ -29,10 +29,21 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
       return rows.map((r) => ({ trackId: r.track_id, topicId: r.topic_id, weight: r.weight }))
     },
 
-    async topTrackIds(topicId: TopicId, limit: number): Promise<readonly TrackId[]> {
+    async topTrackIds(
+      topicId: TopicId,
+      language: LanguageCode,
+      limit: number
+    ): Promise<readonly TrackId[]> {
+      // Only tracks that actually have a variant in the active UI language, so a
+      // topic page never surfaces lectures the user can't read in their language.
       const rows = await contentDb.query<{ track_id: string }>(
-        "SELECT track_id FROM track_topics WHERE topic_id = ? ORDER BY weight DESC LIMIT ?",
-        [topicId, limit]
+        `SELECT tt.track_id
+           FROM track_topics tt
+           JOIN track_variants tv ON tv.track_id = tt.track_id AND tv.language = ?
+          WHERE tt.topic_id = ?
+          ORDER BY tt.weight DESC
+          LIMIT ?`,
+        [language, topicId, limit]
       )
       return rows.map((r) => r.track_id)
     },
