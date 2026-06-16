@@ -22,6 +22,7 @@ import type { IDatabase, QueryParams } from "@ports/app/index.js"
 import { runUserMigrations } from "@infra/persistence/migrations/user/runMigrations.js"
 import { playlistTracksFor, demoTranscriptTrackId } from "./tracks.js"
 import { chatFixtureFor, DEMO_SESSION_ID } from "./chat.js"
+import { CAPTURE_LOCALES } from "../config.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TOOL_ROOT = path.resolve(__dirname, "..")
@@ -37,17 +38,24 @@ interface Args {
   now: number
 }
 
-function parseArgs(argv: string[]): Args {
+/** Raw CLI options. `locale`/`out` are resolved per-locale in main(). */
+interface CliOpts {
+  locale?: string
+  out?: string
+  seed: number
+  days: number
+  now: number
+}
+
+function parseArgs(argv: string[]): CliOpts {
   const opts: Record<string, string> = {}
   for (const arg of argv) {
     const m = /^--([^=]+)=(.*)$/.exec(arg)
     if (m) opts[m[1]!] = m[2]!
   }
-  const locale = opts.locale ?? "en"
-  const out = opts.out ?? path.join(DEFAULT_OUT_DIR, `user-${locale}.db`)
   return {
-    locale,
-    out,
+    locale: opts.locale,
+    out: opts.out,
     seed: opts.seed ? Number(opts.seed) : 42,
     days: opts.days ? Number(opts.days) : 120,
     // Anchor to the START of the generation day (local midnight), NOT a
@@ -404,15 +412,22 @@ async function seedChat(db: IDatabase, args: Args): Promise<void> {
   // Stagger message timestamps by 1s so listBySession's
   // ORDER BY created_at ASC keeps user-before-assistant order even
   // though they were inserted within the same wall-clock second.
-  const META_EMPTY = '{"_v":1,"data":{}}'
   for (let i = 0; i < fixture.messages.length; i++) {
     const msg = fixture.messages[i]!
     const createdAt = sessionCreatedAt + i * 1_000
+    // Verse / cite bodies ride the message's `meta` envelope (the persisted
+    // form of the server's SSE payloads). The renderer reads them off the
+    // message and only shows the small chip when a body is absent — so this
+    // is what makes the screenshot render the full verse + citation cards.
+    const data: Record<string, unknown> = {}
+    if (msg.verses) data.verses = msg.verses
+    if (msg.cites) data.cites = msg.cites
+    const meta = JSON.stringify({ _v: 1, data })
     await db.execute(
       `INSERT INTO chat_messages
          (id, session_id, role, content, created_at, meta)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [msg.id, DEMO_SESSION_ID, msg.role, msg.content, createdAt, META_EMPTY]
+      [msg.id, DEMO_SESSION_ID, msg.role, msg.content, createdAt, meta]
     )
   }
   console.log(`  wrote chat session "${fixture.sessionTitle}" with ${fixture.messages.length} messages`)
@@ -420,8 +435,7 @@ async function seedChat(db: IDatabase, args: Args): Promise<void> {
 
 /* -------------------------------- Main -------------------------------- */
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2))
+async function buildOne(args: Args): Promise<void> {
   const rng = mulberry32(args.seed)
 
   console.log(`→ generating user fixture: locale=${args.locale} seed=${args.seed} days=${args.days}`)
@@ -446,6 +460,17 @@ async function main(): Promise<void> {
   console.log(`✓ wrote ${args.out} (${bytes.length} bytes)`)
 
   raw.close()
+}
+
+async function main(): Promise<void> {
+  const cli = parseArgs(process.argv.slice(2))
+  // No --locale → build the whole capture set (config.CAPTURE_LOCALES);
+  // --locale=xx builds just that one.
+  const locales = cli.locale ? [cli.locale] : [...CAPTURE_LOCALES]
+  for (const locale of locales) {
+    const out = cli.out ?? path.join(DEFAULT_OUT_DIR, `user-${locale}.db`)
+    await buildOne({ locale, out, seed: cli.seed, days: cli.days, now: cli.now })
+  }
 }
 
 main().catch((err) => {
