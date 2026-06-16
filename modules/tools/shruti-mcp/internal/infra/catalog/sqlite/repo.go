@@ -453,5 +453,37 @@ func (r *Repo) UpsertAudio(ctx context.Context, a catalog.AudioRow) error {
 	})
 }
 
+// UpsertAudios upserts many track_audio rows in a single transaction — the
+// bulk path for registering thousands of out-of-band versions at once.
+func (r *Repo) UpsertAudios(ctx context.Context, rows []catalog.AudioRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		stmt, err := tx.PrepareContext(ctx, `
+			INSERT INTO track_audio (track_id, language, kind, path, filesize, duration)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(track_id, language, kind) DO UPDATE SET
+				path     = excluded.path,
+				filesize = excluded.filesize,
+				duration = excluded.duration`)
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+		for _, a := range rows {
+			if _, err := stmt.ExecContext(ctx, a.TrackID, a.Language, a.Kind, a.Path, a.Filesize, a.Duration); err != nil {
+				return fmt.Errorf("upsert audio[%s/%s/%s]: %w", a.TrackID, a.Language, a.Kind, err)
+			}
+		}
+		return tx.Commit()
+	})
+}
+
 // Compile-time interface assertion.
 var _ catalogport.Repository = (*Repo)(nil)

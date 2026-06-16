@@ -11,6 +11,7 @@ import (
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/ingest"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/normalize"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/outline"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/registeraudio"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/review"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runner"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
@@ -32,6 +33,7 @@ type Deps struct {
 	Ingest              ingest.UseCase
 	Normalize           normalize.UseCase
 	AudioDenoise        audiodenoise.UseCase
+	RegisterAudio       registeraudio.UseCase
 	Metadata            extractmeta.UseCase
 	Transcribe          transcribe.UseCase
 	Review              review.UseCase

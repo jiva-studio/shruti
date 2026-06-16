@@ -114,6 +114,21 @@ func (l *Lazy) UpsertAudio(ctx context.Context, a catalog.AudioRow) error {
 	return markModified(l.Path)
 }
 
+func (l *Lazy) UpsertAudios(ctx context.Context, rows []catalog.AudioRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.UpsertAudios(ctx, rows); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+
 func (l *Lazy) GetReferences(ctx context.Context, trackID string) ([]catalog.TrackReference, error) {
 	r, err := l.open(ctx)
 	if err != nil {

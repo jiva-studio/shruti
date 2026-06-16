@@ -310,6 +310,7 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterTrackStatus(s, deps)
 	RegisterAudioNormalize(s, deps)
 	RegisterAudioDenoise(s, deps)
+	RegisterAudioRegister(s, deps)
 	RegisterMetadataExtract(s, deps)
 	RegisterTranscriptCreate(s, deps)
 	RegisterTranscriptReview(s, deps)
