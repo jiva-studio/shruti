@@ -58,6 +58,11 @@ export default {
     tapToManage: "Відкрити та керувати",
     choose: "Підтримайте «Слухай Садху»",
     subscribe: "Підписатися",
+    trialBadge: "{days} днів безкоштовно",
+    trialThenPrice: "далі {price} / {period}",
+    startFreeTrial: "Спробувати безкоштовно",
+    trialDisclaimer:
+      "Скасувати можна будь-коли. Після пробного періоду підписка продовжиться автоматично.",
     subscribed: "Підписку оформлено",
     manage: "Керування підпискою",
     restore: "Відновити",

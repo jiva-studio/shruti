@@ -49,6 +49,11 @@ export default {
     tapToManage: "Tippen zum Ansehen oder Verwalten",
     choose: "Unterstütze „Shruti“",
     subscribe: "Abonnieren",
+    trialBadge: "{days} Tage kostenlos",
+    trialThenPrice: "danach {price} / {period}",
+    startFreeTrial: "Kostenlos testen",
+    trialDisclaimer:
+      "Jederzeit kündbar. Nach dem Testzeitraum verlängert sich das Abo automatisch.",
     subscribed: "Abonnement abgeschlossen",
     manage: "Abonnement verwalten",
     restore: "Wiederherstellen",

@@ -49,6 +49,11 @@ export default {
     tapToManage: "Koppints a megtekintéshez vagy kezeléshez",
     choose: "Támogasd a „Shruti”-t",
     subscribe: "Előfizetés",
+    trialBadge: "{days} nap ingyen",
+    trialThenPrice: "utána {price} / {period}",
+    startFreeTrial: "Ingyenes próba indítása",
+    trialDisclaimer:
+      "Bármikor lemondható. A próbaidőszak után az előfizetés automatikusan megújul.",
     subscribed: "Az előfizetés megtörtént",
     manage: "Előfizetés kezelése",
     restore: "Visszaállítás",
