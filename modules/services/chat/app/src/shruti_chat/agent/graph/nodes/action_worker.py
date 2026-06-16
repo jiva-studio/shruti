@@ -84,12 +84,15 @@ async def _resolve_pdf_track_refs(state: ChatState, ctx: TurnContext) -> list[in
         return refs
 
     # 2. Gather results from THIS turn (catalog lecture rows / research
-    #    transcript chunks). Both carry an integer `ref`.
-    gather = [
-        e["ref"]
-        for e in (state.get("tool_results") or [])
-        if isinstance(e, dict) and isinstance(e.get("ref"), int)
-    ]
+    #    transcript chunks). Both carry an integer `ref`. A tool result is
+    #    either a single row (dict) or a LIST of rows — `tracks_list` returns
+    #    a list, appended to `tool_results` as ONE element — so flatten.
+    gather: list[int] = []
+    for entry in state.get("tool_results") or []:
+        rows = entry if isinstance(entry, list) else [entry]
+        for row in rows:
+            if isinstance(row, dict) and isinstance(row.get("ref"), int):
+                gather.append(row["ref"])
     if (refs := _unique_track_refs(gather, ctx)):
         return refs
 
