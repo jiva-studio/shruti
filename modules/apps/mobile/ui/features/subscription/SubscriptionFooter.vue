@@ -38,6 +38,15 @@
       <IonButton expand="block" class="cta" :strong="true" @click="emit('manage')">
         {{ $t("settings.subscription.manage") }}
       </IonButton>
+
+      <!-- Restore stays reachable while subscribed: when an entitlement is
+           stranded on a stale RC app_user_id (e.g. a prior anonymous/device
+           id), the SDK still reports the device as subscribed, so hiding
+           Restore here traps the user with no way to re-home the receipt
+           onto their signed-in account. -->
+      <IonButton expand="block" fill="clear" :disabled="restoring" @click="emit('restore')">
+        {{ $t("settings.subscription.restore") }}
+      </IonButton>
     </template>
 
     <IonButton
