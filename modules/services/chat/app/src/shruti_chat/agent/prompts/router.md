@@ -103,16 +103,19 @@ Intents:
   export, daily reminder, smart-library setup, Pro upgrade.
   HARD RULE: if the query contains ANY of these tokens (case-
   insensitive, in either language), this is create_action REGARDLESS
-  of surrounding topic words:
+  of surrounding topic words OR a scripture reference:
     pdf, pdf-ку, скачать, скачай, download, экспорт, export,
     поделиться, поделись, share, отправь, send me, распечатать,
     print, напоминай, напоминание, reminder, умная библиотека,
     smart library, авто-загрузка, auto-download, pro, подписка,
     subscribe, upgrade
-  When a query mixes a topic ("про карму") with an action token
-  ("pdf"), STILL pick create_action — the action_worker will use
-  the topic to gather tracks itself. Do NOT route such queries to
-  `research` just because they mention a topic.
+  When a query mixes a topic ("про карму") OR a verse address
+  ("по БГ 4.18", "BG 4.18") with an action token ("pdf"), STILL pick
+  create_action — the action_worker uses the topic / verse to gather
+  the matching lectures itself. A scripture reference does NOT make it
+  `show_verse`, and a topic does NOT make it `research`: the action
+  token wins. («сделай pdf лекции по БГ 4.18» → create_action,
+  action_kind=pdf, source_id=BG, tokens=4.18 — NOT show_verse.)
   Examples (ru) — PDF:
     "сгенерируй pdf лекции",
     "скачать лекцию в PDF",
@@ -120,6 +123,8 @@ Intents:
     "отправь мне pdf",
     "сохрани этот фрагмент в PDF",
     "сгенерируй pdf лекции про карму",
+    "сделай pdf транскрипции лекции по БГ 4.18"  → create_action,
+        NOT show_verse (source_id=BG, tokens=4.18).
     "сделай pdf последней лекции"   → also set recent_ref: true.
   Examples (en) — PDF:
     "generate a pdf of this lecture",
