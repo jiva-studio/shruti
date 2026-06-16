@@ -53,11 +53,10 @@ const LEGACY_DAILY_NOTIFICATION_ID = 9001
  * and on every `appStateChange` resume. On pause it gives rules a hook
  * to do speculative prep (currently only `inactivity`).
  *
- * Phase 2 ships the skeleton: registry resolution, eligibility gating,
- * the prep/notify/deliver pipeline, and a per-row in-memory mutex
- * guarding against overlapping ticks. The registry is empty in this
- * phase — rule handlers register themselves from their own modules
- * starting in Phase 4.
+ * Pipeline: registry resolution, eligibility gating, prep/notify/deliver,
+ * and a per-row in-memory mutex guarding against overlapping ticks. The
+ * rules themselves live in `proactive/rules` and are registered into the
+ * registry (`proactive/registry.ts`) at import time.
  */
 export function useProactiveScheduler(): void {
   const app = useLectorium()

@@ -6,9 +6,6 @@ import type { ProactiveRuleHandler, ResolvedProactiveRule } from "./types.js"
  * `proactive` block at all, or when it omits a specific rule. Each
  * entry in the published config overrides the bundled default by `id`
  * — `enabled: false` is the kill switch for a single rule.
- *
- * Phase 2 ships an empty registry; subsequent phases register handlers
- * with `registerRule()` from the rule's own module.
  */
 const BUNDLED_DEFAULTS: ProactiveRuleConfig[] = [
   {

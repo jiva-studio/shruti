@@ -51,6 +51,10 @@ export const useAuthStore = defineStore("auth", () => {
   const isPro = computed(() => tier.value === "pro")
 
   let resumeHandle: { remove(): Promise<void> } | undefined
+  // restore() runs again after every signOut/deleteAccount; keep the previous
+  // onSessionChange subscription so we can drop it before re-subscribing,
+  // otherwise applySession fires N+1 times after N sign-outs.
+  let sessionUnsub: (() => void) | undefined
   /**
    * Wall-clock at the last successful `/auth/me` round-trip. Used by
    * `ensureFresh()` to cheaply skip the request when we already pulled
@@ -153,7 +157,8 @@ export const useAuthStore = defineStore("auth", () => {
     try {
       const session = await auth.initialize()
       applySession(session)
-      auth.onSessionChange(applySession)
+      sessionUnsub?.()
+      sessionUnsub = auth.onSessionChange(applySession)
       // Foreground-resume tier sync. Webhook-driven tier flips (purchase
       // on another device, subscription expired, refund) reach the server
       // immediately but the running JWT carries the stale value until

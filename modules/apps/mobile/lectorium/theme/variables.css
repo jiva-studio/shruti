@@ -109,6 +109,18 @@
   --lectorium-immersive-background: #1a130d;
   --lectorium-immersive-text: #c0b8a8;
 
+  /* Cream tone for text/borders that sit over a dark image scrim (collection
+   * & topic cover cards, author avatar ring). FIXED on purpose — it must not
+   * invert with the theme like --ion-color-light/-dark do, because the scrim
+   * underneath is always dark. One value, referenced everywhere that overlay
+   * cream is needed, so the shade can't drift between cards. */
+  --lectorium-scrim-cream: #f4ebdd;
+
+  /* Soft depth halo behind verse blocks in the transcript reader. Fixed
+   * (theme-independent) — the reader is always dark. Shared by SentenceBlock
+   * and VerseTextInlineBlock so the two stay identical. */
+  --lectorium-verse-glow: 0px 0px 12px rgba(0, 0, 0, 0.25);
+
   /* Raised input surface — chat input bar, search box, anywhere a
    * text-entry capsule needs to sit visually ABOVE the page surface.
    * Light theme: brightened past the cream page so the capsule reads

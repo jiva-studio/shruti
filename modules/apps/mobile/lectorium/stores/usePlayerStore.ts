@@ -202,7 +202,14 @@ export const usePlayerStore = defineStore("player", () => {
     const prevPositionMs = positionMs.value
     itemId.value = null
     if (prevItemId && prevItemId !== id) {
-      await session.finishCurrent(prevItemId, prevPositionMs)
+      // Best-effort: a rejected finishCurrent must not abort the resync — the
+      // catch is in the caller, so without this `itemId` would stay null and
+      // the FloatingPlayer would vanish until the next successful resume.
+      try {
+        await session.finishCurrent(prevItemId, prevPositionMs)
+      } catch (err) {
+        console.warn("[player] finishCurrent during resync failed", err)
+      }
     }
     const meta = currentQueue.find((q) => q.itemId === id)
     trackId.value = cmd.trackId

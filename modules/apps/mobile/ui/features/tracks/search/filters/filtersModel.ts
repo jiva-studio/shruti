@@ -83,10 +83,6 @@ export function composeDateEdge(
   return `${year}-${String(month).padStart(2, "0")}`
 }
 
-export function getDateEdge(filters: FiltersModel, edge: DateEdge): string | undefined {
-  return filters[edge]
-}
-
 export function setDateEdge(
   filters: FiltersModel,
   edge: DateEdge,

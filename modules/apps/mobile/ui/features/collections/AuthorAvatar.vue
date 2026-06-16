@@ -39,7 +39,7 @@ const loaded = ref(false)
   overflow: hidden;
   background: var(--ion-color-light);
   /* Ring so overlapping avatars stay visually separated over any cover. */
-  box-shadow: 0 0 0 2px #f4ebdd;
+  box-shadow: 0 0 0 2px var(--lectorium-scrim-cream);
 }
 
 .img {

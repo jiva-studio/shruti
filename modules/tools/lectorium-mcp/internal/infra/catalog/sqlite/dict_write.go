@@ -33,7 +33,7 @@ func (r *Repo) CreateDictImpl(ctx context.Context, kind catalog.Kind, e catalog.
 	for lang, name := range e.Names {
 		var stmt string
 		var args []any
-		if kind == catalog.KindSource || kind == catalog.KindTopic {
+		if hasShortName(kind) {
 			stmt = fmt.Sprintf(`INSERT INTO %s (id, language, full_name, short_name) VALUES (?, ?, ?, ?)`, tbl)
 			args = []any{id, lang, name, e.ShortName[lang]}
 		} else {
@@ -61,7 +61,7 @@ func (r *Repo) UpdateDictLocaleImpl(ctx context.Context, kind catalog.Kind, id, 
 	}
 	defer tx.Rollback()
 
-	if kind == catalog.KindSource || kind == catalog.KindTopic {
+	if hasShortName(kind) {
 		_, err = tx.ExecContext(ctx, fmt.Sprintf(`
 			INSERT INTO %s (id, language, full_name, short_name) VALUES (?, ?, ?, ?)
 			ON CONFLICT(id, language) DO UPDATE SET
@@ -147,18 +147,9 @@ func (r *Repo) DeleteDictImpl(ctx context.Context, kind catalog.Kind, id string)
 }
 
 func (r *Repo) usageCountTx(ctx context.Context, tx *sql.Tx, kind catalog.Kind, id string) (int, error) {
-	var stmt string
-	switch kind {
-	case catalog.KindAuthor:
-		stmt = `SELECT COUNT(*) FROM tracks WHERE author_id = ?`
-	case catalog.KindLocation:
-		stmt = `SELECT COUNT(*) FROM tracks WHERE location_id = ?`
-	case catalog.KindSource:
-		stmt = `SELECT COUNT(*) FROM track_references WHERE source_id = ?`
-	case catalog.KindTag:
-		stmt = `SELECT COUNT(*) FROM track_tags WHERE tag_id = ?`
-	default:
-		return 0, fmt.Errorf("unknown kind %q", kind)
+	stmt, err := usageCountSQL(kind)
+	if err != nil {
+		return 0, err
 	}
 	row := tx.QueryRowContext(ctx, stmt, id)
 	var n int

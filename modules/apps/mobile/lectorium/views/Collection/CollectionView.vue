@@ -120,7 +120,13 @@ const toolbarStyle = computed(() => ({
   "--background": `rgba(var(--ion-background-color-rgb), ${titleOpacity.value})`,
 }))
 
+// Sequence token: `collection` and `topic-tracks` share this component, and an
+// in-place language switch re-runs load() without re-mounting. Without a guard
+// an older multi-await load can overwrite the title/tracks/cover with stale data.
+let loadGen = 0
+
 async function load(kind: string, id: string, locale: string): Promise<void> {
+  const myGen = ++loadGen
   loading.value = true
   title.value = ""
   description.value = null
@@ -132,25 +138,29 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
     let ids: readonly string[] = []
     if (kind === "topic") {
       await dictionaries.ensureLoaded()
+      if (myGen !== loadGen) return
       title.value = dictionaries.topicNamesById.get(id) ?? id
       coverKey.value = dictionaries.topicCoverById.get(id) ?? null
       ids = await repos.topics.topTrackIds(id as TopicId, locale as LanguageCode, TOPIC_TRACKS)
     } else {
       const d = await repos.collections.getCollection(id, locale)
+      if (myGen !== loadGen) return
       if (!d) return
       title.value = d.name
       description.value = d.description || null
       coverKey.value = d.cover || null
       ids = d.trackIds
     }
+    if (myGen !== loadGen) return
     trackIds.value = ids
     if (ids.length === 0) return
     const byId = await repos.tracks.getByIds([...ids])
+    if (myGen !== loadGen) return
     tracks.value = ids.map((tid) => byId.get(tid)).filter((tr): tr is Track => tr !== undefined)
   } catch (err) {
     console.warn("[detail] load failed", err)
   } finally {
-    loading.value = false
+    if (myGen === loadGen) loading.value = false
   }
 }
 
@@ -216,8 +226,8 @@ async function performAdd(): Promise<void> {
 .hero-toolbar ion-back-button,
 .hero-toolbar ion-buttons ion-button,
 .hero-toolbar ion-buttons ion-button :deep(svg) {
-  --color: #f4ebdd;
-  color: #f4ebdd;
+  --color: var(--lectorium-scrim-cream);
+  color: var(--lectorium-scrim-cream);
 }
 
 .hero-toolbar.solid ion-back-button,
@@ -270,7 +280,7 @@ async function performAdd(): Promise<void> {
   font-size: 24px;
   font-weight: 700;
   line-height: 1.2;
-  color: #f4ebdd;
+  color: var(--lectorium-scrim-cream);
 }
 
 .description {

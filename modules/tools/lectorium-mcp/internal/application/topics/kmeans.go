@@ -57,11 +57,18 @@ func kmeansCosine(points [][]float32, k, iters int, seed int64) KMeansResult {
 				sums[c][d] += float64(x)
 			}
 		}
+		// Re-seed empty clusters from the points worst-served by their current
+		// centroid. claimed stops two empty clusters in the same iteration from
+		// grabbing the *same* farthest point — which would collapse them back
+		// into one and leave fewer than k real clusters.
+		claimed := make([]bool, n)
 		for c := 0; c < k; c++ {
 			if counts[c] == 0 {
-				// Re-seed an empty cluster from the point farthest from its
-				// own centroid, so k clusters stay populated.
-				centroids[c] = farthestPoint(points, centroids, assign)
+				if idx := farthestPoint(points, centroids, assign, claimed); idx >= 0 {
+					centroids[c] = cloneVec(points[idx])
+					claimed[idx] = true
+					assign[idx] = c // give the reseeded cluster a member to hold
+				}
 				changed = true
 				continue
 			}
@@ -121,9 +128,16 @@ func kmeansPlusPlusInit(points [][]float32, k int, rng *rand.Rand) [][]float32 {
 	return centroids
 }
 
-func farthestPoint(points, centroids [][]float32, assign []int) []float32 {
-	worst, worstSim := 0, math.Inf(1)
+// farthestPoint returns the index of the not-yet-claimed point least similar
+// to its own assigned centroid — the best candidate to seed a fresh cluster.
+// Returns -1 when no eligible point remains (every point already claimed this
+// iteration), so the caller leaves the empty cluster's centroid untouched.
+func farthestPoint(points, centroids [][]float32, assign []int, claimed []bool) int {
+	worst, worstSim := -1, math.Inf(1)
 	for i, p := range points {
+		if claimed[i] {
+			continue
+		}
 		c := assign[i]
 		if c < 0 || c >= len(centroids) {
 			continue
@@ -132,7 +146,7 @@ func farthestPoint(points, centroids [][]float32, assign []int) []float32 {
 			worst, worstSim = i, s
 		}
 	}
-	return cloneVec(points[worst])
+	return worst
 }
 
 func cloneVec(v []float32) []float32 {

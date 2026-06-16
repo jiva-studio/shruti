@@ -5,7 +5,7 @@
     <slot />
 
     <template v-if="chapters.length > 0">
-      <h3 class="contents-title">{{ t("transcript.contents") }}</h3>
+      <SectionLabel>{{ t("transcript.contents") }}</SectionLabel>
       <ul class="chapters">
         <li
           v-for="(ch, i) in chapters"
@@ -24,6 +24,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n"
+import SectionLabel from "./SectionLabel.vue"
 import type { UiOutlineChapter } from "./types.js"
 
 /**
@@ -77,15 +78,6 @@ function formatMs(ms: number): string {
   font-size: 15px;
   line-height: 1.5;
   color: var(--ion-text-color, #222);
-}
-
-.contents-title {
-  margin: 0 0 4px;
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ion-color-medium, #777);
 }
 
 .chapters {

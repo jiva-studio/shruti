@@ -3,8 +3,6 @@ import { ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 
 interface SeenFlags {
-  home: boolean
-  search: boolean
   player: boolean
   /**
    * The user has explicitly opened a transcript (manual tap, not the
@@ -15,7 +13,7 @@ interface SeenFlags {
 }
 
 const STORAGE_KEY = "tutorial.v1"
-const DEFAULT: SeenFlags = { home: false, search: false, player: false, transcriptOpened: false }
+const DEFAULT: SeenFlags = { player: false, transcriptOpened: false }
 
 /**
  * Persisted "seen this onboarding step" flags. Lives in preferences so a

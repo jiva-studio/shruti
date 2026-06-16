@@ -63,7 +63,7 @@ const displayHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 }
 .commentary-card :deep(code) {
   font-family: ui-monospace, SFMono-Regular, monospace;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
   padding: 1px 4px;
   border-radius: 4px;
   font-size: 0.9em;
