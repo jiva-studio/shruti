@@ -17,6 +17,9 @@
       </span>
       <div class="pdf-info">
         <span class="pdf-title">{{ item.title }}</span>
+        <span v-if="item.references.length" class="pdf-refs">
+          <ScriptureChip v-for="(r, i) in item.references" :key="i" :caption="refCaption(r)" />
+        </span>
         <span v-if="metaFor(item)" class="pdf-meta">{{ metaFor(item) }}</span>
       </div>
     </li>
@@ -33,7 +36,11 @@ import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
 import { IconFileTypePdf } from "@tabler/icons-vue"
 import type { ActionPayload } from "@lectorium/stores/useChatStore.js"
-import type { ChatSharePdfItemPayload as SharePdfItemPayload } from "@lib/domain/chatMessage.js"
+import type {
+  ChatSharePdfItemPayload as SharePdfItemPayload,
+  ChatSharePdfRefPayload as SharePdfRefPayload,
+} from "@lib/domain/chatMessage.js"
+import ScriptureChip from "./ScriptureChip.vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
@@ -66,6 +73,13 @@ function metaFor(item: SharePdfItemPayload): string {
   if (item.author) parts.push(item.author)
   if (item.date) parts.push(item.date)
   return parts.join(" · ")
+}
+
+// Caption for one scripture reference — the server already resolved the
+// source label, so this is just "<short_name> <tokens>" e.g. "БГ 4.8".
+function refCaption(r: SharePdfRefPayload): string {
+  const label = r.shortName ?? r.fullName ?? r.sourceId ?? ""
+  return r.tokens ? `${label} ${r.tokens}`.trim() : label
 }
 
 // Filesystem-unsafe across Android / iOS / Windows shares. Control
@@ -220,6 +234,17 @@ void props.actionId
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--ion-text-color);
+}
+
+.pdf-refs {
+  /* Scripture-address chips (ScriptureChip) — the key identifier of the
+     lecture. The chip carries its own pill styling; this just lays them
+     out, wrapping for a multi-verse lecture. Negative margin offsets the
+     chip's own 2px side margin so it aligns with the title. */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0 0 -2px;
 }
 
 .pdf-meta {
