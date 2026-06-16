@@ -164,9 +164,9 @@ const {
 })
 
 function onTap() {
-  // Phase 1 chip fallback only. With body present the card already
-  // shows everything; no detail view yet.
-  console.info("[VerseCard] tap", { sourceId: props.sourceId, tokens: props.tokens })
+  // Intentional no-op: the expanded card already shows the verse in full, so
+  // tapping the chip has nothing to open. Kept as the @tap target so the chip
+  // still gives press feedback; wire a detail view here if one is ever added.
 }
 </script>
 

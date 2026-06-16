@@ -13,10 +13,13 @@ import (
 	outlineport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/outline"
 )
 
-// Embedder turns texts into dense vectors (one per text, same order).
+// Embedder turns texts into dense vectors (one per text, same order). Model
+// identifies the embedding model so a vocabulary records which space it lives
+// in and the assign step can refuse a mismatched configuration.
 type Embedder interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 	Dim() int
+	Model() string
 }
 
 // GranularReader reads one track-language's granular outline. Returns an

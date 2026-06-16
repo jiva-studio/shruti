@@ -64,7 +64,7 @@ defineProps<{
   padding: 0.25rem;
   white-space: nowrap;
   transition: all 0.2s ease-in-out;
-  box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shruti-verse-glow);
   font-style: normal;
   pointer-events: none;
 }

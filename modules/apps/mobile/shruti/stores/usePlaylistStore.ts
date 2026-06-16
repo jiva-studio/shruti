@@ -282,7 +282,9 @@ export const usePlaylistStore = defineStore("playlist", () => {
         url,
         title: variant.title,
         author,
-        durationMs: variant.audio.duration != null ? variant.audio.duration * 1000 : undefined,
+        // audio.duration is already milliseconds (TrackAudio.duration), and the
+        // queue item's durationMs is milliseconds too — pass it through, no ×1000.
+        durationMs: variant.audio.duration ?? undefined,
       })
     }
     return out

@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"time"
@@ -60,6 +61,10 @@ func New(cfg Config) (*Client, error) {
 
 // Dim returns the configured embedding dimensionality (0 = provider default).
 func (c *Client) Dim() int { return c.dimensions }
+
+// Model returns the configured embedding model id — the space all vectors
+// belong to. Recorded in the vocabulary so assign can detect a config drift.
+func (c *Client) Model() string { return c.model }
 
 // Embed returns one vector per input text, in the same order. Inputs are sent
 // in batches; a failed batch is retried a few times on 429/5xx before failing
@@ -158,6 +163,15 @@ func (c *Client) doBatch(ctx context.Context, body []byte, n int) (vecs [][]floa
 	for i, d := range out.Data {
 		if len(d.Embedding) == 0 {
 			return nil, false, fmt.Errorf("empty vector at index %d", d.Index)
+		}
+		// Reject NaN/Inf: a non-finite component poisons every downstream
+		// cosine (normalize, nearest), and a single NaN makes nearest return
+		// no match — silently wrong clusters/assignments, or a panic. Treat
+		// it as terminal corruption rather than retrying deterministic garbage.
+		for _, x := range d.Embedding {
+			if math.IsNaN(float64(x)) || math.IsInf(float64(x), 0) {
+				return nil, false, fmt.Errorf("non-finite value in vector at index %d", d.Index)
+			}
 		}
 		vecs[i] = d.Embedding
 	}

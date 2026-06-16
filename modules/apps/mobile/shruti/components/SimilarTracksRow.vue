@@ -1,6 +1,6 @@
 <template>
   <div v-if="rows.length" class="similar">
-    <h3 class="contents-title">{{ t("transcript.similarByTopic") }}</h3>
+    <SectionLabel inset>{{ t("transcript.similarByTopic") }}</SectionLabel>
     <TracksList :rows="rows" />
   </div>
 </template>
@@ -9,8 +9,10 @@
 import { ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { TracksList } from "@ui/components/tracks/list/index.js"
+import SectionLabel from "@ui/components/SectionLabel.vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
+import { listSimilarTracksByTopic } from "@lib/application/listSimilarTracksByTopic.js"
 import type { Track } from "@lib/domain/track.js"
 
 const props = defineProps<{ track: Track }>()
@@ -25,19 +27,21 @@ const SIMILAR_LIMIT = 5
 const similar = ref<readonly Track[]>([])
 const rows = mapper.mapRows(() => similar.value, { context: "discovery" })
 
+// Sequence token: props.track can swap while a load is in flight.
+let gen = 0
+
 async function load(track: Track): Promise<void> {
+  const myGen = ++gen
   similar.value = []
-  const seedTopics = track.topicIds.slice(0, SEED_TOPICS)
-  if (seedTopics.length === 0) return
   try {
-    const repos = app.repositories()
-    const ids = await repos.topics.similarTrackIds(seedTopics, track.id, SIMILAR_LIMIT)
-    if (ids.length === 0) return
-    const byId = await repos.tracks.getByIds([...ids])
-    similar.value = ids.map((id) => byId.get(id)).filter((n): n is Track => n !== undefined)
+    const result = await listSimilarTracksByTopic(
+      { track, seedTopics: SEED_TOPICS, limit: SIMILAR_LIMIT },
+      app.repositories()
+    )
+    if (myGen === gen) similar.value = result
   } catch (err) {
     console.warn("[similar] load failed", err)
-    similar.value = []
+    if (myGen === gen) similar.value = []
   }
 }
 
@@ -47,15 +51,3 @@ watch(
   { immediate: true }
 )
 </script>
-
-<style scoped>
-.contents-title {
-  margin: 16px 0 4px;
-  padding-inline: var(--ion-padding, 16px);
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ion-color-medium, #777);
-}
-</style>

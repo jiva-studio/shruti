@@ -86,13 +86,41 @@ func dictTable(k catalog.Kind) (string, error) {
 	return "", fmt.Errorf("unknown kind %q", k)
 }
 
+// hasShortName reports whether a Kind carries the optional short_name
+// column. Source and topic do; author/location/tag do not. This is the
+// single source of truth for that fact — the read (GetDict) and write
+// (dict_write.go) paths both consult it so they can't drift apart.
+func hasShortName(k catalog.Kind) bool {
+	return k == catalog.KindSource || k == catalog.KindTopic
+}
+
+// usageCountSQL returns the COUNT(*) query that reports how many catalog
+// rows reference a dict entry of the given kind. Kept as one helper so
+// adding a Kind needs a single edit, not two parallel switches (the
+// missing KindTopic case here is what broke topic.get / topic.delete).
+func usageCountSQL(kind catalog.Kind) (string, error) {
+	switch kind {
+	case catalog.KindAuthor:
+		return `SELECT COUNT(*) FROM tracks WHERE author_id = ?`, nil
+	case catalog.KindLocation:
+		return `SELECT COUNT(*) FROM tracks WHERE location_id = ?`, nil
+	case catalog.KindSource:
+		return `SELECT COUNT(*) FROM track_references WHERE source_id = ?`, nil
+	case catalog.KindTag:
+		return `SELECT COUNT(*) FROM track_tags WHERE tag_id = ?`, nil
+	case catalog.KindTopic:
+		return `SELECT COUNT(*) FROM track_topics WHERE topic_id = ?`, nil
+	}
+	return "", fmt.Errorf("unknown kind %q", kind)
+}
+
 func (r *Repo) GetDict(ctx context.Context, kind catalog.Kind, id string) (catalog.DictEntry, bool, error) {
 	tbl, err := dictTable(kind)
 	if err != nil {
 		return catalog.DictEntry{}, false, err
 	}
 	cols := "id, language, full_name"
-	if kind == catalog.KindSource {
+	if hasShortName(kind) {
 		cols = "id, language, full_name, short_name"
 	}
 	rows, err := r.db.QueryContext(ctx,
@@ -102,7 +130,7 @@ func (r *Repo) GetDict(ctx context.Context, kind catalog.Kind, id string) (catal
 	}
 	defer rows.Close()
 	entry := catalog.DictEntry{Id: id, Names: map[string]string{}}
-	if kind == catalog.KindSource {
+	if hasShortName(kind) {
 		entry.ShortName = map[string]string{}
 	}
 	any := false
@@ -110,7 +138,7 @@ func (r *Repo) GetDict(ctx context.Context, kind catalog.Kind, id string) (catal
 		any = true
 		var rid, lang, fullName string
 		var shortName sql.NullString
-		if kind == catalog.KindSource {
+		if hasShortName(kind) {
 			if err := rows.Scan(&rid, &lang, &fullName, &shortName); err != nil {
 				return catalog.DictEntry{}, false, err
 			}
@@ -137,7 +165,7 @@ func (r *Repo) ListDict(ctx context.Context, kind catalog.Kind, opts catalog.Lis
 		opts.Limit = 100
 	}
 	cols := "id, language, full_name"
-	if kind == catalog.KindSource {
+	if hasShortName(kind) {
 		cols = "id, language, full_name, short_name"
 	}
 
@@ -237,18 +265,9 @@ func (r *Repo) LookupIDByName(ctx context.Context, kind catalog.Kind, name, lang
 // UsageCount returns how many tracks/track_variants/track_references rows
 // reference this dict id. Used to refuse Delete when > 0.
 func (r *Repo) UsageCount(ctx context.Context, kind catalog.Kind, id string) (int, error) {
-	var sqlText string
-	switch kind {
-	case catalog.KindAuthor:
-		sqlText = `SELECT COUNT(*) FROM tracks WHERE author_id = ?`
-	case catalog.KindLocation:
-		sqlText = `SELECT COUNT(*) FROM tracks WHERE location_id = ?`
-	case catalog.KindSource:
-		sqlText = `SELECT COUNT(*) FROM track_references WHERE source_id = ?`
-	case catalog.KindTag:
-		sqlText = `SELECT COUNT(*) FROM track_tags WHERE tag_id = ?`
-	default:
-		return 0, fmt.Errorf("unknown kind %q", kind)
+	sqlText, err := usageCountSQL(kind)
+	if err != nil {
+		return 0, err
 	}
 	row := r.db.QueryRowContext(ctx, sqlText, id)
 	var n int

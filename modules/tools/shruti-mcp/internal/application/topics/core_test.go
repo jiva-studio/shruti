@@ -50,6 +50,34 @@ func TestKMeansSeparatesClusters(t *testing.T) {
 	}
 }
 
+// TestKMeansReseedsDistinctCentroids drives k above the number of natural
+// groups so several clusters start empty and must be re-seeded. The bug was
+// that simultaneous empty clusters all grabbed the *same* farthest point,
+// collapsing into duplicate centroids; assert every centroid is distinct.
+func TestKMeansReseedsDistinctCentroids(t *testing.T) {
+	// Two tight groups but k=5 → at least three clusters reseed.
+	var pts [][]float32
+	for g := 0; g < 2; g++ {
+		base := dir(g)
+		for j := 0; j < 6; j++ {
+			pts = append(pts, jitter(base, 3, float32(j)*0.01))
+		}
+	}
+	const k = 5
+	res := kmeansCosine(pts, k, 25, 7)
+	if len(res.Centroids) != k {
+		t.Fatalf("expected %d centroids, got %d", k, len(res.Centroids))
+	}
+	for i := 0; i < len(res.Centroids); i++ {
+		for j := i + 1; j < len(res.Centroids); j++ {
+			if dot(res.Centroids[i], res.Centroids[j]) > 0.99999 {
+				t.Fatalf("centroids %d and %d are duplicates (sim %.5f)",
+					i, j, dot(res.Centroids[i], res.Centroids[j]))
+			}
+		}
+	}
+}
+
 func TestLangWeightsTimeShare(t *testing.T) {
 	centroids := [][]float32{dir(0), dir(1)}
 	topicIDs := []string{"topic_a", "topic_b"}

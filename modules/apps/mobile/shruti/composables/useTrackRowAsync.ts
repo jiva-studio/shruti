@@ -49,13 +49,21 @@ export function useTrackRowAsync(getTrackId: () => string): TrackRowAsyncRefs {
   const loading = ref(true)
   const error = ref(false)
 
+  // Sequence token: the trackId can swap (chat re-render, list virtualization
+  // reuse) while a load is in flight. Only the latest reload may write the
+  // refs, otherwise an older resolve lands last and shows track A's data under
+  // track B's id.
+  let gen = 0
+
   async function reload(): Promise<void> {
+    const myGen = ++gen
     const trackId = getTrackId()
     loading.value = true
     error.value = false
     try {
       const repos = app.repositories()
       const trk = await repos.tracks.getById(trackId as TrackId)
+      if (myGen !== gen) return
       if (!trk) {
         track.value = null
         author.value = null
@@ -75,6 +83,7 @@ export function useTrackRowAsync(getTrackId: () => string): TrackRowAsyncRefs {
           : Promise.resolve(null),
         Promise.all(sourceIds.map((id) => repos.sources.getById(id as SourceId))),
       ])
+      if (myGen !== gen) return
       author.value = (au as Author | null) ?? null
       location.value = (loc as Location | null) ?? null
       const sourceMap = new Map<string, Source>()
@@ -83,10 +92,11 @@ export function useTrackRowAsync(getTrackId: () => string): TrackRowAsyncRefs {
       }
       sourcesById.value = sourceMap
     } catch (err) {
+      if (myGen !== gen) return
       console.warn("useTrackRowAsync: failed to load", err)
       error.value = true
     } finally {
-      loading.value = false
+      if (myGen === gen) loading.value = false
     }
   }
 

@@ -98,6 +98,7 @@ import {
   CarouselSection,
   TileSection,
   CollectionListItem,
+  type CarouselItem,
 } from "@ui/features/collections/index.js"
 import RowDivider from "@ui/components/RowDivider.vue"
 import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
@@ -112,6 +113,7 @@ import {
   type GroupCollection,
 } from "@shruti/composables/useCollectionGroups.js"
 import { useShruti } from "@shruti/shruti.js"
+import { shuffled } from "@shruti/utils/shuffle.js"
 import { searchAndFilterTracks } from "@lib/application/searchAndFilterTracks.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
@@ -136,7 +138,7 @@ const recommendedRows = mapper.mapRows(() => recommendations.recommended, { cont
 // shelves. The grid skips the three shelf topics so nothing repeats.
 const TOPIC_TILES = 6
 const SHELF_PREVIEW = 3
-const topicTiles = ref<{ id: string; name: string; coverUrl?: string }[]>([])
+const topicTiles = ref<CarouselItem[]>([])
 function pickTopicTiles(): void {
   const inShelves = new Set(recommendations.shelves.map((s) => s.topicId))
   topicTiles.value = shuffled(dictionaries.topics.filter((t) => !inShelves.has(t.id)))
@@ -179,15 +181,6 @@ const lectureSample = ref<readonly Track[]>([])
 // changes on reshuffle, so the displayed set stays stable.
 const previewLectures = mapper.mapRows(() => lectureSample.value, { context: "discovery" })
 
-function shuffled<T>(items: readonly T[]): T[] {
-  const pool = [...items]
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[pool[i], pool[j]] = [pool[j], pool[i]]
-  }
-  return pool
-}
-
 function pickOtherCollections(): void {
   const shown = new Set(topGroups.value.flatMap((g) => g.collections.map((c) => c.id)))
   otherCollections.value = shuffled(allCollections.value.filter((c) => !shown.has(c.id))).slice(
@@ -215,17 +208,23 @@ async function loadLecturePool(language: string): Promise<void> {
 
 watch([collectionGroups, allCollections], pickOtherCollections, { immediate: true })
 watch(appLanguage, (language) => void loadLecturePool(language), { immediate: true })
-// Re-pick the random topic tiles once the vocabulary / shelves are loaded.
-watch(() => [dictionaries.topics.length, recommendations.shelves.length] as const, pickTopicTiles, {
-  immediate: true,
-})
+// Re-pick the random topic tiles once the vocabulary / shelves are loaded, and
+// again on a language switch so the tile labels follow the new locale.
+watch(
+  () => [dictionaries.topics.length, recommendations.shelves.length, appLanguage.value] as const,
+  pickTopicTiles,
+  { immediate: true }
+)
 
 onIonViewWillEnter(() => {
   pickOtherCollections()
   pickLectures()
   pickTopicTiles()
   void dictionaries.ensureLoaded()
-  void recommendations.ensureLoaded()
+  // refresh (not ensureLoaded) so the profile reflects tracks heard since the
+  // last visit — otherwise the shelves freeze on the first (often cold-start)
+  // build until the app restarts.
+  void recommendations.refresh()
 })
 
 async function onSelectTrack(trackId: string): Promise<void> {
@@ -258,7 +257,7 @@ function openTracks(): void {
 .all-lectures {
   --background: var(--ion-color-step-800, #3d2b1f);
   --background-activated: var(--ion-color-step-700, #51392a);
-  --color: #f4ebdd;
+  --color: var(--shruti-scrim-cream);
   --box-shadow: none;
   --border-radius: 12px;
   --padding-top: 0;

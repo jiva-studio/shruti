@@ -106,7 +106,7 @@ const loaded = ref(false)
 }
 
 .collection-card.is-loaded .name {
-  color: #f4ebdd;
+  color: var(--shruti-scrim-cream);
 }
 
 .hash {

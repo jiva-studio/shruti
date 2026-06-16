@@ -99,6 +99,76 @@ func TestTopicDictRoundTrip(t *testing.T) {
 	}
 }
 
+// TestTopicShortNameRoundTrip pins the read/write symmetry for the topic
+// short_name column: it is written by the dict CRUD path and must be read
+// back by GetDict (the bug was GetDict gating short_name on KindSource only).
+func TestTopicShortNameRoundTrip(t *testing.T) {
+	r, done := newTopicsTestRepo(t)
+	defer done()
+	ctx := context.Background()
+
+	id, err := r.CreateDict(ctx, catalog.KindTopic, catalog.DictEntry{
+		Id:        "topic_short001",
+		Names:     map[string]string{"en": "Bhakti linux-client"},
+		ShortName: map[string]string{"en": "Bhakti"},
+	})
+	if err != nil {
+		t.Fatalf("CreateDict(topic): %v", err)
+	}
+	got, ok, err := r.GetDict(ctx, catalog.KindTopic, id)
+	if err != nil || !ok {
+		t.Fatalf("GetDict(topic): ok=%v err=%v", ok, err)
+	}
+	if got.ShortName["en"] != "Bhakti" {
+		t.Fatalf("topic short_name not read back: %v", got.ShortName)
+	}
+}
+
+// TestTopicUsageCountAndDelete pins that the topic kind is wired into the
+// usage-count switches. Before the fix UsageCount/usageCountTx had no
+// KindTopic case, so topic.get and topic.delete both errored with
+// "unknown kind".
+func TestTopicUsageCountAndDelete(t *testing.T) {
+	r, done := newTopicsTestRepo(t)
+	defer done()
+	ctx := context.Background()
+
+	id, err := r.CreateDict(ctx, catalog.KindTopic, catalog.DictEntry{
+		Id:    "topic_use0001",
+		Names: map[string]string{"en": "Karma"},
+	})
+	if err != nil {
+		t.Fatalf("CreateDict(topic): %v", err)
+	}
+
+	// No references yet → usage 0, delete allowed... but first attach one.
+	if err := r.SetTrackTopics(ctx, "track_u", map[string]float64{id: 0.7}); err != nil {
+		t.Fatalf("SetTrackTopics: %v", err)
+	}
+	n, err := r.UsageCount(ctx, catalog.KindTopic, id)
+	if err != nil {
+		t.Fatalf("UsageCount(topic): %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected usage 1, got %d", n)
+	}
+	// A referenced topic must refuse deletion.
+	if err := r.DeleteDict(ctx, catalog.KindTopic, id); err == nil {
+		t.Fatalf("DeleteDict should refuse a referenced topic")
+	}
+
+	// Drop the reference, then deletion succeeds.
+	if err := r.SetTrackTopics(ctx, "track_u", map[string]float64{}); err != nil {
+		t.Fatalf("clear SetTrackTopics: %v", err)
+	}
+	if err := r.DeleteDict(ctx, catalog.KindTopic, id); err != nil {
+		t.Fatalf("DeleteDict(topic) after clearing refs: %v", err)
+	}
+	if _, ok, _ := r.GetDict(ctx, catalog.KindTopic, id); ok {
+		t.Fatalf("topic should be gone after delete")
+	}
+}
+
 func TestSetTrackTopicsEmptyClears(t *testing.T) {
 	r, done := newTopicsTestRepo(t)
 	defer done()
