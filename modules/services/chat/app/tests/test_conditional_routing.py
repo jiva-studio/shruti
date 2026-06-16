@@ -15,12 +15,40 @@ Covers the short-path added on top of the original behavior:
 from __future__ import annotations
 
 from lectorium_chat.agent.graph.conditional import (
+    route_after_action,
     route_after_router,
 )
 
 
 def test_direct_chat_goes_to_synthesizer() -> None:
     assert route_after_router({"intent": "direct_chat"}) == "synthesizer"
+
+
+# ── route_after_action: card → deterministic responder, else synth ──
+
+
+def test_action_with_card_goes_to_deterministic_responder() -> None:
+    """A produced action card IS the answer — emit it deterministically
+    (the marker), skip the LLM synthesizer."""
+    state = {
+        "tool_results": [
+            {"kind": "share_pdf", "action_id": "abc123", "items": [{}]},
+        ],
+    }
+    assert route_after_action(state) == "action_responder"
+
+
+def test_action_reminder_card_goes_to_deterministic_responder() -> None:
+    state = {"tool_results": [{"kind": "enable_daily_reminder", "action_id": "ee55"}]}
+    assert route_after_action(state) == "action_responder"
+
+
+def test_action_without_card_goes_to_synthesizer() -> None:
+    """Nothing found / tool error → no card → the synthesizer writes the
+    localized «не нашёл …» message (needs an LLM for the language)."""
+    assert route_after_action({"tool_results": [{"error": "no_pdfs_prepared"}]}) == "synthesizer"
+    assert route_after_action({"tool_results": []}) == "synthesizer"
+    assert route_after_action({}) == "synthesizer"
 
 
 def test_help_goes_to_help_worker() -> None:
