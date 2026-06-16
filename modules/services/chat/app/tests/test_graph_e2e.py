@@ -368,26 +368,22 @@ async def test_action_worker_resolves_prior_track_refs_for_pdf() -> None:
 
     The user's prior assistant message held `[card:track_A]` /
     `[card:track_B]` markers. `fold_history` strips them — so when
-    the next turn asks "Сделай PDF этих лекций", the LLM in
-    action_worker can't see what "этих" referred to.
+    the next turn asks "Сделай PDF этих лекций", the action node must
+    recover what "этих" referred to from the RAW history.
 
-    Fix: action_worker pre-extracts the prior track_ids from the
-    RAW history, mints integer aliases in the current turn's
-    TurnAliasMap, and injects them as a `PRIOR-TURN TRACKS` block
-    so the LLM picks subsets by integer ref. The existing
-    aliased_tools wrapper dealiases back to real catalog ids before
-    calling `track_pdf_generate` — the model never touches raw
-    track strings.
+    The action node is DETERMINISTIC (no LLM): it extracts the prior
+    track_ids from history, aliases them into the current turn, and
+    calls the aliased `track_pdf_generate` with the integer refs — the
+    aliased_tools wrapper de-aliases back to the real catalog ids.
 
-    This test pins the wiring: the worker DOES inject the block, and
-    when the LLM picks refs `[1, 2]`, the tool sees the real track
-    ids `["track_A", "track_B"]`.
+    This test pins the wiring: with no anchor / gather, the node falls
+    through to the prior-turn refs and the tool sees the real track ids
+    `["track_A", "track_B"]`.
     """
     captured: dict[str, Any] = {}
 
     async def fake_track_pdf_generate(**kwargs: Any) -> dict[str, Any]:
         captured["track_ids"] = kwargs.get("track_ids")
-        captured["system_prompt_saw_prior_refs"] = True  # set when called
         yield_event = kwargs.get("yield_event")
         if yield_event is not None:
             yield_event(
@@ -409,28 +405,12 @@ async def test_action_worker_resolves_prior_track_refs_for_pdf() -> None:
             RoutingDecision(intent="create_action", confidence=0.95),
         ],
         stream_responses=[
-            # research_worker: no tools, just converge (we don't care
-            # about it for this test).
+            # research_worker (the gather): no tools, just converge — it
+            # finds nothing, so the action node falls through to the
+            # prior-turn refs.
             [{"finish_reason": "stop"}],
-            # action_worker turn 1: call track_pdf_generate with the
-            # alias integers 1 and 2 — the LLM was given a
-            # PRIOR-TURN TRACKS block listing [^1] and [^2].
-            [
-                {
-                    "tool_calls": [
-                        {
-                            "index": 0,
-                            "id": "tc1",
-                            "name": "track_pdf_generate",
-                            "arguments_delta": '{"track_ids":[1,2],"lang":"ru"}',
-                        }
-                    ]
-                },
-                {"finish_reason": "stop"},
-            ],
-            # action_worker turn 2: converge.
-            [{"finish_reason": "stop"}],
-            # Synth: copies the action marker.
+            # action_worker is deterministic now — no LLM turn here.
+            # Synth: copies the action marker the deterministic node produced.
             [{"text": "Готовлю PDF.\n[action:share_pdf|id=act_pdf]"},
              {"finish_reason": "stop"}],
         ],
