@@ -48,6 +48,11 @@ export default {
     tapToManage: "Toque para ver ou gerenciar",
     choose: 'Apoie o "Shruti"',
     subscribe: "Assinar",
+    trialBadge: "{days} dias grátis",
+    trialThenPrice: "depois {price} / {period}",
+    startFreeTrial: "Iniciar teste gratuito",
+    trialDisclaimer:
+      "Cancele quando quiser. Após o teste, a assinatura é renovada automaticamente.",
     subscribed: "Assinatura concluída",
     manage: "Gerenciar assinatura",
     restore: "Restaurar",

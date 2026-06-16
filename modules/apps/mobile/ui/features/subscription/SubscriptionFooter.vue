@@ -14,7 +14,11 @@
           <h2>
             <b>{{ planTitle(pkg.packageId) }}</b>
           </h2>
-          <p>{{ pkg.priceString }} / {{ periodLabel(pkg.billingPeriod) }}</p>
+          <template v-if="freeTrial(pkg)">
+            <p class="trial">{{ trialBadge(pkg) }}</p>
+            <p class="then">{{ thenPrice(pkg) }}</p>
+          </template>
+          <p v-else>{{ pkg.priceString }} / {{ periodLabel(pkg.billingPeriod) }}</p>
         </IonLabel>
         <IonIcon v-if="selectedPackageId === pkg.packageId" slot="end" :icon="checkmarkCircle" />
       </IonItem>
@@ -26,8 +30,12 @@
         :disabled="!selectedPackageId || purchasing"
         @click="onSubscribeClick"
       >
-        {{ $t("settings.subscription.subscribe") }}
+        {{ ctaLabel }}
       </IonButton>
+
+      <IonNote v-if="selectedHasTrial" class="trial-disclaimer">
+        {{ $t("settings.subscription.trialDisclaimer") }}
+      </IonNote>
 
       <IonButton expand="block" fill="clear" :disabled="restoring" @click="emit('restore')">
         {{ $t("settings.subscription.restore") }}
@@ -69,15 +77,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonIcon, IonItem, IonLabel, IonNote } from "@ionic/vue"
 import { checkmarkCircle } from "ionicons/icons"
+
+export interface IntroOfferView {
+  isFree: boolean
+  priceString: string
+  periodUnit: string
+  periodNumberOfUnits: number
+}
 
 export interface PackageView {
   packageId: string
   priceString: string
   billingPeriod: string
+  introOffer?: IntroOfferView
 }
 
 export interface LegalDocumentView {
@@ -125,6 +141,51 @@ function periodLabel(period: string): string {
   return te(key) ? t(key) : period
 }
 
+/** The free trial on a package, if it carries one we should advertise. */
+function freeTrial(pkg: PackageView): IntroOfferView | undefined {
+  return pkg.introOffer?.isFree ? pkg.introOffer : undefined
+}
+
+/** Normalize the intro period to whole days so iOS's "2 weeks" and
+ *  Android's "14 days" both read as the same "14 days free". */
+function trialDays(offer: IntroOfferView): number {
+  const n = offer.periodNumberOfUnits
+  switch (offer.periodUnit) {
+    case "WEEK":
+      return n * 7
+    case "MONTH":
+      return n * 30
+    case "YEAR":
+      return n * 365
+    default:
+      return n
+  }
+}
+
+function trialBadge(pkg: PackageView): string {
+  const offer = freeTrial(pkg)
+  if (!offer) return ""
+  return t("settings.subscription.trialBadge", { days: trialDays(offer) })
+}
+
+function thenPrice(pkg: PackageView): string {
+  return t("settings.subscription.trialThenPrice", {
+    price: pkg.priceString,
+    period: periodLabel(pkg.billingPeriod),
+  })
+}
+
+const selectedHasTrial = computed<boolean>(() => {
+  const pkg = props.packages.find((p) => p.packageId === selectedPackageId.value)
+  return pkg ? freeTrial(pkg) !== undefined : false
+})
+
+const ctaLabel = computed<string>(() =>
+  selectedHasTrial.value
+    ? t("settings.subscription.startFreeTrial")
+    : t("settings.subscription.subscribe")
+)
+
 function onSubscribeClick(): void {
   if (!selectedPackageId.value) return
   emit("subscribe", selectedPackageId.value)
@@ -146,6 +207,24 @@ function onSubscribeClick(): void {
 .cta {
   margin: 12px 16px 4px;
   --box-shadow: none;
+}
+
+.plan .trial {
+  font-weight: 600;
+}
+
+.plan .then {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.trial-disclaimer {
+  display: block;
+  margin: 0 16px 4px;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--ion-color-medium);
+  text-align: center;
 }
 
 .cant-pay {

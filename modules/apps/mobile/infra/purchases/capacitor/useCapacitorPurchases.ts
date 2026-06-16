@@ -3,6 +3,7 @@ import {
   Purchases,
   PURCHASES_ERROR_CODE,
   LOG_LEVEL,
+  INTRO_ELIGIBILITY_STATUS,
   type CustomerInfo,
   type PurchasesPackage,
 } from "@revenuecat/purchases-capacitor"
@@ -10,6 +11,7 @@ import {
   PurchaseCancelledError,
   type CustomerInfoListener,
   type CustomerState,
+  type IntroOffer,
   type IPurchases,
   type PurchasePackage,
 } from "@ports/app/purchases.js"
@@ -75,7 +77,21 @@ export function useCapacitorPurchases(cfg: CapacitorPurchasesConfig): IPurchases
         `allOfferings=${Object.keys(offerings.all).join(",")}`
       )
       if (!current) return []
-      return current.availablePackages.map(toPurchasePackage)
+      // iOS reports whether the customer can still use a product's intro
+      // offer (a used-up trial would be charged full price immediately, so
+      // we must not advertise "free" to those users). Android always
+      // returns UNKNOWN, so there we fall back to the intro phase being
+      // present on the product — Google enforces new-customer eligibility
+      // at purchase time.
+      const eligible = await introEligibility(
+        platform === "ios" ? current.availablePackages.map((p) => p.product.identifier) : []
+      )
+      return current.availablePackages.map((pkg) =>
+        toPurchasePackage(
+          pkg,
+          platform === "ios" ? eligible[pkg.product.identifier] === true : true
+        )
+      )
     },
 
     async getCustomerState() {
@@ -171,7 +187,23 @@ const EMPTY_STATE: CustomerState = {
 
 const NOOP_UNSUB = (): void => {}
 
-function toPurchasePackage(pkg: PurchasesPackage): PurchasePackage {
+/**
+ * Maps an RC package to our port shape. `showIntro` gates whether the
+ * product's intro phase (the free trial) is surfaced — the caller passes
+ * `false` for iOS customers RC reports as ineligible so we never advertise
+ * a trial the App Store would charge for immediately.
+ */
+function toPurchasePackage(pkg: PurchasesPackage, showIntro: boolean): PurchasePackage {
+  const intro = pkg.product.introPrice
+  const introOffer: IntroOffer | undefined =
+    showIntro && intro
+      ? {
+          isFree: intro.price === 0,
+          priceString: intro.priceString,
+          periodUnit: intro.periodUnit,
+          periodNumberOfUnits: intro.periodNumberOfUnits,
+        }
+      : undefined
   return {
     packageId: pkg.identifier,
     productId: pkg.product.identifier,
@@ -179,6 +211,31 @@ function toPurchasePackage(pkg: PurchasesPackage): PurchasePackage {
     description: pkg.product.description,
     priceString: pkg.product.priceString,
     billingPeriod: pkg.product.subscriptionPeriod ?? "",
+    introOffer,
+  }
+}
+
+/**
+ * iOS-only intro-offer eligibility per product id, mapped to a plain
+ * "is eligible" boolean. Only `ELIGIBLE` counts: RC's own guidance is to
+ * show the regular price on `UNKNOWN` rather than risk a misleading trial
+ * badge. Never rejects — on failure we return an empty map and the caller
+ * treats every product as not-eligible.
+ */
+async function introEligibility(productIds: string[]): Promise<Record<string, boolean>> {
+  if (productIds.length === 0) return {}
+  try {
+    const result = await Purchases.checkTrialOrIntroductoryPriceEligibility({
+      productIdentifiers: productIds,
+    })
+    const out: Record<string, boolean> = {}
+    for (const [id, e] of Object.entries(result)) {
+      out[id] = e.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE
+    }
+    return out
+  } catch (e) {
+    console.warn("[purchases] intro eligibility check failed", e)
+    return {}
   }
 }
 

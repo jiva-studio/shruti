@@ -48,6 +48,11 @@ export default {
     tapToManage: "দেখতে বা পরিচালনা করতে ট্যাপ করুন",
     choose: '"Shruti"-কে সমর্থন করুন',
     subscribe: "সাবস্ক্রাইব করুন",
+    trialBadge: "{days} দিন ফ্রি",
+    trialThenPrice: "এরপর {price} / {period}",
+    startFreeTrial: "ফ্রি ট্রায়াল শুরু করুন",
+    trialDisclaimer:
+      "যেকোনো সময় বাতিল করুন। ট্রায়াল শেষে সাবস্ক্রিপশন স্বয়ংক্রিয়ভাবে নবায়ন হবে।",
     subscribed: "সাবস্ক্রিপশন সম্পন্ন হয়েছে",
     manage: "সাবস্ক্রিপশন পরিচালনা করুন",
     restore: "পুনরুদ্ধার করুন",
