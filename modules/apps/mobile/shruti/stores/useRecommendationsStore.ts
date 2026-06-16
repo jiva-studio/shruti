@@ -2,8 +2,9 @@ import { defineStore } from "pinia"
 import { ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import type { Track } from "@lib/domain/track.js"
-import type { TopicId } from "@lib/domain/core.js"
+import type { LanguageCode, TopicId } from "@lib/domain/core.js"
 
 /** One hot-topic shelf: the topic plus a few of its tracks the user hasn't
  *  heard and hasn't queued. */
@@ -31,6 +32,7 @@ const RECOMMENDED_SIZE = 3
 export const useRecommendationsStore = defineStore("recommendations", () => {
   const app = useShruti()
   const playlist = usePlaylistStore()
+  const appLanguage = useAppLanguage()
 
   const recommended = ref<readonly Track[]>([])
   const shelves = ref<readonly TopicShelf[]>([])
@@ -81,9 +83,9 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
       const shelfList: TopicShelf[] = []
       const topPicks: string[] = []
       for (const topicId of hotTopics) {
-        const ids = (await repos.topics.topTrackIds(topicId, SHELF_SIZE)).filter(
-          (id) => !excluded.has(id) && !playlist.hasTrack(id)
-        )
+        const ids = (
+          await repos.topics.topTrackIds(topicId, appLanguage.value as LanguageCode, SHELF_SIZE)
+        ).filter((id) => !excluded.has(id) && !playlist.hasTrack(id))
         if (ids.length === 0) continue
         const byId = await repos.tracks.getByIds(ids)
         const tracks = ids.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined)
