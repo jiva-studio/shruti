@@ -47,6 +47,11 @@ export default {
     tapToManage: "Открыть и управлять",
     choose: "Поддержите «Слушай Садху»",
     subscribe: "Подписаться",
+    trialBadge: "{days} дней бесплатно",
+    trialThenPrice: "далее {price} / {period}",
+    startFreeTrial: "Попробовать бесплатно",
+    trialDisclaimer:
+      "Отменить можно в любой момент. После пробного периода подписка продлится автоматически.",
     subscribed: "Подписка оформлена",
     manage: "Управление подпиской",
     restore: "Восстановить",

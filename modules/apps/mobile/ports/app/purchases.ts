@@ -6,6 +6,24 @@
  * Apple ID / Google Account-scoped RevenueCat data.
  */
 
+/**
+ * An introductory offer attached to a subscription product — currently
+ * only used for the free trial. Present only when the store has an intro
+ * phase configured AND (on iOS) the customer is still eligible for it.
+ * Android can't report eligibility client-side, so there it reflects the
+ * product merely having an intro phase.
+ */
+export interface IntroOffer {
+  /** `true` when the intro phase costs nothing (a free trial). */
+  isFree: boolean
+  /** Localized price of the intro phase, e.g. `$0.00`. */
+  priceString: string
+  /** Unit of the intro period: `DAY` | `WEEK` | `MONTH` | `YEAR`. */
+  periodUnit: string
+  /** Number of units in the intro period, e.g. `14`. */
+  periodNumberOfUnits: number
+}
+
 export interface PurchasePackage {
   packageId: string
   productId: string
@@ -14,6 +32,8 @@ export interface PurchasePackage {
   priceString: string
   /** ISO-8601 period (e.g. `P1M`, `P1Y`). Empty string when unknown. */
   billingPeriod: string
+  /** Set when the package carries an intro offer the user can still use. */
+  introOffer?: IntroOffer
 }
 
 export interface CustomerState {
