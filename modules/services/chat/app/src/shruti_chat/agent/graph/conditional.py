@@ -195,3 +195,37 @@ def route_after_catalog(state: ChatState) -> str:
     if state.get("intent") == "create_action":
         return "action_worker"
     return "synthesizer"
+
+
+# Action results the action_worker appends to tool_results — each carries a
+# `kind` matching its `[action:<kind>|id=…]` marker + a hex `action_id`.
+_ACTION_RESULT_KINDS = frozenset({
+    "share_pdf",
+    "enable_daily_reminder",
+    "configure_smart_library",
+    "upgrade_to_pro",
+})
+
+
+def _produced_action_card(state: ChatState) -> bool:
+    """True when the action_worker emitted an action card this turn (a
+    tool_result with an action `kind` + `action_id`)."""
+    for note in state.get("tool_results") or []:
+        if (
+            isinstance(note, dict)
+            and isinstance(note.get("action_id"), str)
+            and note.get("kind") in _ACTION_RESULT_KINDS
+        ):
+            return True
+    return False
+
+
+def route_after_action(state: ChatState) -> str:
+    """After action_worker. A produced card IS the answer — emit it
+    deterministically (just the `[action:…|id=…]` marker) and skip the LLM
+    synthesizer: there's nothing to reason about, and the synthesizer only
+    adds variable prose / stray `[card:…]` citations on what should be a flat
+    list. When NO card was produced (nothing found / tool error), fall through
+    to the synthesizer, which writes the «не нашёл …» message IN THE USER'S
+    LANGUAGE — the one part that genuinely needs an LLM."""
+    return "action_responder" if _produced_action_card(state) else "synthesizer"
