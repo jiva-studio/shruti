@@ -20,7 +20,9 @@ function makeListeningSessions(
     },
     tick: async () => {},
     finish: async () => {},
+    finishAt: async () => {},
     getLastSessionForItem: async () => null,
+    getResumePositionForItem: async () => null,
     getProgressForItems: async () => new Map(),
     getCompletedAtForItems: async (itemIds) => {
       const completed = new Set<string>(completedItemIds)
