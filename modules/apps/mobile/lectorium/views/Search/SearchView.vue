@@ -237,12 +237,11 @@ const topicTiles = computed(() => landing.topicTiles)
 const previewLectures = mapper.mapRows(() => landing.lectureSample, { context: "discovery" })
 
 onIonViewWillEnter(() => {
-  // Ensure the batch is loaded (no-op once warmed at startup).
+  // Ensure the batch is loaded (no-op once warmed at startup). Recommendations
+  // are part of that batch (built once in the landing load, like collections
+  // and topics) — we deliberately don't rebuild them on every entry, which used
+  // to reshuffle and visibly swap the "Recommended for you" block on each visit.
   void landing.ensureLoaded()
-  // refresh (not ensureLoaded) so the profile reflects tracks heard since the
-  // last visit — otherwise the shelves freeze on the first (often cold-start)
-  // build until the app restarts.
-  void recommendations.refresh()
 })
 
 async function onSelectTrack(trackId: string): Promise<void> {

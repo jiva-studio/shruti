@@ -97,18 +97,29 @@ export async function buildRecommendations(
     hotTopics = [...withTracks].slice(0, input.shelfTopics)
   }
 
+  // Build every hot-topic shelf concurrently — each is two sequential DB reads
+  // (topTrackIds → getByIds), so running them in parallel rather than in a
+  // for-await loop cuts this phase to roughly one shelf's latency. Promise.all
+  // preserves hotTopics' affinity order.
+  const built = await Promise.all(
+    hotTopics.map(async (topicId): Promise<RecommendationShelf | null> => {
+      const ids = (await deps.topics.topTrackIds(topicId, input.languages, input.shelfSize)).filter(
+        (id) => !excluded(id)
+      )
+      if (ids.length === 0) return null
+      const byId = await deps.tracks.getByIds(ids)
+      const tracks = ids.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined)
+      if (tracks.length === 0) return null
+      return { topicId, tracks }
+    })
+  )
+
   const shelves: RecommendationShelf[] = []
   const topPicks: TrackId[] = []
-  for (const topicId of hotTopics) {
-    const ids = (await deps.topics.topTrackIds(topicId, input.languages, input.shelfSize)).filter(
-      (id) => !excluded(id)
-    )
-    if (ids.length === 0) continue
-    const byId = await deps.tracks.getByIds(ids)
-    const tracks = ids.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined)
-    if (tracks.length === 0) continue
-    shelves.push({ topicId, tracks })
-    if (tracks[0]) topPicks.push(tracks[0].id)
+  for (const shelf of built) {
+    if (!shelf) continue
+    shelves.push(shelf)
+    if (shelf.tracks[0]) topPicks.push(shelf.tracks[0].id)
   }
 
   // "Recommended for you": with history, the top unheard pick from each hot
