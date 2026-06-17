@@ -33,8 +33,11 @@ describe("listSimilarTracksByTopic", () => {
       .mockResolvedValue(["n1", "n2"] as TrackId[])
     const deps = makeDeps({ topics: { similarTrackIds: similarSpy } })
     const track = mkTrack("seed", ["a", "b", "c"])
-    const res = await listSimilarTracksByTopic({ track, seedTopics: 2, limit: 5 }, deps)
-    expect(similarSpy).toHaveBeenCalledWith(["a", "b"], "seed", 5)
+    const res = await listSimilarTracksByTopic(
+      { track, seedTopics: 2, languages: ["en"], limit: 5 },
+      deps
+    )
+    expect(similarSpy).toHaveBeenCalledWith(["a", "b"], "seed", ["en"], 5)
     expect(res.map((t) => t.id)).toEqual(["n1", "n2"])
   })
 
@@ -42,7 +45,7 @@ describe("listSimilarTracksByTopic", () => {
     const similarSpy = vi.fn()
     const deps = makeDeps({ topics: { similarTrackIds: similarSpy } })
     const res = await listSimilarTracksByTopic(
-      { track: mkTrack("seed", []), seedTopics: 5, limit: 5 },
+      { track: mkTrack("seed", []), seedTopics: 5, languages: ["en"], limit: 5 },
       deps
     )
     expect(res).toEqual([])
@@ -52,7 +55,7 @@ describe("listSimilarTracksByTopic", () => {
   it("returns [] when there are no neighbours", async () => {
     const deps = makeDeps({ topics: { similarTrackIds: async () => [] } })
     const res = await listSimilarTracksByTopic(
-      { track: mkTrack("seed", ["a"]), seedTopics: 5, limit: 5 },
+      { track: mkTrack("seed", ["a"]), seedTopics: 5, languages: ["en"], limit: 5 },
       deps
     )
     expect(res).toEqual([])

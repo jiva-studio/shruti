@@ -2,7 +2,7 @@ import { defineStore } from "pinia"
 import { ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
-import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { shuffled } from "@lectorium/utils/shuffle.js"
 import {
   buildRecommendations,
@@ -31,7 +31,7 @@ const RECOMMENDED_SIZE = 3
 export const useRecommendationsStore = defineStore("recommendations", () => {
   const app = useLectorium()
   const playlist = usePlaylistStore()
-  const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
 
   const recommended = ref<readonly Track[]>([])
   const shelves = ref<readonly RecommendationShelf[]>([])
@@ -59,7 +59,7 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
       const result = await buildRecommendations(
         {
           now: Date.now(),
-          language: appLanguage.value as LanguageCode,
+          languages: libraryLanguages.value as LanguageCode[],
           historyWindowMs: HISTORY_WINDOW_MS,
           shelfTopics: SHELF_TOPICS,
           shelfSize: SHELF_SIZE,

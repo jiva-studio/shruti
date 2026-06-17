@@ -1,14 +1,20 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useSearchFiltersStore } from "@lectorium/stores/useSearchFiltersStore.js"
-import { detectDeviceLocaleAsync } from "@lectorium/i18n/index.js"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
 
 // First-launch seed written by useSearchFiltersStore: oldest-first sort and
-// a single device-locale language. The Filters badge must not count these
-// as "active" or a pristine install shows "2".
+// the locale-derived library language(s). The Filters badge must not count
+// these as "active" or a pristine install shows "2".
 const DEFAULT_SORT: SortMethod = "byDateAsc"
+
+/** Order-independent equality of two language-code lists. */
+function sameLanguageSet(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((x) => set.has(x))
+}
 
 export interface UseSearchFiltersBindingReturn {
   filters: Ref<FiltersModel>
@@ -34,16 +40,17 @@ export interface UseSearchFiltersBindingReturn {
 export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
   const store = useSearchFiltersStore()
   const filters = ref<FiltersModel>({})
-  // The single language the store seeds on first launch; used to keep the
-  // pristine-install language out of the active count.
-  const seededLocale = ref<string | undefined>(undefined)
+  // The locale-derived library language(s) the store seeds on first launch;
+  // used to keep the pristine-install language selection out of the active
+  // count. Populated from the store once it has loaded.
+  const seededLanguages = ref<readonly string[]>([])
   // Set while the initial hydration assigns `filters.value`, so the deep
   // watcher doesn't echo every just-loaded value straight back to the store.
   let hydrating = false
 
   const ready = (async () => {
     await store.load()
-    seededLocale.value = await detectDeviceLocaleAsync()
+    seededLanguages.value = [...store.localeLanguageDefault]
     hydrating = true
     filters.value = {
       authors: [...store.authorIds],
@@ -109,7 +116,7 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
     // untouched default; anything else (cleared, or extra langs) counts.
     const langs = f.languages ?? []
     const isSeededLangDefault =
-      langs.length === 1 && seededLocale.value !== undefined && langs[0] === seededLocale.value
+      seededLanguages.value.length > 0 && sameLanguageSet(langs, seededLanguages.value)
     const languageCount = isSeededLangDefault ? 0 : langs.length
     const sortIsActive = f.sort !== undefined && f.sort !== "" && f.sort !== DEFAULT_SORT
     return (

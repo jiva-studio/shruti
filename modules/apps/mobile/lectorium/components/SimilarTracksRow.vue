@@ -12,14 +12,17 @@ import { TracksList } from "@ui/components/tracks/list/index.js"
 import SectionLabel from "@ui/components/SectionLabel.vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { listSimilarTracksByTopic } from "@lib/application/listSimilarTracksByTopic.js"
 import type { Track } from "@lib/domain/track.js"
+import type { LanguageCode } from "@lib/domain/core.js"
 
 const props = defineProps<{ track: Track }>()
 
 const { t } = useI18n()
 const app = useLectorium()
 const mapper = useTrackUiStateMapper()
+const libraryLanguages = useLibraryLanguages()
 
 const SEED_TOPICS = 5
 const SIMILAR_LIMIT = 5
@@ -35,7 +38,12 @@ async function load(track: Track): Promise<void> {
   similar.value = []
   try {
     const result = await listSimilarTracksByTopic(
-      { track, seedTopics: SEED_TOPICS, limit: SIMILAR_LIMIT },
+      {
+        track,
+        seedTopics: SEED_TOPICS,
+        languages: libraryLanguages.value as LanguageCode[],
+        limit: SIMILAR_LIMIT,
+      },
       app.repositories()
     )
     if (myGen === gen) similar.value = result
@@ -46,8 +54,8 @@ async function load(track: Track): Promise<void> {
 }
 
 watch(
-  () => props.track,
-  (track) => void load(track),
+  () => [props.track, libraryLanguages.value] as const,
+  ([track]) => void load(track),
   { immediate: true }
 )
 </script>

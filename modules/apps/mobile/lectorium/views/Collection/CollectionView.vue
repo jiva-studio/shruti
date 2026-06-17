@@ -68,6 +68,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
 import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
 import { addTracksToPlaylist } from "@lib/application"
@@ -88,6 +89,7 @@ const toast = useToast()
 const mapper = useTrackUiStateMapper()
 const trackActions = useTrackActionSheet()
 const appLanguage = useAppLanguage()
+const libraryLanguages = useLibraryLanguages()
 
 const TOPIC_TRACKS = 50
 
@@ -141,7 +143,12 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
       if (myGen !== loadGen) return
       title.value = dictionaries.topicNamesById.get(id) ?? id
       coverKey.value = dictionaries.topicCoverById.get(id) ?? null
-      ids = await repos.topics.topTrackIds(id as TopicId, locale as LanguageCode, TOPIC_TRACKS)
+      // Topic membership is filtered to the library languages in SQL.
+      ids = await repos.topics.topTrackIds(
+        id as TopicId,
+        libraryLanguages.value as LanguageCode[],
+        TOPIC_TRACKS
+      )
     } else {
       const d = await repos.collections.getCollection(id, locale)
       if (myGen !== loadGen) return
@@ -152,11 +159,23 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
       ids = d.trackIds
     }
     if (myGen !== loadGen) return
-    trackIds.value = ids
-    if (ids.length === 0) return
+    if (ids.length === 0) {
+      trackIds.value = []
+      return
+    }
     const byId = await repos.tracks.getByIds([...ids])
     if (myGen !== loadGen) return
-    tracks.value = ids.map((tid) => byId.get(tid)).filter((tr): tr is Track => tr !== undefined)
+    const hydrated = ids.map((tid) => byId.get(tid)).filter((tr): tr is Track => tr !== undefined)
+    // A curated collection can mix languages; show only tracks the user can
+    // consume in their library languages. Topic membership is already filtered
+    // in SQL, and an empty language set means "no filter".
+    const langs = libraryLanguages.value
+    const visible =
+      kind === "topic" || langs.length === 0
+        ? hydrated
+        : hydrated.filter((tr) => tr.variants.some((v) => langs.includes(v.language)))
+    tracks.value = visible
+    trackIds.value = visible.map((tr) => tr.id)
   } catch (err) {
     console.warn("[detail] load failed", err)
   } finally {
@@ -165,7 +184,7 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
 }
 
 watch(
-  () => [props.id, props.kind ?? "collection", appLanguage.value] as const,
+  () => [props.id, props.kind ?? "collection", appLanguage.value, libraryLanguages.value] as const,
   ([id, kind, locale]) => void load(kind, id, locale),
   { immediate: true }
 )

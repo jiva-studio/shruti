@@ -3,6 +3,7 @@ export default {
     subscription: "Подписка",
     account: "Аккаунт",
     appearance: "Внешний вид",
+    library: "Библиотека",
     chat: "Спроси Садху",
     contacts: "Связаться с нами",
     status: "Статус",
@@ -12,6 +13,9 @@ export default {
     debug: "Отладка",
     danger: "Опасная зона",
     about: "О приложении",
+  },
+  libraryLanguages: {
+    description: "Показывать лекции на этих языках в поиске, темах и рекомендациях.",
   },
 
   account: {

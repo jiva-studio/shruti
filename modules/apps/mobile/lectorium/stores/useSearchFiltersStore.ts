@@ -4,6 +4,10 @@ import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { detectDeviceLocaleAsync } from "@lectorium/i18n/index.js"
+import {
+  defaultLibraryLanguages,
+  reduceLocaleToContentLanguage,
+} from "@lib/application/reduceLocaleToLibraryLanguages.js"
 
 // v3 introduces locale-seeded defaults on first launch (issue #411). The
 // version bump is intentional: every install — fresh or upgraded from v2 —
@@ -57,9 +61,33 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
   const dateFrom = ref<string | undefined>(undefined)
   const dateTo = ref<string | undefined>(undefined)
   const loaded = ref<boolean>(false)
+  // The locale-derived default library language(s) for this device — the
+  // untouched baseline. Computed once in `load()` and exposed so the Filters
+  // badge can tell a pristine language selection from a deliberate one.
+  const localeLanguageDefault = ref<readonly string[]>([])
+
+  // Resolve the default content language(s) for the device locale, constrained
+  // to languages the catalog actually has lectures in. Reducing the raw UI
+  // locale (e.g. uk → ru) is essential: a strict `language = uiLocale` filter
+  // would empty the whole library for any UI language with no audio of its own.
+  async function computeLocaleDefault(): Promise<readonly string[]> {
+    const locale = await detectDeviceLocaleAsync()
+    let available: string[]
+    try {
+      available = (await app.repositories().languages.listWithTracks()).map((l) => l.code)
+    } catch {
+      // Content DB not open yet — fall back to the bare reduced language so the
+      // seed is still sensible; it is re-evaluated on the next launch.
+      available = []
+    }
+    return available.length > 0
+      ? defaultLibraryLanguages(locale, available)
+      : [reduceLocaleToContentLanguage(locale)]
+  }
 
   async function load(): Promise<void> {
     if (loaded.value) return
+    localeLanguageDefault.value = await computeLocaleDefault()
     const raw = await app.preferences.get(STORAGE_KEY)
     if (raw) {
       try {
@@ -81,13 +109,12 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
       return
     }
 
-    // First launch (or first launch under v3): seed the language filter
-    // from the device locale and default the sort to oldest-first. We
-    // persist immediately so subsequent reads take the regular branch
-    // and the user's later changes overwrite the seed instead of racing
-    // with it.
-    const locale = await detectDeviceLocaleAsync()
-    languageCodes.value = [locale]
+    // First launch (or first launch under v3): seed the library language(s)
+    // from the device locale reduced to a content language we actually have
+    // (e.g. uk → ru), and default the sort to oldest-first. We persist
+    // immediately so subsequent reads take the regular branch and the user's
+    // later changes overwrite the seed instead of racing with it.
+    languageCodes.value = [...localeLanguageDefault.value]
     sort.value = "byDateAsc"
     loaded.value = true
     await persist()
@@ -206,6 +233,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     dateFrom,
     dateTo,
     loaded,
+    localeLanguageDefault,
     load,
     setAuthors,
     setLanguages,
