@@ -5,6 +5,7 @@ Centralised routing matrix:
   direct_chat / unknown  → synthesizer        (no tools)
   help                   → help_worker        → synthesizer
   find_track             → catalog_worker     → synthesizer
+  recommend              → recommend_worker   → synthesizer      (no LLM loop)
   research               → research_worker    → synthesizer
   create_action          → action_worker      → synthesizer      (short path)
                         OR research_worker    → action_worker → synthesizer
@@ -125,6 +126,9 @@ def route_after_router(state: ChatState) -> str:
         return "help_worker"
     if intent == "find_track":
         return "catalog_worker"
+    if intent == "recommend":
+        # Deterministic topic-affinity recommender — no LLM ReAct loop.
+        return "recommend_worker"
     if intent == "show_verse":
         return "show_verse_worker"
     if intent == "create_action":

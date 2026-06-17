@@ -77,11 +77,10 @@ Intents:
                  "which verse mentions linux-client-kshema".
 - find_track: catalog lookup by metadata — title, source/verse
   address, date, location, author, OR the user's listening history
-  by TIME WINDOW (this week, yesterday) OR personal next-track
-  recommendations (NOT "similar to" — that's research). **Playlist
-  requests ("собери плейлист", "make a playlist") also belong here**
-  — the result is a list of tracks; the client renders them as
-  card-stack and offers a save-as-playlist action separately.
+  by TIME WINDOW (this week, yesterday). **Playlist requests ("собери
+  плейлист", "make a playlist") also belong here** — the result is a
+  list of tracks; the client renders them as card-stack and offers a
+  save-as-playlist action separately.
   Crucially: ANY "show / list / покажи / give me LECTURES" phrasing
   is find_track even when paired with a verse address, because the
   user wants a LIST OF TRACKS (rendered as `[^N]` cards), not
@@ -91,14 +90,28 @@ Intents:
                  "покажи лекции по БГ 2.13",
                  "лекции по второй главе Гиты",
                  "что я слушал на этой неделе",
-                 "что мне послушать дальше",
                  "собери плейлист про карму".
   Examples (en): "morning walks 1976 Bombay",
                  "show lectures on SB 5.5.3",
                  "give me lectures about chapter 2",
                  "what I listened to this week",
-                 "what should I listen to next",
                  "build a playlist on bhakti".
+- recommend: the user wants a PERSONAL "what to listen to next" pick
+  driven by their own listening history — NOT a named topic, author,
+  date, or "similar to THIS lecture" (that's research). No metadata
+  anchor, no scripture reference: just "recommend me something" / "what
+  else should I listen to". The recommender is deterministic (topic
+  affinity over what they've already heard), so it needs no extracted
+  args. If the user names a concrete topic/author/source ("recommend
+  lectures on karma"), that's find_track / research, NOT recommend.
+  Examples (ru): "что мне послушать дальше",
+                 "что послушать ещё",
+                 "посоветуй лекцию",
+                 "порекомендуй что-нибудь".
+  Examples (en): "what should I listen to next",
+                 "what else should I listen to",
+                 "recommend me a lecture",
+                 "suggest something to listen to".
 - create_action: user wants to TRIGGER or CREATE something — PDF
   export, daily reminder, smart-library setup, Pro upgrade.
   HARD RULE: if the query contains ANY of these tokens (case-

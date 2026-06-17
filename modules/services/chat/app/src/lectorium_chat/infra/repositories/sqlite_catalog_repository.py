@@ -442,6 +442,81 @@ def _get_titles_sync(
     return out
 
 
+def _topic_weights_for_tracks_sync(
+    db_path: Path, track_ids: list[str],
+) -> list[tuple[str, str, float]]:
+    """`(track_id, topic_id, weight)` for the given tracks — the raw signal
+    the taste profile is built from. Mirrors mobile `weightsForTracks`."""
+    ids = [t for t in track_ids if t]
+    if not ids:
+        return []
+    placeholders = ",".join("?" * len(ids))
+    with _catalog_conn(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT track_id, topic_id, weight FROM track_topics "
+            f"WHERE track_id IN ({placeholders})",
+            (*ids,),
+        ).fetchall()
+    return [(r["track_id"], r["topic_id"], float(r["weight"])) for r in rows]
+
+
+def _top_track_ids_for_topic_sync(
+    db_path: Path, topic_id: str, languages: list[str], limit: int,
+) -> list[str]:
+    """Highest-weight tracks on a topic, optionally language-constrained.
+
+    EXISTS (not a JOIN) so a track with several matching variants stays a
+    single row — mirrors the mobile `topTrackIds` SQL verbatim."""
+    langs = [code for code in languages if code]
+    with _catalog_conn(db_path) as conn:
+        if not langs:
+            rows = conn.execute(
+                "SELECT track_id FROM track_topics WHERE topic_id = ? "
+                "ORDER BY weight DESC LIMIT ?",
+                (topic_id, limit),
+            ).fetchall()
+        else:
+            placeholders = ",".join("?" * len(langs))
+            rows = conn.execute(
+                f"SELECT tt.track_id FROM track_topics tt "
+                f"WHERE tt.topic_id = ? AND EXISTS ("
+                f"  SELECT 1 FROM track_variants tv "
+                f"  WHERE tv.track_id = tt.track_id AND tv.language IN ({placeholders})"
+                f") ORDER BY tt.weight DESC LIMIT ?",
+                (topic_id, *langs, limit),
+            ).fetchall()
+    return [r["track_id"] for r in rows]
+
+
+def _topic_names_sync(
+    db_path: Path, topic_ids: list[str], lang: str,
+) -> dict[str, str]:
+    """Batch topic_id → display name, requested lang then en fallback."""
+    ids = [t for t in topic_ids if t]
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    with _catalog_conn(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, full_name, short_name, language FROM topics
+            WHERE id IN ({placeholders})
+            ORDER BY id,
+                     CASE language WHEN ? THEN 0 WHEN 'en' THEN 1 ELSE 2 END
+            """,
+            (*ids, lang),
+        ).fetchall()
+    out: dict[str, str] = {}
+    for r in rows:
+        tid = r["id"]
+        if tid in out:  # first row per id wins → honours the lang order
+            continue
+        name = (r["full_name"] or r["short_name"] or "").strip()
+        if name:
+            out[tid] = name
+    return out
+
+
 def _filter_track_ids_by_ref(
     conn: sqlite3.Connection,
     *,
@@ -943,6 +1018,27 @@ class SqliteCatalogRepository:
     async def filter_existing_track_ids(self, track_ids: list[str]) -> list[str]:
         return await asyncio.to_thread(
             _filter_existing_track_ids_sync, self._db_path, track_ids,
+        )
+
+    async def topic_weights_for_tracks(
+        self, track_ids: list[str],
+    ) -> list[tuple[str, str, float]]:
+        return await asyncio.to_thread(
+            _topic_weights_for_tracks_sync, self._db_path, track_ids,
+        )
+
+    async def top_track_ids_for_topic(
+        self, topic_id: str, *, languages: list[str], limit: int,
+    ) -> list[str]:
+        return await asyncio.to_thread(
+            _top_track_ids_for_topic_sync, self._db_path, topic_id, languages, limit,
+        )
+
+    async def topic_names(
+        self, topic_ids: list[str], *, lang: str,
+    ) -> dict[str, str]:
+        return await asyncio.to_thread(
+            _topic_names_sync, self._db_path, topic_ids, lang,
         )
 
     async def get_outline(

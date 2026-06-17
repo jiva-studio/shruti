@@ -358,6 +358,7 @@ async def run_chat_turn(
             # Code-driven research pipeline collaborators.
             chunk_repo=deps.chunk_repo,
             catalog_repo=deps.catalog_repo,
+            user_context=user_context,
             embedder=deps.embedder,
             reranker=deps.reranker,
             pool=deps.pool,

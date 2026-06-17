@@ -51,6 +51,7 @@ from lectorium_chat.agent.graph.nodes import (
     catalog_worker_node,
     help_worker_node,
     locate_worker_node,
+    recommend_worker_node,
     research_worker_node,
     router_node,
     show_verse_worker_node,
@@ -78,6 +79,7 @@ def build_chat_graph() -> Pregel:
     builder.add_node("research_worker", research_worker_node)
     builder.add_node("locate_worker", locate_worker_node)
     builder.add_node("catalog_worker", catalog_worker_node)
+    builder.add_node("recommend_worker", recommend_worker_node)
     builder.add_node("action_worker", action_worker_node)
     builder.add_node("help_worker", help_worker_node)
     builder.add_node("show_verse_worker", show_verse_worker_node)
@@ -93,6 +95,7 @@ def build_chat_graph() -> Pregel:
             "research_worker": "research_worker",
             "locate_worker": "locate_worker",
             "catalog_worker": "catalog_worker",
+            "recommend_worker": "recommend_worker",
             "action_worker": "action_worker",
             "help_worker": "help_worker",
             "show_verse_worker": "show_verse_worker",
@@ -137,6 +140,11 @@ def build_chat_graph() -> Pregel:
         },
     )
     builder.add_edge("action_responder", END)
+    # recommend_worker emits topic-affinity lecture cards (or a "listen first"
+    # note) deterministically — straight to the synthesizer, which only phrases
+    # the lead-in + follow-up chips. No synthesis_planner (these are list-tile
+    # cards, not essay-grounding notes), same as catalog_worker.
+    builder.add_edge("recommend_worker", "synthesizer")
     # help_worker emits a help blurb (not an action card) — straight to synth.
     builder.add_edge("help_worker", "synthesizer")
     # locate_worker emits concise location notes (chapter/verse address) —
