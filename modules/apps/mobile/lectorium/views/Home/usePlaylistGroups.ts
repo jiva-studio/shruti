@@ -1,9 +1,9 @@
 import { ref, computed, watch, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 import type { PlaylistRenderItem } from "@ui/features/playlist/index.js"
-import type { TrackCollectionRef } from "@infra/repositories/sql/index.js"
 
 export interface UsePlaylistGroupsReturn {
   /** The playlist flattened into standalone rows + collection groups. */
@@ -11,29 +11,40 @@ export interface UsePlaylistGroupsReturn {
 }
 
 /**
- * Derives collection groups for the Home playlist from collection membership —
- * no per-item provenance is stored. For each playlist track we read which
- * collections it belongs to (`collection_tracks`) and group maximal runs of
- * consecutive rows that share a collection.
+ * Groups the Home playlist into collection accordions from STORED provenance:
+ * each playlist item records the collection it was added from (`collectionId`,
+ * set only when the user adds a whole collection — see migration 012). Maximal
+ * runs of two-or-more consecutive rows sharing the same source collection
+ * become one group; everything else renders as a standalone track.
  *
- * A run is labelled with the collection that yields the LONGEST consecutive
- * run starting at that point; ties resolve to the lowest `sort_order` (the repo
- * returns memberships in that order, and we keep the first on a tie). A track
- * that belongs to two added collections therefore shows under one only, and a
- * track that was already in the playlist before a collection was added simply
- * falls outside the contiguous block — both accepted by design. Archiving a
- * middle track keeps the surrounding rows adjacent, so the group survives.
+ * Unlike the old derive-by-membership approach, this reflects user intent: a
+ * single lecture opened from a collection (no provenance) is never folded into
+ * a group, and an "add all" groups exactly the tracks the user added —
+ * independent of which catalog collections those tracks happen to belong to.
  *
- * Membership is keyed by `${locale}:${trackId}` so a UI-language switch
- * re-derives against that locale's collections.
+ * Collection names are localized, so they're resolved per `collectionId` for
+ * the active locale; an id that no longer resolves (collection removed from the
+ * bundled catalog) falls back to standalone rows.
  */
 export function usePlaylistGroups(
   rows: ComputedRef<readonly UiTrackRow[]>,
   locale: Ref<string>
 ): UsePlaylistGroupsReturn {
   const app = useLectorium()
+  const playlist = usePlaylistStore()
   const { t } = useI18n()
-  const membership = ref<Map<string, readonly TrackCollectionRef[]>>(new Map())
+  // `${locale}:${collectionId}` → display name (or null when unresolved).
+  const names = ref<Map<string, string | null>>(new Map())
+
+  // trackId → source collectionId, from the active playlist items. A track is
+  // unique in the active playlist, so this mapping is unambiguous.
+  const sourceByTrack = computed(() => {
+    const m = new Map<string, string>()
+    for (const { item } of playlist.entries) {
+      if (item.collectionId) m.set(item.trackId, item.collectionId)
+    }
+    return m
+  })
 
   // Dominant author across a group's lectures: the one contributing the most
   // lectures, with an "…and others" suffix when more than one author appears.
@@ -56,64 +67,63 @@ export function usePlaylistGroups(
     return counts.size > 1 ? t("home.collectionMoreAuthors", { author: top }) : top
   }
 
-  async function load(ids: readonly string[], loc: string): Promise<void> {
+  async function loadNames(ids: readonly string[], loc: string): Promise<void> {
     const repos = app.repositories()
-    const next = new Map(membership.value)
+    const next = new Map(names.value)
     let changed = false
     await Promise.all(
       ids.map(async (id) => {
         const key = `${loc}:${id}`
         if (next.has(key)) return
         try {
-          next.set(key, await repos.collections.getTrackCollections(id, loc))
+          next.set(key, await repos.collections.getCollectionName(id, loc))
         } catch {
-          next.set(key, [])
+          next.set(key, null)
         }
         changed = true
       })
     )
-    if (changed) membership.value = next
+    if (changed) names.value = next
   }
 
   watch(
-    [() => rows.value.map((r) => r.id).join(","), locale],
-    () => {
-      void load(
-        rows.value.map((r) => r.id),
-        locale.value
-      )
-    },
+    [() => [...new Set(sourceByTrack.value.values())].sort().join(","), locale],
+    () => void loadNames([...new Set(sourceByTrack.value.values())], locale.value),
     { immediate: true }
   )
 
   const items = computed<readonly PlaylistRenderItem[]>(() => {
     const rs = rows.value
     const loc = locale.value
-    const memOf = (id: string): readonly TrackCollectionRef[] =>
-      membership.value.get(`${loc}:${id}`) ?? []
+    const src = sourceByTrack.value
+    // A row's source collection counts only once its name has resolved for the
+    // active locale; an unresolved id leaves the row standalone.
+    const colOf = (rowId: string): { id: string; name: string } | null => {
+      const cid = src.get(rowId)
+      if (!cid) return null
+      const name = names.value.get(`${loc}:${cid}`)
+      return name ? { id: cid, name } : null
+    }
 
     const out: PlaylistRenderItem[] = []
     let i = 0
     while (i < rs.length) {
-      const here = memOf(rs[i].id)
-      // Among the collections this row belongs to, pick the one whose
-      // consecutive run (starting here) is longest.
-      let best: { col: TrackCollectionRef; end: number } | null = null
-      for (const col of here) {
-        let j = i
-        while (j + 1 < rs.length && memOf(rs[j + 1].id).some((c) => c.id === col.id)) j++
-        if (j > i && (best === null || j - i > best.end - i)) best = { col, end: j }
+      const here = colOf(rs[i].id)
+      // Extend a run of consecutive rows sharing the same source collection.
+      let j = i
+      if (here) {
+        while (j + 1 < rs.length && colOf(rs[j + 1].id)?.id === here.id) j++
       }
-      if (best) {
-        const groupRows = rs.slice(i, best.end + 1)
+      if (here && j > i) {
+        const groupRows = rs.slice(i, j + 1)
         out.push({
           kind: "group",
-          id: best.col.id,
-          name: best.col.name,
+          id: here.id,
+          name: here.name,
           author: dominantAuthor(groupRows),
           rows: groupRows,
         })
-        i = best.end + 1
+        i = j + 1
       } else {
         out.push({ kind: "track", row: rs[i] })
         i++

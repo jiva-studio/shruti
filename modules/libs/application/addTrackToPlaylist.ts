@@ -6,6 +6,8 @@ import { err, ok, type Result } from "@kit/core"
 
 export interface AddTrackToPlaylistInput {
   readonly trackId: TrackId
+  /** Source collection when the track is added as part of an "add all". */
+  readonly collectionId?: string | null
 }
 
 export type AddTrackToPlaylistError = "already-in-playlist"
@@ -33,7 +35,7 @@ export async function addTrackToPlaylist(
     const active = await deps.playlistItems.listActive()
     const existing = active.find((item) => item.trackId === input.trackId)
     if (existing) return err("already-in-playlist")
-    const created = await deps.playlistItems.add(input.trackId)
+    const created = await deps.playlistItems.add(input.trackId, input.collectionId ?? null)
     return ok(created)
   })
 }

@@ -46,6 +46,7 @@ const mkItem = (id: string, trackId: string): PlaylistItem => ({
   trackId: trackId as TrackId,
   addedAt: 1000,
   archivedAt: null,
+  collectionId: null,
 })
 
 const mkTrack = (id: string): Track => ({

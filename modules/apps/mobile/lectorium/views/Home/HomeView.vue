@@ -275,7 +275,7 @@ async function onPickCollection(collectionId: string): Promise<void> {
   try {
     const result = await addTracksToPlaylist(
       { trackIds: [...collection.trackIds] },
-      { playlist: { add: (id) => playlist.add(id) } }
+      { playlist: { add: (id) => playlist.add(id, collectionId) } }
     )
     if (!result.ok) {
       void toast.error(t("home.starterPacks.error"))

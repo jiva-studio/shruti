@@ -156,10 +156,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
     if (!loaded) await refresh()
   }
 
-  async function add(trackId: TrackId): Promise<Result<PlaylistItem, AddTrackToPlaylistError>> {
+  async function add(
+    trackId: TrackId,
+    collectionId: string | null = null
+  ): Promise<Result<PlaylistItem, AddTrackToPlaylistError>> {
     const repos = app.repositories()
     const result = await addTrackToPlaylist(
-      { trackId },
+      { trackId, collectionId },
       { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
     )
     if (result.ok) {

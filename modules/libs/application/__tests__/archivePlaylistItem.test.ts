@@ -27,6 +27,7 @@ const sampleItem = (over: Partial<PlaylistItem> = {}): PlaylistItem => ({
   trackId: "t-1" as TrackId,
   addedAt: 1000,
   archivedAt: null,
+  collectionId: null,
   ...over,
 })
 
