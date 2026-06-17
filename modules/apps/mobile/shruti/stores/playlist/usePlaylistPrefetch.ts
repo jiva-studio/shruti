@@ -56,6 +56,11 @@ export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
       }
     } catch (err) {
       console.error("[playlist] prefetch failed", err)
+      // `add()` optimistically set "downloading" before this resolved.
+      // If `getById` (or anything above) THREW, nothing else will ever
+      // flip the state, so the row spins "downloading" forever — clear
+      // the optimistic flag here too, mirroring the no-audio branch.
+      useDownloadStore().clearStartingDownload(trackId)
     }
     // Delegate to the shared transcript prefetcher so the playlist path
     // gets the same `useServerFallback` CDN rotation the audio-success

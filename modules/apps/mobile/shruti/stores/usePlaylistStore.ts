@@ -304,8 +304,20 @@ export const usePlaylistStore = defineStore("playlist", () => {
    * past the first paged window (`entries`) — without it we'd need
    * `entry.track` to read the duration, and items off-page wouldn't be
    * eligible.
+   *
+   * `allowCompletion` (default true) lets a caller patch position WITHOUT
+   * marking completion — e.g. a lock-screen skip or playback error that
+   * finished a track part-way but happened to land near the end. The
+   * reconcile path passes false for those so a non-natural end can't
+   * falsely complete + auto-archive an unfinished lecture.
    */
-  function patchProgress(itemId: PlaylistItemId, progressMs: number, durationMs?: number): void {
+  function patchProgress(
+    itemId: PlaylistItemId,
+    progressMs: number,
+    durationMs?: number,
+    options?: { allowCompletion?: boolean }
+  ): void {
+    const allowCompletion = options?.allowCompletion ?? true
     // Once an item is `completed`, the engine can still emit a late
     // `playing=false, position<duration` tick (it sometimes settles a
     // few hundred ms before the reported duration). Let it update the
@@ -319,9 +331,24 @@ export const usePlaylistStore = defineStore("playlist", () => {
     next.set(itemId, effective)
     progressMap.value = next
 
-    const entry = entries.value.find((e) => e.item.id === itemId)
-    const resolvedDurationMs = entry ? maxAudioDurationMs(entry.track) : (durationMs ?? 0)
+    // Prefer the engine-reported duration when present and positive: the
+    // catalog duration (`maxAudioDurationMs`) can overstate a denoised /
+    // re-encoded file that's actually shorter, so completion would never
+    // trigger against the catalog value. Taking the min keeps completion
+    // correct whichever source is shorter while still tolerating a stale
+    // or missing engine duration.
+    const catalogDurationMs = (() => {
+      const entry = entries.value.find((e) => e.item.id === itemId)
+      return entry ? maxAudioDurationMs(entry.track) : 0
+    })()
+    const engineDurationMs = durationMs && durationMs > 0 ? durationMs : 0
+    const resolvedDurationMs =
+      catalogDurationMs > 0 && engineDurationMs > 0
+        ? Math.min(catalogDurationMs, engineDurationMs)
+        : engineDurationMs || catalogDurationMs
+
     if (
+      allowCompletion &&
       resolvedDurationMs > 0 &&
       isCompleted(progressMs, resolvedDurationMs) &&
       completedAtMap.value.get(itemId) == null
