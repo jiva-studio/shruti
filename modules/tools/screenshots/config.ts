@@ -76,7 +76,7 @@ export interface DeviceSpec {
 /** Store form factors. width × height × dpr → output PNG size. */
 export const DEVICES: readonly DeviceSpec[] = [
   { code: "phone", width: 412, height: 892, dpr: 3 }, // Play phone → 1236×2676
-  { code: "iphone67", width: 430, height: 932, dpr: 3 }, // App Store 6.7" → 1290×2796
+  { code: "iphone69", width: 440, height: 956, dpr: 3 }, // App Store 6.9" → 1320×2868 (master iPhone size; auto-scales to 6.7"/6.5")
   { code: "ipad13", width: 1024, height: 1366, dpr: 2 }, // App Store iPad 13" → 2048×2732
   { code: "surfaceduo", width: 540, height: 720, dpr: 2.5 }, // Play large-screen → 1350×1800
 ]

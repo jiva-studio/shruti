@@ -21,7 +21,7 @@ function findChrome(): string | undefined {
 export default defineConfig({
   testDir: "./specs",
   timeout: 90_000,
-  // Capturing 32 scenarios (8 × iphone67/ipad13 × en/ru) on a shared CI runner,
+  // Capturing 32 scenarios (8 × iphone69/ipad13 × en/ru) on a shared CI runner,
   // a single scenario occasionally times out waiting for its state (e.g. the
   // transcript dialog's .highlighted/.current). Without retries that one flake
   // fails the whole deploy. Retry in CI so a transient capture re-runs instead.
@@ -48,7 +48,7 @@ export default defineConfig({
   },
   // One project per (device × locale), generated from config.ts. Device sizes:
   //   phone      412×892  ×3   → 1236×2676 (Play phoneScreenshots)
-  //   iphone67   430×932  ×3   → 1290×2796 (App Store 6.7")
+  //   iphone69   440×956  ×3   → 1320×2868 (App Store 6.9")
   //   ipad13    1024×1366 ×2   → 2048×2732 (App Store iPad 13")
   //   surfaceduo 540×720  ×2.5 → 1350×1800 (Play large-screen)
   projects: DEVICES.flatMap((d) =>
