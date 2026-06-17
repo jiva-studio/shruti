@@ -7,6 +7,7 @@ export default {
   starterPacks: {
     error: "লেকচার যোগ করা যায়নি",
   },
+  collectionMoreAuthors: "{author} ও অন্যান্য",
   subscriptionNag: {
     title: "প্রকল্পটিকে সমর্থন করুন",
     description:

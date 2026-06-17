@@ -6,6 +6,7 @@ export default {
   starterPacks: {
     error: "प्रवचन जोड़ने में विफल",
   },
+  collectionMoreAuthors: "{author} और अन्य",
   subscriptionNag: {
     title: "परियोजना का समर्थन करें",
     description:

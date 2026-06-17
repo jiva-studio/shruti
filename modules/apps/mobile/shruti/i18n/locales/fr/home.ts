@@ -7,6 +7,7 @@ export default {
   starterPacks: {
     error: "Impossible d'ajouter les conférences",
   },
+  collectionMoreAuthors: "{author} et d'autres",
   subscriptionNag: {
     title: "Soutenez le projet",
     description:

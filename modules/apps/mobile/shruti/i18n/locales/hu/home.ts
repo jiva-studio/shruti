@@ -7,6 +7,7 @@ export default {
   starterPacks: {
     error: "Nem sikerült hozzáadni az előadásokat",
   },
+  collectionMoreAuthors: "{author} és mások",
   subscriptionNag: {
     title: "Támogasd a projektet",
     description:

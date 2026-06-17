@@ -7,6 +7,7 @@ export default {
   starterPacks: {
     error: "No se pudieron añadir las clases",
   },
+  collectionMoreAuthors: "{author} y otros",
   subscriptionNag: {
     title: "Apoya el proyecto",
     description:
