@@ -108,13 +108,33 @@ def _render_note(idx: int, note: dict[str, Any]) -> str:
     return f"{header}\n{text}"
 
 
-def _format_user(question: str, lang: str, notes: list[dict[str, Any]]) -> str:
+def _lang_directive(lang: str, lang_name: str | None) -> str:
+    """Render the `Language:` directive value.
+
+    A bare locale code ("sr-Latn") makes the LLM drift to Russian; the
+    synthesizer fixes this by resolving the human language NAME from the
+    catalog `languages` table and so do the planner-side writers. When the
+    name resolves we emit `Srpski (sr-Latn)`; otherwise fall back to the
+    bare code so the directive is never empty.
+    """
+    if lang_name:
+        return f"{lang_name} ({lang})"
+    return lang
+
+
+def _format_user(
+    question: str,
+    lang: str,
+    notes: list[dict[str, Any]],
+    *,
+    lang_name: str | None = None,
+) -> str:
     note_blocks = "\n\n".join(
         _render_note(i, n) for i, n in enumerate(notes, start=1)
     )
     return (
         f"Question: {json.dumps(question, ensure_ascii=False)}\n"
-        f"Language: {lang}\n\n"
+        f"Language: {_lang_directive(lang, lang_name)}\n\n"
         f"Notes:\n{note_blocks}"
     )
 
@@ -162,6 +182,7 @@ async def _synthesize_conclusion(
     llm: Any,
     model: str | None,
     callbacks: list[Any] | None,
+    lang_name: str | None = None,
 ) -> Outline:
     """Server-side fallback: when the planner skips `conclusion` on a 3+
     thesis outline (consistent behaviour of weaker structured-output
@@ -173,7 +194,7 @@ async def _synthesize_conclusion(
         f"  {i+1}. {t.thesis}" for i, t in enumerate(outline.theses)
     )
     user_msg = (
-        f"Language: {lang}\n\n"
+        f"Language: {_lang_directive(lang, lang_name)}\n\n"
         f"Theses:\n{theses_block}"
     )
 
@@ -230,6 +251,7 @@ async def synthesize_intro(
     llm: Any,
     model: str | None = None,
     callbacks: list[Any] | None = None,
+    lang_name: str | None = None,
 ) -> str | None:
     """Write the intro from the FINISHED theses, in a dedicated pass.
 
@@ -248,7 +270,7 @@ async def synthesize_intro(
         f"  {i+1}. {t.thesis}" for i, t in enumerate(outline.theses)
     )
     user_msg = (
-        f"Language: {lang}\n\n"
+        f"Language: {_lang_directive(lang, lang_name)}\n\n"
         f"Theses:\n{theses_block}"
     )
 
@@ -301,6 +323,7 @@ async def build_outline(
     model: str | None = None,
     conclusion_model: str | None = None,
     callbacks: list[Any] | None = None,
+    lang_name: str | None = None,
 ) -> Outline | None:
     """Run one structured-output LLM call. Returns:
 
@@ -325,7 +348,12 @@ async def build_outline(
         effective_model = prompt.config.get("model") or model
         messages: list[Message] = [
             {"role": "system", "content": prompt.text},
-            {"role": "user", "content": _format_user(question, lang, notes)},
+            {
+                "role": "user",
+                "content": _format_user(
+                    question, lang, notes, lang_name=lang_name
+                ),
+            },
         ]
         outline: Outline = await llm.structured_output(
             messages, Outline,
@@ -359,6 +387,7 @@ async def build_outline(
         outline = await _synthesize_conclusion(
             outline, lang, llm=llm,
             model=conclusion_model, callbacks=callbacks,
+            lang_name=lang_name,
         )
         if outline.conclusion != before_conclusion and outline.conclusion:
             fallback_outcome = "filled"
