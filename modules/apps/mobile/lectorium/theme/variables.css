@@ -92,6 +92,7 @@
   --ion-text-color-rgb: 61, 43, 31;
 
   --ion-border-color: #e8ddc8;
+  --lectorium-divider: rgba(61, 43, 31, 0.12);
 
   --ion-toolbar-background: #faf5ea;
   --ion-toolbar-color: #3d2b1f;
@@ -257,6 +258,7 @@
     --ion-text-color-rgb: 192, 184, 168;
 
     --ion-border-color: #2e2218;
+    --lectorium-divider: rgba(192, 184, 168, 0.07);
 
     --ion-toolbar-background: #1f1611;
     --ion-toolbar-color: #c0b8a8;

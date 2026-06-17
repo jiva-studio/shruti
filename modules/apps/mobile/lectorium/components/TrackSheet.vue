@@ -11,15 +11,15 @@
     </div>
     <IonContent>
       <div class="sheet-body">
-        <LectureOverview class="overview" :description="description" :chapters="chapters">
-          <div v-if="topicChips.length" class="topic-chips">
-            <span v-for="(name, i) in visibleChips" :key="i" class="topic-chip">
-              <IconHash :size="11" class="chip-hash" />
-              {{ name }}
-            </span>
-            <span v-if="overflowCount" class="topic-chip more">+{{ overflowCount }}</span>
-          </div>
-        </LectureOverview>
+        <div v-if="topicChips.length" class="topic-chips">
+          <span v-for="(name, i) in visibleChips" :key="i" class="topic-chip">
+            <IconHash :size="11" class="chip-hash" />
+            {{ name }}
+          </span>
+          <span v-if="overflowCount" class="topic-chip more">+{{ overflowCount }}</span>
+        </div>
+        <p v-if="description" class="description">{{ description }}</p>
+        <LectureOutline v-if="chapters.length" :chapters="chapters" />
       </div>
       <SimilarTracksRow v-if="track" :track="track" />
     </IonContent>
@@ -65,7 +65,7 @@ import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
-import LectureOverview from "@ui/components/LectureOverview.vue"
+import LectureOutline from "@ui/components/LectureOutline.vue"
 import SimilarTracksRow from "@lectorium/components/SimilarTracksRow.vue"
 
 const { t } = useI18n()
@@ -192,13 +192,15 @@ function onShare(): void {
   background: var(--ion-background-color, #fff);
 }
 
-.overview {
-  margin-top: 0;
+.description {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ion-text-color, #222);
 }
 
 .sheet-body {
-  padding: var(--ion-padding, 16px);
-  padding-bottom: 0;
+  padding: 4px var(--ion-padding, 16px) 16px;
 }
 
 .topic-chips {
@@ -286,13 +288,14 @@ function onShare(): void {
 .act {
   position: relative;
   margin: 0;
+  --padding-start: 0;
+  --padding-end: 0;
   --box-shadow: none;
 }
 
-/* Icon pinned to the left edge; the label stays centred in the button. */
 .act [slot="start"] {
   position: absolute;
-  left: 16px;
+  left: 9px;
   top: 50%;
   transform: translateY(-50%);
   margin: 0;

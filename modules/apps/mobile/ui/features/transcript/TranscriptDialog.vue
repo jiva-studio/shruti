@@ -19,14 +19,13 @@
 
       <TranscriptDialogHeader :title="title" :author="author" />
 
-      <LectureOverview
-        v-if="description || (chapters && chapters.length > 0)"
-        class="overview"
-        interactive
-        :description="description ?? null"
-        :chapters="chapters ?? []"
-        @seek="onChapterTap"
-      />
+      <div v-if="description || (chapters && chapters.length > 0)" class="overview">
+        <p v-if="description" class="description">{{ description }}</p>
+        <template v-if="chapters && chapters.length > 0">
+          <SectionLabel>{{ $t("transcript.contents") }}</SectionLabel>
+          <LectureOutline interactive :chapters="chapters" @seek="onChapterTap" />
+        </template>
+      </div>
 
       <LanguageSelector
         v-if="availableLanguages.length > 1"
@@ -70,7 +69,8 @@ import { computed, nextTick, useTemplateRef } from "vue"
 import { IonButton, IonContent, IonModal } from "@ionic/vue"
 import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
-import LectureOverview from "@ui/components/LectureOverview.vue"
+import LectureOutline from "@ui/components/LectureOutline.vue"
+import SectionLabel from "@ui/components/SectionLabel.vue"
 import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
 import TranscriptDialogHeader from "./TranscriptDialogHeader.vue"
 import { useTranscriptAutoScroll } from "./useTranscriptAutoScroll.js"
@@ -213,6 +213,13 @@ ion-modal ion-toolbar {
      transcript body's 16px gutter. */
   display: block;
   padding-inline: 16px;
+}
+
+.description {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ion-text-color, #222);
 }
 
 .transcript-text {
