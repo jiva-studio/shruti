@@ -848,3 +848,43 @@ describe("tracksRepository.sql — listYears", () => {
     expect(await repo.listYears()).toEqual([1976, 1975, 1974])
   })
 })
+
+describe("tracksRepository.sql — count", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "en" as LanguageCode
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    await seedFixture(db, SOURCES, TRACKS, LOCATIONS, TAGS)
+  })
+
+  it("counts the whole catalogue with no filters", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect(await repo.count()).toBe(TRACKS.length)
+  })
+
+  it("counts only tracks with a variant in the given language", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    // Every fixture track has an English variant; only the "Джентельмен" track
+    // also has a Russian one.
+    expect(await repo.count({ languageCodes: ["en" as LanguageCode] })).toBe(TRACKS.length)
+    expect(await repo.count({ languageCodes: ["ru" as LanguageCode] })).toBe(1)
+  })
+
+  it("applies source filters like list()", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect(await repo.count({ sourceIds: ["sb"] })).toBe(1)
+    expect(await repo.count({ sourceIds: ["bg"] })).toBe(4)
+  })
+
+  it("excludes hidden tracks", async () => {
+    await clearAllFixtureTables(db)
+    await seedFixture(db, SOURCES, [
+      { id: "v", date: "1974-01-01", titles: { en: "Visible" }, references: [] },
+      { id: "h", date: "1974-01-02", titles: { en: "Hidden" }, references: [], hidden: true },
+    ])
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect(await repo.count()).toBe(1)
+  })
+})

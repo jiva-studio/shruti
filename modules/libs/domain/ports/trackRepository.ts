@@ -64,6 +64,15 @@ export interface ITrackRepository {
   search(query: TrackSearchQuery): Promise<readonly Track[]>
 
   /**
+   * Total number of tracks matching `filters` (filter-only, no text
+   * search), after the `hidden = 0` cut — i.e. the size of the set
+   * `list()` would page through. Powers the "search among N lectures"
+   * subtitle on the library search entry. Absent/empty filters count
+   * the whole catalogue.
+   */
+  count(filters?: TrackListFilters): Promise<number>
+
+  /**
    * Distinct calendar years present in the catalog (from `tracks.date`),
    * descending. Powers the year picker in the Search date-range filter so
    * it only offers years that actually have content.
