@@ -30,11 +30,13 @@ def test_cite_marker_expands_with_transcript_snippet():
     text = "Some prose. [cite:track_eV6bWmyLYcPD@552480-607280] More prose."
     out = annotate_markers(text, aliases)
 
-    # The marker lives on the first line INSIDE the fence, a blank line,
-    # then the window + transcript snippet.
-    assert "9:12–10:07" in out
+    # Inside the fence: marker, the ↳ locator right under it, a blank line,
+    # then the transcript snippet.
     assert "The living entity, being marginal" in out
-    assert "```\n[cite:track_eV6bWmyLYcPD@552480-607280]\n\n" in out
+    assert (
+        "```\n[cite:track_eV6bWmyLYcPD@552480-607280]\n"
+        "↳ track_eV6bWmyLYcPD · 9:12–10:07\n\n" in out
+    )
     # The fence is its own block: blank line before it, and the trailing
     # prose resumes after the closing fence + blank line.
     assert "Some prose. \n\n```\n" in out

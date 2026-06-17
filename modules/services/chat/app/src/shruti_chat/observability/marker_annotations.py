@@ -20,8 +20,8 @@ of the answer prose:
 
     ```
     [cite:track_eV6bWmyLYcPD@552480-607280]
-
     ↳ track_eV6bWmyLYcPD · 9:12–10:07
+
     "…the living entity, being marginal, can come under the influence…"
     ```
 
@@ -80,19 +80,23 @@ def _truncate(text: str) -> str:
 
 
 def _block(marker: str, lines: list[str]) -> str:
-    """Replace the marker with a fenced code block containing the marker
-    itself, a blank line, then its expansion — surrounded by blank lines.
+    """Replace the marker with a fenced code block — surrounded by blank
+    lines — laid out as: the marker, the `↳` locator line right under it,
+    then a blank line, then the cited content (snippet / sentences /
+    chapter titles).
 
-    The expansion is diagnostic, not answer text, so the ``` fence makes
-    Langfuse render the whole thing as a distinct monospace box. Putting
-    the marker on the first line inside the fence (with a blank line before
-    the expansion) keeps the citation token visible and clearly separated
-    from what it resolves to. Markers we can't resolve come back
-    unchanged."""
-    body = "\n".join(line for line in lines if line)
-    if not body:
+    The fence makes Langfuse render the whole thing as a distinct monospace
+    box (diagnostic meta, not answer text); the marker + locator read as
+    the reference header, and the blank line sets the quoted content apart
+    from it. Markers we can't resolve come back unchanged."""
+    lines = [line for line in lines if line]
+    if not lines:
         return marker
-    return f"\n\n```\n{marker}\n\n{body}\n```\n\n"
+    head, rest = lines[0], lines[1:]
+    inner = f"{marker}\n{head}"
+    if rest:
+        inner += "\n\n" + "\n".join(rest)
+    return f"\n\n```\n{inner}\n```\n\n"
 
 
 def annotate_markers(text: str, aliases: TurnAliasMap) -> str:
