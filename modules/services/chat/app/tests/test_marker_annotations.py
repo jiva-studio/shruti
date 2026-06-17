@@ -43,6 +43,27 @@ def test_cite_marker_expands_with_transcript_snippet():
     assert "```\n\n More prose" in out
 
 
+def test_long_snippet_is_hard_wrapped():
+    aliases = TurnAliasMap()
+    n = aliases.alias_chunk("track_X", 0, 5000, lang="en")
+    long_snippet = (
+        "It is said when a living entity a part and parcel of God desires "
+        "independently to enjoy or to lord it over the material nature he "
+        "comes down from the spiritual world to this material world and that "
+        "is the cause of his falldown into the illusory energy called maya."
+    )
+    aliases.chunk_texts[n] = long_snippet
+    out = annotate_markers("[cite:track_X@0-5000]", aliases)
+
+    # The snippet line is wider than the wrap width → it got split into
+    # multiple lines, and no single line in the box runs past the budget.
+    body_lines = [ln for ln in out.splitlines() if ln and ln != "```"]
+    assert any(ln.startswith('"') for ln in body_lines)
+    assert all(len(ln) <= 92 for ln in body_lines), [ln for ln in body_lines if len(ln) > 92]
+    # The whole quote text is still present once the wrap newlines are flattened.
+    assert "called maya." in out.replace("\n", " ")
+
+
 def test_cite_without_stashed_text_shows_window_only():
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_X", 1000, 2000, lang="en")  # no chunk_texts entry

@@ -38,6 +38,7 @@ catalog / DB calls), so it never adds latency to turn completion.
 from __future__ import annotations
 
 import re
+import textwrap
 
 from lectorium_chat.agent.markers import (
     CARD_RE,
@@ -60,6 +61,17 @@ CHAPTER_RE = re.compile(r"\[chapter:([A-Za-z0-9_]+)/([0-9.,-]+)(?:\|([^\]\n]*))?
 
 # Snippets can be long; keep the trace readable.
 _MAX_SNIPPET = 600
+# A ``` code fence renders as `pre` in Langfuse — long lines do NOT soft-wrap,
+# they scroll off the right edge. So hard-wrap the cited text to a fixed width
+# before it goes in the box. Marker / `↳` lines are never wrapped (a marker
+# token must stay intact).
+_WRAP = 88
+
+
+def _wrap(line: str) -> str:
+    return textwrap.fill(
+        line, width=_WRAP, break_long_words=False, break_on_hyphens=False,
+    )
 
 
 def _fmt_ms(ms: int) -> str:
@@ -95,7 +107,7 @@ def _block(marker: str, lines: list[str]) -> str:
     head, rest = lines[0], lines[1:]
     inner = f"{marker}\n{head}"
     if rest:
-        inner += "\n\n" + "\n".join(rest)
+        inner += "\n\n" + "\n".join(_wrap(line) for line in rest)
     return f"\n\n```\n{inner}\n```\n\n"
 
 
