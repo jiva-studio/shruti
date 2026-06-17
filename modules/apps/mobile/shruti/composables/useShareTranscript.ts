@@ -1,6 +1,7 @@
 import type { RenderTranscriptRequest } from "@ports/app/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
+import { SHORT_POLL_TIMEOUT_MS } from "@shruti/services/pollUntilReady.js"
 
 export interface UseShareTranscriptReturn {
   /**
@@ -28,6 +29,9 @@ export function useShareTranscript(): UseShareTranscriptReturn {
       filename,
       predictedUrl,
       cut: () => app.shareTranscriptService.renderPdf(req),
+      // A transcript PDF renders in seconds; a dead URL must fail fast
+      // rather than spin toward the 8-min Studio-video default.
+      pollTimeoutMs: SHORT_POLL_TIMEOUT_MS,
     })
   }
 

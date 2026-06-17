@@ -125,21 +125,15 @@ describe("useHttpShareVideoService", () => {
     })
   })
 
-  it("falls through to ready:false when the cut takes longer than 8s (server still rendering)", async () => {
+  it("falls through to ready:false when the cut takes longer than 8s (real abort path)", async () => {
     vi.useFakeTimers()
-    // fetch never resolves; rejects with AbortError when the controller signals.
+    // fetch never resolves; rejects with the bare reason the runtime
+    // surfaces on abort. We do NOT set err.name — the adapter must rely
+    // on signal.aborted, which is the actual production behaviour.
     fetchMock.mockImplementation((_url, init) => {
       return new Promise((_, reject) => {
         const sig = (init as RequestInit | undefined)?.signal as AbortSignal | undefined
-        sig?.addEventListener(
-          "abort",
-          () => {
-            const err = new Error("aborted") as Error & { name: string }
-            err.name = "AbortError"
-            reject(err)
-          },
-          { once: true }
-        )
+        sig?.addEventListener("abort", () => reject(sig.reason), { once: true })
       })
     })
 
