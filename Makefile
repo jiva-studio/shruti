@@ -8,6 +8,7 @@
 .PHONY: transcriber-mcp-build transcriber-mcp-up transcriber-mcp-down transcriber-mcp-restart transcriber-mcp-status transcriber-mcp-logs
 .PHONY: shruti-mcp-build shruti-mcp-test shruti-mcp-lint shruti-mcp-up shruti-mcp-down shruti-mcp-restart shruti-mcp-status shruti-mcp-logs
 .PHONY: stack-setup stack-up stack-down stack-restart stack-status stack-logs stack-app
+.PHONY: e2e-install e2e e2e-all e2e-report
 
 # --- Variables ---
 ISSUE ?= 0
@@ -352,3 +353,15 @@ stack-logs: ## Tail local backend stack logs (Ctrl-C to stop)
 
 stack-app: ## Serve the mobile app against the local stack (dev region, port 11001)
 	@cd modules/apps/mobile && VITE_DEV_REGION=true npm run dev
+
+e2e-install: ## One-time mobile E2E setup (deps + chromium + fixtures)
+	@$(MAKE) -C modules/tests/e2e install
+
+e2e: ## Run the mobile E2E suite, offline only (fast, no backend)
+	@$(MAKE) -C modules/tests/e2e test
+
+e2e-all: ## Run the full mobile E2E suite (offline + live; auto-starts the stack)
+	@$(MAKE) -C modules/tests/e2e all
+
+e2e-report: ## Open the mobile E2E HTML report (a video per test)
+	@$(MAKE) -C modules/tests/e2e report

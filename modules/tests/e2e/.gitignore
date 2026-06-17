@@ -1,0 +1,14 @@
+node_modules/
+test-results/
+playwright-report/
+playwright-report-live/
+playwright/.cache/
+
+# Local secrets for @live runs (OPENROUTER_API_KEY, AWS_*). Never commit.
+.env.local
+
+# Large binary fixtures snapshotted from the published catalog + the seeded
+# user DBs. Recreate locally with scripts/prepare-fixtures.sh (see README).
+# The silent.mp3 audio stub is small and IS committed.
+fixtures/content.db
+fixtures/user-*.db
