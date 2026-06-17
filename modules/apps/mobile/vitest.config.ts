@@ -25,6 +25,13 @@ export default defineConfig({
       "@lib/persistence/main": path.resolve(__dirname, "./submodules/persistence-main"),
       "@lib/persistence/user": path.resolve(__dirname, "./submodules/persistence-user"),
       "@kit": path.resolve(__dirname, "../../kit/src"),
+      // kit's source (compiled in via the @kit alias) imports these from the
+      // consuming app's node_modules. It lives outside this app's tree, so a
+      // bare resolve can't walk up to find them once the `modules/node_modules`
+      // symlink is gone — point them here explicitly (mirrors the vite.config
+      // dedupe and the tsconfig paths entries).
+      "@ionic/vue": path.resolve(__dirname, "./node_modules/@ionic/vue"),
+      "@capacitor": path.resolve(__dirname, "./node_modules/@capacitor"),
     },
   },
   test: {
