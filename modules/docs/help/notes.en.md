@@ -25,6 +25,9 @@ here you can:
   action sheet.
 - **Delete** a note when you no longer need it.
 
+With a PRO subscription, **Notes Studio** can also turn a note into a short
+video to share.
+
 ## Privacy
 
 Notes are stored locally on your device and synced as part of your

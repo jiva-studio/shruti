@@ -14,6 +14,14 @@ export default {
       title: "Qu'est-ce que la sādhana",
       summary: "La pratique spirituelle quotidienne et comment l'application la soutient",
     },
+    "finding-lectures": {
+      title: "Trouver des conférences",
+      summary: "Recherche, collections, thèmes et filtres pour découvrir des conférences",
+    },
+    playlist: {
+      title: "Playlist",
+      summary: "Ajout de conférences, téléchargement hors ligne, progression et lecture continue",
+    },
     "chat-ask-sadhu": {
       title: "Demandez à Sadhu",
       summary: "Assistant IA qui cherche dans les conférences et cite la source",
@@ -46,6 +54,10 @@ export default {
     "settings-overview": {
       title: "Aperçu des paramètres",
       summary: "Chaque groupe et chaque option des paramètres expliqués",
+    },
+    subscription: {
+      title: "Abonnement (PRO)",
+      summary: "Ce que débloque PRO, la période d'essai gratuite et comment s'abonner",
     },
     "smart-library": {
       title: "Bibliothèque intelligente",

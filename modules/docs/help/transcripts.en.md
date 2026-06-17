@@ -7,15 +7,16 @@ between sentences with a single tap.
 When a lecture is playing, swipe **up** on the floating player to expand
 the full player, then swipe **left/right** between the player panels —
 the transcript is the panel next to the controls. The transcript can also
-be set to **open automatically** when playback starts (Settings → Player).
+be set to **open automatically** when playback starts (Settings →
+Appearance).
 
 ## What you can do
 
 - **Tap a sentence** to jump audio playback to that exact moment.
 - **Follow along** — the current sentence is highlighted as the audio
-  plays. The transcript scrolls automatically so the active line stays in
-  view. Both auto-scroll and the highlight can be turned off in Settings →
-  Player if you prefer to read freely.
+  plays (toggle in Settings → Appearance). With the PRO **Automatic scroll**
+  turned on, the transcript also scrolls itself so the active line stays in
+  view.
 - **Select a fragment** to save it as a **note** or share it as a quote.
   Notes remember the audio range, so you can replay just that excerpt
   later from the Notes tab.

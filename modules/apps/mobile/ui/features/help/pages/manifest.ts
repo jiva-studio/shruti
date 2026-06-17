@@ -6,9 +6,11 @@ import {
   BookIcon,
   DatabaseExportIcon,
   FlameIcon,
+  HeadphonesIcon,
   IconDownload,
   IconPlay,
   IconRosetteDiscountCheckFilled,
+  IconSearch,
   IconSettings,
   MessageIcon,
   TranscriptIcon,
@@ -19,6 +21,12 @@ import HelpIndicatorsPage from "./components/HelpIndicatorsPage.vue"
 
 import sadhanaEn from "@docs/help/what-is-sadhana.en.md?raw"
 import sadhanaRu from "@docs/help/what-is-sadhana.ru.md?raw"
+import findingLecturesEn from "@docs/help/finding-lectures.en.md?raw"
+import findingLecturesRu from "@docs/help/finding-lectures.ru.md?raw"
+import playlistEn from "@docs/help/playlist.en.md?raw"
+import playlistRu from "@docs/help/playlist.ru.md?raw"
+import subscriptionEn from "@docs/help/subscription.en.md?raw"
+import subscriptionRu from "@docs/help/subscription.ru.md?raw"
 import activityEn from "@docs/help/activity-tracker.en.md?raw"
 import activityRu from "@docs/help/activity-tracker.ru.md?raw"
 import chatAskSadhuEn from "@docs/help/chat-ask-sadhu.en.md?raw"
@@ -42,6 +50,8 @@ import deleteAccountRu from "@docs/help/delete-account.ru.md?raw"
 
 export type HelpPageId =
   | "what-is-sadhana"
+  | "finding-lectures"
+  | "playlist"
   | "activity-tracker"
   | "chat-ask-sadhu"
   | "transcripts"
@@ -50,6 +60,7 @@ export type HelpPageId =
   | "player-controls"
   | "indicators"
   | "settings-overview"
+  | "subscription"
   | "smart-library"
   | "export-import"
   | "delete-account"
@@ -89,6 +100,20 @@ export const helpManifest: HelpCategory[] = [
         icon: markRaw(BookIcon),
         en: sadhanaEn,
         ru: sadhanaRu,
+      },
+      {
+        id: "finding-lectures",
+        type: "markdown",
+        icon: markRaw(IconSearch),
+        en: findingLecturesEn,
+        ru: findingLecturesRu,
+      },
+      {
+        id: "playlist",
+        type: "markdown",
+        icon: markRaw(HeadphonesIcon),
+        en: playlistEn,
+        ru: playlistRu,
       },
       {
         id: "chat-ask-sadhu",
@@ -149,6 +174,13 @@ export const helpManifest: HelpCategory[] = [
         icon: markRaw(IconSettings),
         en: settingsOverviewEn,
         ru: settingsOverviewRu,
+      },
+      {
+        id: "subscription",
+        type: "markdown",
+        icon: markRaw(IconRosetteDiscountCheckFilled),
+        en: subscriptionEn,
+        ru: subscriptionRu,
       },
       {
         id: "smart-library",

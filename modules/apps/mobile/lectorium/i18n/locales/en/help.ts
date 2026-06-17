@@ -14,6 +14,14 @@ export default {
       title: "What is sadhana",
       summary: "Daily spiritual practice and how the app supports it",
     },
+    "finding-lectures": {
+      title: "Finding lectures",
+      summary: "Search, collections, topics and filters to discover lectures",
+    },
+    playlist: {
+      title: "Playlist",
+      summary: "Add lectures, offline download, progress and continuous playback",
+    },
     "chat-ask-sadhu": {
       title: "Ask Sadhu",
       summary: "AI assistant that searches the lectures and cites the source",
@@ -45,6 +53,10 @@ export default {
     "settings-overview": {
       title: "Settings overview",
       summary: "Every settings group and item explained",
+    },
+    subscription: {
+      title: "Subscription (PRO)",
+      summary: "What PRO unlocks, the free trial, and how to subscribe",
     },
     "smart-library": {
       title: "Smart library",
