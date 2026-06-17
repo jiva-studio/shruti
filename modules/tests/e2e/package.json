@@ -1,0 +1,18 @@
+{
+  "name": "lectorium-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end (Playwright) tests for the Lectorium mobile web app.",
+  "scripts": {
+    "test": "playwright test --project=mocked",
+    "test:offline": "playwright test --project=mocked",
+    "test:live": "E2E_INCLUDE_LIVE=1 playwright test --project=stack",
+    "test:all": "E2E_INCLUDE_LIVE=1 playwright test",
+    "test:headed": "playwright test --project=mocked --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}
