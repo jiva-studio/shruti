@@ -37,10 +37,13 @@ import type {
  * into a single entity with a `Map<lang, name>`.
  */
 
+// Runs during every list/search hydration via rowToTrack; an unexpected enum
+// value from the catalog DB must not crash the whole list, so fall back to
+// "original" rather than throwing (mirrors narrowAudioKind below).
 function narrowVariantKind(raw: string | null): TrackVariantKind | null {
   if (raw === null) return null
   if (raw === "original" || raw === "generated" || raw === "edited") return raw
-  throw new Error(`Invalid track_variant kind: ${raw}`)
+  return "original"
 }
 
 // Audio kind is a display-preference field; an unexpected value must not crash
@@ -155,7 +158,11 @@ function parseOutline(raw: string | null): readonly TrackOutlineChapter[] | null
       const title = typeof e.title === "string" ? e.title.trim() : ""
       const start = typeof e.start === "number" ? e.start : null
       if (!title || start == null) continue
-      const end = typeof e.end === "number" ? e.end : start
+      // A missing/non-numeric end would collapse to a zero-length [start, start)
+      // chapter that the "current chapter at time T" lookup never matches; skip
+      // such malformed entries instead.
+      const end = typeof e.end === "number" ? e.end : null
+      if (end == null || end <= start) continue
       out.push({ title, startMs: start, endMs: end })
     }
     return out.length > 0 ? out : null
