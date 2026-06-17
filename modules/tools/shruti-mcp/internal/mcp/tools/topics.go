@@ -27,10 +27,11 @@ type TopicsWriter interface {
 // per-track assignment (disabled when the embeddings client isn't configured).
 // Cover generates topic cover art (disabled when image generation isn't wired).
 type TopicsDeps struct {
-	Catalog TopicsWriter
-	Build   topicsapp.BuildUseCase
-	Assign  topicsapp.AssignUseCase
-	Cover   covergen.UseCase
+	Catalog    TopicsWriter
+	Build      topicsapp.BuildUseCase
+	Assign     topicsapp.AssignUseCase
+	Cover      covergen.UseCase
+	CoverBuild topicsapp.CoverBuildUseCase
 }
 
 // topicsConfigured reports whether the embedding-backed build/assign are wired
@@ -41,6 +42,7 @@ func (d TopicsDeps) topicsConfigured() bool { return d.Assign.Embed != nil }
 func RegisterTopics(s *server.MCPServer, deps Deps) {
 	registerTrackTopicsSet(s, deps.Topics)
 	registerTopicCoverGenerate(s, deps.Topics)
+	registerTopicCoversBuild(s, deps)
 	registerTopicsBuild(s, deps)
 	registerTrackTopicsAssign(s, deps)
 }
@@ -212,5 +214,66 @@ func registerTopicCoverGenerate(s *server.MCPServer, deps TopicsDeps) {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
 		return envelope.Result(kind, map[string]any{"id": id, "cover": key}), nil
+	})
+}
+
+// registerTopicCoversBuild exposes `topics.covers.build`: generate covers for
+// ALL topics as one async batch (bounded concurrency + per-cover retry). By
+// default it only fills topics missing a cover, so re-running resumes cheaply;
+// pass force=true to regenerate every cover.
+func registerTopicCoversBuild(s *server.MCPServer, deps Deps) {
+	const kind = "topics.covers.build"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription("Generate cover images for ALL topics in one async batch: skip topics that "+
+			"already have a cover (unless force=true), and fan generation out with bounded concurrency + "+
+			"retry. Best-effort — a single cover's failure is recorded, not fatal, and re-running "+
+			"(force=false) only fills the gaps. Async: returns a run_id; poll via runs.status / runs.wait "+
+			"(progress is per-topic). For ONE topic use topic.cover.generate."),
+		mcp.WithBoolean("force", mcp.Description("Regenerate every topic's cover, including ones that already have one (default false: only fill missing).")),
+		mcp.WithNumber("limit", mcp.Description("Cap how many topics to process this run (0 = all).")),
+		mcp.WithString("language", mcp.Description("Locale whose name seeds the prompt (en fallback).")),
+		mcp.WithString("extra_prompt", mcp.Description("Optional extra prompt fragment appended to steer every generation.")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if deps.Runner == nil {
+			return envelope.Err(kind, envelope.CodeInternal, "runner not initialized", nil), nil
+		}
+		if !deps.Topics.CoverBuild.Cover.Enabled() {
+			return envelope.Err(kind, envelope.CodeDependencyFailed,
+				"image generation is not configured (set config images.api_key)", nil), nil
+		}
+		force := req.GetBool("force", false)
+		limit := int(req.GetFloat("limit", 0))
+		language := req.GetString("language", "")
+		extra := req.GetString("extra_prompt", "")
+
+		// Plan up front so the dispatch + progress carry the real total.
+		todo, _, err := deps.Topics.CoverBuild.Plan(ctx, force, limit)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, "plan covers: "+err.Error(), nil), nil
+		}
+		total := len(todo)
+
+		runId, err := deps.Runner.Submit(ctx, runner.Spec{
+			Kind:        run.KindTopicCovers,
+			Cancellable: true,
+			Init:        run.Run{Progress: run.Progress{FilesTotal: total}},
+			WorkFn: func(workCtx context.Context, report runner.ProgressFn) (json.RawMessage, error) {
+				res, err := deps.Topics.CoverBuild.Run(workCtx, force, limit, language, extra,
+					func(done, total, failed int) {
+						report(run.Progress{FilesTotal: total, FilesDone: done, FilesFailed: failed})
+					})
+				if err != nil {
+					return nil, err
+				}
+				return json.Marshal(res)
+			},
+		})
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, "submit run: "+err.Error(), nil), nil
+		}
+		return envelope.Run(kind, runDispatch{
+			Id: runId, Kind: string(run.KindTopicCovers), State: string(run.StateQueued), AcceptedCount: total,
+		}), nil
 	})
 }

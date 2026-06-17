@@ -4,7 +4,33 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
+
+// ListTopicCovers returns every distinct topic id with whether it already has a
+// cover image. One row per topic (cover is stored on all locales, so collapse on
+// id). Ordered by id for deterministic batch progress.
+func (r *Repo) ListTopicCovers(ctx context.Context) ([]catalog.TopicCover, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, MAX(CASE WHEN cover IS NOT NULL AND cover != '' THEN 1 ELSE 0 END)
+		   FROM topics GROUP BY id ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []catalog.TopicCover
+	for rows.Next() {
+		var tc catalog.TopicCover
+		var has int
+		if err := rows.Scan(&tc.ID, &has); err != nil {
+			return nil, err
+		}
+		tc.HasCover = has == 1
+		out = append(out, tc)
+	}
+	return out, rows.Err()
+}
 
 // GetTopicName returns a topic's full name in the requested language, falling
 // back to en and then any available locale. ok=false when the topic is absent.

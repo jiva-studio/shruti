@@ -57,6 +57,15 @@ func (l *Lazy) ListDict(ctx context.Context, kind catalog.Kind, opts catalog.Lis
 	return r.ListDict(ctx, kind, opts)
 }
 
+func (l *Lazy) ListTopicCovers(ctx context.Context) ([]catalog.TopicCover, error) {
+	r, err := l.open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return r.ListTopicCovers(ctx)
+}
+
 func (l *Lazy) UsageCount(ctx context.Context, kind catalog.Kind, id string) (int, error) {
 	r, err := l.open(ctx)
 	if err != nil {
