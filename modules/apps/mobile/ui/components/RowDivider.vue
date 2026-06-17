@@ -14,7 +14,12 @@
 <style scoped>
 .row-divider {
   height: 1px;
-  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.07), transparent);
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--shruti-divider, rgba(0, 0, 0, 0.07)),
+    transparent
+  );
   pointer-events: none;
 }
 </style>

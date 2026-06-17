@@ -14,7 +14,7 @@ defineProps<{ inset?: boolean }>()
 
 <style scoped>
 .section-label {
-  margin: 0 0 4px;
+  margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
@@ -23,7 +23,7 @@ defineProps<{ inset?: boolean }>()
 }
 
 .section-label.inset {
-  margin: 16px 0 4px;
+  margin: 16px 0 0;
   padding-inline: var(--ion-padding, 16px);
 }
 </style>
