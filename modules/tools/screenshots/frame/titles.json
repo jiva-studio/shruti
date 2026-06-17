@@ -3,32 +3,32 @@
     "en": "Listen to lectures every day",
     "ru": "Слушай лекции каждый день"
   },
-  "02_library": {
-    "en": "A full library of lectures",
-    "ru": "Большая библиотека лекций"
+  "02_search": {
+    "en": "Discover new lectures",
+    "ru": "Открывай новые лекции"
   },
-  "03_notes": {
-    "en": "Bookmark what matters most",
-    "ru": "Сохраняй важные мысли"
+  "03_chat": {
+    "en": "Ask Sadhu anything",
+    "ru": "Спроси Садху о чём угодно"
   },
   "04_transcript": {
     "en": "Follow the full transcript",
     "ru": "Следи за текстом лекции"
   },
-  "05_chat": {
-    "en": "Ask Sadhu anything",
-    "ru": "Спроси Садху о чём угодно"
-  },
-  "06_filters": {
-    "en": "Find exactly what you need",
-    "ru": "Находи именно то, что нужно"
-  },
-  "07_search": {
-    "en": "Discover new lectures",
-    "ru": "Открывай новые лекции"
-  },
-  "08_track": {
+  "05_track": {
     "en": "Every lecture in detail",
     "ru": "Каждая лекция — в деталях"
+  },
+  "06_notes": {
+    "en": "Bookmark what matters most",
+    "ru": "Сохраняй важные мысли"
+  },
+  "07_library": {
+    "en": "A full library of lectures",
+    "ru": "Большая библиотека лекций"
+  },
+  "08_filters": {
+    "en": "Find exactly what you need",
+    "ru": "Находи именно то, что нужно"
   }
 }

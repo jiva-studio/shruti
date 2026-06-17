@@ -10,7 +10,7 @@ export interface Scenario {
 }
 
 /** Stable session id seeded by generate-fixtures/seedChat for the
- *  `05_chat` scenario. Same id in both EN and RU fixtures so one literal
+ *  `03_chat` scenario. Same id in both EN and RU fixtures so one literal
  *  drives `debug.openChatSession(...)` for both locales. */
 export const DEMO_CHAT_SESSION_ID = "chat_demo_soul"
 /** Id of the user-question row inside the demo session — pinned to
@@ -159,7 +159,7 @@ async function settleDiscoveryCovers(page: Page): Promise<void> {
     })
 }
 
-/** Track whose detail sheet we open for the `08_track` scenario, keyed by
+/** Track whose detail sheet we open for the `05_track` scenario, keyed by
  *  CONTENT language (the only two that exist). RU has a rich lecture
  *  (description + chapter outline + topic chips); EN lectures carry no
  *  outline/description/topics in the catalog yet, so the EN sheet shows title +
@@ -188,6 +188,9 @@ async function openTrackSheet(page: Page, code: CaptureLocale): Promise<void> {
     .waitFor({ state: "visible", timeout: 10_000 })
 }
 
+// The `NN_` filename prefix sets the order screenshots appear in the stores
+// (App Store / Play sort by filename), independent of this array's order.
+// Display order: home → search → chat → transcript → track → notes → library → filters.
 export const scenarios: Scenario[] = [
   {
     name: "01_home",
@@ -204,14 +207,14 @@ export const scenarios: Scenario[] = [
   {
     // The flat, filterable catalog list — the old "search" page, now reached
     // via Search → "All lectures" and living at /tabs/search/tracks (the
-    // /tabs/search root is the new discovery/browse page, see 07_search).
-    name: "02_library",
+    // /tabs/search root is the new discovery/browse page, see 02_search).
+    name: "07_library",
     route: "/tabs/search/tracks",
     waitFor: ".track",
     settle: 600,
   },
   {
-    name: "03_notes",
+    name: "06_notes",
     route: "/tabs/notes",
     waitFor: ".note",
     settle: 600,
@@ -226,7 +229,7 @@ export const scenarios: Scenario[] = [
     beforeCapture: openTranscriptMidPlayback,
   },
   {
-    name: "05_chat",
+    name: "03_chat",
     // Land on the stable chat pathname, then open the seeded demo
     // session in `beforeCapture` via the debug bridge (see
     // openDemoChatSession for why we don't deep-link the session here).
@@ -243,7 +246,7 @@ export const scenarios: Scenario[] = [
   {
     // The filters bottom-sheet lives on the catalog list (TracksView), not the
     // discovery root — open it there.
-    name: "06_filters",
+    name: "08_filters",
     route: "/tabs/search/tracks",
     // Wait for the open filters sheet's content (the list of dimensions),
     // not just the modal host, so the sheet has finished presenting.
@@ -258,7 +261,7 @@ export const scenarios: Scenario[] = [
     // stored per content-language (en/ru only), so a UI locale without its own
     // collections (e.g. sr-Latn) shows the topic grid but no carousels. Topics
     // fall back, so the tile grid is the one section present for every locale.
-    name: "07_search",
+    name: "02_search",
     route: "/tabs/search",
     waitFor: ".carousel-section .collection-card, .tile-section .collection-card",
     settle: 600,
@@ -268,7 +271,7 @@ export const scenarios: Scenario[] = [
     // The unified per-track detail bottom sheet (<TrackSheet>) that opens when a
     // track is tapped: title, description, chapter outline, topic chips, and the
     // share / add-to-playlist actions. Opened over the catalog list.
-    name: "08_track",
+    name: "05_track",
     route: "/tabs/search/tracks",
     waitFor: "ion-modal.track-sheet .sheet-actions",
     settle: 700,
