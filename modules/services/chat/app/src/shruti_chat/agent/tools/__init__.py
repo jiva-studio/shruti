@@ -23,7 +23,7 @@ keep in sync.
 
 from __future__ import annotations
 
-from functools import partial
+from functools import partial, wraps
 from typing import Any
 
 from shruti_chat.agent.tools._registry import (
@@ -167,6 +167,15 @@ def build_personalized_tools(
             continue
 
         def _make(_fn: ToolFn) -> ToolFn:
+            # `@wraps(_fn)` keeps `__wrapped__` pointing at the underlying
+            # partial so `inspect.signature` still sees its real params.
+            # Without it the `**kwargs` shell hides `alias_map`, and the
+            # later `build_aliased_tools` introspection skips injecting it
+            # — every personalized tool that also takes `alias_map`
+            # (user_recommendations_get / user_tracks_list /
+            # user_history_search) then crashes with a missing-arg
+            # TypeError. Order matters: personalize wraps first, alias second.
+            @wraps(_fn)
             async def _wrapped(**kwargs: Any) -> Any:
                 kwargs.pop("user_context", None)
                 return await _fn(user_context=user_context, **kwargs)
