@@ -276,9 +276,21 @@ platform :android do
     # supply uploads every locale dir present under metadata_path/android. We
     # only commit complete listings (see store-locales.json `canonical` +
     # translate-store-copy), so there's nothing partial to blank out a listing.
-    # Listing copy is not tied to a release, so no version_code/AAB is needed.
+    #
+    # Even though listing copy is global (not per-release), supply ties the edit
+    # to the track's release and can't choose when the internal track has more
+    # than one ("More than one release found in this track"). Resolve the
+    # current internal version_code at runtime, exactly like the screenshots
+    # lane does.
+    version_codes = google_play_track_version_codes(
+      package_name: "studio.jiva.shruti",
+      track: "internal",
+      json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
+    )
+    UI.user_error!("No releases on the Play Console internal track — upload an AAB first") if version_codes.empty?
     upload_to_play_store(
       track: "internal",
+      version_code: version_codes.max.to_i,
       json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
       metadata_path: PLAY_METADATA_PATH,
       skip_upload_apk: true,
