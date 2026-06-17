@@ -30,15 +30,15 @@ def test_cite_marker_expands_with_transcript_snippet():
     text = "Some prose. [cite:track_eV6bWmyLYcPD@552480-607280] More prose."
     out = annotate_markers(text, aliases)
 
-    # Marker stays verbatim …
-    assert "[cite:track_eV6bWmyLYcPD@552480-607280]" in out
-    # … followed by the window and the transcript snippet, then a close tag.
+    # The marker lives on the first line INSIDE the fence, a blank line,
+    # then the window + transcript snippet.
     assert "9:12–10:07" in out
     assert "The living entity, being marginal" in out
-    assert "[/cite]" in out
-    # Prose after the citation resumes on its own line, not glued to [/cite].
-    assert "[/cite]\n" in out
-    assert "[/cite] More prose" not in out
+    assert "```\n[cite:track_eV6bWmyLYcPD@552480-607280]\n\n" in out
+    # The fence is its own block: blank line before it, and the trailing
+    # prose resumes after the closing fence + blank line.
+    assert "Some prose. \n\n```\n" in out
+    assert "```\n\n More prose" in out
 
 
 def test_cite_without_stashed_text_shows_window_only():
@@ -47,7 +47,7 @@ def test_cite_without_stashed_text_shows_window_only():
 
     out = annotate_markers("[cite:track_X@1000-2000]", aliases)
     assert "0:01–0:02" in out
-    assert "[/cite]" in out
+    assert "```" in out
 
 
 def test_commentary_uses_translated_sentences_when_present():
@@ -72,7 +72,7 @@ def test_commentary_uses_translated_sentences_when_present():
     # Mirrors what the user saw — the translated sentence, not the source.
     assert "Джая и Виджая пали" in out
     assert "Jaya and Vijaya" not in out
-    assert "[/commentary]" in out
+    assert "```" in out
 
 
 async def test_commentary_shows_only_picked_sentences_in_card_mode():

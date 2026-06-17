@@ -9,21 +9,27 @@ was cited, what was said in that window, or which purport hides behind
 relevant or correct.
 
 `annotate_markers` rewrites that text for the TRACE ONLY (never the
-client stream): each marker is kept verbatim, and directly under it we
-inline what it resolves to — pulled from the same per-turn `TurnAliasMap`
-the marker expander used — wrapped in a closing tag so the start/end of
-each expansion is obvious to a human:
+client stream): each marker is replaced by a fenced code block holding
+the marker itself plus what it resolves to — pulled from the same
+per-turn `TurnAliasMap` the marker expander used. The ``` fence makes
+Langfuse render it as a distinct monospace box (with blank lines around
+it), so a reviewer sees at a glance that it's diagnostic meta, not part
+of the answer prose:
 
+    …falldown.
+
+    ```
     [cite:track_eV6bWmyLYcPD@552480-607280]
-      ↳ 09:12–10:07
-      "…the living entity, being marginal, can come under the influence…"
-    [/cite]
 
-What's shown mirrors what the USER saw: commentary uses
-`sentences_translated or sentences`, so a translated purport shows its
-translation, exactly like the in-app card. Audio fragments show the
-transcript snippet in its original language (lectures aren't translated
-per-fragment in the UI).
+    ↳ track_eV6bWmyLYcPD · 9:12–10:07
+    "…the living entity, being marginal, can come under the influence…"
+    ```
+
+What's shown mirrors what the USER saw: commentary uses the picked
+sentences the card rendered (translation included), so a translated
+purport shows its translation. Audio fragments show the transcript
+snippet in its original language (lectures aren't translated per-fragment
+in the UI).
 
 Pure + synchronous + dependency-free: it reads only the alias map (no
 catalog / DB calls), so it never adds latency to turn completion.
@@ -73,16 +79,20 @@ def _truncate(text: str) -> str:
     return text
 
 
-def _block(marker: str, tag: str, lines: list[str]) -> str:
-    """Render the marker, an indented expansion, and a closing tag.
+def _block(marker: str, lines: list[str]) -> str:
+    """Replace the marker with a fenced code block containing the marker
+    itself, a blank line, then its expansion — surrounded by blank lines.
 
-    The closing tag ends with a newline so the answer prose that follows
-    the citation resumes on its own line instead of being glued to
-    `[/tag]` — keeps the trace readable when a marker sits mid-sentence."""
-    body = "\n".join(f"  {line}" for line in lines if line)
+    The expansion is diagnostic, not answer text, so the ``` fence makes
+    Langfuse render the whole thing as a distinct monospace box. Putting
+    the marker on the first line inside the fence (with a blank line before
+    the expansion) keeps the citation token visible and clearly separated
+    from what it resolves to. Markers we can't resolve come back
+    unchanged."""
+    body = "\n".join(line for line in lines if line)
     if not body:
         return marker
-    return f"{marker}\n{body}\n[/{tag}]\n"
+    return f"\n\n```\n{marker}\n\n{body}\n```\n\n"
 
 
 def annotate_markers(text: str, aliases: TurnAliasMap) -> str:
@@ -109,7 +119,7 @@ def annotate_markers(text: str, aliases: TurnAliasMap) -> str:
         lines = [f"↳ {track_id} · {window}"]
         if snippet:
             lines.append(f'"{_truncate(snippet)}"')
-        return _block(m.group(0), "cite", lines)
+        return _block(m.group(0), lines)
 
     def _commentary(m: re.Match[str]) -> str:
         n = int(m.group(1))
@@ -132,7 +142,7 @@ def annotate_markers(text: str, aliases: TurnAliasMap) -> str:
         lines = [f"↳ {attribution}"]
         if shown:
             lines.append(f'"{_truncate(shown)}"')
-        return _block(m.group(0), "commentary", lines)
+        return _block(m.group(0), lines)
 
     def _chapter(m: re.Match[str]) -> str:
         source_id, region_token = m.group(1), m.group(2)
@@ -145,15 +155,15 @@ def annotate_markers(text: str, aliases: TurnAliasMap) -> str:
                 break
         lines = [f"↳ {label}" if label else f"↳ {source_id}/{region_token}"]
         lines.extend(titles)
-        return _block(m.group(0), "chapter", lines)
+        return _block(m.group(0), lines)
 
     def _media(m: re.Match[str]) -> str:
         caption = m.group(2) or ""
         lines = [f"↳ {caption}"] if caption else [f"↳ {m.group(1)}"]
-        return _block(m.group(0), "media", lines)
+        return _block(m.group(0), lines)
 
-    def _track_only(m: re.Match[str], tag: str) -> str:
-        return _block(m.group(0), tag, [f"↳ {m.group(1)} (whole track)"])
+    def _track_only(m: re.Match[str]) -> str:
+        return _block(m.group(0), [f"↳ {m.group(1)} (whole track)"])
 
     out = text
     out = CITE_RE.sub(_cite, out)
@@ -162,12 +172,11 @@ def annotate_markers(text: str, aliases: TurnAliasMap) -> str:
     out = VERSE_RE.sub(
         lambda m: _block(
             m.group(0),
-            "verse",
             [f"↳ {m.group(3) or (m.group(1) + '/' + m.group(2))}"],
         ),
         out,
     )
     out = MEDIA_RE.sub(_media, out)
-    out = CARD_RE.sub(lambda m: _track_only(m, "card"), out)
-    out = OUTLINE_RE.sub(lambda m: _track_only(m, "outline"), out)
+    out = CARD_RE.sub(_track_only, out)
+    out = OUTLINE_RE.sub(_track_only, out)
     return out
