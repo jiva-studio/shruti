@@ -71,7 +71,7 @@ tests un-runnable in `bundle` mode.
 Turnkey (a `Makefile` wraps everything — brings the stack up when needed):
 
 ```bash
-cd modules/tests/e2e
+cd tests/e2e/mobile
 make install     # one-time: deps + chromium + fixtures
 make test        # offline suite (fast, no backend)
 make all         # offline + live (auto-starts the local stack) → one report

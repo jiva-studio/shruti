@@ -119,7 +119,7 @@ jobs:
         run: cd modules/tools/screenshots && npx playwright install chromium
 
       # Pull the latest published content DB matching the supported scheme.
-      # `db-sync.sh e2e` writes it to modules/tests/e2e/fixtures/public/db/,
+      # `db-sync.sh e2e` writes it to tests/e2e/mobile/fixtures/public/db/,
       # which the screenshots tool consumes from fixtures/content.db.
       - name: sync content DB from S3
         run: bash modules/db-sync.sh e2e
@@ -127,7 +127,7 @@ jobs:
       - name: stage content.db for screenshots tool
         run: |
           set -euo pipefail
-          src=$(ls -t modules/tests/e2e/fixtures/public/db/shruti.*.db | head -1)
+          src=$(ls -t tests/e2e/mobile/fixtures/public/db/shruti.*.db | head -1)
           mkdir -p modules/tools/screenshots/fixtures
           cp "$src" modules/tools/screenshots/fixtures/content.db
           echo "Staged $src → modules/tools/screenshots/fixtures/content.db"
