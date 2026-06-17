@@ -308,11 +308,15 @@
    * page bg in dark mode is #000 (iOS) / #121212 (MD), not our #1a130d.
    * Match --lectorium-fade-bg-rgb to the platform value so header/tab-bar
    * fade gradients land on the real page bg rather than a warm-brown
-   * seam over the near-black content. */
+   * seam over the near-black content. Same reason for --ion-toolbar-background:
+   * paint the toolbar the real platform page bg so routed headers / dialog
+   * toolbars read flat (no raised-toolbar seam below the search header). */
   :root.ios {
     --lectorium-fade-bg-rgb: 0, 0, 0;
+    --ion-toolbar-background: #000;
   }
   :root.md {
     --lectorium-fade-bg-rgb: 18, 18, 18;
+    --ion-toolbar-background: #121212;
   }
 }

@@ -111,6 +111,12 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   --padding-end: 56px;
 }
 
+/* Match the back arrow to the trailing filter icon (both --ion-color-medium)
+   so the header affordances read as one set. */
+.search-row :deep(.leading) {
+  color: var(--ion-color-medium);
+}
+
 .search-row-filter-button {
   position: absolute;
   right: 14px;

@@ -13,6 +13,15 @@ export default {
   allLectures: "Все лекции",
   topics: "Темы",
   topicsSection: "Лекции на различные темы",
+  fullLibrary: {
+    title: "Поиск по библиотеке",
+    subtitle:
+      "Поиск среди {count} лекции | Поиск среди {count} лекций | Поиск среди {count} лекций",
+  },
+  smartLibrary: {
+    title: "Умная библиотека",
+    subtitle: "Сама пополняет плейлист новыми лекциями",
+  },
   actions: {
     addToPlaylist: "Добавить в плейлист",
     openTranscript: "Открыть транскрипт",

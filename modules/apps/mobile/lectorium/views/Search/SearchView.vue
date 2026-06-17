@@ -21,6 +21,16 @@
       @more="openGroup(g.id)"
     />
 
+    <LibraryBanner
+      :title="$t('search.fullLibrary.title')"
+      :description="$t('search.fullLibrary.subtitle', { count: lectureCount }, lectureCount)"
+      background="/library/search-bg.webp"
+      background-dark="/library/search-bg-dark.webp"
+      @click="openTracks"
+    >
+      <template #icon><IconSearch :size="26" :stroke-width="2" /></template>
+    </LibraryBanner>
+
     <TileSection
       v-if="topicTiles.length"
       :title="$t('search.topicsSection')"
@@ -67,6 +77,18 @@
       </TracksList>
     </div>
 
+    <LibraryBanner
+      :title="$t('search.smartLibrary.title')"
+      :description="$t('search.smartLibrary.subtitle')"
+      :pro-badge="!purchases.isSubscribed"
+      :pro-badge-label="$t('app.proBadge')"
+      background="/library/smart-bg.webp"
+      background-dark="/library/smart-bg-dark.webp"
+      @click="onSmartLibraryEntry"
+    >
+      <template #icon><IconSparkles :size="26" :stroke-width="2" /></template>
+    </LibraryBanner>
+
     <template v-if="previewLectures.length">
       <SectionHeader :title="$t('search.lecturesTitle')">
         <template #action>
@@ -82,6 +104,24 @@
         </template>
       </TracksList>
     </template>
+
+    <SmartLibraryDialog
+      v-model:target-seconds="autoDownloadTargetSeconds"
+      v-model:archive-delay="autoArchiveDelay"
+      :open="smartLibraryDialogOpen"
+      :filter-summary="smartLibrary.filterSummary.value"
+      @update:open="smartLibraryDialogOpen = $event"
+      @open-filters="smartLibraryFiltersOpen = true"
+    />
+
+    <SearchFiltersSheet
+      v-model:filters="smartLibrary.filters.value"
+      :open="smartLibraryFiltersOpen"
+      :sections="smartLibrary.sections.value"
+      :can-reset="smartLibrary.activeFilterCount.value > 0"
+      @update:open="smartLibraryFiltersOpen = $event"
+      @reset="smartLibrary.reset"
+    />
   </AppPage>
 </template>
 
@@ -89,7 +129,7 @@
 import { computed, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { IonButton, onIonViewWillEnter } from "@ionic/vue"
-import { IconChevronRight } from "@tabler/icons-vue"
+import { IconChevronRight, IconSearch, IconSparkles } from "@tabler/icons-vue"
 import { AppPage } from "@ui/primitives/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
@@ -98,8 +138,11 @@ import {
   CarouselSection,
   TileSection,
   CollectionListItem,
+  LibraryBanner,
   type CarouselItem,
 } from "@ui/features/collections/index.js"
+import { SmartLibraryDialog } from "@ui/features/settings/index.js"
+import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import RowDivider from "@ui/components/RowDivider.vue"
 import { resolveAssetUrl } from "@lectorium/services/regionsRegistry.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
@@ -114,9 +157,18 @@ import {
 } from "@lectorium/composables/useCollectionGroups.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { shuffled } from "@lectorium/utils/shuffle.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
+import { useConfig } from "@lectorium/composables/useConfig.js"
+import {
+  AUTO_ARCHIVE_DELAY_KEY,
+  type AutoArchiveDelay,
+} from "@lectorium/composables/useAutoArchiveSweep.js"
+import { useSmartLibraryBinding } from "@lectorium/views/Settings/composables/useSmartLibraryBinding.js"
+import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
+import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { searchAndFilterTracks } from "@lib/application/searchAndFilterTracks.js"
 import type { Track } from "@lib/domain/track.js"
-import type { TrackId } from "@lib/domain/core.js"
+import type { TrackId, LanguageCode } from "@lib/domain/core.js"
 
 const player = usePlayerStore()
 const router = useRouter()
@@ -126,7 +178,43 @@ const mapper = useTrackUiStateMapper()
 const trackActions = useTrackActionSheet()
 const recommendations = useRecommendationsStore()
 const dictionaries = useDictionariesStore()
+const purchases = usePurchasesStore()
+const paywall = usePaywallStore()
 const { groups: collectionGroups, allCollections } = useCollectionGroups(appLanguage)
+
+// "Search the whole library" entry: the lecture count is scoped to the user's
+// chosen library content languages (the same facet the search sheet / Settings
+// → Library edit), so the number matches what the tracks search actually lists.
+const libraryLanguages = useLibraryLanguages()
+const lectureCount = ref(0)
+async function loadLectureCount(languages: readonly LanguageCode[]): Promise<void> {
+  try {
+    lectureCount.value = await app
+      .repositories()
+      .tracks.count(languages.length ? { languageCodes: languages } : undefined)
+  } catch (err) {
+    console.warn("[search] lecture count failed", err)
+  }
+}
+watch(libraryLanguages, (languages) => void loadLectureCount(languages), { immediate: true })
+
+// "Smart library" entry — same binding the Settings page drives, so editing it
+// here and there reads/writes one persisted set. Gated behind the subscription:
+// tapping while unsubscribed opens the paywall instead of the dialog.
+const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
+const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
+const isSubscribed = computed(() => purchases.isSubscribed)
+const smartLibrary = useSmartLibraryBinding(
+  autoDownloadTargetSeconds,
+  autoArchiveDelay,
+  isSubscribed
+)
+const smartLibraryDialogOpen = ref(false)
+const smartLibraryFiltersOpen = ref(false)
+function onSmartLibraryEntry(): void {
+  if (purchases.isSubscribed) smartLibraryDialogOpen.value = true
+  else paywall.requestOpen("smartLibrary")
+}
 
 // "Recommended for you" picks + per-hot-topic shelves, derived on-device from
 // the listening profile (see useRecommendationsStore). SHELF_PREVIEW caps the
