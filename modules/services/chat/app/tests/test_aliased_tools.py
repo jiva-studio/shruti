@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import Any
 
 from lectorium_chat.agent.aliased_tools import build_aliased_tools
+from lectorium_chat.agent.tools import build_personalized_tools
+from lectorium_chat.agent.tools._registry import all_tools
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 
 
@@ -100,3 +102,73 @@ async def test_unknown_tool_passes_through() -> None:
     wrapped = build_aliased_tools({"random_tool": random_tool}, aliases)
     # Returns identical callable — no wrapping needed.
     assert wrapped["random_tool"] is random_tool
+
+
+# --- Regression: personalize-then-alias must still inject alias_map ---------
+#
+# `chat_turn` composes the wrappers as
+#   build_aliased_tools(build_personalized_tools(TOOLS, uc), aliases)
+# A personalized tool that ALSO declares `alias_map` (the three user_* tools)
+# is wrapped twice. Before the `@wraps` fix the personalize wrapper hid the
+# underlying signature behind `**kwargs`, so `build_aliased_tools` could not
+# see `alias_map` and never injected it — every call crashed the turn with
+#   {"error": "bad args: ... missing 1 required keyword-only argument: 'alias_map'"}
+# which is why "что послушать дальше" / "что я слушал" returned nothing.
+
+
+def test_user_history_tools_are_personalized_and_aliased() -> None:
+    """The three history/recommend tools are BOTH personalized and take
+    `alias_map` — the exact combination the double-wrap regression broke."""
+    defs = all_tools()
+    for name in ("user_recommendations_get", "user_tracks_list", "user_history_search"):
+        assert defs[name].personalized is True, name
+
+
+async def test_personalized_then_aliased_injects_both() -> None:
+    """A personalized + alias_map tool, wrapped in the real production order,
+    receives the server-side user_context AND the per-turn alias_map."""
+    received: dict[str, Any] = {}
+
+    async def fake_user_tracks_list(
+        *, user_context: Any = None, alias_map: TurnAliasMap, limit: int = 20,
+    ) -> list[dict]:
+        received["user_context"] = user_context
+        received["alias_map"] = alias_map
+        received["limit"] = limit
+        return []
+
+    # "user_tracks_list" is in the personalized set, so build_personalized_tools
+    # wraps the fake; build_aliased_tools must then still inject alias_map.
+    sentinel_ctx = object()
+    personalized = build_personalized_tools(
+        {"user_tracks_list": fake_user_tracks_list}, sentinel_ctx  # type: ignore[arg-type]
+    )
+    aliases = TurnAliasMap()
+    aliased = build_aliased_tools(personalized, aliases)
+
+    # The LLM only supplies `limit`; user_context + alias_map are injected.
+    await aliased["user_tracks_list"](limit=5)
+
+    assert received["user_context"] is sentinel_ctx
+    assert received["alias_map"] is aliases
+    assert received["limit"] == 5
+
+
+async def test_personalized_rejects_llm_supplied_user_context() -> None:
+    """Even when both wrappers are applied, an LLM-invented `user_context`
+    is dropped in favour of the server-side one."""
+    received: dict[str, Any] = {}
+
+    async def fake(*, user_context: Any = None, alias_map: TurnAliasMap) -> list[dict]:
+        received["user_context"] = user_context
+        received["alias_map"] = alias_map
+        return []
+
+    server_ctx = object()
+    aliased = build_aliased_tools(
+        build_personalized_tools({"user_tracks_list": fake}, server_ctx),  # type: ignore[arg-type]
+        TurnAliasMap(),
+    )
+    await aliased["user_tracks_list"](user_context="LLM-INVENTED")
+
+    assert received["user_context"] is server_ctx
