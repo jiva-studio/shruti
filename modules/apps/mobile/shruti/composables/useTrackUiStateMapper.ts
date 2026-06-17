@@ -4,6 +4,7 @@ import { buildTrackRow } from "@shruti/composables/buildTrackRow.js"
 import { formatListeningDuration } from "@shruti/composables/formatListeningDuration.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore, type DownloadState } from "@shruti/stores/useDownloadStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
@@ -59,6 +60,7 @@ export interface UseTrackUiStateMapperReturn {
 export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   const { t } = useI18n()
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
   const dictionaries = useDictionariesStore()
   const downloads = useDownloadStore()
   const playlist = usePlaylistStore()
@@ -116,6 +118,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     // `useHomeRowBuilder`.
     return buildTrackRow(track, {
       preferredLanguage: appLanguage.value,
+      contentLanguages: libraryLanguages.value,
       authorsById: dictionaries.authorsById,
       locationsById: dictionaries.locationsById,
       sourcesById: dictionaries.sourcesById,

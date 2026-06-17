@@ -7,7 +7,12 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
+import {
+  preferredContentLanguage,
+  resolveLocalizedName,
+  resolveTrackTitle,
+} from "@lib/domain/services/localizedName.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 
@@ -38,6 +43,7 @@ export interface TrackControllerReturn {
 export function useTrackController(options: TrackControllerOptions): TrackControllerReturn {
   const { trackId } = options
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
 
   const app = useShruti()
   const repos = app.repositories()
@@ -58,16 +64,24 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const selectedLanguage = ref<LanguageCode | null>(null)
   const error = ref<string | null>(null)
 
+  // The track's content language (a library language it has) — drives the title,
+  // the default transcript and playback. Labels (author name) follow the UI.
+  const contentLang = computed<LanguageCode>(
+    () =>
+      (track.value
+        ? preferredContentLanguage(track.value, libraryLanguages.value, appLanguage.value)
+        : undefined) ?? appLanguage.value
+  )
+
   const title = computed(() => {
     if (!track.value) return ""
-    const lang = selectedLanguage.value ?? appLanguage.value
+    const lang = selectedLanguage.value ?? contentLang.value
     return resolveTrackTitle(track.value, lang) ?? track.value.id
   })
 
   const authorName = computed(() => {
     if (!author.value) return track.value?.authorId ?? ""
-    const lang = selectedLanguage.value ?? appLanguage.value
-    return resolveLocalizedName(author.value, lang) ?? author.value.id
+    return resolveLocalizedName(author.value, appLanguage.value) ?? author.value.id
   })
 
   const hasAudio = computed(() => track.value?.variants.some((v) => v.audio !== null) ?? false)
@@ -89,10 +103,13 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     track.value = detail.value.track
     author.value = detail.value.author
     availableLanguages.value = detail.value.availableLanguages
+    const preferred = preferredContentLanguage(
+      detail.value.track,
+      libraryLanguages.value,
+      appLanguage.value
+    )
     selectedLanguage.value =
-      availableLanguages.value.find((l) => l === appLanguage.value) ??
-      availableLanguages.value[0] ??
-      null
+      availableLanguages.value.find((l) => l === preferred) ?? availableLanguages.value[0] ?? null
   }
 
   function onLanguageChange(language: LanguageCode): void {
@@ -101,7 +118,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
 
   async function onPlay(): Promise<void> {
     if (!track.value) return
-    const lang = selectedLanguage.value ?? appLanguage.value
+    const lang = selectedLanguage.value ?? contentLang.value
     // If the track is queued in the playlist, resume from saved progress.
     // Otherwise (ad-hoc play from the Track screen) play without
     // persistence — there's no playlist item to write to.
@@ -117,7 +134,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   onMounted(() => {
     void loadEverything().then(async () => {
       if (resumeFromMs !== null && track.value) {
-        const lang = selectedLanguage.value ?? appLanguage.value
+        const lang = selectedLanguage.value ?? contentLang.value
         const entry = playlist.getEntryByTrackId(track.value.id)
         await player.openTrack({
           track: track.value,
