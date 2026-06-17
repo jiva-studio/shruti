@@ -20,7 +20,7 @@ import { CachedImage } from "@ui/primitives/index.js"
  * the "other collections" list on the Search page. Text sits in an IonLabel
  * (h3 + p) so it inherits the same type scale and colours as the track rows
  * it sits alongside. Cover is served from the local image cache via
- * CachedImage and fades in over the thumb's light placeholder background.
+ * CachedImage over the thumb's light placeholder background.
  */
 defineProps<{
   name: string

@@ -137,24 +137,18 @@ import {
   TileSection,
   CollectionListItem,
   LibraryBanner,
-  type CarouselItem,
 } from "@ui/features/collections/index.js"
 import { SmartLibraryDialog } from "@ui/features/settings/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import RowDivider from "@ui/components/RowDivider.vue"
-import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useRecommendationsStore } from "@shruti/stores/useRecommendationsStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
-import {
-  useLibraryLandingStore,
-  type GroupCollection,
-} from "@shruti/stores/useLibraryLandingStore.js"
+import { useLibraryLandingStore } from "@shruti/stores/useLibraryLandingStore.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
 import { useShruti } from "@shruti/shruti.js"
-import { shuffled } from "@shruti/utils/shuffle.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import {
@@ -164,7 +158,6 @@ import {
 import { useSmartLibraryBinding } from "@shruti/views/Settings/composables/useSmartLibraryBinding.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
-import type { Track } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 const player = usePlayerStore()
@@ -212,25 +205,11 @@ function onSmartLibraryEntry(): void {
 // inline rows; "see all" opens the full topic-tracks view.
 const recommendedRows = mapper.mapRows(() => recommendations.recommended, { context: "discovery" })
 
-// Topics are shown two ways: a grid of tiles ("Темы") of any few topics, and —
-// lower down — the user's three most-listened topics as title + lectures
-// shelves. The grid skips the three shelf topics so nothing repeats.
-const TOPIC_TILES = 6
+// Topics are shown two ways: a grid of tiles ("Темы"), and — lower down — the
+// user's three most-listened topics as title + lectures shelves. The tile grid
+// (and its cover prewarm) is derived in the landing store, which already skips
+// the shelf topics; here we only build the shelves themselves.
 const SHELF_PREVIEW = 3
-const topicTiles = ref<CarouselItem[]>([])
-function pickTopicTiles(): void {
-  const inShelves = new Set(recommendations.shelves.map((s) => s.topicId))
-  topicTiles.value = shuffled(dictionaries.topics.filter((t) => !inShelves.has(t.id)))
-    .slice(0, TOPIC_TILES)
-    .map((topic) => {
-      const cover = dictionaries.topicCoverById.get(topic.id)
-      return {
-        id: topic.id,
-        name: dictionaries.topicShortNamesById.get(topic.id) ?? topic.id,
-        coverUrl: cover ? resolveAssetUrl(cover) : undefined,
-      }
-    })
-}
 const topicShelves = computed(() =>
   recommendations.shelves.map((s) => ({
     topicId: s.topicId,
@@ -246,49 +225,20 @@ function onSelectTopic(topicId: string): void {
   void router.push({ name: "topic-tracks", params: { topicId } })
 }
 
-const topGroups = computed(() => landing.collectionGroups.slice(0, 2))
-const OTHER_COLLECTIONS_LIMIT = 4
-const PREVIEW_LECTURES_LIMIT = 10
-
-const otherCollections = ref<readonly GroupCollection[]>([])
-const lectureSample = ref<readonly Track[]>([])
+// The shown subsets — and the prewarm of their covers — are derived once per
+// load in the landing store, so the view just renders them: no picking logic
+// and no image-cache warming in the component.
+const topGroups = computed(() => landing.topGroups)
+const otherCollections = computed(() => landing.otherCollections)
+const topicTiles = computed(() => landing.topicTiles)
 
 // mapRows keeps row state live and, in "discovery" context, folds playback
-// progress to the binary state discovery surfaces use. The selection only
-// changes on reshuffle, so the displayed set stays stable.
-const previewLectures = mapper.mapRows(() => lectureSample.value, { context: "discovery" })
-
-function pickOtherCollections(): void {
-  const shown = new Set(topGroups.value.flatMap((g) => g.collections.map((c) => c.id)))
-  otherCollections.value = shuffled(landing.allCollections.filter((c) => !shown.has(c.id))).slice(
-    0,
-    OTHER_COLLECTIONS_LIMIT
-  )
-}
-
-function pickLectures(): void {
-  lectureSample.value = shuffled(landing.lecturePool).slice(0, PREVIEW_LECTURES_LIMIT)
-}
-
-watch(() => [landing.collectionGroups, landing.allCollections], pickOtherCollections, {
-  immediate: true,
-})
-watch(() => landing.lecturePool, pickLectures, { immediate: true })
-// Re-pick the random topic tiles once the vocabulary / shelves are loaded, and
-// again on a language switch so the tile labels follow the new locale.
-watch(
-  () => [dictionaries.topics.length, recommendations.shelves.length, appLanguage.value] as const,
-  pickTopicTiles,
-  { immediate: true }
-)
+// progress to the binary state discovery surfaces use.
+const previewLectures = mapper.mapRows(() => landing.lectureSample, { context: "discovery" })
 
 onIonViewWillEnter(() => {
-  // Ensure the batch is loaded (no-op once warmed at startup), then reshuffle
-  // the random picks so the surface varies between visits.
+  // Ensure the batch is loaded (no-op once warmed at startup).
   void landing.ensureLoaded()
-  pickOtherCollections()
-  pickLectures()
-  pickTopicTiles()
   // refresh (not ensureLoaded) so the profile reflects tracks heard since the
   // last visit — otherwise the shelves freeze on the first (often cold-start)
   // build until the app restarts.

@@ -1,12 +1,15 @@
 import { defineStore } from "pinia"
-import { ref } from "vue"
+import { computed, ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
+import { prewarmImageCache } from "@shruti/services/prewarmImageCache.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useRecommendationsStore } from "@shruti/stores/useRecommendationsStore.js"
+import { shuffled } from "@shruti/utils/shuffle.js"
 import { searchAndFilterTracks } from "@usecases/discovery/searchAndFilterTracks.js"
+import type { CarouselItem } from "@ui/features/collections/index.js"
 import type { Track } from "@lib/domain/track.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 
@@ -26,8 +29,15 @@ export interface CollectionGroupView {
 }
 
 // The "All lectures" preview draws a random sample from this pool; oversized so
-// a reshuffle on every view-enter shows variety without re-querying.
+// the picked sample shows variety without re-querying.
 const PREVIEW_POOL_SIZE = 40
+// How much of each section the landing actually shows. The picks are derived
+// once per load (below) so the page — and the image prewarm — know the exact
+// shown set up front, before the view mounts.
+const TOP_GROUPS = 2
+const OTHER_COLLECTIONS = 4
+const TOPIC_TILES = 6
+const PREVIEW_LECTURES = 10
 
 /**
  * All data the Search landing page renders, loaded as one batch behind a single
@@ -56,6 +66,16 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   const lectureCount = ref(0)
   /** Flips true after the first full parallel load; gates the page render. */
   const ready = ref(false)
+
+  // The exact subsets the landing renders, derived once per load. The view just
+  // reads them (no picking logic in the component), and the load fills them
+  // before flipping `ready` — so they are settled before the view mounts.
+  const topGroups = computed<readonly CollectionGroupView[]>(() =>
+    collectionGroups.value.slice(0, TOP_GROUPS)
+  )
+  const otherCollections = ref<readonly GroupCollection[]>([])
+  const topicTiles = ref<readonly CarouselItem[]>([])
+  const lectureSample = ref<readonly Track[]>([])
 
   // Track the (UI-language, library-languages) pair the loaded data belongs to
   // so a language switch reloads, and coalesce concurrent loads (startup
@@ -125,6 +145,36 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     }
   }
 
+  // Derive the shown subsets from the loaded data. The "other collections" and
+  // topic tiles are a random sample (variety between loads); the topic-tile grid
+  // skips the topics already shown as listening shelves so nothing repeats.
+  function pickShownSets(): void {
+    const shownIds = new Set(topGroups.value.flatMap((g) => g.collections.map((c) => c.id)))
+    otherCollections.value = shuffled(
+      allCollections.value.filter((c) => !shownIds.has(c.id))
+    ).slice(0, OTHER_COLLECTIONS)
+
+    const inShelves = new Set(recommendations.shelves.map((s) => s.topicId))
+    topicTiles.value = shuffled(dictionaries.topics.filter((t) => !inShelves.has(t.id)))
+      .slice(0, TOPIC_TILES)
+      .map((topic) => ({
+        id: topic.id,
+        name: dictionaries.topicShortNamesById.get(topic.id) ?? topic.id,
+        coverUrl: topic.cover ? resolveAssetUrl(topic.cover) : undefined,
+      }))
+
+    lectureSample.value = shuffled(lecturePool.value).slice(0, PREVIEW_LECTURES)
+  }
+
+  /** Every cover the landing will render — and nothing else. */
+  function shownCoverUrls(): (string | undefined)[] {
+    return [
+      ...topGroups.value.flatMap((g) => g.collections.map((c) => c.coverUrl)),
+      ...otherCollections.value.map((c) => c.coverUrl),
+      ...topicTiles.value.map((t) => t.coverUrl),
+    ]
+  }
+
   async function load(key: string): Promise<void> {
     const language = appLanguage.value
     await Promise.all([
@@ -134,8 +184,26 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
       dictionaries.ensureLoaded(),
       recommendations.refresh(),
     ])
+    // The catalog DB may still be downloading/opening on a fresh or cleared
+    // start (the startup preload from main.ts fires before the Welcome bootstrap
+    // finishes), in which case every query above came back empty. Don't commit
+    // that as the loaded state — leave the key unset and `ready` false so the
+    // next ensureLoaded() (the Search view entering once the DB is ready) reruns
+    // the load against real data instead of sticking on the empty result.
+    const hasData =
+      collectionGroups.value.length > 0 ||
+      allCollections.value.length > 0 ||
+      lecturePool.value.length > 0
+    if (!hasData) return
+
+    pickShownSets()
     loadedKey = key
     ready.value = true
+    // Warm the on-device image cache for exactly the covers this page will
+    // render, here in the prefetch layer (run from main.ts at startup) so they
+    // are cached before the view ever mounts — no placeholder → fade-in on open.
+    // Fire-and-forget: gentle background work that never gates `ready`.
+    void prewarmImageCache(app.filesStorage, shownCoverUrls())
   }
 
   /**
@@ -160,6 +228,10 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     allCollections,
     lecturePool,
     lectureCount,
+    topGroups,
+    otherCollections,
+    topicTiles,
+    lectureSample,
     ready,
     ensureLoaded,
   }
