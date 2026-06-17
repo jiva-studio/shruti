@@ -47,9 +47,11 @@ class _FakeStore:
 
 
 def _settings() -> Settings:
-    # Pull defaults straight from the model — the rate-limiter uses them
-    # as-is, so we don't override anything here.
+    # Pull defaults straight from the model. `_env_file=None` keeps the local
+    # dev `.env` (which lowers IP/device caps for manual testing) out of the
+    # unit tests, so the limits asserted here never depend on the environment.
     return Settings(
+        _env_file=None,
         database_url="postgres://test",
         s3_bucket="x",
         s3_region="us-east-1",
