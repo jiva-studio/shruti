@@ -1,6 +1,6 @@
 import { ref, type Ref } from "vue"
-import type { HeatmapDay } from "@lib/application/buildHeatmapDays.js"
-import { getActivityOverview } from "@lib/application/getActivityOverview.js"
+import type { HeatmapDay } from "@usecases/activity/buildHeatmapDays.js"
+import { getActivityOverview } from "@usecases/activity/getActivityOverview.js"
 import { useShruti } from "@shruti/shruti.js"
 
 /** Width of the heatmap window in days. ~32 weeks of past, plus a week ahead. */
@@ -22,7 +22,7 @@ export interface UseActivityHeatmapReturn {
  * player pause, and on track completion).
  *
  * Pure reactive shim — the actual orchestration is `getActivityOverview`
- * in @lib/application, which fetches via batch `tracks.getByIds` instead
+ * in @usecases, which fetches via batch `tracks.getByIds` instead
  * of the previous N+1 `getById` fan-out.
  */
 export function useActivityHeatmap(): UseActivityHeatmapReturn {

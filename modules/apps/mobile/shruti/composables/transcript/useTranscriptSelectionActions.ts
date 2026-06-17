@@ -1,7 +1,7 @@
 import type { NoteId, TrackId } from "@lib/domain/core.js"
-import { createNote } from "@lib/application/createNote.js"
-import { deleteNote } from "@lib/application/deleteNote.js"
-import { formatNoteShare, type NoteShareContext } from "@lib/application/formatNoteShare.js"
+import { createNote } from "@usecases/notes/createNote.js"
+import { deleteNote } from "@usecases/notes/deleteNote.js"
+import { formatNoteShare, type NoteShareContext } from "@usecases/notes/formatNoteShare.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 

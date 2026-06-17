@@ -7,11 +7,11 @@ import { shuffled } from "@shruti/utils/shuffle.js"
 import {
   buildRecommendations,
   type RecommendationShelf,
-} from "@lib/application/buildRecommendations.js"
+} from "@usecases/discovery/buildRecommendations.js"
 import type { Track } from "@lib/domain/track.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 
-export type { RecommendationShelf } from "@lib/application/buildRecommendations.js"
+export type { RecommendationShelf } from "@usecases/discovery/buildRecommendations.js"
 
 // Listening window that shapes the taste profile.
 const HISTORY_WINDOW_MS = 180 * 24 * 60 * 60 * 1000
@@ -23,7 +23,7 @@ const RECOMMENDED_SIZE = 3
 
 /**
  * On-device recommender state. The taste-profile logic lives in the
- * `buildRecommendations` use case (@lib/application); this store is the thin
+ * `buildRecommendations` use case (@usecases); this store is the thin
  * reactive shim that supplies wall-clock, the active UI language, the
  * playlist-derived exclusion predicate and a shuffle, runs it single-flight,
  * and exposes the result.

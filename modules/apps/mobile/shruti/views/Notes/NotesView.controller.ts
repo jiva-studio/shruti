@@ -10,7 +10,7 @@ import type { Note } from "@lib/domain/note.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { Track } from "@lib/domain/track.js"
-import { formatNoteShare } from "@lib/application/formatNoteShare.js"
+import { formatNoteShare } from "@usecases/notes/formatNoteShare.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import {
   resolveLocalizedName,

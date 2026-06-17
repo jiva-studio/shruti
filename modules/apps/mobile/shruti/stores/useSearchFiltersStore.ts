@@ -7,7 +7,7 @@ import { detectDeviceLocaleAsync } from "@shruti/i18n/index.js"
 import {
   defaultLibraryLanguages,
   reduceLocaleToContentLanguage,
-} from "@lib/application/reduceLocaleToLibraryLanguages.js"
+} from "@usecases/library/reduceLocaleToLibraryLanguages.js"
 
 // v3 introduces locale-seeded defaults on first launch (issue #411). The
 // version bump is intentional: every install — fresh or upgraded from v2 —

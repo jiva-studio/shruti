@@ -3,12 +3,12 @@ import { computed, ref } from "vue"
 import {
   addTrackToPlaylist,
   type AddTrackToPlaylistError,
-} from "@lib/application/addTrackToPlaylist.js"
+} from "@usecases/playlist/addTrackToPlaylist.js"
 import {
   archivePlaylistItem,
   type ArchivePlaylistItemError,
-} from "@lib/application/archivePlaylistItem.js"
-import { listActivePlaylistTracks } from "@lib/application/listPlaylistTracks.js"
+} from "@usecases/playlist/archivePlaylistItem.js"
+import { listActivePlaylistTracks } from "@usecases/playlist/listPlaylistTracks.js"
 import type { AuthorId, LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Author } from "@lib/domain/author.js"
 import { isCompleted } from "@lib/domain/listeningSession.js"

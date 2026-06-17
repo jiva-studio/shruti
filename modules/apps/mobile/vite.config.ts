@@ -109,7 +109,26 @@ export default defineConfig({
     // symbols don't match the one `app.use(router)` provided — surfacing as
     // `injection "Symbol(router)" not found` and a route that reads
     // `undefined` (which silently breaks the chat session-load watcher).
-    dedupe: ["vue", "vue-router", "@ionic/vue", "@ionic/core", "@ionic/vue-router"],
+    //
+    // The `@capacitor/*` packages are deduped for a second reason: kit's source
+    // (`../../kit/src`, compiled in via kitVitePlugin) imports them, but kit
+    // lives outside this app's tree so a bare resolve from a kit file can't walk
+    // up to this app's node_modules. dedupe forces Vite to resolve them from the
+    // project root (here), where they're installed — the same role the dropped
+    // `modules/node_modules` symlink used to play.
+    dedupe: [
+      "vue",
+      "vue-router",
+      "@ionic/vue",
+      "@ionic/core",
+      "@ionic/vue-router",
+      "@capacitor/core",
+      "@capacitor/filesystem",
+      "@capacitor/haptics",
+      "@capacitor/local-notifications",
+      "@capacitor/preferences",
+      "@capacitor/share",
+    ],
     alias: [
       { find: "@ports", replacement: path.resolve(__dirname, "./ports") },
       { find: "@infra", replacement: path.resolve(__dirname, "./infra") },
@@ -117,8 +136,8 @@ export default defineConfig({
       { find: "@lib/contracts", replacement: path.resolve(__dirname, "./submodules/contracts") },
       { find: "@lib/domain", replacement: path.resolve(__dirname, "./submodules/domain") },
       {
-        find: "@lib/application",
-        replacement: path.resolve(__dirname, "./submodules/application"),
+        find: "@usecases",
+        replacement: path.resolve(__dirname, "./usecases"),
       },
       {
         find: "@lib/persistence/main",
