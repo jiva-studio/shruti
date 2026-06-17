@@ -104,6 +104,13 @@ func registerDenoiseWait(s *server.MCPServer, p Provider, cfg Config) {
 			mcp.Description("rnnoise-mix: original ratio in pauses (0-1). Default 0.10.")),
 		mcp.WithNumber("mix_max",
 			mcp.Description("rnnoise-mix: original ratio on voice (0-1). Default 0.25.")),
+		mcp.WithString("plan_json",
+			mcp.Description("Splice plan (overrides strategy): JSON "+
+				"{\"segments\":[{\"start_ms\":0,\"end_ms\":275000,\"strategy\":\"afftdn\"},"+
+				"{\"start_ms\":275000,\"strategy\":\"deepfilternet\"}],\"crossfade_ms\":120}. "+
+				"Each segment is cleaned with its own strategy (afftdn over kirtan, "+
+				"deepfilternet over speech); segments must form a contiguous partition; "+
+				"loudness is applied once over the whole.")),
 		mcp.WithNumber("timeout_s",
 			mcp.Description("Max wall seconds to wait. Default 1800. 0 = enqueue and return now.")),
 	)
@@ -128,6 +135,11 @@ func registerDenoiseWait(s *server.MCPServer, p Provider, cfg Config) {
 		dest.Key = destKey
 
 		params := paramsFromReq(req)
+		if pj := strings.TrimSpace(req.GetString("plan_json", "")); pj != "" {
+			if err := applyPlanJSON(&params, pj); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+		}
 
 		created, err := p.Client().CreateJob(ctx, client.CreateJobRequest{
 			SourceURL: sourceURL, Dest: dest, Params: params,
@@ -229,6 +241,28 @@ func waitForJob(ctx context.Context, c JobClient, jobID string, total time.Durat
 	}
 	res.TimedOut = true
 	return res, nil
+}
+
+// applyPlanJSON parses a splice-plan JSON string and folds it into params,
+// overriding the single-strategy fields. Defaults crossfade to 120 ms.
+func applyPlanJSON(params *client.DenoiseParams, planJSON string) error {
+	var plan struct {
+		Segments    []client.PlanSegment `json:"segments"`
+		CrossfadeMs *int                 `json:"crossfade_ms"`
+	}
+	if err := json.Unmarshal([]byte(planJSON), &plan); err != nil {
+		return fmt.Errorf("plan_json: %w", err)
+	}
+	if len(plan.Segments) == 0 {
+		return errors.New("plan_json has no segments")
+	}
+	params.Segments = plan.Segments
+	if plan.CrossfadeMs != nil {
+		params.CrossfadeMs = *plan.CrossfadeMs
+	} else {
+		params.CrossfadeMs = 120
+	}
+	return nil
 }
 
 func paramsFromReq(req mcp.CallToolRequest) client.DenoiseParams {

@@ -31,6 +31,7 @@ afftdn needs only ffmpeg.
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -216,10 +217,11 @@ def _run(cmd):
         raise RuntimeError(f"{cmd[0]} failed ({proc.returncode}): {tail}")
 
 
-def _denoise_deepfilternet(in_path, out_path):
+def _dfn_enhance_to_wav(in_path, out_wav):
     """DeepFilterNet3 via the standalone `deep-filter` Rust binary — no torch,
     no Python ML deps, CPU-only, model weights embedded. Decode → 48k mono wav
-    → deep-filter → mono 128k mp3 (matches the other strategies' contract)."""
+    → deep-filter → 48k mono wav. No loudness normalization (the caller decides
+    whether/when to normalize)."""
     bin_path = _resolve_deep_filter_bin()
     with tempfile.TemporaryDirectory() as td:
         wav_in = os.path.join(td, "in.wav")
@@ -234,8 +236,15 @@ def _denoise_deepfilternet(in_path, out_path):
         wav_out = os.path.join(outdir, "in.wav")
         if not os.path.exists(wav_out):
             raise RuntimeError("deep-filter produced no output")
-        # Single encode: denoised wav → loudness-normalized mono 128k mp3.
-        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", wav_out,
+        shutil.copyfile(wav_out, out_wav)
+
+
+def _denoise_deepfilternet(in_path, out_path):
+    """deep-filter enhance → loudness-normalized mono 128k mp3 (single encode)."""
+    with tempfile.TemporaryDirectory() as td:
+        enhanced = os.path.join(td, "enhanced.wav")
+        _dfn_enhance_to_wav(in_path, enhanced)
+        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", enhanced,
               "-af", NORMALIZE_FILTER,
               "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(out_path)])
 
@@ -259,6 +268,139 @@ def denoise_one(in_path, out_path, strategy=DEFAULT_STRATEGY,
         _denoise_deepfilternet(in_path, out_path)
     else:
         raise ValueError(f"unknown strategy: {strategy!r} (one of {STRATEGIES})")
+
+
+# ──────────────────────────── segment plan (splice) ────────────────────────
+#
+# Some recordings carry sung kirtan / recited Sanskrit at the edges (or mid-talk)
+# that DeepFilterNet — a speech model — mangles, because it treats the singing as
+# noise to suppress. A plan splits the timeline into a contiguous partition of
+# segments, each cleaned with its OWN strategy (afftdn for kirtan, deepfilternet
+# for speech, "copy" for raw), then concatenated. Loudness is applied ONCE over
+# the whole spliced file so the seams don't jump in level.
+
+PLAN_STRATEGIES = STRATEGIES + ("copy",)  # "copy" = passthrough (no denoise)
+
+
+def _probe_duration_ms(path):
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=nk=1:nw=1", str(path)],
+        capture_output=True, text=True,
+    )
+    try:
+        return int(round(float(out.stdout.strip()) * 1000))
+    except ValueError:
+        return 0
+
+
+def _segment_to_wav(in_path, out_wav, strategy, nr, nf, mix_min, mix_max):
+    """Denoise one already-cut segment to a 48k mono WAV, WITHOUT loudness
+    normalization (applied once over the whole spliced file). 'copy' passes the
+    audio through untouched."""
+    if strategy == "copy":
+        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", str(in_path),
+              "-ac", "1", "-ar", str(SAMPLE_RATE), str(out_wav)])
+    elif strategy == "afftdn":
+        af = f"afftdn=nr={nr}:nf={nf},alimiter=limit=0.95"
+        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", str(in_path),
+              "-af", af, "-ac", "1", "-ar", str(SAMPLE_RATE), str(out_wav)])
+    elif strategy == "deepfilternet":
+        _dfn_enhance_to_wav(in_path, out_wav)
+    elif strategy in ("rnnoise", "rnnoise-mix", "afftdn-rnnoise-mix"):
+        # These strategies only emit mp3; re-decode to the common 48k wav.
+        with tempfile.TemporaryDirectory() as td:
+            seg_mp3 = os.path.join(td, "seg.mp3")
+            denoise_one(in_path, seg_mp3, strategy, nr, nf, mix_min, mix_max)
+            _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", seg_mp3,
+                  "-ac", "1", "-ar", str(SAMPLE_RATE), str(out_wav)])
+    else:
+        raise ValueError(f"unknown strategy: {strategy!r} (one of {PLAN_STRATEGIES})")
+
+
+def _concat_wavs(wavs, out_wav, crossfade_ms):
+    """Concatenate same-format (48k mono) WAVs. With crossfade_ms>0 the seams are
+    blended with an equal-power crossfade; otherwise hard-concatenated."""
+    if len(wavs) == 1:
+        shutil.copyfile(wavs[0], out_wav)
+        return
+    inputs = []
+    for w in wavs:
+        inputs += ["-i", w]
+    if crossfade_ms and crossfade_ms > 0:
+        d = crossfade_ms / 1000.0
+        cur = "[0:a]"
+        fc = ""
+        for idx in range(1, len(wavs)):
+            label = "[out]" if idx == len(wavs) - 1 else f"[a{idx}]"
+            fc += f"{cur}[{idx}:a]acrossfade=d={d}:c1=tri:c2=tri{label};"
+            cur = f"[a{idx}]"
+        fc = fc.rstrip(";")
+    else:
+        fc = "".join(f"[{i}:a]" for i in range(len(wavs))) + \
+            f"concat=n={len(wavs)}:v=0:a=1[out]"
+    _run(["ffmpeg", "-hide_banner", "-nostats", "-y", *inputs,
+          "-filter_complex", fc, "-map", "[out]", str(out_wav)])
+
+
+def denoise_plan(in_path, out_path, segments, crossfade_ms=120, normalize=True,
+                 default_nr=DEFAULT_NR, default_nf=DEFAULT_NF,
+                 default_mix_min=DEFAULT_MIX_MIN, default_mix_max=DEFAULT_MIX_MAX):
+    """Splice-denoise: cut each segment from in_path, clean it with its own
+    strategy to a 48k mono WAV, concat (optionally crossfaded), then apply ONE
+    loudness pass over the whole and encode mono 128k mp3.
+
+    `segments`: ordered list of dicts {start_ms, end_ms?, strategy, nr?, nf?}.
+    Must form a contiguous partition (gaps/overlaps > 50 ms raise); a missing
+    end_ms on the last segment means "to end of file"."""
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    if not segments:
+        raise ValueError("plan has no segments")
+    total_ms = _probe_duration_ms(in_path)
+    segs = sorted(segments, key=lambda s: int(s["start_ms"]))
+    prev_end = 0
+    norm = []
+    for s in segs:
+        start = int(s["start_ms"])
+        end = int(s["end_ms"]) if s.get("end_ms") is not None else total_ms
+        if start < prev_end - 50:
+            raise ValueError(f"segments overlap near {start}ms")
+        if start > prev_end + 50:
+            raise ValueError(
+                f"gap before {start}ms (prev end {prev_end}ms) — plan must be a "
+                "contiguous partition")
+        if end <= start:
+            raise ValueError(f"empty segment {start}-{end}ms")
+        norm.append((start, end, s))
+        prev_end = end
+
+    with tempfile.TemporaryDirectory() as td:
+        wavs = []
+        for i, (start, end, s) in enumerate(norm):
+            cut = os.path.join(td, f"cut_{i}.wav")
+            _run(["ffmpeg", "-hide_banner", "-nostats", "-y",
+                  "-ss", f"{start / 1000:.3f}", "-to", f"{end / 1000:.3f}",
+                  "-i", str(in_path), "-ac", "1", "-ar", str(SAMPLE_RATE), cut])
+            den = os.path.join(td, f"den_{i}.wav")
+            _segment_to_wav(
+                cut, den, s.get("strategy", DEFAULT_STRATEGY),
+                float(s.get("nr", default_nr)), float(s.get("nf", default_nf)),
+                default_mix_min, default_mix_max)
+            wavs.append(den)
+        joined = os.path.join(td, "joined.wav")
+        _concat_wavs(wavs, joined, crossfade_ms)
+        af = NORMALIZE_FILTER if normalize else "anull"
+        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", joined,
+              "-af", af, "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k",
+              str(out_path)])
+
+
+def _load_plan(raw):
+    """Plan from a JSON file path or an inline JSON string."""
+    if os.path.isfile(raw):
+        with open(raw) as f:
+            return json.load(f)
+    return json.loads(raw)
 
 
 def _process(args):
@@ -323,7 +465,25 @@ Examples:
                         help=f"rnnoise-mix: original ratio on voice (default {DEFAULT_MIX_MAX}).")
     parser.add_argument("-w", "--workers", type=int, default=1,
                         help="Parallel workers for recursive mode (default 1).")
+    parser.add_argument("--plan", default=None,
+                        help="Segment-plan (splice) mode: JSON file path or inline "
+                             "JSON {\"segments\":[{start_ms,end_ms?,strategy,nr?,nf?}],"
+                             " \"crossfade_ms\":120, \"normalize\":true}. Requires "
+                             "--in/--out; overrides --strategy. Each segment is "
+                             "cleaned with its own strategy and the parts are spliced "
+                             "with one final loudness pass.")
     args = parser.parse_args()
+
+    if args.plan:
+        if not (args.in_path and args.out_path):
+            parser.error("--plan requires --in and --out")
+        plan = _load_plan(args.plan)
+        denoise_plan(args.in_path, args.out_path, plan["segments"],
+                     crossfade_ms=int(plan.get("crossfade_ms", 120)),
+                     normalize=bool(plan.get("normalize", True)),
+                     default_nr=args.nr, default_nf=args.nf,
+                     default_mix_min=args.mix_min, default_mix_max=args.mix_max)
+        return
 
     if args.in_path or args.out_path:
         if not (args.in_path and args.out_path):

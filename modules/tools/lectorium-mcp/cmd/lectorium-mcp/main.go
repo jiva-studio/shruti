@@ -605,10 +605,11 @@ func main() {
 			Normalizer: ffTool,
 		},
 		AudioDenoise: audiodenoise.UseCase{
-			Audio:    audioStore,
-			Probe:    ffTool,
-			Denoiser: execdenoise.New(cfg.Denoiser.PythonBin, cfg.Denoiser.Script),
-			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+			Audio:       audioStore,
+			Probe:       ffTool,
+			Denoiser:    execdenoise.New(cfg.Denoiser.PythonBin, cfg.Denoiser.Script),
+			Catalog:     sqlitecatalog.NewLazy(currentDBPath),
+			Transcripts: transcriptStore,
 		},
 		RegisterAudio: registeraudio.UseCase{
 			Catalog: sqlitecatalog.NewLazy(currentDBPath),
