@@ -2,7 +2,7 @@ import { defineStore } from "pinia"
 import { ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
-import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { shuffled } from "@shruti/utils/shuffle.js"
 import {
   buildRecommendations,
@@ -31,7 +31,7 @@ const RECOMMENDED_SIZE = 3
 export const useRecommendationsStore = defineStore("recommendations", () => {
   const app = useShruti()
   const playlist = usePlaylistStore()
-  const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
 
   const recommended = ref<readonly Track[]>([])
   const shelves = ref<readonly RecommendationShelf[]>([])
@@ -59,7 +59,7 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
       const result = await buildRecommendations(
         {
           now: Date.now(),
-          language: appLanguage.value as LanguageCode,
+          languages: libraryLanguages.value as LanguageCode[],
           historyWindowMs: HISTORY_WINDOW_MS,
           shelfTopics: SHELF_TOPICS,
           shelfSize: SHELF_SIZE,

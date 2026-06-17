@@ -31,38 +31,82 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
 
     async topTrackIds(
       topicId: TopicId,
-      language: LanguageCode,
+      languages: readonly LanguageCode[],
       limit: number
     ): Promise<readonly TrackId[]> {
-      // Only tracks that actually have a variant in the active UI language, so a
-      // topic page never surfaces lectures the user can't read in their language.
+      // Restrict to tracks that have a variant in one of the user's library
+      // languages, so a topic page never surfaces lectures they can't read.
+      // EXISTS (not a JOIN) so a track with several matching variants stays one
+      // row. Empty `languages` = no filter (show every track on the topic).
+      if (languages.length === 0) {
+        const rows = await contentDb.query<{ track_id: string }>(
+          `SELECT track_id FROM track_topics WHERE topic_id = ? ORDER BY weight DESC LIMIT ?`,
+          [topicId, limit]
+        )
+        return rows.map((r) => r.track_id)
+      }
+      const langPh = languages.map(() => "?").join(", ")
       const rows = await contentDb.query<{ track_id: string }>(
         `SELECT tt.track_id
            FROM track_topics tt
-           JOIN track_variants tv ON tv.track_id = tt.track_id AND tv.language = ?
           WHERE tt.topic_id = ?
+            AND EXISTS (
+              SELECT 1 FROM track_variants tv
+               WHERE tv.track_id = tt.track_id AND tv.language IN (${langPh})
+            )
           ORDER BY tt.weight DESC
           LIMIT ?`,
-        [language, topicId, limit]
+        [topicId, ...languages, limit]
       )
       return rows.map((r) => r.track_id)
+    },
+
+    async topicIdsWithTracksIn(languages: readonly LanguageCode[]): Promise<readonly TopicId[]> {
+      if (languages.length === 0) {
+        const rows = await contentDb.query<{ topic_id: string }>(
+          `SELECT DISTINCT topic_id FROM track_topics`
+        )
+        return rows.map((r) => r.topic_id as TopicId)
+      }
+      const langPh = languages.map(() => "?").join(", ")
+      const rows = await contentDb.query<{ topic_id: string }>(
+        `SELECT DISTINCT tt.topic_id
+           FROM track_topics tt
+          WHERE EXISTS (
+            SELECT 1 FROM track_variants tv
+             WHERE tv.track_id = tt.track_id AND tv.language IN (${langPh})
+          )`,
+        [...languages]
+      )
+      return rows.map((r) => r.topic_id as TopicId)
     },
 
     async similarTrackIds(
       topicIds: readonly TopicId[],
       excludeTrackId: TrackId,
+      languages: readonly LanguageCode[],
       limit: number
     ): Promise<readonly TrackId[]> {
       if (topicIds.length === 0) return []
-      const placeholders = topicIds.map(() => "?").join(", ")
+      const topicPh = topicIds.map(() => "?").join(", ")
+      // EXISTS keeps SUM(weight) honest — a JOIN to track_variants would
+      // multiply a track's row per matching variant and inflate its score.
+      const langClause =
+        languages.length === 0
+          ? ""
+          : `AND EXISTS (SELECT 1 FROM track_variants tv
+               WHERE tv.track_id = tt.track_id AND tv.language IN (${languages
+                 .map(() => "?")
+                 .join(", ")}))`
       const rows = await contentDb.query<{ track_id: string }>(
-        `SELECT track_id
-           FROM track_topics
-          WHERE topic_id IN (${placeholders}) AND track_id != ?
-          GROUP BY track_id
-          ORDER BY SUM(weight) DESC
+        `SELECT tt.track_id
+           FROM track_topics tt
+          WHERE tt.topic_id IN (${topicPh}) AND tt.track_id != ?
+            ${langClause}
+          GROUP BY tt.track_id
+          ORDER BY SUM(tt.weight) DESC
           LIMIT ?`,
-        [...topicIds, excludeTrackId, limit]
+        [...topicIds, excludeTrackId, ...languages, limit]
       )
       return rows.map((r) => r.track_id)
     },

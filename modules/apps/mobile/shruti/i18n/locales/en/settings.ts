@@ -3,6 +3,7 @@ export default {
     subscription: "Subscription",
     account: "Account",
     appearance: "Appearance",
+    library: "Library",
     chat: "Ask Sadhu",
     contacts: "Contact Us",
     status: "Status",
@@ -12,6 +13,9 @@ export default {
     debug: "Debug",
     danger: "Danger zone",
     about: "About",
+  },
+  libraryLanguages: {
+    description: "Show lectures in these languages across search, topics and recommendations.",
   },
 
   account: {

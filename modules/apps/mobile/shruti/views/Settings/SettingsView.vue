@@ -30,6 +30,12 @@
       @open-track-info="trackInfoOpen = true"
     />
 
+    <SettingsLibraryGroup
+      :language-items="contentLanguageItems"
+      :selected="libraryLanguages"
+      @update:selected="setLibraryLanguages"
+    />
+
     <SettingsChatGroup
       v-model:chat-language="chatLanguage"
       v-model:chat-translate-citations="chatTranslateCitations"
@@ -121,6 +127,7 @@ import {
   SettingsDataGroup,
   SettingsDebugGroup,
   SettingsHelpGroup,
+  SettingsLibraryGroup,
   SettingsSadhanaGroup,
   SmartLibraryDialog,
   TrackInfoDialog,
@@ -167,6 +174,9 @@ const {
   notificationsTime,
   autoDownloadTargetSeconds,
   smartLibrary,
+  libraryLanguages,
+  contentLanguageItems,
+  setLibraryLanguages,
   activeServerId,
   serverItems,
   languageItems,
