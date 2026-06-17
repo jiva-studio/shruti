@@ -1,5 +1,5 @@
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
-import { pollUntilReady } from "@lectorium/services/pollUntilReady.js"
+import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@lectorium/services/pollUntilReady.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
@@ -84,7 +84,7 @@ export function useCitationSnippet() {
         excerptId,
       })
       url = result.url || predicted
-      if (!result.ready) await pollUntilReady(url)
+      if (!result.ready) await pollUntilReady(url, { timeoutMs: SHORT_POLL_TIMEOUT_MS })
     }
 
     urlCache.set(key, url)

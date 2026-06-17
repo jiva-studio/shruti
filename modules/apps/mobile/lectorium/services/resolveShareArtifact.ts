@@ -24,6 +24,13 @@ export interface ResolveShareArtifactArgs {
   /** Called right before the final download (Studio flips its status to
    *  "downloading…" here). */
   readonly onBeforeDownload?: () => void
+  /**
+   * Hard cap (ms) for the predicted-URL poll on the cold path. Defaults
+   * to `pollUntilReady`'s 8-min Studio-video budget; the fast audio /
+   * transcript cutters pass `SHORT_POLL_TIMEOUT_MS` so a dead URL fails
+   * fast instead of hanging for minutes.
+   */
+  readonly pollTimeoutMs?: number
 }
 
 /**
@@ -50,7 +57,9 @@ export async function resolveShareArtifact(args: ResolveShareArtifactArgs): Prom
     const run = (async () => {
       const result = await args.cut()
       const url = (result && result.url) || args.predictedUrl
-      if (!result || result.ready !== true) await pollUntilReady(url)
+      if (!result || result.ready !== true) {
+        await pollUntilReady(url, { timeoutMs: args.pollTimeoutMs })
+      }
       return url
     })()
     publicUrl = args.wrapCut ? await args.wrapCut(run) : await run

@@ -116,4 +116,57 @@ describe("useHttpShareAudioService", () => {
     const svc = useHttpShareAudioService(() => "https://endpoint")
     await expect(svc.cut({ sourceKey: "k", startMs: 0, endMs: 1 })).rejects.toThrow(/504/)
   })
+
+  it("falls through to ready:false when the cut aborts (real abort path, not a faked err.name)", async () => {
+    vi.useFakeTimers()
+    // fetch never resolves; rejects with the bare reason the runtime
+    // surfaces on abort. We do NOT set err.name — the adapter must rely
+    // on signal.aborted, which is the actual production behaviour.
+    fetchMock.mockImplementation((_url, init) => {
+      return new Promise((_, reject) => {
+        const sig = (init as RequestInit | undefined)?.signal as AbortSignal | undefined
+        sig?.addEventListener("abort", () => reject(sig.reason), { once: true })
+      })
+    })
+
+    const svc = useHttpShareAudioService(() => "https://yc.example/excerpts")
+    const promise = svc.cut({ sourceKey: "k", startMs: 0, endMs: 1000, excerptId: "n1" })
+
+    await vi.advanceTimersByTimeAsync(8_000)
+    const result = await promise
+    // ready:false + no url → the caller polls its predicted URL.
+    expect(result).toEqual({ excerptId: "n1", url: "", ready: false })
+    vi.useRealTimers()
+  })
+
+  it("re-throws a genuine (non-abort) network error rather than swallowing it", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+
+    const svc = useHttpShareAudioService(() => "https://endpoint")
+    await expect(svc.cut({ sourceKey: "k", startMs: 0, endMs: 1 })).rejects.toThrow(
+      /Failed to fetch/
+    )
+  })
+
+  it("coerces ready:true with an empty/relative/garbage url to ready:false (caller polls)", async () => {
+    for (const badUrl of ["", "/relative/path.mp3", "not-a-url", "ftp://x/y.mp3"]) {
+      fetchMock.mockResolvedValueOnce(ok({ excerpt_id: "n1", url: badUrl, ready: true }))
+      const svc = useHttpShareAudioService(() => "https://endpoint")
+      const result = await svc.cut({ sourceKey: "k", startMs: 0, endMs: 1, excerptId: "n1" })
+      expect(result).toEqual({ excerptId: "n1", url: "", ready: false })
+    }
+  })
+
+  it("keeps ready:true for a valid absolute https url (no poll)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({ excerpt_id: "n1", url: "https://cdn/share/audio/n1.mp3", ready: true })
+    )
+    const svc = useHttpShareAudioService(() => "https://endpoint")
+    const result = await svc.cut({ sourceKey: "k", startMs: 0, endMs: 1, excerptId: "n1" })
+    expect(result).toEqual({
+      excerptId: "n1",
+      url: "https://cdn/share/audio/n1.mp3",
+      ready: true,
+    })
+  })
 })

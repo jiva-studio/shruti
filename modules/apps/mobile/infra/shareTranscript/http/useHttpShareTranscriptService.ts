@@ -4,6 +4,11 @@ import type {
   RenderTranscriptResponse,
 } from "@ports/app/index.js"
 
+/** True iff `url` is a non-empty absolute http(s) URL. */
+function isAbsoluteHttpUrl(url: unknown): url is string {
+  return typeof url === "string" && /^https?:\/\/\S+/i.test(url)
+}
+
 /**
  * HTTP adapter over the share-transcript service. `getBaseUrl` resolves
  * the per-region base (`${host}/share/transcripts`) at call time, so a
@@ -40,16 +45,43 @@ export function useHttpShareTranscriptService(getBaseUrl: () => string): IShareT
         }))
       }
 
-      const response = await fetch(`${base}/pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      // Mobile platforms abort idle fetches around 60-100 s by default —
+      // cap at 8 s with our own AbortController so a slow handler doesn't
+      // masquerade as a multi-minute network hang. If we abort, fall
+      // through to `ready:false`: the caller polls the predicted URL.
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 8_000)
+      let response: Response
+      try {
+        response = await fetch(`${base}/pdf`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: ctrl.signal,
+        })
+      } catch (err: unknown) {
+        // Detect our own timeout via the signal rather than the rejection
+        // value: `fetch` surfaces an abort as a DOMException in browsers
+        // but as a bare value on some runtimes, so `err.name` is not
+        // reliable. `signal.aborted` is the one thing we control.
+        if (ctrl.signal.aborted) {
+          return { url: "", ready: false }
+        }
+        throw err
+      } finally {
+        clearTimeout(timer)
+      }
       if (!response.ok) {
         throw new Error(`share-transcript returned ${response.status} ${response.statusText}`)
       }
       const parsed = (await response.json()) as { url: string; ready: boolean }
-      return { url: parsed.url, ready: parsed.ready }
+
+      // Guard against a `ready:true` with a dead/empty URL (e.g. server
+      // with an unset public base). Coerce to `ready:false` so the caller
+      // polls its predicted URL instead of feeding a 404 to the viewer.
+      const url = isAbsoluteHttpUrl(parsed.url) ? parsed.url : ""
+      const ready = parsed.ready === true && url.length > 0
+      return { url, ready }
     },
   }
 }
