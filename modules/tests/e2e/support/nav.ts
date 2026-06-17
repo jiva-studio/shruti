@@ -50,6 +50,31 @@ export function searchInput(page: Page): Locator {
   return page.locator(".search-row ion-input input")
 }
 
+/** Matches any Cyrillic letter. Used to tell a Russian lecture title apart from a
+ *  Latin (English) one — the observable signal that a content surface is showing
+ *  lectures in the chosen library language (titles follow the library language,
+ *  see PR #1008). */
+export const CYRILLIC = /[Ѐ-ӿ]/
+
+/** Trimmed titles of the track rows on the ACTIVE list (scoped to `:visible`). */
+export async function trackTitles(page: Page): Promise<string[]> {
+  return (await trackRows(page).locator(".title").allInnerTexts()).map((t) => t.trim())
+}
+
+/** The Settings → Library "Lecture languages" row that opens the picker. */
+export function libraryLanguageRow(page: Page): Locator {
+  return page.locator("ion-item", { hasText: "Lecture languages" })
+}
+
+/**
+ * The open library-language picker. Several `SelectorDialog`s sit in the DOM at
+ * once (interface / chat / library); only the library one is a multi-select, so
+ * "the selector dialog that contains checkboxes" uniquely identifies it.
+ */
+export function libraryLanguageDialog(page: Page): Locator {
+  return page.locator("ion-modal.selector-dialog", { has: page.locator("ion-checkbox") })
+}
+
 /** The per-track detail bottom sheet (TrackSheet). */
 export function trackSheet(page: Page): Locator {
   return page.locator("ion-modal.track-sheet")
