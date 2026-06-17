@@ -44,12 +44,28 @@ async def test_resolve_retrieval_lang_corpus_lang_passes_through() -> None:
     assert await resolve_retrieval_lang(repo, "en") == "en"
 
 
-async def test_resolve_retrieval_lang_probe_failure_falls_back_english() -> None:
+async def test_resolve_retrieval_lang_probe_failure_retrieves_natively() -> None:
+    # A probe EXCEPTION (transient Postgres/Redis hiccup) must NOT force a
+    # Russian turn down to English-only grounding — it clamps against the
+    # static fallback set (en+ru) so `answer_lang` still retrieves natively.
     class _BoomRepo:
         async def distinct_langs(self) -> list[str]:
             raise RuntimeError("db down")
 
-    assert await resolve_retrieval_lang(_BoomRepo(), "ru") == "en"
+    assert await resolve_retrieval_lang(_BoomRepo(), "ru") == "ru"
+    assert await resolve_retrieval_lang(_BoomRepo(), "en") == "en"
+    # A non-corpus answer language still clamps to English on probe failure.
+    assert await resolve_retrieval_lang(_BoomRepo(), "uk") == "en"
+
+
+async def test_resolve_retrieval_lang_empty_corpus_result_clamps_to_english() -> None:
+    # A genuine EMPTY-corpus RESULT (probe succeeded, returned []) is the ONLY
+    # case that clamps to English — distinct from a probe failure.
+    class _EmptyRepo:
+        async def distinct_langs(self) -> list[str]:
+            return []
+
+    assert await resolve_retrieval_lang(_EmptyRepo(), "ru") == "en"
 
 
 # ── _fetch_one — no cross-language fallback ──────────────────────────

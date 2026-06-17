@@ -31,11 +31,13 @@ from lectorium_chat.agent.tools._envelope import (
     resolve_commentary_author_names,
 )
 from lectorium_chat.indexer.library.repo import fetch_document_body
+from lectorium_chat.infra.llm_provider.openrouter import is_provider_unavailable
 from lectorium_chat.observability.langfuse_client import langfuse_span
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.attribution_lookup import find_attributions
 from lectorium_chat.research.caption_generator import generate_captions
 from lectorium_chat.research.constants import (
+    BOOST_REF_RERANK_ACCEPT,
     FINAL_CUT_MIN_LIBRARY,
     FINAL_CUT_MIN_VERSES,
     MAX_FANOUT_ROUNDS,
@@ -80,9 +82,34 @@ OnEvent = Callable[[str, dict[str, Any]], None]
 
 
 # Fallback retrieval language when the answer language has no corpus AND
-# the corpus-language probe failed (empty set). English is the product's
+# a genuine empty-corpus RESULT came back. English is the product's
 # guaranteed-present corpus language and always has a partial HNSW index.
 _DEFAULT_RETRIEVAL_LANG = "en"
+
+# Static corpus-language set used ONLY when the `distinct_langs` probe
+# RAISES (transient Postgres/Redis hiccup) — as opposed to returning an
+# empty list. A bare clamp against [] would force English even for a
+# Russian turn, silently degrading a ru question to English-only grounding
+# on a transient blip. The product's guaranteed corpus languages are en+ru
+# (see `Settings.indexer_langs` default "ru,en"); sourced from config when
+# one is available, falling back to this literal otherwise.
+_PROBE_FAILURE_FALLBACK_LANGS = ("en", "ru")
+
+
+def _fallback_corpus_langs() -> list[str]:
+    """Best-effort static corpus-language set for a probe FAILURE. Prefers
+    the deployment's configured `indexer_langs`; falls back to the literal
+    en+ru when config can't be read (never raise — this is itself the
+    degradation path)."""
+    try:
+        from lectorium_chat.config import get_settings
+
+        langs = get_settings().langs
+        if langs:
+            return langs
+    except Exception:  # noqa: BLE001 — config read must never fail the clamp
+        pass
+    return list(_PROBE_FAILURE_FALLBACK_LANGS)
 
 
 def clamp_retrieval_lang(answer_lang: str, corpus_langs: list[str]) -> str:
@@ -105,8 +132,14 @@ async def resolve_retrieval_lang(
 ) -> str:
     """Corpus-constrained retrieval language for a turn answering in
     `answer_lang`: probe the corpus languages (`distinct_langs`, cached) and
-    `clamp_retrieval_lang`. On any probe failure, clamp against the empty
-    set → English, so retrieval never runs with a non-corpus lang.
+    `clamp_retrieval_lang`.
+
+    Probe FAILURE vs empty RESULT are handled differently. On an exception
+    we clamp against a static fallback set (configured `indexer_langs`, e.g.
+    en+ru), so a transient Postgres/Redis hiccup on a Russian turn still
+    retrieves natively instead of being silently forced to English-only.
+    Only a genuine EMPTY-corpus RESULT (the probe succeeded and returned [])
+    clamps to English via `clamp_retrieval_lang`.
 
     Shared by `research_worker` and `synthesis_planner` so BOTH attach
     purports in the same corpus language. Without it the planner's lazy
@@ -114,13 +147,18 @@ async def resolve_retrieval_lang(
     nothing, and fell back to a stray Russian purport — see
     `commentary_expansion._fetch_one`.
     """
-    corpus_langs: list[str] = []
     if chunk_repo is not None and hasattr(chunk_repo, "distinct_langs"):
         try:
             corpus_langs = await chunk_repo.distinct_langs()
         except Exception as exc:  # noqa: BLE001 — never fail a turn
             log.warning("distinct_langs_failed", request_id=request_id, error=str(exc))
-    return clamp_retrieval_lang(answer_lang, corpus_langs)
+            # Probe FAILED (not an empty corpus) — clamp against the static
+            # fallback set so `answer_lang` can still retrieve natively.
+            return clamp_retrieval_lang(answer_lang, _fallback_corpus_langs())
+        return clamp_retrieval_lang(answer_lang, corpus_langs)
+    # No probe available at all (no repo / no method) — preserve the legacy
+    # static-fallback behaviour rather than blindly forcing English.
+    return clamp_retrieval_lang(answer_lang, _fallback_corpus_langs())
 
 
 def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
@@ -153,6 +191,14 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
     Also opens a Langfuse span (`retrieval.<stage>`) so the same per-stage
     timing shows up in the trace timeline next to the LLM generations — that
     is where the previously un-instrumented retrieval seconds were hiding.
+
+    EXCEPTION: a provider-availability failure (out of credits / key rejected
+    / provider down) is NOT swallowed. Degrading it to `default` here would
+    hand the synthesizer empty grounding and produce a confident-looking but
+    ungrounded partial answer — worse than telling the user the service is
+    momentarily unavailable. It re-raises so `chat_turn` classifies it as a
+    calm `chat_unavailable`, not `agent_error`. A transient blip in ONE stage
+    (timeout, a single ANN error) still degrades gracefully as before.
     """
     started = perf_counter()
     status = "ok"
@@ -164,6 +210,13 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
             log.warning("pipeline_stage_timeout", stage=name, timeout=timeout, request_id=request_id)
             return default
         except Exception as exc:  # noqa: BLE001 — best-effort
+            if is_provider_unavailable(exc):
+                status = "provider_unavailable"
+                log.warning(
+                    "pipeline_stage_provider_unavailable",
+                    stage=name, error=str(exc), request_id=request_id,
+                )
+                raise
             status = "error"
             log.warning("pipeline_stage_error", stage=name, error=str(exc), request_id=request_id)
             return default
@@ -751,6 +804,55 @@ def _kick_caption_gen(
     alias_map._caption_task = task  # type: ignore[attr-defined]
 
 
+async def _gate_topic_refs(
+    envelopes: list[dict[str, Any]],
+    *,
+    reranker: Any,
+    question: str,
+    request_id: str | None,
+) -> list[dict[str, Any]]:
+    """Cross-encoder gate for fetched boost (topic-attribution) refs.
+
+    boost refs are pinned at a flat 0.75 cosine that floats them above
+    ordinary fanout, but — unlike the fanout pool — they never go through the
+    reranker. A topic that matched only a tangential angle of the question
+    therefore gets seated above on-topic fanout chunks. When a reranker is
+    present, re-score each ref's TEXT against the USER QUESTION and drop the
+    ones below `BOOST_REF_RERANK_ACCEPT`. Survivors keep their 0.75 `score`
+    (so the downstream two-tier sort is unchanged for the kept set).
+
+    Conservative by construction: no reranker, no usable texts, or a reranker
+    error all pass the refs through untouched — the normal fanout path is
+    never touched, and a gate failure can only ADD refs back, never silently
+    drop a curated decision on infra trouble.
+    """
+    if reranker is None or not envelopes:
+        return envelopes
+    texts = [(e.get("text") or "").strip() for e in envelopes]
+    if not any(texts):
+        return envelopes
+    try:
+        scored = await reranker.rerank(question, texts)
+    except Exception as exc:  # noqa: BLE001 — a turn never fails on the reranker
+        log.warning("topic_ref_rerank_failed", error=str(exc), request_id=request_id)
+        return envelopes
+    score_by_idx = {idx: rs for idx, rs in scored}
+    kept: list[dict[str, Any]] = []
+    for i, env in enumerate(envelopes):
+        rs = score_by_idx.get(i)
+        # An index the reranker omitted (its own top_k) is treated as below
+        # the bar — it ranked outside the kept set.
+        if rs is not None and rs >= BOOST_REF_RERANK_ACCEPT:
+            kept.append(env)
+    log.info(
+        "topic_refs_gated",
+        request_id=request_id,
+        before=len(envelopes),
+        after=len(kept),
+    )
+    return kept
+
+
 async def _research_path(
     *,
     question: str,
@@ -873,6 +975,19 @@ async def _research_path(
             refs=len(topic_refs),
             envelopes=len(topic_refs_fetched),
         )
+        # boost refs are pinned at 0.75 without going through the rerank the
+        # fanout pool does — gate them against the user question so a
+        # tangential topic match can't sit above on-topic fanout. No-op when
+        # no reranker is wired (cosine-only path stays as before).
+        if reranker is not None:
+            topic_refs_fetched = await _safe(
+                lambda: _gate_topic_refs(
+                    topic_refs_fetched, reranker=reranker,
+                    question=question, request_id=request_id,
+                ),
+                default=topic_refs_fetched, timeout=TIMEOUT_FETCH_REFS_S,
+                name="gate_topic_refs", request_id=request_id,
+            )
 
     # Step C: fanout, coverage gate, up to N rounds.
     accumulated = FanoutResult()

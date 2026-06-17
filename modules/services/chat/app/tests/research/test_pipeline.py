@@ -821,3 +821,184 @@ async def test_short_path_commentary_ref_resolves_author_name():
     assert len(result.authoritative_refs) == 1
     # The commentary alias was minted WITH the resolved author name.
     assert "А. Ч. Бхактиведанта Свами Прабхупада" in alias.commentary_authors.values()
+
+
+# ---- provider-unavailable degradation (corpus fanout) ---------------------
+
+import openai  # noqa: E402
+
+from lectorium_chat.infra.llm_provider.openrouter import is_provider_unavailable  # noqa: E402
+
+
+@dataclass
+class _FanoutBoomEmbedder:
+    """embed_query succeeds (so attribution lookup proceeds), but
+    embed_documents raises a PROVIDER-UNAVAILABLE error — the failure mode of
+    OpenRouter being out of credits / down DURING the fanout embed call."""
+
+    docs_called: int = 0
+
+    async def embed_query(self, text: str) -> list[float]:
+        return [0.0] * 1536
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.docs_called += 1
+        raise openai.APIConnectionError(request=None)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_fanout_provider_unavailable_propagates_not_partial():
+    """An embedder that raises a provider-availability error during corpus
+    fanout must PROPAGATE (so chat_turn surfaces a calm `chat_unavailable`),
+    NOT be swallowed into an empty/partial outline. `_safe` re-raises a
+    provider-unavailable error rather than degrading it to its default."""
+    pool = FakePool({("ru", "pinned"): []})  # no question match → LONG path → fanout
+    chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
+    llm = FakeLLM(by_schema={
+        "QueryPlan": _plan("q"),
+        "TopicExtractionResult": TopicExtractionResult(topics=[]),  # straight to fanout
+    })
+    embedder = _FanoutBoomEmbedder()
+
+    with pytest.raises(Exception) as ei:
+        await run_research(
+            question="вопрос", lang="ru", router_args={},
+            chunk_repo=chunk_repo, catalog_repo=FakeCatalogRepo(),
+            embedder=embedder, alias_map=FakeAliasMap(),
+            pool=pool, llm=llm, embed_model="m", embed_dim=1536,
+        )
+    # The error chat_turn will classify is a provider-availability failure.
+    assert is_provider_unavailable(ei.value) is True
+    assert embedder.docs_called >= 1
+
+
+@pytest.mark.asyncio
+async def test_fanout_non_provider_error_still_degrades():
+    """A NON-provider error during fanout embed still degrades gracefully to
+    an empty result (regression guard for the `_safe` carve-out — only
+    provider-unavailable errors propagate, everything else is swallowed)."""
+
+    @dataclass
+    class _PlainBoomEmbedder:
+        async def embed_query(self, text: str) -> list[float]:
+            return [0.0] * 1536
+
+        async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            raise RuntimeError("a bug in our own code, not the provider")
+
+    pool = FakePool({("ru", "pinned"): []})
+    chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
+    llm = FakeLLM(by_schema={
+        "QueryPlan": _plan("q"),
+        "TopicExtractionResult": TopicExtractionResult(topics=[]),
+    })
+    result = await run_research(
+        question="вопрос", lang="ru", router_args={},
+        chunk_repo=chunk_repo, catalog_repo=FakeCatalogRepo(),
+        embedder=_PlainBoomEmbedder(), alias_map=FakeAliasMap(),
+        pool=pool, llm=llm, embed_model="m", embed_dim=1536,
+    )
+    # Degraded, not raised: empty research with no crash.
+    assert result.research_chunks == []
+    assert result.authoritative_refs == []
+
+
+# ---- #4: boost topic-ref rerank gate --------------------------------------
+
+
+@dataclass
+class _FakeReranker:
+    """Returns scripted (index, score) pairs by document text. Any text not in
+    the map is omitted (mimics the reranker's own top_k cut)."""
+
+    score_by_text: dict[str, float] = field(default_factory=dict)
+    name: str = "fake-reranker"
+
+    async def rerank(self, query, documents, *, top_k=None):
+        out = []
+        for i, d in enumerate(documents):
+            if d in self.score_by_text:
+                out.append((i, self.score_by_text[d]))
+        return out
+
+
+@pytest.mark.asyncio
+async def test_boost_topic_refs_gated_by_reranker():
+    """A fetched boost topic-ref that the reranker scores BELOW the accept
+    threshold is dropped; an on-topic one is kept. The normal fanout path is
+    untouched."""
+    pool = FakePool({
+        ("ru", "pinned"): [],
+        (None, "pinned"): [],
+        ("ru", "boost"): [
+            _row("attribution_t1", 0.75, [
+                {"ref_kind": "verse", "target_id": "verse_on_topic"},
+                {"ref_kind": "verse", "target_id": "verse_off_topic"},
+            ]),
+        ],
+    })
+    chunk_repo = FakeChunkRepo(
+        lecture_results=[],
+        library_results=[],
+        by_target={
+            ("verse", "verse_on_topic"): [
+                _LibChunk("verse_on_topic", "verse", "ON TOPIC", "ru",
+                          source_id="src", tokens="2.1", addr_label="x"),
+            ],
+            ("verse", "verse_off_topic"): [
+                _LibChunk("verse_off_topic", "verse", "OFF TOPIC", "ru",
+                          source_id="src", tokens="2.2", addr_label="y"),
+            ],
+        },
+    )
+    llm = FakeLLM(by_schema={
+        "QueryPlan": _plan("q"),
+        "TopicExtractionResult": TopicExtractionResult(topics=["t"]),
+    })
+    reranker = _FakeReranker(score_by_text={"ON TOPIC": 0.9, "OFF TOPIC": 0.1})
+
+    kwargs = _common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo)
+    result = await run_research(
+        question="вопрос", lang="ru", router_args={},
+        reranker=reranker, **kwargs,
+    )
+    texts = {e["text"] for e in result.research_chunks}
+    assert "ON TOPIC" in texts
+    assert "OFF TOPIC" not in texts
+
+
+@pytest.mark.asyncio
+async def test_boost_topic_refs_ungated_without_reranker():
+    """No reranker wired → boost refs pass through ungated (prior behaviour),
+    both on- and off-topic refs surface."""
+    pool = FakePool({
+        ("ru", "pinned"): [],
+        (None, "pinned"): [],
+        ("ru", "boost"): [
+            _row("attribution_t1", 0.75, [
+                {"ref_kind": "verse", "target_id": "verse_a"},
+                {"ref_kind": "verse", "target_id": "verse_b"},
+            ]),
+        ],
+    })
+    chunk_repo = FakeChunkRepo(
+        lecture_results=[], library_results=[],
+        by_target={
+            ("verse", "verse_a"): [
+                _LibChunk("verse_a", "verse", "A", "ru", source_id="s", tokens="1.1", addr_label="x"),
+            ],
+            ("verse", "verse_b"): [
+                _LibChunk("verse_b", "verse", "B", "ru", source_id="s", tokens="1.2", addr_label="y"),
+            ],
+        },
+    )
+    llm = FakeLLM(by_schema={
+        "QueryPlan": _plan("q"),
+        "TopicExtractionResult": TopicExtractionResult(topics=["t"]),
+    })
+    result = await run_research(
+        question="вопрос", lang="ru", router_args={},
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+    texts = {e["text"] for e in result.research_chunks}
+    assert {"A", "B"} <= texts
