@@ -189,6 +189,14 @@ class TurnAliasMap:
         # `CitationCard.vue` can render the full quote block. Empty until
         # the research path fills it — clients fall back to the chip.
         self.chunk_texts: dict[int, str] = {}
+        # The exact picked-sentence body shown to the user for each cited
+        # commentary, keyed by alias int. Filled by `_format_commentary_card`
+        # at expansion time (the same joined text it ships in the card's
+        # `action` payload, translation included). Observability-only: the
+        # Langfuse trace annotation reads it to mirror what the card
+        # rendered, instead of the full source chunk. Never read by the
+        # client path.
+        self.commentary_shown: dict[int, str] = {}
 
     def _alloc_ref(self) -> int:
         """Allocate the next sequential alias integer for this turn."""
