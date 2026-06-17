@@ -123,6 +123,32 @@ class CatalogRepository(Protocol):
         a bare code the LLM mis-resolves."""
         ...
 
+    async def topic_weights_for_tracks(
+        self, track_ids: list[str],
+    ) -> list[tuple[str, str, float]]:
+        """Return `(track_id, topic_id, weight)` rows from `track_topics`
+        for the given tracks. Mirrors the mobile recommender's
+        `ITopicRepository.weightsForTracks` — the taste profile is
+        Σ(weight × listened_seconds) per topic. Empty input → empty."""
+        ...
+
+    async def top_track_ids_for_topic(
+        self, topic_id: str, *, languages: list[str], limit: int,
+    ) -> list[str]:
+        """Highest-weight tracks on a topic, optionally constrained to
+        tracks with a transcript variant in one of `languages` (EXISTS,
+        not JOIN, so a multi-variant track stays one row). Empty
+        `languages` = no language filter. Mirrors the mobile
+        `topTrackIds`."""
+        ...
+
+    async def topic_names(
+        self, topic_ids: list[str], *, lang: str,
+    ) -> dict[str, str]:
+        """Batch topic_id → display name in `lang` (en fallback). Used to
+        tell the user which topics the recommendations are based on."""
+        ...
+
     async def get_outline(
         self, track_id: str, lang: str,
     ) -> tuple[str | None, str | None]:
