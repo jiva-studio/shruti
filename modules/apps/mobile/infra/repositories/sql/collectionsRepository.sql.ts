@@ -25,12 +25,6 @@ export interface CollectionDetail {
   readonly trackIds: readonly string[]
 }
 
-/** A collection a given track belongs to — used to group the playlist. */
-export interface TrackCollectionRef {
-  readonly id: string
-  readonly name: string
-}
-
 /** A named group (shelf) of collections, as shown on the Search page. */
 export interface CollectionGroupRow {
   readonly id: string
@@ -77,11 +71,11 @@ export interface ISqlCollectionRepository {
   getCollection(collectionId: string, locale: string): Promise<CollectionDetail | null>
 
   /**
-   * Collections (id + name) the given track belongs to in `locale`, ordered
-   * by `sort_order ASC`. Drives playlist grouping by derivation — no
-   * per-item provenance is stored.
+   * Localized display name for one collection, or `null` when the collection
+   * doesn't exist in `locale` (e.g. removed after a catalog update). Used to
+   * label playlist groups from the stored `collection_id` provenance.
    */
-  getTrackCollections(trackId: string, locale: string): Promise<readonly TrackCollectionRef[]>
+  getCollectionName(collectionId: string, locale: string): Promise<string | null>
 
   /**
    * Distinct authors of a collection, ordered by how many of its tracks each
@@ -174,22 +168,15 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
       }
     },
 
-    async getTrackCollections(
-      trackId: string,
-      locale: string
-    ): Promise<readonly TrackCollectionRef[]> {
+    async getCollectionName(collectionId: string, locale: string): Promise<string | null> {
       try {
-        return await contentDb.query<TrackCollectionRef>(
-          `SELECT c.id, c.name
-             FROM collection_tracks ctk
-             JOIN collections c
-               ON c.id = ctk.collection_id AND c.language = ctk.collection_language
-            WHERE ctk.track_id = ? AND ctk.collection_language = ?
-            ORDER BY c.sort_order ASC, c.id ASC`,
-          [trackId, locale]
+        const rows = await contentDb.query<{ name: string }>(
+          `SELECT name FROM collections WHERE id = ? AND language = ? LIMIT 1`,
+          [collectionId, locale]
         )
+        return rows.length > 0 ? rows[0].name : null
       } catch (err) {
-        if (isMissingTable(err)) return []
+        if (isMissingTable(err)) return null
         throw err
       }
     },

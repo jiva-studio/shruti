@@ -27,6 +27,7 @@ const sample = (over: Partial<PlaylistItem> = {}): PlaylistItem => ({
   trackId: "t-1" as TrackId,
   addedAt: 1000,
   archivedAt: null,
+  collectionId: null,
   ...over,
 })
 
@@ -41,7 +42,18 @@ describe("addTrackToPlaylist", () => {
     )
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.value.id).toBe("pi-new")
-    expect(add).toHaveBeenCalledWith("t-new")
+    expect(add).toHaveBeenCalledWith("t-new", null)
+  })
+
+  it("forwards the source collectionId to the repo", async () => {
+    const created = sample({ trackId: "t-new" as TrackId, collectionId: "col-1" })
+    const add = vi.fn<IPlaylistItemRepository["add"]>().mockResolvedValue(created)
+    const repo = makeRepo({ listActive: async () => [], add })
+    await addTrackToPlaylist(
+      { trackId: "t-new" as TrackId, collectionId: "col-1" },
+      { playlistItems: repo, unitOfWork: noopUnitOfWork }
+    )
+    expect(add).toHaveBeenCalledWith("t-new", "col-1")
   })
 
   it("returns already-in-playlist for active duplicates", async () => {

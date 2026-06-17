@@ -38,20 +38,21 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
       )
     },
 
-    async add(trackId: TrackId): Promise<PlaylistItem> {
+    async add(trackId: TrackId, collectionId: string | null = null): Promise<PlaylistItem> {
       const id = newPlaylistItemId()
       const now = Date.now()
       await mutate(
         db,
-        `INSERT INTO playlist_items (id, track_id, added_at, archived_at)
-         VALUES (?, ?, ?, NULL)`,
-        [id, trackId, now]
+        `INSERT INTO playlist_items (id, track_id, added_at, archived_at, collection_id)
+         VALUES (?, ?, ?, NULL, ?)`,
+        [id, trackId, now, collectionId]
       )
       return {
         id,
         trackId,
         addedAt: now,
         archivedAt: null,
+        collectionId,
       }
     },
 

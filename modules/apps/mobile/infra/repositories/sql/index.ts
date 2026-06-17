@@ -37,7 +37,6 @@ export { createSqlCollectionRepository } from "./collectionsRepository.sql.js"
 export type {
   FeaturedCollectionRow,
   CollectionDetail,
-  TrackCollectionRef,
   CollectionGroupRow,
   CollectionAuthor,
   ISqlCollectionRepository,
