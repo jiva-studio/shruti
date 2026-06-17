@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test"
 import { bootLive, askChat, assistantBubble } from "../support/live.js"
 
-// Real LLM turns are occasionally slow/transient under load — retry @live.
-test.describe.configure({ retries: 2 })
+// Real LLM turns are occasionally slow/transient under load — retry @live. The
+// grounded-answer poll waits up to 180s, so the per-test budget must exceed that
+// (the global 120s default would kill a slow-but-valid turn before the poll).
+test.describe.configure({ retries: 2, timeout: 240_000 })
 
 /**
  * @live — needs the local stack (chat + auth) up. A real chat turn end to end:

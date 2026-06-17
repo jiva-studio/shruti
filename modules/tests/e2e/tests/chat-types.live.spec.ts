@@ -1,8 +1,11 @@
 import { test, expect } from "@playwright/test"
 import { bootLive, askChat } from "../support/live.js"
 
-// Real LLM turns are occasionally slow/transient under load — retry @live.
-test.describe.configure({ retries: 2 })
+// Real LLM turns are occasionally slow/transient under load — retry @live. Each
+// card assertion waits up to 180s for the stream to finish, so the per-test
+// budget must exceed that (the global 120s default would kill a slow-but-valid
+// turn before its own assertion times out).
+test.describe.configure({ retries: 2, timeout: 240_000 })
 
 /**
  * @live — different chat REQUEST TYPES routed by the chat service
