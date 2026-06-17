@@ -33,6 +33,7 @@ const (
 	KindLibraryImport      Kind = "library_import"
 	KindTopicsBuild        Kind = "topics_build"
 	KindTopicsAssign       Kind = "topics_assign"
+	KindTopicCovers        Kind = "topic_covers"
 )
 
 // Long-running per-track tools (transcript_review, transcript_create,
@@ -43,9 +44,10 @@ const (
 // MCP RPC budget.
 
 // State is the run's lifecycle position. Allowed transitions:
-//   queued    → running, cancelled
-//   running   → done, failed, cancelled
-//   done/failed/cancelled → terminal
+//
+//	queued    → running, cancelled
+//	running   → done, failed, cancelled
+//	done/failed/cancelled → terminal
 type State string
 
 const (
@@ -68,17 +70,17 @@ func (s State) IsTerminal() bool {
 
 // Progress captures live counters surfaced via run_status.
 //
-//   FilesTotal  / FilesDone — for batch runs that map onto N target files.
-//   StageBreakdown          — for kind=pipeline: how many targets are at
-//                             each stage. Empty for non-pipeline runs.
-//   Message                 — short human-readable status note ("uploading
-//                             config.json", "queued behind 3 prior batches").
+//	FilesTotal  / FilesDone — for batch runs that map onto N target files.
+//	StageBreakdown          — for kind=pipeline: how many targets are at
+//	                          each stage. Empty for non-pipeline runs.
+//	Message                 — short human-readable status note ("uploading
+//	                          config.json", "queued behind 3 prior batches").
 type Progress struct {
-	FilesTotal      int            `json:"files_total"`
-	FilesDone       int            `json:"files_done"`
-	FilesFailed     int            `json:"files_failed"`
-	StageBreakdown  map[string]int `json:"stage_breakdown,omitempty"`
-	Message         string         `json:"message,omitempty"`
+	FilesTotal     int            `json:"files_total"`
+	FilesDone      int            `json:"files_done"`
+	FilesFailed    int            `json:"files_failed"`
+	StageBreakdown map[string]int `json:"stage_breakdown,omitempty"`
+	Message        string         `json:"message,omitempty"`
 }
 
 // Run is the top-level value. Stays JSON-friendly so the runregistry
@@ -86,17 +88,17 @@ type Progress struct {
 // nullable because some kinds (per-track sync wrappers turned async)
 // don't have a selector.
 type Run struct {
-	Id          string           `json:"id"`
-	Kind        Kind             `json:"kind"`
-	State       State            `json:"state"`
-	StartedAt   time.Time        `json:"started_at"`
-	FinishedAt  time.Time        `json:"finished_at,omitempty"`
-	Selector    *track.Selector  `json:"selector,omitempty"`
-	Targets     []string         `json:"targets,omitempty"`
-	Progress    Progress         `json:"progress"`
-	Result      json.RawMessage  `json:"result,omitempty"`
-	Error       string           `json:"error,omitempty"`
-	Cancellable bool             `json:"cancellable"`
+	Id          string          `json:"id"`
+	Kind        Kind            `json:"kind"`
+	State       State           `json:"state"`
+	StartedAt   time.Time       `json:"started_at"`
+	FinishedAt  time.Time       `json:"finished_at,omitempty"`
+	Selector    *track.Selector `json:"selector,omitempty"`
+	Targets     []string        `json:"targets,omitempty"`
+	Progress    Progress        `json:"progress"`
+	Result      json.RawMessage `json:"result,omitempty"`
+	Error       string          `json:"error,omitempty"`
+	Cancellable bool            `json:"cancellable"`
 }
 
 // New constructs a Run in StateQueued with StartedAt=now. Caller fills
