@@ -21,7 +21,11 @@ function findChrome(): string | undefined {
 export default defineConfig({
   testDir: "./specs",
   timeout: 90_000,
-  retries: 0,
+  // Capturing 32 scenarios (8 × iphone67/ipad13 × en/ru) on a shared CI runner,
+  // a single scenario occasionally times out waiting for its state (e.g. the
+  // transcript dialog's .highlighted/.current). Without retries that one flake
+  // fails the whole deploy. Retry in CI so a transient capture re-runs instead.
+  retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: [["list"]],
   webServer: {
