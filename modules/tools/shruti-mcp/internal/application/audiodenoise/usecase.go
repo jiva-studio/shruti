@@ -10,10 +10,12 @@ import (
 	"fmt"
 
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/denoiseplan"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
 	audioport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 	denoiserport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/denoiser"
+	transcriptport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
 type UseCase struct {
@@ -21,6 +23,10 @@ type UseCase struct {
 	Probe    audioport.Probe
 	Denoiser denoiserport.Denoiser
 	Catalog  catalogport.CommitRepository
+	// Transcripts is optional: when set, the EN transcript is used to detect
+	// sung kirtan / recited regions and protect them from the speech denoiser
+	// via a splice plan. Nil (or no transcript on disk) → plain whole-file.
+	Transcripts transcriptport.Store
 }
 
 type Result struct {
@@ -29,16 +35,28 @@ type Result struct {
 	CleanPath  string   `json:"clean_path"`
 	DurationMs int64    `json:"duration_ms"`
 	SizeBytes  int64    `json:"size_bytes"`
+	// Spliced reports whether a kirtan-aware splice plan was applied (vs plain
+	// whole-file denoise); Segments is the plan's segment count when spliced.
+	Spliced  bool `json:"spliced"`
+	Segments int  `json:"segments,omitempty"`
 }
 
 // Run denoises out/public/tracks/{id}/audio/original.mp3 → clean.mp3, probes it,
 // and upserts a track_audio kind=clean row for (id, language) pointing at the
-// canonical relative key. Idempotent: re-running overwrites the file + row.
+// canonical relative key. When the transcript reveals sung kirtan / recited
+// regions it applies a splice plan (afftdn over those, deepfilternet over
+// speech) instead of mangling them whole-file. Idempotent: re-running
+// overwrites the file + row.
 func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result, error) {
 	in := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 	out := uc.Audio.PublicAudioPath(id, audioport.VersionClean)
 
-	if err := uc.Denoiser.Denoise(ctx, in, out); err != nil {
+	plan := uc.buildPlan(ctx, id, language, in)
+	if len(plan) > 0 {
+		if err := uc.Denoiser.DenoisePlan(ctx, in, out, plan, denoiseplan.CrossfadeMs); err != nil {
+			return Result{}, err
+		}
+	} else if err := uc.Denoiser.Denoise(ctx, in, out); err != nil {
 		return Result{}, err
 	}
 	info, err := uc.Probe.Probe(ctx, out)
@@ -65,5 +83,26 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 		CleanPath:  relPath,
 		DurationMs: info.DurationMs,
 		SizeBytes:  info.SizeBytes,
+		Spliced:    len(plan) > 0,
+		Segments:   len(plan),
 	}, nil
+}
+
+// buildPlan reads the EN transcript and the source duration to detect kirtan /
+// recitation regions. Returns nil (→ plain whole-file denoise) when no
+// transcript is configured/on disk, the duration can't be probed, or the track
+// has no protectable regions.
+func (uc UseCase) buildPlan(ctx context.Context, id track.Id, language, inPath string) []denoiseplan.Segment {
+	if uc.Transcripts == nil {
+		return nil
+	}
+	raw, err := uc.Transcripts.ReadRaw(ctx, id, language)
+	if err != nil {
+		return nil
+	}
+	info, err := uc.Probe.Probe(ctx, inPath)
+	if err != nil {
+		return nil
+	}
+	return denoiseplan.Build(raw.Segments, info.DurationMs)
 }

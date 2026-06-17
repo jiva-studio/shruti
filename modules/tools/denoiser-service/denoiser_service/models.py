@@ -46,6 +46,21 @@ class S3Dest(BaseModel):
         return f"https://{self.bucket}.s3.amazonaws.com/{self.key}"
 
 
+class PlanSegment(BaseModel):
+    """One slice of a splice plan. The segments form a contiguous partition of
+    the timeline; each is cleaned with its own strategy."""
+
+    start_ms: int = Field(..., ge=0, description="Segment start, ms from file start.")
+    end_ms: Optional[int] = Field(
+        None, description="Segment end, ms. Omit on the last segment for end-of-file.")
+    strategy: str = Field(
+        "deepfilternet",
+        description="Strategy for this segment: deepfilternet | afftdn | rnnoise | "
+        "rnnoise-mix | afftdn-rnnoise-mix | copy (passthrough, no denoise).")
+    nr: Optional[float] = Field(None, description="afftdn noise reduction (dB) for this segment.")
+    nf: Optional[float] = Field(None, description="afftdn noise floor (dB) for this segment.")
+
+
 class DenoiseParams(BaseModel):
     """Knobs forwarded to denoise_mp3.py. Defaults match the script."""
 
@@ -72,6 +87,18 @@ class DenoiseParams(BaseModel):
     mix_max: float = Field(
         0.25, ge=0.0, le=1.0,
         description="rnnoise-mix: original ratio on voice. Default 0.25.",
+    )
+    # splice plan (optional) — overrides `strategy` when present
+    segments: Optional[list[PlanSegment]] = Field(
+        None,
+        description="Splice plan: ordered, contiguous partition of the timeline, "
+        "each segment cleaned with its own strategy (e.g. afftdn over a sung "
+        "kirtan, deepfilternet over speech). When set, overrides `strategy`; "
+        "loudness is applied once over the whole spliced file.",
+    )
+    crossfade_ms: int = Field(
+        120, ge=0, le=2000,
+        description="Splice plan: crossfade duration at segment seams, ms. Default 120.",
     )
 
 

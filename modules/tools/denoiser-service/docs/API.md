@@ -54,6 +54,20 @@ Queue a denoise job. Returns `201`.
 | `params.nf` | float | no | afftdn noise floor in dB. Default `-25`. |
 | `params.mix_min` | float | no | rnnoise-mix: original ratio in pauses (0–1). Default `0.10`. |
 | `params.mix_max` | float | no | rnnoise-mix: original ratio on voice (0–1). Default `0.25`. |
+| `params.segments` | array | no | Splice plan — overrides `strategy`. Ordered, contiguous partition of the timeline; each segment `{ start_ms, end_ms?, strategy, nr?, nf? }` is cleaned with its own strategy (e.g. `afftdn` over a sung kirtan, `deepfilternet` over speech, `copy` = passthrough). Loudness is applied **once** over the whole spliced file, so seams don't jump in level. Omit `end_ms` on the last segment for end-of-file. |
+| `params.crossfade_ms` | int | no | Splice plan: crossfade at segment seams, ms. Default `120`. |
+
+**Splice-plan example** (kirtan intro left mild, lecture body neural-denoised):
+
+```json
+"params": {
+  "segments": [
+    { "start_ms": 0,      "end_ms": 275000, "strategy": "afftdn", "nr": 8 },
+    { "start_ms": 275000,                   "strategy": "deepfilternet" }
+  ],
+  "crossfade_ms": 120
+}
+```
 
 ### Response `201`
 
