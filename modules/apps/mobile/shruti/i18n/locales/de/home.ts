@@ -7,6 +7,7 @@ export default {
   starterPacks: {
     error: "Vorträge konnten nicht hinzugefügt werden",
   },
+  collectionMoreAuthors: "{author} und andere",
   subscriptionNag: {
     title: "Unterstütze das Projekt",
     description:

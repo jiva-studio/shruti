@@ -16,4 +16,12 @@ export default {
   // in the background a day after the user left a lecture unfinished.
   // `{title}` is the lecture's localised catalog title.
   unfinishedLectureBody: "No has terminado «{title}». Toca para volver y completarla.",
+  // Shown when a chat answer finishes while the app is backgrounded.
+  chatAnswerReadyTitle: "Sadhu ha respondido",
+  chatAnswerReadyBody: "Tu respuesta está lista.",
+  // Toast shown when a proactive message appears while the app is in the foreground.
+  proactiveNewMessageTitle: "Nuevo mensaje",
+  proactiveNewMessageToast: "Sadhu tiene un nuevo mensaje para ti.",
+  // Action button on the in-app toast — opens the chat session.
+  openButton: "Abrir",
 }

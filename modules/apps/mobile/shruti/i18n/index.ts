@@ -566,16 +566,75 @@ function toSupportedLocale(raw: string | null | undefined): SupportedLocale {
   if ((SUPPORTED_LOCALES as readonly string[]).includes(code)) {
     return code as SupportedLocale
   }
+  // Serbian needs a script subtag to pick a bundle, but Capacitor's Device
+  // plugin (and many OS locales) report a bare `sr` or a region variant
+  // like `sr-RS` / `sr-ME` with no script. Default those to Latin — the
+  // hand-authored bundle `sr-Cyrl` is transliterated from — rather than
+  // letting them fall through to English.
+  if (code === "sr" || code.startsWith("sr-")) {
+    return "sr-Latn"
+  }
   // Fall back to the primary subtag so region variants like `uk-UA` →
   // `uk` or `en-US` → `en` still resolve.
   const short = code.split("-")[0] as SupportedLocale
   return (SUPPORTED_LOCALES as readonly string[]).includes(short) ? short : "en"
 }
 
+/**
+ * CLDR plural-category selector for East-Slavic languages (ru, uk) and
+ * Serbian (sr): maps a count to the `one | few | many` slot order used by
+ * the `|`-separated plural strings in those locales.
+ *
+ *   one  → index 0 — n % 10 == 1 and n % 100 != 11   (1, 21, 31, …)
+ *   few  → index 1 — n % 10 in 2..4 and n % 100 not in 12..14  (2, 3, 4, …)
+ *   many → index 2 — everything else (0, 5..20, 11..14, …)
+ *
+ * vue-i18n calls this with the resolved choice count; the return value is
+ * the zero-based index into the choice list. Without it, vue-i18n applies
+ * the default English binary rule and mis-selects every Slavic form.
+ */
+function slavicEastPluralRule(choice: number): number {
+  const n = Math.abs(choice)
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return 0 // one
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 1 // few
+  return 2 // many
+}
+
+/**
+ * CLDR plural-category selector for Polish — same `one | few | many` slot
+ * order, but `one` is reserved for exactly 1 and the `few` band excludes
+ * the 12..14 hundreds range differently from East-Slavic.
+ *
+ *   one  → index 0 — n == 1
+ *   few  → index 1 — n % 10 in 2..4 and n % 100 not in 12..14
+ *   many → index 2 — everything else
+ */
+function polishPluralRule(choice: number): number {
+  const n = Math.abs(choice)
+  if (n === 1) return 0 // one
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 1 // few
+  return 2 // many
+}
+
 export const i18n = createI18n({
   legacy: false,
   locale: detectLocale(),
   fallbackLocale: "en",
+  // Register CLDR plural-rule selectors for the locales whose `|`-separated
+  // strings carry 3 forms (one/few/many). Locales absent from this map keep
+  // vue-i18n's default English binary rule, which is correct for the
+  // Germanic / Romance / two-form locales in the bundle.
+  pluralRules: {
+    ru: slavicEastPluralRule,
+    uk: slavicEastPluralRule,
+    "sr-Latn": slavicEastPluralRule,
+    "sr-Cyrl": slavicEastPluralRule,
+    pl: polishPluralRule,
+  },
   messages: {
     en,
     ru,

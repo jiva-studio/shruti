@@ -3,6 +3,7 @@ export default {
     subscription: "सब्सक्रिप्शन",
     account: "खाता",
     appearance: "रूप-रंग",
+    library: "लाइब्रेरी",
     chat: "Ask Sadhu",
     contacts: "संपर्क करें",
     status: "स्थिति",
@@ -12,6 +13,10 @@ export default {
     debug: "डीबग",
     danger: "खतरनाक क्षेत्र",
     about: "ऐप के बारे में",
+  },
+  libraryLanguages: {
+    title: "प्रवचन की भाषाएँ",
+    description: "खोज, विषयों और अनुशंसाओं में प्रवचन इन भाषाओं में दिखाएँ।",
   },
 
   account: {
@@ -268,6 +273,8 @@ export default {
     email: {
       title: "हमें ईमेल भेजें",
       description: "कोई प्रश्न या सुझाव हैं?",
+      emailSubject: "सहायता अनुरोध",
+      emailIntro: "कृपया इस पंक्ति के ऊपर अपना प्रश्न या समस्या लिखें।",
     },
     // VK / Telegram rows render only in the ru locale (Russian-audience
     // communities), so their strings live solely in ru/settings.ts.
