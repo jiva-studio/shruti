@@ -518,6 +518,11 @@ platform :ios do
       skip_metadata: true,
       skip_app_version_update: true,
       screenshots_path: File.expand_path(metadata_root),
+      # Even with skip_metadata, deliver validates the locale directory names
+      # under metadata_path (default ./fastlane/metadata) and rejects our
+      # `android`/`ios` listing-copy subdirs. Point it at the ios subtree so it
+      # only sees valid App Store locale dirs (en-US, ru).
+      metadata_path: File.expand_path(IOS_METADATA_PATH),
       overwrite_screenshots: true,
       force: true,
       run_precheck_before_submit: false,
