@@ -148,7 +148,14 @@ export function useCapacitorSqlPersistence(): IPersistence {
             await fn()
             await db.commitTransaction()
           } catch (error) {
-            await db.rollbackTransaction()
+            // Rollback can itself throw (begin failed, connection gone),
+            // which would mask the real error. Isolate it and always
+            // rethrow the ORIGINAL error. Mirrors the sql.js adapter.
+            try {
+              await db.rollbackTransaction()
+            } catch {
+              // Swallow: the original error is what the caller cares about.
+            }
             throw error
           }
         },

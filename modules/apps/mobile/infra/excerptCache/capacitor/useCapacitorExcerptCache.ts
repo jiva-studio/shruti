@@ -26,7 +26,12 @@ export function useCapacitorExcerptCache(): IExcerptCache {
   return {
     async findLocal(filename: string): Promise<string | null> {
       try {
-        await Filesystem.stat({ path: filename, directory: Directory.Cache })
+        // A bare `stat` succeeds for a zero-byte / partially-written
+        // leftover (e.g. an interrupted download), which would then be
+        // served as a valid cache hit. Require a non-empty file so only
+        // fully-written excerpts count as cached.
+        const { size } = await Filesystem.stat({ path: filename, directory: Directory.Cache })
+        if (!size) return null
         const { uri } = await Filesystem.getUri({
           path: filename,
           directory: Directory.Cache,
@@ -50,10 +55,22 @@ export function useCapacitorExcerptCache(): IExcerptCache {
     },
 
     async download({ url, filename }: { url: string; filename: string }): Promise<string> {
-      // `id = filename` keys the download for `completed`/`failed` event
+      // Download atomicity: write to a temp sibling and atomically rename it
+      // onto the canonical `filename` only once the download fully completes.
+      // The native downloader streams bytes straight to its destination, so if
+      // the process is killed / the download aborts mid-stream a partially
+      // written multi-MB file is left at that path. Were that path `filename`,
+      // `findLocal` (size > 0) would happily serve the torn file as a valid
+      // cache hit. By downloading to `${filename}.tmp` and renaming only on
+      // `completed`, the canonical `filename` can never be a partial — the
+      // rename is the single atomic publish step. The `size > 0` guard in
+      // `findLocal` then remains only as a cheap secondary defence.
+      const tmpFilename = `${filename}.tmp`
+
+      // `id = tmpFilename` keys the download for `completed`/`failed` event
       // matching. Excerpt filenames are slashless (`share-*-note-{id}.{mp3,mp4}`)
       // so they never collide with the tracks adapter's `id = URL.pathname`.
-      const id = filename
+      const id = tmpFilename
       const handles: PluginListenerHandle[] = []
       let onCompleted!: (localUrl: string) => void
       let onFailed!: (error: Error) => void
@@ -83,9 +100,29 @@ export function useCapacitorExcerptCache(): IExcerptCache {
         await MediaDownloader.download({
           id,
           url,
-          destination: { directory: "cache", subdir: "", filename },
+          destination: { directory: "cache", subdir: "", filename: tmpFilename },
         })
-        return await result
+        // The download landed in full at the temp path; publish it atomically.
+        await result
+        await Filesystem.rename({
+          from: tmpFilename,
+          to: filename,
+          directory: Directory.Cache,
+        })
+        const { uri } = await Filesystem.getUri({
+          path: filename,
+          directory: Directory.Cache,
+        })
+        return uri
+      } catch (error) {
+        // Best-effort cleanup so an aborted download / failed rename never
+        // leaves a `.tmp` orphan behind to leak cache space.
+        try {
+          await Filesystem.deleteFile({ path: tmpFilename, directory: Directory.Cache })
+        } catch {
+          // Temp file was never created or already gone — nothing to clean.
+        }
+        throw error
       } finally {
         for (const h of handles) await h.remove()
       }
