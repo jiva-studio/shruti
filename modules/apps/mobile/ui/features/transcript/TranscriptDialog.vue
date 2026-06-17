@@ -21,10 +21,12 @@
 
       <div v-if="description || (chapters && chapters.length > 0)" class="overview">
         <p v-if="description" class="description">{{ description }}</p>
-        <template v-if="chapters && chapters.length > 0">
-          <SectionLabel>{{ $t("transcript.contents") }}</SectionLabel>
-          <LectureOutline interactive :chapters="chapters" @seek="onChapterTap" />
-        </template>
+        <LectureOutline
+          v-if="chapters && chapters.length > 0"
+          interactive
+          :chapters="chapters"
+          @seek="onChapterTap"
+        />
       </div>
 
       <LanguageSelector
@@ -70,7 +72,6 @@ import { IonButton, IonContent, IonModal } from "@ionic/vue"
 import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
 import LectureOutline from "@ui/components/LectureOutline.vue"
-import SectionLabel from "@ui/components/SectionLabel.vue"
 import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
 import TranscriptDialogHeader from "./TranscriptDialogHeader.vue"
 import { useTranscriptAutoScroll } from "./useTranscriptAutoScroll.js"
