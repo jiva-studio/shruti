@@ -12,8 +12,6 @@
       <span class="banner-scrim" aria-hidden="true" />
     </template>
 
-    <span class="banner-icon"><slot name="icon" /></span>
-
     <span class="banner-text">
       <span class="banner-title">
         {{ title }}
@@ -33,17 +31,16 @@ import { IconChevronRight } from "@tabler/icons-vue"
 import { ProBadge } from "@ui/primitives/index.js"
 
 /**
- * A single-row entry banner for the Search page — a leading accent icon, a
- * title with an optional description below it, and a trailing chevron. Used for
- * the "search the whole library" and "smart library" shelves that sit between
- * the carousels. Styled as a card (radius + shadow) to match the cover tiles.
+ * A single-row entry banner for the Search page — a title with an optional
+ * description below it and a trailing chevron. Used for the "search the whole
+ * library" and "smart library" shelves that sit between the carousels. Styled
+ * as a card (radius + shadow) to match the cover tiles.
  *
  * An optional decorative `background` image sits behind the row, anchored to
  * the right and dissolved into the warm card tint by a left-to-right scrim, so
- * the icon + text on the left stay on a calm surface and remain legible.
+ * the text on the left stays on a calm surface and remains legible.
  *
- * Presentation-only: the caller supplies the icon (default slot `icon`), the
- * copy, and decides what a tap does.
+ * Presentation-only: the caller supplies the copy and decides what a tap does.
  */
 defineProps<{
   title: string
@@ -82,6 +79,12 @@ const emit = defineEmits<{ (e: "click"): void }>()
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Keep the <picture> wrapper out of the flex flow so it adds no column or gap;
+   the art inside is absolutely positioned. */
+picture {
+  display: contents;
+}
+
 /* Decorative cover: fills the card, focal art kept to the right edge. */
 .banner-bg {
   position: absolute;
@@ -107,19 +110,9 @@ const emit = defineEmits<{ (e: "click"): void }>()
 }
 
 /* Content sits above the absolutely-positioned art + scrim. */
-.banner-icon,
 .banner-text,
 .banner-chevron {
   position: relative;
-}
-
-.banner-icon {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Bare accent icon — no chip background. */
-  color: var(--ion-color-primary);
 }
 
 .banner-text {
