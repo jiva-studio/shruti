@@ -22,7 +22,7 @@ import type { IDatabase, QueryParams } from "@ports/app/index.js"
 import { runUserMigrations } from "@infra/persistence/migrations/user/runMigrations.js"
 import { playlistTracksFor, demoTranscriptTrackId } from "./tracks.js"
 import { chatFixtureFor, DEMO_SESSION_ID } from "./chat.js"
-import { CAPTURE_LOCALES } from "../config.js"
+import { CAPTURE_LOCALES, contentLanguageFor } from "../config.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TOOL_ROOT = path.resolve(__dirname, "..")
@@ -362,7 +362,9 @@ const TRANSCRIPT_BASE_URL = "https://cdn-s3.shruti.local/public/tracks"
 
 async function seedNotes(db: IDatabase, args: Args, rng: () => number): Promise<void> {
   const trackId = demoTranscriptTrackId(args.locale)
-  const transcriptUrl = `${TRANSCRIPT_BASE_URL}/${trackId}/transcripts/${args.locale}.json`
+  // Transcripts only exist in the content language (en/ru); a UI locale like
+  // sr-Latn falls back to the English demo track + transcript.
+  const transcriptUrl = `${TRANSCRIPT_BASE_URL}/${trackId}/transcripts/${contentLanguageFor(args.locale)}.json`
   let doc: TranscriptDoc
   try {
     const response = await fetch(transcriptUrl)

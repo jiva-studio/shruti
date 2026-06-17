@@ -1,16 +1,21 @@
-name: Mobile / Screenshots
+name: Mobile / Store listing
 
 # Manual-only: capture store screenshots from the Vite dev server via the
-# Playwright pipeline in `modules/tools/screenshots/`. With `deploy=true`
-# also pushes the staged PNGs to the chosen store(s) — Google Play
-# (Fastlane `supply`) and/or App Store Connect (Fastlane `deliver`).
+# Playwright pipeline in `modules/tools/screenshots/`. With `deploy=true` it
+# updates the chosen store(s) end to end — uploading both the framed
+# screenshots and the listing copy (titles/descriptions) from
+# fastlane/metadata/, for every locale in the registry. The upload is gated:
+# it stages an edit but never submits for review; you confirm in the console.
+#
+# Locales come from the store registry (modules/apps/mobile/store-locales.json):
+# leave `locales` empty to run every configured locale.
 #
 # Triggered from the Actions tab → "mobile / screenshots" → "Run workflow".
 on:
   workflow_dispatch:
     inputs:
       platform:
-        description: 'Which store to run'
+        description: 'Store'
         required: true
         default: 'both'
         type: choice
@@ -19,17 +24,17 @@ on:
           - android
           - ios
       locales:
-        description: 'Comma-separated locales (subset of en,ru)'
-        required: true
-        default: 'en,ru'
+        description: 'Locales (empty = all)'
+        required: false
+        default: ''
         type: string
       deploy:
-        description: 'Upload to the chosen store(s) (otherwise just stage + frame, leave PNGs as artifact)'
+        description: 'Upload to store (off = build only)'
         required: false
         default: false
         type: boolean
       dry_run:
-        description: 'When deploy=true, run supply/deliver in validate-only mode (no store edit committed)'
+        description: 'Validate only'
         required: false
         default: false
         type: boolean
@@ -62,8 +67,8 @@ jobs:
     runs-on: macos-latest
     strategy:
       # Serialize matrix entries — both jobs use the Playwright `webServer`
-      # config's fixed port (11001), so running them in parallel triggers
-      #   "Error: http://localhost:11001 is already used".
+      # config's fixed port (11099), so running them in parallel triggers
+      #   "Error: http://localhost:11099 is already used".
       max-parallel: 1
       fail-fast: false
       matrix:
@@ -137,10 +142,29 @@ jobs:
         # of passing it as false. Same trick for `dry_run`.
         run: |
           set -euo pipefail
-          ARGS="locales:${{ inputs.locales }}"
+          ARGS=""
+          # Empty `locales` → omit the flag → the lane falls back to every
+          # registry locale (capture_locales).
+          if [ -n "${{ inputs.locales }}" ]; then ARGS="locales:${{ inputs.locales }}"; fi
           if [ "${{ inputs.deploy }}" != "true" ]; then ARGS="$ARGS skip_upload:true"; fi
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS dry_run:true"; fi
           cd modules/apps/mobile && bundle exec fastlane ${{ matrix.platform }} screenshots $ARGS
+
+      # Same deploy run also pushes the listing copy (titles/descriptions) so a
+      # single "deploy" updates everything. Gated lane — stages, never submits.
+      - name: run fastlane ${{ matrix.platform }} metadata
+        if: ${{ inputs.deploy }}
+        env:
+          GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
+          APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
+          APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+        run: |
+          set -euo pipefail
+          ARGS=""
+          # Only the android metadata lane takes dry_run (supply validate-only).
+          if [ "${{ inputs.dry_run }}" = "true" ] && [ "${{ matrix.platform }}" = "android" ]; then ARGS="dry_run:true"; fi
+          cd modules/apps/mobile && bundle exec fastlane ${{ matrix.platform }} metadata $ARGS
 
       - name: upload framed PNGs as artifact
         if: always()
