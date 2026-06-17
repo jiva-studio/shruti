@@ -27,9 +27,9 @@ import java.nio.ByteOrder;
  * so the perceived volume stays stable across the slider.
  *
  * Supports `ENCODING_PCM_16BIT` and `ENCODING_PCM_FLOAT` at any
- * sample rate. Anything that isn't 2-channel PCM is rejected via
- * `UnhandledAudioFormatException`, which makes ExoPlayer skip this
- * processor and play the source unchanged.
+ * sample rate. Anything that isn't 2-channel PCM disables the
+ * processor (onConfigure returns `AudioFormat.NOT_SET`), so the
+ * source plays through unchanged.
  *
  * `enabled` and `ratio` are `volatile` so the UI thread can update
  * them while the audio render thread reads them; both writes are
@@ -58,15 +58,18 @@ public final class StereoMixAudioProcessor extends BaseAudioProcessor {
     protected AudioFormat onConfigure(AudioFormat inputAudioFormat)
             throws UnhandledAudioFormatException {
         // We only know how to mix true stereo. Mono / surround / non-
-        // PCM streams are passed through untouched (returning
-        // NOT_SET tells BaseAudioProcessor to disable us for this
-        // configuration).
+        // PCM streams are passed through untouched: returning NOT_SET
+        // disables this processor for the current configuration so the
+        // source plays unchanged. Throwing UnhandledAudioFormatException
+        // here instead is a fatal audio-sink configuration error that
+        // aborts playback at position 0, so a mono source would never
+        // play at all.
         if (inputAudioFormat.channelCount != 2) {
-            throw new UnhandledAudioFormatException(inputAudioFormat);
+            return AudioFormat.NOT_SET;
         }
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT
                 && inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
-            throw new UnhandledAudioFormatException(inputAudioFormat);
+            return AudioFormat.NOT_SET;
         }
         // Output format matches input — same encoding, same rate,
         // still 2 channels (carrying the duplicated mono signal when
