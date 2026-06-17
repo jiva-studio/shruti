@@ -33,9 +33,9 @@ function findChrome(): string | undefined {
 }
 
 const offlineCommand = USE_BUNDLE
-  ? `node scripts/serve-dist.mjs ../../apps/mobile/dist ${PORT}`
-  : `cd ../../apps/mobile && npm run dev -- --port ${PORT} --strictPort`
-const liveCommand = `cd ../../apps/mobile && VITE_DEV_REGION=true npm run dev -- --port ${LIVE_PORT} --strictPort`
+  ? `node scripts/serve-dist.mjs ../../../modules/apps/mobile/dist ${PORT}`
+  : `cd ../../../modules/apps/mobile && npm run dev -- --port ${PORT} --strictPort`
+const liveCommand = `cd ../../../modules/apps/mobile && VITE_DEV_REGION=true npm run dev -- --port ${LIVE_PORT} --strictPort`
 
 const sharedUse = {
   launchOptions: { executablePath: findChrome() },
