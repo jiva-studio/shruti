@@ -19,4 +19,18 @@ export default {
   // `{title}` is the lecture's localised catalog title.
   unfinishedLectureBody:
     "Du hast „{title}“ noch nicht zu Ende gehört. Tippe, um zurückzukehren und ihn abzuschließen.",
+  // Shown when a chat answer finishes while the app is backgrounded (or armed
+  // ahead at send in case the app freezes mid-turn). The title carries the
+  // session's own title when there is one (so multiple chats are
+  // distinguishable); this generic title is the fallback. No "tap to…" hint —
+  // tapping is the only possible action, so it adds nothing.
+  chatAnswerReadyTitle: "Sadhu hat geantwortet",
+  chatAnswerReadyBody: "Deine Antwort ist bereit.",
+  // Toast shown when a proactive message appears while the app is in the
+  // foreground (its background delivery is a separate scheduled notification).
+  // Title is the fallback toast header for sessions without their own title.
+  proactiveNewMessageTitle: "Neue Nachricht",
+  proactiveNewMessageToast: "Sadhu hat eine neue Nachricht für dich.",
+  // Action button on the in-app toast — opens the chat session.
+  openButton: "Öffnen",
 }

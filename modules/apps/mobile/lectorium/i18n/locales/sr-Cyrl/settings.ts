@@ -5,6 +5,7 @@ export default {
     subscription: "Претплата",
     account: "Налог",
     appearance: "Изглед",
+    library: "Библиотека",
     chat: "Питај Садхуа",
     contacts: "Контактирајте нас",
     status: "Статус",
@@ -14,6 +15,10 @@ export default {
     debug: "Отклањање грешака",
     danger: "Опасна зона",
     about: "О апликацији",
+  },
+  libraryLanguages: {
+    title: "Језици предавања",
+    description: "Прикажи предавања на овим језицима у претрази, темама и препорукама.",
   },
 
   chatLanguage: {
@@ -269,6 +274,8 @@ export default {
     email: {
       title: "Пошаљите нам е-поруку",
       description: "Имате питања или предлоге?",
+      emailSubject: "Захтев за подршку",
+      emailIntro: "Молимо опишите своје питање или проблем изнад ове линије.",
     },
     // VK / Telegram rows render only in the ru locale (Russian-audience
     // communities), so their strings live solely in ru/settings.ts.

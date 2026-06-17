@@ -3,4 +3,7 @@
 export default {
   noneAvailable: "За ову нумеру нема транскрипата.",
   loading: "Учитавање транскрипта…",
+  contents: "Садржај",
+  similarByTopic: "Слична предавања",
+  similarByTopicReason: "Сличне теме: {topics}",
 }

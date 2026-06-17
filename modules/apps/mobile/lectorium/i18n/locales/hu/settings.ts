@@ -3,6 +3,7 @@ export default {
     subscription: "Előfizetés",
     account: "Fiók",
     appearance: "Megjelenés",
+    library: "Könyvtár",
     chat: "Kérdezd Sadhut",
     contacts: "Lépj kapcsolatba velünk",
     status: "Állapot",
@@ -12,6 +13,11 @@ export default {
     debug: "Hibakeresés",
     danger: "Veszélyes zóna",
     about: "Az alkalmazásról",
+  },
+  libraryLanguages: {
+    title: "Előadások nyelvei",
+    description:
+      "Ezeken a nyelveken jelenjenek meg az előadások a keresésben, a témákban és az ajánlásokban.",
   },
 
   account: {
@@ -271,6 +277,8 @@ export default {
     email: {
       title: "Írj nekünk e-mailt",
       description: "Kérdésed vagy javaslatod van?",
+      emailSubject: "Támogatási kérés",
+      emailIntro: "Kérlek, írd le a kérdésedet vagy problémádat e fölött a sor fölött.",
     },
     // VK / Telegram rows render only in the ru locale (Russian-audience
     // communities), so their strings live solely in ru/settings.ts.

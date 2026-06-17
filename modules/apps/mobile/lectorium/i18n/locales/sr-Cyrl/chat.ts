@@ -274,14 +274,13 @@ export default {
   proactiveInactivityWelcomeBody:
     "Дуго вас није било. Свежа предавања вас чекају — отворите библиотеку и наставите одакле сте стали.",
 
-  // Weekly-digest proactive session — a short rollup of the user's
-  // listening over the past 7 days.
+  // Weekly digest — proactive recap of the user's listening week.
   weeklyDigestTitle: "Ваша недеља",
   weeklyDigestTotalTime: "Укупно време слушања",
   weeklyDigestLectures: "Предавања ове недеље",
   weeklyDigestStreak: "Низ дана",
   weeklyDigestCompleted: "Завршено",
-  weeklyDigestEmpty: "Нисте слушали ове недеље — изаберите нешто свеже да се вратите у ритам.",
+  weeklyDigestEmpty: "Ове недеље нисте слушали — изаберите нешто свеже да се вратите у ритам.",
   weeklyDigestMore: "+{count} још",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse

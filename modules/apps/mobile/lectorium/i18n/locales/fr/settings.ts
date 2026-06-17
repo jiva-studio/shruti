@@ -3,6 +3,7 @@ export default {
     subscription: "Abonnement",
     account: "Compte",
     appearance: "Apparence",
+    library: "Bibliothèque",
     chat: "Demandez à Sadhu",
     contacts: "Nous contacter",
     status: "Statut",
@@ -12,6 +13,11 @@ export default {
     debug: "Débogage",
     danger: "Zone sensible",
     about: "À propos",
+  },
+  libraryLanguages: {
+    title: "Langues des conférences",
+    description:
+      "Afficher les conférences dans ces langues dans la recherche, les sujets et les recommandations.",
   },
 
   account: {
@@ -271,6 +277,8 @@ export default {
     email: {
       title: "Envoyez-nous un e-mail",
       description: "Des questions ou des suggestions ?",
+      emailSubject: "Demande d'assistance",
+      emailIntro: "Veuillez décrire votre question ou votre problème au-dessus de cette ligne.",
     },
     // VK / Telegram rows render only in the ru locale (Russian-audience
     // communities), so their strings live solely in ru/settings.ts.

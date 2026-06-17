@@ -8,6 +8,7 @@ export default {
   starterPacks: {
     error: "Није могуће додати предавања",
   },
+  collectionMoreAuthors: "{author} и други",
   subscriptionNag: {
     title: "Подржите пројекат",
     description:

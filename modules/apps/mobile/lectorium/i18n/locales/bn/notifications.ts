@@ -14,4 +14,18 @@ export default {
   // in the background a day after the user left a lecture unfinished.
   // `{title}` is the lecture's localised catalog title.
   unfinishedLectureBody: "আপনি “{title}” শেষ করেননি। ফিরে গিয়ে শেষ করতে ট্যাপ করুন।",
+  // Shown when a chat answer finishes while the app is backgrounded (or armed
+  // ahead at send in case the app freezes mid-turn). The title carries the
+  // session's own title when there is one (so multiple chats are
+  // distinguishable); this generic title is the fallback. No "tap to…" hint —
+  // tapping is the only possible action, so it adds nothing.
+  chatAnswerReadyTitle: "সাধু উত্তর দিয়েছেন",
+  chatAnswerReadyBody: "আপনার উত্তর প্রস্তুত।",
+  // Toast shown when a proactive message appears while the app is in the
+  // foreground (its background delivery is a separate scheduled notification).
+  // Title is the fallback toast header for sessions without their own title.
+  proactiveNewMessageTitle: "নতুন বার্তা",
+  proactiveNewMessageToast: "সাধুর কাছে আপনার জন্য একটি নতুন বার্তা আছে।",
+  // Action button on the in-app toast — opens the chat session.
+  openButton: "খুলুন",
 }
