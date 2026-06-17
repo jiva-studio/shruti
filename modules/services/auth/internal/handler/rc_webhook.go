@@ -43,11 +43,12 @@ type rcSubscriberFetcher interface {
 }
 
 // webhookEventStore is the subset of *store.WebhookEventRepo the
-// handler calls. Mocked in tests to assert the seal-with-error path
-// triggers exactly once.
+// handler calls. Mocked in tests. The handler only records errors on
+// unprocessed rows (RecordError); it never seals an event as processed
+// with an error, because an event we can't authoritatively resolve must
+// stay retryable.
 type webhookEventStore interface {
 	RecordError(ctx context.Context, eventID, msg string) error
-	MarkProcessedWithError(ctx context.Context, eventID, msg string) error
 }
 
 // rcSubscriptionApplier abstracts the bits of *service.Service the
@@ -211,6 +212,29 @@ type rcWebhookPayload struct {
 	} `json:"event"`
 }
 
+const anonIDPrefix = "$RCAnonymousID:"
+
+// firstIdentified returns the first non-empty, non-anonymous id in the
+// list (an id bound, or bindable, to an auth.users row), or "".
+func firstIdentified(ids []string) string {
+	for _, id := range ids {
+		if id != "" && !strings.HasPrefix(id, anonIDPrefix) {
+			return id
+		}
+	}
+	return ""
+}
+
+// firstAnonymous returns the first $RCAnonymousID:* id in the list, or "".
+func firstAnonymous(ids []string) string {
+	for _, id := range ids {
+		if strings.HasPrefix(id, anonIDPrefix) {
+			return id
+		}
+	}
+	return ""
+}
+
 func (h *RCWebhookHandler) now() time.Time {
 	if h.Clock != nil {
 		return h.Clock()
@@ -258,22 +282,39 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// the id(s) in transferred_to, so fall back to the identified
 	// (non-anonymous) destination: that's the one bound to an auth.users
 	// row, and refetching it picks up the just-transferred entitlement.
-	// (The transferred_from owner — if it's an identified user that lost
-	// the entitlement — self-corrects on its own next event / the 24h
-	// reconcile sweep; the common anon source has no row to downgrade.)
+	// (The identified transferred_from owner that LOST the entitlement is
+	// downgraded inline after the primary apply, below.)
 	appUserID := p.Event.AppUserID
 	if appUserID == "" {
-		for _, id := range p.Event.TransferredTo {
-			if id != "" && !strings.HasPrefix(id, "$RCAnonymousID:") {
-				appUserID = id
-				break
-			}
-		}
+		appUserID = firstIdentified(p.Event.TransferredTo)
 	}
 	if appUserID == "" {
-		// No app_user_id and no identified transfer destination → nothing
-		// to refetch and nothing the orphan sweep can resolve. Refuse with
-		// 400 so RC stops retrying.
+		// No identified id to refetch. Two sub-cases:
+		//
+		//  a) A TRANSFER whose every transferred_to id is still anonymous
+		//     ($RCAnonymousID:*). No auth.users row owns it YET, but the
+		//     client may bind it via Purchases.logIn moments later. If we
+		//     400-and-forget here the entitlement is lost: there's no
+		//     stored event for the orphan sweep to replay once the link
+		//     materialises, and the paying user is stranded on free.
+		//     Store the event keyed on the anon target id and return 200
+		//     so RC stops retrying — the orphan sweep resolves it once the
+		//     id binds. (Idempotency still applies on re-delivery.)
+		//
+		//  b) Truly nothing usable (no app_user_id, no transferred_to at
+		//     all) → 400 so RC stops retrying; nothing the sweep could do.
+		if anonTarget := firstAnonymous(p.Event.TransferredTo); anonTarget != "" {
+			if _, _, err := h.applier().InsertOrLookup(ctx, p.Event.ID, anonTarget); err != nil {
+				slog.ErrorContext(ctx, "rc_webhook_store_anon_transfer_failed",
+					"event_id", p.Event.ID, "err", err.Error())
+				writeErr(w, http.StatusInternalServerError, "db_error", "store anon transfer failed")
+				return
+			}
+			slog.InfoContext(ctx, "rc_webhook_anon_transfer_stored",
+				"event_id", p.Event.ID, "rc_app_user_id", anonTarget)
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "deferred": true})
+			return
+		}
 		slog.WarnContext(ctx, "rc_webhook_no_app_user_id",
 			"event_id", p.Event.ID, "event_type", p.Event.Type)
 		writeErr(w, http.StatusBadRequest, "bad_request", "missing app_user_id")
@@ -344,24 +385,33 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// fall through to the apply step.
 		} else if errors.Is(err, rcclient.ErrPermanent) {
 			// 401/403 / unrecognised 4xx — API key is wrong or RC has
-			// permanently rejected the call. Retrying just burns more
-			// quota on each RC webhook redelivery (5 retries / ~80 min)
-			// and each reconcile sweep. Mark the event processed WITH
-			// the error message so RC stops, page ops via the counter
-			// and a 200 response.
+			// permanently rejected the call. We can NOT authoritatively
+			// resolve the subscriber state, so we must NOT seal the event
+			// processed: sealing freezes whatever tier the user currently
+			// has, and a dropped non-time-based REVOCATION/REFUND that
+			// rode in on this event would leave a cancelled user on Pro
+			// indefinitely (the column never gets corrected, and the
+			// reconcile cron's 24h permanent-skip suppresses the catch-up
+			// fetch too).
+			//
+			// Instead: record the error but leave processed_at NULL. RC
+			// keeps retrying within its ~80-min budget; once ops rotate
+			// the key (the hard-alert counter below pages them) the next
+			// RC retry — or, past the budget, the reconcile/orphan sweep —
+			// resolves the real state and corrects the tier. Returning 200
+			// (not 500) avoids amplifying the redelivery storm while the
+			// key is broken, but the unsealed row is what guarantees the
+			// correction eventually lands.
 			metrics.RCAPIPermanentTotal.Inc()
 			metrics.RCAPIAuthFailedTotal.Inc()
+			metrics.RCWebhookPermanentUnresolvedTotal.Inc()
 			safeErr := sanitizeRCError(err)
 			slog.ErrorContext(ctx, "rc_refetch_permanent_failure",
 				"event_id", p.Event.ID,
 				"rc_app_user_id", appUserID,
 				"err", safeErr,
 			)
-			if sealErr := h.events().MarkProcessedWithError(ctx,
-				p.Event.ID, "permanent: "+safeErr); sealErr != nil {
-				slog.ErrorContext(ctx, "rc_webhook_seal_failed",
-					"event_id", p.Event.ID, "err", sealErr.Error())
-			}
+			_ = h.events().RecordError(ctx, p.Event.ID, "permanent: "+safeErr)
 			writeJSON(w, http.StatusOK, map[string]bool{"ok": false, "permanent": true})
 			return
 		} else {
@@ -415,7 +465,54 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"matched", matched,
 		"tier", snap.Tier,
 	)
+
+	// TRANSFER source downgrade. A TRANSFER moves the entitlement from
+	// transferred_from to transferred_to; we just refetched + applied the
+	// destination above. If an IDENTIFIED (non-anonymous) source id lost
+	// the entitlement it must be downgraded too — otherwise both the old
+	// and new owner read Pro until the up-to-24h stale sweep catches the
+	// source, i.e. two Pro sessions from one purchase. Do it inline.
+	//
+	// Best-effort: the primary event is already committed, so a failure
+	// here must NOT fail the webhook (that would make RC redeliver and
+	// re-apply the destination). We log and lean on the stale sweep as the
+	// backstop. A distinct synthetic event_id keeps the source apply from
+	// colliding with the primary event's idempotency/outbox-dedup row.
+	if from := firstIdentified(p.Event.TransferredFrom); from != "" && from != appUserID {
+		h.downgradeTransferSource(ctx, p.Event.ID, from)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// downgradeTransferSource refetches the identified former owner of a
+// transferred entitlement and applies the resulting (now entitlement-less)
+// snapshot, flipping it to free in the same handler invocation. All
+// failure modes are logged and swallowed — the caller has already
+// committed the primary apply and returns 200 regardless.
+func (h *RCWebhookHandler) downgradeTransferSource(ctx context.Context, eventID, fromID string) {
+	resp, err := h.fetcher().GetSubscriber(ctx, fromID)
+	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
+		// 404 is fine — an unknown subscriber simply has no entitlements,
+		// which yields a free snapshot. Anything else (permanent / rate-
+		// limited / 5xx) we just log; the stale sweep reconciles later.
+		slog.WarnContext(ctx, "rc_transfer_source_refetch_failed",
+			"event_id", eventID, "rc_app_user_id", fromID,
+			"err", sanitizeRCError(err))
+		return
+	}
+	snap := service.SnapshotFromRCResponse(fromID, resp, h.now())
+	srcEventID := eventID + ":from:" + fromID
+	srcUserID, srcMatched, err := h.applier().Apply(ctx, srcEventID, snap)
+	if err != nil {
+		slog.WarnContext(ctx, "rc_transfer_source_apply_failed",
+			"event_id", srcEventID, "rc_app_user_id", fromID,
+			"err", sanitizeRCError(err))
+		return
+	}
+	slog.InfoContext(ctx, "rc_transfer_source_reconciled",
+		"event_id", srcEventID, "rc_app_user_id", fromID,
+		"user_id", srcUserID.String(), "matched", srcMatched, "tier", snap.Tier)
 }
 
 func (h *RCWebhookHandler) checkBearer(r *http.Request) bool {

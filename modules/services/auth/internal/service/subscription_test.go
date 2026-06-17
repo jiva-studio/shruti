@@ -10,6 +10,8 @@ import (
 	"github.com/akdasa-studios/lectorium/auth/internal/store"
 )
 
+func ptr[T any](v T) *T { return &v }
+
 func TestSnapshotFromRCResponse(t *testing.T) {
 	now := time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC)
 	future := now.Add(30 * 24 * time.Hour)
@@ -51,6 +53,21 @@ func TestSnapshotFromRCResponse(t *testing.T) {
 				},
 			},
 			wantTier: TierFree,
+		},
+		{
+			// Just-barely-past expiry (within expiryGrace) must stay Pro:
+			// modest clock skew at the boundary shouldn't demote the user.
+			name: "expiry within grace stays pro",
+			resp: &rcclient.SubscriberResponse{
+				Subscriber: &rcclient.Subscriber{
+					OriginalAppUserID: "app_user_1",
+					Entitlements: map[string]rcclient.Entitlement{
+						"pro": {ExpiresDate: ptr(now.Add(-30 * time.Second))},
+					},
+				},
+			},
+			wantTier:    TierPro,
+			wantExpires: ptr(now.Add(-30 * time.Second)),
 		},
 		{
 			name: "active entitlement is pro",

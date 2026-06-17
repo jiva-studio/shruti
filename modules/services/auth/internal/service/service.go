@@ -82,7 +82,19 @@ func (s *Service) Anonymous(ctx context.Context, deviceID string, bearerAccess s
 
 	if uid, ok := s.userFromBearer(bearerAccess); ok && !isAnonymousClaim(bearerAccess, s.Verifier) {
 		// Already signed in with a social identity; refuse to overwrite.
-		return s.issueSession(ctx, uid, false, deviceID)
+		// Guard: the bearer can be cryptographically valid yet name a user
+		// that has since been deleted (account-delete revokes refresh
+		// tokens but can't revoke an unexpired access token). Re-issuing
+		// blindly would hit a dangling FK in refresh_tokens → 500. If the
+		// row is gone, fall through to the normal anonymous path so the
+		// device gets a fresh session instead of an error.
+		u, err := s.Users.Get(ctx, uid)
+		if err != nil {
+			return nil, err
+		}
+		if u != nil {
+			return s.issueSession(ctx, uid, false, deviceID)
+		}
 	}
 
 	ident, err := s.Identities.Get(ctx, ProviderDevice, deviceID)
@@ -509,8 +521,9 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 	// must not be reported as Pro to the client. The DB stays as-is
 	// (reconcile cron / next webhook fixes the column); the JWT and /me
 	// response always reflect "real now". Lifetime entitlements
-	// (TierExpiresAt == nil) keep the original tier.
-	if tier == TierPro && u.TierExpiresAt != nil && !u.TierExpiresAt.After(time.Now().UTC()) {
+	// (TierExpiresAt == nil) keep the original tier. expiryGrace absorbs
+	// modest clock skew so we don't demote right at the boundary.
+	if tier == TierPro && u.TierExpiresAt != nil && !stillActive(*u.TierExpiresAt, time.Now().UTC()) {
 		tier = TierFree
 	}
 
@@ -635,7 +648,9 @@ func (s *Service) loadTierAndExpiry(ctx context.Context, userID uuid.UUID, now t
 	tier = u.Tier
 	if u.TierExpiresAt != nil {
 		expiresAtEpoch = u.TierExpiresAt.Unix()
-		if tier == TierPro && !u.TierExpiresAt.After(now) {
+		// expiryGrace absorbs modest clock skew so a Pro session isn't
+		// demoted to free right at the boundary.
+		if tier == TierPro && !stillActive(*u.TierExpiresAt, now) {
 			tier = TierFree
 		}
 	}
