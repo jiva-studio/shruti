@@ -1,5 +1,5 @@
 /**
- * Fixture content for the `05_chat` screenshot — one chat session with
+ * Fixture content for the `03_chat` screenshot — one chat session with
  * a "What is the soul?" Q&A. The assistant answer carries a verse
  * marker (BG 2.20) and a citation marker so the screenshot showcases the
  * richest chat-bubble UI the app can render.
