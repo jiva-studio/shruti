@@ -110,10 +110,17 @@ async def test_resolves_show_verse(ctx: TurnContext, query, source_id, tokens) -
 @pytest.mark.parametrize(
     "query",
     [
-        "что значит BG 2.13",   # question → research
+        "что значит BG 2.13",   # ru question (no "?") → research
         "что такое карма",      # no number → research
         "ШБ 99.99.99",          # no such verse
         "ЧЧ 17.80",             # bare CC: ambiguous (Adi + Madhya both have it)
+        # Non-en/ru explain-requests WITHOUT a "?". These used to short-circuit
+        # to a bare verse card because the old gate only listed ru/en
+        # interrogatives; the structural surrounding-text gate now defers them
+        # to the LLM router in ANY language (no keyword list — cf. PRs #977/#978).
+        "erkläre BG 2.13",          # German: "explain BG 2.13"
+        "explícame el BG 2.13",     # Spanish: "explain BG 2.13 to me"
+        "गीता २.१३ का अर्थ",          # Hindi: "the meaning of Gita 2.13"
     ],
 )
 async def test_defers_to_llm(ctx: TurnContext, query) -> None:
