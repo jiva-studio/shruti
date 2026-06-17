@@ -20,6 +20,8 @@ export interface PlaylistItemRow {
   readonly track_id: string
   readonly added_at: number
   readonly archived_at: number | null
+  /** Source collection (012 migration); NULL for individually-added tracks. */
+  readonly collection_id: string | null
 }
 
 export interface ListeningSessionRow {

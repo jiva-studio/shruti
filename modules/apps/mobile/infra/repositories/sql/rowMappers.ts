@@ -48,6 +48,7 @@ export function rowToPlaylistItem(row: PlaylistItemRow): PlaylistItem {
     trackId: row.track_id,
     addedAt: row.added_at,
     archivedAt: row.archived_at,
+    collectionId: row.collection_id ?? null,
   }
 }
 

@@ -191,10 +191,13 @@ async function onAdd(): Promise<void> {
 async function performAdd(): Promise<void> {
   if (trackIds.value.length === 0) return
   adding.value = true
+  // Stamp provenance only for real collections; a topic shelf is not a
+  // collection, so its tracks stay standalone (no false grouping).
+  const sourceCollectionId = (props.kind ?? "collection") === "collection" ? props.id : null
   try {
     const result = await addTracksToPlaylist(
       { trackIds: [...trackIds.value] },
-      { playlist: { add: (id) => playlist.add(id) } }
+      { playlist: { add: (id) => playlist.add(id, sourceCollectionId) } }
     )
     if (!result.ok) void toast.error(t("search.collections.addError"))
   } catch {

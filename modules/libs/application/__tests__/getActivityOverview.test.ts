@@ -82,6 +82,7 @@ function makeItem(id: string, trackId: string, archivedAt: number | null = null)
     trackId: trackId as TrackId,
     addedAt: 0,
     archivedAt,
+    collectionId: null,
   }
 }
 

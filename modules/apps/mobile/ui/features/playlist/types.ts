@@ -2,9 +2,9 @@ import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 
 /**
  * One rendered entry in the Home playlist: either a standalone track row or a
- * collapsible group of consecutive tracks that belong to the same collection.
- * Groups are derived at render time from collection membership — no per-item
- * provenance is stored (see usePlaylistGroups).
+ * collapsible group of consecutive tracks added from the same collection.
+ * Groups come from each item's stored `collectionId` provenance — set when the
+ * user adds a whole collection (see usePlaylistGroups).
  */
 export type PlaylistRenderItem =
   | { readonly kind: "track"; readonly row: UiTrackRow }
