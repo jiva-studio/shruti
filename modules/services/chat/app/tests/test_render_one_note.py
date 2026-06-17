@@ -104,6 +104,39 @@ def test_verse_header_remains_bare() -> None:
     assert "БГ 9.22" not in first_line
 
 
+def test_outline_note_renders_titles_as_grounding() -> None:
+    """track_outline_get returns `{track_id, lang, items:[{start_ms, title}]}`
+    — no `ref`, no `text`. Before the fix this fell through to the generic
+    path and rendered to an empty string, leaving the synthesizer with blank
+    RESEARCH NOTES → empty-result refusal even though the recap data was
+    present. The branch must surface the titles + pin the `[outline:<id>]`
+    marker."""
+    note = {
+        "track_id": "track_xCUy8kQJkgXM",
+        "lang": "ru",
+        "items": [
+            {"start_ms": 59000, "title": "Методы и уровни преданного служения"},
+            {"start_ms": 387000, "title": "Ложные концепции гуманизма"},
+        ],
+    }
+    out = _render_one_note(1, note)
+    assert out  # not the empty string the old generic path produced
+    assert "Методы и уровни преданного служения" in out
+    assert "Ложные концепции гуманизма" in out
+    # The synthesizer must be told to emit the exact marker for the card.
+    assert "[outline:track_xCUy8kQJkgXM]" in out
+
+
+def test_outline_unavailable_error_still_handled() -> None:
+    """When the track has no precomputed outline the tool returns
+    `{error: outline_unavailable, ...}` — that must still hit the generic
+    error branch, not the new items branch."""
+    note = {"error": "outline_unavailable", "track_id": "track_x", "lang": "ru"}
+    out = _render_one_note(1, note)
+    assert "no usable results" in out
+    assert "outline_unavailable" in out
+
+
 def test_lecture_header_keeps_natural_language_title() -> None:
     """Lectures intentionally keep their title in the header — a title
     like 'Утренняя прогулка, 1976-04-03, Бомбей' doesn't look like a
