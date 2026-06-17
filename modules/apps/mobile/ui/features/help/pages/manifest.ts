@@ -19,34 +19,31 @@ import {
 
 import HelpIndicatorsPage from "./components/HelpIndicatorsPage.vue"
 
-import sadhanaEn from "@docs/help/what-is-sadhana.en.md?raw"
-import sadhanaRu from "@docs/help/what-is-sadhana.ru.md?raw"
-import findingLecturesEn from "@docs/help/finding-lectures.en.md?raw"
-import findingLecturesRu from "@docs/help/finding-lectures.ru.md?raw"
-import playlistEn from "@docs/help/playlist.en.md?raw"
-import playlistRu from "@docs/help/playlist.ru.md?raw"
-import subscriptionEn from "@docs/help/subscription.en.md?raw"
-import subscriptionRu from "@docs/help/subscription.ru.md?raw"
-import activityEn from "@docs/help/activity-tracker.en.md?raw"
-import activityRu from "@docs/help/activity-tracker.ru.md?raw"
-import chatAskSadhuEn from "@docs/help/chat-ask-sadhu.en.md?raw"
-import chatAskSadhuRu from "@docs/help/chat-ask-sadhu.ru.md?raw"
-import transcriptsEn from "@docs/help/transcripts.en.md?raw"
-import transcriptsRu from "@docs/help/transcripts.ru.md?raw"
-import notesEn from "@docs/help/notes.en.md?raw"
-import notesRu from "@docs/help/notes.ru.md?raw"
-import notificationsEn from "@docs/help/notifications.en.md?raw"
-import notificationsRu from "@docs/help/notifications.ru.md?raw"
-import playerControlsEn from "@docs/help/player-controls.en.md?raw"
-import playerControlsRu from "@docs/help/player-controls.ru.md?raw"
-import settingsOverviewEn from "@docs/help/settings-overview.en.md?raw"
-import settingsOverviewRu from "@docs/help/settings-overview.ru.md?raw"
-import smartLibraryEn from "@docs/help/smart-library.en.md?raw"
-import smartLibraryRu from "@docs/help/smart-library.ru.md?raw"
-import exportImportEn from "@docs/help/export-import.en.md?raw"
-import exportImportRu from "@docs/help/export-import.ru.md?raw"
-import deleteAccountEn from "@docs/help/delete-account.en.md?raw"
-import deleteAccountRu from "@docs/help/delete-account.ru.md?raw"
+// Help articles are authored as markdown under `modules/docs/help/`
+// (the single source of truth shared with the chat service), one file
+// per page per locale: `<page-id>.<locale>.md`. Bulk-import them all as
+// raw strings instead of listing ~200 explicit imports — adding a new
+// locale or page is then just a matter of dropping in the `.md` file.
+const HELP_RAW = import.meta.glob("@docs/help/*.md", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>
+
+/**
+ * Collect every translated body for one page id into a `{ locale: body }`
+ * map by parsing the `<page-id>.<locale>.md` filename. Format-agnostic
+ * about the glob key prefix (alias / relative / absolute).
+ */
+function pageLocales(id: HelpPageId): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [path, raw] of Object.entries(HELP_RAW)) {
+    const file = path.split("/").pop() ?? ""
+    const match = file.match(/^(.*)\.([A-Za-z-]+)\.md$/)
+    if (match && match[1] === id) out[match[2]] = raw
+  }
+  return out
+}
 
 export type HelpPageId =
   | "what-is-sadhana"
@@ -74,8 +71,8 @@ interface HelpPageBase {
 
 export interface HelpMarkdownPage extends HelpPageBase {
   type: "markdown"
-  en: string
-  ru: string
+  /** Article body per locale code (e.g. `en`, `ru`, `sr-Cyrl`). */
+  locales: Record<string, string>
 }
 
 export interface HelpComponentPage extends HelpPageBase {
@@ -98,64 +95,55 @@ export const helpManifest: HelpCategory[] = [
         id: "what-is-sadhana",
         type: "markdown",
         icon: markRaw(BookIcon),
-        en: sadhanaEn,
-        ru: sadhanaRu,
+        locales: pageLocales("what-is-sadhana"),
       },
       {
         id: "finding-lectures",
         type: "markdown",
         icon: markRaw(IconSearch),
-        en: findingLecturesEn,
-        ru: findingLecturesRu,
+        locales: pageLocales("finding-lectures"),
       },
       {
         id: "playlist",
         type: "markdown",
         icon: markRaw(HeadphonesIcon),
-        en: playlistEn,
-        ru: playlistRu,
+        locales: pageLocales("playlist"),
       },
       {
         id: "chat-ask-sadhu",
         type: "markdown",
         icon: markRaw(MessageIcon),
-        en: chatAskSadhuEn,
-        ru: chatAskSadhuRu,
+        locales: pageLocales("chat-ask-sadhu"),
       },
       {
         id: "player-controls",
         type: "markdown",
         icon: markRaw(IconPlay),
-        en: playerControlsEn,
-        ru: playerControlsRu,
+        locales: pageLocales("player-controls"),
       },
       {
         id: "transcripts",
         type: "markdown",
         icon: markRaw(TranscriptIcon),
-        en: transcriptsEn,
-        ru: transcriptsRu,
+        locales: pageLocales("transcripts"),
       },
       {
         id: "notes",
         type: "markdown",
         icon: markRaw(AnnotationIcon),
-        en: notesEn,
-        ru: notesRu,
+        locales: pageLocales("notes"),
       },
       {
         id: "activity-tracker",
         type: "markdown",
         icon: markRaw(FlameIcon),
-        en: activityEn,
-        ru: activityRu,
+        locales: pageLocales("activity-tracker"),
       },
       {
         id: "notifications",
         type: "markdown",
         icon: markRaw(BellIcon),
-        en: notificationsEn,
-        ru: notificationsRu,
+        locales: pageLocales("notifications"),
       },
       {
         id: "indicators",
@@ -172,29 +160,25 @@ export const helpManifest: HelpCategory[] = [
         id: "settings-overview",
         type: "markdown",
         icon: markRaw(IconSettings),
-        en: settingsOverviewEn,
-        ru: settingsOverviewRu,
+        locales: pageLocales("settings-overview"),
       },
       {
         id: "subscription",
         type: "markdown",
         icon: markRaw(IconRosetteDiscountCheckFilled),
-        en: subscriptionEn,
-        ru: subscriptionRu,
+        locales: pageLocales("subscription"),
       },
       {
         id: "smart-library",
         type: "markdown",
         icon: markRaw(IconDownload),
-        en: smartLibraryEn,
-        ru: smartLibraryRu,
+        locales: pageLocales("smart-library"),
       },
       {
         id: "delete-account",
         type: "markdown",
         icon: markRaw(TrashIcon),
-        en: deleteAccountEn,
-        ru: deleteAccountRu,
+        locales: pageLocales("delete-account"),
       },
     ],
   },
@@ -205,8 +189,7 @@ export const helpManifest: HelpCategory[] = [
         id: "export-import",
         type: "markdown",
         icon: markRaw(DatabaseExportIcon),
-        en: exportImportEn,
-        ru: exportImportRu,
+        locales: pageLocales("export-import"),
       },
     ],
   },

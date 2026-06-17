@@ -1,6 +1,6 @@
 <template>
   <div v-if="page" class="help-page">
-    <HelpMarkdown v-if="page.type === 'markdown'" :en="page.en" :ru="page.ru" />
+    <HelpMarkdown v-if="page.type === 'markdown'" :locales="page.locales" />
     <component v-else :is="page.component" />
   </div>
 </template>

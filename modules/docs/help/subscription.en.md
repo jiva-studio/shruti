@@ -12,7 +12,7 @@ conveniences and helps us keep adding new lectures.
 - **Automatic scroll** — the transcript follows along as the audio plays.
 - **Track info layout** — choose which detail (reference, author, location,
   date) sits on the top line under each lecture title.
-- **Notes Studio** — turn your saved notes into short videos to share.
+- **Studio** — turn your saved notes into short videos to share.
 - **Share & export** — share a lecture as a PDF, a text transcript, or its
   audio.
 - **A bigger Ask Sadhu allowance** — a higher daily message limit.

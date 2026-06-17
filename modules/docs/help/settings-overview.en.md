@@ -24,9 +24,9 @@ controls.
 - **Language** — the language of the app interface. Changing it switches all
   labels but does not affect the language of the lectures themselves.
 - **Player progress** — show or hide the progress ring around the play
-  button in the floating mini-player.
+  button in the floating player.
 - **Player on notes page** — show an inline audio player next to each saved
-  note.
+  quote.
 - **Highlight sentence** — highlight the current spoken sentence while a
   transcript is open.
 - **Automatic scroll** *(PRO)* — keep the current paragraph in view as the
@@ -69,6 +69,6 @@ controls.
 
 ## About
 
-At the bottom you can see the app version, build identifier and content
-database number — handy when reporting a problem. Tapping this area a few
-times unlocks a hidden debug section.
+At the bottom you can see the app version, build ID, content database
+version and the active server (CDN) — handy when reporting a problem.
+Tapping this area a few times unlocks a hidden debug section.

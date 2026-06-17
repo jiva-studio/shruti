@@ -42,8 +42,8 @@ the app.
 In the **Danger zone** (visible only after unlocking the debug section) you
 will find two destructive options that are easy to confuse:
 
-- **Clear cache** removes only transcripts you have downloaded for reading.
-  It does not touch your playlist, notes or listening progress.
+- **Clear cache** removes all downloaded audio and transcripts. It does
+  not touch your playlist, notes or listening progress.
 - **Clear user data** wipes every personal table — same effect as a fresh
   install. The lecture catalog stays.
 

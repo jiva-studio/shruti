@@ -8,14 +8,15 @@ import { useI18n } from "vue-i18n"
 import { marked } from "marked"
 
 const props = defineProps<{
-  en: string
-  ru: string
+  locales: Record<string, string>
 }>()
 
 const { locale } = useI18n()
 
 const html = computed(() => {
-  const source = locale.value === "ru" ? props.ru : props.en
+  // Prefer the active UI locale; fall back to English when an article
+  // has not been translated into it yet.
+  const source = props.locales[locale.value] ?? props.locales.en ?? ""
   return marked.parse(source, { gfm: true, breaks: false }) as string
 })
 </script>

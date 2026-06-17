@@ -41,7 +41,7 @@ The Mix panel exposes a single horizontal slider that collapses the
 stereo image toward one ear.
 
 - **Far left** — both ears hear the **left** channel only.
-- **Centre (default)** — normal stereo, no processing.
+- **Center (default)** — normal stereo, no processing.
 - **Far right** — both ears hear the **right** channel only.
 
 The centre has a small snap-back zone, so releasing near the middle

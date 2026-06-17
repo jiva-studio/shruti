@@ -4,11 +4,10 @@ between sentences with a single tap.
 
 ## Opening the transcript
 
-When a lecture is playing, swipe **up** on the floating player to expand
-the full player, then swipe **left/right** between the player panels —
-the transcript is the panel next to the controls. The transcript can also
-be set to **open automatically** when playback starts (Settings →
-Appearance).
+When a lecture is playing, **tap the player body** (anywhere except the
+play button) to open the transcript; tap again to close it without
+stopping playback. The transcript can also be set to **open
+automatically** when playback starts (Settings → Appearance).
 
 ## What you can do
 
