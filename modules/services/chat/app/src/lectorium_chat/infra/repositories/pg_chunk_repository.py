@@ -825,31 +825,3 @@ class PgChunkRepository:
             )
             for r in rows
         ]
-
-    async def get_first_chunk_embeddings(
-        self,
-        track_ids: list[str],
-        *,
-        lang: str | None,
-    ) -> list[list[float]]:
-        if not track_ids:
-            return []
-        emb_table = self._router.chunk_table
-        where = ["c.embed_model = $1", "c.track_id = ANY($2::text[])"]
-        params: list[Any] = [self._embed_model, track_ids]
-        if lang:
-            where.append(f"c.lang = ${len(params) + 1}")
-            params.append(lang)
-        sql = f"""
-          SELECT DISTINCT ON (c.track_id) c.track_id, e.embedding
-          FROM chunks c
-          JOIN {emb_table} e ON e.chunk_id = c.id
-          WHERE {' AND '.join(where)}
-          ORDER BY c.track_id, c.start_ms
-        """
-        pool = self._pool
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
-        # pgvector's asyncpg codec gives us list[float] / numpy directly;
-        # cast to list for predictability.
-        return [list(r["embedding"]) for r in rows]

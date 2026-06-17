@@ -1,9 +1,10 @@
 """Catalog worker — deterministic catalog lookups (find_track intent).
 
-Handles "lectures by X in Y", "что я слушал на этой неделе", "что мне
-послушать дальше" — queries that need metadata filtering, not semantic
-search. Toolset is the resolve_* + tracks_list + track_get +
-user_tracks_list + user_recommendations_get subset.
+Handles "lectures by X in Y", "что я слушал на этой неделе" — queries
+that need metadata filtering, not semantic search. Toolset is the
+resolve_* + tracks_list + track_get + user_tracks_list subset.
+("Что послушать дальше" is its own deterministic `recommend` intent /
+recommend_worker — it never reaches here.)
 
 router.intent="find_track" routes here. Like every worker, it appends
 to `state["tool_results"]` and lets the synthesizer compose the reply.
@@ -19,8 +20,8 @@ from lectorium_chat.agent.graph.turn_context import TurnContext
 
 
 # Catalog work is shallow — `resolve_X` then `tracks_list`, or a single
-# `user_tracks_list` / `user_recommendations_get`. Cap at 5 so a
-# misbehaving LLM can't burn 7 turns on lookups.
+# `user_tracks_list`. Cap at 5 so a misbehaving LLM can't burn 7 turns
+# on lookups.
 _MAX_TURNS = 5
 
 

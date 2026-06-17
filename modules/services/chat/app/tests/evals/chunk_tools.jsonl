@@ -18,7 +18,6 @@
 {"query": "что я недавно слушал про преданное служение", "context": {"recent_tracks": "auto"}, "expect_tool": "user_history_search", "expect_args": {"query": "преданное служение"}}
 {"query": "I heard something about karma recently — find it", "lang": "en", "context": {"recent_tracks": "auto"}, "expect_tool": "user_history_search"}
 {"query": "что я слушал на этой неделе", "context": {"recent_tracks": "auto"}, "expect_tool": "user_tracks_list"}
-{"query": "что мне послушать дальше", "context": {"recent_tracks": "auto"}, "expect_tool": "user_recommendations_get"}
 {"_comment": "── DIRECT CHAT: small talk, no retrieval ──"}
 {"query": "привет", "expect_intent": "direct_chat", "expect_no_tool": true}
 {"query": "спасибо большое", "expect_intent": "direct_chat", "expect_no_tool": true}

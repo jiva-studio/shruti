@@ -71,8 +71,7 @@ async def recommend_worker_node(
         user_context=ctx.user_context,
         catalog=ctx.catalog_repo,
         # Single language — recommend lectures the user can actually read in
-        # the answer language (an English clip is useless to a Russian user),
-        # mirroring user_recommendations_get's single-lang stance.
+        # the answer language (an English clip is useless to a Russian user).
         languages=[ctx.lang],
     )
 

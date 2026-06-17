@@ -117,10 +117,10 @@ async def test_unknown_tool_passes_through() -> None:
 
 
 def test_user_history_tools_are_personalized_and_aliased() -> None:
-    """The three history/recommend tools are BOTH personalized and take
-    `alias_map` — the exact combination the double-wrap regression broke."""
+    """The history tools are BOTH personalized and take `alias_map` — the
+    exact combination the double-wrap regression broke."""
     defs = all_tools()
-    for name in ("user_recommendations_get", "user_tracks_list", "user_history_search"):
+    for name in ("user_tracks_list", "user_history_search"):
         assert defs[name].personalized is True, name
 
 
