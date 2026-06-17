@@ -41,8 +41,13 @@ import { useI18n } from "vue-i18n"
 import { IonActionSheet, IonSpinner } from "@ionic/vue"
 import { IconHeadphones } from "@tabler/icons-vue"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { groupReferences } from "@lib/domain/services/references.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import {
+  preferredContentLanguage,
+  resolveLocalizedName,
+  resolveTrackTitle,
+} from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
 import { useToast } from "@kit/composables"
@@ -51,6 +56,7 @@ import { maxAudioDurationMs } from "@lib/domain/track.js"
 const props = defineProps<{ trackId: string }>()
 const { t } = useI18n()
 const appLanguage = useAppLanguage()
+const libraryLanguages = useLibraryLanguages()
 const { addToPlaylist } = useAddToPlaylist()
 const toast = useToast()
 
@@ -90,7 +96,12 @@ const { track, location, sourcesById, loading, error } = useTrackRowAsync(() => 
 
 const title = computed(() => {
   if (!track.value) return ""
-  return resolveTrackTitle(track.value, appLanguage.value) ?? track.value.id
+  const contentLang = preferredContentLanguage(
+    track.value,
+    libraryLanguages.value,
+    appLanguage.value
+  )
+  return resolveTrackTitle(track.value, contentLang ?? appLanguage.value) ?? track.value.id
 })
 
 const locationName = computed(() =>

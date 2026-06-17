@@ -2,7 +2,12 @@ import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
+import {
+  preferredContentLanguage,
+  resolveLocalizedName,
+  resolveTrackTitle,
+} from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useChatActions } from "@shruti/composables/useChatActions.js"
 import { useOpenInStudio } from "@shruti/composables/useOpenInStudio.js"
@@ -58,6 +63,7 @@ export function useCitationActions(
   const { t } = useI18n()
   const app = useShruti()
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
   const toast = useToast()
   const { addToPlaylist } = useAddToPlaylist()
   const { saveCitation } = useChatActions()
@@ -70,9 +76,15 @@ export function useCitationActions(
   /** Reentrancy guard so a double-tap on Save doesn't create two notes. */
   const savingNote = ref(false)
 
-  const trackTitle = computed<string>(() =>
-    track.value ? (resolveTrackTitle(track.value, appLanguage.value) ?? "") : ""
-  )
+  const trackTitle = computed<string>(() => {
+    if (!track.value) return ""
+    // Title follows the content language (a library language the track has),
+    // not the UI language — which still drives the author name label.
+    const cl =
+      preferredContentLanguage(track.value, libraryLanguages.value, appLanguage.value) ??
+      appLanguage.value
+    return resolveTrackTitle(track.value, cl) ?? ""
+  })
   const authorName = computed<string>(
     () => resolveLocalizedName(author.value, appLanguage.value) ?? ""
   )

@@ -1,7 +1,12 @@
 import { computed, ref, watch, type ComputedRef } from "vue"
 import { useShruti } from "@shruti/shruti.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import {
+  preferredContentLanguage,
+  resolveLocalizedName,
+  resolveTrackTitle,
+} from "@lib/domain/services/localizedName.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import type { AuthorId, LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Author } from "@lib/domain/author.js"
@@ -34,6 +39,7 @@ export function useCitationMetadata(
   lang: () => string
 ): ComputedRef<Map<string, CitationMeta>> {
   const app = useShruti()
+  const libraryLanguages = useLibraryLanguages()
   const dictionaries = useDictionariesStore()
 
   // Raw, language-agnostic loads cached per trackId. `undefined` value =
@@ -76,8 +82,13 @@ export function useCitationMetadata(
     const out = new Map<string, CitationMeta>()
     for (const [id, { track, author }] of rawById.value.entries()) {
       const first = track?.references?.[0]
+      // Title follows the content language (the library language the track has),
+      // not the UI language `lc` — which still drives author / reference labels.
+      const contentLang = track
+        ? (preferredContentLanguage(track, libraryLanguages.value, lc) ?? lc)
+        : lc
       out.set(id, {
-        trackTitle: resolveTrackTitle(track, lc) ?? "",
+        trackTitle: resolveTrackTitle(track, contentLang) ?? "",
         authorName: resolveLocalizedName(author, lc) ?? "",
         reference: first ? formatReference(first, dictionaries.sourcesById, lc) : "",
         trackDate: track?.date || "",
