@@ -43,15 +43,17 @@ _PREFIXES = sorted(
 # A numeric address: digit groups joined by . space : , - (any mix).
 _NUM_RE = re.compile(r"\d+(?:[.\s:,_\-–]*\d+)*")
 
-# Words that signal the user wants an ANSWER about the verse, not just the
-# verse — route those to research, not show_verse.
-_QUESTION_RE = re.compile(
-    r"\b(что|значит|почему|зачем|как|расскажи|объясни|смысл|"
-    r"what|why|how|explain|means?|meaning)\b|\?",
-    re.IGNORECASE,
-)
+# A trailing `?` is a cheap, language-neutral "this is a question" signal that
+# survives even when the interrogative word itself is in a language we don't
+# enumerate ("गीता २.१३ क्या है?"). It is NOT the gate — the structural
+# surrounding-text check below is — but it's a safe, universal hint.
+_QUESTION_MARK_RE = re.compile(r"[?¿？]")
+
 # Structural words sitting between the book and the number ("глава", "стих",
-# "lila", …) — stripped so they don't pollute the book text.
+# "lila", …) — stripped so they don't pollute the book text NOR inflate the
+# surrounding-text token count. Multilingual but bounded: these are scripture
+# *structure* nouns, not intent verbs (we deliberately do NOT enumerate intent
+# verbs like "explain/erkläre/explícame" — see the structural gate in `decide`).
 _STOP_RE = re.compile(
     r"\b(глав[аы]|стих|текст|песн[ьи]|канто|лила|"
     r"chapter|verse|text|canto|lila|"
@@ -59,16 +61,19 @@ _STOP_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Splits a name/phrase into comparable word tokens. Hyphens count as separators
+# so "Bhagavad-gita" / "Шримад-Бхагаватам" tokenize the same way the user's
+# spaced form does ("Шримад Бхагаватам"); digits and punctuation are dropped.
+_TOKEN_SPLIT_RE = re.compile(r"[\s\-–_/.]+")
+
+
+def _word_tokens(text: str) -> list[str]:
+    """Alpha word tokens, hyphens treated as separators (see _TOKEN_SPLIT_RE)."""
+    return [t for t in _TOKEN_SPLIT_RE.split(text) if re.search(r"[^\W\d_]", t)]
+
+
 # Confidence floor for a fuzzy book match (resolve() returns 0..1).
 _BOOK_CONF_FLOOR = 0.70
-# A bare reference is just "<book> <number>" — a short book name or abbrev.
-# When the query carries MORE words than that around the number, the user is
-# almost certainly not asking for the raw verse ("сделай pdf лекции по БГ 4.18",
-# "лекции по БГ 4.18", "make a pdf of BG 4.18") — so we defer to the LLM router,
-# which reads the real intent across ALL languages without us enumerating verbs.
-# Book names/abbrevs are ≤2 tokens once structural words (глава/стих/лила/…) are
-# stripped: "БГ", "Бхагавад-гита", "Шримад Бхагаватам", "ЧЧ Мадхья".
-_MAX_BARE_BOOK_TOKENS = 2
 # Below this many characters we don't even try (a stray "2.13" inside chatter
 # is still fine — this only guards truly empty input).
 _MIN_CHARS = 2
@@ -80,9 +85,13 @@ class ParsedRef:
 
     booktext: str            # the non-numeric, non-stopword remainder (may be "")
     ref_candidates: list[str]  # normalized token strings to try, e.g. ["2.13"]
-    has_question: bool
-    book_token_count: int    # alpha word tokens in booktext (surrounding-text size)
+    has_question: bool       # a `?`/`¿`/`？` anywhere — language-neutral hint
+    book_tokens: list[str]   # alpha word tokens in booktext (surrounding text)
     has_alpha: bool          # booktext contains letters (a book was named)
+
+    @property
+    def book_token_count(self) -> int:
+        return len(self.book_tokens)
 
 
 def _normalize_digits(text: str) -> str:
@@ -128,19 +137,55 @@ def parse_ref(query: str) -> ParsedRef | None:
         return None
     numstr = m.group(0)
     rest = norm[: m.start()] + " " + norm[m.end():]
-    booktext = _QUESTION_RE.sub(" ", _STOP_RE.sub(" ", rest))
+    # Only scripture-STRUCTURE words are stripped (глава/стих/lila/…). Intent
+    # verbs ("explain", "erkläre", "explícame") are deliberately LEFT IN so they
+    # count as surrounding text — the structural gate in `decide` then defers
+    # them, in ANY language, without us enumerating verbs (see PRs #977/#978).
+    booktext = _STOP_RE.sub(" ", rest)
     booktext = " ".join(booktext.split()).strip()
     return ParsedRef(
         booktext=booktext,
         ref_candidates=_ref_candidates(numstr),
-        has_question=bool(_QUESTION_RE.search(norm)),
-        book_token_count=sum(1 for t in booktext.split() if re.search(r"[^\W\d_]", t)),
+        has_question=bool(_QUESTION_MARK_RE.search(norm)),
+        book_tokens=_word_tokens(booktext),
         has_alpha=bool(re.search(r"[^\W\d_]", booktext)),
     )
 
 
 ResolveBook = Callable[[str], Awaitable[list[tuple[str, float]]]]
 VerseExists = Callable[[str, str], Awaitable[bool]]
+
+
+async def _is_bare_reference(parsed: ParsedRef, resolve_book: ResolveBook) -> bool:
+    """Structural, language-neutral test: is the verse reference essentially the
+    WHOLE message, or is there meaningful surrounding text (a verb-laden request)?
+
+    A bare reference's booktext is JUST the book — an abbreviation ("БГ"), a
+    spaced full name ("Шримад Бхагаватам", "ЧЧ Мадхья") or a fuzzy/typo'd single
+    word ("Багвадгита", "Гита"). A verb-laden request carries EXTRA words that
+    are NOT part of any book name ("erkläre BG", "explícame el BG", "лекции по
+    БГ", "गीता का अर्थ"). We detect those extras structurally:
+
+      * single-token booktext → bare (the resolver already validated it as the
+        book word, even a run-together typo);
+      * multi-token booktext → bare ONLY if EVERY token is itself book-ish, i.e.
+        resolves to some source on its own ("Шримад", "Бхагаватам", "ЧЧ",
+        "Мадхья" all do). One token that resolves to nothing ("erkläre", "что",
+        "по", "का") is alien surrounding text ⇒ defer.
+
+    This reuses the SAME catalog resolver (all locales, all scripts) instead of
+    a keyword/interrogative list, so it generalizes to every UI language — an
+    extra word in German, Spanish or Hindi is alien just like a Russian one
+    (cf. PRs #977/#978: no per-language verb lists).
+    """
+    book_toks = parsed.book_tokens
+    if len(book_toks) <= 1:
+        return True
+    for bt in book_toks:
+        cands = await resolve_book(bt)
+        if not any(conf >= _BOOK_CONF_FLOOR for _sid, conf in cands):
+            return False  # a token that names no book → surrounding text → defer
+    return True
 
 
 async def decide(
@@ -160,11 +205,7 @@ async def decide(
     if not parsed.ref_candidates:
         return None
     if parsed.has_question:
-        return None  # "что значит BG 2.13" → research
-    if parsed.book_token_count > _MAX_BARE_BOOK_TOKENS:
-        # Lots of text around the number → not a bare verse lookup. Defer to
-        # the LLM router so it reads the intent ("сделай pdf …", "лекции по …")
-        # in whatever language the user used.
+        # A "?"/"¿"/"？" anywhere is a universal "answer me" hint → research.
         return None
 
     if parsed.booktext:
@@ -172,6 +213,13 @@ async def decide(
         src_ids = [sid for sid, conf in cands if conf >= _BOOK_CONF_FLOOR]
         if not src_ids:
             # Book words present but unresolved — don't guess; let the LLM try.
+            return None
+        # Structural gate: the reference must DOMINATE the message. The fuzzy
+        # resolver matches "erkläre BG" → BG at full confidence (token_set_ratio
+        # ignores the extra "erkläre"), so the whole-booktext confidence can't
+        # tell a bare ref from a verb-laden request — per-token resolution can.
+        # Defer if any booktext token names no book (surrounding text).
+        if not await _is_bare_reference(parsed, resolve_book):
             return None
     elif parsed.has_alpha:
         return None
@@ -206,7 +254,9 @@ class AddressClassifier:
 
         async def resolve_book(text: str) -> list[tuple[str, float]]:
             # lang=None searches source names across ALL locales (БГ ru and
-            # Bhagavad-gita en both resolve to the same id).
+            # Bhagavad-gita en both resolve to the same id). The structural gate
+            # calls this per booktext token too, so a token in ANY script that
+            # names a book resolves; a surrounding word in any language doesn't.
             ents = await repo.resolve("source", text, lang=None, limit=6)
             best: dict[str, float] = {}
             for e in ents:
