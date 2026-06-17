@@ -63,12 +63,24 @@ def test_research_goes_to_research_worker() -> None:
     assert route_after_router({"intent": "research"}) == "research_worker"
 
 
-def test_unknown_falls_back_to_synthesizer() -> None:
-    assert route_after_router({"intent": "unknown"}) == "synthesizer"
+def test_unknown_routes_through_light_research() -> None:
+    # #39: `unknown` no longer drops to a tool-less synthesizer reply.
+    # It runs a light research pass so a single misclassification can't
+    # yield a confident "not found" with retrieval skipped — the worker
+    # grounds the answer or honestly comes up empty.
+    assert route_after_router({"intent": "unknown"}) == "research_worker"
 
 
-def test_missing_intent_falls_back_to_synthesizer() -> None:
-    assert route_after_router({}) == "synthesizer"
+def test_missing_intent_routes_through_light_research() -> None:
+    # The default (unrecognised / missing intent) takes the same light
+    # research path as `unknown` (#39).
+    assert route_after_router({}) == "research_worker"
+
+
+def test_direct_chat_stays_tool_less() -> None:
+    # direct_chat (greetings / meta-talk) has nothing to ground and still
+    # goes straight to the tool-less synthesizer.
+    assert route_after_router({"intent": "direct_chat"}) == "synthesizer"
 
 
 # ── create_action short paths ──────────────────────────────────────

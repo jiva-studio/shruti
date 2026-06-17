@@ -62,12 +62,16 @@ async def test_router_returns_decision_verbatim_when_confident() -> None:
 
 
 @pytest.mark.asyncio
-async def test_low_confidence_collapses_to_unknown() -> None:
-    """Confidence < 0.5 means the router isn't sure — downstream routing
-    must treat as unknown so synthesizer takes the soft-fallback path."""
+async def test_low_confidence_non_retrieval_collapses_to_unknown() -> None:
+    """Confidence < 0.5 on a non-retrieval intent means the router isn't
+    sure — collapse to `unknown` so downstream routing takes the soft
+    fallback. `create_action` carries no grounding of its own, so a
+    low-confidence one is safest flattened."""
     llm = FakeLLMForRouter(
         responses=[
-            RoutingDecision(intent="research", confidence=0.3, extracted_args={"hint": "foo"}),
+            RoutingDecision(
+                intent="create_action", confidence=0.3, extracted_args={"hint": "foo"},
+            ),
         ]
     )
     out = await run_router_turn("что-то странное", lang="ru", llm=llm)
@@ -76,6 +80,28 @@ async def test_low_confidence_collapses_to_unknown() -> None:
     # Extracted args survive the collapse — they may still be useful
     # to a fallback responder.
     assert out.extracted_args == {"hint": "foo"}
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_research_is_preserved() -> None:
+    """#36: a low-confidence retrieval-bearing intent (research / locate /
+    find_track) must NOT collapse to `unknown`. Flattening it would send
+    the turn to a tool-less synthesizer that confidently answers "not
+    found" with retrieval skipped (the `router_unknown_misroute` class).
+    A slightly-unsure research is still far better served by running the
+    search — the worker grounds it or honestly comes up empty."""
+    for intent in ("research", "locate", "find_track"):
+        llm = FakeLLMForRouter(
+            responses=[
+                RoutingDecision(
+                    intent=intent, confidence=0.3, extracted_args={"hint": "foo"},
+                ),
+            ]
+        )
+        out = await run_router_turn("что-то странное", lang="ru", llm=llm)
+        assert out.intent == intent, f"{intent} must survive the low-conf collapse"
+        assert out.confidence == 0.3
+        assert out.extracted_args == {"hint": "foo"}
 
 
 @pytest.mark.asyncio

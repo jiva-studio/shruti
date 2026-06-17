@@ -9,7 +9,8 @@ Topology:
                        START
                          │
                          ▼
-                      router ──── direct_chat / unknown ─────┐
+                      router ──── direct_chat ──────────────┐
+            (unknown / default → research_worker, see #39)   │
                          │                                    │
        ┌────────────┬────┴──────────┬──────────────┬───┐      │
        │            │               │              │   │      │
