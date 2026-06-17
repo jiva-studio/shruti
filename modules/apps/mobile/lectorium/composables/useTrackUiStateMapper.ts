@@ -92,6 +92,33 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     return "none"
   }
 
+  /**
+   * Discovery-surface state (Search / Library). Same outcome as `toUiState`
+   * with the discovery fold applied, but deliberately does NOT read
+   * `player.positionMs` / `player.durationMs`: those surfaces collapse the
+   * progress states to the binary "added" / "completed" badge, so the exact
+   * playback position is irrelevant. Reading it would make the row computed
+   * re-run on every playback tick (several times a second) and needlessly
+   * re-render the whole Search page during playback.
+   */
+  function toDiscoveryState(trackId: string, downloadState: DownloadState): UiTrackState {
+    if (downloadState === "downloading") return "downloading"
+    if (downloadState === "failed") return "failed"
+    // Currently-playing track → "playing", which folds to added/completed here.
+    if (player.trackId === trackId) {
+      return playlist.hasCompletedTrack(trackId) ? "completed" : "added"
+    }
+    const entry = playlist.getEntryByTrackId(trackId)
+    if (entry && playlist.getCompletedAt(entry.item.id) != null) return "completed"
+    // Saved progress → "queued", which also folds to added/completed.
+    if (entry && playlist.getProgressMs(entry.item.id) > 0) {
+      return playlist.hasCompletedTrack(trackId) ? "completed" : "added"
+    }
+    if (playlist.hasCompletedTrack(trackId)) return "completed"
+    if (playlist.hasTrack(trackId)) return "added"
+    return "none"
+  }
+
   function progressPctFor(track: Track, state: UiTrackState): number {
     if (state === "downloading") return downloads.getProgress(track.id)
     if (state === "playing") {
@@ -129,13 +156,37 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     })
   }
 
+  /**
+   * Discovery-surface row: state via `toDiscoveryState` (no playback position),
+   * progress only for an active download — the playing/queued progress radial
+   * belongs to the Home playlist view, not Search/Library.
+   */
+  function toDiscoveryRow(track: Track): UiTrackRow {
+    const state = toDiscoveryState(track.id, downloads.getState(track.id))
+    const progressPct = state === "downloading" ? downloads.getProgress(track.id) : 0
+    return buildTrackRow(track, {
+      preferredLanguage: appLanguage.value,
+      contentLanguages: libraryLanguages.value,
+      authorsById: dictionaries.authorsById,
+      locationsById: dictionaries.locationsById,
+      sourcesById: dictionaries.sourcesById,
+      tagNamesById: dictionaries.tagNamesById,
+      formatDuration: (ms) => formatListeningDuration(ms / 1000, t),
+      state,
+      progressPct,
+    })
+  }
+
   function mapRows(
     tracks: () => readonly Track[],
     options?: { context?: RowContext }
   ): ComputedRef<readonly UiTrackRow[]> {
     const discovery = options?.context === "discovery"
     return computed(() => {
-      // Touch reactive sources so `computed` re-runs on changes.
+      // Touch reactive sources so `computed` re-runs on changes. Discovery
+      // surfaces deliberately omit player.positionMs / player.durationMs:
+      // they fold the progress states to a binary badge, so re-running on
+      // every playback tick would only thrash the render.
       void downloads.states
       void downloads.progress
       void playlist.entries
@@ -143,28 +194,10 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       void playlist.completedAtMap
       void playlist.completedTrackIds
       void player.trackId
+      if (discovery) return tracks().map(toDiscoveryRow)
       void player.positionMs
       void player.durationMs
-      const mapped = tracks().map(toUiRow)
-      if (!discovery) return mapped
-      // Discovery surfaces (Search/Library): collapse playback-progress
-      // states to the binary "added"/"completed" badges. Progress radials
-      // belong to the Home playlist view only.
-      //
-      // Re-listen of a completed track: `toUiState` returns "playing" mid-
-      // replay (player progresses through the new pass), but on discovery
-      // the row should stay "completed" — the user has already finished
-      // this lecture. Look up `hasCompletedTrack` to override before the
-      // playing/queued → added fold.
-      return mapped.map((row) => {
-        if (row.state === "playing" || row.state === "queued") {
-          if (playlist.hasCompletedTrack(row.id)) {
-            return { ...row, state: "completed" as UiTrackState, progressPct: 0 }
-          }
-          return { ...row, state: "added" as UiTrackState, progressPct: 0 }
-        }
-        return row
-      })
+      return tracks().map(toUiRow)
     })
   }
 
