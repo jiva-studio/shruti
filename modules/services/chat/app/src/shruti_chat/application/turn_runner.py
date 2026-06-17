@@ -34,9 +34,12 @@ _HEARTBEAT_INTERVAL_S = 30
 # runner owns the cancel state, the caller owns which turn (chat / proactive)
 # to run.
 StreamFactory = Callable[[Callable[[], Awaitable[bool]]], AsyncIterator[AgentEvent]]
-# Turn-specific teardown: (had_error, completed) → the usage frame to append,
-# or None. Does quota refund / idempotency release as a side effect.
-Finalize = Callable[[bool, bool], Awaitable["dict[str, Any] | None"]]
+# Turn-specific teardown: (had_error, completed, answer_started) → the usage
+# frame to append, or None. Does quota refund / idempotency release as a side
+# effect. `answer_started` is True once any user-visible answer `delta` has been
+# pushed to the client, so finalize() can refuse to refund a Stop that landed
+# after the answer already streamed.
+Finalize = Callable[[bool, bool, bool], Awaitable["dict[str, Any] | None"]]
 
 
 class TurnRunner:
@@ -94,6 +97,13 @@ class TurnRunner:
             had_error = False
             completed = False
             cancelled = False
+            # Whether any user-visible answer content has reached the client.
+            # Only `delta` frames carry the answer prose; router/status/thinking
+            # /tool events do NOT count. Once True, an explicit Stop must keep
+            # the charge — the user already received (most of) the answer, so a
+            # refund + key release would let them stream the full answer and
+            # then cancel one frame before `done` for an unlimited free turn.
+            answer_started = False
             buffer: list[dict[str, Any]] = []
             await self._turn_store.mark_running(trace_id, user_id)
             # Periodic liveness heartbeat — DECOUPLED from event flow. A long
@@ -118,22 +128,27 @@ class TurnRunner:
                 async for ev in stream:
                     if ev.type == "error":
                         had_error = True
+                    elif ev.type == "delta":
+                        answer_started = True
                     frame = {
                         "event": ev.type,
                         "data": json.dumps(ev.data, ensure_ascii=False),
                     }
                     buffer.append(frame)
                     await queue.put(frame)
-                completed = True
                 # Explicit Stop is CO-OPERATIVE: DELETE /chat/turn sets the
                 # cancel flag and the turn loop (run_chat_turn) notices it and
                 # `return`s — which ends this stream cleanly, looking exactly
                 # like a normal completion. Without this check finalize would
                 # treat a user-stopped turn as a delivered answer (no refund,
                 # state="done"). Re-read the cancel signal once the stream
-                # drains: if Stop was requested, account for it as cancelled.
-                if await is_cancelled():
-                    cancelled = True
+                # drains: if Stop was requested, account for it as cancelled
+                # (`completed=False`); finalize() then refunds + releases the
+                # key ONLY if no answer content was delivered yet
+                # (`answer_started`). A Stop after the answer started keeps the
+                # charge — see finalize.
+                cancelled = await is_cancelled()
+                completed = not cancelled
             except asyncio.CancelledError:
                 # Shutdown (redeploy) OR explicit Stop (DELETE /chat/turn)
                 # cancels this task. CancelledError is a BaseException, so it
@@ -141,10 +156,11 @@ class TurnRunner:
                 # `finally` run finalize(completed=True semantics) — charging
                 # the user for a turn that never delivered an answer AND
                 # holding the idempotency key for its full TTL. Mark it
-                # cancelled so finalize refunds quota + releases the key and
-                # the store records state="cancelled". The teardown below is
-                # shielded so the cancellation can't interrupt the accounting
-                # mid-flight; we re-raise after it completes.
+                # cancelled (`completed` stays False) so finalize refunds quota
+                # + releases the key and the store records state="cancelled".
+                # The teardown below is shielded so the cancellation can't
+                # interrupt the accounting mid-flight; we re-raise after it
+                # completes.
                 cancelled = True
                 raise
             except Exception:
@@ -159,12 +175,17 @@ class TurnRunner:
                 # stays held. `_teardown` swallows its own non-cancel errors so
                 # it can't skip the sentinel either.
                 async def _teardown() -> None:
-                    # A cancelled turn is a non-clean end: refund + release like
-                    # an error, but record a distinct `cancelled` state so the
-                    # store/UI can tell "user stopped" from "model failed".
-                    failed = had_error or cancelled
+                    # A cancelled turn is a non-clean end (`completed=False`):
+                    # finalize() refunds + releases ONLY when no answer streamed
+                    # (`answer_started`), while a distinct `cancelled` state lets
+                    # the store/UI tell "user stopped" from "model failed". Pass
+                    # the PURE error flag (cancel is conveyed by `completed`, not
+                    # `had_error`) plus `answer_started` so finalize keeps the
+                    # cancel path — and its post-answer charge — separate.
                     try:
-                        usage_frame = await finalize(failed, completed)
+                        usage_frame = await finalize(
+                            had_error, completed, answer_started
+                        )
                     except Exception:
                         log.exception("chat_turn_finalize_failed", trace_id=trace_id)
                         usage_frame = None

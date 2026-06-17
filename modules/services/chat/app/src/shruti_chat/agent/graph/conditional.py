@@ -2,7 +2,8 @@
 
 Centralised routing matrix:
 
-  direct_chat / unknown  → synthesizer        (no tools)
+  direct_chat            → synthesizer        (no tools)
+  unknown / default      → research_worker    → synthesizer  (light grounding, #39)
   help                   → help_worker        → synthesizer
   find_track             → catalog_worker     → synthesizer
   recommend              → recommend_worker   → synthesizer      (no LLM loop)
@@ -116,8 +117,16 @@ def _is_current_ref(state: ChatState) -> bool:
 def route_after_router(state: ChatState) -> str:
     """Pick the first worker node based on `state["intent"]`.
 
-    Unknown intents fall back to `synthesizer` for a tool-less reply
-    ("could you clarify?"). Same for direct_chat.
+    `direct_chat` (greetings / meta-talk) goes straight to the tool-less
+    `synthesizer` — there is nothing to ground. `unknown` (and any
+    unrecognised intent) instead falls through a LIGHT research pass: a
+    single misclassification by the router shouldn't yield a confident,
+    tool-less "not found". The research_worker either grounds the answer
+    or honestly comes up empty, and the synthesizer then phrases the
+    result — which is strictly better than refusing with zero search.
+    See #36 (the router no longer collapses retrieval-bearing intents to
+    `unknown`, so what reaches here as `unknown` is genuinely ambiguous
+    and most safely handled by attempting retrieval).
     """
     intent = state.get("intent", "unknown")
     if intent == "direct_chat":
@@ -180,7 +189,12 @@ def route_after_router(state: ChatState) -> str:
         return "research_worker"
     if intent == "locate":
         return "locate_worker"
-    return "synthesizer"
+    # `unknown` / any unrecognised intent: attempt a light research pass
+    # rather than answering tool-less. research_worker → synthesis_planner
+    # → synthesizer grounds the reply when the corpus has something, and
+    # falls back to an honest empty answer otherwise — never a confident
+    # refusal with retrieval skipped (#39).
+    return "research_worker"
 
 
 def route_after_research(state: ChatState) -> str:
