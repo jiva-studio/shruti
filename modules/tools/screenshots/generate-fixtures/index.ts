@@ -268,18 +268,16 @@ async function seedSessions(
   // so the in-progress radial is deterministic.
   const inProgressItems = itemIds.slice(0, IN_PROGRESS_COUNT)
   const partialToPosition = [400, 700, 1000, 1300] // seconds into a ~30-min lecture
-  const PROGRESS_CAP = 1500 // < every real lecture length, so never "completed"
   for (let k = 0; k < inProgressItems.length; k++) {
     const item = inProgressItems[k]!
     const toPos = partialToPosition[k] ?? 600
+    // `getProgressForItems` reads the high-water mark (MAX(to_position)), so
+    // cap any prior session on this item to the intended partial — otherwise
+    // a longer random session would drive the radial instead of THIS one.
     await db.execute(
       "UPDATE listening_sessions SET from_position = 0, to_position = ? WHERE item_id = ? AND to_position > ?",
-      [PROGRESS_CAP, item, PROGRESS_CAP]
+      [toPos, item, toPos]
     )
-    // Stamp this late on the current day (23:00) so its ended_at beats any
-    // capped day-0 session the random loop may have left on this item —
-    // `getProgressForItems` reads MAX(ended_at), and we want THIS partial
-    // (not a capped 1500s row) to drive the radial.
     const startedAt = Math.floor(args.now / 1000) + 23 * 60 * 60
     await db.execute(
       `INSERT INTO listening_sessions

@@ -65,23 +65,50 @@ export interface IListeningSessionRepository {
   /** Same as tick — semantically "the last update before closing". */
   finish(id: ListeningSessionId, args: { position: TrackPositionSec }): Promise<void>
 
-  /** Most recent session for an item, by `ended_at`. Used to derive resume position. */
+  /**
+   * Close a session with an explicit `ended_at` (unix seconds) instead of
+   * "now". Used to split a session that spans local midnight: the
+   * pre-midnight portion is closed at the last second of the old local day
+   * so `getDailyTotals` (which groups by `date(ended_at, 'localtime')`)
+   * credits it to that day, not the day the split was detected.
+   */
+  finishAt(
+    id: ListeningSessionId,
+    args: { position: TrackPositionSec; endedAtSec: number }
+  ): Promise<void>
+
+  /** Most recent session for an item, by `(ended_at, id)`. */
   getLastSessionForItem(itemId: PlaylistItemId): Promise<ListeningSession | null>
 
   /**
-   * Batch resolve `to_position` of the latest session for each item id.
-   * Used by the playlist to render progress rings without N+1 queries.
+   * Resume position for one item: the *high-water mark* — the furthest
+   * `to_position` ever reached across all of the item's sessions, not the
+   * latest session's end. Rewinding (e.g. 40:00 → 5:00) and stopping must
+   * not lose the user's place; resume returns the furthest point reached.
+   * `null` when the item has no sessions. The caller still clamps against
+   * duration, so a completed track's high-water mark resets to 0 on replay.
    */
-  getProgressForItems(itemIds: readonly PlaylistItemId[]): Promise<Map<PlaylistItemId, ProgressEntry>>
+  getResumePositionForItem(itemId: PlaylistItemId): Promise<TrackPositionSec | null>
 
   /**
-   * For each item id, return `ended_at` (unix seconds) of the *most
-   * recent* session whose `to_position >= duration - 2` (i.e. the last
-   * time the track crossed the completion threshold). null means not
-   * yet finished. Latest (not first) so that re-listening a completed
-   * track resets time-based downstream behavior such as the
-   * auto-archive sweep. `durations` is keyed by item id and expresses
-   * seconds.
+   * Batch resolve the resume position (high-water mark — MAX `to_position`)
+   * for each item id. Used by the playlist to render progress rings without
+   * N+1 queries. `updatedAtSec` carries the latest `ended_at` for the item.
+   */
+  getProgressForItems(
+    itemIds: readonly PlaylistItemId[]
+  ): Promise<Map<PlaylistItemId, ProgressEntry>>
+
+  /**
+   * For each item id, decide completion from the *latest* session only.
+   * Returns that session's `ended_at` (unix seconds) when its
+   * `to_position >= duration - 2`, else null. Evaluating the latest
+   * session (rather than "any session that ever crossed the threshold")
+   * keeps completion consistent with the resume/progress position: after
+   * the user replays a finished track and rewinds, the track becomes
+   * in-progress again and is not re-archived until the latest session
+   * reaches the threshold once more. `durations` is keyed by item id and
+   * expresses seconds.
    */
   getCompletedAtForItems(
     itemIds: readonly PlaylistItemId[],
@@ -128,10 +155,7 @@ export interface IListeningSessionRepository {
    * `Date.now()`. Powers the weekly-digest "lectures you listened to"
    * list.
    */
-  getTracksListenedInRange(
-    fromMs: number,
-    toMs: number
-  ): Promise<readonly TrackListeningTotal[]>
+  getTracksListenedInRange(fromMs: number, toMs: number): Promise<readonly TrackListeningTotal[]>
 
   /**
    * Wipe every session row. Used by the "delete account" / "clear user
