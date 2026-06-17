@@ -46,6 +46,7 @@ from lectorium_chat.observability.langfuse_client import (
     get_langfuse,
     with_langfuse_trace,
 )
+from lectorium_chat.observability.marker_annotations import annotate_markers
 from lectorium_chat.observability.logging import (
     bind_turn_context,
     clear_turn_context,
@@ -499,6 +500,21 @@ async def run_chat_turn(
             # (langfuse issue #9556).
             if langfuse_root_span is not None and full_prose:
                 final_output = "".join(full_prose)
+                # Inline a human-readable expansion under each chip marker
+                # so a reviewer can see WHICH lecture / purport was cited
+                # and judge its relevance — the raw `[cite:track@…]` /
+                # `[commentary:N]` markers are opaque in the trace. Trace
+                # copy only; the client already got the unannotated stream.
+                # Pure + dependency-free, but guarded so it can never break
+                # the actual output write below.
+                try:
+                    final_output = annotate_markers(final_output, aliases)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning(
+                        "langfuse_marker_annotation_failed",
+                        request_id=request_id,
+                        error=str(exc),
+                    )
                 try:
                     langfuse_root_span.update(output=final_output)
                 except Exception as exc:  # noqa: BLE001

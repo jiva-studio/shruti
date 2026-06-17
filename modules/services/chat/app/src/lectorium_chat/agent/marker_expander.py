@@ -725,6 +725,10 @@ class MarkerExpander:
         text = self._join_commentary_picks([(i, shown[i]) for i in idxs])
         if not text:
             return ""
+        # Mirror the rendered quote for the Langfuse trace annotation — the
+        # picked sentences only, exactly as the card shows them. Trace-only;
+        # the client gets `text` via the `action` payload below as before.
+        self._aliases.commentary_shown[n] = text
         payload: dict[str, object] = {
             "ref": n,
             "author_name": ref.author_name or "",
