@@ -144,6 +144,70 @@ func (s *stubApplier) Apply(_ context.Context, _ string, _ store.SubscriptionSna
 	return s.applyUserID, s.applyMatched, s.applyErr
 }
 
+// recordingApplier is a richer stub than stubApplier: it records the
+// event_ids passed to Apply and the app_user_id passed to InsertOrLookup,
+// so the TRANSFER tests can assert the primary vs synthetic-source split
+// and the store-and-defer path.
+type recordingApplier struct {
+	mu                  sync.Mutex
+	applyCalls          int
+	insertOrLookupCalls int
+	lastInsertAppUserID string
+	appliedEventIDs     []string
+	applyUserID         uuid.UUID
+	applyMatched        bool
+}
+
+func (s *recordingApplier) InsertOrLookup(_ context.Context, _, appUserID string) (inserted, processed bool, err error) {
+	s.mu.Lock()
+	s.insertOrLookupCalls++
+	s.lastInsertAppUserID = appUserID
+	s.mu.Unlock()
+	return true, false, nil
+}
+
+func (s *recordingApplier) WaitForSibling(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
+func (s *recordingApplier) Apply(_ context.Context, eventID string, _ store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
+	s.mu.Lock()
+	s.applyCalls++
+	s.appliedEventIDs = append(s.appliedEventIDs, eventID)
+	s.mu.Unlock()
+	return s.applyUserID, s.applyMatched, nil
+}
+
+func (s *recordingApplier) appliedEventID(want string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range s.appliedEventIDs {
+		if id == want {
+			return true
+		}
+	}
+	return false
+}
+
+// recordingFetcher records every app_user_id GetSubscriber was asked for,
+// returning the same canned response for all.
+type recordingFetcher struct {
+	mu      sync.Mutex
+	resp    *rcclient.SubscriberResponse
+	err     error
+	fetched map[string]bool
+}
+
+func (s *recordingFetcher) GetSubscriber(_ context.Context, appUserID string) (*rcclient.SubscriberResponse, error) {
+	s.mu.Lock()
+	if s.fetched == nil {
+		s.fetched = map[string]bool{}
+	}
+	s.fetched[appUserID] = true
+	s.mu.Unlock()
+	return s.resp, s.err
+}
+
 // stubEvents records the calls the handler makes against the webhook-
 // events store. We care about which "seal" path got hit.
 type stubEvents struct {
@@ -197,16 +261,20 @@ func mkRequest(t *testing.T, secret string, payload map[string]any) *http.Reques
 	return r
 }
 
-// TestRCWebhookPermanentError200AndMarkProcessed — when GetSubscriber
-// returns ErrPermanent (e.g. 401), the handler must:
-//   - return 200 (so RC stops retrying)
-//   - call MarkProcessedWithError with a "permanent: …" prefix
-//   - NOT call Apply (no DB churn)
-//   - bump the auth-failed counter
-func TestRCWebhookPermanentError200AndMarkProcessed(t *testing.T) {
+// TestRCWebhookPermanentErrorLeavesEventRetryable — when GetSubscriber
+// returns ErrPermanent (e.g. a revoked API key), the handler must NOT
+// seal the event: sealing freezes the user's current tier and a dropped
+// revocation/refund would leave them on Pro forever. Instead it must:
+//   - return 200 (so RC doesn't amplify the redelivery storm)
+//   - call RecordError (leaving processed_at NULL → still retryable)
+//   - NOT seal via MarkProcessedWithError
+//   - NOT call Apply (no DB churn on a state we can't resolve)
+//   - bump the auth-failed, permanent, and unresolved hard-alert counters
+func TestRCWebhookPermanentErrorLeavesEventRetryable(t *testing.T) {
 	const secret = "rc-secret"
 	beforeCounter := metrics.RCAPIAuthFailedTotal.Value()
 	beforePermanent := metrics.RCAPIPermanentTotal.Value()
+	beforeUnresolved := metrics.RCWebhookPermanentUnresolvedTotal.Value()
 
 	applier := &stubApplier{}
 	events := &stubEvents{}
@@ -232,22 +300,29 @@ func TestRCWebhookPermanentError200AndMarkProcessed(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		body, _ := io.ReadAll(w.Body)
-		t.Fatalf("want 200 (so RC stops retrying), got %d body=%s", w.Code, string(body))
+		t.Fatalf("want 200 (avoid redelivery storm), got %d body=%s", w.Code, string(body))
 	}
 	if applier.applyCalls != 0 {
 		t.Fatalf("apply must NOT run on permanent error, got %d calls", applier.applyCalls)
 	}
-	if events.markProcessedErrCalls != 1 {
-		t.Fatalf("expected MarkProcessedWithError called once, got %d", events.markProcessedErrCalls)
+	if events.markProcessedErrCalls != 0 {
+		t.Fatalf("permanent failure must NOT seal the event, got %d MarkProcessedWithError calls",
+			events.markProcessedErrCalls)
 	}
-	if !startsWith(events.markProcessedErrLastMsg, "permanent: ") {
-		t.Fatalf("expected message to start with 'permanent: ', got %q", events.markProcessedErrLastMsg)
+	if events.recordErrCalls != 1 {
+		t.Fatalf("expected RecordError called once (row stays retryable), got %d", events.recordErrCalls)
+	}
+	if !startsWith(events.recordErrLastMsg, "permanent: ") {
+		t.Fatalf("expected message to start with 'permanent: ', got %q", events.recordErrLastMsg)
 	}
 	if got := metrics.RCAPIAuthFailedTotal.Value() - beforeCounter; got != 1 {
 		t.Fatalf("expected rc_api_auth_failed_total +1, got +%d", got)
 	}
 	if got := metrics.RCAPIPermanentTotal.Value() - beforePermanent; got != 1 {
 		t.Fatalf("expected rc_api_permanent_total +1, got +%d", got)
+	}
+	if got := metrics.RCWebhookPermanentUnresolvedTotal.Value() - beforeUnresolved; got != 1 {
+		t.Fatalf("expected rc_webhook_permanent_unresolved_total +1, got +%d", got)
 	}
 }
 
@@ -332,12 +407,15 @@ func TestRCWebhookTransferReconcilesDestination(t *testing.T) {
 	}
 }
 
-// TestRCWebhookTransferOnlyAnonymousDestination400 — when the only
-// transfer destination is itself anonymous, no auth.users row could ever
-// match it, so there's nothing to reconcile: keep the 400 so RC stops.
-func TestRCWebhookTransferOnlyAnonymousDestination400(t *testing.T) {
+// TestRCWebhookTransferOnlyAnonymousDestinationStored — when the only
+// transfer destination is still anonymous ($RCAnonymousID:*), the id may
+// bind to an auth.users row via Purchases.logIn moments later. 400-and-
+// forget would lose the entitlement (nothing for the orphan sweep to
+// replay), so the handler stores the event keyed on the anon id and
+// returns 200 so the sweep can resolve it once the link materialises.
+func TestRCWebhookTransferOnlyAnonymousDestinationStored(t *testing.T) {
 	const secret = "rc-secret"
-	applier := &stubApplier{}
+	applier := &recordingApplier{}
 	h := &RCWebhookHandler{
 		SecretPrimary: secret,
 		Applier:       applier,
@@ -355,11 +433,106 @@ func TestRCWebhookTransferOnlyAnonymousDestination400(t *testing.T) {
 		},
 	}))
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("want 400 when no identified destination, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		body, _ := io.ReadAll(w.Body)
+		t.Fatalf("want 200 store-and-defer for anon-only destination, got %d body=%s",
+			w.Code, string(body))
 	}
 	if applier.applyCalls != 0 {
-		t.Fatalf("apply must not run, got %d", applier.applyCalls)
+		t.Fatalf("apply must not run (no identified id to refetch), got %d", applier.applyCalls)
+	}
+	if applier.insertOrLookupCalls != 1 {
+		t.Fatalf("event must be stored once for the orphan sweep, got %d InsertOrLookup calls",
+			applier.insertOrLookupCalls)
+	}
+	if applier.lastInsertAppUserID != "$RCAnonymousID:onlyAnon" {
+		t.Fatalf("event must be stored keyed on the anon target id, got %q",
+			applier.lastInsertAppUserID)
+	}
+}
+
+// TestRCWebhookTransferNoUsableIDs400 — a TRANSFER with no app_user_id
+// and an empty transferred_to has nothing to refetch and nothing the
+// sweep could ever resolve, so we keep the 400 to stop RC retrying.
+func TestRCWebhookTransferNoUsableIDs400(t *testing.T) {
+	const secret = "rc-secret"
+	applier := &recordingApplier{}
+	h := &RCWebhookHandler{
+		SecretPrimary: secret,
+		Applier:       applier,
+		Events:        &stubEvents{},
+		Fetcher:       &stubFetcher{resp: &rcclient.SubscriberResponse{}},
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
+		"event": map[string]any{
+			"id":          "evt_transfer_empty",
+			"type":        "TRANSFER",
+			"environment": "PRODUCTION",
+		},
+	}))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 when no usable id at all, got %d", w.Code)
+	}
+	if applier.insertOrLookupCalls != 0 || applier.applyCalls != 0 {
+		t.Fatalf("nothing must be stored or applied, got insert=%d apply=%d",
+			applier.insertOrLookupCalls, applier.applyCalls)
+	}
+}
+
+// TestRCWebhookTransferDowngradesIdentifiedSource — a TRANSFER moves the
+// entitlement to transferred_to (refetched + applied as the primary id)
+// AND, when transferred_from holds an identified id, that former owner
+// must be downgraded inline (not left for the up-to-24h stale sweep, which
+// would leave two Pro sessions from one purchase). The handler refetches
+// BOTH ids and applies BOTH.
+func TestRCWebhookTransferDowngradesIdentifiedSource(t *testing.T) {
+	const secret = "rc-secret"
+	applier := &recordingApplier{applyUserID: uuid.New(), applyMatched: true}
+	events := &stubEvents{}
+	fetcher := &recordingFetcher{resp: &rcclient.SubscriberResponse{}}
+	h := &RCWebhookHandler{
+		SecretPrimary: secret,
+		Applier:       applier,
+		Events:        events,
+		Fetcher:       fetcher,
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
+		"event": map[string]any{
+			"id":               "evt_transfer_src",
+			"type":             "TRANSFER",
+			"environment":      "PRODUCTION",
+			"transferred_from": []string{"auth-uuid-src"},
+			"transferred_to":   []string{"auth-uuid-dest"},
+		},
+	}))
+
+	if w.Code != http.StatusOK {
+		body, _ := io.ReadAll(w.Body)
+		t.Fatalf("TRANSFER must reconcile both ends → 200, got %d body=%s", w.Code, string(body))
+	}
+	// Both the destination (primary apply) and the source (inline
+	// downgrade) must have been refetched + applied.
+	if applier.applyCalls != 2 {
+		t.Fatalf("expected Apply twice (destination + source), got %d", applier.applyCalls)
+	}
+	if !fetcher.fetched["auth-uuid-dest"] {
+		t.Fatalf("destination must be refetched, fetched=%v", fetcher.fetched)
+	}
+	if !fetcher.fetched["auth-uuid-src"] {
+		t.Fatalf("identified source must be refetched for downgrade, fetched=%v", fetcher.fetched)
+	}
+	// The source apply must use a distinct synthetic event_id so it
+	// doesn't collide with the primary event's idempotency row.
+	if !applier.appliedEventID("evt_transfer_src") {
+		t.Fatalf("primary apply must use the real event_id, got %v", applier.appliedEventIDs)
+	}
+	if !applier.appliedEventID("evt_transfer_src:from:auth-uuid-src") {
+		t.Fatalf("source apply must use a distinct synthetic event_id, got %v", applier.appliedEventIDs)
 	}
 }
 

@@ -59,8 +59,20 @@ var RCAPIRateLimitedTotal = &Counter{}
 // PromQL graph track "calls RC has told us to stop making".
 var RCAPIPermanentTotal = &Counter{}
 
+// RCWebhookPermanentUnresolvedTotal counts webhook events the handler
+// could NOT authoritatively resolve because the RC REST refetch returned
+// a permanent failure (bad/revoked API key). The event is left
+// unprocessed on purpose — until ops fix the key the tier can NOT be
+// corrected, so a stale Pro entitlement may outlive a revocation/refund.
+// This is the page-now signal: a non-zero rate here means a paying-state
+// drift is accumulating, distinct from the broader RCAPIPermanentTotal
+// (which also covers reconcile-cron permanent hits that the skip window
+// already accounts for). Alert on increase.
+var RCWebhookPermanentUnresolvedTotal = &Counter{}
+
 func init() {
 	register("rc_api_auth_failed_total", RCAPIAuthFailedTotal)
 	register("rc_api_rate_limited_total", RCAPIRateLimitedTotal)
 	register("rc_api_permanent_total", RCAPIPermanentTotal)
+	register("rc_webhook_permanent_unresolved_total", RCWebhookPermanentUnresolvedTotal)
 }
