@@ -27,9 +27,13 @@ def _read_pages(locale: str) -> dict[str, str]:
 
 
 async def get_help(locale: str = "en") -> str:
-    """Concatenate every help page for ``locale``; fall back to English."""
-    if locale not in ("en", "ru"):
-        locale = "en"
+    """Concatenate every help page for ``locale``; fall back to English.
+
+    Any locale the corpus has been translated into is served as-is — the
+    available set is decided from the files on disk (``*.<locale>.md``),
+    not a hardcoded list — so a locale falls back to English only when no
+    page exists for it yet.
+    """
     pages = _read_pages(locale)
     if not pages and locale != "en":
         pages = _read_pages("en")
@@ -56,8 +60,14 @@ register_tool(ToolDef(
         "properties": {
             "locale": {
                 "type": "string",
-                "enum": ["en", "ru"],
-                "description": "Locale of the help text. Defaults to 'en'.",
+                "enum": [
+                    "en", "ru", "uk", "sr-Latn", "sr-Cyrl", "es", "pt",
+                    "it", "de", "fr", "pl", "hu", "hi", "bn",
+                ],
+                "description": (
+                    "Locale of the help text. Defaults to 'en'. Any "
+                    "untranslated locale falls back to English."
+                ),
             },
         },
     },
