@@ -355,13 +355,13 @@ stack-app: ## Serve the mobile app against the local stack (dev region, port 110
 	@cd modules/apps/mobile && VITE_DEV_REGION=true npm run dev
 
 e2e-install: ## One-time mobile E2E setup (deps + chromium + fixtures)
-	@$(MAKE) -C modules/tests/e2e install
+	@$(MAKE) -C tests/e2e/mobile install
 
 e2e: ## Run the mobile E2E suite, offline only (fast, no backend)
-	@$(MAKE) -C modules/tests/e2e test
+	@$(MAKE) -C tests/e2e/mobile test
 
 e2e-all: ## Run the full mobile E2E suite (offline + live; auto-starts the stack)
-	@$(MAKE) -C modules/tests/e2e all
+	@$(MAKE) -C tests/e2e/mobile all
 
 e2e-report: ## Open the mobile E2E HTML report (a video per test)
-	@$(MAKE) -C modules/tests/e2e report
+	@$(MAKE) -C tests/e2e/mobile report

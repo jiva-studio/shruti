@@ -8,7 +8,7 @@ on:
       - modules/apps/mobile/**
       - modules/plugins/**
       - modules/libs/**
-      - modules/tests/e2e/**
+      - tests/e2e/mobile/**
       - .github/workflows/apps-mobile.yml
       - .github/workflows/preview-cleanup.yml
 

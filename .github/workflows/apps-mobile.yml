@@ -7,7 +7,7 @@ on:
       - modules/apps/mobile/**
       - modules/plugins/**
       - modules/libs/**
-      - modules/tests/e2e/**
+      - tests/e2e/mobile/**
       - modules/db-scheme.json
       - modules/db-sync.sh
       - .github/workflows/apps-mobile.yml
@@ -21,7 +21,7 @@ on:
       - modules/apps/mobile/**
       - modules/plugins/**
       - modules/libs/**
-      - modules/tests/e2e/**
+      - tests/e2e/mobile/**
       - modules/db-scheme.json
       - modules/db-sync.sh
       - .github/workflows/apps-mobile.yml

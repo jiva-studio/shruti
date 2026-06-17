@@ -25,7 +25,7 @@ export CACHE_DIR="${HERE}/.db-cache"
 
 export ANDROID_DIR="${HERE}/apps/mobile/android/app/src/main/assets/databases"
 export IOS_DIR="${HERE}/apps/mobile/ios/App/App/databases"
-export E2E_DB_DIR="${HERE}/tests/e2e/fixtures/public/db"
-export E2E_CONFIG="${HERE}/tests/e2e/fixtures/public/config.json"
+export E2E_DB_DIR="${HERE}/../tests/e2e/mobile/fixtures/public/db"
+export E2E_CONFIG="${HERE}/../tests/e2e/mobile/fixtures/public/config.json"
 
 exec bash "${HERE}/kit/scripts/db-sync.sh" "${1:-all}"
