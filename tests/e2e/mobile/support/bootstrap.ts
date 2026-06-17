@@ -184,3 +184,60 @@ export async function boot(
   await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
   await page.addStyleTag({ content: KILL_ANIMATIONS_CSS })
 }
+
+/**
+ * Persist a library-language filter with an explicit set of content languages
+ * (e.g. `["ru", "en"]` to exercise the multi-select). Pins the Bhagavad-gita
+ * source — which carries both en and ru lectures — so the resulting list is
+ * stable and populated. Distinct from {@link preseedSearchFilter}, which seeds a
+ * single locale.
+ */
+export async function preseedSearchFilterLangs(page: Page, langs: string[]): Promise<void> {
+  const filters = {
+    authorIds: [],
+    languageCodes: langs,
+    locationIds: [],
+    sourceIds: ["source_dsicuBsFvinZ"],
+    tagIds: [],
+    duration: [],
+    sort: "byReference",
+  }
+  await page.addInitScript(
+    ({ value }: { value: string }) => {
+      try {
+        localStorage.setItem("CapacitorStorage.search.filters.v3", value)
+      } catch {
+        /* unavailable origin — non-fatal */
+      }
+    },
+    { value: JSON.stringify(filters) }
+  )
+}
+
+/**
+ * Boot WITHOUT a pre-seeded language filter, so the app runs its real first-
+ * launch library-language derivation from the device locale (`uk → ru`, `hi →
+ * en`, …). Set the device/browser locale with Playwright's `test.use({ locale })`
+ * — on web `Device.getLanguageCode()` reads `navigator.language`, which the
+ * `locale` context option drives. `userDb` chooses which seeded user.db to load
+ * (use the language the locale reduces to). Pass `filterLangs` to instead pin an
+ * explicit multi-language selection (skips derivation).
+ */
+export async function bootDeviceLocale(
+  page: Page,
+  userDb: Locale = "en",
+  opts: { filterLangs?: string[] } = {}
+): Promise<void> {
+  assertFixturesPresent()
+  await interceptContent(page)
+  await preseedUserDb(page, userDb)
+  if (opts.filterLangs) await preseedSearchFilterLangs(page, opts.filterLangs)
+  await preseedDismissedNags(page)
+
+  // No `?locale=` override: detectLocale()/Device.getLanguageCode() fall through
+  // to navigator.language, set by the Playwright `locale` context option.
+  await page.goto("/")
+  await page.waitForURL("**/tabs/home", { timeout: 60_000 })
+  await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
+  await page.addStyleTag({ content: KILL_ANIMATIONS_CSS })
+}
