@@ -6,6 +6,7 @@
     class="cached-image"
     :class="{ 'is-loaded': loaded }"
     @load="onLoad"
+    @error="onError"
   />
 </template>
 
@@ -28,7 +29,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: "loaded"): void }>()
 
-const { src } = useCachedImageUrl(toRef(props, "url"))
+const { src, retry } = useCachedImageUrl(toRef(props, "url"))
 const loaded = ref(false)
 
 // Re-hide (and re-arm the parent's scrim) until the new source decodes.
@@ -40,6 +41,14 @@ watch(
 function onLoad() {
   loaded.value = true
   emit("loaded")
+}
+
+// The rendered src failed to decode (e.g. the cached resolve fell back to the
+// raw remote URL and that link is flaky too). Ask the composable to re-attempt
+// the cached resolve; it's bounded, so a permanently-dead cover just stops
+// retrying and stays on the parent's placeholder rather than looping.
+function onError() {
+  retry()
 }
 </script>
 

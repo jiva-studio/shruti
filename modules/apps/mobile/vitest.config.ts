@@ -56,6 +56,7 @@ export default defineConfig({
       "usecases/**/__tests__/**/*.test.ts",
       "infra/**/__tests__/**/*.test.ts",
       "shruti/**/__tests__/**/*.test.ts",
+      "ui/**/__tests__/**/*.test.ts",
     ],
   },
 })
