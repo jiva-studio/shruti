@@ -5,6 +5,7 @@ import {
   LOG_LEVEL,
   INTRO_ELIGIBILITY_STATUS,
   type CustomerInfo,
+  type PurchasesEntitlementInfo,
   type PurchasesPackage,
 } from "@revenuecat/purchases-capacitor"
 import {
@@ -166,13 +167,22 @@ export function useCapacitorPurchases(cfg: CapacitorPurchasesConfig): IPurchases
 
     onCustomerInfoChanged(listener: CustomerInfoListener) {
       if (!available) return NOOP_UNSUB
-      const handlePromise = Purchases.addCustomerInfoUpdateListener((info) => {
+      // `addCustomerInfoUpdateListener` resolves to a `PurchasesCallbackId`
+      // (a plain string), NOT a removable handle object — so the old
+      // `handle?.remove?.()` was always a silent no-op and the listener
+      // leaked on every mount/unmount. Remove it by its callback id via
+      // `removeCustomerInfoUpdateListener`.
+      const idPromise = Purchases.addCustomerInfoUpdateListener((info) => {
         void toCustomerState(info).then(listener)
       })
       return () => {
-        void Promise.resolve(handlePromise).then((handle) => {
-          ;(handle as { remove?: () => Promise<void> } | undefined)?.remove?.()
-        })
+        void idPromise
+          .then((listenerToRemove) =>
+            Purchases.removeCustomerInfoUpdateListener({ listenerToRemove })
+          )
+          .catch((e) => {
+            console.warn("[purchases] failed to remove customer info listener", e)
+          })
       }
     },
   }
@@ -250,21 +260,33 @@ async function toCustomerState(info: CustomerInfo): Promise<CustomerState> {
   // the fix is to attach the product to an Entitlement in the RC
   // dashboard, not to mask it on the client.
   const activeEntitlements = Object.keys(info.entitlements.active)
-  const activeEnt =
-    activeEntitlements.length > 0 ? info.entitlements.active[activeEntitlements[0]] : undefined
+
+  // Fetch the current offering once: it both drives the deterministic
+  // entitlement pick below and resolves the active package id. Offerings
+  // may be unavailable (network / not configured) — tolerate that.
+  let currentPackages: PurchasesPackage[] | undefined
+  if (activeEntitlements.length > 0) {
+    try {
+      currentPackages = (await Purchases.getOfferings()).current?.availablePackages
+    } catch {
+      // Offerings unavailable — entitlement pick falls back to expiry.
+    }
+  }
+
+  // A customer can hold more than one active entitlement at once (e.g. an
+  // RU promotional grant adds a SEPARATE entitlement alongside a paid
+  // sub). Picking `active[Object.keys(active)[0]]` is non-deterministic —
+  // map key order can flip between calls, resolving `activeProductId` /
+  // `managementUrl` to the wrong (or empty) entitlement. Pick
+  // deterministically: prefer the entitlement whose product is in the
+  // current offering, otherwise the one expiring latest.
+  const activeEnt = pickActiveEntitlement(info.entitlements.active, currentPackages)
   const activeProductId = activeEnt?.productIdentifier
 
   let activePackageId: string | undefined
   if (activeProductId) {
-    try {
-      const offerings = await Purchases.getOfferings()
-      const pkg = offerings.current?.availablePackages.find(
-        (p) => p.product.identifier === activeProductId
-      )
-      activePackageId = pkg?.identifier
-    } catch {
-      // Offerings unavailable — leave package unresolved.
-    }
+    const pkg = currentPackages?.find((p) => p.product.identifier === activeProductId)
+    activePackageId = pkg?.identifier
     // No package match (product not in current offering, or offerings
     // unavailable) — still report the subscription as active using the
     // raw product id; the UI only checks `activePackageId !== undefined`.
@@ -280,6 +302,35 @@ async function toCustomerState(info: CustomerInfo): Promise<CustomerState> {
     managementUrl: info.managementURL ?? getManagementUrl(activeProductId),
     appUserId: info.originalAppUserId,
   }
+}
+
+/**
+ * Deterministically picks one entitlement from RC's `active` map. The map
+ * can hold more than one active entitlement (e.g. a paid sub plus an RU
+ * promotional grant), and JS object key order is not a stable selection
+ * key. Prefer the entitlement whose product is sold in the current
+ * offering — that's the one the app actually surfaces — and otherwise the
+ * entitlement expiring latest (a lifetime / non-expiring grant, with
+ * `expirationDate === null`, sorts last so it wins as the most durable).
+ */
+function pickActiveEntitlement(
+  active: Record<string, PurchasesEntitlementInfo>,
+  currentPackages: PurchasesPackage[] | undefined
+): PurchasesEntitlementInfo | undefined {
+  const entitlements = Object.values(active)
+  if (entitlements.length <= 1) return entitlements[0]
+
+  const offeringProductIds = new Set(currentPackages?.map((p) => p.product.identifier))
+  const inOffering = entitlements.filter((e) => offeringProductIds.has(e.productIdentifier))
+  const pool = inOffering.length > 0 ? inOffering : entitlements
+
+  return pool.reduce((latest, e) => (expiryRank(e) > expiryRank(latest) ? e : latest))
+}
+
+/** Sort key for entitlement durability: a null expiry (lifetime) ranks highest. */
+function expiryRank(e: PurchasesEntitlementInfo): number {
+  if (e.expirationDateMillis === null) return Number.POSITIVE_INFINITY
+  return e.expirationDateMillis
 }
 
 function getManagementUrl(productId: string | undefined): string | undefined {
