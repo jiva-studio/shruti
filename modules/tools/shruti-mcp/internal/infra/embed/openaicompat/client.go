@@ -9,9 +9,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
+	"os"
 	"sort"
 	"time"
 )
@@ -26,6 +29,9 @@ type Config struct {
 	Dimensions int
 	// BatchSize caps how many inputs go in one HTTP call (0 → 96).
 	BatchSize int
+	// Timeout bounds a single HTTP call including the body read (0 → 120s). A
+	// timeout here is transient and retried, not fatal.
+	Timeout time.Duration
 }
 
 type Client struct {
@@ -49,8 +55,12 @@ func New(cfg Config) (*Client, error) {
 	if batch <= 0 {
 		batch = 96
 	}
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = 120 * time.Second
+	}
 	return &Client{
-		http:       &http.Client{Timeout: 60 * time.Second},
+		http:       &http.Client{Timeout: timeout},
 		endpoint:   endpoint,
 		apiKey:     cfg.APIKey,
 		model:      cfg.Model,
@@ -127,6 +137,17 @@ func (c *Client) embedBatch(ctx context.Context, batch []string) ([][]float32, e
 	return nil, fmt.Errorf("after %d attempts: %w", maxAttempts, lastErr)
 }
 
+// isTimeout reports whether err is a deadline/timeout (the http.Client.Timeout
+// firing, a context deadline, or a net.Error timeout) rather than a permanent
+// failure — such errors are worth retrying.
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
 // doBatch performs one HTTP call. retryable is true for 429/5xx so the caller
 // backs off; client errors (4xx other than 429) are terminal.
 func (c *Client) doBatch(ctx context.Context, body []byte, n int) (vecs [][]float32, retryable bool, err error) {
@@ -151,7 +172,12 @@ func (c *Client) doBatch(ctx context.Context, body []byte, n int) (vecs [][]floa
 	}
 	var out embedResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, false, fmt.Errorf("decode response: %w", err)
+		// A timeout while reading the body (the client Timeout firing, or a
+		// slow/stalled endpoint) is transient, not corruption — retry it. Only
+		// when the parent ctx is still live: a genuine run cancellation must
+		// abort, not loop. Anything else (real JSON garbage) stays terminal.
+		retryable := ctx.Err() == nil && isTimeout(err)
+		return nil, retryable, fmt.Errorf("decode response: %w", err)
 	}
 	if len(out.Data) != n {
 		return nil, false, fmt.Errorf("expected %d vectors, got %d", n, len(out.Data))
