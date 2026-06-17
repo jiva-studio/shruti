@@ -166,13 +166,18 @@ async def augment_thin_theses(
     ref_texts = [(base_notes[i - 1].get("text") or "").strip() for i in ref_idx_list]
     nonempty_refs = [(idx, txt) for idx, txt in zip(ref_idx_list, ref_texts) if txt]
 
-    async def _embed(texts: list[str]) -> list[list[float]]:
+    async def _embed_q(texts: list[str]) -> list[list[float]]:
+        # Theses are QUERIES (used as the ANN query vector below) → query path.
+        return await embedder.embed_queries(texts) if texts else []
+
+    async def _embed_d(texts: list[str]) -> list[list[float]]:
+        # Notes are DOCUMENTS scored against the thesis → document path.
         return await embedder.embed_documents(texts) if texts else []
 
     try:
         thesis_embeds, ref_embeds = await asyncio.gather(
-            _embed(thesis_texts),
-            _embed([t for _, t in nonempty_refs]),
+            _embed_q(thesis_texts),
+            _embed_d([t for _, t in nonempty_refs]),
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("augment_embed_failed", error=str(exc))

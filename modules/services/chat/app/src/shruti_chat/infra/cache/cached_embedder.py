@@ -39,6 +39,11 @@ class CachedEmbedder:
             factory=lambda: self._inner.embed_query(text),
         )
 
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        # Pass-through: see module docstring on why batch caching is a
+        # poor fit at this layer.
+        return await self._inner.embed_queries(texts)
+
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         # Pass-through: see module docstring on why batch caching is a
         # poor fit at this layer.

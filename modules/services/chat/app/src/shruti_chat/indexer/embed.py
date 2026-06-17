@@ -69,6 +69,10 @@ class Embedder(ABC):
         ...
 
     @abstractmethod
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        ...
+
+    @abstractmethod
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         ...
 
@@ -144,7 +148,7 @@ class OpenAICompatEmbedder(Embedder):
         resp = await self._create(inp)
         return resp.data[0].embedding
 
-    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+    async def _embed_batched(self, texts: list[str], prefix: str) -> list[list[float]]:
         if not texts:
             return []
         # OpenAI/OpenRouter accept a batch in `input`; up to ~2k entries per call.
@@ -153,8 +157,8 @@ class OpenAICompatEmbedder(Embedder):
         out: list[list[float]] = []
         for i in range(0, len(texts), BATCH):
             chunk = texts[i:i + BATCH]
-            if self._doc_prefix:
-                chunk = [f"{self._doc_prefix}{t}" for t in chunk]
+            if prefix:
+                chunk = [f"{prefix}{t}" for t in chunk]
             resp = await self._create(chunk)
             # Guard against a mid-batch reorder/drop: if the provider returns
             # a different number of vectors than we sent, the input↔vector
@@ -175,6 +179,15 @@ class OpenAICompatEmbedder(Embedder):
             ordered = sorted(resp.data, key=lambda d: getattr(d, "index", 0))
             out.extend(d.embedding for d in ordered)
         return out
+
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        # QUERY text gets the QUERY prefix. Harmless on the current symmetric
+        # model, but essential the moment an asymmetric model (BGE/E5/Voyage)
+        # is configured: embedding queries with the DOC prefix corrupts recall.
+        return await self._embed_batched(texts, self._query_prefix)
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self._embed_batched(texts, self._doc_prefix)
 
 
 def get_embedder(settings: Settings | None = None) -> Embedder:

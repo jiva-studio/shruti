@@ -86,6 +86,9 @@ class FakeEmbedder:
             return self.embed_docs_returns
         return [[0.0] * 1536 for _ in texts]
 
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed_documents(texts)
+
 
 class FakeCatalogRepo:
     def __init__(
@@ -845,6 +848,11 @@ class _FanoutBoomEmbedder:
         self.docs_called += 1
         raise openai.APIConnectionError(request=None)  # type: ignore[arg-type]
 
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        # Fanout sub-queries route through the query path; raise the same
+        # provider-unavailable error there too.
+        return await self.embed_documents(texts)
+
 
 @pytest.mark.asyncio
 async def test_fanout_provider_unavailable_propagates_not_partial():
@@ -885,6 +893,9 @@ async def test_fanout_non_provider_error_still_degrades():
 
         async def embed_documents(self, texts: list[str]) -> list[list[float]]:
             raise RuntimeError("a bug in our own code, not the provider")
+
+        async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+            return await self.embed_documents(texts)
 
     pool = FakePool({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
