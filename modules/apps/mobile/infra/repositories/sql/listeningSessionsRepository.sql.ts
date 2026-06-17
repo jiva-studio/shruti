@@ -27,9 +27,12 @@ function nowSec(): number {
 
 export function createSqlListeningSessionRepository(db: IDatabase): IListeningSessionRepository {
   async function lastToPositionForItem(itemId: PlaylistItemId): Promise<TrackPositionSec | null> {
+    // `id DESC` is a deterministic tiebreak: `ended_at` has whole-second
+    // resolution, so two sessions closed in the same second would otherwise
+    // pick an arbitrary row.
     return queryOne<{ to_position: number }, TrackPositionSec>(
       db,
-      "SELECT to_position FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC LIMIT 1",
+      "SELECT to_position FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC, id DESC LIMIT 1",
       [itemId],
       (r) => r.to_position
     )
@@ -87,12 +90,32 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       ])
     },
 
+    async finishAt(id, { position, endedAtSec }) {
+      await mutate(db, "UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
+        endedAtSec,
+        position,
+        id,
+      ])
+    },
+
     async getLastSessionForItem(itemId): Promise<ListeningSession | null> {
+      // `id DESC` deterministically breaks whole-second `ended_at` ties.
       return queryOne<ListeningSessionRow, ListeningSession>(
         db,
-        "SELECT * FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC LIMIT 1",
+        "SELECT * FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC, id DESC LIMIT 1",
         [itemId],
         rowToListeningSession
+      )
+    },
+
+    async getResumePositionForItem(itemId): Promise<TrackPositionSec | null> {
+      // High-water mark: the furthest point ever reached, NOT the latest
+      // session's end. Rewinding then stopping must not throw away progress.
+      return queryOne<{ hwm: number | null }, TrackPositionSec | null>(
+        db,
+        "SELECT MAX(to_position) AS hwm FROM listening_sessions WHERE item_id = ?",
+        [itemId],
+        (r) => r.hwm
       )
     },
 
@@ -100,17 +123,16 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       const result = new Map<PlaylistItemId, ProgressEntry>()
       if (itemIds.length === 0) return result
       const placeholders = itemIds.map(() => "?").join(",")
+      // `position` is the high-water mark (MAX to_position) so the resume
+      // ring never rewinds when the user seeks back and stops; `updatedAtSec`
+      // is the item's latest `ended_at` for any recency display.
       const rows = await db.query<{ item_id: string; to_position: number; ended_at: number }>(
-        `SELECT outer_ls.item_id AS item_id,
-                outer_ls.to_position AS to_position,
-                outer_ls.ended_at AS ended_at
-           FROM listening_sessions outer_ls
-          WHERE outer_ls.item_id IN (${placeholders})
-            AND outer_ls.ended_at = (
-              SELECT MAX(inner_ls.ended_at)
-                FROM listening_sessions inner_ls
-               WHERE inner_ls.item_id = outer_ls.item_id
-            )`,
+        `SELECT item_id AS item_id,
+                MAX(to_position) AS to_position,
+                MAX(ended_at) AS ended_at
+           FROM listening_sessions
+          WHERE item_id IN (${placeholders})
+          GROUP BY item_id`,
         [...itemIds]
       )
       for (const row of rows) {
@@ -123,25 +145,27 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       const result = new Map<PlaylistItemId, number | null>()
       for (const id of itemIds) result.set(id, null)
       if (itemIds.length === 0) return result
-      // For each (itemId, threshold = duration - COMPLETION_THRESHOLD_SEC),
-      // find the latest session.ended_at where to_position >= threshold.
-      // Latest (not earliest) so that re-listening a completed track
-      // resets the auto-archive clock — otherwise an "immediate" sweep
-      // would archive a track the user just finished replaying.
+      // Completion is decided from the *latest* session only, so it stays
+      // consistent with the resume/progress position. Take the latest
+      // session (by `ended_at`, `id` as a deterministic tiebreak) and report
+      // it completed only when ITS `to_position >= duration - threshold`.
+      // This makes a replayed-then-rewound track in-progress again (no
+      // partial-radial-yet-archive-eligible divergence) and resets the
+      // auto-archive clock until the latest session crosses the threshold.
       // We iterate per item to keep the SQL simple — itemIds is bounded by
       // playlist page size, so it's cheap.
       for (const itemId of itemIds) {
         const dur = durations.get(itemId)
         if (typeof dur !== "number" || dur <= 0) continue
         const threshold = Math.max(0, dur - COMPLETION_THRESHOLD_SEC)
-        const rows = await db.query<{ ended_at: number }>(
-          `SELECT ended_at FROM listening_sessions
-            WHERE item_id = ? AND to_position >= ?
-            ORDER BY ended_at DESC
+        const rows = await db.query<{ ended_at: number; to_position: number }>(
+          `SELECT ended_at, to_position FROM listening_sessions
+            WHERE item_id = ?
+            ORDER BY ended_at DESC, id DESC
             LIMIT 1`,
-          [itemId, threshold]
+          [itemId]
         )
-        if (rows[0]) result.set(itemId, rows[0].ended_at)
+        if (rows[0] && rows[0].to_position >= threshold) result.set(itemId, rows[0].ended_at)
       }
       return result
     },
@@ -210,7 +234,7 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
                 MAX(ls.ended_at) AS ended_at,
                 (SELECT to_position FROM listening_sessions
                   WHERE item_id = ls.item_id
-                  ORDER BY ended_at DESC LIMIT 1) AS position
+                  ORDER BY ended_at DESC, id DESC LIMIT 1) AS position
            FROM listening_sessions ls
            JOIN playlist_items pi ON pi.id = ls.item_id
           GROUP BY ls.item_id
