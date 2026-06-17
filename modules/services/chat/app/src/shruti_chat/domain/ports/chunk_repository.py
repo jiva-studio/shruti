@@ -8,9 +8,6 @@ Operations the application uses today:
 - `get_window` — chunks around a timecode for citation context.
 - `get_anchor_texts` — raw chunk text for an anchor span; used by
   `chunks_find_similar` to build a query embedding.
-- `get_first_chunk_embeddings` — one representative embedding per
-  track (the first chunk's vector); used by `user_recommendations_get`
-  to compute the user's listening centroid.
 
 The port is intentionally narrow. New use-cases extend it explicitly;
 we do not expose a generic "execute SQL" method.
@@ -131,16 +128,6 @@ class ChunkRepository(Protocol):
         corresponds 1:1 to the cited [start_ms, end_ms] window. Restricted
         to `kind='track_transcript'`. Returns None when no row matches
         (e.g. a focus span the user tapped that isn't a chunk boundary)."""
-        ...
-
-    async def get_first_chunk_embeddings(
-        self,
-        track_ids: list[str],
-        *,
-        lang: str | None,
-    ) -> list[list[float]]:
-        """One embedding per track (the first chunk by `start_ms`).
-        Tracks without a matching chunk are silently dropped."""
         ...
 
     async def get_chunks_by_addr_label(

@@ -54,7 +54,6 @@ from shruti_chat.agent.tools import (  # noqa: F401 — side-effect imports
     resolve,
     tracks,
     user_history_search,
-    user_recommendations_get,
     user_tracks_list,
 )
 
@@ -131,7 +130,6 @@ def bind_repositories(
         "chunks_get_window":      {"chunk_repo": chunk_repo},
         "chunks_find_similar":    {"chunk_repo": chunk_repo, "embedder": embedder},
         "user_history_search":    {"chunk_repo": chunk_repo, "embedder": embedder},
-        "user_recommendations_get": {"chunk_repo": chunk_repo},
         "user_tracks_list":       {"catalog_repo": catalog_repo},
         "track_get":             {"catalog_repo": catalog_repo},
         "tracks_list":           {"catalog_repo": catalog_repo},
@@ -172,9 +170,8 @@ def build_personalized_tools(
             # Without it the `**kwargs` shell hides `alias_map`, and the
             # later `build_aliased_tools` introspection skips injecting it
             # — every personalized tool that also takes `alias_map`
-            # (user_recommendations_get / user_tracks_list /
-            # user_history_search) then crashes with a missing-arg
-            # TypeError. Order matters: personalize wraps first, alias second.
+            # (user_tracks_list / user_history_search) then crashes with a
+            # missing-arg TypeError. Order: personalize wraps first, alias second.
             @wraps(_fn)
             async def _wrapped(**kwargs: Any) -> Any:
                 kwargs.pop("user_context", None)

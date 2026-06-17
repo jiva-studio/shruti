@@ -119,8 +119,6 @@ def anchor_block(state: ChatState) -> str:
             f"  * \"что я слушал на этой неделе\" / \"вчера\" / \"за месяц\" → "
             f"`user_tracks_list(since=\"<iso>\", until=\"<iso>\")` — compute "
             f"both bounds from `now` above.\n"
-            f"  * \"что мне послушать дальше\" / \"recommend more\" → "
-            f"`user_recommendations_get()` — no args.\n"
             f"  NEVER use `chunks_search` for these — it ignores the user's "
             f"history."
         )

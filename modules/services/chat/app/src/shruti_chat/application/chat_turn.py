@@ -83,7 +83,6 @@ _CATALOG_TOOL_NAMES = frozenset({
     "collections_find",
     "track_get",
     "user_tracks_list",
-    "user_recommendations_get",
     # Needed so a deictic «перескажи последнюю лекцию» can be summarised
     # here: catalog resolves the last-played track via user_tracks_list,
     # then pulls its chapter outline to write the recap. Without this the
