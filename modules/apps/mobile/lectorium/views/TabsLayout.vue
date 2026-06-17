@@ -42,14 +42,25 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from "vue"
 import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
 import { useRouter } from "vue-router"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
 import { useProactiveInboxBadge } from "@lectorium/composables/useProactiveInboxBadge.js"
+import { useLibraryLandingStore } from "@lectorium/stores/useLibraryLandingStore.js"
 import IconAppSadhu from "@lectorium/views/Chat/components/IconAppSadhu.vue"
 
 const router = useRouter()
+
+// The tabs shell mounts once the deep-link guard has confirmed both databases
+// are open, so this is the earliest point the Search landing data can actually
+// load. Warm it here — in the background, while the user is still on Home — so
+// the Search tab's collection/topic covers are already cached (prewarmed by the
+// store) before the user ever opens it. Fire-and-forget; failures are non-fatal.
+onMounted(() => {
+  void useLibraryLandingStore().ensureLoaded()
+})
 
 /**
  * Tapping the chat tab ALWAYS opens the chat home (the session list / empty

@@ -21,10 +21,10 @@ import { CachedImage } from "@ui/primitives/index.js"
  * the detail sheet, not on the card.)
  *
  * The tile keeps a light placeholder background at all times; the cover (a
- * `CachedImage` fill layer) fades in on top of it, so there is no flash between
- * states. The name is always shown — dark over the bare placeholder, animating
- * to cream as the scrim fades in with the image once `CachedImage` reports
- * `loaded`. The scrim itself only appears over an actual cover.
+ * `CachedImage` fill layer) appears on top of it once decoded, so there is no
+ * flash between states. The name is always shown — dark over the bare
+ * placeholder, switching to cream together with the scrim once `CachedImage`
+ * reports `loaded`. The scrim itself only appears over an actual cover.
  */
 defineProps<{
   name: string
@@ -63,8 +63,8 @@ const loaded = ref(false)
   transform: scale(0.97);
 }
 
-/* Readability scrim behind the name — fades in with the image (matching
-   CachedImage's 200ms fade), absent over the bare placeholder. */
+/* Readability scrim behind the name — shown with the image (once the cover
+   decodes), absent over the bare placeholder. */
 .scrim {
   position: absolute;
   left: 0;
@@ -75,7 +75,6 @@ const loaded = ref(false)
      so the overlay stays legible over any cover in both themes. */
   background: linear-gradient(to top, rgba(61, 43, 31, 0.72), rgba(61, 43, 31, 0));
   opacity: 0;
-  transition: opacity 200ms ease;
   pointer-events: none;
 }
 
@@ -90,10 +89,9 @@ const loaded = ref(false)
   line-height: 1.25;
   font-weight: 600;
   /* Always visible. Over the bare placeholder it's the dark theme text colour
-     (legible on the light tile); when the cover + scrim fade in, it animates to
+     (legible on the light tile); when the cover + scrim appear it switches to
      warm cream (fixed tone, doesn't invert) so it stays legible over the image. */
   color: var(--ion-text-color);
-  transition: color 200ms ease;
   /* Wrap only between whole words — never mid-word. keep-all also stops the
      default break AFTER a hyphen, which otherwise splits the hyphenated terms
      this content is full of ("Бхагавад-гита", "Шримад-Бхагаватам"). */
