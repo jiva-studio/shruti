@@ -10,7 +10,6 @@ export { default as VerseTextBlock } from "./VerseTextBlock.vue"
 export { default as VerseTextInlineBlock } from "./VerseTextInlineBlock.vue"
 export { default as VerseTranslationBlock } from "./VerseTranslationBlock.vue"
 export { default as SelectionActions } from "./SelectionActions.vue"
-export { default as SpeakerFloatingChip } from "./SpeakerFloatingChip.vue"
 export { default as Timestamp } from "./Timestamp.vue"
 export { default as TextSelector } from "./TextSelector.vue"
 export type {
