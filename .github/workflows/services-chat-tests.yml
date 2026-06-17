@@ -1,0 +1,51 @@
+name: Services / chat tests
+
+# Runs the chat-service pytest suite. The image-build workflow
+# (services-ghcr.yml) only builds + scans + pushes — it never ran the
+# tests, so a logic regression could ship to :latest unnoticed (the
+# «Перескажи текущую лекцию» empty-result bug, PR #1016, was found in
+# prod for exactly this reason). This workflow is the gate: it runs on
+# every PR that touches the chat subtree so a broken turn fails CI
+# before merge, and on push to main so the result is recorded there too.
+
+on:
+  pull_request:
+    paths:
+      - 'modules/services/chat/**'
+      - '.github/workflows/services-chat-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'modules/services/chat/**'
+      - '.github/workflows/services-chat-tests.yml'
+
+concurrency:
+  group: services-chat-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # The package + tests live under app/; pyproject's editable
+        # install puts `src/lectorium_chat` on the path and pytest's
+        # rootdir (app) makes the `tests.*` packages importable.
+        working-directory: modules/services/chat/app
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install chat + dev deps
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest tests -q
