@@ -152,6 +152,38 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
     if "error" in note:
         return f"(no usable results: {note.get('error')!s})"
 
+    # track_outline_get result: `{track_id, lang, items:[{start_ms, title}]}`.
+    # Unlike the citable notes it carries NO `ref` and NO `text` — the chapter
+    # headings live in `items`, and the interactive contents list renders
+    # client-side from the `[outline:<id>]` marker (the tool already emitted the
+    # `outline` action event). Without a branch here the note falls through to
+    # the generic path, which produces an EMPTY string (no header, no text) — so
+    # the synthesizer sees blank RESEARCH NOTES and refuses with the
+    # empty-result discipline even though the recap data is right there. Surface
+    # the titles as grounding so the synthesizer can summarise them, and pin the
+    # marker it must emit for the card. See agent/tools/outline.py + tools.md.
+    outline_items = note.get("items")
+    outline_track_id = note.get("track_id")
+    if (
+        isinstance(outline_items, list)
+        and outline_items
+        and isinstance(outline_track_id, str)
+    ):
+        titles = "\n".join(
+            f"- {it['title']}"
+            for it in outline_items
+            if isinstance(it, dict) and it.get("title")
+        )
+        if titles:
+            return (
+                "LECTURE OUTLINE (chapter headings of the lecture the user "
+                "asked about). Summarise these in 2-4 sentences as the answer "
+                "(don't invent topics, don't enumerate the items one by one), "
+                f"and place the marker [outline:{outline_track_id}] on its OWN "
+                "line where the interactive contents list should render:\n"
+                f"{titles}"
+            )
+
     # Action-tool result: emit an explicit "copy this marker" directive.
     # The propose_* tools return `{ok, kind, action_id, ...}`; synth
     # copies the marker character-by-character — no chance to invent
