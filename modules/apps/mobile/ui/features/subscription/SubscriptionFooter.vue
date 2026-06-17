@@ -57,6 +57,19 @@
       </IonButton>
     </template>
 
+    <!-- No purchase or manage branch applies: the store hasn't resolved its
+         first round-trip yet (transient), or this build simply has no IAP
+         (RU / web — permanent). Without an explicit branch the footer renders
+         blank, so show a loading hint until `ready`, then a plain
+         "unavailable here" note. -->
+    <IonNote v-else-if="!ready" class="footer-status">
+      {{ $t("settings.subscription.loading") }}
+    </IonNote>
+
+    <IonNote v-else class="footer-status">
+      {{ $t("settings.subscription.unavailable") }}
+    </IonNote>
+
     <IonButton
       v-if="showCantPay"
       expand="block"
@@ -104,6 +117,12 @@ export interface LegalDocumentView {
 const props = defineProps<{
   packages: PackageView[]
   isSubscribed: boolean
+  /**
+   * `true` once the purchases store finished its first round-trip (or
+   * determined the build has no IAP). Gates the loading vs. "unavailable
+   * here" fallback shown when there are no packages and no subscription.
+   */
+  ready: boolean
   purchasing: boolean
   restoring: boolean
   legalDocuments: LegalDocumentView[]
@@ -231,6 +250,15 @@ function onSubscribeClick(): void {
   margin: 0 16px;
   --box-shadow: none;
   font-size: 0.9rem;
+}
+
+.footer-status {
+  display: block;
+  margin: 12px 16px;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  color: var(--ion-color-medium);
+  text-align: center;
 }
 
 .legal {

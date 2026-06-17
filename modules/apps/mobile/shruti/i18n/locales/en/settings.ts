@@ -57,6 +57,8 @@ export default {
     trialThenPrice: "then {price} / {period}",
     startFreeTrial: "Start free trial",
     trialDisclaimer: "Cancel anytime. After the trial, the subscription renews automatically.",
+    loading: "Loading subscription options…",
+    unavailable: "In-app purchases aren't available on this device.",
     subscribed: "Subscription completed",
     manage: "Manage Subscription",
     restore: "Restore",
