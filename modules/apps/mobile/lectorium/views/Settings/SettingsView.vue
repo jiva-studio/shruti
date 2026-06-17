@@ -16,6 +16,12 @@
       @preferred-server-change="onPreferredServerChange"
     />
 
+    <SettingsLibraryGroup
+      :language-items="contentLanguageItems"
+      :selected="libraryLanguages"
+      @update:selected="setLibraryLanguages"
+    />
+
     <SettingsAppearanceGroup
       v-model:app-language="appLanguage"
       v-model:show-player-progress="showPlayerProgress"
@@ -28,12 +34,6 @@
       :is-subscribed="subscription.isSubscribed"
       @request-paywall="paywall.requestOpen($event)"
       @open-track-info="trackInfoOpen = true"
-    />
-
-    <SettingsLibraryGroup
-      :language-items="contentLanguageItems"
-      :selected="libraryLanguages"
-      @update:selected="setLibraryLanguages"
     />
 
     <SettingsChatGroup

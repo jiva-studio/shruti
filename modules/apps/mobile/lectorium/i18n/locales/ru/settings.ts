@@ -15,6 +15,7 @@ export default {
     about: "О приложении",
   },
   libraryLanguages: {
+    title: "Языки лекций",
     description: "Показывать лекции на этих языках в поиске, темах и рекомендациях.",
   },
 

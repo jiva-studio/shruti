@@ -15,6 +15,7 @@ export default {
     about: "About",
   },
   libraryLanguages: {
+    title: "Lecture languages",
     description: "Show lectures in these languages across search, topics and recommendations.",
   },
 
