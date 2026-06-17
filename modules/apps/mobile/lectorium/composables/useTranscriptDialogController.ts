@@ -2,7 +2,7 @@ import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type { Note } from "@lib/domain/note.js"
-import type { NoteShareContext } from "@lib/application/formatNoteShare.js"
+import type { NoteShareContext } from "@usecases/notes/formatNoteShare.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"

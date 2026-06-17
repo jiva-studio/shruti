@@ -13,7 +13,7 @@ import SectionLabel from "@ui/components/SectionLabel.vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
-import { listSimilarTracksByTopic } from "@lib/application/listSimilarTracksByTopic.js"
+import { listSimilarTracksByTopic } from "@usecases/discovery/listSimilarTracksByTopic.js"
 import type { Track } from "@lib/domain/track.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 

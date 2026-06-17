@@ -75,7 +75,7 @@ vi.mock("vue-i18n", () => ({
 vi.mock("@ionic/vue", () => ({
   toastController: { create: vi.fn() },
 }))
-vi.mock("@lib/application", () => ({
+vi.mock("@usecases", () => ({
   runChatTurn: vi.fn(),
   submitChatFeedback: vi.fn(),
   recordInlineHintCooldown: vi.fn(),

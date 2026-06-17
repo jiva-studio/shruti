@@ -1,7 +1,7 @@
 import { defineStore } from "pinia"
 import { computed, onScopeDispose, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
-import { playTrack, type PlayTrackError } from "@lib/application/playTrack.js"
+import { playTrack, type PlayTrackError } from "@usecases/playback/playTrack.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"

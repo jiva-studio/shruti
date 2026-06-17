@@ -1,5 +1,5 @@
 import type { Ref } from "vue"
-import type { RunChatTurnEvent } from "@lib/application"
+import type { RunChatTurnEvent } from "@usecases"
 // Type-only import — erased at runtime, so this does NOT create a runtime
 // import cycle with the store (the store imports this module's function).
 import type { ChatMessage } from "@lectorium/stores/useChatStore.js"

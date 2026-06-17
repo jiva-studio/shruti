@@ -9,7 +9,7 @@ import type {
   IProactiveStateRepository,
   ProactiveStateEntry,
 } from "@lib/domain/ports/proactiveStateRepository.js"
-import { getActivityOverview } from "@lib/application/getActivityOverview.js"
+import { getActivityOverview } from "@usecases/activity/getActivityOverview.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"

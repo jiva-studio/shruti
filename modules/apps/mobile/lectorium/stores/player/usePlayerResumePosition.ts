@@ -1,4 +1,4 @@
-import { getProgressForItem } from "@lib/application/getProgressForItem.js"
+import { getProgressForItem } from "@usecases/playback/getProgressForItem.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import { isCompleted } from "@lib/domain/listeningSession.js"
 import { useLectorium } from "@lectorium/lectorium.js"

@@ -1,7 +1,7 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { useRoute } from "vue-router"
 import { useI18n } from "vue-i18n"
-import { loadTrackDetail } from "@lib/application/loadTrackDetail.js"
+import { loadTrackDetail } from "@usecases/playback/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"

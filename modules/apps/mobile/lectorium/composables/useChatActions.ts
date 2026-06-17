@@ -3,7 +3,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 import { useToast } from "@kit/composables"
-import { saveCitationAsNote } from "@lib/application"
+import { saveCitationAsNote } from "@usecases"
 import type { TrackId } from "@lib/domain/core.js"
 
 /**

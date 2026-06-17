@@ -8,7 +8,7 @@
  * adapter (`@infra/chat/http/*`).
  *
  * The layered dependency rule structurally forbids a shared home for these:
- * `@lib/application` may import only `@lib/domain`, and `@ports/app` may
+ * `@usecases` may import only `@lib/domain`, and `@ports/app` may
  * import nothing. A use case that needs the chat-stream port therefore had no
  * place to import it from without breaking a rule. This module is that place.
  *
@@ -19,7 +19,7 @@
  *   own clean (camelCase) `ChatActionPayload` / `ChatOutlinePayload`; this
  *   layer carries the snake_case wire shapes the server actually emits.
  *
- * Who may import it: `@lib/domain`, `@lib/application`, `@ports/app`,
+ * Who may import it: `@lib/domain`, `@usecases`, `@ports/app`,
  * `@infra/*`, and the composition root.
  */
 export type {

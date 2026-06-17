@@ -97,7 +97,7 @@ import { useCollections } from "@lectorium/composables/useCollections.js"
 import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
-import { addTracksToPlaylist } from "@lib/application"
+import { addTracksToPlaylist } from "@usecases"
 import { useHomeController } from "./HomeView.controller.js"
 import { usePlaylistGroups } from "./usePlaylistGroups.js"
 

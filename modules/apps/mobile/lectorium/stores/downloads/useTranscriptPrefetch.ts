@@ -1,4 +1,4 @@
-import { downloadTranscripts } from "@lib/application/downloadTranscripts.js"
+import { downloadTranscripts } from "@usecases/downloads/downloadTranscripts.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useServerFallback } from "./useServerFallback.js"

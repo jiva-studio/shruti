@@ -1,5 +1,5 @@
 import { ref, type Ref } from "vue"
-import { loadTranscript } from "@lib/application/loadTranscript.js"
+import { loadTranscript } from "@usecases/playback/loadTranscript.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Transcript } from "@lib/domain/transcript.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"

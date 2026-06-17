@@ -1,7 +1,7 @@
 import { useLectorium } from "@lectorium/lectorium.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
-import type { PlaylistEntry } from "@lib/application/listPlaylistTracks.js"
+import type { PlaylistEntry } from "@usecases/playlist/listPlaylistTracks.js"
 
 export interface DerivedData {
   /** Position in **milliseconds** for each loaded item, derived from sessions. */

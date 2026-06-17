@@ -9,7 +9,7 @@ import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useHomeRowBuilder } from "./useHomeRowBuilder.js"
-import type { HeatmapDay } from "@lib/application/buildHeatmapDays.js"
+import type { HeatmapDay } from "@usecases/activity/buildHeatmapDays.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 
 export interface HomeControllerReturn {

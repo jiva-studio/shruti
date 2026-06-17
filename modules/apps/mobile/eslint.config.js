@@ -55,7 +55,7 @@ export default defineConfigWithVueTs(
         {
           patterns: [
             {
-              group: ["@lib/domain", "@lib/domain/*", "@lib/application/*"],
+              group: ["@lib/domain", "@lib/domain/*", "@usecases", "@usecases/**"],
               message: "Contracts must not import domain/application — keep them dependency-free",
             },
             { group: ["@ports/*"], message: "Contracts must not import technical ports" },
@@ -81,7 +81,7 @@ export default defineConfigWithVueTs(
         "error",
         {
           patterns: [
-            { group: ["@lib/application/*"], message: "Domain must not import application layer" },
+            { group: ["@usecases", "@usecases/**"], message: "Domain must not import application layer" },
             { group: ["@ports/*"], message: "Domain must not import technical ports" },
             { group: ["@infra/*"], message: "Domain must not import infrastructure" },
             { group: ["@ui/*"], message: "Domain must not import UI" },
@@ -98,7 +98,7 @@ export default defineConfigWithVueTs(
 
   // Application: depends on domain only
   {
-    files: ["submodules/application/**/*.ts"],
+    files: ["usecases/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -160,7 +160,7 @@ export default defineConfigWithVueTs(
               message: "Persistence row types must not import technical ports",
             },
             {
-              group: ["@lib/domain/*", "@lib/domain", "@lib/application/*"],
+              group: ["@lib/domain/*", "@lib/domain", "@usecases", "@usecases/**"],
               message:
                 "Persistence row types must not import domain or application — they are pure row shapes",
             },
@@ -202,7 +202,7 @@ export default defineConfigWithVueTs(
               message: "Infrastructure must not import composition root",
             },
             {
-              group: ["@lib/application/*"],
+              group: ["@usecases", "@usecases/**"],
               message: "Infrastructure must not import application layer",
             },
             {
@@ -236,7 +236,7 @@ export default defineConfigWithVueTs(
               group: ["@lib/domain/*", "@lib/domain"],
               message: "UI must not import domain — use mirror types",
             },
-            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@usecases", "@usecases/**"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
             {
               group: ["@capacitor/*"],
@@ -262,7 +262,7 @@ export default defineConfigWithVueTs(
               group: ["@lib/domain/*", "@lib/domain"],
               message: "UI must not import domain — use mirror types",
             },
-            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@usecases", "@usecases/**"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
             {
               group: ["@capacitor/*"],
@@ -291,7 +291,7 @@ export default defineConfigWithVueTs(
               group: ["@lib/domain/*", "@lib/domain"],
               message: "UI must not import domain — use mirror types",
             },
-            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@usecases", "@usecases/**"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
             {
               group: ["@capacitor/*"],
@@ -321,7 +321,7 @@ export default defineConfigWithVueTs(
               group: ["@lib/domain/*", "@lib/domain"],
               message: "UI must not import domain — use mirror types",
             },
-            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@usecases", "@usecases/**"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
             {
               group: ["@capacitor/*"],
@@ -354,7 +354,7 @@ export default defineConfigWithVueTs(
               group: ["@lib/domain/*", "@lib/domain"],
               message: "UI must not import domain — use mirror types",
             },
-            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@usecases", "@usecases/**"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
             {
               group: ["@capacitor/*"],

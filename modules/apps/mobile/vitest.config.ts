@@ -21,7 +21,7 @@ export default defineConfig({
       "@ui": path.resolve(__dirname, "./ui"),
       "@lectorium": path.resolve(__dirname, "./lectorium"),
       "@lib/domain": path.resolve(__dirname, "./submodules/domain"),
-      "@lib/application": path.resolve(__dirname, "./submodules/application"),
+      "@usecases": path.resolve(__dirname, "./usecases"),
       "@lib/persistence/main": path.resolve(__dirname, "./submodules/persistence-main"),
       "@lib/persistence/user": path.resolve(__dirname, "./submodules/persistence-user"),
       "@kit": path.resolve(__dirname, "../../kit/src"),
@@ -31,7 +31,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "submodules/domain/**/__tests__/**/*.test.ts",
-      "submodules/application/**/__tests__/**/*.test.ts",
+      "usecases/**/__tests__/**/*.test.ts",
       "infra/**/__tests__/**/*.test.ts",
       "lectorium/**/__tests__/**/*.test.ts",
     ],

@@ -1,5 +1,5 @@
 import { onBeforeUnmount, onMounted, watch, type Ref } from "vue"
-import { archivePlaylistItem } from "@lib/application/archivePlaylistItem.js"
+import { archivePlaylistItem } from "@usecases/playlist/archivePlaylistItem.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
 import { useLectorium } from "@lectorium/lectorium.js"

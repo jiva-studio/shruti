@@ -28,7 +28,7 @@ import {
   runChatTurn,
   submitChatFeedback,
   type RunChatTurnEvent,
-} from "@lib/application"
+} from "@usecases"
 import type {
   ChatActionPayload,
   ChatActionState,
@@ -112,7 +112,7 @@ function parseQuotaTier(raw: string | undefined): QuotaTier | undefined {
 
 /**
  * Owns the chat tab's reactive state and dispatches workflow verbs to
- * the use-cases in `@lib/application/chat`.
+ * the use-cases in `@usecases/chat`.
  *
  * The store does NOT touch SQL or HTTP directly — it pulls the repos +
  * chat service adapters off `useLectorium()` (built by the composition

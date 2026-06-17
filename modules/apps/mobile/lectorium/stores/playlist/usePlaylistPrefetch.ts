@@ -1,7 +1,7 @@
 import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { useTranscriptPrefetch } from "@lectorium/stores/downloads/useTranscriptPrefetch.js"
 import type { TrackId } from "@lib/domain/core.js"
-import type { PlaylistEntry } from "@lib/application/listPlaylistTracks.js"
+import type { PlaylistEntry } from "@usecases/playlist/listPlaylistTracks.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 
 /**
