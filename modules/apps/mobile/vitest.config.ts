@@ -16,22 +16,24 @@ export default defineConfig({
   resolve: {
     preserveSymlinks: true,
     alias: {
-      "@ports": path.resolve(__dirname, "./ports"),
-      "@infra": path.resolve(__dirname, "./infra"),
-      "@ui": path.resolve(__dirname, "./ui"),
       // The in-house Capacitor plugins share the `@shruti` npm scope
       // (`@shruti/plugin-*`) but live in node_modules, not under `./shruti`.
       // The broad `@shruti` alias below would otherwise rewrite them into
       // `./shruti/plugin-*` (nonexistent) — mirror vite.config's exclusion by
       // resolving the plugin packages explicitly first (more specific wins).
+      // The media-downloader SUT imports the real module (not mocked), so point
+      // it at the built ESM entry rather than the package dir.
       "@shruti/plugin-media-downloader": path.resolve(
         __dirname,
-        "./node_modules/@shruti/plugin-media-downloader"
+        "./node_modules/@shruti/plugin-media-downloader/dist/esm/index.js"
       ),
       "@shruti/plugin-audio-player": path.resolve(
         __dirname,
         "./node_modules/@shruti/plugin-audio-player"
       ),
+      "@ports": path.resolve(__dirname, "./ports"),
+      "@infra": path.resolve(__dirname, "./infra"),
+      "@ui": path.resolve(__dirname, "./ui"),
       "@shruti": path.resolve(__dirname, "./shruti"),
       "@lib/domain": path.resolve(__dirname, "./submodules/domain"),
       "@usecases": path.resolve(__dirname, "./usecases"),
