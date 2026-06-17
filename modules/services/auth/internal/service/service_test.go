@@ -450,6 +450,39 @@ func TestAnonymousReturnsExistingSessionForSignedInBearer(t *testing.T) {
 	}
 }
 
+// TestAnonymousWithBearerForDeletedUserDoesNotError — a social bearer
+// can stay cryptographically valid (15-min access TTL) after the account
+// it names is deleted. Re-issuing a session for that gone user used to
+// hit a dangling FK in refresh_tokens and 500. The handler must instead
+// fall through to the normal anonymous path and mint a fresh session.
+func TestAnonymousWithBearerForDeletedUserDoesNotError(t *testing.T) {
+	svc, stub := boot(t)
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{Subject: "g-del", Email: "del@example.com", EmailVerified: true}
+	signedIn, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub", DeviceID: "dev-gone"})
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+
+	if err := svc.DeleteAccount(ctx, signedIn.UserID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// The access token is still valid; Anonymous must not blow up on the
+	// dangling FK — it should mint a fresh anon session for the device.
+	again, err := svc.Anonymous(ctx, "dev-gone-2", signedIn.AccessToken)
+	if err != nil {
+		t.Fatalf("anonymous after delete must not error, got %v", err)
+	}
+	if again.UserID == signedIn.UserID {
+		t.Errorf("must not re-issue for the deleted user %s", signedIn.UserID)
+	}
+	if !again.Anonymous {
+		t.Error("fresh session for a new device must be anonymous")
+	}
+}
+
 // TestDeleteAccountEmitsOutbox covers the two observable effects of
 // DeleteAccount in one go:
 //

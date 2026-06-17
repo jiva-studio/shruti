@@ -24,6 +24,20 @@ const (
 	TierPro  = "pro"
 )
 
+// expiryGrace is a small slack applied to every "is this entitlement
+// still active?" comparison so modest clock skew between this service,
+// the DB, and RevenueCat doesn't flip a user Pro→free right at the
+// boundary (and back again on the next refetch). Picked well under the
+// shortest real subscription period so it can't keep a genuinely-expired
+// user on Pro for any meaningful time — it only smooths the boundary.
+const expiryGrace = 60 * time.Second
+
+// stillActive reports whether an entitlement whose expiry is `exp` should
+// still count as active at `now`, allowing for expiryGrace of skew.
+func stillActive(exp, now time.Time) bool {
+	return exp.After(now.Add(-expiryGrace))
+}
+
 // rcResponseMalformedTotal counts RC `GET /subscribers/{id}` payloads
 // where a required field was missing (no `subscriber` object, or no
 // `original_app_user_id` on it). We treat these as recoverable — fall
@@ -96,7 +110,7 @@ func SnapshotFromRCResponse(appUserID string, resp *rcclient.SubscriberResponse,
 			latest = nil // a nil among any active → "never expires" wins
 			break
 		}
-		if ent.ExpiresDate.After(now) {
+		if stillActive(*ent.ExpiresDate, now) {
 			snap.Tier = TierPro
 			if latest == nil || ent.ExpiresDate.After(*latest) {
 				e := *ent.ExpiresDate
