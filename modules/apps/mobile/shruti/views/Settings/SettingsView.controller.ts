@@ -132,7 +132,7 @@ export function useSettingsController(): SettingsControllerReturn {
     activeServer: app.activeServer,
   })
 
-  const { items: languageItems } = useAppLanguageList(app.repositories().languages)
+  const { items: languageItems } = useAppLanguageList()
 
   // Library content languages — the global lecture-language filter, backed by
   // the same persisted store the search language facet uses (one SSOT). The

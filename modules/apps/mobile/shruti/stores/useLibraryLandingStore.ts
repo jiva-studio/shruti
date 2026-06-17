@@ -123,10 +123,15 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     }
   }
 
-  async function loadLecturePool(language: string): Promise<void> {
+  async function loadLecturePool(languages: readonly LanguageCode[]): Promise<void> {
     try {
       lecturePool.value = await searchAndFilterTracks(
-        { query: "", languageCodes: [language], limit: PREVIEW_POOL_SIZE, offset: 0 },
+        {
+          query: "",
+          languageCodes: languages.length ? languages : undefined,
+          limit: PREVIEW_POOL_SIZE,
+          offset: 0,
+        },
         { tracks: app.repositories().tracks }
       )
     } catch (err) {
@@ -179,7 +184,7 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     const language = appLanguage.value
     await Promise.all([
       loadCollections(language),
-      loadLecturePool(language),
+      loadLecturePool(libraryLanguages.value),
       loadLectureCount(libraryLanguages.value),
       dictionaries.ensureLoaded(),
       recommendations.refresh(),
