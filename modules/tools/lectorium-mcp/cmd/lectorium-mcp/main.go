@@ -575,6 +575,12 @@ func main() {
 		}
 	}
 	topicsDeps.Cover = topicCoverGen
+	// Batch cover generation over all topics (async fan-out). Gated at call time
+	// on the generator being enabled; the lister works regardless.
+	topicsDeps.CoverBuild = topicsapp.CoverBuildUseCase{
+		Lister: sqlitecatalog.NewLazy(currentDBPath),
+		Cover:  topicCoverGen,
+	}
 
 	// Author avatar/bio (avatar upload disabled when no S3 bucket; bio set
 	// works regardless since it only writes the catalog DB).

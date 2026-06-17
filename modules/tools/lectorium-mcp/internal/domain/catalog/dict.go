@@ -29,12 +29,20 @@ func (k Kind) IDPrefix() string {
 }
 
 // DictEntry is one dictionary row collapsed across locales.
-//   Names      : language → full_name (one row per locale in DB)
-//   ShortName  : language → short_name (sources and topics)
+//
+//	Names      : language → full_name (one row per locale in DB)
+//	ShortName  : language → short_name (sources and topics)
 type DictEntry struct {
 	Id        string
 	Names     map[string]string
 	ShortName map[string]string // populated for KindSource and KindTopic
+}
+
+// TopicCover is one topic's cover-generation status: the id and whether a cover
+// image is already stored. Used by the batch cover build to skip done topics.
+type TopicCover struct {
+	ID       string
+	HasCover bool
 }
 
 // ListOpts is shared by *_list tools.
