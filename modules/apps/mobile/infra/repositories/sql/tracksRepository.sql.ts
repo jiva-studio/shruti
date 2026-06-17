@@ -533,6 +533,16 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       return pageIds.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined)
     },
 
+    async count(filters?: TrackListFilters): Promise<number> {
+      const filterParts = buildFilterClauses(filters ?? {})
+      const clauses = ["t.hidden = 0", ...filterParts.clauses]
+      const rows = await contentDb.query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM tracks t WHERE ${clauses.join(" AND ")}`,
+        [...filterParts.params]
+      )
+      return rows[0]?.n ?? 0
+    },
+
     async listYears(): Promise<readonly number[]> {
       // Distinct 4-digit year prefix of the date string, newest first.
       // Empty/null dates are excluded so the picker never offers a blank.

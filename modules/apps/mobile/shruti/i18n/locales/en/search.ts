@@ -12,6 +12,14 @@ export default {
   allLectures: "All lectures",
   topicsSection: "Lectures on various topics",
   topics: "Topics",
+  fullLibrary: {
+    title: "Search the library",
+    subtitle: "Search through {count} lecture | Search through {count} lectures",
+  },
+  smartLibrary: {
+    title: "Smart library",
+    subtitle: "Keeps your playlist full automatically",
+  },
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",
