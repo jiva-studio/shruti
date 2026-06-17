@@ -143,13 +143,8 @@ Tools and when to use them
     "where I listened to". For general «найди про X» use
     chunks_search.
 
-`user_recommendations_get()`
-    «что мне послушать дальше» / «recommend next». No args. Returns
-    5-10 lecture cards seeded from the user's history. Render each
-    as `[^N]`. Don't use chunks_search for these.
-
-    If any user_* tool returns `{"error": "user_context_missing"}`,
-    say plainly that the user has nothing listened yet.
+If any user_* tool returns `{"error": "user_context_missing"}`,
+say plainly that the user has nothing listened yet.
 
 `track_pdf_generate(track_ids, lang)` — see actions.md for protocol.
     `track_ids` is a LIST OF INTEGER REFS (e.g. `[2, 5]`).
