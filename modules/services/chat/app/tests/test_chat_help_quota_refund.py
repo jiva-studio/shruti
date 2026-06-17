@@ -8,22 +8,30 @@ non-exempt intent (research) keeps its charge.
 
 Driven against the real POST /chat handler + runner with a fake LLM
 stream and a refund-recording rate limiter (same harness shape as
-test_chat_disconnect_resume).
+test_chat_disconnect_resume). The mid-stream router_decision event is
+NOT fabricated — it's captured from a real `router_node` run so the
+producer/consumer contract is genuinely exercised.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from fastapi import Request
 
+from shruti_chat.agent.graph.nodes import router as router_node_mod
+from shruti_chat.agent.graph.nodes.router import router_node
+from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.api import chat as chat_api
 from shruti_chat.api.chat import chat
 from shruti_chat.api.schemas.chat import ChatRequestDto
 from shruti_chat.application.turn_runner import TurnRunner
+from shruti_chat.domain.routing import RoutingDecision
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
 
 
@@ -115,12 +123,70 @@ def _usage_current(events: list[dict[str, Any]]) -> int:
     return json.loads(frame["data"])["current"]
 
 
-def _stream_with_intent(intent: str):
+@dataclass
+class _RouterCtx:
+    llm: Any | None = None
+    request_id: str = "req-test"
+    kv_cache: Any | None = None
+    embed_task: Any | None = None
+    langfuse_trace_id: str | None = None
+    aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
+    lang: str = "ru"
+
+
+@dataclass
+class _RouterRuntime:
+    context: _RouterCtx
+
+
+async def _real_router_decision_event(
+    monkeypatch: pytest.MonkeyPatch, intent: str
+) -> dict[str, Any]:
+    """Run the REAL `router_node` and return the status event it emits.
+
+    The whole point of this test is the producer/consumer contract between
+    `router_node` (emits the SSE status event) and the API refund path
+    (consumes it). Fabricating the event would let the producer regress
+    silently — so we drive the node for real (with a scripted decision +
+    no-op classifier chain) and capture exactly what it pushes."""
+    emitted: list[dict[str, Any]] = []
+
+    async def _no_classifier(*_a, **_k):
+        return None
+
+    async def _identity_rewrite(_history, query, **_k):
+        return query
+
+    async def _fake_router_turn(*_a, **_k) -> RoutingDecision:
+        return RoutingDecision(intent=intent, confidence=0.95, extracted_args={})
+
+    monkeypatch.setattr(router_node_mod, "get_stream_writer", lambda: emitted.append)
+    monkeypatch.setattr(router_node_mod, "run_classifier_chain", _no_classifier)
+    monkeypatch.setattr(router_node_mod, "resolve_followup_query", _identity_rewrite)
+    monkeypatch.setattr(router_node_mod, "run_router_turn", _fake_router_turn)
+
+    await router_node(
+        {"user_query": "what can you do?", "lang": "en", "history": []},
+        _RouterRuntime(_RouterCtx()),
+    )
+
+    decision_events = [
+        e
+        for e in emitted
+        if e.get("type") == "status"
+        and (e.get("data") or {}).get("key") == "router_decision"
+    ]
+    assert len(decision_events) == 1, "router_node must emit exactly one decision event"
+    return decision_events[0]
+
+
+def _stream_with_intent(intent: str, router_event: dict[str, Any]):
     async def _fake_stream(*_args, **_kwargs):
-        # Router decision arrives mid-stream exactly as the real graph emits it.
-        yield _FakeAgentEvent(
-            "status", {"key": "router_decision", "params": {"intent": intent}}
-        )
+        # Router decision arrives mid-stream — and `router_event` is the
+        # payload the REAL `router_node` produced (captured in `_run`), so
+        # this exercises the genuine producer/consumer contract rather than
+        # a hand-fabricated shape.
+        yield _FakeAgentEvent(router_event["type"], router_event["data"])
         yield _FakeAgentEvent("delta", {"text": "answer"})
         yield _FakeAgentEvent("done", {})
 
@@ -128,7 +194,10 @@ def _stream_with_intent(intent: str):
 
 
 async def _run(monkeypatch, intent: str) -> tuple[_RecordingRateLimiter, dict[str, Any]]:
-    monkeypatch.setattr(chat_api, "run_chat_turn", lambda *a, **k: _stream_with_intent(intent)())
+    router_event = await _real_router_decision_event(monkeypatch, intent)
+    monkeypatch.setattr(
+        chat_api, "run_chat_turn", lambda *a, **k: _stream_with_intent(intent, router_event)()
+    )
     store = _FakeTurnStore()
     limiter = _RecordingRateLimiter()
     deps = _Deps(store, limiter)
