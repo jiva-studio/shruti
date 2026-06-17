@@ -1,0 +1,145 @@
+# Shruti mobile E2E tests
+
+End-to-end tests that drive the mobile web app through **real user gestures**
+(tab taps, list taps, the search box, the add-to-playlist button) with
+Playwright and assert behaviour — not pixels.
+
+Specs carry tags on two axes, and titles read `area · behaviour` so the report
+groups naturally.
+
+**Execution tag** (which server/report project):
+- **`@offline`** — deterministic, fast, no backend (intercepted fixtures). Runs in
+  the `mocked` project. This is what `npm test` runs.
+- **`@live`** — drives the real backend (local stack: chat + auth). Runs in the
+  `stack` project via `npm run test:live` (needs the stack up — see "Live tier").
+
+**Area tag** (which part of the app): `@home` · `@library` · `@player` ·
+`@transcript` · `@notes` · `@settings` · `@chat`. Filter with e.g.
+`npx playwright test --grep @chat` to run every chat journey across both tiers.
+
+One run, one report: `npm run test:all` runs `mocked` + `stack` into a single
+`playwright-report/` (open with `npm run report`).
+
+### `@offline` journeys
+
+| Spec | Journey |
+| --- | --- |
+| `launch` | app boots past Welcome to a populated Home |
+| `search` | the library search box filters the catalog list |
+| `track-card` | tapping a track opens its detail card |
+| `add-track` | adding from the card grows the playlist |
+| `delete-track` | swipe-delete shrinks the queue |
+| `play` | tapping a queued track activates the player |
+| `transcript` | starting a track reveals its transcript |
+| `notes` | the Notes tab lists the saved bookmarks |
+| `settings` | flipping a setting changes app behaviour |
+| `chat-render` | the chat composer + suggestions render |
+| `share-menu` | the track share menu offers a PDF export |
+
+### `@live` journeys (need the local stack)
+
+| Spec | Journey |
+| --- | --- |
+| `chat-send.live` | send a chat message → receive a streamed reply |
+
+## How it works
+
+The app needs a catalog DB and a user DB to run, and bounces to `/welcome`
+otherwise. Rather than click through onboarding, `support/bootstrap.ts` reuses
+the screenshot pipeline's recipe:
+
+- **Network interception** — `**/public/config.json` and the catalog
+  `**/public/db/shruti.*.db` are fulfilled from `fixtures/` so the app comes
+  up offline and deterministically; `**/public/tracks/*/audio/*` is served a
+  real ~1s silent MP3 so playback genuinely starts.
+- **IndexedDB pre-seed** — `fixtures/user-<locale>.db` (a seeded user with ~9
+  playlist tracks, history and notes) is written into IndexedDB before boot.
+- Transcript JSONs are **not** intercepted — they hit real S3, so the transcript
+  spec exercises the live fetch.
+
+Everything is driven through the rendered UI; the suite never touches the
+`window.__shruti.debug` bridge (the screenshot pipeline does). That bridge
+isn't compiled into the production/CI bundle, so depending on it would make the
+tests un-runnable in `bundle` mode.
+
+## Running locally
+
+Turnkey (a `Makefile` wraps everything — brings the stack up when needed):
+
+```bash
+cd modules/tests/e2e
+make install     # one-time: deps + chromium + fixtures
+make test        # offline suite (fast, no backend)
+make all         # offline + live (auto-starts the local stack) → one report
+make report      # open the HTML report (a video per test)
+```
+
+Or directly:
+
+```bash
+npm install
+./scripts/prepare-fixtures.sh   # one-time: build the gitignored DB fixtures
+npm test                        # offline   (or: npm run test:headed)
+./scripts/run-all.sh            # offline + live (auto-starts the stack)
+```
+
+`npm test` boots a Vite dev server on `E2E_PORT` (default 11097) and runs the
+`@offline` specs against it. A system Chrome is auto-detected; set `CHROME_PATH`
+to override.
+
+Every run records a **video of each test** and writes the HTML report to
+`playwright-report/`; open it with `npm run report` to watch what each test did.
+
+## Live tier (`@live`)
+
+These run against a real local backend instead of mocks — needed for chat
+send/receive (and, later, auth / PDF). The app is served with
+`VITE_DEV_REGION=true` so it points at the local stack (`localhost:11080` chat /
+`:11081` auth) while content still loads from the prod CDN.
+
+```bash
+./scripts/live-up.sh             # make stack-setup (first run) + stack-up + wait /readyz
+npm run test:live                # playwright.live.config.ts → @live specs
+```
+
+`live-up.sh` needs, in `../../../infra/app/.env.dev`: `OPENROUTER_API_KEY` (chat
+can't answer without it — `/readyz` stays false), `AWS_*` (corpus indexing), and
+a `SHRUTI_TS_IP` (only the search-mcp service; a dummy is fine). For grounded
+answers, seed a **small curated corpus** via the chat service's index/import
+path; an empty corpus still streams an ungrounded reply, enough for the
+send/receive smoke test.
+
+> **Worktree note** — when running from a `git worktree`, the mobile app needs
+> its `node_modules` and the `modules/kit` submodule. Symlink both from a fully
+> set-up checkout, e.g.
+> `ln -s <main>/modules/apps/mobile/node_modules modules/apps/mobile/node_modules`
+> and `ln -s <main>/modules/kit modules/kit`.
+
+## CI
+
+Two CI paths run this suite:
+
+- **`e2e (manual)` workflow** (`.github/workflows/e2e.yml`) — **the real run**.
+  Trigger it from the Actions tab (`workflow_dispatch`). It builds the in-house
+  plugins, prepares the fixtures (`prepare-fixtures.sh` fetches the published
+  catalog from the CDN and seeds the user DBs), installs Chromium, and runs the
+  full suite against the Vite dev server. Kept manual on purpose — it boots the
+  app, so it's heavier than the unit jobs and not worth gating every push on.
+
+- **kit reusable `e2e` job** (auto, on mobile PRs) — a **no-op**. It activates
+  because `package-lock.json` is committed, but every spec SKIPS when the
+  fixtures aren't prepared (`support/test.ts`), so it stays green without doing
+  real work. (`E2E_USE_BUNDLE=1` would make `playwright.config.ts` serve the
+  prebuilt `dist/` via `vite preview` instead of the dev server.)
+
+Follow-up before the auto job does real testing: wire `prepare-fixtures.sh` into
+it (or commit a slim catalog fixture so it can run offline).
+
+## Fixtures (`fixtures/`, gitignored except `silent.mp3`)
+
+- `content.db` — snapshot of the published catalog DB.
+- `user-en.db` / `user-ru.db` — seeded user DBs from the screenshot pipeline's
+  generator (`modules/tools/screenshots/generate-fixtures`).
+- `silent.mp3` — a valid ~1s silent MP3 audio stub (committed; small).
+
+Recreate the gitignored ones with `./scripts/prepare-fixtures.sh`.

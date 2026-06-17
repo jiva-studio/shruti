@@ -1,0 +1,45 @@
+name: e2e (manual)
+
+# Mobile end-to-end tests (Playwright, modules/tests/e2e). Run on demand from the
+# Actions tab — this boots the web app and drives real user journeys, so it's
+# heavier than the unit jobs and deliberately NOT gated on every push. The
+# reusable kit `e2e` job stays a no-op (it skips when fixtures aren't prepared);
+# this workflow prepares the fixtures and runs the suite for real.
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
+      - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # The web app pulls in the in-house Capacitor plugins; build them like the
+      # web-bundle job does so the dev server can resolve their packages.
+      - uses: ./.github/actions/build-audio-player
+      - uses: ./.github/actions/build-media-downloader
+      - name: install mobile app deps
+        run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - name: install e2e deps
+        run: cd modules/tests/e2e && npm ci --prefer-offline --no-audit
+      - name: prepare fixtures
+        run: cd modules/tests/e2e && ./scripts/prepare-fixtures.sh
+      - name: install chromium
+        run: cd modules/tests/e2e && npx playwright install --with-deps chromium
+      - name: run e2e
+        run: cd modules/tests/e2e && npx playwright test
+      - name: upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-playwright-report
+          path: modules/tests/e2e/playwright-report/
+          retention-days: 14
