@@ -27,9 +27,7 @@
       background="/library/search-bg.webp"
       background-dark="/library/search-bg-dark.webp"
       @click="openTracks"
-    >
-      <template #icon><IconSearch :size="26" :stroke-width="2" /></template>
-    </LibraryBanner>
+    />
 
     <TileSection
       v-if="topicTiles.length"
@@ -85,9 +83,7 @@
       background="/library/smart-bg.webp"
       background-dark="/library/smart-bg-dark.webp"
       @click="onSmartLibraryEntry"
-    >
-      <template #icon><IconSparkles :size="26" :stroke-width="2" /></template>
-    </LibraryBanner>
+    />
 
     <template v-if="previewLectures.length">
       <SectionHeader :title="$t('search.lecturesTitle')">
@@ -129,7 +125,7 @@
 import { computed, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { IonButton, onIonViewWillEnter } from "@ionic/vue"
-import { IconChevronRight, IconSearch, IconSparkles } from "@tabler/icons-vue"
+import { IconChevronRight } from "@tabler/icons-vue"
 import { AppPage } from "@ui/primitives/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
