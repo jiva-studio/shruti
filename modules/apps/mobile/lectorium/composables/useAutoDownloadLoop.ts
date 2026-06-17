@@ -7,7 +7,8 @@ import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { durationFilterBounds } from "@lib/domain/durationFilters.js"
 import { dateRangeBounds } from "@lib/domain/dateFilters.js"
 import type { TrackListFilters } from "@lib/domain/ports/trackRepository.js"
-import { maxAudioDurationMs } from "@lib/domain/track.js"
+import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
+import type { PlaylistItemId } from "@lib/domain/core.js"
 
 const MAX_ATTEMPTS_PER_RUN = 50
 const PAGE_SIZE = 50
@@ -54,7 +55,22 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
     }
   }
 
-  function queueDurationSec(): number {
+  /**
+   * Sum the remaining unlistened seconds across the FULL active set.
+   *
+   * `playlist.entries` is only the first loaded page (~50 rows), so a
+   * playlist deeper than one page would undercount and `refill()` would
+   * keep adding+downloading past the target. The caller passes the
+   * already-fetched `listActive()` snapshot so we account for every
+   * active item, not just the paged window.
+   */
+  /**
+   * Lower bound on remaining queued seconds, computed from the loaded
+   * `playlist.entries` page only. A subset of the active set, so it's
+   * always ≤ the true total — safe to use as a "definitely enough"
+   * short-circuit, never to decide we need MORE.
+   */
+  function pagedQueueLowerBoundSec(): number {
     let total = 0
     for (const entry of playlist.entries) {
       if (playlist.getCompletedAt(entry.item.id) !== null) continue
@@ -66,12 +82,28 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
     return total
   }
 
+  function queueDurationSec(activeTracks: readonly { itemId: string; track: Track }[]): number {
+    let total = 0
+    for (const { itemId, track } of activeTracks) {
+      if (playlist.getCompletedAt(itemId as PlaylistItemId) !== null) continue
+      const durMs = maxAudioDurationMs(track)
+      if (durMs <= 0) continue
+      const progressMs = playlist.getProgressMs(itemId as PlaylistItemId)
+      total += Math.max(0, Math.floor((durMs - progressMs) / 1000))
+    }
+    return total
+  }
+
   async function refill(): Promise<void> {
     if (running) return
     if (!purchases.isSubscribed) return
     const target = targetSeconds.value
     if (target <= 0) return
-    if (queueDurationSec() >= target) return
+    // Cheap lower-bound short-circuit: the paged `entries` are a SUBSET of
+    // the active set, so their remaining-duration sum can only be ≤ the
+    // true total. If even that partial sum already meets the target, the
+    // full set certainly does — skip the DB sweep below.
+    if (pagedQueueLowerBoundSec() >= target) return
     running = true
     try {
       const repos = app.repositories()
@@ -84,11 +116,24 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
       for (const i of activeItems) skipIds.add(i.trackId)
       for (const i of archivedItems) skipIds.add(i.trackId)
 
+      // Build the FULL active set's queue accounting from the complete
+      // `listActive()` snapshot (not the paged `playlist.entries`) so a
+      // >50-item playlist doesn't undercount the queued duration and
+      // over-download past the target. Tracks added during this run are
+      // appended to `activeTracks` so the per-iteration re-check stays
+      // accurate without re-querying the DB each pass.
+      const activeTrackById = await repos.tracks.getByIds(activeItems.map((i) => i.trackId))
+      const activeTracks: { itemId: string; track: Track }[] = []
+      for (const i of activeItems) {
+        const t = activeTrackById.get(i.trackId)
+        if (t) activeTracks.push({ itemId: i.id, track: t })
+      }
+
       const filters = currentFilters()
       const sortBy = filtersStore.sort
       let pageOffset = 0
       for (let attempts = 0; attempts < MAX_ATTEMPTS_PER_RUN; attempts++) {
-        if (queueDurationSec() >= target) return
+        if (queueDurationSec(activeTracks) >= target) return
         const page = await repos.tracks.list({
           filters,
           sortBy,
@@ -107,6 +152,13 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
           // Don't loop on a backend error — bail; the next external
           // event (toggle, completion) will retry.
           return
+        }
+        // Account for the freshly-added track so the next iteration's
+        // `queueDurationSec` reflects it. The new playlist item id is
+        // in the use-case result; fall back to skipping accounting if
+        // the add reported already-in-playlist (no new item).
+        if (result.ok) {
+          activeTracks.push({ itemId: result.value.id, track: next })
         }
       }
     } catch (err) {

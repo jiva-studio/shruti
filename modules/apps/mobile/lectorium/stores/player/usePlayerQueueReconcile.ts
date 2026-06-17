@@ -70,10 +70,16 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
           // Best-effort: a failed journal write shouldn't block the ack —
           // losing one history row is better than reprocessing forever.
         }
+        // A non-natural end (lock-screen skip / playback error) finished
+        // the item part-way. Even if that part-way position lands within
+        // COMPLETION_THRESHOLD_MS of the end, it must NOT mark completion
+        // (which would auto-archive an unfinished lecture) — suppress it
+        // via `allowCompletion: false`. Only `reason === "auto"` completes.
         playlist.patchProgress(
           e.finishedItemId,
           completed ? e.durationMs : e.finishedAtMs,
-          e.durationMs
+          e.durationMs,
+          { allowCompletion: completed }
         )
       }
     }
