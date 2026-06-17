@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { ref, type Ref } from "vue"
-import type { RunChatTurnEvent } from "@lib/application"
+import type { RunChatTurnEvent } from "@usecases"
 import { applyStreamingTurnEvent } from "../chatTurnReducer.js"
 import type { ChatMessage } from "../useChatStore.js"
 

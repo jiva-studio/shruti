@@ -1,6 +1,6 @@
 import { ref, watch, type Ref } from "vue"
 import { useDebounceFn } from "@vueuse/core"
-import { searchAndFilterTracks } from "@lib/application/searchAndFilterTracks.js"
+import { searchAndFilterTracks } from "@usecases/discovery/searchAndFilterTracks.js"
 import type { Track } from "@lib/domain/track.js"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"

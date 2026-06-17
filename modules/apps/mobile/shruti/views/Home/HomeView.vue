@@ -97,7 +97,7 @@ import { useCollections } from "@shruti/composables/useCollections.js"
 import { useSubscriptionBinding } from "@shruti/views/Settings/composables/useSubscriptionBinding.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useToast } from "@kit/composables"
-import { addTracksToPlaylist } from "@lib/application"
+import { addTracksToPlaylist } from "@usecases"
 import { useHomeController } from "./HomeView.controller.js"
 import { usePlaylistGroups } from "./usePlaylistGroups.js"
 

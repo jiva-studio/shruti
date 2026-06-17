@@ -13,7 +13,7 @@ import SectionLabel from "@ui/components/SectionLabel.vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
-import { listSimilarTracksByTopic } from "@lib/application/listSimilarTracksByTopic.js"
+import { listSimilarTracksByTopic } from "@usecases/discovery/listSimilarTracksByTopic.js"
 import type { Track } from "@lib/domain/track.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 

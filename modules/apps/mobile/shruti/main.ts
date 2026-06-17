@@ -60,6 +60,7 @@ import {
 import { createFailoverClient } from "@kit/servers"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
+import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
 import { installConsoleCapture } from "./services/logger/index.js"
 
 // Capture console.* into the in-memory debug buffer (Settings → Debug →
@@ -211,5 +212,14 @@ void hydrateRegions(preferences)
       .restore()
       .catch((e) => {
         console.warn("auth.restore failed", e)
+      })
+    // Warm the Search landing page in the background so it renders fully formed
+    // (no section-by-section pop-in) the moment the user opens the tab. Failures
+    // are non-fatal — the view re-runs ensureLoaded() on mount and shows its
+    // spinner if the data isn't ready yet.
+    void useLibraryLandingStore()
+      .ensureLoaded()
+      .catch((e) => {
+        console.warn("library landing preload failed", e)
       })
   })

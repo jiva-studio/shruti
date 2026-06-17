@@ -1,5 +1,5 @@
 <template>
-  <AppPage :reserve-bottom-space="player.open">
+  <AppPage :reserve-bottom-space="player.open" :loading="!landing.ready">
     <div class="page-top" aria-hidden="true" />
     <template v-if="recommendedRows.length">
       <SectionHeader :title="$t('search.recommendedForYou')" />
@@ -23,7 +23,9 @@
 
     <LibraryBanner
       :title="$t('search.fullLibrary.title')"
-      :description="$t('search.fullLibrary.subtitle', { count: lectureCount }, lectureCount)"
+      :description="
+        $t('search.fullLibrary.subtitle', { count: landing.lectureCount }, landing.lectureCount)
+      "
       background="/library/search-bg.webp"
       background-dark="/library/search-bg-dark.webp"
       @click="openTracks"
@@ -144,13 +146,13 @@ import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useRecommendationsStore } from "@shruti/stores/useRecommendationsStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
+import {
+  useLibraryLandingStore,
+  type GroupCollection,
+} from "@shruti/stores/useLibraryLandingStore.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
-import {
-  useCollectionGroups,
-  type GroupCollection,
-} from "@shruti/composables/useCollectionGroups.js"
 import { useShruti } from "@shruti/shruti.js"
 import { shuffled } from "@shruti/utils/shuffle.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
@@ -162,9 +164,8 @@ import {
 import { useSmartLibraryBinding } from "@shruti/views/Settings/composables/useSmartLibraryBinding.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
-import { searchAndFilterTracks } from "@lib/application/searchAndFilterTracks.js"
 import type { Track } from "@lib/domain/track.js"
-import type { TrackId, LanguageCode } from "@lib/domain/core.js"
+import type { TrackId } from "@lib/domain/core.js"
 
 const player = usePlayerStore()
 const router = useRouter()
@@ -176,23 +177,17 @@ const recommendations = useRecommendationsStore()
 const dictionaries = useDictionariesStore()
 const purchases = usePurchasesStore()
 const paywall = usePaywallStore()
-const { groups: collectionGroups, allCollections } = useCollectionGroups(appLanguage)
-
-// "Search the whole library" entry: the lecture count is scoped to the user's
-// chosen library content languages (the same facet the search sheet / Settings
-// → Library edit), so the number matches what the tracks search actually lists.
+// All the section data (collection groups, lecture pool, lecture count) loads as
+// one batch behind `landing.ready`, warmed at app startup — so the page renders
+// fully formed instead of popping its sections in one by one. The lecture count
+// is scoped to the user's chosen library content languages so it matches what
+// the tracks search lists.
+const landing = useLibraryLandingStore()
 const libraryLanguages = useLibraryLanguages()
-const lectureCount = ref(0)
-async function loadLectureCount(languages: readonly LanguageCode[]): Promise<void> {
-  try {
-    lectureCount.value = await app
-      .repositories()
-      .tracks.count(languages.length ? { languageCodes: languages } : undefined)
-  } catch (err) {
-    console.warn("[search] lecture count failed", err)
-  }
-}
-watch(libraryLanguages, (languages) => void loadLectureCount(languages), { immediate: true })
+// Reload the batch when the UI or library languages change (no-op otherwise);
+// the store keeps the current content visible until the new set is ready.
+watch([appLanguage, libraryLanguages], () => void landing.ensureLoaded())
+void landing.ensureLoaded()
 
 // "Smart library" entry — same binding the Settings page drives, so editing it
 // here and there reads/writes one persisted set. Gated behind the subscription:
@@ -251,13 +246,11 @@ function onSelectTopic(topicId: string): void {
   void router.push({ name: "topic-tracks", params: { topicId } })
 }
 
-const topGroups = computed(() => collectionGroups.value.slice(0, 2))
+const topGroups = computed(() => landing.collectionGroups.slice(0, 2))
 const OTHER_COLLECTIONS_LIMIT = 4
 const PREVIEW_LECTURES_LIMIT = 10
-const PREVIEW_POOL_SIZE = 40
 
 const otherCollections = ref<readonly GroupCollection[]>([])
-const lecturePool = ref<readonly Track[]>([])
 const lectureSample = ref<readonly Track[]>([])
 
 // mapRows keeps row state live and, in "discovery" context, folds playback
@@ -267,31 +260,20 @@ const previewLectures = mapper.mapRows(() => lectureSample.value, { context: "di
 
 function pickOtherCollections(): void {
   const shown = new Set(topGroups.value.flatMap((g) => g.collections.map((c) => c.id)))
-  otherCollections.value = shuffled(allCollections.value.filter((c) => !shown.has(c.id))).slice(
+  otherCollections.value = shuffled(landing.allCollections.filter((c) => !shown.has(c.id))).slice(
     0,
     OTHER_COLLECTIONS_LIMIT
   )
 }
 
 function pickLectures(): void {
-  lectureSample.value = shuffled(lecturePool.value).slice(0, PREVIEW_LECTURES_LIMIT)
+  lectureSample.value = shuffled(landing.lecturePool).slice(0, PREVIEW_LECTURES_LIMIT)
 }
 
-async function loadLecturePool(language: string): Promise<void> {
-  try {
-    lecturePool.value = await searchAndFilterTracks(
-      { query: "", languageCodes: [language], limit: PREVIEW_POOL_SIZE, offset: 0 },
-      { tracks: app.repositories().tracks }
-    )
-  } catch (err) {
-    console.warn("[search] lecture preview load failed", err)
-    lecturePool.value = []
-  }
-  pickLectures()
-}
-
-watch([collectionGroups, allCollections], pickOtherCollections, { immediate: true })
-watch(appLanguage, (language) => void loadLecturePool(language), { immediate: true })
+watch(() => [landing.collectionGroups, landing.allCollections], pickOtherCollections, {
+  immediate: true,
+})
+watch(() => landing.lecturePool, pickLectures, { immediate: true })
 // Re-pick the random topic tiles once the vocabulary / shelves are loaded, and
 // again on a language switch so the tile labels follow the new locale.
 watch(
@@ -301,10 +283,12 @@ watch(
 )
 
 onIonViewWillEnter(() => {
+  // Ensure the batch is loaded (no-op once warmed at startup), then reshuffle
+  // the random picks so the surface varies between visits.
+  void landing.ensureLoaded()
   pickOtherCollections()
   pickLectures()
   pickTopicTiles()
-  void dictionaries.ensureLoaded()
   // refresh (not ensureLoaded) so the profile reflects tracks heard since the
   // last visit — otherwise the shelves freeze on the first (often cold-start)
   // build until the app restarts.

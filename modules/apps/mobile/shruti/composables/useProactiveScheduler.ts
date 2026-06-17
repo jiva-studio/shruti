@@ -9,7 +9,7 @@ import type {
   IProactiveStateRepository,
   ProactiveStateEntry,
 } from "@lib/domain/ports/proactiveStateRepository.js"
-import { getActivityOverview } from "@lib/application/getActivityOverview.js"
+import { getActivityOverview } from "@usecases/activity/getActivityOverview.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShruti } from "@shruti/shruti.js"

@@ -1,7 +1,7 @@
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { useTranscriptPrefetch } from "@shruti/stores/downloads/useTranscriptPrefetch.js"
 import type { TrackId } from "@lib/domain/core.js"
-import type { PlaylistEntry } from "@lib/application/listPlaylistTracks.js"
+import type { PlaylistEntry } from "@usecases/playlist/listPlaylistTracks.js"
 import { useShruti } from "@shruti/shruti.js"
 
 /**

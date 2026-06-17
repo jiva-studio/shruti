@@ -3,7 +3,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useToast } from "@kit/composables"
-import { saveCitationAsNote } from "@lib/application"
+import { saveCitationAsNote } from "@usecases"
 import type { TrackId } from "@lib/domain/core.js"
 
 /**
