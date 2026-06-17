@@ -74,11 +74,15 @@ def _truncate(text: str) -> str:
 
 
 def _block(marker: str, tag: str, lines: list[str]) -> str:
-    """Render the marker, an indented expansion, and a closing tag."""
+    """Render the marker, an indented expansion, and a closing tag.
+
+    The closing tag ends with a newline so the answer prose that follows
+    the citation resumes on its own line instead of being glued to
+    `[/tag]` — keeps the trace readable when a marker sits mid-sentence."""
     body = "\n".join(f"  {line}" for line in lines if line)
     if not body:
         return marker
-    return f"{marker}\n{body}\n[/{tag}]"
+    return f"{marker}\n{body}\n[/{tag}]\n"
 
 
 def annotate_markers(text: str, aliases: TurnAliasMap) -> str:
