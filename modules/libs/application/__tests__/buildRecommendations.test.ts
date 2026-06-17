@@ -19,7 +19,7 @@ const noShuffle = <T>(items: readonly T[]): T[] => [...items]
 
 const baseInput = {
   now: 1_000_000,
-  language: "en" as LanguageCode,
+  languages: ["en"] as LanguageCode[],
   historyWindowMs: 1000,
   shelfTopics: 3,
   shelfSize: 12,
@@ -33,7 +33,7 @@ function makeDeps(over: Partial<BuildRecommendationsDeps> = {}): BuildRecommenda
     listeningSessions: { getTracksListenedInRange: async () => [] },
     topics: {
       weightsForTracks: async () => [],
-      listAll: async () => [],
+      topicIdsWithTracksIn: async () => [],
       topTrackIds: async () => [],
     },
     tracks: { getByIds: async (ids) => new Map(ids.map((id) => [id, mkTrack(id)])) },
@@ -56,7 +56,7 @@ describe("buildRecommendations", () => {
           { trackId: "h1" as TrackId, topicId: "tb" as TopicId, weight: 1 },
           { trackId: "h2" as TrackId, topicId: "ta" as TopicId, weight: 1 },
         ],
-        listAll: async () => [],
+        topicIdsWithTracksIn: async () => [],
         topTrackIds: async (topicId) =>
           topicId === ("tb" as TopicId) ? (["b1", "b2"] as TrackId[]) : (["a1"] as TrackId[]),
       },
@@ -77,7 +77,7 @@ describe("buildRecommendations", () => {
         weightsForTracks: async () => [
           { trackId: "h1" as TrackId, topicId: "tb" as TopicId, weight: 1 },
         ],
-        listAll: async () => [],
+        topicIdsWithTracksIn: async () => [],
         // h1 is heard, x1 is externally excluded, keep1 survives.
         topTrackIds: async () => ["h1", "x1", "keep1"] as TrackId[],
       },
@@ -98,7 +98,7 @@ describe("buildRecommendations", () => {
     const deps = makeDeps({
       topics: {
         weightsForTracks: async () => [],
-        listAll: async () => [{ id: "t1" as TopicId } as never, { id: "t2" as TopicId } as never],
+        topicIdsWithTracksIn: async () => ["t1", "t2"] as TopicId[],
         topTrackIds: async (topicId) =>
           topicId === ("t1" as TopicId) ? (["c1"] as TrackId[]) : (["c2"] as TrackId[]),
       },

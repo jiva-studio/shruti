@@ -17,6 +17,8 @@ import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import type { CdnServer } from "@lib/domain/servers.js"
 import { getRegions } from "@shruti/services/regionsRegistry.js"
 import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
+import { useContentLanguageList } from "./composables/useContentLanguageList.js"
+import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
 import {
   useSmartLibraryBinding,
@@ -57,6 +59,10 @@ export interface SettingsControllerReturn {
   notificationsTime: Ref<[number, number] | undefined>
   autoDownloadTargetSeconds: Ref<number>
   smartLibrary: UseSmartLibraryBindingReturn
+  /* Library content languages (the global lecture-language filter SSOT) */
+  libraryLanguages: ComputedRef<string[]>
+  contentLanguageItems: Ref<SelectorItem[]>
+  setLibraryLanguages: (codes: string[]) => void
   /* Selector sources */
   activeServerId: ComputedRef<string>
   serverItems: SelectorItem[]
@@ -128,6 +134,17 @@ export function useSettingsController(): SettingsControllerReturn {
 
   const { items: languageItems } = useAppLanguageList(app.repositories().languages)
 
+  // Library content languages — the global lecture-language filter, backed by
+  // the same persisted store the search language facet uses (one SSOT). The
+  // setter refuses an empty selection so at least one language always stays on.
+  const { items: contentLanguageItems } = useContentLanguageList(app.repositories().languages)
+  const filtersStore = useSearchFiltersStore()
+  void filtersStore.load()
+  const libraryLanguages = computed<string[]>(() => [...filtersStore.languageCodes])
+  function setLibraryLanguages(codes: string[]): void {
+    if (codes.length > 0) void filtersStore.setLanguages(codes)
+  }
+
   /* Notifications scheduler */
   watch(
     [notificationsEnabled, notificationsTime, appLanguage],
@@ -172,6 +189,9 @@ export function useSettingsController(): SettingsControllerReturn {
     notificationsTime,
     autoDownloadTargetSeconds,
     smartLibrary,
+    libraryLanguages,
+    contentLanguageItems,
+    setLibraryLanguages,
     activeServerId,
     serverItems,
     languageItems,

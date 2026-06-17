@@ -1,4 +1,4 @@
-import type { TopicId, TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, TopicId, TrackId } from "@lib/domain/core.js"
 import type { ITopicRepository } from "@lib/domain/ports/topicRepository.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { Track } from "@lib/domain/track.js"
@@ -8,6 +8,8 @@ export interface ListSimilarTracksByTopicInput {
   readonly track: Pick<Track, "id" | "topicIds">
   /** How many of the track's topics to use as the similarity seed. */
   readonly seedTopics: number
+  /** Restrict neighbours to these library languages (empty = no filter). */
+  readonly languages: readonly LanguageCode[]
   /** Max neighbours to return. */
   readonly limit: number
 }
@@ -31,7 +33,12 @@ export async function listSimilarTracksByTopic(
 ): Promise<readonly Track[]> {
   const seedTopics = input.track.topicIds.slice(0, input.seedTopics) as TopicId[]
   if (seedTopics.length === 0) return []
-  const ids = await deps.topics.similarTrackIds(seedTopics, input.track.id as TrackId, input.limit)
+  const ids = await deps.topics.similarTrackIds(
+    seedTopics,
+    input.track.id as TrackId,
+    input.languages,
+    input.limit
+  )
   if (ids.length === 0) return []
   const byId = await deps.tracks.getByIds([...ids])
   return ids.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined)

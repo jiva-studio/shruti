@@ -13,8 +13,10 @@ export interface RecommendationShelf {
 export interface BuildRecommendationsInput {
   /** Wall-clock now (ms). Injected so the use case stays pure/testable. */
   readonly now: number
-  /** Active UI language — shelves only show topic tracks with a variant in it. */
-  readonly language: LanguageCode
+  /** Library languages — shelves only show topic tracks with a variant in one
+   *  of them, and cold-start only picks topics that have such tracks. Empty =
+   *  no language filter. */
+  readonly languages: readonly LanguageCode[]
   /** How far back the taste profile looks. */
   readonly historyWindowMs: number
   /** How many top topics become shelves. */
@@ -35,7 +37,10 @@ export interface BuildRecommendationsInput {
 
 export interface BuildRecommendationsDeps {
   readonly listeningSessions: Pick<IListeningSessionRepository, "getTracksListenedInRange">
-  readonly topics: Pick<ITopicRepository, "weightsForTracks" | "listAll" | "topTrackIds">
+  readonly topics: Pick<
+    ITopicRepository,
+    "weightsForTracks" | "topicIdsWithTracksIn" | "topTrackIds"
+  >
   readonly tracks: Pick<ITrackRepository, "getByIds">
 }
 
@@ -85,16 +90,17 @@ export async function buildRecommendations(
   const hasHistory = hotTopics.length > 0
 
   // Cold start (or no topics matched the heard tracks): fall back to the first
-  // topics so the shelves still populate.
+  // topics that actually have lectures in the library languages, so the shelves
+  // populate and never lead to an empty topic page.
   if (hotTopics.length === 0) {
-    const all = await deps.topics.listAll()
-    hotTopics = all.slice(0, input.shelfTopics).map((t) => t.id)
+    const withTracks = await deps.topics.topicIdsWithTracksIn(input.languages)
+    hotTopics = [...withTracks].slice(0, input.shelfTopics)
   }
 
   const shelves: RecommendationShelf[] = []
   const topPicks: TrackId[] = []
   for (const topicId of hotTopics) {
-    const ids = (await deps.topics.topTrackIds(topicId, input.language, input.shelfSize)).filter(
+    const ids = (await deps.topics.topTrackIds(topicId, input.languages, input.shelfSize)).filter(
       (id) => !excluded(id)
     )
     if (ids.length === 0) continue
