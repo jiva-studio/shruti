@@ -254,11 +254,13 @@ export const scenarios: Scenario[] = [
   {
     // The redesigned discovery/browse page: "recommended for you", collection
     // carousels (groups), a topic-tile grid, and lecture shelves. Wait for the
-    // first collection carousel so the curated structure is on-screen; the
-    // longer settle lets the remote cover images paint.
+    // first cover card — a carousel collection OR a topic tile: collections are
+    // stored per content-language (en/ru only), so a UI locale without its own
+    // collections (e.g. sr-Latn) shows the topic grid but no carousels. Topics
+    // fall back, so the tile grid is the one section present for every locale.
     name: "07_search",
     route: "/tabs/search",
-    waitFor: ".carousel-section .collection-card",
+    waitFor: ".carousel-section .collection-card, .tile-section .collection-card",
     settle: 600,
     beforeCapture: settleDiscoveryCovers,
   },

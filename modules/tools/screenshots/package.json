@@ -5,7 +5,9 @@
   "scripts": {
     "capture": "playwright test specs/capture.spec.ts",
     "frame": "playwright test specs/frame.spec.ts",
-    "generate-user-fixture": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/generate-fixtures/index.ts"
+    "generate-user-fixture": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/generate-fixtures/index.ts",
+    "translate-titles": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/translate/titles.ts",
+    "translate-store-copy": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/translate/store-copy.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0"
