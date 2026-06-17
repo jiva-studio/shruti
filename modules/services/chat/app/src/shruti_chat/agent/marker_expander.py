@@ -43,6 +43,7 @@ from __future__ import annotations
 import re
 from typing import NamedTuple
 
+from shruti_chat.agent.markers import SENTENCE_MARKER_LEAK_RE
 from shruti_chat.agent.turn_aliases import (
     ChapterRef,
     ChunkRef,
@@ -128,6 +129,15 @@ _CARD_REF_RE = re.compile(
     r"^\[(?:verse|chapter):([A-Za-z0-9_]+)/([0-9.,-]+)(?:\|[^\]\n]*)?\]$"
 )
 
+# Extracts the track_id from a grammar-valid `[outline:track_X]` marker.
+# An outline card is legit only when `track_outline_get` actually ran for
+# that track this turn (it emits an `action` event with the items the card
+# renders). A marker for a track the turn never produced an outline for is
+# a hallucination — the client would mount an empty interactive list (a
+# silent no-op card). Validate against the set of grounded outline ids,
+# mirroring the action-id grounding check; DROP if absent.
+_OUTLINE_ID_RE = re.compile(r"^\[outline:([A-Za-z0-9_.-]+)\]$")
+
 # Runaway buffer cap — if we don't see `]` after this many chars, it
 # wasn't a marker.
 _MAX_BUFFER = 200
@@ -155,6 +165,7 @@ class MarkerExpander:
         *,
         request_id: str | None = None,
         emitted_action_ids: set[str] | None = None,
+        emitted_outline_ids: set[str] | None = None,
         commentary_as_card: bool = False,
         lazy_cards: bool = False,
     ) -> None:
@@ -193,6 +204,15 @@ class MarkerExpander:
         # unchanged, preserving legacy behaviour.
         self._emitted_action_ids = emitted_action_ids
 
+        # Track ids for which `track_outline_get` actually ran this turn
+        # (each emits an `outline` action carrying the card's items). A
+        # grammar-valid `[outline:track_X]` whose track is NOT in here is a
+        # model hallucination → dropped, so the client never mounts an empty
+        # outline card. `None` (tests / non-outline turns) means "no
+        # validation set" → grammar-valid outline markers pass through
+        # unchanged, mirroring `_emitted_action_ids`.
+        self._emitted_outline_ids = emitted_outline_ids
+
         # Optional 1-based-position → alias remap. The synthesizer numbers
         # its research notes by their POSITION in the final note list
         # (1..N), the same index-space the synthesis planner uses for
@@ -214,6 +234,12 @@ class MarkerExpander:
         # Aliases successfully expanded so far — used for within-response
         # dedup in `_format_ref`.
         self._emitted: set[int] = set()
+
+        # Per commentary alias, the union of sentence indices already shown
+        # in this response. Lets a repeat `[^N|s=…]` selecting a DIFFERENT
+        # range survive the dedup gate (a second, disjoint quote of the same
+        # purport) while an identical re-cite is still dropped.
+        self._emitted_comm_sel: dict[int, frozenset[int]] = {}
 
         # Count of `[<keyword>...]` brackets we DROPPED because they
         # looked like one of our marker types but didn't match the
@@ -488,12 +514,40 @@ class MarkerExpander:
                             marker=marker[:120],
                         )
                         return ""
+                    # Outline card markers: same grounding — a grammar-valid
+                    # `[outline:track_X]` whose track never produced an outline
+                    # this turn is a hallucination (empty no-op card on the
+                    # client). Drop it. `None` set ⇒ no validation (legacy).
+                    om = _OUTLINE_ID_RE.match(marker)
+                    if om is not None and self._emitted_outline_ids is not None:
+                        if om.group(1) not in self._emitted_outline_ids:
+                            self._malformed_count += 1
+                            log.info(
+                                "chat_outline_marker_ungrounded_dropped",
+                                request_id=self._request_id,
+                                track_id=om.group(1),
+                                emitted=sorted(self._emitted_outline_ids),
+                            )
+                            return ""
                     return marker
             self._malformed_count += 1
             log.info(
                 "chat_marker_malformed_dropped",
                 request_id=self._request_id,
                 marker=marker[:120],
+            )
+            return ""
+
+        # Bare `[s=N,…]` sentence-index token. The `|s=…` payload is only
+        # legal as a SUFFIX inside `[^N|s=…]`; a standalone `[s=0,2]` is
+        # producer-side garbage (the synth note renderer's `[s=N]` markers
+        # leaking past the model). Drop it instead of passing it through —
+        # the client would otherwise render the raw token in the bubble.
+        if SENTENCE_MARKER_LEAK_RE.fullmatch(marker):
+            log.info(
+                "chat_marker_sentence_token_leak_dropped",
+                request_id=self._request_id,
+                marker=marker[:80],
             )
             return ""
 
@@ -530,25 +584,58 @@ class MarkerExpander:
         this is the server-side enforcement so any model slip-up
         doesn't produce spammy duplicate chips."""
         ref: ChunkRef | VerseRef | None = None
-        if isinstance(n, int) and self._ref_remap is not None:
+        if isinstance(n, int) and self._ref_remap:
             # The LLM emitted a note POSITION (synthesizer note-header /
             # outline index-space). Translate to the real alias before any
             # resolve / dedup / caption lookup so every downstream lookup
-            # keys on the alias, not the position. A position the map
-            # doesn't know falls through unchanged → handled as an
-            # alias-miss below (drop, never guess).
-            n = self._ref_remap.get(n, n)
+            # keys on the alias, not the position. A non-empty remap is the
+            # authoritative position→alias map for this synthesis stream, so a
+            # position it does NOT contain is a non-citable note (e.g. a
+            # synthesizer note with no backing chunk): drop it as an alias-miss
+            # rather than resolving the raw position number as a literal alias
+            # — the position integer-space and the alias integer-space differ,
+            # so a fall-through could attach a chip to an unrelated source.
+            # (An empty remap means "no positional notes this stream" and is
+            # treated above as no remap at all — `[^N]` is then the alias.)
+            remapped = self._ref_remap.get(n)
+            if remapped is None:
+                log.info(
+                    "chat_marker_position_unmapped",
+                    request_id=self._request_id,
+                    position=n,
+                )
+                return ""
+            n = remapped
         if isinstance(n, int):
+            ref = self._aliases.resolve(n)
             # Dedup: if this exact alias has already been expanded in
             # this response, drop with log.
             if n in self._emitted:
+                # Commentary special-case: a repeat alias that selects a
+                # DIFFERENT sentence range of the same purport is NOT a
+                # duplicate chip — it's a second, disjoint quote the answer
+                # legitimately needs (e.g. `[^5|s=0]` opening the point, then
+                # `[^5|s=7]` for a later sentence). Plain dedup would silently
+                # drop the second quote. Let it through to `_format_commentary`
+                # so the new sentences render. Conservative: only when the new
+                # selection differs from what this alias already showed; an
+                # identical re-cite is still dropped as a true duplicate.
+                if isinstance(ref, CommentaryRef):
+                    new_sel = self._commentary_selection(ref, sentence_indices)
+                    prev_sel = self._emitted_comm_sel.get(n)
+                    if new_sel and new_sel != prev_sel:
+                        self._emitted_comm_sel[n] = (
+                            new_sel if prev_sel is None else prev_sel | new_sel
+                        )
+                        if self._commentary_as_card:
+                            return self._format_commentary_card(n, ref, sentence_indices)
+                        return self._format_commentary(ref, sentence_indices)
                 log.info(
                     "chat_marker_dedup_dropped",
                     request_id=self._request_id,
                     ref=n,
                 )
                 return ""
-            ref = self._aliases.resolve(n)
 
         if ref is None:
             # Unresolvable marker (no number, or an alias the LLM
@@ -573,6 +660,12 @@ class MarkerExpander:
         self._emitted.add(n)
 
         if isinstance(ref, CommentaryRef):
+            # Record which sentences this first cite of the alias showed, so a
+            # later repeat with a DIFFERENT selection can pass the dedup gate
+            # above (a disjoint quote of the same purport).
+            sel = self._commentary_selection(ref, sentence_indices)
+            if sel:
+                self._emitted_comm_sel[n] = sel
             # Card mode (client declared `commentary_card`): emit a numeric
             # marker `[commentary:N]` and queue an `action` payload carrying
             # ONLY the cited sentences + author + reference — exactly the
@@ -615,6 +708,24 @@ class MarkerExpander:
             return f"[card:{ref.track_id}]"
 
         return ""
+
+    def _commentary_selection(
+        self,
+        ref: CommentaryRef,
+        sentence_indices: list[int] | None,
+    ) -> frozenset[int]:
+        """Resolve the set of sentence indices a commentary marker would
+        actually render — mirroring the selection rules in
+        `_format_commentary` / `_format_commentary_card`: no `|s=…` → first 2
+        sentences; explicit indices clamped to range. Used by the dedup gate
+        to tell a repeat alias with a NEW selection (a disjoint quote) apart
+        from a true duplicate. Empty when nothing valid resolves."""
+        shown = ref.sentences_translated or ref.sentences
+        if not shown:
+            return frozenset()
+        if not sentence_indices:
+            return frozenset(range(min(2, len(shown))))
+        return frozenset(i for i in sentence_indices if 0 <= i < len(shown))
 
     def _format_commentary(
         self,

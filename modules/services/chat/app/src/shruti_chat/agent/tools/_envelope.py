@@ -149,7 +149,10 @@ def library_to_envelope(
     """
     meta: dict[str, Any] = {}
     item_kind = chunk.item_kind
-    ref: int | None
+    # Default so an unexpected `item_kind` (none of the branches below match)
+    # can't raise UnboundLocalError at the return — the envelope ships with a
+    # null ref (no alias minted) instead of crashing the whole turn.
+    ref: int | None = None
     if item_kind == "media":
         # Media clip: short video/audio fragment surfaced by ANN. Like a
         # verse, the LLM cites via `[^N]`; the expander unfolds it into
