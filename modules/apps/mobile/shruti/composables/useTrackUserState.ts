@@ -1,18 +1,10 @@
 import { useShruti } from "@shruti/shruti.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
-import {
-  buildChatUserContext,
-  type FocusFragmentPayload,
-  type UserContextPayload,
-} from "@usecases"
+import { buildChatUserContext, type FocusFragmentPayload, type UserContextPayload } from "@usecases"
 
 // Re-export the wire-format types so existing callers (chat store,
 // chat client) keep importing them from the composable's module path.
-export type {
-  FocusFragmentPayload,
-  UserContextPayload,
-  UserContextTrackPayload,
-} from "@usecases"
+export type { FocusFragmentPayload, UserContextPayload, UserContextTrackPayload } from "@usecases"
 
 /**
  * Vue-reactive bridge to the chat `UserContext` builder. The
