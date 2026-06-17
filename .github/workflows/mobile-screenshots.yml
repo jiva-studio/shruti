@@ -74,7 +74,16 @@ jobs:
       matrix:
         platform: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
+      # The `kit` submodule carries db-sync.sh and the vite aliases the dev
+      # server needs, and it's a private repo — fetch it over SSH exactly like
+      # apps-mobile.yml does. Without this the "sync content DB" step (and later
+      # the capture's vite.config) fail with a missing modules/kit/* file.
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
 
       - uses: actions/setup-node@v5
         with:
