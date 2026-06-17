@@ -11,7 +11,7 @@ import { shuffled } from "@shruti/utils/shuffle.js"
 import { searchAndFilterTracks } from "@usecases/discovery/searchAndFilterTracks.js"
 import type { CarouselItem } from "@ui/features/collections/index.js"
 import type { Track } from "@lib/domain/track.js"
-import type { LanguageCode } from "@lib/domain/core.js"
+import type { LanguageCode, TopicId } from "@lib/domain/core.js"
 
 /** One collection card within a group. */
 export interface GroupCollection {
@@ -77,6 +77,13 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   const topicTiles = ref<readonly CarouselItem[]>([])
   const lectureSample = ref<readonly Track[]>([])
 
+  // The topic ids that have ≥1 lecture in the selected library languages, used
+  // to drop topic tiles whose topic page would be empty under the current
+  // language. `null` means "no language filter" (no library languages selected
+  // ⇒ show every topic), distinct from an empty set (languages selected but no
+  // topic matched ⇒ show none).
+  const allowedTopicIds = ref<ReadonlySet<TopicId> | null>(null)
+
   // Track the (UI-language, library-languages) pair the loaded data belongs to
   // so a language switch reloads, and coalesce concurrent loads (startup
   // preload + the view's own mount call) onto one run.
@@ -140,6 +147,23 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     }
   }
 
+  async function loadAllowedTopicIds(languages: readonly LanguageCode[]): Promise<void> {
+    // No library languages selected ⇒ no filter (show every topic tile). With
+    // languages selected, only topics that have a lecture in one of them pass.
+    if (languages.length === 0) {
+      allowedTopicIds.value = null
+      return
+    }
+    try {
+      const ids = await app.repositories().topics.topicIdsWithTracksIn(languages)
+      allowedTopicIds.value = new Set(ids)
+    } catch (err) {
+      console.warn("[library-landing] allowed topic ids load failed", err)
+      // On failure fall back to "no filter" so we never blank the tile grid.
+      allowedTopicIds.value = null
+    }
+  }
+
   async function loadLectureCount(languages: readonly LanguageCode[]): Promise<void> {
     try {
       lectureCount.value = await app
@@ -160,7 +184,14 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
     ).slice(0, OTHER_COLLECTIONS)
 
     const inShelves = new Set(recommendations.shelves.map((s) => s.topicId))
-    topicTiles.value = shuffled(dictionaries.topics.filter((t) => !inShelves.has(t.id)))
+    // Drop topics with no lecture in the selected library languages so a tile
+    // never opens onto an empty topic page. `null` = no language filter.
+    const allowed = allowedTopicIds.value
+    topicTiles.value = shuffled(
+      dictionaries.topics.filter(
+        (t) => !inShelves.has(t.id) && (allowed === null || allowed.has(t.id))
+      )
+    )
       .slice(0, TOPIC_TILES)
       .map((topic) => ({
         id: topic.id,
@@ -186,6 +217,7 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
       loadCollections(language),
       loadLecturePool(libraryLanguages.value),
       loadLectureCount(libraryLanguages.value),
+      loadAllowedTopicIds(libraryLanguages.value),
       dictionaries.ensureLoaded(),
       recommendations.refresh(),
     ])

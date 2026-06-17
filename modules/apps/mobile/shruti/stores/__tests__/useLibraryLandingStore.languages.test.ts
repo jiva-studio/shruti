@@ -9,6 +9,12 @@ import { createPinia, setActivePinia } from "pinia"
 const searchAndFilterTracks = vi.fn().mockResolvedValue([{ id: "t1" }])
 // The scoped-count query — must receive the same library-language scope.
 const tracksCount = vi.fn().mockResolvedValue(0)
+// The topic-language filter query. Returns the topic ids that have a lecture in
+// the requested library languages; tests set the resolved value per case.
+const topicIdsWithTracksIn = vi.fn().mockResolvedValue([])
+
+// The topics dictionary the tile grid draws from. A test can swap this in.
+let dictionaryTopics: { id: string }[] = []
 
 // Library languages are driven by a writable holder so each test can set them
 // before the store loads.
@@ -29,6 +35,7 @@ vi.mock("@shruti/shruti.js", () => ({
         getGroupCollections: vi.fn().mockResolvedValue([]),
       },
       tracks: { count: tracksCount },
+      topics: { topicIdsWithTracksIn },
     }),
     filesStorage: {},
   }),
@@ -43,7 +50,9 @@ vi.mock("@shruti/composables/useLibraryLanguages.js", () => ({
 vi.mock("@shruti/stores/useDictionariesStore.js", () => ({
   useDictionariesStore: () => ({
     ensureLoaded: vi.fn().mockResolvedValue(undefined),
-    topics: [],
+    get topics() {
+      return dictionaryTopics
+    },
     topicShortNamesById: new Map(),
   }),
 }))
@@ -67,6 +76,9 @@ describe("useLibraryLandingStore — language scoping", () => {
     setActivePinia(createPinia())
     searchAndFilterTracks.mockClear()
     tracksCount.mockClear()
+    topicIdsWithTracksIn.mockClear()
+    topicIdsWithTracksIn.mockResolvedValue([])
+    dictionaryTopics = []
     libraryLanguagesRef.value = []
   })
 
@@ -98,5 +110,32 @@ describe("useLibraryLandingStore — language scoping", () => {
 
     // count gets `undefined` (no filter object) on an empty set.
     expect(tracksCount).toHaveBeenCalledWith(undefined)
+  })
+
+  it("hides topic tiles with no lecture in the selected library languages", async () => {
+    libraryLanguagesRef.value = ["en"]
+    dictionaryTopics = [{ id: "topic-en" }, { id: "topic-ru-only" }]
+    // Only topic-en has an English lecture; topic-ru-only is excluded.
+    topicIdsWithTracksIn.mockResolvedValue(["topic-en"])
+
+    const store = useLibraryLandingStore()
+    await store.ensureLoaded()
+
+    expect(topicIdsWithTracksIn).toHaveBeenCalledWith(["en"])
+    const tileIds = store.topicTiles.map((t) => t.id)
+    expect(tileIds).toEqual(["topic-en"])
+  })
+
+  it("does NOT filter topic tiles when no library language is selected", async () => {
+    libraryLanguagesRef.value = []
+    dictionaryTopics = [{ id: "topic-en" }, { id: "topic-ru-only" }]
+
+    const store = useLibraryLandingStore()
+    await store.ensureLoaded()
+
+    // No language filter ⇒ the query is skipped and every topic stays.
+    expect(topicIdsWithTracksIn).not.toHaveBeenCalled()
+    const tileIds = store.topicTiles.map((t) => t.id).sort()
+    expect(tileIds).toEqual(["topic-en", "topic-ru-only"])
   })
 })
