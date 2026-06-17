@@ -124,3 +124,43 @@ func TestMaskKey(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyPlanJSON(t *testing.T) {
+	var p client.DenoiseParams
+	pj := `{"segments":[
+		{"start_ms":0,"end_ms":275000,"strategy":"afftdn","nr":8},
+		{"start_ms":275000,"strategy":"deepfilternet"}
+	],"crossfade_ms":150}`
+	if err := applyPlanJSON(&p, pj); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Segments) != 2 {
+		t.Fatalf("want 2 segments, got %d", len(p.Segments))
+	}
+	s0 := p.Segments[0]
+	if s0.StartMs != 0 || s0.EndMs == nil || *s0.EndMs != 275000 || s0.Strategy != "afftdn" || s0.NR == nil || *s0.NR != 8 {
+		t.Errorf("segment0 = %+v", s0)
+	}
+	if s1 := p.Segments[1]; s1.EndMs != nil || s1.Strategy != "deepfilternet" {
+		t.Errorf("segment1 should be open-ended deepfilternet, got %+v", s1)
+	}
+	if p.CrossfadeMs != 150 {
+		t.Errorf("crossfade = %d, want 150", p.CrossfadeMs)
+	}
+}
+
+func TestApplyPlanJSON_DefaultsAndErrors(t *testing.T) {
+	var p client.DenoiseParams
+	if err := applyPlanJSON(&p, `{"segments":[{"start_ms":0,"strategy":"afftdn"}]}`); err != nil {
+		t.Fatal(err)
+	}
+	if p.CrossfadeMs != 120 {
+		t.Errorf("default crossfade = %d, want 120", p.CrossfadeMs)
+	}
+	if err := applyPlanJSON(&p, `{"segments":[]}`); err == nil {
+		t.Error("empty segments should error")
+	}
+	if err := applyPlanJSON(&p, `not json`); err == nil {
+		t.Error("malformed json should error")
+	}
+}

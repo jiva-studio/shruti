@@ -26,6 +26,16 @@ type S3Dest struct {
 	ContentType     string `json:"content_type,omitempty"`
 }
 
+// PlanSegment is one slice of a splice plan. Segments form a contiguous
+// partition of the timeline; each is cleaned with its own strategy.
+type PlanSegment struct {
+	StartMs  int      `json:"start_ms"`
+	EndMs    *int     `json:"end_ms,omitempty"` // nil on the last segment = end-of-file
+	Strategy string   `json:"strategy"`         // incl. "copy" (passthrough)
+	NR       *float64 `json:"nr,omitempty"`     // afftdn: per-segment override
+	NF       *float64 `json:"nf,omitempty"`     // afftdn: per-segment override
+}
+
 // DenoiseParams are the algorithm knobs forwarded to denoise_mp3.py.
 type DenoiseParams struct {
 	// Strategy: "deepfilternet" (default), "afftdn", "rnnoise",
@@ -35,6 +45,10 @@ type DenoiseParams struct {
 	NF       float64 `json:"nf"`      // afftdn: noise floor dB
 	MixMin   float64 `json:"mix_min"` // rnnoise-mix: original ratio in pauses
 	MixMax   float64 `json:"mix_max"` // rnnoise-mix: original ratio on voice
+	// Segments, when non-empty, splice per-segment strategies and override
+	// Strategy. Loudness is applied once over the whole spliced file.
+	Segments    []PlanSegment `json:"segments,omitempty"`
+	CrossfadeMs int           `json:"crossfade_ms,omitempty"` // seam crossfade, ms (default 120)
 }
 
 // CreateJobRequest is the POST /jobs body.
