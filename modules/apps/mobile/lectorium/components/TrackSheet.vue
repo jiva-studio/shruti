@@ -50,9 +50,14 @@ import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import {
+  preferredContentLanguage,
+  resolveLocalizedName,
+  resolveTrackTitle,
+} from "@lib/domain/services/localizedName.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useShareTrack } from "@lectorium/composables/useShareTrack.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
@@ -66,6 +71,7 @@ import SimilarTracksRow from "@lectorium/components/SimilarTracksRow.vue"
 const { t } = useI18n()
 const app = useLectorium()
 const appLanguage = useAppLanguage()
+const libraryLanguages = useLibraryLanguages()
 const sheet = useTrackSheetStore()
 const dictionaries = useDictionariesStore()
 const purchases = usePurchasesStore()
@@ -81,14 +87,23 @@ const selectedLanguage = ref<LanguageCode | null>(null)
 const open = computed(() => sheet.trackId !== null)
 const isSubscribed = computed(() => purchases.isSubscribed)
 
-const effectiveLang = computed<LanguageCode>(() => selectedLanguage.value ?? appLanguage.value)
+// Content language for this track: the library language it actually has, so the
+// title + transcript match the language the track was surfaced in. Falls back to
+// the UI language (and resolveTrackTitle then to the only existing variant).
+const contentLang = computed<LanguageCode>(
+  () =>
+    (track.value
+      ? preferredContentLanguage(track.value, libraryLanguages.value, appLanguage.value)
+      : undefined) ?? appLanguage.value
+)
 
-// Title + author follow the UI language (like the track list / mapper) so the
-// author shows its English name on an English UI. resolveTrackTitle still
-// falls back to the only existing title when there's no UI-language variant.
+const effectiveLang = computed<LanguageCode>(() => selectedLanguage.value ?? contentLang.value)
+
+// Title follows the content language; the author NAME is a label and follows the
+// UI language.
 const title = computed(() => {
   if (!track.value) return ""
-  return resolveTrackTitle(track.value, appLanguage.value) ?? track.value.id
+  return resolveTrackTitle(track.value, contentLang.value) ?? track.value.id
 })
 
 const author = computed(() => {
@@ -131,8 +146,15 @@ watch(
     if (!detail.ok || sheet.trackId !== id) return
     track.value = detail.value.track
     authorEntity.value = detail.value.author
+    // Default the shown transcript to the track's content language (a library
+    // language it has), else its first available — the user can still switch.
+    const preferred = preferredContentLanguage(
+      detail.value.track,
+      libraryLanguages.value,
+      appLanguage.value
+    )
     selectedLanguage.value =
-      detail.value.availableLanguages.find((l: LanguageCode) => l === appLanguage.value) ??
+      detail.value.availableLanguages.find((l: LanguageCode) => l === preferred) ??
       detail.value.availableLanguages[0] ??
       null
   }

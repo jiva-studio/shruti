@@ -4,6 +4,7 @@ import { buildTrackRow } from "@lectorium/composables/buildTrackRow.js"
 import { formatListeningDuration } from "@lectorium/composables/formatListeningDuration.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useDownloadStore, type DownloadState } from "@lectorium/stores/useDownloadStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
@@ -59,6 +60,7 @@ export interface UseTrackUiStateMapperReturn {
 export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   const { t } = useI18n()
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
   const dictionaries = useDictionariesStore()
   const downloads = useDownloadStore()
   const playlist = usePlaylistStore()
@@ -116,6 +118,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     // `useHomeRowBuilder`.
     return buildTrackRow(track, {
       preferredLanguage: appLanguage.value,
+      contentLanguages: libraryLanguages.value,
       authorsById: dictionaries.authorsById,
       locationsById: dictionaries.locationsById,
       sourcesById: dictionaries.sourcesById,

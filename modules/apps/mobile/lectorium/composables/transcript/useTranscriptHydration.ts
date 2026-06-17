@@ -5,14 +5,20 @@ import type { IAuthorRepository } from "@lib/domain/ports/authorRepository.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
 import type { Track } from "@lib/domain/track.js"
+import { preferredContentLanguage } from "@lib/domain/services/localizedName.js"
 
 export interface UseTranscriptHydrationOptions {
   /**
-   * Reactive UI language. Title and author display names are re-derived
-   * from the cached domain entities whenever this value changes, so the
-   * dialog updates without re-fetching when the user switches language.
+   * Reactive UI language. The author display name (a label) is re-derived
+   * from the cached entity whenever this changes.
    */
   preferredLanguage: MaybeRefOrGetter<LanguageCode>
+  /**
+   * The user's library languages — drive the transcript CONTENT (title +
+   * default shown language) so it matches the language the lecture was
+   * surfaced in, independent of the UI language. Empty → follow preferredLanguage.
+   */
+  libraryLanguages: MaybeRefOrGetter<readonly LanguageCode[]>
   /** Resolved on each call so the composable can be constructed before the
    *  content DB is open (e.g. mounted at app root). */
   getRepos: () => {
@@ -69,7 +75,8 @@ export function useTranscriptHydration(
   const title = computed<string>(() => {
     const track = trackEntity.value
     if (!track) return ""
-    const lang = toValue(options.preferredLanguage)
+    const ui = toValue(options.preferredLanguage)
+    const lang = preferredContentLanguage(track, toValue(options.libraryLanguages), ui) ?? ui
     const variant = track.variants.find((v) => v.language === lang) ?? track.variants[0]
     return variant?.title ?? ""
   })
@@ -101,7 +108,12 @@ export function useTranscriptHydration(
     }
 
     availableLanguages.value = await repos.transcripts.availableLanguages(trackId)
-    const lang = toValue(options.preferredLanguage)
+    // Default the shown transcript to the track's content language (a library
+    // language it has), else the first available — the user can still switch.
+    const ui = toValue(options.preferredLanguage)
+    const lang = track
+      ? (preferredContentLanguage(track, toValue(options.libraryLanguages), ui) ?? ui)
+      : ui
     const firstActive =
       availableLanguages.value.find((l) => l === lang) ?? availableLanguages.value[0]
     activeLanguages.value = firstActive ? [firstActive] : []

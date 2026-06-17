@@ -3,10 +3,15 @@ import { actionSheetController, loadingController } from "@ionic/vue"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { RenderTranscriptRequest, ShareOptions } from "@ports/app/index.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import {
+  preferredContentLanguage,
+  resolveLocalizedName,
+  resolveTrackTitle,
+} from "@lib/domain/services/localizedName.js"
 import type { Transcript } from "@lib/domain/transcript.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useToast } from "@kit/composables"
@@ -73,6 +78,7 @@ export function useShareTrack(): UseShareTrackReturn {
   const { t } = useI18n()
   const app = useLectorium()
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
   const overlays = useOverlaysStore()
   const toast = useToast()
   const shareJob = useShareJobStore()
@@ -133,10 +139,18 @@ export function useShareTrack(): UseShareTrackReturn {
     }
   }
 
-  // The transcript endpoints only speak ru / en; for any other UI
-  // language fall back to ru and let the server / repo pick what exists.
-  function reqLang(): LanguageCode {
-    return (appLanguage.value === "en" ? "en" : "ru") as LanguageCode
+  // Share in the user's content language: a library language actually available
+  // for this track, else the first available — so a Russian lecture is shared in
+  // Russian even on an English UI, while a single-language track shares the one
+  // language it has. When several library languages are available, break the tie
+  // by the UI language (mirrors preferredContentLanguage).
+  function pickShareLang(available: readonly LanguageCode[]): LanguageCode {
+    const candidates = libraryLanguages.value.filter((l) => available.includes(l))
+    if (candidates.length === 0) return available[0] as LanguageCode
+    if (candidates.includes(appLanguage.value as LanguageCode)) {
+      return appLanguage.value as LanguageCode
+    }
+    return candidates[0] as LanguageCode
   }
 
   async function presentShareMenu(trackId: TrackId): Promise<void> {
@@ -254,7 +268,7 @@ export function useShareTrack(): UseShareTrackReturn {
       const repos = app.repositories()
       const langs = await repos.transcripts.availableLanguages(trackId)
       if (langs.length === 0) return { ok: false, reason: "no_transcript" }
-      const lang = langs.includes(reqLang()) ? reqLang() : langs[0]
+      const lang = pickShareLang(langs)
       const transcriptKey = await repos.tracks.getTranscriptPath(trackId, lang)
       if (!transcriptKey) return { ok: false, reason: "no_transcript" }
 
@@ -273,18 +287,17 @@ export function useShareTrack(): UseShareTrackReturn {
   }
 
   function shareTranscriptText(trackId: TrackId): Promise<void> {
-    const lang = reqLang()
-    return run("pdf", `text:${trackId}:${lang}`, t("search.share.preparingText"), async () => {
+    return run("pdf", `text:${trackId}`, t("search.share.preparingText"), async () => {
       const repos = app.repositories()
       const langs = await repos.transcripts.availableLanguages(trackId)
       if (langs.length === 0) return { ok: false, reason: "no_transcript" }
-      const chosen = langs.includes(lang) ? lang : langs[0]
+      const chosen = pickShareLang(langs)
       const transcript = await repos.transcripts.get(trackId, chosen)
       const body = transcriptToText(transcript)
       if (!body) return { ok: false, reason: "no_transcript" }
 
       const track = await repos.tracks.getById(trackId)
-      const title = resolveTrackTitle(track, lang) ?? trackId
+      const title = resolveTrackTitle(track, chosen) ?? trackId
       const header = track?.date ? `${title} (${track.date})` : title
       return {
         ok: true,
@@ -298,7 +311,6 @@ export function useShareTrack(): UseShareTrackReturn {
   }
 
   function shareAudio(trackId: TrackId): Promise<void> {
-    const lang = reqLang()
     return run("audio", `audio:${trackId}`, t("search.share.preparingAudio"), async (ctx) => {
       const repos = app.repositories()
       const track = await repos.tracks.getById(trackId)
@@ -320,6 +332,9 @@ export function useShareTrack(): UseShareTrackReturn {
           }
         }))
 
+      const lang =
+        preferredContentLanguage(track, libraryLanguages.value, appLanguage.value) ??
+        appLanguage.value
       const title = resolveTrackTitle(track, lang) ?? trackId
       return {
         ok: true,

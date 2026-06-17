@@ -47,3 +47,33 @@ export function resolveTrackTitle(
   const variant = track.variants.find((v) => v.language === lang) ?? track.variants[0]
   return variant?.title && variant.title.length > 0 ? variant.title : undefined
 }
+
+/**
+ * The content language to DISPLAY a track in (title / transcript / audio):
+ * a library language the track actually has a variant in, else the track's own
+ * first variant language. `undefined` only for a track with no variants.
+ *
+ * This keeps display consistent with selection — a lecture that surfaced because
+ * it has a Russian variant is shown in Russian even on an English UI — while a
+ * single-language track always falls back to the one language it has (so a track
+ * outside the library languages, e.g. one sitting in the playlist, never renders
+ * blank or in a language it doesn't have). NOT for labels (author/location/
+ * source names, dates) — those follow the UI language.
+ *
+ * When several library languages match (both selected AND the track has both),
+ * the tie is broken by `uiLanguage`: among equally-valid library languages,
+ * prefer the one the user reads the interface in; otherwise the first in library
+ * priority order. Selection stays 100% library-driven — the UI language only
+ * orders an already-chosen set.
+ */
+export function preferredContentLanguage(
+  track: Pick<Track, "variants">,
+  libraryLanguages: readonly LanguageCode[],
+  uiLanguage?: LanguageCode
+): LanguageCode | undefined {
+  // Library languages the track actually has, in library priority order.
+  const candidates = libraryLanguages.filter((l) => track.variants.some((v) => v.language === l))
+  if (candidates.length === 0) return track.variants[0]?.language
+  if (uiLanguage && candidates.includes(uiLanguage)) return uiLanguage
+  return candidates[0]
+}

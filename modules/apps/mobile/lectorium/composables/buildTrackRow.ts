@@ -8,12 +8,18 @@ import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.
 import { groupReferences } from "@lib/domain/services/references.js"
 import { formatTrackDate } from "./formatTrackDate.js"
 import {
+  preferredContentLanguage,
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
 } from "@lib/domain/services/localizedName.js"
 
 export interface BuildTrackRowDeps {
+  /** UI language — drives LABELS: author/location/source names, date, ref
+   *  prefixes. Not the lecture title (see `contentLanguages`). */
   readonly preferredLanguage: LanguageCode
+  /** The user's library languages — drive the lecture TITLE so it matches the
+   *  language the track was surfaced in. Empty → title follows preferredLanguage. */
+  readonly contentLanguages: readonly LanguageCode[]
   readonly authorsById: ReadonlyMap<string, Author>
   readonly locationsById?: ReadonlyMap<string, Location>
   readonly sourcesById?: ReadonlyMap<string, Source>
@@ -48,7 +54,13 @@ export interface BuildTrackRowDeps {
  * localised source short-names.
  */
 export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow {
-  const title = resolveTrackTitle(track, deps.preferredLanguage) ?? track.id
+  // Title follows the content language (the library language this track has),
+  // so a lecture surfaced in Russian reads in Russian even on an English UI.
+  // Labels below stay on the UI language.
+  const contentLang =
+    preferredContentLanguage(track, deps.contentLanguages, deps.preferredLanguage) ??
+    deps.preferredLanguage
+  const title = resolveTrackTitle(track, contentLang) ?? track.id
   const author = track.authorId ? deps.authorsById.get(track.authorId) : null
   const authorName = resolveLocalizedNameOrEmpty(author, deps.preferredLanguage)
   const location = track.locationId ? deps.locationsById?.get(track.locationId) : null
