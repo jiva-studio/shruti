@@ -48,6 +48,38 @@ _IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 
 _SUPPORTED_PROTOCOL_VERSIONS = ("1",)
 
+# Intents that don't consume the user's daily chat quota. "help" is a
+# capability question ("what can you do", "how do I change region") —
+# people asking the assistant for help with the app shouldn't have it
+# eat into the limit that exists to bound LLM search/answer cost. The
+# router classifies intent only AFTER the rate gate has charged the
+# turn, so we credit it back in finalize() once the intent is known
+# (see _stream_with_intent_capture). Net effect: a help turn is charged
+# then refunded → it never reduces the remaining count.
+_QUOTA_EXEMPT_INTENTS = frozenset({"help"})
+
+
+async def _stream_with_intent_capture(
+    inner: AsyncIterator[Any], meta: dict[str, Any],
+) -> AsyncIterator[Any]:
+    """Tail the turn's event stream and record the router's chosen intent.
+
+    The router emits its decision as a `status` event with
+    `key=router_decision` and `params.intent=…` (proactive turns never
+    emit it, so `meta["intent"]` stays None there). finalize() reads the
+    captured intent to decide quota policy — it runs after the stream
+    drains, by which point the router has long since fired.
+    """
+    async for ev in inner:
+        if getattr(ev, "type", None) == "status":
+            data = getattr(ev, "data", None) or {}
+            if data.get("key") == "router_decision":
+                params = data.get("params") or {}
+                intent = params.get("intent")
+                if isinstance(intent, str):
+                    meta["intent"] = intent
+        yield ev
+
 
 def _check_protocol_version(version: str | None) -> None:
     """Enforce explicit SSE protocol handshake.
@@ -176,13 +208,19 @@ async def chat(
     effective_trace_id = client_trace_id or uuid.uuid4().hex
     turn_started = perf_counter()
 
+    # Filled in by _stream_with_intent_capture as the turn streams; read
+    # by finalize() to decide whether the charged quota unit is refunded
+    # (quota-exempt intents like "help"). Mutable so the closure sees it.
+    turn_meta: dict[str, Any] = {"intent": None}
+
     def build_stream(
         is_cancelled: Callable[[], Awaitable[bool]],
     ) -> AsyncIterator[Any]:
         # Resume / disconnect is the runner's concern; here we only choose
         # which turn to run and thread the runner's cancel predicate in.
+        # Wrap the chosen turn so finalize() learns the router's intent.
         if body.proactive is not None:
-            return run_proactive_turn(
+            inner = run_proactive_turn(
                 body.proactive.rule_kind,
                 body.proactive.rule_context,
                 lang=body.lang,
@@ -190,21 +228,23 @@ async def chat(
                 user_context=user_ctx,
                 is_disconnected=is_cancelled,
             )
-        return run_chat_turn(
-            [m.model_dump() for m in body.messages],
-            lang=body.lang,
-            translate_citations=body.translate_citations,
-            capabilities=body.capabilities,
-            request_id=request_id,
-            user_context=user_ctx,
-            is_disconnected=is_cancelled,
-            deps=deps,
-            session_id=body.session_id,
-            session_title=body.session_title,
-            client_trace_id=client_trace_id,
-            region=region,
-            turn_config=(body.config.model_dump() if body.config else None),
-        )
+        else:
+            inner = run_chat_turn(
+                [m.model_dump() for m in body.messages],
+                lang=body.lang,
+                translate_citations=body.translate_citations,
+                capabilities=body.capabilities,
+                request_id=request_id,
+                user_context=user_ctx,
+                is_disconnected=is_cancelled,
+                deps=deps,
+                session_id=body.session_id,
+                session_title=body.session_title,
+                client_trace_id=client_trace_id,
+                region=region,
+                turn_config=(body.config.model_dump() if body.config else None),
+            )
+        return _stream_with_intent_capture(inner, turn_meta)
 
     async def finalize(had_error: bool, completed: bool) -> dict[str, Any]:
         # Turn-specific teardown (the runner owns the task / buffer / finish):
@@ -214,8 +254,15 @@ async def chat(
         # delivers its answer to the buffer.
         if idempotency_key and had_error:
             await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
+        # Refund the charged quota unit on a failed turn (no answer
+        # delivered) OR a quota-exempt intent (a "help" turn that DID
+        # answer — asking the assistant for app help shouldn't burn the
+        # daily limit). Both go through the same best-effort decrement;
+        # the idempotency key above is only released on real failure, so
+        # a help turn still dedupes genuine duplicate sends.
+        quota_exempt = turn_meta["intent"] in _QUOTA_EXEMPT_INTENTS
         usage_current = rl.current_after
-        if had_error:
+        if had_error or quota_exempt:
             refunded = await deps.rate_limiter.refund(
                 user.id, user.anonymous, ip,
                 scope="chat", quota_id=user.quota_id,
