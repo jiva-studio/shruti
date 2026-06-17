@@ -33,6 +33,50 @@ def ci_build_id
 end
 
 # ---------------------------------------------------------------------------- #
+# Store locale registry — the single source of truth for which locales we
+# publish and how each maps to the two stores. Mirrored on the TS side by
+# modules/tools/screenshots/config.ts (both read store-locales.json). Adding a
+# language to the stores is one entry there; the lanes below derive everything
+# from it. Schema: see store-locales.json `$comment`.
+# ---------------------------------------------------------------------------- #
+def store_locales
+  @store_locales ||=
+    JSON.parse(File.read(File.join(MOBILE_ROOT, "store-locales.json"))).fetch("locales")
+end
+
+# App UI locales we generate screenshots for (capture != false).
+def capture_locales
+  store_locales.select { |_, v| v.fetch("capture", true) }.keys
+end
+
+# { app_locale => Google Play code } for entries published on Play.
+# `only` filters to a requested subset of app locales.
+def play_locale_map(only: nil)
+  store_locales.each_with_object({}) do |(loc, v), h|
+    next if v["play"].nil?
+    next if only && !only.include?(loc)
+    h[loc] = v["play"]
+  end
+end
+
+# { app_locale => App Store Connect code } for entries the App Store supports
+# (appStore == null is skipped — e.g. Serbian, which the store can't take).
+def app_store_locale_map(only: nil)
+  store_locales.each_with_object({}) do |(loc, v), h|
+    next if v["appStore"].nil?
+    next if only && !only.include?(loc)
+    h[loc] = v["appStore"]
+  end
+end
+
+# Parse a lane's `locales:` option ("en,ru") into an array, or default to the
+# full capture set from the registry.
+def requested_locales(options)
+  return capture_locales if options[:locales].to_s.strip.empty?
+  options[:locales].split(",").map(&:strip)
+end
+
+# ---------------------------------------------------------------------------- #
 # Shared setup (runs before every lane on both platforms)
 # ---------------------------------------------------------------------------- #
 
@@ -129,8 +173,10 @@ platform :android do
     screenshots_tool = File.expand_path("../../tools/screenshots", MOBILE_ROOT)
     metadata_root = File.join(__dir__, "metadata/android")
 
-    locales = (options[:locales] || "en,ru").split(",").map(&:strip)
-    locale_map = { "en" => "en-US", "ru" => "ru-RU" }.select { |k, _| locales.include?(k) }
+    # app_locale => Play code, for the requested (or all-capture) locales that
+    # are actually published on Play.
+    locale_map = play_locale_map(only: requested_locales(options))
+    locales = locale_map.keys
     # First iteration: phone-only. tablet7 / tablet10 projects don't exist in
     # `modules/tools/screenshots/playwright.config.ts` yet — when they're
     # added, extend this map and the `project_flags` line below.
@@ -224,6 +270,29 @@ platform :android do
     upload_to_play_store(**play_params)
   end
 
+  desc "Upload Google Play listing copy (titles/descriptions) from metadata/android/. " \
+       "Gated: commits the edit but does NOT submit for review. Pass dry_run:true to validate only."
+  lane :metadata do |options|
+    # supply uploads every locale dir present under metadata_path/android. We
+    # only commit complete listings (see store-locales.json `canonical` +
+    # translate-store-copy), so there's nothing partial to blank out a listing.
+    # Listing copy is not tied to a release, so no version_code/AAB is needed.
+    upload_to_play_store(
+      track: "internal",
+      json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
+      metadata_path: PLAY_METADATA_PATH,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true,
+      # Commit the edit, but leave submission to the user in the Play Console.
+      changes_not_sent_for_review: true,
+      validate_only: options[:dry_run] ? true : false,
+    )
+  end
+
   # ---- private ----
 
   private_lane :setup_keystore do
@@ -250,7 +319,6 @@ platform :android do
     }
   end
 
-  PLAY_LOCALES = %w[en-US ru-RU].freeze
   # Absolute path: fastlane chdirs into actions with a different CWD than the
   # lane body, so a `__dir__`-based relative path resolves differently for
   # `write_play_changelog_files!` (writes from fastlane/) and for `supply`
@@ -287,8 +355,9 @@ platform :android do
   def write_play_changelog_files!
     build_id = ci_build_id
     return if build_id.empty?
-    notes = ReleaseNotes.generate(locales: PLAY_LOCALES)
-    PLAY_LOCALES.each do |locale|
+    play_locales = play_locale_map.values
+    notes = ReleaseNotes.generate(locales: play_locales)
+    play_locales.each do |locale|
       dir = File.join(PLAY_METADATA_PATH, locale, "changelogs")
       FileUtils.mkdir_p(dir)
       File.write(File.join(dir, "#{build_id}.txt"), notes.fetch(locale))
@@ -305,6 +374,10 @@ platform :ios do
   IOS_SCHEME = "App"
   IOS_PROVISIONING_PROFILE_NAME = "Lectorium Distribution"
   IOS_IPA_PATH = File.join(MOBILE_ROOT, "ios/App/build/App.ipa")
+  # App Store listing copy (name/subtitle/description/keywords). Kept in its own
+  # tree — deliver scans metadata_path for locale subdirs and would choke on the
+  # `android` folder if pointed at the shared metadata/ root.
+  IOS_METADATA_PATH = File.join(MOBILE_ROOT, "fastlane/metadata/ios")
 
   desc "Build a signed App Store IPA"
   lane :build do
@@ -382,9 +455,11 @@ platform :ios do
     # screenshots in their own tree.
     metadata_root = File.join(__dir__, "ios-screenshots")
 
-    locales = (options[:locales] || "en,ru").split(",").map(&:strip)
-    # App Store Connect uses "ru" (no country suffix), unlike Google Play which uses "ru-RU".
-    locale_map = { "en" => "en-US", "ru" => "ru" }.select { |k, _| locales.include?(k) }
+    # app_locale => App Store code, for the requested (or all-capture) locales
+    # the App Store actually supports. Serbian (appStore:null) is dropped here,
+    # so it never gets captured or staged for iOS.
+    locale_map = app_store_locale_map(only: requested_locales(options))
+    locales = locale_map.keys
     devices = %w[iphone67 ipad13]
     project_flags = locales.flat_map { |l|
       devices.map { |d| "--project=#{d}-#{l}" }
@@ -449,6 +524,26 @@ platform :ios do
       submit_for_review: false,
       # Don't auto-publish: user reviews staged set in App Store Connect before submitting.
       automatic_release: false,
+    )
+  end
+
+  desc "Upload App Store listing copy (name/subtitle/description/keywords) from " \
+       "metadata/ios/. Gated: does NOT submit for review. Serbian and other " \
+       "App-Store-unsupported locales are simply absent from metadata/ios/."
+  lane :metadata do
+    setup_app_store_connect_api_key
+    deliver(
+      app_identifier: IOS_BUNDLE_ID,
+      metadata_path: File.expand_path(IOS_METADATA_PATH),
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_app_version_update: true,
+      run_precheck_before_submit: false,
+      submit_for_review: false,
+      automatic_release: false,
+      # Skip the interactive HTML preview/confirmation — this lane is run
+      # deliberately and the user reviews the result in App Store Connect.
+      force: true,
     )
   end
 

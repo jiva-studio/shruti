@@ -1,8 +1,9 @@
 /* Rubik — a substantial sans with softly rounded corners (no serifs), heavier
    on the page than Inter's squared geometry or Nunito's lighter humanist cut.
-   Cyrillic + Latin ship as separate subsets; the Cyrillic face carries a
-   unicode-range so RU headlines pick it up, the Latin face (no range) covers
-   everything else. */
+   Cyrillic + Latin + Latin-Extended ship as separate subsets; the Cyrillic
+   face carries a unicode-range so RU headlines pick it up, Latin-Extended
+   carries diacritics for Latin-script locales (Polish, Serbian, …), and the
+   plain Latin face (no range) is the catch-all for everything else. */
 @font-face {
   font-family: "Rubik";
   src: url("fonts/rubik-cyrillic-400-normal.woff2") format("woff2");
@@ -32,6 +33,28 @@
   font-weight: 700;
   font-style: normal;
   font-display: block;
+}
+/* Latin Extended subset — carries the diacritics for Latin-script locales
+   (Polish ł ą ę ż, Serbian č ć ž š đ, …; U+0100–024F) that the plain `latin`
+   subset omits. Declared AFTER the latin faces with an explicit unicode-range
+   so it wins for those codepoints while latin stays the catch-all. */
+@font-face {
+  font-family: "Rubik";
+  src: url("fonts/rubik-latin-ext-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+1E00-1EFF, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Rubik";
+  src: url("fonts/rubik-latin-ext-700-normal.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+1E00-1EFF, U+2C60-2C7F, U+A720-A7FF;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

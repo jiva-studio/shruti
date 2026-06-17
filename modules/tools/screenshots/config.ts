@@ -1,19 +1,50 @@
 /**
- * Single source of truth for which locales and device form factors the
- * screenshot pipeline produces. Everything else — Playwright projects, the
- * capture spec, fixture generation, and framing — derives from here, so adding
- * a language or a device is a one-line change.
+ * Which locales and device form factors the screenshot pipeline produces.
+ * The locale list is NOT defined here — it's derived from the shared store
+ * registry (modules/apps/mobile/store-locales.json), the single source of
+ * truth that fastlane reads too. Everything else (Playwright projects, the
+ * capture spec, fixture generation, framing) derives from this module.
  *
- * To add a UI locale:
- *   1. append it to CAPTURE_LOCALES (must be one of the app's SUPPORTED_LOCALES
- *      in modules/apps/mobile/lectorium/i18n/index.ts),
- *   2. add its headlines to frame/titles.json,
+ * To add a UI locale to the stores + screenshots:
+ *   1. add an entry to modules/apps/mobile/store-locales.json (the locale must
+ *      be one of SUPPORTED_LOCALES in lectorium/i18n/index.ts),
+ *   2. add its headlines to frame/titles.json (or run `npm run translate-titles`),
  *   3. generate its user.db fixture (`npm run generate-user-fixture`).
  */
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-/** UI locales to capture. Subset of the app's SUPPORTED_LOCALES. */
-export const CAPTURE_LOCALES = ["en", "ru"] as const
-export type CaptureLocale = (typeof CAPTURE_LOCALES)[number]
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+/** One store registry entry (see store-locales.json `$comment`). */
+export interface StoreLocale {
+  /** Google Play locale code, or null if not published on Play. */
+  play: string | null
+  /** App Store Connect locale code, or null if the store can't take it. */
+  appStore: string | null
+  /** Whether to generate marketing screenshots for this locale. */
+  capture?: boolean
+  /** Hand-authored copy that auto-translation must never overwrite. */
+  canonical?: boolean
+}
+
+/** The shared store registry, keyed by app UI locale. */
+export const STORE_LOCALES: Record<string, StoreLocale> = (() => {
+  const registryPath = path.resolve(__dirname, "../../apps/mobile/store-locales.json")
+  const raw = JSON.parse(fs.readFileSync(registryPath, "utf-8")) as {
+    locales: Record<string, StoreLocale>
+  }
+  return raw.locales
+})()
+
+/** UI locales to capture screenshots for (registry entries with capture !== false). */
+export const CAPTURE_LOCALES: string[] = Object.entries(STORE_LOCALES)
+  .filter(([, v]) => v.capture !== false)
+  .map(([k]) => k)
+
+/** A UI locale string — the registry is data-driven, so this is just a string. */
+export type CaptureLocale = string
 
 /**
  * Track audio + transcripts + outlines exist only in `en` and `ru`. Map any UI
