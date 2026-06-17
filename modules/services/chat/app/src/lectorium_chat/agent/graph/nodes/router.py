@@ -15,9 +15,13 @@ from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prior_refs import extract_prior_track_refs
 from lectorium_chat.application.followup_rewrite import resolve_followup_query
 from lectorium_chat.application.router_turn import run_router_turn
+from lectorium_chat.domain.routing import RoutingDecision
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
-from lectorium_chat.observability.logging import bind_node_role
+from lectorium_chat.observability.logging import bind_node_role, get_logger
+
+
+log = get_logger(__name__)
 
 
 # Deterministic classifiers tried before the LLM router. Stateless — built
@@ -68,15 +72,29 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
         # surface track refs the user can point at? Disambiguates deictic
         # follow-ups and keys the router cache so they don't collide.
         prior_turn_had_refs = bool(extract_prior_track_refs(state.get("history")))
-        decision = await run_router_turn(
-            query,
-            lang=state["lang"],
-            llm=ctx.llm,
-            request_id=ctx.request_id,
-            prior_turn_had_refs=prior_turn_had_refs,
-            kv_cache=ctx.kv_cache,
-            callbacks=[cb] if cb is not None else None,
-        )
+        # A genuine parse failure (structured-output retries + fallback model
+        # + JSON salvage all exhausted) raises out of run_router_turn. The
+        # domain design says `unknown` is the intended soft fallback — a failed
+        # classification must NOT kill the whole turn. Catch and degrade so the
+        # turn proceeds down the documented synthesizer path.
+        try:
+            decision = await run_router_turn(
+                query,
+                lang=state["lang"],
+                llm=ctx.llm,
+                request_id=ctx.request_id,
+                prior_turn_had_refs=prior_turn_had_refs,
+                kv_cache=ctx.kv_cache,
+                callbacks=[cb] if cb is not None else None,
+            )
+        except Exception:
+            log.exception(
+                "router_turn_failed_soft_fallback_unknown",
+                request_id=ctx.request_id,
+            )
+            decision = RoutingDecision(
+                intent="unknown", confidence=0.0, extracted_args={},
+            )
     # Cancel the speculative embed task for intents that don't consume
     # the embedding. Saves one OpenRouter call per direct_chat / help /
     # create_action turn; on research / find_track / unknown we leave
@@ -88,6 +106,14 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
     }:
         ctx.embed_task.cancel()
         ctx.embed_task = None
+    # Surface the routing decision as an SSE `status` event. The API layer
+    # (`api/chat.py`) and the Langfuse `router_intent` score both look for a
+    # `status` event with key=router_decision / params.intent — without this
+    # emit the help-quota refund path is dead code and the intent is never
+    # observable. Emitted for every path (deterministic, follow-up, LLM).
+    get_stream_writer()(
+        {"type": "status", "data": {"key": "router_decision", "params": {"intent": decision.intent}}}
+    )
     return {
         "intent": decision.intent,
         "confidence": decision.confidence,
