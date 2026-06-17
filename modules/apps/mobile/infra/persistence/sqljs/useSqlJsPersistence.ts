@@ -113,6 +113,11 @@ export function useSqlJsPersistence(): IPersistence {
         },
 
         async close(): Promise<void> {
+          // Flush any in-flight / queued coalesced save before tearing the
+          // database down, otherwise the last write is dropped. `.catch`
+          // so a failed persist still lets us close (and doesn't reject
+          // close() with a stale error).
+          await savePromise.catch(() => undefined)
           db.close()
         },
       }

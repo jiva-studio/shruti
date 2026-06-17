@@ -105,22 +105,47 @@ export function useCapacitorRemoteFilesStorage({
       // atomic write, no MediaDownloader delete-then-redownload gap.
       const cached = await MediaDownloader.resolveLocalUrl({ url })
       if (cached.localUrl) {
+        const localUrl = cached.localUrl
         void (async () => {
           try {
             const fresh = await fetch(url, { cache: "no-store" })
             if (!fresh.ok) return
             const text = await fresh.text()
+            // Validate the response is real JSON before persisting it.
+            // A 200 HTML error page (captive portal) is `ok` but would
+            // otherwise poison the cache so every later read throws until
+            // `clearAll`. Throwing here aborts the refresh and leaves the
+            // good cached file in place.
+            JSON.parse(text)
+            // Write to a sibling temp file and rename over the target so a
+            // concurrent `readFile` of `localUrl` never sees a half-written
+            // file (which would make `JSON.parse` throw on a torn read).
+            const tmpPath = `${localUrl}.tmp`
             await Filesystem.writeFile({
-              path: cached.localUrl as string,
+              path: tmpPath,
               data: text,
               encoding: Encoding.UTF8,
             })
+            try {
+              await Filesystem.rename({ from: tmpPath, to: localUrl })
+            } catch (renameError) {
+              // The temp file was written but the atomic publish failed; drop
+              // the `.tmp` sibling so it doesn't leak, then bubble up to leave
+              // the existing cached file untouched.
+              try {
+                await Filesystem.deleteFile({ path: tmpPath })
+              } catch {
+                // Temp already gone — nothing to clean.
+              }
+              throw renameError
+            }
           } catch {
-            // Offline OK — leave the cached file in place.
+            // Offline, non-JSON response, or write failure — leave the
+            // cached file untouched.
           }
         })()
         const result = await Filesystem.readFile({
-          path: cached.localUrl,
+          path: localUrl,
           encoding: Encoding.UTF8,
         })
         const text = typeof result.data === "string" ? result.data : ""
