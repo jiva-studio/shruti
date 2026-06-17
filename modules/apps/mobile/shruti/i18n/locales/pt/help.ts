@@ -14,6 +14,14 @@ export default {
       title: "O que é sādhana",
       summary: "A prática espiritual diária e como o app ajuda a mantê-la",
     },
+    "finding-lectures": {
+      title: "Encontrar aulas",
+      summary: "Busca, coleções, tópicos e filtros para descobrir aulas",
+    },
+    playlist: {
+      title: "Playlist",
+      summary: "Adicione aulas, baixe para ouvir offline, progresso e reprodução contínua",
+    },
     "chat-ask-sadhu": {
       title: "Pergunte ao Sadhu",
       summary: "Assistente de IA que busca nas aulas e cita a fonte",
@@ -45,6 +53,10 @@ export default {
     "settings-overview": {
       title: "Visão geral dos ajustes",
       summary: "Cada grupo e item de ajustes explicado",
+    },
+    subscription: {
+      title: "Assinatura (PRO)",
+      summary: "O que o PRO desbloqueia, o período de teste gratuito e como assinar",
     },
     "smart-library": {
       title: "Biblioteca inteligente",

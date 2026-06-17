@@ -14,6 +14,14 @@ export default {
       title: "Czym jest sadhana",
       summary: "Codzienna praktyka duchowa i jak aplikacja ją wspiera",
     },
+    "finding-lectures": {
+      title: "Znajdowanie wykładów",
+      summary: "Wyszukiwanie, kolekcje, tematy i filtry, aby odkrywać wykłady",
+    },
+    playlist: {
+      title: "Playlista",
+      summary: "Dodawanie wykładów, pobieranie offline, postępy i ciągłe odtwarzanie",
+    },
     "chat-ask-sadhu": {
       title: "Zapytaj Sadhu",
       summary: "Asystent AI, który przeszukuje wykłady i podaje źródło",
@@ -45,6 +53,10 @@ export default {
     "settings-overview": {
       title: "Przegląd ustawień",
       summary: "Objaśnienie każdej grupy i każdej opcji ustawień",
+    },
+    subscription: {
+      title: "Subskrypcja (PRO)",
+      summary: "Co odblokowuje PRO, bezpłatny okres próbny i jak wykupić subskrypcję",
     },
     "smart-library": {
       title: "Inteligentna biblioteka",

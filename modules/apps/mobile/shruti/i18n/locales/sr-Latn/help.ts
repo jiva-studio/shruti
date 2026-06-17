@@ -14,6 +14,14 @@ export default {
       title: "Šta je sadhana",
       summary: "Svakodnevna duhovna praksa i kako je aplikacija podržava",
     },
+    "finding-lectures": {
+      title: "Pronalaženje predavanja",
+      summary: "Pretraga, kolekcije, teme i filteri za otkrivanje predavanja",
+    },
+    playlist: {
+      title: "Plejlista",
+      summary: "Dodavanje predavanja, preuzimanje za oflajn, napredak i neprekidna reprodukcija",
+    },
     "chat-ask-sadhu": {
       title: "Pitaj Sadhua",
       summary: "AI pomoćnik koji pretražuje predavanja i navodi izvor",
@@ -45,6 +53,10 @@ export default {
     "settings-overview": {
       title: "Pregled podešavanja",
       summary: "Svaka grupa i stavka podešavanja objašnjena",
+    },
+    subscription: {
+      title: "Pretplata (PRO)",
+      summary: "Šta PRO otključava, besplatni probni period i kako se pretplatiti",
     },
     "smart-library": {
       title: "Pametna biblioteka",

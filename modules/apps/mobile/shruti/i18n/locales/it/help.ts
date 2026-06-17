@@ -14,6 +14,14 @@ export default {
       title: "Cos'è la sadhana",
       summary: "La pratica spirituale quotidiana e come l'app la sostiene",
     },
+    "finding-lectures": {
+      title: "Trovare le lezioni",
+      summary: "Ricerca, raccolte, argomenti e filtri per scoprire le lezioni",
+    },
+    playlist: {
+      title: "Playlist",
+      summary: "Aggiungi lezioni, scarica offline, progressi e riproduzione continua",
+    },
     "chat-ask-sadhu": {
       title: "Chiedi a Sadhu",
       summary: "Assistente IA che cerca nelle lezioni e cita la fonte",
@@ -45,6 +53,10 @@ export default {
     "settings-overview": {
       title: "Panoramica delle impostazioni",
       summary: "Ogni gruppo e voce delle impostazioni spiegati",
+    },
+    subscription: {
+      title: "Abbonamento (PRO)",
+      summary: "Cosa sblocca il PRO, la prova gratuita e come abbonarsi",
     },
     "smart-library": {
       title: "Biblioteca intelligente",
