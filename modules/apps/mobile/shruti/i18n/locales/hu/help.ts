@@ -14,6 +14,14 @@ export default {
       title: "Mi a szádhana",
       summary: "A napi lelki gyakorlat, és hogyan támogatja az alkalmazás",
     },
+    "finding-lectures": {
+      title: "Előadások keresése",
+      summary: "Keresés, gyűjtemények, témák és szűrők az előadások felfedezéséhez",
+    },
+    playlist: {
+      title: "Lejátszási lista",
+      summary: "Előadások hozzáadása, offline letöltés, haladás és folyamatos lejátszás",
+    },
     "chat-ask-sadhu": {
       title: "Kérdezd Sadhut",
       summary: "MI-asszisztens, amely az előadásokban keres és megadja a forrást",
@@ -46,6 +54,10 @@ export default {
     "settings-overview": {
       title: "Beállítások áttekintése",
       summary: "Minden beállítási csoport és elem elmagyarázva",
+    },
+    subscription: {
+      title: "Előfizetés (PRO)",
+      summary: "Mit nyit meg a PRO, az ingyenes próbaidőszak, és hogyan fizess elő",
     },
     "smart-library": {
       title: "Okos könyvtár",

@@ -14,6 +14,15 @@ export default {
       title: "Was ist Sādhana",
       summary: "Die tägliche spirituelle Praxis und wie die App sie unterstützt",
     },
+    "finding-lectures": {
+      title: "Vorträge finden",
+      summary: "Suche, Sammlungen, Themen und Filter, um Vorträge zu entdecken",
+    },
+    playlist: {
+      title: "Playlist",
+      summary:
+        "Vorträge hinzufügen, offline herunterladen, Fortschritt und durchgehende Wiedergabe",
+    },
     "chat-ask-sadhu": {
       title: "Frag Sadhu",
       summary: "KI-Assistent, der die Vorträge durchsucht und die Quelle angibt",
@@ -46,6 +55,10 @@ export default {
     "settings-overview": {
       title: "Übersicht der Einstellungen",
       summary: "Jede Einstellungsgruppe und jeder Punkt erklärt",
+    },
+    subscription: {
+      title: "Abonnement (PRO)",
+      summary: "Was PRO freischaltet, die kostenlose Testphase und wie du abonnierst",
     },
     "smart-library": {
       title: "Intelligente Bibliothek",
