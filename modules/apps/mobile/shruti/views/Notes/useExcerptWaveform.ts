@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { useShruti } from "@shruti/shruti.js"
-import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
+import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@shruti/services/pollUntilReady.js"
 import {
   WAVEFORM_RAW_PEAKS,
   buildPlaceholderPeaks,
@@ -165,7 +165,7 @@ export function useExcerptWaveform(opts: UseExcerptWaveformOptions): UseExcerptW
     // Server returns ready:false right after dispatching the background
     // cut; the audio element must wait for the upload to land or the
     // first play() races the worker and 404s.
-    if (!result.ready) await pollUntilReady(cachedUrl)
+    if (!result.ready) await pollUntilReady(cachedUrl, { timeoutMs: SHORT_POLL_TIMEOUT_MS })
     excerptUrlByNote.set(r.noteId, cachedUrl)
     void maybeLoadRealPeaks()
     return cachedUrl

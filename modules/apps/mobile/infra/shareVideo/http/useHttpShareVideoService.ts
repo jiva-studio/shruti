@@ -48,7 +48,7 @@ export function useHttpShareVideoService(
       // If we abort, fall through to `ready:false` — the caller polls
       // the predicted URL, and the server keeps the queue row.
       const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort("cut-timeout-fall-through-to-poll"), 8_000)
+      const timer = setTimeout(() => ctrl.abort(), 8_000)
       let response: Response
       try {
         response = await fetch(endpoint, {
@@ -61,7 +61,11 @@ export function useHttpShareVideoService(
           signal: ctrl.signal,
         })
       } catch (err: unknown) {
-        if ((err as DOMException | undefined)?.name === "AbortError") {
+        // Detect our own timeout via the signal rather than the rejection
+        // value: `fetch` surfaces an abort as a DOMException in browsers
+        // but as a bare value on some runtimes, so `err.name` is not
+        // reliable. `signal.aborted` is the one thing we control.
+        if (ctrl.signal.aborted) {
           return { videoId: req.videoId ?? "", url: "", ready: false }
         }
         throw err

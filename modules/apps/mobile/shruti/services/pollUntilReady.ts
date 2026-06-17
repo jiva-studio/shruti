@@ -1,3 +1,12 @@
+/**
+ * Short poll cap (ms) for the fast share-audio / citation cut path. The
+ * cutter produces a small excerpt in seconds; if the predicted URL is
+ * still 404 after this window it's a dead URL (e.g. unset public base),
+ * not a slow render — so fail fast instead of spinning toward the 8-min
+ * default reserved for the Studio video cold path.
+ */
+export const SHORT_POLL_TIMEOUT_MS = 45_000
+
 export interface PollOptions {
   /** Hard cap in ms before throwing. Default 480_000 (8 min) — worst-case AWS cold render observed at ~6 min in production logs; YC sync render is much shorter (~120 s). */
   readonly timeoutMs?: number
