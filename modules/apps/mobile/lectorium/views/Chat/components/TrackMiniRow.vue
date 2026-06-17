@@ -31,8 +31,10 @@ import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet } from "@ionic/vue"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { groupReferences } from "@lib/domain/services/references.js"
 import {
+  preferredContentLanguage,
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
 } from "@lib/domain/services/localizedName.js"
@@ -44,6 +46,7 @@ const props = defineProps<{ trackId: string }>()
 
 const { t } = useI18n()
 const appLanguage = useAppLanguage()
+const libraryLanguages = useLibraryLanguages()
 const { addToPlaylist } = useAddToPlaylist()
 const toast = useToast()
 
@@ -72,9 +75,15 @@ const actionSheetButtons = computed<readonly SheetButton[]>(() => [
   },
 ])
 
-const title = computed(() =>
-  track.value ? (resolveTrackTitle(track.value, appLanguage.value) ?? track.value.id) : ""
-)
+const title = computed(() => {
+  if (!track.value) return ""
+  // Title follows the content language (a library language the track has),
+  // not the UI language — which still drives author / location / date labels.
+  const cl =
+    preferredContentLanguage(track.value, libraryLanguages.value, appLanguage.value) ??
+    appLanguage.value
+  return resolveTrackTitle(track.value, cl) ?? track.value.id
+})
 
 const references = computed<string[]>(() => {
   if (!track.value) return []

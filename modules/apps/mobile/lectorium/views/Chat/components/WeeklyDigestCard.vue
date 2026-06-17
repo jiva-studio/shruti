@@ -46,9 +46,10 @@ import { computed, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useDurationFormatter } from "@lectorium/composables/useDurationFormatter.js"
 import { getActivityOverview } from "@usecases/activity/getActivityOverview.js"
-import { resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { DurationBadge } from "@ui/components/badges/index.js"
 import { CompletedBadge, StreakBadge } from "@ui/features/activity/index.js"
@@ -61,6 +62,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const app = useLectorium()
 const appLanguage = useAppLanguage()
+const libraryLanguages = useLibraryLanguages()
 const formatDuration = useDurationFormatter()
 
 /** How many lectures to show before folding the rest into "+N more". */
@@ -154,9 +156,12 @@ async function load(): Promise<void> {
     const tracksById = await repos.tracks.getByIds(ids)
     lectures.value = ranged.map((r) => {
       const track = tracksById.get(r.trackId as TrackId)
+      const contentLang = track
+        ? preferredContentLanguage(track, libraryLanguages.value, appLanguage.value)
+        : undefined
       return {
         trackId: r.trackId,
-        title: resolveTrackTitle(track, appLanguage.value) ?? "",
+        title: resolveTrackTitle(track, contentLang ?? appLanguage.value) ?? "",
         listenedSeconds: r.listenedSeconds,
       }
     })

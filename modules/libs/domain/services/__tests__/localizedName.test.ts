@@ -140,6 +140,39 @@ describe("resolveTrackTitle", () => {
   })
 })
 
+describe("chat-card title path (content language vs UI language)", () => {
+  // The canonical expression every chat card / mini-row uses to title a track:
+  // the TITLE follows the content language (a library language the track has),
+  // while the surrounding UI stays on `ui`. Guards the leak the PR fixes —
+  // a Russian-UI user reading English lectures must see the English title.
+  function cardTitle(t: Track, library: LanguageCode[], ui: LanguageCode): string | undefined {
+    const cl = preferredContentLanguage(t, library, ui) ?? ui
+    return resolveTrackTitle(t, cl)
+  }
+
+  const bilingual = track([
+    { language: "en", title: "Hello" },
+    { language: "ru", title: "Привет" },
+  ])
+
+  it("titles in the CONTENT language even when the UI language differs", () => {
+    // English library, Russian UI → English title (not the UI-driven "Привет").
+    expect(cardTitle(bilingual, ["en"], "ru")).toBe("Hello")
+    // Russian library, English UI → Russian title.
+    expect(cardTitle(bilingual, ["ru"], "en")).toBe("Привет")
+  })
+
+  it("falls back to the track's own variant when it lacks every library language", () => {
+    // ru-only track, English library + UI → still its Russian title, not blank.
+    expect(cardTitle(track([{ language: "ru", title: "Привет" }]), ["en"], "en")).toBe("Привет")
+  })
+
+  it("with no library languages set, the UI language only orders the fallback", () => {
+    // Empty library → first available variant title.
+    expect(cardTitle(bilingual, [], "ru")).toBe("Hello")
+  })
+})
+
 describe("preferredContentLanguage", () => {
   const bilingual = track([
     { language: "en", title: "Hello" },

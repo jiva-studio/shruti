@@ -22,8 +22,9 @@ import { computed, onMounted, ref, watch } from "vue"
 import router from "@lectorium/router/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
-import { resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 interface OutlineItem {
@@ -53,6 +54,7 @@ const emit = defineEmits<{
 // Singleton import — see NotesView.controller for the why.
 const app = useLectorium()
 const appLanguage = useAppLanguage()
+const libraryLanguages = useLibraryLanguages()
 
 const COLLAPSED_LIMIT = 7
 const expanded = ref(false)
@@ -68,7 +70,10 @@ const visibleItems = computed(() =>
 async function loadTitle(): Promise<void> {
   try {
     const t = await app.repositories().tracks.getById(props.trackId as TrackId)
-    if (t) trackTitle.value = resolveTrackTitle(t, appLanguage.value) ?? ""
+    if (t) {
+      const contentLang = preferredContentLanguage(t, libraryLanguages.value, appLanguage.value)
+      trackTitle.value = resolveTrackTitle(t, contentLang ?? appLanguage.value) ?? ""
+    }
   } catch {
     /* keep empty — header still renders the "Оглавление" label */
   }

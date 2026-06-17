@@ -2,7 +2,12 @@ import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
+import {
+  preferredContentLanguage,
+  resolveLocalizedName,
+  resolveTrackTitle,
+} from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useChatActions } from "@lectorium/composables/useChatActions.js"
 import { useOpenInStudio } from "@lectorium/composables/useOpenInStudio.js"
@@ -58,6 +63,7 @@ export function useCitationActions(
   const { t } = useI18n()
   const app = useLectorium()
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
   const toast = useToast()
   const { addToPlaylist } = useAddToPlaylist()
   const { saveCitation } = useChatActions()
@@ -70,9 +76,15 @@ export function useCitationActions(
   /** Reentrancy guard so a double-tap on Save doesn't create two notes. */
   const savingNote = ref(false)
 
-  const trackTitle = computed<string>(() =>
-    track.value ? (resolveTrackTitle(track.value, appLanguage.value) ?? "") : ""
-  )
+  const trackTitle = computed<string>(() => {
+    if (!track.value) return ""
+    // Title follows the content language (a library language the track has),
+    // not the UI language — which still drives the author name label.
+    const cl =
+      preferredContentLanguage(track.value, libraryLanguages.value, appLanguage.value) ??
+      appLanguage.value
+    return resolveTrackTitle(track.value, cl) ?? ""
+  })
   const authorName = computed<string>(
     () => resolveLocalizedName(author.value, appLanguage.value) ?? ""
   )
