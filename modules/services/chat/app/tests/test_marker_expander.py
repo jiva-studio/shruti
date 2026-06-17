@@ -21,7 +21,9 @@ Defenses against model failure:
 from __future__ import annotations
 
 from lectorium_chat.agent.marker_expander import MarkerExpander
+from lectorium_chat.agent.tools._envelope import library_to_envelope
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
+from lectorium_chat.domain.entities import LibraryChunk
 
 
 async def _expand(expander: MarkerExpander, text: str) -> str:
@@ -753,3 +755,191 @@ async def test_commentary_blockquote_preserves_internal_newlines_with_gt() -> No
     for line in out.split("\n"):
         if "бхакти-йогена" in line:
             assert line.lstrip().startswith(">")
+
+
+# ── Bare `[s=N]` sentence-token leak (producer-side garbage) ─────────
+
+
+async def test_bare_sentence_token_is_dropped() -> None:
+    """A standalone `[s=0,2]` (the synth note renderer's sentence marker
+    leaking past the model) must be DROPPED, not passed through as visible
+    text. The `|s=…` payload is only legal as a SUFFIX inside `[^N|s=…]`."""
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "Прабхупада пишет [s=0,2] об этом")
+    assert "[s=" not in out
+    # Surrounding prose survives (the orphan whitespace before the dropped
+    # marker is collapsed by the same normalisation as other drops).
+    assert "Прабхупада пишет" in out
+    assert out.rstrip().endswith("об этом")
+
+
+async def test_bare_single_sentence_token_dropped() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "text [s=3] tail")
+    assert "[s=3]" not in out
+    assert "text" in out and out.rstrip().endswith("tail")
+
+
+# ── [outline:track] grounding (anti-hallucination) ──────────────────
+
+
+async def test_outline_marker_kept_when_track_grounded() -> None:
+    """A `[outline:track_X]` whose track actually produced an outline this
+    turn (in the grounding set) survives verbatim."""
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases, emitted_outline_ids={"track_X"})
+    out = await _expand(e, "Вот план: [outline:track_X]")
+    assert "[outline:track_X]" in out
+
+
+async def test_outline_marker_ungrounded_is_dropped() -> None:
+    """A `[outline:UNKNOWN]` for a track the turn never produced an outline
+    for is a hallucination (empty no-op card on the client) — dropped."""
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases, emitted_outline_ids={"track_real"})
+    out = await _expand(e, "Готово. [outline:track_hallucinated] спасибо")
+    assert "[outline:" not in out
+    assert "track_hallucinated" not in out
+    assert out.startswith("Готово.")
+    assert out.rstrip().endswith("спасибо")
+    assert e.malformed_count == 1
+
+
+async def test_outline_marker_no_validation_set_passes_through() -> None:
+    """Legacy / non-outline turns pass `None` → grammar-valid outline markers
+    pass through unchanged, mirroring the action-id behaviour."""
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases, emitted_outline_ids=None)
+    out = await _expand(e, "x [outline:whatever_track] y")
+    assert out == "x [outline:whatever_track] y"
+
+
+# ── Commentary: disjoint repeat selection survives dedup ─────────────
+
+
+async def test_two_disjoint_commentary_quotes_same_segment_both_survive() -> None:
+    """`[^N|s=0]` then `[^N|s=7]` — the second cite of the SAME purport
+    selects a DIFFERENT sentence, so it's a disjoint quote the answer needs,
+    not a duplicate chip. Plain dedup would drop it; the commentary
+    special-case lets both render. Prose between them prevents the
+    same-source merge, so both sentences must appear in the output."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "comm_seg", 0,
+        addr_label="БГ 2.13", author_name="Прабхупада",
+        sentences=["S0.", "S1.", "S2.", "S3.", "S4.", "S5.", "S6.", "S7."],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"Первое [^{ref}|s=0]\nДалее [^{ref}|s=7]\n")
+    assert "S0." in out
+    assert "S7." in out
+
+
+async def test_identical_commentary_recite_still_dropped() -> None:
+    """A repeat alias with the SAME selection is a true duplicate and is
+    still dropped — the disjoint-quote relaxation must not reopen the
+    spammy-duplicate hole."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "c", 0, addr_label="БГ 2.13", author_name="Author",
+        sentences=["S0.", "S1.", "S2."],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"Первое [^{ref}|s=0]\nПрозаический текст.\nСнова [^{ref}|s=0]\n")
+    # `S0.` appears exactly once (second identical cite dropped).
+    assert out.count("S0.") == 1
+
+
+async def test_disjoint_commentary_quotes_card_mode_both_emit() -> None:
+    """Card mode: two disjoint selections of the same purport queue TWO
+    `action` payloads (one per distinct quote)."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "c", 0, addr_label="БГ 2.13", author_name="Author",
+        sentences=["S0.", "S1.", "S2.", "S3."],
+    )
+    e = MarkerExpander(aliases, commentary_as_card=True)
+    out = await _expand(e, f"a [^{ref}|s=0] b [^{ref}|s=3] c")
+    assert out.count(f"[commentary:{ref}]") == 2
+    actions = e.take_commentary_actions()
+    assert len(actions) == 2
+    assert actions[0]["data"]["payload"]["text"] == "S0."
+    assert actions[1]["data"]["payload"]["text"] == "S3."
+
+
+# ── Position→alias remap: missing position is an alias-miss ──────────
+
+
+async def test_position_remap_hit_resolves_to_alias() -> None:
+    """A position present in the remap resolves to its mapped alias (the
+    happy path the synthesizer relies on)."""
+    aliases = TurnAliasMap()
+    a = aliases.alias_chunk("track_A", 1000, 2000)  # alias 1
+    b = aliases.alias_chunk("track_B", 3000, 4000)  # alias 2
+    e = MarkerExpander(aliases)
+    # Position 1 → alias 2 (track_B); position 2 → alias 1 (track_A).
+    e.set_ref_remap({1: b, 2: a})
+    out = await _expand(e, "[^1]")
+    assert out == "[cite:track_B@3000-4000]"
+
+
+async def test_position_remap_miss_is_dropped_not_raw_alias() -> None:
+    """With a NON-EMPTY remap, a position the map doesn't contain (a
+    non-citable note the LLM cited) is dropped as an alias-miss — NOT
+    resolved as a literal alias, which could attach a chip to an unrelated
+    source since position-space and alias-space differ."""
+    aliases = TurnAliasMap()
+    a = aliases.alias_chunk("track_A", 1000, 2000)  # alias 1
+    aliases.alias_chunk("track_B", 3000, 4000)      # alias 2 (must not leak)
+    e = MarkerExpander(aliases)
+    # Only position 1 is citable (→ alias 1). The LLM cites position 2,
+    # which has no entry → drop, never fall through to alias 2.
+    e.set_ref_remap({1: a})
+    out = await _expand(e, "see [^2] here")
+    assert "[cite:" not in out
+    assert "track_B" not in out
+
+
+async def test_empty_remap_present_falls_back_to_alias_path() -> None:
+    """An EMPTY-but-present remap (`{}`) — what `_build_position_alias_remap`
+    legitimately returns when there are tool_results but zero citable notes —
+    must keep the LEGACY "`[^N]` is a raw alias" behaviour, NOT be treated as
+    an authoritative remap that drops every position. The guard is a TRUTHY
+    check (`if self._ref_remap:`), so `{}` is equivalent to no remap and
+    `[^1]` resolves via the normal alias path. Regressing the guard to
+    `is not None` would make `{}.get(1)` return None → drop, breaking this."""
+    aliases = TurnAliasMap()
+    a = aliases.alias_chunk("track_A", 1000, 2000)  # alias 1
+    e = MarkerExpander(aliases)
+    e.set_ref_remap({})  # present but empty → legacy alias semantics
+    out = await _expand(e, f"see [^{a}] here")
+    # Alias content surfaces — NOT dropped as a remap-miss.
+    assert out == "see [cite:track_A@1000-2000] here"
+
+
+# ── library_to_envelope defensive default (no UnboundLocalError) ─────
+
+
+def test_library_to_envelope_unexpected_item_kind_returns_gracefully() -> None:
+    """An unexpected `item_kind` (none of media/verse/commentary/...) must
+    not raise UnboundLocalError on the `ref` local — the envelope ships with
+    a null ref instead of crashing the whole turn."""
+    aliases = TurnAliasMap()
+    chunk = LibraryChunk(
+        item_id="x1",
+        item_kind="totally_unexpected",
+        source_id=None,
+        tokens="",
+        author_id=None,
+        doc_date=None,
+        lang="en",
+        segment_index=0,
+        text="some text",
+        addr_label="Whatever",
+    )
+    env = library_to_envelope(chunk, alias_map=aliases)
+    assert env["ref"] is None
+    assert env["type"] == "totally_unexpected"
+    assert env["text"] == "some text"
