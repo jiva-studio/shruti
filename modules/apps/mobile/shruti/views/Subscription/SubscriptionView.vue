@@ -30,6 +30,7 @@
         <SubscriptionFooter
           :packages="subscription.packages"
           :is-subscribed="subscription.isSubscribed"
+          :ready="subscription.ready"
           :purchasing="subscription.purchasing"
           :restoring="subscription.restoring"
           :legal-documents="subscription.legalDocuments"

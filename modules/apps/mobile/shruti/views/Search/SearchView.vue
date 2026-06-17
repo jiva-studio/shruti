@@ -78,6 +78,7 @@
     </div>
 
     <LibraryBanner
+      v-if="smartLibraryAvailable"
       :title="$t('search.smartLibrary.title')"
       :description="$t('search.smartLibrary.subtitle')"
       :pro-badge="!purchases.isSubscribed"
@@ -195,9 +196,14 @@ const smartLibrary = useSmartLibraryBinding(
 )
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
+// Only surface the Smart Library entry where in-app purchases work. On the RU
+// build / web (no IAP) the paywall has nothing to sell, so opening it would
+// strand the user on a dead screen — hide the banner and no-op the entry
+// instead. Subscribers always keep access (the dialog, not the paywall).
+const smartLibraryAvailable = computed(() => purchases.available || purchases.isSubscribed)
 function onSmartLibraryEntry(): void {
   if (purchases.isSubscribed) smartLibraryDialogOpen.value = true
-  else paywall.requestOpen("smartLibrary")
+  else if (purchases.available) paywall.requestOpen("smartLibrary")
 }
 
 // "Recommended for you" picks + per-hot-topic shelves, derived on-device from
