@@ -16,22 +16,24 @@ export default defineConfig({
   resolve: {
     preserveSymlinks: true,
     alias: {
-      "@ports": path.resolve(__dirname, "./ports"),
-      "@infra": path.resolve(__dirname, "./infra"),
-      "@ui": path.resolve(__dirname, "./ui"),
       // The in-house Capacitor plugins share the `@lectorium` npm scope
       // (`@lectorium/plugin-*`) but live in node_modules, not under `./lectorium`.
       // The broad `@lectorium` alias below would otherwise rewrite them into
       // `./lectorium/plugin-*` (nonexistent) — mirror vite.config's exclusion by
       // resolving the plugin packages explicitly first (more specific wins).
+      // The media-downloader SUT imports the real module (not mocked), so point
+      // it at the built ESM entry rather than the package dir.
       "@lectorium/plugin-media-downloader": path.resolve(
         __dirname,
-        "./node_modules/@lectorium/plugin-media-downloader"
+        "./node_modules/@lectorium/plugin-media-downloader/dist/esm/index.js"
       ),
       "@lectorium/plugin-audio-player": path.resolve(
         __dirname,
         "./node_modules/@lectorium/plugin-audio-player"
       ),
+      "@ports": path.resolve(__dirname, "./ports"),
+      "@infra": path.resolve(__dirname, "./infra"),
+      "@ui": path.resolve(__dirname, "./ui"),
       "@lectorium": path.resolve(__dirname, "./lectorium"),
       "@lib/domain": path.resolve(__dirname, "./submodules/domain"),
       "@usecases": path.resolve(__dirname, "./usecases"),

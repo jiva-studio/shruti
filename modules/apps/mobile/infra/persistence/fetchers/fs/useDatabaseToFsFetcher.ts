@@ -3,6 +3,9 @@ import { Filesystem, Directory } from "@capacitor/filesystem"
 import { MediaDownloader } from "@lectorium/plugin-media-downloader"
 import type { IDatabaseFetcher, ProgressCallback } from "@ports/app/index.js"
 
+/** Magic header every valid SQLite 3 file starts with (16 bytes incl. NUL). */
+const SQLITE_MAGIC_HEADER = "SQLite format 3\0"
+
 /**
  * `IDatabaseFetcher` for native platforms, backed by the
  * `@lectorium/plugin-media-downloader` plugin for the actual transfer
@@ -92,9 +95,27 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
     },
 
     async exists(path: string): Promise<boolean> {
+      // A bare `stat` only proves a file is present, not usable. An OS-killed
+      // mid-write download (Android WorkManager / MIUI kill, low storage) can
+      // leave a zero/short or otherwise corrupt file on disk; treating it as a
+      // valid cache means it's opened as a corrupt DB and never re-fetched.
+      // Validate the SQLite magic header + a minimum size so a half-written
+      // file reports `false` and the resolver downloads a fresh copy.
       try {
-        await Filesystem.stat({ path, directory: Directory.Data })
-        return true
+        const { size } = await Filesystem.stat({ path, directory: Directory.Data })
+        if (size < SQLITE_MAGIC_HEADER.length) return false
+
+        // `offset`/`length` partial reads are native-only — exactly the
+        // platform this fs adapter runs on. Read just the header bytes.
+        const { data } = await Filesystem.readFile({
+          path,
+          directory: Directory.Data,
+          offset: 0,
+          length: SQLITE_MAGIC_HEADER.length,
+        })
+        // Native returns base64; decode and compare against the magic header.
+        const header = typeof data === "string" ? atob(data) : ""
+        return header === SQLITE_MAGIC_HEADER
       } catch {
         return false
       }
