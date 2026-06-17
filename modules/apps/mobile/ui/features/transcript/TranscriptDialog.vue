@@ -60,8 +60,6 @@
         @note-tapped="(e) => emit('noteTapped', e)"
         @pick-start="emit('pickStart')"
       />
-
-      <SpeakerFloatingChip />
     </IonContent>
   </IonModal>
 </template>
@@ -72,7 +70,6 @@ import { IonButton, IonContent, IonModal } from "@ionic/vue"
 import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
 import LectureOutline from "@ui/components/LectureOutline.vue"
-import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
 import TranscriptDialogHeader from "./TranscriptDialogHeader.vue"
 import { useTranscriptAutoScroll } from "./useTranscriptAutoScroll.js"
 import TranscriptStatus from "./TranscriptStatus.vue"
