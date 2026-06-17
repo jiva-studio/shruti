@@ -20,6 +20,9 @@ export interface SearchControllerReturn {
   isLoading: Ref<boolean>
   error: Ref<string | null>
   emptyMessage: ComputedRef<string>
+  /** True once the first query has run and yielded zero rows with no error —
+   *  the cue to show the "nothing matches your filters" empty state. */
+  showEmptyState: ComputedRef<boolean>
   filters: Ref<FiltersModel>
   hasMore: Ref<boolean>
   filterSections: ComputedRef<readonly SearchFilterSectionDef[]>
@@ -49,6 +52,9 @@ export function useSearchController(): SearchControllerReturn {
   const actionSheet = useTrackActionSheet()
   const downloads = useDownloadStore()
   const filtersOpen = ref<boolean>(false)
+  // Stays false until the first query settles, so the empty state never flashes
+  // during the initial filter/dictionary hydration before any search has run.
+  const hasRun = ref<boolean>(false)
 
   const { rawTracks, isLoading, error, hasMore, runQuery, loadMore } = useSearchQuery({
     query,
@@ -60,6 +66,7 @@ export function useSearchController(): SearchControllerReturn {
     await filtersReady
     await dictionaries.ensureLoaded()
     await runQuery()
+    hasRun.value = true
   })
 
   // Filter edits fire once per gesture — re-run immediately, not debounced.
@@ -77,6 +84,10 @@ export function useSearchController(): SearchControllerReturn {
   // there's no "specify search criteria" prompt on the fresh state. The
   // computed remains for future no-results / error messaging.
   const emptyMessage = computed(() => "")
+
+  const showEmptyState = computed(
+    () => hasRun.value && !isLoading.value && !error.value && rows.value.length === 0
+  )
 
   async function onSelect(trackId: string): Promise<void> {
     // Failed downloads retry on tap — no ActionSheet. The red X IS the
@@ -98,6 +109,7 @@ export function useSearchController(): SearchControllerReturn {
     isLoading,
     error,
     emptyMessage,
+    showEmptyState,
     filters,
     hasMore,
     filterSections,
