@@ -281,6 +281,7 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         const next = wrapMeta({
           actions,
           outlines: current.outlines,
+          media: current.media,
           verses: current.verses,
           cites: current.cites,
           chapters: current.chapters,
