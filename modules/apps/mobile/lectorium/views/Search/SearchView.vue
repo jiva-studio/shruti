@@ -255,9 +255,12 @@ function openTracks(): void {
 }
 
 .all-lectures {
-  --background: var(--ion-color-step-800, #3d2b1f);
-  --background-activated: var(--ion-color-step-700, #51392a);
-  --color: var(--lectorium-scrim-cream);
+  /* Theme-aware warm surface pill (same token pair as .chip.off and the
+     collection cards). Do NOT use --ion-color-step-*: the stepped scale
+     inverts in dark theme and turned this into a bright cream blob. */
+  --background: var(--ion-color-light);
+  --background-activated: var(--ion-color-light-shade);
+  --color: var(--ion-color-light-contrast);
   --box-shadow: none;
   --border-radius: 12px;
   --padding-top: 0;
