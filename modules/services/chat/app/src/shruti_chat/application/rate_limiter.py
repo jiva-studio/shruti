@@ -310,11 +310,43 @@ class RateLimiter:
                     scoped_key=scoped_ip_key, key_type="ip", limit=ip_limit, day=today,
                 )
             except RateLimitStoreUnavailable:
+                # The per-user counter (pass-1) already charged this request,
+                # but the IP check can't run — give the user-unit back before
+                # surfacing the outage so a fail-closed 503 doesn't silently
+                # consume quota. Best-effort: a second outage on the decrement
+                # is swallowed (same window resets it).
+                try:
+                    await self._store.decrement(scoped_key=scoped_user_key, day=today)
+                except RateLimitStoreUnavailable:
+                    log.warning(
+                        "rate_limit_user_refund_on_ip_reject_failed",
+                        scope=scope, key_type="user",
+                    )
                 return self._on_backend_unavailable(
                     scoped_key=scoped_ip_key, key_type="ip",
                     limit=ip_limit, echoed_tier=echoed_tier, tier=tier,
                 )
             if rec.count > rec.limit:
+                # The per-IP cap rejects, but pass-1 already charged the
+                # per-user bucket. Without giving it back, an IP-throttled
+                # anonymous user permanently loses a user-quota unit per
+                # blocked attempt (and the usage chip over-counts). Refund
+                # the user unit before returning the IP reject; best-effort,
+                # mirroring `refund()`.
+                try:
+                    refunded = await self._store.decrement(
+                        scoped_key=scoped_user_key, day=today,
+                    )
+                    # Reflect the refund in the chip snapshot the IP-reject
+                    # path echoes (`current_after`), so the client doesn't
+                    # show a unit it didn't actually consume.
+                    if refunded is not None:
+                        user_current_after = refunded
+                except RateLimitStoreUnavailable:
+                    log.warning(
+                        "rate_limit_user_refund_on_ip_reject_failed",
+                        scope=scope, key_type="user",
+                    )
                 return reject(rec, "ip")
 
         return RateLimitResult(

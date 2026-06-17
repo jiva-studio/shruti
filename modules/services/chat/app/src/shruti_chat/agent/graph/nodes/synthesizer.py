@@ -119,6 +119,13 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
                     emitted_cards.add(key)
                     task = asyncio.ensure_future(spec.build(ctx, req.ref_num, req.ref))
                     await queue.put(("card", (spec, req.ref), task))
+                elif event.type == "error":
+                    # Empty-completion guard: the synthesizer produced no
+                    # prose at all (provider streamed nothing after retry +
+                    # fallback). Forward the error frame so the chat_turn
+                    # bridge sets had_error → finalize refunds the quota and
+                    # the client shows "try again" instead of a blank answer.
+                    await queue.put(("error", event.data, None))
                 # `done` is handled by the chat_turn wrapper — ignore here.
         finally:
             await queue.put((None, None, None))  # sentinel
@@ -149,6 +156,8 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
                             },
                         }
                     )
+            elif kind == "error":
+                writer({"type": "error", "data": data})
         await producer
     finally:
         if not producer.done():

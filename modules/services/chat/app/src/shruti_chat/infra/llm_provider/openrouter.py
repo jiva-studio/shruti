@@ -60,6 +60,10 @@ _RETRYABLE_EXC = (
 def _is_retryable(exc: BaseException) -> bool:
     if isinstance(exc, _RETRYABLE_EXC):
         return True
+    # A clean-but-empty stream is worth one more roll of the dice on the
+    # same model, then the fallback model (see `EmptyCompletionError`).
+    if isinstance(exc, EmptyCompletionError):
+        return True
     # Some providers surface 429/5xx as a generic APIStatusError.
     status = getattr(exc, "status_code", None)
     return isinstance(status, int) and (status == 429 or 500 <= status < 600)
@@ -126,6 +130,26 @@ _UNAVAILABLE_EXC = (
 _UNAVAILABLE_STATUS = frozenset({401, 402, 403, 408, 429})
 
 
+class EmptyCompletionError(Exception):
+    """A streaming completion ended cleanly but produced no text AND no
+    tool call — or finished with an error-class `finish_reason`. The SSE
+    stream closes normally in this case, so the `openai` SDK never raises;
+    without this typed signal `stream_completion`'s retry/fallback loop
+    would treat the blank stream as a successful (empty) answer.
+
+    Mapped as RETRYABLE so the same-model retry + fallback-model escalation
+    fire, and tagged provider-unavailable so a fully-exhausted empty stream
+    surfaces as a calm `chat_unavailable` (the upstream answered with
+    nothing — out of capacity / content-filtered — not our bug)."""
+
+
+# `finish_reason` values that mean the provider aborted rather than
+# completed: a stream that ends on one of these with no usable output is
+# an upstream failure, not a deliberate empty answer. "stop"/"tool_calls"/
+# "length" are legitimate terminations and never treated as empty here.
+_ERROR_FINISH_REASONS = frozenset({"error", "content_filter"})
+
+
 def is_provider_unavailable(exc: BaseException) -> bool:
     """True if `exc` — or anything in its `__cause__` / `__context__`
     chain — is an LLM-provider-availability failure.
@@ -140,7 +164,7 @@ def is_provider_unavailable(exc: BaseException) -> bool:
     cur: BaseException | None = exc
     while cur is not None and id(cur) not in seen:
         seen.add(id(cur))
-        if isinstance(cur, _UNAVAILABLE_EXC):
+        if isinstance(cur, (_UNAVAILABLE_EXC, EmptyCompletionError)):
             return True
         status = getattr(cur, "status_code", None)
         if isinstance(status, int) and (
@@ -469,6 +493,15 @@ class OpenRouterLLMProvider:
         produced = False
         last_exc: BaseException | None = None
 
+        # `produced` gates retry/fallback: once real OUTPUT (text or a
+        # tool-call delta) is on the wire we can't re-roll. A bare
+        # finish_reason / usage chunk is metadata, not output, so it must
+        # NOT flip this — otherwise a stream that ends empty (and `_raw_stream`
+        # raises `EmptyCompletionError`) right after emitting only a
+        # finish_reason chunk would be wrongly treated as un-retryable.
+        def _has_output(chunk: CompletionChunk) -> bool:
+            return bool(chunk.get("text") or chunk.get("tool_calls"))
+
         # Primary model: initial attempt + same-model transient retries.
         for attempt in range(self._max_retries + 1):
             try:
@@ -477,7 +510,8 @@ class OpenRouterLLMProvider:
                     tool_choice=tool_choice, temperature=temperature,
                     run_name=run_name,
                 ):
-                    produced = True
+                    if _has_output(chunk):
+                        produced = True
                     yield chunk
                 return
             except Exception as exc:  # noqa: BLE001
@@ -511,7 +545,8 @@ class OpenRouterLLMProvider:
                     tool_choice=tool_choice, temperature=temperature,
                     run_name=run_name,
                 ):
-                    produced = True
+                    if _has_output(chunk):
+                        produced = True
                     yield chunk
                 return
             except Exception as exc:  # noqa: BLE001
@@ -579,6 +614,17 @@ class OpenRouterLLMProvider:
         usage_in = 0
         usage_out = 0
         usage_cached = 0
+        # An OpenAI-compatible stream that ends cleanly with zero text and
+        # zero tool-call deltas is NOT a success — it's an upstream failure
+        # the SDK doesn't raise on (the HTTP stream closed 200/OK with an
+        # empty body). Track whether anything usable came through, plus the
+        # last `finish_reason`, and raise a typed `EmptyCompletionError`
+        # AFTER the stream drains so the generation span still closes and
+        # `stream_completion`'s retry/fallback engages. We only raise when
+        # NOTHING was yielded — a mid-stream truncation that already emitted
+        # text is re-raised verbatim upstream (can't be re-rolled).
+        produced_any = False
+        last_finish_reason: str | None = None
         with gen_ctx as gen:
             try:
                 async for chunk in client.astream(lc_msgs):
@@ -592,14 +638,18 @@ class OpenRouterLLMProvider:
                         continue
                     if (t := domain_chunk.get("text")):
                         text_acc.append(t)
+                        produced_any = True
                     if (tc := domain_chunk.get("tool_calls")):
                         tool_call_acc.extend(tc)
+                        produced_any = True
                     if (pt := domain_chunk.get("prompt_tokens")) is not None:
                         usage_in = pt
                     if (ct := domain_chunk.get("completion_tokens")) is not None:
                         usage_out = ct
                     if (cr := domain_chunk.get("cached_tokens")) is not None:
                         usage_cached = cr
+                    if (fr := domain_chunk.get("finish_reason")):
+                        last_finish_reason = fr
                     yield domain_chunk
             finally:
                 if gen is not None:
@@ -613,6 +663,22 @@ class OpenRouterLLMProvider:
                         )
                     except Exception as exc:  # noqa: BLE001
                         log.warning("langfuse_generation_update_failed", error=str(exc))
+
+        # Raise OUTSIDE the generation context so the span above closed with
+        # whatever (empty) output it had. A clean stream that produced no
+        # text and no tool call — or one that ended on an error-class
+        # finish_reason — is an upstream failure, not a blank answer.
+        if not produced_any or last_finish_reason in _ERROR_FINISH_REASONS:
+            log.warning(
+                "llm_stream_empty_completion",
+                model=validated_model,
+                finish_reason=last_finish_reason,
+                produced_any=produced_any,
+            )
+            raise EmptyCompletionError(
+                f"empty completion from {validated_model} "
+                f"(finish_reason={last_finish_reason})"
+            )
 
     async def structured_output(
         self,

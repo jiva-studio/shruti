@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from time import perf_counter
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from shruti_chat.agent.events import AgentEvent
@@ -90,14 +89,32 @@ class TurnRunner:
         async def produce() -> None:
             # `error` frame drives refund + idempotency release. `completed`
             # is set only after the stream drains normally, so a CancelledError
-            # (shutdown) persists as `error`, never a truncated `done`.
+            # (shutdown / explicit Stop) persists as `cancelled`, never a
+            # truncated `done`.
             had_error = False
             completed = False
+            cancelled = False
             buffer: list[dict[str, Any]] = []
             await self._turn_store.mark_running(trace_id, user_id)
+            # Periodic liveness heartbeat — DECOUPLED from event flow. A long
+            # silent generation (deep research, slow first token) used to let
+            # the `running` marker TTL lapse, so a backgrounded client 404'd a
+            # turn that was still alive. Drive it from a background task on a
+            # fixed interval so the marker is refreshed even during total
+            # output silence; cancelled in `finally` so it can't leak.
+            async def _heartbeat_loop() -> None:
+                try:
+                    while True:
+                        await asyncio.sleep(_HEARTBEAT_INTERVAL_S)
+                        await self._turn_store.heartbeat(trace_id)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — heartbeat must never kill the turn
+                    log.warning("chat_turn_heartbeat_failed", trace_id=trace_id)
+
+            heartbeat_task = asyncio.create_task(_heartbeat_loop())
             try:
                 stream = stream_factory(is_cancelled)
-                last_heartbeat = perf_counter()
                 async for ev in stream:
                     if ev.type == "error":
                         had_error = True
@@ -107,35 +124,66 @@ class TurnRunner:
                     }
                     buffer.append(frame)
                     await queue.put(frame)
-                    now = perf_counter()
-                    if now - last_heartbeat >= _HEARTBEAT_INTERVAL_S:
-                        await self._turn_store.heartbeat(trace_id)
-                        last_heartbeat = now
                 completed = True
+                # Explicit Stop is CO-OPERATIVE: DELETE /chat/turn sets the
+                # cancel flag and the turn loop (run_chat_turn) notices it and
+                # `return`s — which ends this stream cleanly, looking exactly
+                # like a normal completion. Without this check finalize would
+                # treat a user-stopped turn as a delivered answer (no refund,
+                # state="done"). Re-read the cancel signal once the stream
+                # drains: if Stop was requested, account for it as cancelled.
+                if await is_cancelled():
+                    cancelled = True
+            except asyncio.CancelledError:
+                # Shutdown (redeploy) OR explicit Stop (DELETE /chat/turn)
+                # cancels this task. CancelledError is a BaseException, so it
+                # would otherwise skip the `except Exception` below and let
+                # `finally` run finalize(completed=True semantics) — charging
+                # the user for a turn that never delivered an answer AND
+                # holding the idempotency key for its full TTL. Mark it
+                # cancelled so finalize refunds quota + releases the key and
+                # the store records state="cancelled". The teardown below is
+                # shielded so the cancellation can't interrupt the accounting
+                # mid-flight; we re-raise after it completes.
+                cancelled = True
+                raise
             except Exception:
                 had_error = True
                 log.exception("chat_turn_producer_failed", trace_id=trace_id)
             finally:
-                # finalize() does quota/idempotency accounting. Guard it so a
-                # raise here can't skip the sentinel below — otherwise an
-                # attached SSE consumer would block on the queue until its ping
-                # timeout, and the turn would never be buffered for resume.
-                try:
-                    usage_frame = await finalize(had_error, completed)
-                except Exception:
-                    log.exception("chat_turn_finalize_failed", trace_id=trace_id)
-                    usage_frame = None
-                if usage_frame is not None:
-                    buffer.append(usage_frame)
-                    await queue.put(usage_frame)
-                await self._turn_store.finish(
-                    trace_id,
-                    state="error" if (had_error or not completed) else "done",
-                    events=buffer,
-                    user_id=user_id,
-                )
-                # Sentinel — unblocks the SSE consumer if still attached.
-                await queue.put(None)
+                heartbeat_task.cancel()
+                # Teardown does quota/idempotency accounting + buffers the turn
+                # for resume. Shield it so a CancelledError (explicit Stop /
+                # shutdown) can't interrupt the refund/release/finish halfway —
+                # otherwise the quota stays charged and the idempotency key
+                # stays held. `_teardown` swallows its own non-cancel errors so
+                # it can't skip the sentinel either.
+                async def _teardown() -> None:
+                    # A cancelled turn is a non-clean end: refund + release like
+                    # an error, but record a distinct `cancelled` state so the
+                    # store/UI can tell "user stopped" from "model failed".
+                    failed = had_error or cancelled
+                    try:
+                        usage_frame = await finalize(failed, completed)
+                    except Exception:
+                        log.exception("chat_turn_finalize_failed", trace_id=trace_id)
+                        usage_frame = None
+                    if usage_frame is not None:
+                        buffer.append(usage_frame)
+                        await queue.put(usage_frame)
+                    if cancelled:
+                        state = "cancelled"
+                    elif had_error or not completed:
+                        state = "error"
+                    else:
+                        state = "done"
+                    await self._turn_store.finish(
+                        trace_id, state=state, events=buffer, user_id=user_id,
+                    )
+                    # Sentinel — unblocks the SSE consumer if still attached.
+                    await queue.put(None)
+
+                await asyncio.shield(asyncio.ensure_future(_teardown()))
                 self._tasks.pop(trace_id, None)
                 self._cancels.pop(trace_id, None)
 
