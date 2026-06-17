@@ -7,9 +7,20 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	domaintopics "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/topics"
+)
+
+const (
+	// defaultNameConcurrency caps simultaneous cluster-naming LLM calls.
+	defaultNameConcurrency = 8
+	// defaultNameRetries is how many attempts one cluster's naming gets on a
+	// transient LLM error before the whole build aborts.
+	defaultNameRetries = 3
 )
 
 // BuildUseCase builds the canonical topic vocabulary from the whole corpus of
@@ -35,6 +46,11 @@ type BuildUseCase struct {
 	Seed        int64
 	MaxDistance float64
 	Samples     int
+
+	// NameConcurrency / NameRetries tune the parallel cluster-naming pass.
+	// Zero falls back to the defaults above.
+	NameConcurrency int
+	NameRetries     int
 }
 
 type BuildResult struct {
@@ -108,6 +124,39 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 		}
 	}
 
+	// Name every cluster — the slow, failure-prone LLM step — in parallel and
+	// with a retry, BEFORE touching the catalog. Doing all naming first means a
+	// transient LLM failure aborts the whole build cleanly, without leaving
+	// half-created orphan topics behind (which a re-run would then duplicate).
+	conc := uc.NameConcurrency
+	if conc <= 0 {
+		conc = defaultNameConcurrency
+	}
+	retries := uc.NameRetries
+	if retries <= 0 {
+		retries = defaultNameRetries
+	}
+	names := make([]domaintopics.Names, k)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(conc)
+	for c := 0; c < k; c++ {
+		c := c
+		g.Go(func() error {
+			samples := representatives(members[c], norm, res.Centroids[c], titles, uc.Samples)
+			n, err := nameClusterWithRetry(gctx, uc.Namer, samples, languages, retries)
+			if err != nil {
+				return fmt.Errorf("name cluster %d: %w", c, err)
+			}
+			names[c] = n
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return BuildResult{}, err
+	}
+
+	// All names resolved — now mint the topic dict entries and the centroid
+	// vocabulary (fast, local catalog writes), and persist the vocabulary last.
 	voc := domaintopics.Vocabulary{
 		Dim:         len(norm[0]),
 		EmbedModel:  uc.Embed.Model(),
@@ -115,12 +164,7 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 		Centroids:   make([]domaintopics.Centroid, 0, k),
 	}
 	for c := 0; c < k; c++ {
-		samples := representatives(members[c], norm, res.Centroids[c], titles, uc.Samples)
-		names, err := uc.Namer.NameCluster(ctx, samples, languages)
-		if err != nil {
-			return BuildResult{}, fmt.Errorf("name cluster %d: %w", c, err)
-		}
-		id, err := uc.Dict.Create(ctx, catalog.KindTopic, names.Full, names.Short)
+		id, err := uc.Dict.Create(ctx, catalog.KindTopic, names[c].Full, names[c].Short)
 		if err != nil {
 			return BuildResult{}, fmt.Errorf("create topic %d: %w", c, err)
 		}
@@ -131,6 +175,37 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 		return BuildResult{}, fmt.Errorf("write vocabulary: %w", err)
 	}
 	return BuildResult{Topics: k, UniqueHeadings: len(titles), Artifacts: read}, nil
+}
+
+// nameClusterWithRetry calls the namer up to `attempts` times, retrying on a
+// transient error with a short exponential backoff. Honours context cancellation
+// (errgroup cancels gctx as soon as any sibling cluster fails).
+func nameClusterWithRetry(
+	ctx context.Context,
+	namer ClusterNamer,
+	samples, languages []string,
+	attempts int,
+) (domaintopics.Names, error) {
+	var lastErr error
+	for a := 0; a < attempts; a++ {
+		if a > 0 {
+			backoff := time.Duration(1<<uint(a-1)) * time.Second // 1s, 2s, 4s…
+			if backoff > 8*time.Second {
+				backoff = 8 * time.Second
+			}
+			select {
+			case <-ctx.Done():
+				return domaintopics.Names{}, ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+		n, err := namer.NameCluster(ctx, samples, languages)
+		if err == nil {
+			return n, nil
+		}
+		lastErr = err
+	}
+	return domaintopics.Names{}, lastErr
 }
 
 // representatives returns up to n cluster-member titles closest to the centroid
