@@ -38,13 +38,13 @@ installed). Production builds tree-shake the bridge entirely.
 | Name | Route | What it shows |
 |------|-------|---------------|
 | `01_home` | `/tabs/home` | Activity heatmap (90+ days seeded) + "Up Next" playlist |
-| `02_library` | `/tabs/search/tracks` | Flat, filterable catalog list (Bhagavad-gita, sorted by reference) |
-| `03_notes` | `/tabs/notes` | 4 bookmarks anchored to real transcript sentences |
+| `02_search` | `/tabs/search` | Discovery/browse page — recommendations, collection carousels, topic tiles, lecture shelves |
+| `03_chat` | `/tabs/chat?session=<id>` | Sadhu chat answering "What is the soul?" — full verse card (BG 2.20) + citation chip |
 | `04_transcript` | TranscriptDialog | Mid-playback transcript with `.current` and `.highlighted` blocks |
-| `05_chat` | `/tabs/chat?session=<id>` | Sadhu chat answering "What is the soul?" — full verse card (BG 2.20) + citation chip |
-| `06_filters` | `/tabs/search/tracks` | Filters bottom-sheet over the catalog list (author/source/place/tag/duration/sort) |
-| `07_search` | `/tabs/search` | Discovery/browse page — recommendations, collection carousels, topic tiles, lecture shelves |
-| `08_track` | TrackSheet | Per-track detail bottom-sheet — description, chapter outline, topic chips, share / add-to-playlist |
+| `05_track` | TrackSheet | Per-track detail bottom-sheet — description, chapter outline, topic chips, share / add-to-playlist |
+| `06_notes` | `/tabs/notes` | 4 bookmarks anchored to real transcript sentences |
+| `07_library` | `/tabs/search/tracks` | Flat, filterable catalog list (Bhagavad-gita, sorted by reference) |
+| `08_filters` | `/tabs/search/tracks` | Filters bottom-sheet over the catalog list (author/source/place/tag/duration/sort) |
 
 > Audio/transcripts/outlines exist only in `en` + `ru`. UI locales without
 > their own audio fall back to English content (see `contentLanguageFor` in
