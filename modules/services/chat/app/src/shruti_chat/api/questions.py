@@ -13,7 +13,6 @@ different prompt. Both go through `agent.oneshot.run_oneshot`.
 from __future__ import annotations
 
 import re
-from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -47,7 +46,11 @@ class QuestionsFocus(BaseModel):
 
 class QuestionsRequest(BaseModel):
     focus: QuestionsFocus
-    lang: Literal["ru", "en"] = "ru"
+    # Any UI locale (uk / sr / hi / …) — the client sends its current UI
+    # language. We only carry ru/en prompts; `_SYSTEM.get(lang, _SYSTEM["en"])`
+    # below serves English to every other locale. A `Literal["ru","en"]` here
+    # would 422 every other client and make that English fallback dead code.
+    lang: str = "en"
 
 
 class QuestionsResponse(BaseModel):

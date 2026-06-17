@@ -18,16 +18,62 @@ conversion in `sanskrit/`, not a translation.
 from __future__ import annotations
 
 import asyncio
+import re
+import unicodedata
 from typing import Any
 
 from shruti_chat.application.cache_helpers import TTL_30D, cached_str
 from shruti_chat.domain.entities import Message
 from shruti_chat.infra.translation.pg_translation_cache import PgTranslationCache
-from shruti_chat.sanskrit import sr_latin_to_cyrillic
+from shruti_chat.sanskrit import iast_to_sr, sr_latin_to_cyrillic
 from shruti_chat.observability.logging import get_logger
 
 
 log = get_logger(__name__)
+
+
+# A "word" run vs a non-word run (whitespace / punctuation), preserving both
+# so the rebuilt string keeps the original spacing.
+_WORD_SPLIT_RE = re.compile(r"(\W+)", flags=re.UNICODE)
+
+
+def _has_iast_diacritic(token: str) -> bool:
+    """True when a Latin token carries a Sanskrit IAST diacritic (macron,
+    dot-below, dot-above, acute on s, tilde on n). These are the marks the
+    translator system-prompt preserves verbatim (Kṛṣṇa, gītā, Prabhupāda),
+    and which `sr_latin_to_cyrillic` would leave half-converted."""
+    for ch in unicodedata.normalize("NFD", token):
+        # COMBINING MACRON / DOT BELOW / DOT ABOVE / ACUTE / TILDE — the
+        # decomposed forms of every IAST diacritic used in the corpus.
+        if ch in ("̄", "̣", "̇", "́", "̃"):
+            return True
+    return False
+
+
+def serbian_text_to_cyrillic(text: str) -> str:
+    """Convert Serbian-Latin prose to Cyrillic while keeping IAST Sanskrit
+    tokens in their correct Serbian-Cyrillic transliteration.
+
+    The translator deliberately preserves IAST names (Kṛṣṇa, Bhagavad-gītā,
+    Prabhupāda) inside the Serbian-Latin output. Running the plain Gajica
+    `sr_latin_to_cyrillic` over the WHOLE string produces hybrid garbage
+    (`Kṛṣṇa → Кṛṣṇа`) because it maps base Latin letters but passes the
+    diacritics through. So we tokenise: IAST tokens go through `iast_to_sr`
+    (a proper IAST→Serbian-Cyrillic map), the surrounding Serbian-Latin
+    prose through `sr_latin_to_cyrillic`. Non-word runs (spaces,
+    punctuation) are preserved verbatim. Mirrors the ru-side hybrid fix.
+    """
+    if not text:
+        return text
+    out: list[str] = []
+    for part in _WORD_SPLIT_RE.split(text):
+        if not part:
+            continue
+        if _has_iast_diacritic(part):
+            out.append(iast_to_sr(part))
+        else:
+            out.append(sr_latin_to_cyrillic(part))
+    return "".join(out)
 
 
 # Bump when the system prompt below changes so old cached rows (keyed on
@@ -87,12 +133,15 @@ class LlmTranslationService:
             return text
         cache_lang, to_cyrillic = _normalise_target(tgt_lang)
         # Same-language no-op (e.g. translate_citations on with a native
-        # source) — never round-trip through the LLM.
+        # source) — never round-trip through the LLM. For a `sr-Latn` source
+        # requested as `sr-Cyrl` we must STILL transliterate Latin→Cyrillic
+        # (the cache langs match but the scripts don't), else a Cyrillic
+        # user gets handed Latin.
         if cache_lang == src_lang:
-            return text
+            return serbian_text_to_cyrillic(text) if to_cyrillic else text
 
         translated = await self._translate_into(src, cache_lang)
-        return sr_latin_to_cyrillic(translated) if to_cyrillic else translated
+        return serbian_text_to_cyrillic(translated) if to_cyrillic else translated
 
     async def _translate_into(self, src: str, cache_lang: str) -> str:
         """Resolve the Latin-script translation for `cache_lang`, going
