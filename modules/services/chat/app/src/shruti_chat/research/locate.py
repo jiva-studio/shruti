@@ -127,6 +127,7 @@ async def _resolve_attribution_hits(
     chunk_repo: Any,
     library_db: Any,
     lang: str,
+    titles_cache: _TitlesCache,
 ) -> list[_Hit]:
     """Turn matched attribution refs into hits. `title` refs resolve via
     library_titles (composite "<source>/<tokens>"); `verse` refs via the
@@ -139,7 +140,7 @@ async def _resolve_attribution_hits(
             sid, _, tok = ref.target_id.partition("/")
             if not sid or not tok:
                 continue
-            titles = await _titles_for(library_db, sid, lang)
+            titles = await _titles_for(library_db, sid, lang, titles_cache)
             title = titles.get(tok, "")
             hits.append(_Hit(sid, tok, title, "title", score))
         elif ref.ref_kind == "verse" and chunk_repo is not None:
@@ -164,19 +165,27 @@ async def _resolve_attribution_hits(
     return hits
 
 
-_titles_cache: dict[tuple[int, str, str], dict[str, str]] = {}
+# Title-map memo type: (source_id, lang) → {chapter_token: title}. The cache
+# is created PER CALL (one dict per run_locate / build_pinned_chapter_notes
+# invocation) and threaded through the helpers — never a process-global. The
+# old global was keyed by `id(library_db)`, which CPython can reuse after GC,
+# risking a cross-call collision, and was mutated from two entry points.
+_TitlesCache = dict[tuple[str, str], dict[str, str]]
 
 
-async def _titles_for(library_db: Any, source_id: str, lang: str) -> dict[str, str]:
-    """Per-call memoized title map for one book (keyed by db identity)."""
+async def _titles_for(
+    library_db: Any, source_id: str, lang: str, cache: _TitlesCache,
+) -> dict[str, str]:
+    """Memoized title map for one book within a single call. `cache` is the
+    per-call dict the caller owns; no process-global state."""
     if library_db is None:
         return {}
-    key = (id(library_db), source_id, lang)
-    cached = _titles_cache.get(key)
+    key = (source_id, lang)
+    cached = cache.get(key)
     if cached is not None:
         return cached
     titles = await fetch_titles(library_db, source_id, lang=lang)
-    _titles_cache[key] = titles
+    cache[key] = titles
     return titles
 
 
@@ -205,6 +214,9 @@ async def build_pinned_chapter_notes(
     if library_db is None or not any(r.ref_kind == "title" for r in refs):
         return []
 
+    # Per-call title memo — no process-global (see `_titles_for`).
+    titles_cache: _TitlesCache = {}
+
     title_hits: list[_Hit] = []
     for ref in refs:
         if ref.ref_kind != "title":
@@ -212,7 +224,7 @@ async def build_pinned_chapter_notes(
         sid, _, tok = ref.target_id.partition("/")
         if not sid or not tok:
             continue
-        titles = await _titles_for(library_db, sid, lang)
+        titles = await _titles_for(library_db, sid, lang, titles_cache)
         title_hits.append(_Hit(sid, tok, titles.get(tok, ""), "title", score))
     if not title_hits:
         return []
@@ -242,7 +254,10 @@ async def build_pinned_chapter_notes(
                 verse_hits.append(_Hit(c.source_id, c.tokens, c.addr_label, "verse", score))
 
     # Verse hits first → their book-level short-name wins the region label.
-    regions = await _build_regions(verse_hits + title_hits, library_db=library_db, lang=lang)
+    regions = await _build_regions(
+        verse_hits + title_hits, library_db=library_db, lang=lang,
+        titles_cache=titles_cache,
+    )
     notes: list[dict] = []
     for region in regions:
         if not region.chapters:
@@ -294,7 +309,9 @@ async def run_locate(
     precomputed_query_embedding_task: Any | None = None,
 ) -> LocateResult:
     """Locate a topic/story in the scripture structure. See module docstring."""
-    _titles_cache.clear()
+    # Per-call title memo — created fresh each invocation and threaded into
+    # every helper, so there's no process-global keyed by a reusable id().
+    titles_cache: _TitlesCache = {}
     # The router emits a SHORT source code (e.g. "SB"/"BG"); chunks.source_id
     # is the opaque catalog id ("source_…"). Passing the short code as the
     # ANN's source filter matches nothing, so only honor an already-opaque
@@ -351,6 +368,7 @@ async def run_locate(
             matched_ids = [m.attribution_id for m in matches]
             attr_hits = await _resolve_attribution_hits(
                 matches, chunk_repo=chunk_repo, library_db=library_db, lang=lang,
+                titles_cache=titles_cache,
             )
 
     # (b)+(c) Semantic search over title + verse + commentary kinds.
@@ -401,7 +419,9 @@ async def run_locate(
                 break
         return LocateResult(verses=verses, matched_attribution_ids=matched_ids)
 
-    regions = await _build_regions(all_hits, library_db=library_db, lang=lang)
+    regions = await _build_regions(
+        all_hits, library_db=library_db, lang=lang, titles_cache=titles_cache,
+    )
     truncated = len(regions) > _MAX_REGIONS
     return LocateResult(
         regions=regions[:_MAX_REGIONS],
@@ -411,7 +431,7 @@ async def run_locate(
 
 
 async def _build_regions(
-    hits: list[_Hit], *, library_db: Any, lang: str,
+    hits: list[_Hit], *, library_db: Any, lang: str, titles_cache: _TitlesCache,
 ) -> list[LocateRegion]:
     """Group hits into chapter regions, book-aware. A region is a canto
     (3-level books) or the book itself (2-level books like BG)."""
@@ -419,7 +439,7 @@ async def _build_regions(
     regions: dict[tuple[str, str], dict[str, Any]] = {}
 
     for h in hits:
-        titles = await _titles_for(library_db, h.source_id, lang)
+        titles = await _titles_for(library_db, h.source_id, lang, titles_cache)
         has_cantos = any("." in t for t in titles.keys())
         segs = h.tokens.split(",")[0].split(".")
         if h.item_kind == "title":
