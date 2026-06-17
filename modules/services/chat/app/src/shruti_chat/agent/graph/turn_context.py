@@ -145,6 +145,10 @@ class TurnContext:
     chunk_repo: Any | None = None       # ChunkRepository
     catalog_repo: Any | None = None     # CatalogRepository
     embedder: Any | None = None         # EmbedderPort
+    # The on-device listening snapshot sent with the request. Personalized
+    # TOOLS get it via build_personalized_tools' closure; deterministic
+    # nodes (recommend_worker) read it straight off the context.
+    user_context: Any | None = None     # UserContext
     # Cross-encoder reranker (RerankerPort). None when no provider is
     # configured / the key is missing → research pipeline uses cosine.
     reranker: Any | None = None
