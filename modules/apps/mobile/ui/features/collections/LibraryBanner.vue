@@ -79,10 +79,13 @@ const emit = defineEmits<{ (e: "click"): void }>()
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Keep the <picture> wrapper out of the flex flow so it adds no column or gap;
-   the art inside is absolutely positioned. */
+/* Keep the <picture> wrapper out of the flex flow so it adds no column or gap.
+   `display: contents` is not enough: the in-flow <source> child would still
+   count as a (zero-width) flex item and the container's gap would push the
+   text right. Absolutely positioning the whole art layer removes it from flow. */
 picture {
-  display: contents;
+  position: absolute;
+  inset: 0;
 }
 
 /* Decorative cover: fills the card, focal art kept to the right edge. */
