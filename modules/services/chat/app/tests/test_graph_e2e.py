@@ -76,6 +76,7 @@ class FakeLLM:
                 "messages_count": len(messages),
                 "tools_count": len(tools or []),
                 "tool_choice": tool_choice,
+                "messages": list(messages),
             }
         )
         chunks = self.stream_responses[self._sidx]
@@ -360,6 +361,128 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
     assert action["id"] == "act_abc123"
     # Nested payload shape per SSE v1 (plan §11.3).
     assert action["payload"]["track_ids"] == ["t1", "t2"]
+
+
+@pytest.mark.asyncio
+async def test_recap_current_lecture_outline_reaches_synth() -> None:
+    """Regression for the «Перескажи текущую лекцию» empty-result refusal
+    (PR #1016).
+
+    Router classifies the deictic recap as `research` + `current_ref`; with
+    a `current_track_ref` anchor set, `route_after_router` sends it to the
+    catalog_worker. The worker calls `track_outline_get`, which emits the
+    `outline` action card and returns `{track_id, lang, items:[{start_ms,
+    title}]}` — a shape with NO `ref` and NO `text`.
+
+    The bug: `_render_one_note` had no branch for that shape, so it rendered
+    to an EMPTY string, the synthesizer's RESEARCH NOTES block came out blank,
+    and the empty-result discipline fired a canned refusal — even though the
+    recap data was present. This test pins the full seam end-to-end: the
+    outline titles must reach the SYNTHESIZER's prompt as grounding, and the
+    `[outline:<id>]` marker directive must be there for it to emit the card.
+    """
+    track_id = "track_xCUy8kQJkgXM"
+    titles = [
+        "Методы и уровни преданного служения",
+        "Природа души и ее связь с Богом",
+    ]
+
+    async def fake_track_outline_get(**kwargs: Any) -> dict[str, Any]:
+        yield_event = kwargs.get("yield_event")
+        items = [
+            {"start_ms": 59000, "title": titles[0]},
+            {"start_ms": 688000, "title": titles[1]},
+        ]
+        if yield_event is not None:
+            yield_event(
+                "action",
+                {
+                    "kind": "outline",
+                    "id": f"outline_{track_id}",
+                    "payload": {"track_id": track_id, "items": items},
+                },
+            )
+        return {"track_id": track_id, "lang": "ru", "items": items}
+
+    llm = FakeLLM(
+        router_responses=[
+            RoutingDecision(
+                intent="research", confidence=1.0,
+                extracted_args={"current_ref": True},
+            ),
+        ],
+        stream_responses=[
+            # catalog_worker turn 1: call track_outline_get.
+            [
+                {
+                    "tool_calls": [
+                        {
+                            "index": 0, "id": "oc1", "name": "track_outline_get",
+                            "arguments_delta": f'{{"track_id":"{track_id}"}}',
+                        }
+                    ]
+                },
+                {"finish_reason": "stop"},
+            ],
+            # catalog_worker turn 2: converge.
+            [{"finish_reason": "stop"}],
+            # synth: a real model would summarise the titles + drop the
+            # marker; script that so we can assert the SSE carries it.
+            [{"text": f"В этой лекции обсуждается природа души.\n\n[outline:{track_id}]"},
+             {"finish_reason": "stop"}],
+        ],
+    )
+
+    graph = build_chat_graph()
+    aliases = TurnAliasMap()
+    ctx = TurnContext(
+        request_id="r-recap",
+        aliases=aliases,
+        expander=MarkerExpander(aliases),
+        llm=llm,
+        catalog_tools={"track_outline_get": fake_track_outline_get},
+    )
+
+    events: list[tuple[str, dict[str, Any]]] = []
+    async for mode, payload in graph.astream(
+        {
+            "history": [],
+            "user_query": "Перескажи текущую лекцию",
+            "lang": "ru",
+            "request_id": "r-recap",
+            # chat_turn pre-mints this from user_context.current_track_id;
+            # the anchor is what routes research+current_ref → catalog_worker.
+            "current_track_ref": 1,
+        },
+        context=ctx,
+        stream_mode=["custom"],
+    ):
+        if mode == "custom":
+            events.append((payload.get("type"), payload.get("data", {})))
+
+    # The catalog_worker ran and the outline card fired.
+    actions = [d for t, d in events if t == "action"]
+    assert any(a.get("kind") == "outline" for a in actions), (
+        f"no outline action; event types: {[t for t, _ in events]!r}"
+    )
+
+    # THE regression assertion: the synthesizer received the outline titles
+    # as grounding (non-empty RESEARCH NOTES) — before the fix this prompt
+    # held an empty notes block and the synth refused.
+    synth_call = next(s for s in llm.seen_streams if s["tools_count"] == 0)
+    synth_system = synth_call["messages"][0]["content"]
+    assert "RESEARCH NOTES" in synth_system
+    for title in titles:
+        assert title in synth_system, (
+            f"outline title {title!r} missing from synthesizer grounding — "
+            "the worker→synth handoff dropped the outline result"
+        )
+    # The synth is told which marker to emit for the interactive card.
+    assert f"[outline:{track_id}]" in synth_system
+
+    # And the marker survives into the streamed answer.
+    deltas = "".join(d.get("text", "") for t, d in events if t == "delta")
+    assert f"[outline:{track_id}]" in deltas
 
 
 @pytest.mark.asyncio
