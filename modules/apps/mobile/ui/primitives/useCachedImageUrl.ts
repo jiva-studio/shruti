@@ -4,7 +4,19 @@ import { FILES_STORAGE_KEY } from "./filesStorageKey.js"
 export interface UseCachedImageUrlReturn {
   /** Locally-cached src for `<img>`, or undefined until the first resolve. */
   readonly src: Ref<string | undefined>
+  /**
+   * Signal that the current `src` failed to render (the `<img>` fired `error`).
+   * Re-attempts the cached resolve a couple times with a short backoff before
+   * giving up, so a cover that lost a flaky request can still recover instead
+   * of staying invisible forever. No-op once attempts are exhausted.
+   */
+  retry(): void
 }
+
+/** Max load attempts (initial + retries) before giving up gracefully. */
+const MAX_ATTEMPTS = 3
+/** Base backoff between attempts; grows linearly per attempt. */
+const RETRY_BACKOFF_MS = 250
 
 /**
  * Resolve a remote image URL to a locally-cached one via the injected
@@ -24,22 +36,45 @@ export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedIma
   const src = ref<string | undefined>(undefined)
   let objectUrl: string | undefined
   let token = 0
+  // Attempts already spent on the current url (reset on every url change).
+  let attempts = 0
 
   function revoke(): void {
     if (objectUrl?.startsWith("blob:")) URL.revokeObjectURL(objectUrl)
     objectUrl = undefined
   }
 
+  function delay(ms: number, current: number): Promise<void> {
+    return new Promise((resolve) => {
+      const id = setTimeout(resolve, ms)
+      // Cancel the wait if a newer url change superseded this generation, so a
+      // pending backoff can't resurrect a stale resolve.
+      if (current !== token) clearTimeout(id)
+    })
+  }
+
   async function load(url: string | undefined): Promise<void> {
     const current = ++token
     revoke()
     src.value = undefined
+    attempts = 0
     if (!url) return
     if (!filesStorage) {
       // No cache wired (e.g. tests) — load the remote URL directly.
       src.value = url
       return
     }
+    await attempt(url, current)
+  }
+
+  // One cached-resolve attempt for `url` under generation `current`. On
+  // success commits the cached URL; on rejection retries the cached resolve a
+  // couple times with a short linear backoff, then falls back to the raw
+  // remote URL so the happy path and a recovered-but-still-failing link both
+  // degrade gracefully. Bounded by MAX_ATTEMPTS and guarded by `token`.
+  async function attempt(url: string, current: number): Promise<void> {
+    if (current !== token || !filesStorage) return
+    attempts++
     try {
       const local = await filesStorage.get(url)
       if (current !== token) {
@@ -49,12 +84,32 @@ export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedIma
       objectUrl = local
       src.value = local
     } catch {
+      if (current !== token) return
+      if (attempts < MAX_ATTEMPTS) {
+        await delay(RETRY_BACKOFF_MS * attempts, current)
+        await attempt(url, current)
+        return
+      }
+      // Out of cached-resolve attempts — fall back to the raw remote URL.
       if (current === token) src.value = url
     }
+  }
+
+  // Called by the consumer when the rendered `<img>` fires `error` (e.g. the
+  // raw-URL fallback also failed on a flaky link). Re-drives the cached resolve
+  // if we still have attempts left; otherwise gives up quietly.
+  function retry(): void {
+    const url = remote.value
+    if (!url || !filesStorage || attempts >= MAX_ATTEMPTS) return
+    const current = token
+    void (async () => {
+      await delay(RETRY_BACKOFF_MS * attempts, current)
+      await attempt(url, current)
+    })()
   }
 
   watch(remote, (u) => void load(u), { immediate: true })
   onUnmounted(revoke)
 
-  return { src }
+  return { src, retry }
 }
