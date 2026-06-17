@@ -231,16 +231,24 @@ async def test_tool_events_reach_sse_stream() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unknown_intent_soft_fallback_to_synth() -> None:
-    """Low confidence → router collapses to unknown → graph routes
-    straight to synth without invoking worker."""
+async def test_unknown_intent_routes_through_light_research() -> None:
+    """#39: an `unknown` intent no longer drops straight to a tool-less
+    synthesizer. It runs a LIGHT research pass first (research_worker →
+    synthesis_planner → synthesizer) so a single misclassification can't
+    yield a confident "not found" with retrieval skipped — the worker
+    grounds the answer or honestly comes up empty, then synth phrases it.
+    """
     llm = FakeLLM(
         router_responses=[
-            # Router returns research with low confidence; the use-case
-            # downgrades to unknown.
-            RoutingDecision(intent="research", confidence=0.3),
+            # Model itself returns `unknown` — a genuinely ambiguous query
+            # (NOT a downgraded research; #36 keeps retrieval intents whole).
+            RoutingDecision(intent="unknown", confidence=0.3),
         ],
         stream_responses=[
+            # research_worker turn 1: no tool calls → immediate convergence
+            # (empty research is fine for this wiring test).
+            [{"finish_reason": "stop"}],
+            # synth: streams the phrased result.
             [{"text": "Не уверен, что нашёл. Попробуй уточнить."}, {"finish_reason": "stop"}],
         ],
     )
@@ -257,8 +265,10 @@ async def test_unknown_intent_soft_fallback_to_synth() -> None:
             deltas.append(payload["data"]["text"])
 
     assert "уточнить" in "".join(deltas)
-    # Worker skipped — only synth call.
-    assert len(llm.seen_streams) == 1
+    # The light research pass ran: research_worker LLM call + synth call.
+    assert len(llm.seen_streams) == 2
+    assert llm.seen_streams[0]["tool_choice"] == "required"
+    assert llm.seen_streams[1]["tools_count"] == 0
 
 
 @pytest.mark.asyncio

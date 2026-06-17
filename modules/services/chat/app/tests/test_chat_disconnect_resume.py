@@ -58,19 +58,26 @@ class _FakeTurnStore:
 
 
 class _AllowRateLimiter:
+    def __init__(self) -> None:
+        self.refunds = 0
+
     async def check_and_increment(self, *args, **kwargs):
         return SimpleNamespace(allowed=True, current_after=1, limit_for_scope=10)
 
     async def refund(self, *args, **kwargs):
+        self.refunds += 1
         return None
 
 
 class _FakeIdempotency:
+    def __init__(self) -> None:
+        self.released: list[str] = []
+
     async def try_acquire(self, key: str, ttl_seconds: int) -> bool:
         return True
 
     async def release(self, key: str) -> None:
-        return None
+        self.released.append(key)
 
 
 class _Deps:
@@ -185,3 +192,71 @@ async def test_explicit_cancel_stops_the_turn(monkeypatch) -> None:
     await _wait(lambda: _TRACE in store.finished)
     kinds = [e["event"] for e in store.finished[_TRACE]["events"]]
     assert "done" not in kinds  # cancelled before completion
+
+
+async def test_cancel_after_answer_streamed_keeps_charge_and_key(monkeypatch) -> None:
+    # ABUSE VECTOR (end-to-end): a user lets the whole answer stream, then hits
+    # Stop one frame before `done`. The charge must be kept (no refund) and the
+    # idempotency key must NOT be released — otherwise they got a free answer
+    # AND could re-send the same key for an unlimited free retry.
+    async def _fake_stream(*_args, is_disconnected=None, **_kwargs):
+        yield _FakeAgentEvent("delta", {"text": "the whole "})
+        yield _FakeAgentEvent("delta", {"text": "answer"})
+        if is_disconnected is not None and await is_disconnected():
+            return  # Stop landed after the answer already streamed
+        yield _FakeAgentEvent("done", {})
+
+    monkeypatch.setattr(chat_api, "run_chat_turn", lambda *a, **k: _fake_stream(*a, **k))
+
+    store = _FakeTurnStore()
+    deps = _Deps(store)
+    await deps.turn_runner.cancel(_TRACE)  # Stop requested up-front
+
+    resp = await chat(
+        _make_request(),
+        _body(),
+        x_chat_protocol_version="1",
+        idempotency_key="abuse-key",
+        x_trace_id=_TRACE,
+        user=_USER,
+        deps=deps,
+    )
+    assert resp.status_code == 200
+
+    await _wait(lambda: _TRACE in store.finished)
+    # The answer streamed, so despite the cancel: keep the charge, keep the key.
+    assert deps.rate_limiter.refunds == 0
+    assert f"chat:{_USER.id}:abuse-key" not in deps.idempotency_store.released
+
+
+async def test_cancel_before_answer_refunds_and_releases_key(monkeypatch) -> None:
+    # The legitimate pre-answer Stop: only a non-answer status event preceded
+    # the cancel, so the user got nothing → refund the unit and release the key
+    # so the same-key retry can re-send.
+    async def _fake_stream(*_args, is_disconnected=None, **_kwargs):
+        yield _FakeAgentEvent("status", {"key": "router_decision"})
+        if is_disconnected is not None and await is_disconnected():
+            return  # Stop before any answer delta
+        yield _FakeAgentEvent("delta", {"text": "never reached"})
+        yield _FakeAgentEvent("done", {})
+
+    monkeypatch.setattr(chat_api, "run_chat_turn", lambda *a, **k: _fake_stream(*a, **k))
+
+    store = _FakeTurnStore()
+    deps = _Deps(store)
+    await deps.turn_runner.cancel(_TRACE)
+
+    resp = await chat(
+        _make_request(),
+        _body(),
+        x_chat_protocol_version="1",
+        idempotency_key="pre-answer-key",
+        x_trace_id=_TRACE,
+        user=_USER,
+        deps=deps,
+    )
+    assert resp.status_code == 200
+
+    await _wait(lambda: _TRACE in store.finished)
+    assert deps.rate_limiter.refunds == 1
+    assert f"chat:{_USER.id}:pre-answer-key" in deps.idempotency_store.released

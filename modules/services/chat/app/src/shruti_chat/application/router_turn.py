@@ -42,6 +42,18 @@ log = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+# Intents whose whole purpose is to gather grounding before the
+# synthesizer answers. Collapsing one of these to "unknown" on a
+# sub-0.5 confidence is actively harmful: `route_after_router` would
+# send "unknown" straight to the synthesizer with EMPTY tool_results,
+# producing a confident, ungrounded "not found" with retrieval skipped
+# (the `router_unknown_misroute` class, re-introduced one layer up). A
+# slightly-unsure `research` is still far better served by running the
+# search than by refusing — so we keep retrieval-bearing intents out of
+# the collapse and let their workers do the grounding.
+_RETRIEVAL_BEARING_INTENTS = frozenset({"research", "locate", "find_track"})
+
+
 class _LLMForRouting(Protocol):
     """Minimal subset of LLMPort that router needs. Narrowed to make
     test mocks small."""
@@ -161,8 +173,17 @@ async def run_router_turn(
     else:
         decision = await _call()
     # Low confidence collapses to "unknown" so downstream routing picks
-    # the soft fallback path (synthesizer answers without tools).
-    if decision.confidence < 0.5 and decision.intent != "unknown":
+    # the soft fallback path. Retrieval-bearing intents are EXEMPT: a
+    # low-confidence `research`/`locate`/`find_track` still benefits from
+    # running its worker's search (which can ground or honestly come up
+    # empty) far more than from being flattened into a tool-less
+    # synthesizer reply. We only collapse genuinely low-signal intents
+    # (direct_chat / help / recommend / show_verse / create_action).
+    if (
+        decision.confidence < 0.5
+        and decision.intent != "unknown"
+        and decision.intent not in _RETRIEVAL_BEARING_INTENTS
+    ):
         log.info(
             "router_low_confidence_to_unknown",
             request_id=request_id,

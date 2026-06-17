@@ -246,23 +246,40 @@ async def chat(
             )
         return _stream_with_intent_capture(inner, turn_meta)
 
-    async def finalize(had_error: bool, completed: bool) -> dict[str, Any]:
+    async def finalize(
+        had_error: bool, completed: bool, answer_started: bool
+    ) -> dict[str, Any]:
+        # A Stop that lands AFTER answer content already streamed to the
+        # client is NOT a free retry: the user received the answer, so we
+        # keep the charge and the idempotency key even though the turn was
+        # cancelled. Only a genuine pre-answer Stop (or a hard failure) is
+        # treated as "the user got nothing". `answer_started` is True once
+        # any user-visible answer `delta` was pushed (router/status/thinking
+        # events don't count). Without this gate a user could stream the
+        # whole answer and cancel one frame before `done` for an unlimited
+        # free turn.
+        stopped_pre_answer = not completed and not answer_started
         # Turn-specific teardown (the runner owns the task / buffer / finish):
-        # release the idempotency key only on a real failure (a clean turn
-        # keeps it to dedup genuine duplicate sends). A bare client disconnect
-        # no longer releases or refunds — the turn still completes and
-        # delivers its answer to the buffer.
-        if idempotency_key and had_error:
+        # release the idempotency key on a real failure OR a Stop BEFORE any
+        # answer streamed. A clean turn keeps the key to dedup genuine
+        # duplicate sends; a bare client disconnect still completes
+        # (`completed=True`) and delivers its answer to the buffer, so it
+        # keeps the key too; and a Stop after the answer started keeps the key
+        # (the user got the answer). Releasing only on a pre-answer cancel lets
+        # that same-key retry re-send instead of bouncing 409 against a held
+        # key the user never got an answer for.
+        if idempotency_key and (had_error or stopped_pre_answer):
             await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
         # Refund the charged quota unit on a failed turn (no answer
-        # delivered) OR a quota-exempt intent (a "help" turn that DID
-        # answer — asking the assistant for app help shouldn't burn the
-        # daily limit). Both go through the same best-effort decrement;
-        # the idempotency key above is only released on real failure, so
-        # a help turn still dedupes genuine duplicate sends.
+        # delivered), a Stop BEFORE any answer streamed (the user cancelled
+        # before getting anything; charging a daily unit for that is wrong),
+        # OR a quota-exempt intent (a "help" turn that DID answer — asking the
+        # assistant for app help shouldn't burn the daily limit). A Stop after
+        # the answer started is deliberately NOT refunded — the user received
+        # the answer. All refunds go through the same best-effort decrement.
         quota_exempt = turn_meta["intent"] in _QUOTA_EXEMPT_INTENTS
         usage_current = rl.current_after
-        if had_error or quota_exempt:
+        if had_error or stopped_pre_answer or quota_exempt:
             refunded = await deps.rate_limiter.refund(
                 user.id, user.anonymous, ip,
                 scope="chat", quota_id=user.quota_id,
