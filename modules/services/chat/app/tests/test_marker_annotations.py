@@ -36,6 +36,9 @@ def test_cite_marker_expands_with_transcript_snippet():
     assert "9:12–10:07" in out
     assert "The living entity, being marginal" in out
     assert "[/cite]" in out
+    # Prose after the citation resumes on its own line, not glued to [/cite].
+    assert "[/cite]\n" in out
+    assert "[/cite] More prose" not in out
 
 
 def test_cite_without_stashed_text_shows_window_only():
