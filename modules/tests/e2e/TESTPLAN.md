@@ -35,6 +35,9 @@ Living checklist of app journeys to cover. Status legend:
 - 🔜 add a track from recommendations / a topic
 - ✅ library filters sheet opens — `filters`
 - 🔜 apply a filter → list narrows → add still works
+- ✅ library content language seeds + filters the catalog per locale — `library-language`
+- ✅ a topic lists only lectures in the library language — `topic-language`
+- ✅ a collection lists only lectures in the library language — `collection-language`
 
 ## Chat
 - ✅ chat composer + suggestions render — `chat-render`
@@ -79,6 +82,7 @@ Living checklist of app journeys to cover. Status legend:
 ## Settings
 - ✅ a setting changes app behaviour (open-transcript-automatically) — `settings`
 - 🔧 switching the app language updates the UI — `settings-language` (in progress)
+- ✅ library-language picker lists content languages + re-filters discovery — `settings-library-language`
 - 🔜 player-progress toggle shows/hides the ring on the player
 - 🔜 player-on-notes · highlight-sentence · track-info toggles
 - ✋ autoplay · automatic-scroll (Pro-gated; need a non-dev build to see paywall)

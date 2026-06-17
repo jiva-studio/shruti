@@ -33,6 +33,10 @@ One run, one report: `npm run test:all` runs `mocked` + `stack` into a single
 | `transcript` | starting a track reveals its transcript |
 | `notes` | the Notes tab lists the saved bookmarks |
 | `settings` | flipping a setting changes app behaviour |
+| `library-language` | the library content language seeds + filters the catalog per locale |
+| `topic-language` | a topic lists only lectures in the library language |
+| `collection-language` | a collection lists only lectures in the library language |
+| `settings-library-language` | the Settings library-language picker re-filters discovery |
 | `chat-render` | the chat composer + suggestions render |
 | `share-menu` | the track share menu offers a PDF export |
 
