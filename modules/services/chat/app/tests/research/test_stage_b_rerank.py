@@ -30,6 +30,9 @@ class FakeEmbedder:
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [self.vec_by_text.get(t, [0.1, 0.1, 0.1]) for t in texts]
 
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed_documents(texts)
+
 
 class FakeChunkRepo:
     async def get_chunks_by_verse(self, **_kwargs):

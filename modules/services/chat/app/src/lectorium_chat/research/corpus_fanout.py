@@ -407,7 +407,9 @@ async def fanout_search_with_boost(
     # cross-encoder. Logged once as `fanout_round_breakdown` at the end.
     _t_embed = time.perf_counter()
     q_vecs, eligible_track_ids = await asyncio.gather(
-        embedder.embed_documents(query_texts),
+        # QUERY text → query embed path (applies the query prefix, not the
+        # doc prefix); essential the moment an asymmetric model is enabled.
+        embedder.embed_queries(query_texts),
         catalog_repo.filter_track_ids(
             author_id=author_id, source_id=book_id, location_id=location_id,
             tag_ids=tag_ids, date_from=date_from, date_to=date_to,
@@ -416,8 +418,14 @@ async def fanout_search_with_boost(
     embed_ms = (time.perf_counter() - _t_embed) * 1000.0
     if len(q_vecs) != len(query_texts):
         log.warning("fanout_embed_mismatch", queries=len(query_texts), vectors=len(q_vecs))
-        q_vecs = q_vecs[: len(query_texts)]
-        sub_query_ids = sub_query_ids[: len(q_vecs)]
+        # Truncate ALL THREE parallel lists to the common length. Slicing
+        # q_vecs/sub_query_ids alone left query_texts at full length, so the
+        # downstream `zip(q_vecs, query_texts, sub_query_ids)` silently dropped
+        # whichever tail sub-queries the embedder returned vectors for.
+        n = min(len(q_vecs), len(query_texts), len(sub_query_ids))
+        q_vecs = q_vecs[:n]
+        query_texts = query_texts[:n]
+        sub_query_ids = sub_query_ids[:n]
 
     # 2. Lecture lane is disabled when the catalog filter matched zero tracks.
     lectures_disabled = eligible_track_ids is not None and not eligible_track_ids

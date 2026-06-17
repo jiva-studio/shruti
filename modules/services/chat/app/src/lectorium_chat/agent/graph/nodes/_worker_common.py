@@ -526,7 +526,9 @@ async def translate_commentaries(ctx: TurnContext) -> None:
         if not s.strip():
             return s
         try:
-            out = await ctx.translator.translate(s, src_lang="en", tgt_lang=ctx.lang)
+            out = await ctx.translator.translate(
+                s, src_lang=ctx.retrieval_lang, tgt_lang=ctx.lang,
+            )
         except Exception:  # noqa: BLE001 — citation never fails the turn
             return s
         return out or s
@@ -543,7 +545,9 @@ async def translate_commentaries(ctx: TurnContext) -> None:
         joined = "\n".join(sentences)
         whole: str | None
         try:
-            whole = await ctx.translator.translate(joined, src_lang="en", tgt_lang=ctx.lang)
+            whole = await ctx.translator.translate(
+                joined, src_lang=ctx.retrieval_lang, tgt_lang=ctx.lang,
+            )
         except Exception as exc:  # noqa: BLE001 — citation never fails the turn
             whole = None
             log.warning(

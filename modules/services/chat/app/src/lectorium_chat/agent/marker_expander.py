@@ -541,9 +541,11 @@ class MarkerExpander:
         # Bare `[s=N,…]` sentence-index token. The `|s=…` payload is only
         # legal as a SUFFIX inside `[^N|s=…]`; a standalone `[s=0,2]` is
         # producer-side garbage (the synth note renderer's `[s=N]` markers
-        # leaking past the model). Drop it instead of passing it through —
-        # the client would otherwise render the raw token in the bubble.
+        # leaking past the model). It matches none of the keyword grammars, so
+        # it would otherwise pass through verbatim and surface as garbage in
+        # the bubble. Drop it AND count it as malformed.
         if SENTENCE_MARKER_LEAK_RE.fullmatch(marker):
+            self._malformed_count += 1
             log.info(
                 "chat_marker_sentence_token_leak_dropped",
                 request_id=self._request_id,

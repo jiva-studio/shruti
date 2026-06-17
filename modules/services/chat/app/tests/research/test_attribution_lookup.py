@@ -321,16 +321,44 @@ async def test_refs_parsed_from_jsonb() -> None:
 
 
 @pytest.mark.asyncio
-async def test_native_match_at_cross_threshold_promoted_no_extra_query() -> None:
-    # Native top1 is 0.81 — below 0.85 accept_native but above 0.80 accept_cross.
-    # Should accept as native, NOT issue a second cross-lang query.
-    conn = FakeConn({("ru", "pinned"): [_row("a1", 0.81)]})
+async def test_pinned_native_in_cross_band_is_judged_not_auto_promoted() -> None:
+    # Native top1 is 0.81 — below 0.85 accept_native, above 0.80 accept_cross.
+    # For a PINNED (curated) attribution this is BELOW the native bar: it must
+    # NOT be auto-promoted to native unjudged just because it clears the looser
+    # cross bar. With no reranker/LLM judge available the border gate can't
+    # confirm it → reject (the fabricated-source guard), exactly like the
+    # 0.78 border case. (Boost still early-accepts; see the topic tests.)
+    conn = FakeConn(
+        {("ru", "pinned"): [_row("a1", 0.81)]},
+        texts_by_attr={"a1": ["формулировка"]},
+    )
     matches = await find_attributions(
         kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
         embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
-    assert len(matches) == 1
-    assert matches[0].stage == "native"
-    # Verify only one SQL call (native).
+    assert matches == []
+    # No second cross-lang SQL — the native border gate decided it.
     assert len(conn.calls) == 1
     assert conn.calls[0][0] == "native"
+
+
+@pytest.mark.asyncio
+async def test_pinned_native_in_cross_band_accepted_when_judge_confirms() -> None:
+    # Same 0.81 native cosine, but now the cross-encoder confirms the curated
+    # phrasing → accept as a NATIVE-stage match (the judged path the cross-band
+    # pin now flows through instead of the old unjudged auto-promote).
+    conn = FakeConn(
+        {("ru", "pinned"): [_row("a1", 0.81)]},
+        texts_by_attr={"a1": ["неграмотный брахман плакал над Гитой", "брахман и Гита"]},
+    )
+    matches = await find_attributions(
+        kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
+        reranker=FakeReranker(0.80), user_query="история про брахмана и Гиту",
+    )
+    assert len(matches) == 1
+    assert matches[0].attribution_id == "a1"
+    assert matches[0].stage == "native"
+    # Native border gate decided it — no second cross-LANG SQL was issued
+    # (the gate's curated-text fetch is not a cross-stage query).
+    assert not any(c[0] == "cross" for c in conn.calls)
