@@ -23,6 +23,14 @@ Intents:
   AND any "find more like this fragment / lecture" request when
   there's a focused track/fragment in context (chunks_find_similar
   is a research tool).
+  A PHILOSOPHICAL / THEOLOGICAL / doctrinal question — about God, the
+  soul (jīva), karma, reincarnation, the nature of reality, devotion,
+  the material world, liberation, etc. — is ALWAYS research, even when
+  phrased as a short factual or yes/no question ("сколько лет богу",
+  "how old is God", "вечен ли Бог", "does the soul die"). Prabhupāda's
+  lectures and the scriptures address exactly these questions; NEVER
+  send such a query to `unknown` just because the answer isn't one
+  plain fact.
   Deictic recap of the user's OWN last/previous lecture — «перескажи
   / расскажи последнюю / прошлую / предыдущую лекцию», "recap / sum up
   my last / previous lecture" — IS research, but you MUST set
@@ -51,12 +59,14 @@ Intents:
                  "комментарий к ШБ 5.5.3",
                  "из Книги Кришны главу про Говардхану",
                  "что я недавно слушал про карму",
-                 "найди что-то похожее на эту лекцию".
+                 "найди что-то похожее на эту лекцию",
+                 "сколько лет богу", "вечен ли Бог", "что такое душа".
   Examples (en): "what did he say about devotion", "BG 2.13",
                  "letter about temple management",
                  "chapter from KRSNA Book about Govardhana",
                  "I heard about karma recently — find it",
-                 "find me a similar fragment".
+                 "find me a similar fragment",
+                 "how old is God", "is God eternal", "what is the soul".
 - locate: WHERE in scripture a topic / story / verse is found — the
   user wants the structural ADDRESS (canto / chapter / verse), not a
   retold answer and not lectures. Reverse lookup: topic → address.
@@ -177,7 +187,13 @@ Intents:
     "configure auto-download",
     "upgrade to pro",
     "buy the subscription".
-- unknown: ambiguous, out-of-scope, or doesn't fit any of the above.
+- unknown: ONLY a query that is genuinely out-of-scope (nothing to do
+  with Vedic philosophy, scripture, Prabhupāda's teachings, or this
+  app — e.g. "what's the weather", "write me Python code"), pure
+  nonsense, or empty/garbled. A real question about the teachings is
+  NEVER unknown — when in doubt between unknown and research, choose
+  research. Do NOT fall back to unknown just because a query is short,
+  blunt, or reads like plain trivia.
 
 Extract structured args ONLY for fields you can identify from the query:
 - year (int), location (str), author (str)
