@@ -79,6 +79,32 @@ async def test_plain_text_passes_through() -> None:
 
 
 @pytest.mark.asyncio
+async def test_empty_stream_emits_error_not_blank_done() -> None:
+    """A completion stream that yields ZERO text must NOT finalize as a
+    successful (blank) `done` — that would charge the user for an empty
+    message with no refund. Instead the synthesizer emits an `error`
+    event (code `chat_unavailable`) so the bridge sets had_error and the
+    turn is refunded + the client told to retry."""
+    aliases = TurnAliasMap()
+    expander = MarkerExpander(aliases)
+    llm = StreamingLLM(chunks=[])  # provider streamed nothing usable
+
+    events = await _drain(
+        run_synthesizer_turn(
+            "что?",
+            tool_results=[],
+            llm=llm,
+            expander=expander,
+            system_prompt="sys",
+        )
+    )
+    assert [ev.type for ev in events if ev.type == "done"] == []
+    errors = [ev for ev in events if ev.type == "error"]
+    assert len(errors) == 1
+    assert errors[0].data["code"] == "chat_unavailable"
+
+
+@pytest.mark.asyncio
 async def test_ref_marker_to_lecture_expands_into_cite_form() -> None:
     """LLM writes `[^N]`; if alias N is a lecture fragment, server
     expands into the `[cite:track@start-end|caption]` shape the

@@ -650,6 +650,30 @@ async def run_synthesizer_turn(
         expander.set_ref_remap(None)
 
     full_text = "".join(full_prose)
+
+    # A completion that produced ZERO text is not a (blank) answer — it's
+    # an upstream failure the streaming layer couldn't recover from (its
+    # retry + fallback both came back empty, or the provider streamed
+    # nothing). Yielding `done` with an empty `prose` here would let the
+    # turn finalize as had_error=False: no quota refund, no client retry,
+    # the user silently charged for a blank message. Emit an `error` event
+    # instead so the bridge sets had_error and finalize refunds + the
+    # client shows "chat temporarily unavailable, try again".
+    if not full_prose:
+        log.warning(
+            "synth_empty_completion",
+            request_id=request_id,
+            notes_count=len(tool_results),
+        )
+        yield SynthesizerEvent(
+            type="error",
+            data={
+                "code": "chat_unavailable",
+                "message": "The assistant returned an empty response.",
+            },
+        )
+        return
+
     log.info(
         "stage_timing",
         stage="synthesizer_total",

@@ -16,7 +16,10 @@ import pytest
 
 from lectorium_chat.application.rate_limiter import RateLimiter
 from lectorium_chat.config import Settings
-from lectorium_chat.domain.ports.rate_limit_store import CounterRecord
+from lectorium_chat.domain.ports.rate_limit_store import (
+    CounterRecord,
+    RateLimitStoreUnavailable,
+)
 
 
 @dataclass
@@ -36,6 +39,11 @@ class _FakeStore:
         key = (scoped_key, day)
         self.counts[key] = self.counts.get(key, 0) + 1
         return CounterRecord(key_type=key_type, count=self.counts[key], limit=limit)
+
+    async def decrement(self, *, scoped_key: str, day: date) -> int:
+        key = (scoped_key, day)
+        self.counts[key] = max(0, self.counts.get(key, 0) - 1)
+        return self.counts[key]
 
 
 def _settings() -> Settings:
@@ -362,3 +370,121 @@ async def test_signed_in_user_cap_still_fires(limiter):
     )
     assert not rl.allowed
     assert rl.key_type == "user"
+
+
+# ─── per-IP reject refunds the per-user unit (PR #1044 fix #3) ────────────
+
+
+@pytest.mark.asyncio
+async def test_ip_reject_refunds_the_per_user_counter():
+    # When the per-USER cap passes (its counter is incremented) but the
+    # per-IP cap then REJECTS, the user must NOT be charged a quota unit
+    # for a rejection that wasn't on their own cap. Pass-1 already bumped
+    # the per-user bucket; the fix decrements it back before returning the
+    # IP reject. We assert on the actual store state, not key_type.
+    store = _FakeStore(counts={})
+    limiter = RateLimiter(store=store, settings=_settings())
+    # Saturate the per-IP counter to exactly the limit (2000) using
+    # quota-distinct anon identities, so the per-user cap (3) never fires
+    # and the very next call trips the IP cap on pass-2.
+    ip = "10.0.0.7"
+    ip_key = ("chat:ip:" + ip, date.today())
+    store.counts[ip_key] = 2000  # at the limit; next IP increment overflows
+    # This user's per-user bucket starts empty.
+    user_quota = "anon-victim"
+    user_key = ("chat:user:" + user_quota, date.today())
+    assert store.counts.get(user_key, 0) == 0
+
+    rl = await limiter.check_and_increment(
+        "u-anon-victim", anonymous=True, ip=ip,
+        scope="chat", tier="free", quota_id=user_quota,
+    )
+    # Rejected on the IP cap...
+    assert not rl.allowed
+    assert rl.key_type == "ip"
+    # ...and the per-user bucket is back to ZERO — pass-1 incremented it
+    # to 1, the fix decremented it back. Net charge to the user: nothing.
+    assert store.counts.get(user_key, 0) == 0, (
+        "per-IP reject must refund the per-user quota unit"
+    )
+    # The echoed usage-chip snapshot reflects the refund, not the
+    # pre-refund count of 1.
+    assert rl.current_after == 0
+
+
+@pytest.mark.asyncio
+async def test_ip_reject_refund_keeps_user_quota_spendable():
+    # Observable consequence of the refund: after an IP-capped attempt,
+    # the user's own per-user quota is untouched, so they can still spend
+    # their full personal allotment once the IP pressure clears. Without
+    # the refund each IP-blocked attempt would permanently burn a unit.
+    store = _FakeStore(counts={})
+    limiter = RateLimiter(store=store, settings=_settings())
+    ip = "10.0.0.8"
+    user_quota = "anon-spender"
+    user_key = ("chat:user:" + user_quota, date.today())
+    # Park the IP counter at the limit so every call below trips the IP cap.
+    store.counts[("chat:ip:" + ip, date.today())] = 2000
+    for _ in range(5):
+        rl = await limiter.check_and_increment(
+            "u-anon-spender", anonymous=True, ip=ip,
+            scope="chat", tier="free", quota_id=user_quota,
+        )
+        assert not rl.allowed and rl.key_type == "ip"
+    # Five IP-blocked attempts, yet the per-user bucket never accumulated:
+    # each pass-1 increment was refunded.
+    assert store.counts.get(user_key, 0) == 0, (
+        "repeated IP rejects must not silently drain the per-user quota"
+    )
+
+
+@dataclass
+class _IpOutageStore:
+    """Increments the per-user key normally but raises on the per-IP key,
+    simulating Redis going down between pass-1 and pass-2. Records the
+    per-user counter so the test can assert the refund landed."""
+
+    counts: dict[tuple[str, date], int]
+
+    async def increment(
+        self,
+        *,
+        scoped_key: str,
+        key_type: str,
+        limit: int,
+        day: date,
+    ) -> CounterRecord:
+        if key_type == "ip":
+            raise RateLimitStoreUnavailable("redis down on ip key")
+        key = (scoped_key, day)
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return CounterRecord(key_type=key_type, count=self.counts[key], limit=limit)
+
+    async def decrement(self, *, scoped_key: str, day: date) -> int:
+        key = (scoped_key, day)
+        self.counts[key] = max(0, self.counts.get(key, 0) - 1)
+        return self.counts[key]
+
+
+@pytest.mark.asyncio
+async def test_ip_store_unavailable_refunds_the_per_user_counter():
+    # Pass-1 (per-user) succeeds and charges a unit; pass-2 (per-IP) hits
+    # a Redis outage. The fail-closed 503 must not silently consume the
+    # user's quota, so the fix decrements the per-user bucket before
+    # surfacing the outage. Assert the bucket is back to zero.
+    store = _IpOutageStore(counts={})
+    limiter = RateLimiter(store=store, settings=_settings())
+    user_quota = "anon-outage"
+    user_key = ("chat:user:" + user_quota, date.today())
+
+    rl = await limiter.check_and_increment(
+        "u-anon-outage", anonymous=True, ip="10.0.0.9",
+        scope="chat", tier="free", quota_id=user_quota,
+    )
+    # Fail-closed: backend unavailable on the IP check.
+    assert not rl.allowed
+    assert rl.backend_unavailable
+    # The per-user unit charged in pass-1 was given back.
+    assert store.counts.get(user_key, 0) == 0, (
+        "IP-store outage must refund the per-user quota unit"
+    )

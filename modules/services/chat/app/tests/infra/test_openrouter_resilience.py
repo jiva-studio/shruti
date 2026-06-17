@@ -9,10 +9,15 @@ on the wire — gets its own test.
 
 from __future__ import annotations
 
+from langchain_core.messages import AIMessageChunk
 from pydantic import BaseModel
 
 from lectorium_chat.config import Settings
-from lectorium_chat.infra.llm_provider.openrouter import OpenRouterLLMProvider
+from lectorium_chat.infra.llm_provider.openrouter import (
+    EmptyCompletionError,
+    OpenRouterLLMProvider,
+    is_provider_unavailable,
+)
 
 
 # Retryable by virtue of a 5xx status_code; non-retryable has neither a
@@ -51,7 +56,8 @@ def _stub_stream(provider, script):
             for ch in action[1]:
                 yield ch
             return
-        _, exc, n_before = action
+        exc = action[1]
+        n_before = action[2] if len(action) > 2 else 0
         for i in range(n_before):
             yield {"text": f"partial{i}"}
         raise exc
@@ -190,3 +196,112 @@ async def test_structured_raises_when_all_fail():
     except _Fatal:
         raised = True
     assert raised
+
+
+# ── empty-completion stream (silent provider failure) ──────────────────
+
+
+class _FakeAstreamClient:
+    """Stands in for the pooled ChatOpenAI: `astream` replays a scripted
+    list of AIMessageChunk objects then ends cleanly (no exception)."""
+
+    def __init__(self, chunks: list[AIMessageChunk]) -> None:
+        self._chunks = chunks
+
+    def bind_tools(self, **_kw):  # pragma: no cover - tools unused here
+        return self
+
+    async def astream(self, _msgs):
+        for ch in self._chunks:
+            yield ch
+
+
+def _text_chunk(text: str) -> AIMessageChunk:
+    return AIMessageChunk(content=text)
+
+
+def _finish_chunk(reason: str) -> AIMessageChunk:
+    # finish_reason rides in response_metadata, mirroring ChatOpenAI.
+    return AIMessageChunk(content="", response_metadata={"finish_reason": reason})
+
+
+def _patch_client(provider, chunks: list[AIMessageChunk]) -> None:
+    provider._client_for = lambda *a, **k: _FakeAstreamClient(chunks)
+
+
+async def test_raw_stream_raises_empty_completion_on_blank_stream():
+    """A clean SSE end with zero text AND zero tool calls is NOT a blank
+    answer — `_raw_stream` raises the typed `EmptyCompletionError`."""
+    p = _provider()
+    _patch_client(p, [_finish_chunk("stop")])  # only metadata, no output
+    raised = False
+    try:
+        async for _ in p._raw_stream(
+            p._default_model, [{"role": "user", "content": "q"}],
+            tools=None, tool_choice=None, temperature=None, run_name=None,
+        ):
+            pass
+    except EmptyCompletionError:
+        raised = True
+    assert raised
+
+
+async def test_raw_stream_raises_on_error_finish_reason():
+    """An error-class finish_reason with no usable output is treated as
+    a failed completion, not a (blank) success."""
+    p = _provider()
+    _patch_client(p, [_finish_chunk("content_filter")])
+    raised = False
+    try:
+        async for _ in p._raw_stream(
+            p._default_model, [{"role": "user", "content": "q"}],
+            tools=None, tool_choice=None, temperature=None, run_name=None,
+        ):
+            pass
+    except EmptyCompletionError:
+        raised = True
+    assert raised
+
+
+async def test_raw_stream_ok_when_text_present():
+    """A normal stream with text never raises EmptyCompletionError."""
+    p = _provider()
+    _patch_client(p, [_text_chunk("hello"), _finish_chunk("stop")])
+    out = await _drain(p._raw_stream(
+        p._default_model, [{"role": "user", "content": "q"}],
+        tools=None, tool_choice=None, temperature=None, run_name=None,
+    ))
+    assert "".join(c.get("text", "") for c in out) == "hello"
+
+
+async def test_empty_primary_stream_falls_back_to_other_model():
+    """An empty primary `_raw_stream` (EmptyCompletionError) is retryable:
+    `stream_completion` exhausts the primary then escalates to the
+    fallback model, which answers."""
+    p = _provider(max_retries=1)
+    calls = _stub_stream(p, [
+        ("fail", EmptyCompletionError("empty"), 0),  # attempt 0
+        ("fail", EmptyCompletionError("empty"), 0),  # retry → exhausts primary
+        ("ok", [{"text": "fb-answer"}]),             # fallback model answers
+    ])
+    out = await _drain(p.stream_completion([{"role": "user", "content": "q"}]))
+    assert [c["text"] for c in out] == ["fb-answer"]
+    assert calls == [p._default_model, p._default_model, p._fallback_model]
+
+
+async def test_exhausted_empty_stream_maps_to_provider_unavailable():
+    """When every attempt comes back empty the final EmptyCompletionError
+    is classified as provider-unavailable → the turn surfaces a calm
+    `chat_unavailable` rather than a generic agent error."""
+    p = _provider(max_retries=0)
+    _stub_stream(p, [
+        ("fail", EmptyCompletionError("empty")),  # primary
+        ("fail", EmptyCompletionError("empty")),  # fallback
+    ])
+    raised: BaseException | None = None
+    try:
+        await _drain(p.stream_completion([{"role": "user", "content": "q"}]))
+    except EmptyCompletionError as exc:
+        raised = exc
+    assert raised is not None
+    assert is_provider_unavailable(raised)
