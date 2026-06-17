@@ -22,6 +22,18 @@ from typing import Any
 
 _PROMPT_DIR = Path(__file__).parent
 
+# Proactive turns run the same agent LLM loop as the workers (tool calls
+# + `[action:...]` markers), so they share the worker prompt base and add
+# the citation + grounding discipline the rule sections lean on.
+_PROACTIVE_PROMPT_SECTIONS = (
+    "header",
+    "tools",
+    "actions",
+    "quoting",
+    "citations",
+    "grounding",
+)
+
 
 def _read(name: str) -> str:
     return (_PROMPT_DIR / f"{name}.md").read_text()
@@ -39,7 +51,7 @@ def build_system_prompt(rule_kind: str, lang: str) -> str:
     # module-level constant would freeze the prompts at import time).
     from lectorium_chat.agent.prompts import build_prompt
 
-    full_prompt = build_prompt()
+    full_prompt = build_prompt(_PROACTIVE_PROMPT_SECTIONS, lang=lang)
     rule_section = _read(rule_kind)
     # Pass the raw locale code through — no ru/en hardcode, so a new
     # locale (uk / sr-Latn / sr-Cyrl) is honoured without a code change.

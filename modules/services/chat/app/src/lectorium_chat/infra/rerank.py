@@ -108,6 +108,15 @@ class VoyageReranker(RerankerPort):
         scored.sort(key=lambda t: t[1], reverse=True)
         return scored
 
+    async def close(self) -> None:
+        """Close the pooled httpx client on shutdown so the redeploy
+        doesn't leak the keep-alive connection to api.voyageai.com.
+        Best-effort — a failed close must not break lifespan teardown."""
+        try:
+            await self._client.aclose()
+        except Exception:  # pragma: no cover - teardown best-effort
+            pass
+
 
 def get_reranker(settings: Settings | None = None) -> RerankerPort | None:
     global _RERANKER, _RERANKER_BUILT
