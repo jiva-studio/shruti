@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 
+import openai
 from openai import AsyncOpenAI
 
 from shruti_chat.config import Settings, get_settings
@@ -26,6 +27,33 @@ log = get_logger(__name__)
 # those — and any transient API error — with exponential backoff (2,4,8,16s).
 _EMBED_MAX_ATTEMPTS = 5
 _EMBED_BACKOFF_S = 2.0
+
+# 4xx statuses that mean WE sent something wrong (input too long, bad key,
+# bad route, unprocessable). Retrying can't fix them and just burns up to
+# ~30s of backoff before the caller degrades — so raise on the FIRST one.
+# 429 (rate limit) is deliberately NOT here: it IS transient and retryable.
+_NON_RETRYABLE_STATUSES = frozenset({400, 401, 403, 404, 422})
+
+
+def _is_non_retryable(exc: Exception) -> bool:
+    """True for a permanent 4xx (input-too-long / auth / not-found /
+    unprocessable). These have a `status_code` in `_NON_RETRYABLE_STATUSES`
+    on the openai SDK error; a `BadRequestError` (400) without one still
+    counts via isinstance."""
+    status = getattr(exc, "status_code", None)
+    if status in _NON_RETRYABLE_STATUSES:
+        return True
+    return isinstance(
+        exc,
+        (
+            openai.BadRequestError,
+            openai.AuthenticationError,
+            openai.PermissionDeniedError,
+            openai.NotFoundError,
+            openai.UnprocessableEntityError,
+        ),
+    )
+
 
 _EMBEDDER: Embedder | None = None  # forward ref via __future__ annotations
 
@@ -83,6 +111,11 @@ class OpenAICompatEmbedder(Embedder):
         HTTP errors (429/5xx), not that. Without this, a single soft-throttled
         response aborts a whole index run — so retry it, and any transient
         error, with exponential backoff and let the run ride through.
+
+        A permanent 4xx (input-too-long / bad key / bad route) is NOT
+        retryable: retrying just burns ~30s of backoff before the caller
+        degrades. Those raise on the FIRST attempt so degradation happens
+        in <1s.
         """
         last_exc: Exception | None = None
         for attempt in range(_EMBED_MAX_ATTEMPTS):
@@ -92,6 +125,12 @@ class OpenAICompatEmbedder(Embedder):
                     raise ValueError("No embedding data received")
                 return resp
             except Exception as exc:  # noqa: BLE001 — transient embed failures are retryable
+                # Permanent client errors (4xx) can't be fixed by retrying —
+                # raise immediately so `_safe` degrades fast instead of after
+                # the full backoff ladder.
+                if _is_non_retryable(exc):
+                    log.warning("embed_non_retryable", error=str(exc)[:120])
+                    raise
                 last_exc = exc
                 if attempt == _EMBED_MAX_ATTEMPTS - 1:
                     break
@@ -117,7 +156,24 @@ class OpenAICompatEmbedder(Embedder):
             if self._doc_prefix:
                 chunk = [f"{self._doc_prefix}{t}" for t in chunk]
             resp = await self._create(chunk)
-            out.extend(d.embedding for d in resp.data)
+            # Guard against a mid-batch reorder/drop: if the provider returns
+            # a different number of vectors than we sent, the input↔vector
+            # mapping is no longer 1:1 and we'd silently attach the wrong
+            # vector to a chunk. Raise instead — a wrong embedding is worse
+            # than a failed (and retried/degraded) batch. The SDK is supposed
+            # to return data in request order, so this only fires on a real
+            # provider misbehaviour.
+            if len(resp.data) != len(chunk):
+                raise ValueError(
+                    "embedding batch size mismatch: "
+                    f"sent {len(chunk)} inputs, got {len(resp.data)} vectors"
+                )
+            # Re-order by the API's `index` field rather than trusting wire
+            # order, so a reordered (but complete) response still maps each
+            # vector to its input. The count guard above already rejects a
+            # response that dropped or duplicated entries.
+            ordered = sorted(resp.data, key=lambda d: getattr(d, "index", 0))
+            out.extend(d.embedding for d in ordered)
         return out
 
 

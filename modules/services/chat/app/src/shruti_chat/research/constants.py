@@ -33,6 +33,16 @@ PINNED_RERANK_CANDIDATE_POOL = 5       # rerank curated phrasings from the top-N
 BOOST_ACCEPT_SCORE_NATIVE = 0.70
 BOOST_ACCEPT_SCORE_CROSS = 0.65
 BOOST_MAX_MATCHES_PER_TOPIC = 3
+# Cross-encoder gate for fetched boost (topic-attribution) refs. boost matches
+# come from the EXTRACTED-TOPIC embedding (not the user question) and are pinned
+# at a flat 0.75 cosine that floats them above ordinary fanout — but they never
+# went through the reranker the rest of the LONG-path pool does. When a reranker
+# is present, re-score each fetched topic ref against the USER QUESTION and drop
+# the ones below this threshold, so a topic that matched a tangential angle of
+# the question doesn't get pinned above on-topic fanout. Mirrors the verse/
+# library reserve floor; only the boost path is gated (the normal fanout path is
+# untouched). Reranker absent ⇒ no gate (keep prior behaviour).
+BOOST_REF_RERANK_ACCEPT = 0.40
 TOPIC_MAX_TOPICS_EXTRACTED = 5         # cap on LLM output (query topic extraction)
 
 # ---- Fanout / coverage -----------------------------------------------------
