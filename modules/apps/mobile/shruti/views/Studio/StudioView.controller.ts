@@ -8,7 +8,11 @@ import type { Note, NoteMeta } from "@lib/domain/note.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { pickPlayableVariant, type Track } from "@lib/domain/track.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { resolveTrackTitle as resolveTitleForLang } from "@lib/domain/services/localizedName.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
+import {
+  preferredContentLanguage,
+  resolveTrackTitle as resolveTitleForLang,
+} from "@lib/domain/services/localizedName.js"
 import { useShruti } from "@shruti/shruti.js"
 import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
@@ -52,6 +56,7 @@ export function useStudioController(): StudioControllerReturn {
   // Singleton import — see NotesView.controller for the why.
   const app = useShruti()
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
   const purchases = usePurchasesStore()
   const paywall = usePaywallStore()
   const toast = useToast()
@@ -70,8 +75,19 @@ export function useStudioController(): StudioControllerReturn {
 
   const isCitationMode = computed<boolean>(() => citation.value !== null)
 
+  // The track's content language (a library language it has), so the title and
+  // the extracted transcript text match the language the lecture is shown in.
+  function contentLangOf(t: Track | null): LanguageCode {
+    return (
+      (t ? preferredContentLanguage(t, libraryLanguages.value, appLanguage.value) : undefined) ??
+      appLanguage.value
+    )
+  }
+
   const trackTitle = computed<string | undefined>(() =>
-    track.value ? (resolveTitleForLang(track.value, appLanguage.value) ?? undefined) : undefined
+    track.value
+      ? (resolveTitleForLang(track.value, contentLangOf(track.value)) ?? undefined)
+      : undefined
   )
 
   /**
@@ -99,7 +115,7 @@ export function useStudioController(): StudioControllerReturn {
       const result = await loadTranscript(
         {
           trackId: c.trackId as TrackId,
-          preferredLanguage: appLanguage.value as LanguageCode,
+          preferredLanguage: contentLangOf(track.value) as LanguageCode,
         },
         { transcripts: app.repositories().transcripts }
       )

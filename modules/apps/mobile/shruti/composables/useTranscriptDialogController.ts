@@ -16,6 +16,7 @@ import { buildTranscriptViewData } from "@shruti/composables/buildTranscriptView
 import { formatReference } from "@lib/domain/services/references.js"
 import { resolveLocalizedName } from "@lib/domain/services/localizedName.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useTranscriptSystemBars } from "@shruti/composables/useTranscriptSystemBars.js"
 import { useTranscriptHydration } from "./transcript/useTranscriptHydration.js"
@@ -85,6 +86,7 @@ export function useTranscriptDialogController(
   const notesStore = useNotesStore()
   const chatStore = useChatStore()
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
   const allowMultipleLanguages = ref<boolean>(false)
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
   const autoScrollCfg = useConfig<boolean>("settings.autoScroll", false)
@@ -108,6 +110,7 @@ export function useTranscriptDialogController(
   // before the content DB is open, so `app.repositories()` would throw.
   const hydration = useTranscriptHydration({
     preferredLanguage,
+    libraryLanguages: () => libraryLanguages.value,
     getRepos: () => {
       const repos = app.repositories()
       return { tracks: repos.tracks, authors: repos.authors, transcripts: repos.transcripts }

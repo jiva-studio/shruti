@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import {
+  preferredContentLanguage,
   resolveLocalizedName,
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
@@ -136,5 +137,51 @@ describe("resolveTrackTitle", () => {
   it("returns undefined for an undefined/null track", () => {
     expect(resolveTrackTitle(undefined, "en")).toBeUndefined()
     expect(resolveTrackTitle(null, "en")).toBeUndefined()
+  })
+})
+
+describe("preferredContentLanguage", () => {
+  const bilingual = track([
+    { language: "en", title: "Hello" },
+    { language: "ru", title: "Привет" },
+  ])
+
+  it("picks the first library language the track actually has", () => {
+    expect(preferredContentLanguage(bilingual, ["ru"])).toBe("ru")
+    expect(preferredContentLanguage(bilingual, ["en"])).toBe("en")
+    // No UI tie-break → falls to library priority order when the track has both.
+    expect(preferredContentLanguage(bilingual, ["ru", "en"])).toBe("ru")
+    expect(preferredContentLanguage(bilingual, ["en", "ru"])).toBe("en")
+  })
+
+  it("breaks a both-selected tie by the UI language", () => {
+    // Both library languages match the track → prefer the UI language.
+    expect(preferredContentLanguage(bilingual, ["ru", "en"], "en")).toBe("en")
+    expect(preferredContentLanguage(bilingual, ["en", "ru"], "ru")).toBe("ru")
+  })
+
+  it("ignores the UI language when it is not among the matching library languages", () => {
+    // Only ru is selected: the UI being English must NOT pull the en variant in
+    // — selection stays library-driven, the tie-break only orders chosen langs.
+    expect(preferredContentLanguage(bilingual, ["ru"], "en")).toBe("ru")
+    // ru-only track, en UI, en library → no ru candidate, falls back to the
+    // track's only variant.
+    expect(
+      preferredContentLanguage(track([{ language: "ru", title: "Привет" }]), ["en"], "en")
+    ).toBe("ru")
+  })
+
+  it("falls back to the track's own variant when it has none of the library languages", () => {
+    // A single-language (ru-only) track viewed with an en-only library: still
+    // renders in its one language rather than blank.
+    expect(preferredContentLanguage(track([{ language: "ru", title: "Привет" }]), ["en"])).toBe(
+      "ru"
+    )
+    // No library languages set → first available.
+    expect(preferredContentLanguage(bilingual, [])).toBe("en")
+  })
+
+  it("returns undefined for a track with no variants", () => {
+    expect(preferredContentLanguage(track([]), ["en"])).toBeUndefined()
   })
 })
