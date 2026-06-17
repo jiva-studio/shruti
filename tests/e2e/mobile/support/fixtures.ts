@@ -4,7 +4,7 @@ import { fileURLToPath } from "url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-/** modules/tests/e2e */
+/** tests/e2e/mobile */
 export const E2E_ROOT = path.resolve(__dirname, "..")
 /** repo root (…/shruti) — e2e is three levels deep under it. */
 export const REPO_ROOT = path.resolve(E2E_ROOT, "../../..")
@@ -57,7 +57,7 @@ export function assertFixturesPresent(): void {
   if (missing.length > 0) {
     throw new Error(
       `Missing E2E fixtures:\n  ${missing.join("\n  ")}\n` +
-        `Run ./scripts/prepare-fixtures.sh from modules/tests/e2e (see README).`
+        `Run ./scripts/prepare-fixtures.sh from tests/e2e/mobile (see README).`
     )
   }
 }

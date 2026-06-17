@@ -10,7 +10,7 @@
 # from the local lake output.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"      # modules/tests/e2e
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"      # tests/e2e/mobile
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"                     # …/shruti
 SHOTS="$REPO_ROOT/modules/tools/screenshots"
 FIX="$HERE/fixtures"

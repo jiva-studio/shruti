@@ -28,8 +28,8 @@ fi
 
 # Pull secrets (OPENROUTER_API_KEY, optional AWS_*) from a local gitignored file
 # so we don't hit Secret Manager every run. Create it once (see README):
-#   op read "<secret-reference>" → modules/tests/e2e/.env.local
-SECRETS="$REPO_ROOT/modules/tests/e2e/.env.local"
+#   op read "<secret-reference>" → tests/e2e/mobile/.env.local
+SECRETS="$REPO_ROOT/tests/e2e/mobile/.env.local"
 if [[ -f "$SECRETS" ]]; then
   echo ">> injecting secrets from $SECRETS into .env.dev"
   # shellcheck disable=SC1090
