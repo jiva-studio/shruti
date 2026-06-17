@@ -58,6 +58,27 @@ from shruti_chat.observability.langfuse_client import (
 from shruti_chat.observability.logging import get_logger, setup_logging
 
 
+async def _close_quietly(obj: object | None, *method_names: str) -> None:
+    """Call the first available close method on `obj`, awaiting if it's a
+    coroutine. Best-effort: a missing object, a missing method, or a
+    raised error never aborts the rest of the shutdown sequence."""
+    if obj is None:
+        return
+    for name in method_names:
+        fn = getattr(obj, name, None)
+        if fn is None:
+            continue
+        try:
+            res = fn()
+            if asyncio.iscoroutine(res):
+                await res
+        except Exception as exc:  # pragma: no cover - teardown best-effort
+            get_logger(__name__).warning(
+                "shutdown_close_failed", obj=type(obj).__name__, method=name, err=str(exc)
+            )
+        return
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -178,6 +199,8 @@ async def lifespan(app: FastAPI):
         kv_cache=(kv_cache if s.cache_enabled else None),
     )
 
+    reranker = get_reranker(s)
+
     app.state.deps = AppDeps(
         settings=s,
         pool=pool,
@@ -192,7 +215,7 @@ async def lifespan(app: FastAPI):
         turn_runner=turn_runner,
         llm=llm_provider,
         chat_graph=chat_graph,
-        reranker=get_reranker(s),
+        reranker=reranker,
         translation_service=translation_service,
     )
 
@@ -237,6 +260,12 @@ async def lifespan(app: FastAPI):
         if l2 is not None:
             await l2.close()
         await rate_limit_store.close()
+        # Close the remaining Redis-backed stores and the reranker's
+        # pooled httpx client so a redeploy doesn't leak connections.
+        # Each is guarded (missing/None/no-op stores stay safe).
+        await _close_quietly(idempotency_store, "close", "aclose")
+        await _close_quietly(turn_store, "close", "aclose")
+        await _close_quietly(reranker, "close", "aclose")
         await close_pool()
         # Flush pending Langfuse traces last — close() above doesn't
         # block on the SDK's background flusher; if we exit before it
@@ -281,7 +310,16 @@ app.add_middleware(
         # fires — the mobile UI shows "connection lost".
         "X-Trace-Id",
     ],
-    expose_headers=["Retry-After"],
+    # Expose the rate-limit headers so the cross-origin Capacitor WebView
+    # can read them off a 429 — without this list a browser strips every
+    # non-simple response header and the client only sees the JSON body.
+    # `api/_rate_limit.py` already emits all four on a quota rejection.
+    expose_headers=[
+        "Retry-After",
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Reset",
+    ],
     max_age=86400,
 )
 
