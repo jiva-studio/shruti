@@ -70,7 +70,14 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
   // to languages the catalog actually has lectures in. Reducing the raw UI
   // locale (e.g. uk → ru) is essential: a strict `language = uiLocale` filter
   // would empty the whole library for any UI language with no audio of its own.
-  async function computeLocaleDefault(): Promise<readonly string[]> {
+  //
+  // `fromDb` reports whether the catalog languages were actually read: on the
+  // DB-unavailable fallback it is `false`, so `load()` can avoid persisting a
+  // guessed seed and let it re-derive on a later launch.
+  async function computeLocaleDefault(): Promise<{
+    languages: readonly string[]
+    fromDb: boolean
+  }> {
     const locale = await detectDeviceLocaleAsync()
     let available: string[]
     try {
@@ -81,13 +88,14 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
       available = []
     }
     return available.length > 0
-      ? defaultLibraryLanguages(locale, available)
-      : [reduceLocaleToContentLanguage(locale)]
+      ? { languages: defaultLibraryLanguages(locale, available), fromDb: true }
+      : { languages: [reduceLocaleToContentLanguage(locale)], fromDb: false }
   }
 
   async function load(): Promise<void> {
     if (loaded.value) return
-    localeLanguageDefault.value = await computeLocaleDefault()
+    const seed = await computeLocaleDefault()
+    localeLanguageDefault.value = seed.languages
     const raw = await app.preferences.get(STORAGE_KEY)
     if (raw) {
       try {
@@ -111,13 +119,18 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
 
     // First launch (or first launch under v3): seed the library language(s)
     // from the device locale reduced to a content language we actually have
-    // (e.g. uk → ru), and default the sort to oldest-first. We persist
-    // immediately so subsequent reads take the regular branch and the user's
-    // later changes overwrite the seed instead of racing with it.
-    languageCodes.value = [...localeLanguageDefault.value]
+    // (e.g. uk → ru), and default the sort to oldest-first.
+    languageCodes.value = [...seed.languages]
     sort.value = "byDateAsc"
     loaded.value = true
-    await persist()
+    // Only persist a seed we derived against the real catalog. When the
+    // content DB wasn't open yet (`fromDb === false`), the language guess is a
+    // best-effort fallback used for this session only — persisting it would
+    // freeze the guess forever and skip the constrained re-derivation on the
+    // next launch (once the DB is available). We still persist when we have a
+    // DB-backed seed so the user's later changes overwrite it instead of
+    // racing with it.
+    if (seed.fromDb) await persist()
   }
 
   async function persist(): Promise<void> {
