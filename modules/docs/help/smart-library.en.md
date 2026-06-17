@@ -13,10 +13,10 @@ added to your playlist and downloaded for offline listening.
 
 ## Filter
 
-Use the filter to control which lectures the buffer pulls in. Authors,
-languages, locations, sources, tags, and duration are all available — the
-same set you use on Search. With no filter set, the buffer fills from the
-entire library.
+Use the filter to control which lectures the buffer pulls in. It is the
+same filter set you use on Search — authors, languages, locations,
+sources, tags, topics, dates and duration. With no filter set, the buffer
+fills from the entire library.
 
 ## Queue length
 

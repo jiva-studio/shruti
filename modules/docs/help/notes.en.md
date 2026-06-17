@@ -4,8 +4,8 @@ listen to just that fragment again.
 
 ## Creating a note
 
-- Open the **transcript** of a lecture (swipe up on the player, then
-  swipe to the transcript panel).
+- Open the **transcript** of a lecture (tap the player body while it is
+  playing).
 - **Select a range of text** by long-pressing on a sentence and dragging
   the handles to cover the passage you want.
 - Tap **Save as note**. The note remembers both the text and the audio
@@ -25,8 +25,8 @@ here you can:
   action sheet.
 - **Delete** a note when you no longer need it.
 
-With a PRO subscription, **Notes Studio** can also turn a note into a short
-video to share.
+With a PRO subscription, **Studio** can also turn a note into a short
+video to share — long-press a note and choose **Open in Studio**.
 
 ## Privacy
 

@@ -8,7 +8,7 @@ The hard part is not finding a lecture — it is showing up every day.
 ## How the app supports your sadhana
 
 - **Activity tracker** records every minute you listen and turns it into a
-  heatmap on the home screen. You can see at a glance which days you practised
+  heatmap on the home screen. You can see at a glance which days you practiced
   and which days you skipped.
 - **Day streak** counts how many days in a row you've listened to at least one
   lecture. Even a short session counts — what matters is the rhythm, not the
