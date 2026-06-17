@@ -371,13 +371,22 @@ async def rerank_and_attach_commentaries(
             chunk_lists = [[] for _ in pairs]
 
         # Dedup purports already in base_notes (surfaced by standalone ANN).
-        seen: set[tuple[str, int]] = set()
+        # A purport is a WHOLE document: the same item_id surfaced by fanout
+        # (under one segment_index) and re-fetched fresh here (under another)
+        # is the SAME purport — keying on item_id ALONE (not item_id+segment)
+        # is what stops it being cited twice. The fanout envelope's reliable
+        # item_id is in its `_dedup_key` ((kind, item_id, segment)); fall back
+        # to meta for envelopes built elsewhere.
+        seen: set[str] = set()
         for env in base_notes:
             if isinstance(env, dict) and env.get("type") == "commentary":
-                meta = env.get("meta") or {}
-                item_id = meta.get("item_id") or env.get("ref")
+                dk = env.get("_dedup_key")
+                item_id = (
+                    dk[1] if isinstance(dk, tuple) and len(dk) >= 2
+                    else (env.get("meta") or {}).get("item_id")
+                )
                 if item_id is not None:
-                    seen.add((str(item_id), int(meta.get("segment_index", 0) or 0)))
+                    seen.add(str(item_id))
 
         pending: list[LibraryChunk] = []
         pending_key: list[tuple[str, str]] = []
@@ -388,7 +397,7 @@ async def rerank_and_attach_commentaries(
             capped = _select_capped(chunks, cap=max_commentaries_per_verse)
             child_score = max(0.0, parent_score - 0.05)
             for c in capped:
-                dedup_key = (c.item_id, c.segment_index or 0)
+                dedup_key = str(c.item_id)
                 if dedup_key in seen:
                     continue
                 seen.add(dedup_key)
@@ -458,16 +467,22 @@ async def rerank_and_attach_commentaries(
     cos_by_thesis_idx: dict[tuple[int, int], float] = {}
     if embed_idx:
         try:
-            all_embeds = await embedder.embed_documents(
-                thesis_claims + [cand_text[i] for i in embed_idx]
+            # Claims are QUERIES, candidate purports are DOCUMENTS — embed each
+            # through its own prefix path (a no-op on a symmetric model, but
+            # the only correct call on an asymmetric one). Fired concurrently.
+            claim_embeds, cand_embed_list = await asyncio.gather(
+                embedder.embed_queries(thesis_claims),
+                embedder.embed_documents([cand_text[i] for i in embed_idx]),
             )
         except Exception as exc:  # noqa: BLE001
             log.warning("rerank_embed_failed", error=str(exc))
-            all_embeds = []
-        if len(all_embeds) == len(thesis_claims) + len(embed_idx):
-            claim_embeds = all_embeds[: len(thesis_claims)]
+            claim_embeds, cand_embed_list = [], []
+        if (
+            len(claim_embeds) == len(thesis_claims)
+            and len(cand_embed_list) == len(embed_idx)
+        ):
             cand_embeds = {
-                embed_idx[k]: all_embeds[len(thesis_claims) + k]
+                embed_idx[k]: cand_embed_list[k]
                 for k in range(len(embed_idx))
             }
             for ti, c_emb in enumerate(claim_embeds):

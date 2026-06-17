@@ -258,7 +258,18 @@ def _balanced_cut(
         for e in tail:
             if have >= minimum:
                 break
-            if pred(e.get("type")) and (e.get("score") or 0.0) >= RERANK_RESERVE_FLOOR:
+            # The list is ordered by rerank_score, so gate the back-fill on it
+            # too: a reranked item carries a `rerank_score` and has ALREADY been
+            # cross-encoder-vetted — gating it on the cosine `score` floor would
+            # reject a terse verse the reranker rescued (low cosine, high
+            # rerank). Items WITHOUT a rerank_score (reranker off / authoritative
+            # refs) still gate on the cosine floor, the prior behaviour.
+            if not pred(e.get("type")):
+                continue
+            if e.get("rerank_score") is not None:
+                top.append(e)
+                have += 1
+            elif (e.get("score") or 0.0) >= RERANK_RESERVE_FLOOR:
                 top.append(e)
                 have += 1
 
@@ -916,8 +927,10 @@ async def _research_path(
         # Step B: embed all topics in one HTTP call, then parallel pgvector
         # lookups for each.
         if topics:
+            # Topics are QUERY text (each becomes a `user_q_embedding` for
+            # attribution lookup), so route through the query embed path.
             topic_embeddings: list[list[float]] = await _safe(
-                lambda: embedder.embed_documents(topics),
+                lambda: embedder.embed_queries(topics),
                 default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
                 name="embed_topics", request_id=request_id,
             )

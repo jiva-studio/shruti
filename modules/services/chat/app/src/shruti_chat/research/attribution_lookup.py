@@ -81,11 +81,13 @@ async def find_attributions(
         return _take(accepted_native, mm, stage="native")
 
     # NATIVE below `an` but the top NATIVE score already clears the cross
-    # threshold `ac` → accept as native without a second query. Checked
-    # BEFORE the border gate: a score ≥ ac is a confident match, not a
-    # borderline one, and must not be routed through (and possibly rejected
-    # by) the judge. This avoids an unnecessary second SQL too.
-    if native and native[0].score >= ac:
+    # threshold `ac` → accept as native without a second query. Boost only:
+    # for a `pinned` attribution the cross bar `ac` sits BELOW the native bar
+    # `an`, so admitting native matches at `>= ac` would seat a sub-native-bar
+    # curated pin UNJUDGED — exactly the band the border gate below
+    # (`[bs, ac)` and onward) exists to cross-encoder-confirm. Excluding pinned
+    # here lets those scores fall through to that judged path instead.
+    if kind != "pinned" and native and native[0].score >= ac:
         accepted = [m for m in native if m.score >= ac]
         return _take(accepted, mm, stage="native")
 

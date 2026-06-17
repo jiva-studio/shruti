@@ -73,6 +73,9 @@ class FakeEmbedder:
             raise RuntimeError("embedder boom")
         return [self.mapping.get(t, [0.0, 0.0, 0.0, 0.0]) for t in texts]
 
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed_documents(texts)
+
 
 def _verse_env(idx_unused: int, *, text: str, source_id: str, tokens: str, score: float = 0.7) -> dict:
     return {

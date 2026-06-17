@@ -63,6 +63,9 @@ class FakeEmbedder:
         FakeEmbedder.calls += 1
         return [[0.0] * 1536 for _ in texts]
 
+    async def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed_documents(texts)
+
 
 class FakeCatalogRepo:
     def __init__(self, author_names: dict[str, str] | None = None) -> None:
