@@ -68,17 +68,23 @@ def _notes_from_result(result: LocateResult, aliases) -> list[dict]:
         )
         rng = _chapter_range([c.tokens for c in region.chapters])
         label = region.region_label or ""
+        # Neutral, language-agnostic context for the synthesizer — it phrases
+        # the lead-in in the answer language. A hardcoded Russian "главы N"
+        # leaked Russian into uk / sr / hi / en answers. `chapters:` is a
+        # structured hint, not prose, so it never surfaces verbatim.
         if rng:
-            text = f"{label} — главы {rng}".strip(" —")
+            text = f"{label} (chapters: {rng})".strip()
         else:
             text = label
         notes.append({"type": "location", "ref": ref, "text": text})
 
     if result.truncated:
-        # Never let the ~4-region cap read as "this is everything".
+        # Never let the ~4-region cap read as "this is everything". Neutral
+        # marker — the synthesizer renders it in the answer language rather
+        # than the previous hardcoded Russian note.
         notes.append({
             "type": "location",
-            "text": "(показаны основные места; есть и другие)",
+            "text": "(showing the main passages; more exist)",
         })
 
     for verse in result.verses:

@@ -35,7 +35,10 @@ class TitleMessage(BaseModel):
 
 class TitleRequest(BaseModel):
     messages: list[TitleMessage] = Field(min_length=1, max_length=8)
-    lang: Literal["ru", "en"] = "ru"
+    # Any UI locale — the client sends its current UI language. Only ru/en
+    # prompts exist; `_SYSTEM.get(lang, _SYSTEM["en"])` serves English to
+    # every other locale. A `Literal["ru","en"]` would 422 those clients.
+    lang: str = "en"
 
 
 class TitleResponse(BaseModel):

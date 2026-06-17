@@ -95,6 +95,23 @@ async def synthesis_planner_node(
         else None
     )
 
+    # Resolve the human language NAME once and thread it into all three
+    # planner-side writers (planner / intro / conclusion). A bare locale
+    # code ("sr-Latn") in the `Language:` directive makes the LLM drift to
+    # Russian — the synthesizer already fixes this exact drift; the planner
+    # writers stream their prose (the intro) to the client WITHOUT a
+    # synthesizer re-pass, so the fix must be applied here too. Sourced from
+    # the catalog `languages` table (auto-extends; no hardcode). Never fails
+    # the turn — falls back to the bare code on any error / missing repo.
+    lang_name: str | None = None
+    if ctx.catalog_repo is not None:
+        try:
+            lang_name = await ctx.catalog_repo.language_name(
+                state.get("lang") or "ru"
+            )
+        except Exception:  # noqa: BLE001 — language hint must never fail the turn
+            lang_name = None
+
     # `model=None` / `conclusion_model=None` lets `prompt_with_fallback`
     # resolve the model from the respective Langfuse prompt-config (set
     # to `llm_synthesis_planner` / `llm_conclusion_writer` at bootstrap
@@ -107,6 +124,7 @@ async def synthesis_planner_node(
         model=None,
         conclusion_model=None,
         callbacks=[cb] if cb is not None else None,
+        lang_name=lang_name,
     )
 
     if outline is None:
@@ -180,6 +198,7 @@ async def synthesis_planner_node(
             llm=ctx.llm,
             model=None,
             callbacks=[cb] if cb is not None else None,
+            lang_name=lang_name,
         )
         if rewritten:
             resolved_intro = rewritten
