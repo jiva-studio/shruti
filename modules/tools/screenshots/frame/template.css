@@ -99,7 +99,7 @@ html, body {
 .device-phone #title { font-size: 3.5vh; }
 .device-tablet7 #title { font-size: 4.0vh; }
 .device-tablet10 #title { font-size: 3.5vh; }
-.device-iphone67 #title { font-size: 3.5vh; }
+.device-iphone69 #title { font-size: 3.5vh; }
 .device-ipad13 #title { font-size: 3.6vh; }
 .device-surfaceduo #title { font-size: 3.2vh; margin-top: 1.2vh; }
 
@@ -126,7 +126,7 @@ html, body {
   border-radius: 1.8vh;
   padding: 1.0vh;
 }
-.device-iphone67 .phone {
+.device-iphone69 .phone {
   width: 84vw;
   border-radius: 1.8vh;
   padding: 0.4vh;
@@ -162,8 +162,8 @@ html, body {
   aspect-ratio: 800 / 1422;
   border-radius: 1.2vh;
 }
-.device-iphone67 .screen {
-  aspect-ratio: 430 / 932;
+.device-iphone69 .screen {
+  aspect-ratio: 440 / 956;
   border-radius: 1.4vh;
 }
 .device-ipad13 .screen {

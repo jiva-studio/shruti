@@ -472,7 +472,7 @@ platform :ios do
     # so it never gets captured or staged for iOS.
     locale_map = app_store_locale_map(only: requested_locales(options))
     locales = locale_map.keys
-    devices = %w[iphone67 ipad13]
+    devices = %w[iphone69 ipad13]
     project_flags = locales.flat_map { |l|
       devices.map { |d| "--project=#{d}-#{l}" }
     }.join(" ")
@@ -496,7 +496,7 @@ platform :ios do
     # Deliver only scans the locale folder itself (no subdirs), and detects the
     # device from pixel dimensions — so a flat per-locale layout works.
     # Prefix filenames with the device id to avoid name collisions between
-    # iphone67/01_home.png and ipad13/01_home.png.
+    # iphone69/01_home.png and ipad13/01_home.png.
     locale_map.each do |src_lang, app_store_locale|
       dst = File.join(metadata_root, app_store_locale)
       FileUtils.mkdir_p(dst)
