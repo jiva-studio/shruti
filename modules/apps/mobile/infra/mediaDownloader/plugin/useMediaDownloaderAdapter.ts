@@ -98,6 +98,14 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
       await MediaDownloader.deleteFile({ url })
     },
 
+    async cancel(url: string): Promise<void> {
+      // Same id mapping as download() (URL pathname), so this aborts the
+      // matching transfer regardless of which CDN host it was started on.
+      // `deletePartial` drops the half-written file so it can't be mistaken
+      // for a complete download later.
+      await MediaDownloader.cancel({ id: idFor(url), deletePartial: true })
+    },
+
     async resolveLocalUrl(url: string): Promise<string | null> {
       const { localUrl } = await MediaDownloader.resolveLocalUrl({ url })
       return localUrl
