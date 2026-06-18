@@ -10,7 +10,7 @@ export interface AddTrackToPlaylistInput {
   readonly collectionId?: string | null
 }
 
-export type AddTrackToPlaylistError = "already-in-playlist"
+export type AddTrackToPlaylistError = "already-in-playlist" | "write-failed"
 
 export interface AddTrackToPlaylistDeps {
   readonly playlistItems: IPlaylistItemRepository
@@ -31,11 +31,17 @@ export async function addTrackToPlaylist(
   input: AddTrackToPlaylistInput,
   deps: AddTrackToPlaylistDeps
 ): Promise<Result<PlaylistItem, AddTrackToPlaylistError>> {
-  return deps.unitOfWork.run(async () => {
-    const active = await deps.playlistItems.listActive()
-    const existing = active.find((item) => item.trackId === input.trackId)
-    if (existing) return err("already-in-playlist")
-    const created = await deps.playlistItems.add(input.trackId, input.collectionId ?? null)
-    return ok(created)
-  })
+  try {
+    return await deps.unitOfWork.run(async () => {
+      const active = await deps.playlistItems.listActive()
+      const existing = active.find((item) => item.trackId === input.trackId)
+      if (existing) return err("already-in-playlist")
+      const created = await deps.playlistItems.add(input.trackId, input.collectionId ?? null)
+      return ok(created)
+    })
+  } catch {
+    // DB write failed (disk full, contended) — honour the Result contract
+    // instead of throwing out of a usecase the caller awaits as a Result.
+    return err("write-failed")
+  }
 }
