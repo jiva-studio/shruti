@@ -132,6 +132,25 @@ export function useCapacitorSqlPersistence(): IPersistence {
 
       await db.open()
 
+      // Per-connection pragmas. `foreign_keys` is OFF by default on every
+      // SQLite connection, so the schema's `ON DELETE CASCADE`s (chat
+      // messages → proactive sidecar) would silently no-op and leave orphan
+      // rows — it MUST be set outside a transaction, hence `run(..., false)`
+      // (no auto-BEGIN wrap). `busy_timeout` makes a contended write wait
+      // briefly instead of throwing "database is locked" the instant the
+      // 15s listening-session writer overlaps a note/playlist write.
+      await db.run("PRAGMA foreign_keys = ON", [], false)
+      await db.run("PRAGMA busy_timeout = 3000", [], false)
+
+      // SQLite has no nested transactions: two overlapping `transaction()`
+      // callers on this one connection would issue `BEGIN` inside an open
+      // transaction → "cannot start a transaction within a transaction".
+      // Serialise transaction blocks through a promise chain so each runs
+      // atomically end-to-end (mirrors the sql.js adapter). `execute()` is
+      // intentionally NOT queued — repos call it from inside `fn()`, so
+      // routing it through the same chain would deadlock.
+      let txQueue: Promise<unknown> = Promise.resolve()
+
       return {
         async query<T = unknown>(sql: string, params?: QueryParams): Promise<T[]> {
           const result = await db.query(sql, params as unknown[])
@@ -143,21 +162,27 @@ export function useCapacitorSqlPersistence(): IPersistence {
         },
 
         async transaction(fn: () => Promise<void>): Promise<void> {
-          await db.beginTransaction()
-          try {
-            await fn()
-            await db.commitTransaction()
-          } catch (error) {
-            // Rollback can itself throw (begin failed, connection gone),
-            // which would mask the real error. Isolate it and always
-            // rethrow the ORIGINAL error. Mirrors the sql.js adapter.
+          const next = txQueue.then(async () => {
+            await db.beginTransaction()
             try {
-              await db.rollbackTransaction()
-            } catch {
-              // Swallow: the original error is what the caller cares about.
+              await fn()
+              await db.commitTransaction()
+            } catch (error) {
+              // Rollback can itself throw (begin failed, connection gone),
+              // which would mask the real error. Isolate it and always
+              // rethrow the ORIGINAL error. Mirrors the sql.js adapter.
+              try {
+                await db.rollbackTransaction()
+              } catch {
+                // Swallow: the original error is what the caller cares about.
+              }
+              throw error
             }
-            throw error
-          }
+          })
+          // Keep the queue alive even if this block throws so subsequent
+          // callers don't inherit the rejection.
+          txQueue = next.catch(() => undefined)
+          await next
         },
 
         async save(): Promise<void> {},
