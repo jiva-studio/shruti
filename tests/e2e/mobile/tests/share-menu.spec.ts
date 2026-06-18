@@ -4,7 +4,7 @@ import { boot } from "../support/bootstrap.js"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../support/nav.js"
 
 test(qase(65, "Share a transcript as PDF"), { tag: ["@offline", "@library"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { pro: true })
   await openLibrary(page)
   await openTrackSheet(page, trackRows(page).first())
 
