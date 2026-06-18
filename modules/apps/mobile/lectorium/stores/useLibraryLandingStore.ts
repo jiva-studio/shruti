@@ -7,6 +7,7 @@ import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useRecommendationsStore } from "@lectorium/stores/useRecommendationsStore.js"
+import { useSearchFiltersStore } from "@lectorium/stores/useSearchFiltersStore.js"
 import { shuffled } from "@lectorium/utils/shuffle.js"
 import { searchAndFilterTracks } from "@usecases/discovery/searchAndFilterTracks.js"
 import type { CarouselItem } from "@ui/features/collections/index.js"
@@ -57,6 +58,7 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   const app = useLectorium()
   const appLanguage = useAppLanguage()
   const libraryLanguages = useLibraryLanguages()
+  const filters = useSearchFiltersStore()
   const dictionaries = useDictionariesStore()
   const recommendations = useRecommendationsStore()
 
@@ -249,9 +251,18 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
    * reloads but keeps the already-shown content visible until the new set is
    * ready, so no spinner flashes mid-session.
    */
-  function ensureLoaded(): Promise<void> {
+  async function ensureLoaded(): Promise<void> {
+    // Settle the library-language seed BEFORE computing the key or querying.
+    // `useLibraryLanguages()` only fires the filter store's lazy load
+    // fire-and-forget, so on a cold open `libraryLanguages` is still `[]`:
+    // the landing would query an all-languages pool (mixed-language preview
+    // cards shown to e.g. an English user) and an inflated whole-catalog
+    // count, then reload a tick later when the seed lands. Awaiting it first
+    // removes the transient wrong-language preview and the double load.
+    await filters.load()
+
     const key = currentKey()
-    if (key === loadedKey) return Promise.resolve()
+    if (key === loadedKey) return
     if (inFlight && inFlight.key === key) return inFlight.promise
     const promise = load(key).finally(() => {
       if (inFlight?.promise === promise) inFlight = null

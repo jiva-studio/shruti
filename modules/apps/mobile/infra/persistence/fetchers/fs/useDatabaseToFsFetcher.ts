@@ -7,6 +7,17 @@ import type { IDatabaseFetcher, ProgressCallback } from "@ports/app/index.js"
 const SQLITE_MAGIC_HEADER = "SQLite format 3\0"
 
 /**
+ * Abort a content-DB download that makes no progress for this long. A
+ * stalled transfer — a half-open socket, a captive portal that let the
+ * tiny config probe through, or an Android WorkManager job stuck ENQUEUED
+ * waiting for connectivity that never returns — otherwise leaves the
+ * `completion` promise pending forever, stranding the user on an infinite
+ * "Downloading…" splash with no retry. A long gap with zero new bytes is
+ * treated as a failure so bootstrap can surface the retry screen.
+ */
+const DOWNLOAD_STALL_TIMEOUT_MS = 60_000
+
+/**
  * `IDatabaseFetcher` for native platforms, backed by the
  * `@lectorium/plugin-media-downloader` plugin for the actual transfer
  * (so it shares all the background-capable Android WorkManager / iOS
@@ -40,21 +51,46 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
       })
       onProgress?.(0, 0, true)
 
+      // No-progress watchdog: rejects `completion` if the transfer goes
+      // silent for too long (see DOWNLOAD_STALL_TIMEOUT_MS). Re-armed on
+      // every progress event and on dispatch, cleared on terminal events.
+      let stallTimer: ReturnType<typeof setTimeout> | undefined
+      const clearStall = (): void => {
+        if (stallTimer) {
+          clearTimeout(stallTimer)
+          stallTimer = undefined
+        }
+      }
+      const armStall = (): void => {
+        clearStall()
+        stallTimer = setTimeout(() => {
+          onFailed(
+            new Error(
+              `Database download stalled: no progress for ${DOWNLOAD_STALL_TIMEOUT_MS / 1000}s`
+            )
+          )
+        }, DOWNLOAD_STALL_TIMEOUT_MS)
+      }
+
       try {
         // Listeners must be attached BEFORE download(): a fast / cached
         // completion can fire its event synchronously, and a late listener
         // would miss it, hanging `completion` forever.
-        if (onProgress) {
-          handles.push(
-            await MediaDownloader.addListener("progress", (e) => {
-              if (e.id !== id) return
-              onProgress(e.bytesDownloaded, e.contentLength, true)
-            })
-          )
-        }
+        //
+        // The progress listener is attached unconditionally (not only when a
+        // caller `onProgress` is supplied) because it also feeds the stall
+        // watchdog — without it a silent transfer would never re-arm.
+        handles.push(
+          await MediaDownloader.addListener("progress", (e) => {
+            if (e.id !== id) return
+            armStall()
+            onProgress?.(e.bytesDownloaded, e.contentLength, true)
+          })
+        )
         handles.push(
           await MediaDownloader.addListener("completed", (e) => {
             if (e.id !== id) return
+            clearStall()
             onProgress?.(e.bytesDownloaded, e.bytesDownloaded, false)
             onCompleted()
           })
@@ -62,10 +98,12 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
         handles.push(
           await MediaDownloader.addListener("failed", (e) => {
             if (e.id !== id) return
+            clearStall()
             onFailed(new Error(e.error || "Database download failed"))
           })
         )
 
+        armStall()
         await MediaDownloader.download({
           id,
           url,
@@ -89,6 +127,7 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
         }
         throw err
       } finally {
+        clearStall()
         for (const h of handles) await h.remove()
         isDownloading = false
       }

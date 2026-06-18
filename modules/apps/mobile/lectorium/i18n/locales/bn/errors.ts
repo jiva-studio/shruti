@@ -4,4 +4,5 @@ export default {
   downloadsCacheUnavailable: "আপনার ডাউনলোড সূচি পড়া যায়নি। ক্যাশ করা ফাইল এখনও ডিস্কে আছে।",
   trackNotFound: "ট্র্যাক পাওয়া যায়নি।",
   languageListUnavailable: "ভাষা লোড করা যায়নি — একটি সংক্ষিপ্ত তালিকা দেখানো হচ্ছে।",
+  dictionariesUnavailable: "নাম লোড করা যায়নি — কিছু লেবেল অনুপস্থিত থাকতে পারে।",
 }

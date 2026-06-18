@@ -47,6 +47,14 @@ vi.mock("@lectorium/composables/useAppLanguage.js", () => ({
 vi.mock("@lectorium/composables/useLibraryLanguages.js", () => ({
   useLibraryLanguages: () => libraryLanguagesRef,
 }))
+// The landing store awaits the filter store's seed before querying; the
+// library languages themselves are driven by `libraryLanguagesRef` above, so
+// the seed load just needs to resolve.
+vi.mock("@lectorium/stores/useSearchFiltersStore.js", () => ({
+  useSearchFiltersStore: () => ({
+    load: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
 vi.mock("@lectorium/stores/useDictionariesStore.js", () => ({
   useDictionariesStore: () => ({
     ensureLoaded: vi.fn().mockResolvedValue(undefined),
