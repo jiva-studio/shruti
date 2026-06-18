@@ -1,6 +1,6 @@
 import { ref, watch, type Ref } from "vue"
 import { type CdnServer } from "@lib/domain/servers.js"
-import { findRegion } from "./services/regionsRegistry.js"
+import { findRegion, setActiveRegionId } from "./services/regionsRegistry.js"
 import { PREFERRED_SERVER_KEY } from "./services/preferredServer.js"
 import type {
   AuthPort,
@@ -196,6 +196,9 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
   if (instance) throw new Error("Shruti already initialized")
 
   const activeServer = ref<CdnServer>(seed.initialServer)
+  // Mirror the active region into the registry so resolveAssetUrl (covers,
+  // avatars) builds against the live region, not a hardcoded regions[0].
+  setActiveRegionId(seed.initialServer.id)
   // Whenever activeServer flips, persist the id under PREFERRED_SERVER_KEY
   // so the next cold start lands on the same region. This collapses the
   // "set active" and "remember for next launch" knobs that used to live
@@ -204,6 +207,8 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
   // Welcome's initial swap doesn't need an early-exit guard: writing the
   // same id back to preferences is a no-op on disk.
   watch(activeServer, (next, prev) => {
+    // Keep asset resolution pointed at the live region on every promotion.
+    setActiveRegionId(next.id)
     if (next.id === prev.id) return
     void seed.preferences.set(PREFERRED_SERVER_KEY, next.id).catch((err) => {
       console.warn(`[shruti] persist preferredServerId failed for ${next.id}`, err)
