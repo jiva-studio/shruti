@@ -62,6 +62,20 @@ export class PurchaseCancelledError extends Error {
   }
 }
 
+/**
+ * Thrown by `IPurchases.purchase` when the store refuses the purchase for the
+ * device/account rather than the app: IAP disabled on this build/test track,
+ * parental restrictions, or a region without store purchases. This is an
+ * expected store condition, NOT an app fault — callers should show a calm
+ * notice and it is kept out of crash reporting (see `isExpectedError`).
+ */
+export class PurchaseNotAllowedError extends Error {
+  constructor(message = "Purchases are not allowed on this device or account") {
+    super(message)
+    this.name = "PurchaseNotAllowedError"
+  }
+}
+
 export interface IPurchases {
   /**
    * `true` on iOS / Android when the SDK can run (API key present).

@@ -59,6 +59,7 @@ export default {
     trialDisclaimer:
       "Cancele quando quiser. Após o teste, a assinatura é renovada automaticamente.",
     subscribed: "Assinatura concluída",
+    unavailable: "As compras no aplicativo não estão disponíveis neste dispositivo.",
     manage: "Gerenciar assinatura",
     restore: "Restaurar",
     restored: "Sua assinatura foi restaurada com sucesso!",

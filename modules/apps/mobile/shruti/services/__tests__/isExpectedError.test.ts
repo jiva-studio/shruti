@@ -11,6 +11,7 @@ describe("isExpectedError", () => {
       "cannot start a transaction within a transaction",
       "no transaction is active",
       "The operation was aborted",
+      "The device or user is not allowed to make the purchase.",
     ]) {
       expect(isExpectedError(new Error(msg)), msg).toBe(true)
     }
@@ -19,6 +20,7 @@ describe("isExpectedError", () => {
   it("drops expected errors by class name", () => {
     expect(isExpectedError({ name: "AbortError", message: "x" })).toBe(true)
     expect(isExpectedError({ name: "PurchaseCancelledError" })).toBe(true)
+    expect(isExpectedError({ name: "PurchaseNotAllowedError" })).toBe(true)
     // JSON.parse failures on cached blobs (every such site has a fallback)
     expect(isExpectedError(new SyntaxError("Unexpected token < in JSON"))).toBe(true)
   })
