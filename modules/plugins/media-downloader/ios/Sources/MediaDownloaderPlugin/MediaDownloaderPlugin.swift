@@ -253,7 +253,11 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
     /// base) are stable, so we keep that tail and re-join it with the live
     /// base dir. A path already under the current container is returned
     /// unchanged; an unrecognised path is returned as-is.
-    private func resolvedPath(_ stored: String) -> String {
+    ///
+    /// Internal (not private) so `DownloadDelegate` can re-anchor a stored
+    /// path before deleting a partial file on failure — a background download
+    /// can fail after an app update, when the stored container UUID is stale.
+    func resolvedPath(_ stored: String) -> String {
         let anchors: [(marker: String, dir: FileManager.SearchPathDirectory)] = [
             ("/Library/Caches/", .cachesDirectory),
             ("/Documents/", .documentDirectory),
