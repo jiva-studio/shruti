@@ -3,6 +3,7 @@ test-results/
 playwright-report/
 playwright-report-live/
 playwright/.cache/
+logs/
 
 # Local secrets for @live runs (OPENROUTER_API_KEY, AWS_*). Never commit.
 .env.local
