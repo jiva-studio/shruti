@@ -96,7 +96,7 @@ export function useCapacitorRemoteFilesStorage({
       }
     },
 
-    async getJson<T = unknown>(url: string): Promise<T> {
+    async getText(url: string, opts?: { validate?: (text: string) => void }): Promise<string> {
       // Stale-while-revalidate. Mirrors `checkForUpdatesInBackground`
       // for the DB: read the cached file immediately (fast cold-start)
       // and refresh in the background so the NEXT cold-start sees the
@@ -111,15 +111,15 @@ export function useCapacitorRemoteFilesStorage({
             const fresh = await fetch(url, { cache: "no-store" })
             if (!fresh.ok) return
             const text = await fresh.text()
-            // Validate the response is real JSON before persisting it.
-            // A 200 HTML error page (captive portal) is `ok` but would
-            // otherwise poison the cache so every later read throws until
-            // `clearAll`. Throwing here aborts the refresh and leaves the
-            // good cached file in place.
-            JSON.parse(text)
+            // Validate the fresh body before persisting it. A 200 HTML error
+            // page (captive portal) is `ok` but would otherwise poison the
+            // cache so every later read fails until `clearAll`. The caller's
+            // validator (e.g. JSON.parse) throws here, aborting the refresh
+            // and leaving the good cached file in place.
+            opts?.validate?.(text)
             // Write to a sibling temp file and rename over the target so a
             // concurrent `readFile` of `localUrl` never sees a half-written
-            // file (which would make `JSON.parse` throw on a torn read).
+            // file (which would make a downstream parse throw on a torn read).
             const tmpPath = `${localUrl}.tmp`
             await Filesystem.writeFile({
               path: tmpPath,
@@ -140,7 +140,7 @@ export function useCapacitorRemoteFilesStorage({
               throw renameError
             }
           } catch {
-            // Offline, non-JSON response, or write failure — leave the
+            // Offline, invalid response, or write failure — leave the
             // cached file untouched.
           }
         })()
@@ -148,8 +148,7 @@ export function useCapacitorRemoteFilesStorage({
           path: localUrl,
           encoding: Encoding.UTF8,
         })
-        const text = typeof result.data === "string" ? result.data : ""
-        return JSON.parse(text) as T
+        return typeof result.data === "string" ? result.data : ""
       }
       // First-ever fetch — we have to block. Route through MediaDownloader
       // so the file lands at the canonical path other readers expect.
@@ -170,8 +169,7 @@ export function useCapacitorRemoteFilesStorage({
         path: localUrl,
         encoding: Encoding.UTF8,
       })
-      const text = typeof result.data === "string" ? result.data : ""
-      return JSON.parse(text) as T
+      return typeof result.data === "string" ? result.data : ""
     },
 
     async has(url: string): Promise<boolean> {
