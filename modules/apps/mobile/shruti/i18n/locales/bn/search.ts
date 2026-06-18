@@ -23,6 +23,7 @@ export default {
   },
   actions: {
     addToPlaylist: "প্লেলিস্টে যোগ করুন",
+    alreadyInPlaylist: "ইতিমধ্যে প্লেলিস্টে আছে",
     openTranscript: "ট্রান্সক্রিপ্ট খুলুন",
     share: "শেয়ার করুন",
   },
