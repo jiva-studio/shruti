@@ -1,6 +1,7 @@
 import type { AudioQueueTransition } from "@ports/app/audioPlayer.js"
 import { useShruti } from "@shruti/shruti.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 function msToSec(ms: number): number {
   if (!Number.isFinite(ms) || ms <= 0) return 0
@@ -66,9 +67,10 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
           // uses to_position vs duration, which is correct; only the exact
           // completion timestamp is approximate for long-backgrounded play.
           await repo.finish(id, { position: msToSec(e.finishedAtMs) })
-        } catch {
+        } catch (e) {
           // Best-effort: a failed journal write shouldn't block the ack —
           // losing one history row is better than reprocessing forever.
+          reportError("player-queue", e)
         }
         // A non-natural end (lock-screen skip / playback error) finished
         // the item part-way. Even if that part-way position lands within

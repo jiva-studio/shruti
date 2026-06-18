@@ -63,6 +63,7 @@ import { useAuthStore } from "./stores/useAuthStore.js"
 import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
 import { installConsoleCapture } from "./services/logger/index.js"
 import { initMonitoring } from "./services/monitoring/index.js"
+import { reportError } from "./services/monitoring/reportError.js"
 
 // Capture console.* into the in-memory debug buffer (Settings → Debug →
 // "View logs") before anything else runs, so the subscription / proactive
@@ -210,14 +211,14 @@ void hydrateRegions(preferences)
     void usePurchasesStore()
       .init()
       .catch((e) => {
-        console.warn("purchases.init failed", e)
+        reportError("purchases", e)
       })
     // Bootstrap anonymous-by-device session. Resolves the persistent
     // userId asynchronously; the rest of the app reads it via useAuthStore.
     void useAuthStore()
       .restore()
       .catch((e) => {
-        console.warn("auth.restore failed", e)
+        reportError("auth", e)
       })
     // Warm the Search landing page in the background so it renders fully formed
     // (no section-by-section pop-in) the moment the user opens the tab. Failures

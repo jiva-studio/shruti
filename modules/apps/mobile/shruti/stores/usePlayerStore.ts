@@ -2,6 +2,7 @@ import { defineStore } from "pinia"
 import { computed, onScopeDispose, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { playTrack, type PlayTrackError } from "@usecases/playback/playTrack.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
@@ -272,8 +273,10 @@ export const usePlayerStore = defineStore("player", () => {
         queueActive = false
         currentQueue = []
       }
-    } catch {
-      // Best-effort — a drain failure must not break playback.
+    } catch (e) {
+      // Best-effort — a drain failure must not break playback, but it signals a
+      // native-queue desync worth knowing about.
+      reportError("player", e)
     } finally {
       syncing = false
     }

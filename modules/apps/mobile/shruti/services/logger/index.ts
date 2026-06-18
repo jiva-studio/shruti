@@ -50,6 +50,17 @@ function push(level: LogLevel, text: string): void {
   notify()
 }
 
+/**
+ * Record an error-level line in the debug buffer directly, WITHOUT routing
+ * through `console.error`. Used by the Sentry `reportError` bridge so the entry
+ * is visible in Settings → Debug without also tripping the captureConsole
+ * integration (which only escalates real `console.error` calls) — i.e. one
+ * Sentry issue per reported error, not two.
+ */
+export function recordError(...args: unknown[]): void {
+  push("error", formatArgs(args))
+}
+
 /** Live view of the buffer, oldest-first. Do not mutate. */
 export function logSnapshot(): readonly LogEntry[] {
   return buffer

@@ -9,6 +9,7 @@ import { notificationIdFor } from "@shruti/proactive/hash.js"
 import router from "@shruti/router/index.js"
 import { onNotify, type NotifyIntent } from "@shruti/notifications/notifyEvents.js"
 import { onTurnSettled, onTurnStarted } from "@shruti/chat/turnNotificationEvents.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 
 /**
  * The single place that decides HOW to surface a user notification:
@@ -73,7 +74,7 @@ export function useUserNotifier(): void {
         at: Math.max(Date.now() + 2_000, p.createdAt + TURN_ESTIMATE_MS),
         extra: { chatSessionId: p.sessionId },
       })
-      .catch(() => undefined)
+      .catch((e) => reportError("notifier", e))
   }
 
   async function cancelForward(assistantMessageId: string): Promise<void> {
@@ -145,7 +146,7 @@ export function useUserNotifier(): void {
         at: Date.now() + 200,
         extra: intent.sessionId ? { chatSessionId: intent.sessionId } : undefined,
       })
-      .catch(() => undefined)
+      .catch((e) => reportError("notifier", e))
   }
 
   function present(intent: NotifyIntent): void {

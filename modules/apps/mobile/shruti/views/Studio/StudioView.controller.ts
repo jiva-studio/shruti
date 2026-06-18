@@ -14,6 +14,7 @@ import {
   resolveTrackTitle as resolveTitleForLang,
 } from "@lib/domain/services/localizedName.js"
 import { useShruti } from "@shruti/shruti.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
 import { withProgressLabels } from "@shruti/services/withProgressLabels.js"
@@ -241,7 +242,7 @@ export function useStudioController(): StudioControllerReturn {
     const nextMeta: NoteMeta = { ...baseMeta, studio: nextStudio }
     const updated = await notes.update({ id: current.id, meta: nextMeta })
     if (!updated.ok) {
-      console.warn("[studio] failed to persist edit:", updated.error)
+      reportError("studio-note", updated.error)
       return current
     }
     return updated.value
