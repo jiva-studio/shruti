@@ -1,5 +1,23 @@
 import { defineConfig } from "@playwright/test"
 import { execSync } from "child_process"
+import { readFileSync, existsSync } from "fs"
+import { fileURLToPath } from "url"
+
+// Load a gitignored .env.local into process.env so secrets persist across runs
+// instead of living in a shell that's gone next time: QASE_TESTOPS_API_TOKEN for
+// result publishing, OPENROUTER_API_KEY / AWS_* for @live. An already-set env var
+// wins, so an inline `VAR=… playwright test` override still takes precedence.
+;(() => {
+  const envFile = fileURLToPath(new URL(".env.local", import.meta.url))
+  if (!existsSync(envFile)) return
+  for (const line of readFileSync(envFile, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/)
+    if (!m) continue
+    let val = m[2]
+    if (/^(".*"|'.*')$/.test(val)) val = val.slice(1, -1)
+    if (process.env[m[1]] === undefined) process.env[m[1]] = val
+  }
+})()
 
 /**
  * One config, two projects so a single run produces ONE report:
