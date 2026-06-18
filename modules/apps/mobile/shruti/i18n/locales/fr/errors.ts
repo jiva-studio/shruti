@@ -7,4 +7,5 @@ export default {
   trackNotFound: "Conférence introuvable.",
   languageListUnavailable: "Impossible de charger les langues — liste réduite affichée.",
   dictionariesUnavailable: "Impossible de charger les noms — certaines étiquettes peuvent manquer.",
+  playbackFailed: "Impossible de lire ce cours. Vérifiez votre connexion et réessayez.",
 }

@@ -1616,8 +1616,12 @@ export const useChatStore = defineStore("chat", () => {
 
   async function deleteSession(id: string): Promise<void> {
     const repos = chatRepos()
-    await repos.messages.deleteBySession(id as ChatSessionId)
-    await repos.sessions.delete(id as ChatSessionId)
+    // One transaction so a failure can't delete the messages but leave the
+    // session row behind as a "zombie" empty conversation in history.
+    await app.repositories().unitOfWork.run(async () => {
+      await repos.messages.deleteBySession(id as ChatSessionId)
+      await repos.sessions.delete(id as ChatSessionId)
+    })
     sessions.value = sessions.value.filter((s) => s.id !== id)
     if (activeSessionId.value === id) {
       activeSessionId.value = null

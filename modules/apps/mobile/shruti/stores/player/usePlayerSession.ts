@@ -2,6 +2,7 @@ import type { Ref } from "vue"
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useListeningSessionTracker } from "@shruti/composables/useListeningSessionTracker.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { isCompleted } from "@lib/domain/listeningSession.js"
 
 export interface PlayerSessionDeps {
@@ -54,6 +55,12 @@ export function usePlayerSession(deps: PlayerSessionDeps): PlayerSessionReturn {
     getRepo: () => app.repositories().listeningSessions,
   })
 
+  // Listening-session writes are fired without awaiting (they must not block
+  // the progress callback), so without a `.catch` a rejected write — a
+  // contended user DB, disk full — becomes an unhandled rejection and the
+  // interval is silently lost. Funnel them through reportError instead.
+  const reportFail = (e: unknown): void => reportError("listening-session", e)
+
   function applyStatus(position: number, duration: number): void {
     const id = deps.itemIdRef.value
     if (!id) return
@@ -65,6 +72,7 @@ export function usePlayerSession(deps: PlayerSessionDeps): PlayerSessionReturn {
         void tracker
           .finish({ positionMs: duration })
           .then(() => deps.patchPlaylistProgress(id, duration))
+          .catch(reportFail)
       } else {
         deps.patchPlaylistProgress(id, duration)
       }
@@ -73,14 +81,15 @@ export function usePlayerSession(deps: PlayerSessionDeps): PlayerSessionReturn {
 
     if (deps.playingRef.value) {
       if (!tracker.hasActiveSession() || tracker.activeItemId() !== id) {
-        void tracker.start({ itemId: id, positionMs: position })
+        void tracker.start({ itemId: id, positionMs: position }).catch(reportFail)
       } else {
-        void tracker.tick({ positionMs: position })
+        void tracker.tick({ positionMs: position }).catch(reportFail)
       }
     } else if (tracker.hasActiveSession()) {
       void tracker
         .finish({ positionMs: position })
         .then(() => deps.patchPlaylistProgress(id, position))
+        .catch(reportFail)
     }
   }
 
@@ -89,7 +98,10 @@ export function usePlayerSession(deps: PlayerSessionDeps): PlayerSessionReturn {
     if (!id) return
     if (tracker.hasActiveSession()) {
       const pos = deps.positionMsRef.value
-      void tracker.flushOnHide({ positionMs: pos }).then(() => deps.patchPlaylistProgress(id, pos))
+      void tracker
+        .flushOnHide({ positionMs: pos })
+        .then(() => deps.patchPlaylistProgress(id, pos))
+        .catch(reportFail)
     }
   }
 

@@ -61,6 +61,7 @@ export default {
     trialDisclaimer:
       "Bármikor lemondható. A próbaidőszak után az előfizetés automatikusan megújul.",
     subscribed: "Az előfizetés megtörtént",
+    unavailable: "Az alkalmazáson belüli vásárlások nem érhetők el ezen az eszközön.",
     manage: "Előfizetés kezelése",
     restore: "Visszaállítás",
     restored: "Az előfizetésedet sikeresen visszaállítottuk!",

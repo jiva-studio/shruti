@@ -132,7 +132,12 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         // download ever happening. The Android side gets this for free
         // via its `.download` temp-file + atomic-rename pattern.
         if let entry = metadataStore.get(id: id) {
-            try? FileManager.default.removeItem(atPath: entry.localPath)
+            // Re-anchor the stored path to the live container before deleting:
+            // a background download can fail after an app update, when the
+            // UUID baked into entry.localPath is stale and the raw path would
+            // miss the partial (leaving it orphaned). Mirrors the cancel path.
+            let path = plugin?.resolvedPath(entry.localPath) ?? entry.localPath
+            try? FileManager.default.removeItem(atPath: path)
         }
         metadataStore.remove(id: id)
         plugin?.emit(event: "failed", data: [

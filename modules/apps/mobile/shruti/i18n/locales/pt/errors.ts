@@ -7,4 +7,6 @@ export default {
   languageListUnavailable: "Não foi possível carregar os idiomas — exibindo uma lista reduzida.",
   dictionariesUnavailable:
     "Não foi possível carregar os nomes — alguns rótulos podem estar ausentes.",
+  playbackFailed:
+    "Não foi possível reproduzir esta palestra. Verifique sua conexão e tente novamente.",
 }

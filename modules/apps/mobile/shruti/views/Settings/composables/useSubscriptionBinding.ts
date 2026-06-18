@@ -4,7 +4,11 @@ import { alertController } from "@ionic/vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import { PurchaseCancelledError, type PurchasePackage } from "@ports/app/purchases.js"
+import {
+  PurchaseCancelledError,
+  PurchaseNotAllowedError,
+  type PurchasePackage,
+} from "@ports/app/purchases.js"
 
 /** Where the "can't pay" requests land so an operator can grant PRO. */
 const SUPPORT_EMAIL = "support@akdasa.studio"
@@ -99,6 +103,20 @@ export function useSubscriptionBinding(): SubscriptionBinding {
       await store.purchase(packageId)
     } catch (e) {
       if (e instanceof PurchaseCancelledError) return
+      // The store refused the purchase for the device/account (IAP disabled on
+      // this build/test track, restrictions, unsupported region). Calm notice,
+      // and crucially NOT through showError — that console.errors, which the
+      // Sentry captureConsole path would escalate to an issue for an expected
+      // store condition.
+      if (e instanceof PurchaseNotAllowedError) {
+        const alert = await alertController.create({
+          header: t("settings.subscription.title"),
+          message: t("settings.subscription.unavailable"),
+          buttons: [t("app.ok")],
+        })
+        await alert.present()
+        return
+      }
       await showError(e)
       return
     }

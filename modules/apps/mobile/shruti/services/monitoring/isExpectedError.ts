@@ -16,20 +16,26 @@
 
 // Message signatures that are always expected/benign across the app's adapters.
 const EXPECTED_MESSAGE =
-  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)/i
+  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase/i
 
 // Error class names that are control-flow, not faults: request cancellation,
-// user-cancelled IAP, and JSON.parse failures on cached/persisted blobs (every
-// such site has an explicit fallback — a real syntax bug would surface as an
-// unhandled error via the global handlers, not here).
-const EXPECTED_NAMES = new Set(["AbortError", "PurchaseCancelledError", "SyntaxError"])
+// user-cancelled IAP, a store-refused purchase (IAP disabled on this build /
+// restricted account / unsupported region), and JSON.parse failures on
+// cached/persisted blobs (every such site has an explicit fallback — a real
+// syntax bug would surface as an unhandled error via the global handlers, not
+// here).
+const EXPECTED_NAMES = new Set([
+  "AbortError",
+  "PurchaseCancelledError",
+  "PurchaseNotAllowedError",
+  "SyntaxError",
+])
 
 export function isExpectedError(error: unknown): boolean {
   if (error && typeof error === "object") {
     const name = (error as { name?: unknown }).name
     if (typeof name === "string" && EXPECTED_NAMES.has(name)) return true
   }
-  const message =
-    error instanceof Error ? error.message : typeof error === "string" ? error : ""
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : ""
   return EXPECTED_MESSAGE.test(message)
 }
