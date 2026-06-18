@@ -1,7 +1,7 @@
 <template>
   <div v-if="rows.length" class="similar">
     <SectionLabel inset>{{ t("transcript.similarByTopic") }}</SectionLabel>
-    <TracksList :rows="rows" />
+    <TracksList :rows="rows" @select="onSelectSimilar" />
   </div>
 </template>
 
@@ -13,9 +13,10 @@ import SectionLabel from "@ui/components/SectionLabel.vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
+import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
 import { listSimilarTracksByTopic } from "@usecases/discovery/listSimilarTracksByTopic.js"
 import type { Track } from "@lib/domain/track.js"
-import type { LanguageCode } from "@lib/domain/core.js"
+import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 
 const props = defineProps<{ track: Track }>()
 
@@ -23,6 +24,13 @@ const { t } = useI18n()
 const app = useShruti()
 const mapper = useTrackUiStateMapper()
 const libraryLanguages = useLibraryLanguages()
+const trackActions = useTrackActionSheet()
+
+// Tapping a similar lecture re-opens the same sheet for that track: the shared
+// TrackSheet swaps its content in place (and scrolls back to the top).
+function onSelectSimilar(trackId: string): void {
+  void trackActions.present(trackId as TrackId)
+}
 
 const SEED_TOPICS = 5
 const SIMILAR_LIMIT = 5
