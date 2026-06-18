@@ -30,6 +30,15 @@ interface StoredTokens {
 
 const PREFERENCES_KEY = "auth.tokens"
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+// Backoff schedule for the anonymous-bootstrap retry. The endpoint is the
+// app's identity floor — if it fails the user has NO token and the whole
+// app (chat especially) is dead — so we retry transient failures instead
+// of stranding token-less until the next manual restart. One extra event
+// per attempt is well within the edge's per-IP budget.
+const ANON_RETRY_BACKOFF_MS = [400, 1200, 3000]
+
 interface TokenResponseBody {
   accessToken: string
   refreshToken: string
@@ -57,6 +66,11 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
   let session: AuthSession | null = null
   let stored: StoredTokens | null = null
   let refreshInFlight: Promise<string | null> | null = null
+  // Coalesces concurrent anonymous bootstraps (boot + a chat send racing
+  // it, or several callers hitting getAccessToken() after a session loss)
+  // behind a single /auth/anonymous round-trip — same pattern as
+  // refreshInFlight. Without it a token-less app could fire N mint calls.
+  let bootstrapInFlight: Promise<AuthSession> | null = null
   let socialInitialized = false
   const listeners = new Set<(s: AuthSession | null) => void>()
 
@@ -189,16 +203,59 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
   async function callAnonymous(): Promise<TokenResponseBody> {
     const deviceId = (await Device.getId()).identifier
     const platform = Capacitor.getPlatform()
-    const res = await cfg.request("/anonymous", {
+    const init = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
       },
       body: JSON.stringify({ deviceId, platform }),
-    })
-    if (!res.ok) throw new Error(`auth/anonymous: HTTP ${res.status}`)
-    return (await res.json()) as TokenResponseBody
+    }
+    // Attempt once + retry transient failures. A 429 (edge per-IP burst),
+    // a 5xx (auth mid-deploy / DB blip) or a network error are all
+    // recoverable on a later try; any other 4xx (e.g. 400 bad request) is
+    // a real client error and fails fast.
+    let lastErr: unknown
+    for (let attempt = 0; attempt <= ANON_RETRY_BACKOFF_MS.length; attempt++) {
+      let res: Response
+      try {
+        res = await cfg.request("/anonymous", init)
+      } catch (e) {
+        lastErr = e
+        if (attempt === ANON_RETRY_BACKOFF_MS.length) break
+        await sleep(ANON_RETRY_BACKOFF_MS[attempt])
+        continue
+      }
+      if (res.ok) return (await res.json()) as TokenResponseBody
+      const transient = res.status === 429 || res.status === 408 || res.status >= 500
+      if (!transient) throw new Error(`auth/anonymous: HTTP ${res.status}`)
+      lastErr = new Error(`auth/anonymous: HTTP ${res.status}`)
+      if (attempt === ANON_RETRY_BACKOFF_MS.length) break
+      await sleep(ANON_RETRY_BACKOFF_MS[attempt])
+    }
+    throw lastErr ?? new Error("auth/anonymous: retries exhausted")
+  }
+
+  // Coalesced anonymous bootstrap. The anonymous identity is the app's
+  // floor (signed-out users live here, Spotify-free style), so any code
+  // path that finds itself token-less can fall back through here instead
+  // of giving up until the next app restart.
+  function readAccessToken(): string | null {
+    return stored?.accessToken ?? null
+  }
+
+  function bootstrapAnonymous(): Promise<AuthSession> {
+    if (!bootstrapInFlight) {
+      bootstrapInFlight = (async () => {
+        try {
+          const tokens = await callAnonymous()
+          return await commitTokenResponse(tokens)
+        } finally {
+          bootstrapInFlight = null
+        }
+      })()
+    }
+    return bootstrapInFlight
   }
 
   // A refresh attempt has three outcomes, not two: success, a genuine
@@ -255,12 +312,28 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       setSession(sess)
       return sess
     }
-    const tokens = await callAnonymous()
-    return commitTokenResponse(tokens)
+    return bootstrapAnonymous()
   }
 
   async function getAccessToken(): Promise<string | null> {
-    if (!stored) return null
+    if (!stored) {
+      // No session — the boot bootstrap failed (offline / 429 storm) or a
+      // refresh rejection cleared our tokens mid-run. Re-mint the anonymous
+      // identity rather than handing back null forever: otherwise the app
+      // stays token-less (chat hangs on "Thinking…") until a manual restart
+      // — and a restart only retries once. Falls through to null only if the
+      // bootstrap itself (with its own retries) ultimately fails.
+      try {
+        await bootstrapAnonymous()
+      } catch (e) {
+        console.warn("[auth] anonymous bootstrap recovery failed", e)
+        return null
+      }
+      // Read through a helper: `stored` is narrowed to null by the guard
+      // above and TS keeps that across the await, even though
+      // bootstrapAnonymous() repopulated it via commitTokenResponse.
+      return readAccessToken()
+    }
     const now = Date.now()
     if (stored.accessTokenExpiresAt - now > 60_000) {
       return stored.accessToken
