@@ -5,4 +5,5 @@ export default {
     "No se pudo leer tu índice de descargas. Los archivos en caché siguen en el disco.",
   trackNotFound: "Pista no encontrada.",
   languageListUnavailable: "No se pudieron cargar los idiomas — se muestra una lista breve.",
+  dictionariesUnavailable: "No se pudieron cargar los nombres — algunas etiquetas pueden faltar.",
 }

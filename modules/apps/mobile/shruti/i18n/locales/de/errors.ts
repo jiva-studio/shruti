@@ -7,4 +7,6 @@ export default {
   trackNotFound: "Vortrag nicht gefunden.",
   languageListUnavailable:
     "Sprachen konnten nicht geladen werden — es wird eine kurze Liste angezeigt.",
+  dictionariesUnavailable:
+    "Namen konnten nicht geladen werden — einige Bezeichnungen fehlen möglicherweise.",
 }
