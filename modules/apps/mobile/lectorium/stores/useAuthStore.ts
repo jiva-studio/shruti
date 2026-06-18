@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
+import { setMonitoringUser, setMonitoringTag } from "@lectorium/services/monitoring/index.js"
 import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { AccountDeleteError } from "@ports/app/auth.js"
@@ -82,8 +83,15 @@ export const useAuthStore = defineStore("auth", () => {
   // identity's quota bucket and means nothing for the new one.
   watch(userId, (newId, oldId) => {
     if (newId === oldId) return
+    // Group Sentry errors by account — opaque id only, never name/email/IP.
+    setMonitoringUser(newId)
     releaseChatComposeLock()
   })
+
+  // Tag Sentry events with the subscription tier so issues can be filtered
+  // ("is this bug Pro-specific?"). Non-PII; immediate so it's set on first
+  // resolve and kept in sync on every tier change.
+  watch(isPro, (pro) => setMonitoringTag("tier", pro ? "pro" : "free"), { immediate: true })
 
   // Tier-upgrade watcher: free → pro within the same user_id (in-place
   // IAP, or webhook landing for a purchase made on another device)
