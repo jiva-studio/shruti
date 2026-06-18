@@ -22,6 +22,7 @@ export default {
   },
   actions: {
     addToPlaylist: "Hozzáadás a lejátszási listához",
+    downloadAgain: "Letöltés újra",
     alreadyInPlaylist: "Már a lejátszási listán",
     openTranscript: "Átirat megnyitása",
     share: "Megosztás",

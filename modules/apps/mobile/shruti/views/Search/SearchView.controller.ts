@@ -1,7 +1,6 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
-import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import type { TrackId } from "@lib/domain/core.js"
@@ -29,8 +28,7 @@ export interface SearchControllerReturn {
   filtersOpen: Ref<boolean>
   activeFilterCount: ComputedRef<number>
   resetFilters: () => Promise<void>
-  /** Tap on a track row → retry download if failed, else open the
-   *  per-track ActionSheet. */
+  /** Tap on a track row → open the per-track sheet (any download state). */
   onSelect: (trackId: string) => Promise<void>
   loadMore: () => Promise<void>
 }
@@ -50,7 +48,6 @@ export function useSearchController(): SearchControllerReturn {
   const { sections: filterSections } = useSearchFilterSections()
   const { mapRows } = useTrackUiStateMapper()
   const actionSheet = useTrackActionSheet()
-  const downloads = useDownloadStore()
   const filtersOpen = ref<boolean>(false)
   // Stays false until the first query settles, so the empty state never flashes
   // during the initial filter/dictionary hydration before any search has run.
@@ -90,16 +87,10 @@ export function useSearchController(): SearchControllerReturn {
   )
 
   async function onSelect(trackId: string): Promise<void> {
-    // Failed downloads retry on tap — no ActionSheet. The red X IS the
-    // retry affordance; ensureDownloaded de-dupes via `inFlight`.
-    if (downloads.getState(trackId) === "failed") {
-      const track = rawTracks.value.find((t) => t.id === trackId)
-      const variant = track?.variants.find((v) => v.audio)
-      if (variant?.audio) {
-        void downloads.ensureDownloaded(trackId as TrackId, variant.audio.path)
-      }
-      return
-    }
+    // Always open the per-track sheet — regardless of download state. A
+    // failed/stuck download is retried from the sheet's primary button
+    // ("Download again"), not by tapping the row, so the user can always
+    // reach the lecture's details, transcript, and share actions.
     await actionSheet.present(trackId as TrackId)
   }
 
