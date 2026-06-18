@@ -37,6 +37,11 @@ export const useDownloadStore = defineStore("downloads", () => {
   // why. The Welcome screen / Settings can render a banner from this.
   const hydrationError = ref<string | null>(null)
   const inFlight = new Map<TrackId, Promise<string | null>>()
+  // The CDN url a track's transfer was started with, kept while it's in
+  // flight so remove()/cancelPrefetch()/reset() can abort the native
+  // transfer (the downloader cancels by url → pathname id). Cleared when
+  // the task settles.
+  const inFlightUrls = new Map<TrackId, string>()
   // Bounded FIFO for prefetch-style enqueues. Without this, restoring
   // many tracks at once fires `ensureDownloaded` in a tight loop and
   // the native plugin's WorkManager (Android) / URLSession (iOS) drops
@@ -147,6 +152,9 @@ export const useDownloadStore = defineStore("downloads", () => {
         // downloader keys by URL pathname, so any previously-downloaded
         // file is still resolvable even if we later swapped CDNs.
         const probeUrl = buildServerUrl(app.activeServer.value, path)
+        // Record the url so a concurrent remove/archive/reset can cancel the
+        // native transfer (keyed by url → pathname id, host-independent).
+        inFlightUrls.set(trackId, probeUrl)
         if (isRetryAfterFailure) {
           // Flip to "downloading" BEFORE the native delete so the spinner
           // renders on the very next frame — the deleteFile round-trip
@@ -235,7 +243,10 @@ export const useDownloadStore = defineStore("downloads", () => {
       } finally {
         // Only delete our own slot. After a reset() the map was
         // cleared and a newer task may already own this trackId.
-        if (inFlight.get(trackId) === ownership.current) inFlight.delete(trackId)
+        if (inFlight.get(trackId) === ownership.current) {
+          inFlight.delete(trackId)
+          inFlightUrls.delete(trackId)
+        }
       }
     })()
 
@@ -329,7 +340,26 @@ export const useDownloadStore = defineStore("downloads", () => {
     if (nextProgress.delete(trackId)) progress.value = nextProgress
   }
 
+  /**
+   * Abort an in-flight native transfer for a track, if any. Best-effort:
+   * the web backend may not implement cancel, and a transfer that already
+   * finished is a no-op. Drops the tracked url so a later settle doesn't
+   * re-cancel.
+   */
+  function cancelInFlight(trackId: TrackId): void {
+    const url = inFlightUrls.get(trackId)
+    if (!url) return
+    inFlightUrls.delete(trackId)
+    void app.mediaDownloader.cancel(url).catch(() => {})
+  }
+
   async function remove(trackId: TrackId, remoteUrl: string): Promise<void> {
+    // Stop any in-flight transfer first, else the running worker can finish
+    // and re-create the file right after we delete it (orphan on disk with no
+    // DB row). Falls back to the remoteUrl id when the track has no tracked
+    // in-flight url (already finished / not ours).
+    cancelInFlight(trackId)
+    await app.mediaDownloader.cancel(remoteUrl).catch(() => {})
     const repos = app.repositories()
     await removeDownloadedMedia(
       { trackId, remoteUrl },
@@ -373,6 +403,14 @@ export const useDownloadStore = defineStore("downloads", () => {
    * acceptable for the rare race.
    */
   function cancelPrefetch(trackId: TrackId): void {
+    // Already transferring: abort the native transfer so archiving a track
+    // mid-download actually stops the bandwidth + leaves no orphan partial.
+    // (The JS task then settles as "failed", but the archived track is no
+    // longer rendered, so that lingering state is harmless.)
+    if (inFlight.has(trackId)) {
+      cancelInFlight(trackId)
+      return
+    }
     if (!queuedTrackIds.has(trackId)) return
     const idx = prefetchQueue.findIndex((j) => j.trackId === trackId)
     if (idx >= 0) prefetchQueue.splice(idx, 1)
@@ -402,6 +440,12 @@ export const useDownloadStore = defineStore("downloads", () => {
     // logically: the task still resolves but its setState/setProgress
     // calls become no-ops.
     storeEpoch += 1
+    // Abort in-flight native transfers so a wipe/clear-cache doesn't leave
+    // workers running that re-create files into the just-emptied cache.
+    for (const url of inFlightUrls.values()) {
+      void app.mediaDownloader.cancel(url).catch(() => {})
+    }
+    inFlightUrls.clear()
     states.value = new Map()
     progress.value = new Map()
     hydrationError.value = null
