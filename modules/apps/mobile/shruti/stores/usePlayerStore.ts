@@ -1,6 +1,8 @@
 import { defineStore } from "pinia"
 import { computed, onScopeDispose, ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
 import { App, type AppState } from "@capacitor/app"
+import { useToast } from "@kit/composables"
 import { playTrack, type PlayTrackError } from "@usecases/playback/playTrack.js"
 import { reportError } from "@shruti/services/monitoring/reportError.js"
 import type { Author } from "@lib/domain/author.js"
@@ -50,6 +52,8 @@ export const usePlayerStore = defineStore("player", () => {
   const autoOpenTranscript = useConfig<boolean>("settings.openTranscriptAutomatically", false)
   const autoPlayNext = useAutoPlayNext()
   const reconcile = usePlayerQueueReconcile()
+  const { t } = useI18n()
+  const toast = useToast()
 
   // True while a multi-track native queue (continuous playback) is loaded.
   // Off for the single-track `open()` path, so the existing single-track
@@ -252,6 +256,14 @@ export const usePlayerStore = defineStore("player", () => {
     try {
       const s = await app.audioPlayer.getQueueState()
       await reconcile.reconcileAndAck(s.events)
+      // A drained transition with reason "error" means the engine failed on an
+      // item (404, unreadable file). Native auto-skips when there's a next
+      // item, but a single track / the last item just stops with nothing told
+      // to the user — the player would sit silently "not playing". Surface it.
+      // Events are ack'd above, so each error is seen exactly once (no spam).
+      if (s.events.some((e) => e.reason === "error")) {
+        void toast.error(t("errors.playbackFailed"))
+      }
       if (s.currentItemId) {
         // A native queue restored from a previous session that is paused and
         // was never resumed/opened in THIS session is a phantom: hydrating

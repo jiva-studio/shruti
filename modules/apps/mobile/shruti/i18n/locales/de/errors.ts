@@ -9,4 +9,6 @@ export default {
     "Sprachen konnten nicht geladen werden — es wird eine kurze Liste angezeigt.",
   dictionariesUnavailable:
     "Namen konnten nicht geladen werden — einige Bezeichnungen fehlen möglicherweise.",
+  playbackFailed:
+    "Diese Vorlesung konnte nicht abgespielt werden. Prüfe deine Verbindung und versuche es erneut.",
 }

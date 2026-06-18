@@ -6,4 +6,5 @@ export default {
   trackNotFound: "Numera nije pronađena.",
   languageListUnavailable: "Nije moguće učitati jezike — prikazujemo kratku listu.",
   dictionariesUnavailable: "Nije moguće učitati nazive — neke oznake možda nedostaju.",
+  playbackFailed: "Nije moguće reprodukovati ovo predavanje. Proverite vezu i pokušajte ponovo.",
 }
