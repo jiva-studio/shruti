@@ -111,6 +111,39 @@ export async function preseedUserDb(page: Page, locale: Locale): Promise<void> {
 }
 
 /**
+ * Like {@link preseedUserDb} but seeds ONLY when the user DB isn't already in
+ * IndexedDB. Use this for restart/persistence tests: the unconditional preseed
+ * re-runs on every reload and would clobber any runtime-written rows (e.g. a
+ * completed download), so a "restart" wouldn't represent real persistence.
+ */
+export async function preseedUserDbOnce(page: Page, locale: Locale): Promise<void> {
+  const base64 = fs.readFileSync(userDbPath(locale)).toString("base64")
+  await page.addInitScript(
+    ({ b64 }: { b64: string }) => {
+      const open = indexedDB.open("lectorium", 1)
+      open.onupgradeneeded = () => open.result.createObjectStore("databases")
+      open.onsuccess = () => {
+        const db = open.result
+        const ro = db.transaction(["databases"], "readonly").objectStore("databases").get("user.db")
+        ro.onsuccess = () => {
+          if (ro.result) {
+            db.close()
+            return
+          }
+          const bin = atob(b64)
+          const arr = new Uint8Array(bin.length)
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+          const tx = db.transaction(["databases"], "readwrite")
+          tx.objectStore("databases").put(arr, "user.db")
+          tx.oncomplete = () => db.close()
+        }
+      }
+    },
+    { b64: base64 }
+  )
+}
+
+/**
  * Pin the library (TracksView) to the Bhagavad-gita source so it shows a stable,
  * populated, reference-sorted list. Capacitor Preferences on web → localStorage
  * under the `CapacitorStorage.` prefix.
