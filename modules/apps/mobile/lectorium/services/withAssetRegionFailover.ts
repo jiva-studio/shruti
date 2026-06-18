@@ -1,14 +1,19 @@
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
-import type { IRemoteFilesStorage } from "@ports/app/index.js"
 
-export interface AssetRegionFailoverDeps {
+export interface AssetFailoverDeps {
   /** Current region list (registry order). */
   readonly getRegions: () => readonly CdnServer[]
-  /** The currently-active region (whose template the failing url was built with). */
+  /** The active region — whose template the failing url was built with. */
   readonly getActiveServer: () => CdnServer
   /** Promote a region to active after it serves an asset the active one couldn't. */
   readonly promote: (id: string) => void
+  /** Fetch+cache an asset, resolving to a locally-usable url (files storage get). */
+  readonly fetch: (url: string) => Promise<string>
 }
+
+/** A last-resort resolver: given a url that failed on the active region, return
+ *  a locally-usable url served from another region, or null if none can. */
+export type AssetFailover = (failedUrl: string) => Promise<string | null>
 
 /**
  * Recover the S3 object key from a built asset url by stripping the active
@@ -29,47 +34,34 @@ export function extractAssetKey(url: string, urlTemplate: string): string | null
 }
 
 /**
- * Wrap an {@link IRemoteFilesStorage} so a `get()` against a dead CDN region
- * fails over to the other regions: rebuild the same object key against each
- * other region, and on the first success promote it to active so every later
- * asset/streaming/transcript url (which all read the active region) follows —
- * not just this one cover.
+ * Build the asset region-failover resolver.
  *
- * Only `get()` is wrapped; covers and other assets resolve through it. The
- * cache key is host-independent (pathname), so a file fetched from a fallback
- * region is served for the original region's url too. The other methods pass
- * through unchanged.
+ * Called as a LAST RESORT — only after the caller (CachedImage via
+ * `useCachedImageUrl`) has exhausted its same-region retries AND the raw-url
+ * fallback, i.e. the active region looks genuinely unreachable for this asset,
+ * not just flaky. (Doing it inside every `get()` would fight that same-region
+ * retry and flip the active CDN on a single transient blip.)
  *
- * Deps are injected (closures over the composition root) so the decorator is
- * pure + unit-testable and avoids a circular import on the root.
+ * It rebuilds the same object key against each OTHER region and, on the first
+ * that serves it, promotes that region to active so streaming / transcripts /
+ * other covers (all read the active region) follow the live CDN too. Returns
+ * the locally-usable url, or null if no region could serve it.
  */
-export function withAssetRegionFailover(
-  inner: IRemoteFilesStorage,
-  deps: AssetRegionFailoverDeps
-): IRemoteFilesStorage {
-  return {
-    ...inner,
-    async get(url: string): Promise<string> {
+export function createAssetFailover(deps: AssetFailoverDeps): AssetFailover {
+  return async (failedUrl: string): Promise<string | null> => {
+    const active = deps.getActiveServer()
+    const key = extractAssetKey(failedUrl, active.urlTemplate)
+    if (key === null) return null
+    for (const region of deps.getRegions()) {
+      if (region.id === active.id) continue
       try {
-        return await inner.get(url)
-      } catch (firstError) {
-        const active = deps.getActiveServer()
-        const key = extractAssetKey(url, active.urlTemplate)
-        if (key === null) throw firstError
-        for (const region of deps.getRegions()) {
-          if (region.id === active.id) continue
-          try {
-            const result = await inner.get(buildServerUrl(region, key))
-            deps.promote(region.id)
-            return result
-          } catch {
-            // Try the next region.
-          }
-        }
-        // No region could serve it — surface the original failure so the
-        // caller (e.g. CachedImage) runs its raw-url fallback / retry.
-        throw firstError
+        const local = await deps.fetch(buildServerUrl(region, key))
+        deps.promote(region.id)
+        return local
+      } catch {
+        // Try the next region.
       }
-    },
+    }
+    return null
   }
 }

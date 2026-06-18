@@ -34,7 +34,6 @@ import { i18n } from "./i18n/index.js"
 import { initLectorium } from "./lectorium.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
 import { getRegions, hydrateRegions } from "@lectorium/services/regionsRegistry.js"
-import { withAssetRegionFailover } from "@lectorium/services/withAssetRegionFailover.js"
 import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
 import { useCapacitorSqlPersistence } from "@infra/persistence/capacitor/index.js"
 import { useDatabaseToIndexedDbFetcher } from "@infra/persistence/fetchers/idb/index.js"
@@ -113,20 +112,9 @@ initLectorium({
   appConfig: config,
   persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
   databaseFetcher: isNative ? useDatabaseToFsFetcher() : useDatabaseToIndexedDbFetcher(),
-  // Wrap the platform files storage so an asset `get()` against a dead CDN
-  // region fails over to the others and promotes the working one — covers
-  // (and anything via files storage) recover mid-session instead of staying
-  // pinned to a dead region until restart.
-  filesStorage: withAssetRegionFailover(
-    isNative
-      ? useCapacitorRemoteFilesStorage({ cacheDir: "lectorium" })
-      : useWebRemoteFilesStorage({ cacheName: "lectorium" }),
-    {
-      getRegions,
-      getActiveServer: () => useLectorium().activeServer.value,
-      promote: (id) => useLectorium().setActiveServerById(id),
-    }
-  ),
+  filesStorage: isNative
+    ? useCapacitorRemoteFilesStorage({ cacheDir: "lectorium" })
+    : useWebRemoteFilesStorage({ cacheName: "lectorium" }),
   preferences,
   // Capacitor plugin selects native vs its own web fallback automatically.
   audioPlayer: useCapacitorAudioPlayer(),
