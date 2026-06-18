@@ -71,6 +71,12 @@ jobs:
           # Vite reads these generic names (same as kit's native-binary build).
           REVENUECAT_IOS_KEY: ${{ secrets.LECTORIUM_APPLE_REVENUE_CAT_KEY }}
           REVENUECAT_ANDROID_KEY: ${{ secrets.LECTORIUM_GOOGLE_REVENUE_CAT_KEY }}
+          # Present only here (a secret) → @sentry/vite-plugin uploads JS source
+          # maps for this build's release (lectorium@<version>+<sha>, from
+          # COMMIT_SHA above) and strips the .map files from dist afterwards.
+          # Absent (forks / PRs without the secret) → plugin is skipped, build
+          # unchanged. Org/project default in vite.config (akdasa-studio/letorium).
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: cd modules/apps/mobile && npm run build
       - uses: actions/upload-artifact@v7
         with:

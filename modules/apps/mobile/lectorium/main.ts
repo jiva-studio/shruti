@@ -62,6 +62,7 @@ import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
 import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
 import { installConsoleCapture } from "./services/logger/index.js"
+import { initMonitoring } from "./services/monitoring/index.js"
 
 // Capture console.* into the in-memory debug buffer (Settings → Debug →
 // "View logs") before anything else runs, so the subscription / proactive
@@ -181,6 +182,11 @@ initLectorium({
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)
+
+// Wire Sentry (native crash + WebView JS error reporting) before mount so the
+// Vue error handler attaches to the live app. No-op when the DSN is empty or
+// during a local web dev session.
+initMonitoring(app)
 
 // Dev-only debug bridge for the screenshots pipeline (modules/tools/screenshots).
 // Production builds tree-shake this branch entirely — `VITE_DEBUG_API` is unset.

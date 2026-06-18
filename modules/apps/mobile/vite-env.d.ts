@@ -19,3 +19,5 @@ declare const __REVENUECAT_IOS_KEY__: string
 declare const __REVENUECAT_ANDROID_KEY__: string
 declare const __GOOGLE_WEB_CLIENT_ID__: string
 declare const __GOOGLE_IOS_CLIENT_ID__: string
+declare const __SENTRY_DSN__: string
+declare const __SENTRY_RELEASE__: string
