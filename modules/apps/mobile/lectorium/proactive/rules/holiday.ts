@@ -1,3 +1,4 @@
+import { createJsonRemoteStorage } from "@kit/infra"
 import { useLectorium } from "@lectorium/lectorium.js"
 import type { HolidayEntry, RemoteAppConfig } from "@lib/domain/config.js"
 import { notificationIdFor } from "../hash.js"
@@ -134,7 +135,7 @@ async function readHolidayCalendar(): Promise<readonly HolidayEntry[]> {
   const app = useLectorium()
   try {
     const configUrl = app.storagePublicUrl.get(app.appConfig.publicRemoteConfigPath)
-    const raw = await app.filesStorage.getJson<RemoteAppConfig>(configUrl)
+    const raw = await createJsonRemoteStorage(app.filesStorage).getJson<RemoteAppConfig>(configUrl)
     const data = raw.proactive?.calendars?.holidays ?? []
     calendarCache = { at: now, data }
     return data
