@@ -43,6 +43,29 @@ export async function mockChatAuth(page: Page, tier: "free" | "pro" = "free"): P
   )
 }
 
+/* ------------------------------- SSE stream ------------------------------- */
+
+/** One `delta` frame (a chunk of answer text). */
+export function delta(text: string): string {
+  return `event: delta\ndata: ${JSON.stringify({ text })}`
+}
+/** The terminal `done` frame (optionally carrying the cite-alias map). */
+export function done(aliases?: Record<string, unknown>): string {
+  return `event: done\ndata: ${JSON.stringify(aliases ? { aliases } : {})}`
+}
+/** An `action` frame (e.g. a share-PDF action card). */
+export function action(data: Record<string, unknown>): string {
+  return `event: action\ndata: ${JSON.stringify(data)}`
+}
+
+/** Mock POST /chat as a streamed SSE answer built from the given frames. */
+export async function mockChatStream(page: Page, frames: string[]): Promise<void> {
+  const body = frames.map((f) => `${f}\n\n`).join("")
+  await page.route("**/chat", (route) =>
+    route.fulfill({ status: 200, contentType: "text/event-stream", body })
+  )
+}
+
 /** Type a question into the chat composer and send it. */
 export async function askChat(page: Page, text: string): Promise<void> {
   const input = page.locator(".chat-inputbar textarea")
