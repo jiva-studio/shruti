@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
@@ -37,7 +38,7 @@ const COVER_GLOB = "**/public/collections/**"
 const ABORTS = 3
 
 test(
-  "library · a cover that fails once on a flaky network recovers",
+  qase(143, "A cover that fails once on a flaky network recovers"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Per-URL request counter: drives a deterministic "first request fails,

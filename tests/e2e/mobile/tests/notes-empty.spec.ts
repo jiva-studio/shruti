@@ -4,7 +4,7 @@ import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
 test(
-  qase(9, "notes · draining all notes shows the empty state"),
+  qase(9, "Empty notes state"),
   { tag: ["@offline", "@notes"] },
   async ({ page }) => {
     await boot(page)

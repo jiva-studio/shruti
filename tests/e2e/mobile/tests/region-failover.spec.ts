@@ -40,7 +40,7 @@ function region(id: string, host: string) {
 }
 
 test(
-  qase(78, "library · covers fail over to a live region when the active CDN host is dead"),
+  qase(78, "CDN rotation on server failure"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Base content routes (db / audio / transcripts), then override config.json

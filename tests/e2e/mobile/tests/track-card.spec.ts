@@ -1,8 +1,9 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../support/nav.js"
 
-test("library · tapping a track opens its card", { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(147, "Tapping a track opens its card"), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page)
   await openLibrary(page)
 

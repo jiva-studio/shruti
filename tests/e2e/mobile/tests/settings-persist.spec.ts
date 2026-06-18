@@ -8,7 +8,7 @@ import { gotoTab, settingToggle } from "../support/nav.js"
 // app re-hydration (IndexedDB-backed user.db / Preferences).
 
 test(
-  qase(117, "settings · a toggle persists across reload"),
+  qase(117, "Appearance toggles"),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
     await boot(page, "en")
@@ -37,7 +37,7 @@ test(
 )
 
 test(
-  qase(117, "settings · turning Activity tracker off hides the home activity card"),
+  qase(117, "Appearance toggles"),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
     await boot(page, "en")

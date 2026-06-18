@@ -25,7 +25,7 @@ function pickHighlightWord(text: string): string | null {
 }
 
 test(
-  qase(4, "search filters notes and highlights matches"),
+  qase(4, "Search notes by text with highlight"),
   { tag: ["@offline", "@notes"] },
   async ({ page }) => {
     await boot(page)

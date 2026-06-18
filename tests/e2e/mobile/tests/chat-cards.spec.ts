@@ -12,7 +12,7 @@ import { gotoTab } from "../support/nav.js"
 // full CitationCard (`.citation-card`) — no network needed.
 
 test(
-  qase([89, 90], "chat · a stored verse + citation card render from history"),
+  qase([89, 90], "Verse chip upgrades to a verse card"),
   { tag: ["@offline", "@chat"] },
   async ({ page }) => {
     await boot(page, "en")

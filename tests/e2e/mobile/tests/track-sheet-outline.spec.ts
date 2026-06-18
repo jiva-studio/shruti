@@ -15,7 +15,7 @@ test.describe("track sheet · outline + topics", () => {
   test.use({ locale: "ru-RU" })
 
   test(
-    qase(62, "track sheet shows topic chips and the lecture outline"),
+    qase(62, "Outline / chapters navigation"),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       await bootDeviceLocale(page, "ru")

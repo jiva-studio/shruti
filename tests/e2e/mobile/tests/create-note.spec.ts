@@ -10,7 +10,7 @@ import { gotoTab, playFirstQueuedTrack, selectTranscriptText } from "../support/
  * touch + long-press + drag gesture via the shared `selectTranscriptText` helper.
  */
 
-test(qase(2, "transcript · creating a note from a selection"), { tag: ["@offline", "@transcript"] }, async ({ page }) => {
+test(qase(2, "Create a note from a transcript selection"), { tag: ["@offline", "@transcript"] }, async ({ page }) => {
   await boot(page)
 
   await gotoTab(page, "notes")

@@ -30,7 +30,7 @@ for (const c of MATRIX) {
     test.use({ locale: c.locale })
 
     test(
-      qase(35, `library · seeds a ${c.reduces}-language catalog`),
+      qase(35, "Library content is scoped to selected library languages"),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
         await bootDeviceLocale(page, c.userDb)
@@ -51,7 +51,7 @@ for (const c of MATRIX) {
     )
 
     test(
-      qase(25, "library · filters sheet opens"),
+      qase(25, "Filter sheet shows all dimensions"),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
         await bootDeviceLocale(page, c.userDb)
@@ -67,7 +67,7 @@ for (const c of MATRIX) {
     )
 
     test(
-      qase(22, "library · title search filters the catalog"),
+      qase(22, "Filter tracks by title"),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
         await bootDeviceLocale(page, c.userDb)
@@ -84,7 +84,7 @@ for (const c of MATRIX) {
     )
 
     test(
-      qase(45, "search · topic / category tiles are shown"),
+      qase(45, "Topic page respects the library language"),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
         await bootDeviceLocale(page, c.userDb)
@@ -102,7 +102,7 @@ test.describe("content-language · multiple languages selected", () => {
   test.use({ locale: "uk-UA" })
 
   test(
-    qase(35, "library · selecting ru + en shows both scripts"),
+    qase(35, "Library content is scoped to selected library languages"),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       // Explicit multi-language selection — the user broadened the library to
@@ -130,7 +130,7 @@ test.describe("content-language · Ukrainian topic detail", () => {
   test.use({ locale: "uk-UA" })
 
   test(
-    qase(45, "topic · a Ukrainian user sees the topic's Russian lectures"),
+    qase(45, "Topic page respects the library language"),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       await bootDeviceLocale(page, "ru")

@@ -3,7 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, openLibrary, openTrackSheet, playlistRows, trackRows, trackSheet } from "../support/nav.js"
 
-test(qase(29, "library · adding a track grows the playlist"), { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(29, "Track row goes from none to added"), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page)
 
   // Snapshot the current queue. PlaylistRow and the library list both render the

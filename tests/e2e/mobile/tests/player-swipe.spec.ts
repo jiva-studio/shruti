@@ -1,11 +1,12 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { playFirstQueuedTrack } from "../support/nav.js"
 
 const activeDot = () => `(() => { const d = [...document.querySelectorAll(".page-dots .dot")]; return d.findIndex(x => x.classList.contains("active")); })()`
 
 test(
-  "player · swiping the floating player changes its page",
+  qase(146, "Swiping the floating player changes its page"),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
     await boot(page)

@@ -68,7 +68,7 @@ async function closeSheet(page: Page, s: Locator): Promise<void> {
 /* -------------------------------- tests ---------------------------------- */
 
 test(
-  qase(26, "library · filter by source changes the catalog"),
+  qase(26, "Applying an author filter narrows results and shows a count badge"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)
@@ -122,7 +122,7 @@ test(
 )
 
 test(
-  "library · sort byDateAsc reorders the list",
+  qase(142, "Sorting by date (oldest first) reorders the list"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)
@@ -154,7 +154,7 @@ test(
 )
 
 test(
-  qase(27, "library · reset clears the filters and disables itself"),
+  qase(27, "Reset clears all filters"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)

@@ -38,7 +38,7 @@ const COMPLETED_TITLE = "Original Person and Source"
  * library keeps the badge.
  */
 test(
-  qase([18, 19], "home · re-adding a completed+archived track resets queue progress, library keeps the badge"),
+  qase([18, 19], "Swipe-to-archive removes a track but keeps its completion badge"),
   { tag: ["@offline", "@home"] },
   async ({ page }) => {
     await boot(page, "en", { sourceIds: [] })

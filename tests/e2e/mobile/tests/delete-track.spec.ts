@@ -3,7 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { deletePlaylistRow, playlistRows } from "../support/nav.js"
 
-test(qase(18, "home · removing a track shrinks the queue"), { tag: ["@offline", "@home"] }, async ({ page }) => {
+test(qase(18, "Swipe-to-archive removes a track but keeps its completion badge"), { tag: ["@offline", "@home"] }, async ({ page }) => {
   await boot(page)
 
   await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })

@@ -8,7 +8,7 @@ import { gotoTab, trackRows } from "../support/nav.js"
 // topic-language.spec for that language-filtering coverage. This spec just
 // checks the tile → topic-page navigation, so it boots a locale whose library
 // has lectures for every topic.
-test(qase(43, "library · opening a topic shows its lectures"), { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(43, "Open a topic from the grid"), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "ru")
   await gotoTab(page, "search")
 
