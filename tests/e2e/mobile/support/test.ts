@@ -13,12 +13,19 @@ import { fixturesReady, missingFixtures } from "./fixtures.js"
  */
 export const test = base
 
-test.beforeEach(() => {
+/**
+ * Skip the current test when the gitignored binary fixtures (catalog + seeded
+ * user DBs) aren't prepared — e.g. a plain CI checkout — so the kit auto `e2e`
+ * job stays green instead of erroring. Called at the top of the entry helpers
+ * (`interceptContent` / `bootLive`) rather than from a `beforeEach`, so it does
+ * NOT surface as a "Before Hooks" step in the Qase report.
+ */
+export function requireFixtures(): void {
   test.skip(
     !fixturesReady(),
     `E2E fixtures not prepared (${missingFixtures().join(", ")}). ` +
       `Run scripts/prepare-fixtures.sh or the "e2e (manual)" workflow.`
   )
-})
+}
 
 export { expect }
