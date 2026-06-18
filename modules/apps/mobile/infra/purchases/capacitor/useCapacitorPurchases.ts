@@ -10,6 +10,7 @@ import {
 } from "@revenuecat/purchases-capacitor"
 import {
   PurchaseCancelledError,
+  PurchaseNotAllowedError,
   type CustomerInfoListener,
   type CustomerState,
   type IntroOffer,
@@ -121,6 +122,13 @@ export function useCapacitorPurchases(cfg: CapacitorPurchasesConfig): IPurchases
         const err = e as { code?: string }
         if (err?.code === PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) {
           throw new PurchaseCancelledError()
+        }
+        // Store refused the purchase for the device/account (IAP disabled on
+        // this test track, parental restrictions, unsupported region) — an
+        // expected store condition, not an app fault. Map it to a typed error
+        // the caller shows calmly and crash-reporting ignores.
+        if (err?.code === PURCHASES_ERROR_CODE.PURCHASE_NOT_ALLOWED_ERROR) {
+          throw new PurchaseNotAllowedError()
         }
         throw e
       }

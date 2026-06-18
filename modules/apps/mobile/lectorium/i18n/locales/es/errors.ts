@@ -6,4 +6,6 @@ export default {
   trackNotFound: "Pista no encontrada.",
   languageListUnavailable: "No se pudieron cargar los idiomas — se muestra una lista breve.",
   dictionariesUnavailable: "No se pudieron cargar los nombres — algunas etiquetas pueden faltar.",
+  playbackFailed:
+    "No se pudo reproducir esta conferencia. Verifica tu conexión e inténtalo de nuevo.",
 }

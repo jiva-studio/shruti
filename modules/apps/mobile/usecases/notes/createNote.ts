@@ -17,7 +17,7 @@ export interface CreateNoteInput {
   readonly id?: NoteId
 }
 
-export type CreateNoteError = "empty-text" | "text-too-long" | "invalid-timestamps"
+export type CreateNoteError = "empty-text" | "text-too-long" | "invalid-timestamps" | "write-failed"
 
 export interface CreateNoteDeps {
   readonly notes: INoteRepository
@@ -40,12 +40,19 @@ export async function createNote(
     if (validated.error === "text-too-long") return err("text-too-long")
     return err("invalid-timestamps")
   }
-  const note = await deps.notes.create({
-    trackId: input.trackId,
-    text: validated.value.text,
-    timeStart: validated.value.timeStart,
-    timeEnd: validated.value.timeEnd,
-    id: input.id,
-  })
-  return ok(note)
+  // Honour the Result contract for DB failures too (disk full, contended
+  // write): without this they escape as a thrown rejection from a usecase the
+  // caller awaits as a Result, surfacing as an uncaught error / silent no-op.
+  try {
+    const note = await deps.notes.create({
+      trackId: input.trackId,
+      text: validated.value.text,
+      timeStart: validated.value.timeStart,
+      timeEnd: validated.value.timeEnd,
+      id: input.id,
+    })
+    return ok(note)
+  } catch {
+    return err("write-failed")
+  }
 }

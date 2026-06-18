@@ -71,7 +71,13 @@ export function useCitationSnippet() {
     // 1. Already on the CDN from a prior cut() — bail before invoking
     // the Lambda. Tolerate flaky HEAD: if probe explodes we treat it as
     // miss and fall through to cut(); cut() is idempotent on excerptId.
-    const probe = await fetch(predicted, { method: "HEAD" }).catch(() => null)
+    // Cap the probe — a half-open socket (offline transition with no RST)
+    // would otherwise hang the chip spinner for the platform's ~60-100s
+    // idle timeout instead of falling through to cut() promptly.
+    const probe = await fetch(predicted, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => null)
     let url: string
     if (probe?.ok) {
       url = predicted

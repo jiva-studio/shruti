@@ -208,7 +208,16 @@ export function useListeningSessionTracker(
     const id = activeSessionId
     activeSessionId = null
     activeItemId = null
-    await deps.getRepo().finish(id, { position: msToSec(positionMs) })
+    try {
+      await deps.getRepo().finish(id, { position: msToSec(positionMs) })
+    } catch (e) {
+      // The write failed (contended DB, disk full) — restore the handle so a
+      // later tick/finish can still close this session instead of orphaning
+      // it open and losing the interval from the activity totals.
+      activeSessionId = id
+      activeItemId = itemId
+      throw e
+    }
   }
 
   async function seek({

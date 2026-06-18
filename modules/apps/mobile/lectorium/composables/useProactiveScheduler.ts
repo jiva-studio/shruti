@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted } from "vue"
 import { useI18n } from "vue-i18n"
 import { App as CapApp } from "@capacitor/app"
 import type { PluginListenerHandle } from "@capacitor/core"
+import { createJsonRemoteStorage } from "@kit/infra"
 import type { ProactiveConfig, RemoteAppConfig } from "@lib/domain/config.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId } from "@lib/domain/core.js"
@@ -391,7 +392,9 @@ export function useProactiveScheduler(): void {
   async function readRemoteProactiveConfig(): Promise<ProactiveConfig | null> {
     try {
       const configUrl = app.storagePublicUrl.get(app.appConfig.publicRemoteConfigPath)
-      const raw = await app.filesStorage.getJson<RemoteAppConfig>(configUrl)
+      const raw = await createJsonRemoteStorage(app.filesStorage).getJson<RemoteAppConfig>(
+        configUrl
+      )
       return raw.proactive ?? null
     } catch {
       // No remote config cached / network unavailable — fall back to
