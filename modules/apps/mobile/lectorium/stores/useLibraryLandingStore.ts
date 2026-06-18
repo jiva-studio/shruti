@@ -8,6 +8,7 @@ import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useRecommendationsStore } from "@lectorium/stores/useRecommendationsStore.js"
 import { useSearchFiltersStore } from "@lectorium/stores/useSearchFiltersStore.js"
+import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
 import { shuffled } from "@lectorium/utils/shuffle.js"
 import { searchAndFilterTracks } from "@usecases/discovery/searchAndFilterTracks.js"
 import type { CarouselItem } from "@ui/features/collections/index.js"
@@ -214,7 +215,11 @@ export const useLibraryLandingStore = defineStore("libraryLanding", () => {
   }
 
   async function load(key: string): Promise<void> {
-    const language = appLanguage.value
+    // Collections are curated per language; scope them to the chosen library
+    // content language (not the UI locale) so the cards match the lectures the
+    // page shows. The UI language only breaks ties when it is one of the
+    // selected library languages — see `preferredLibraryLanguage`.
+    const language = preferredLibraryLanguage(libraryLanguages.value, appLanguage.value)
     await Promise.all([
       loadCollections(language),
       loadLecturePool(libraryLanguages.value),

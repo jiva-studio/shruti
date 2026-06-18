@@ -3,6 +3,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import {
   preferredContentLanguage,
+  preferredLibraryLanguage,
   resolveLocalizedName,
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
@@ -216,5 +217,30 @@ describe("preferredContentLanguage", () => {
 
   it("returns undefined for a track with no variants", () => {
     expect(preferredContentLanguage(track([]), ["en"])).toBeUndefined()
+  })
+})
+
+describe("preferredLibraryLanguage", () => {
+  it("picks the single selected library language, regardless of the UI language", () => {
+    // The collections bug: a Russian library on an English UI must load the
+    // Russian collection, not the English one.
+    expect(preferredLibraryLanguage(["ru"], "en")).toBe("ru")
+    expect(preferredLibraryLanguage(["en"], "ru")).toBe("en")
+  })
+
+  it("prefers the UI language when it is among the selected library languages", () => {
+    expect(preferredLibraryLanguage(["en", "ru"], "ru")).toBe("ru")
+    expect(preferredLibraryLanguage(["en", "ru"], "en")).toBe("en")
+  })
+
+  it("falls back to the first library language when the UI language is not selected", () => {
+    // es UI, but only en+ru in the library → first in library priority order.
+    expect(preferredLibraryLanguage(["ru", "en"], "es")).toBe("ru")
+    expect(preferredLibraryLanguage(["en", "ru"], "es")).toBe("en")
+  })
+
+  it("falls back to the UI language when no library language is selected", () => {
+    expect(preferredLibraryLanguage([], "en")).toBe("en")
+    expect(preferredLibraryLanguage([], "ru")).toBe("ru")
   })
 })

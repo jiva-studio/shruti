@@ -1,13 +1,6 @@
 import { test, expect } from "../support/test.js"
 import { boot } from "../support/bootstrap.js"
-import {
-  gotoTab,
-  trackRows,
-  trackTitles,
-  CYRILLIC,
-  libraryLanguageRow,
-  libraryLanguageDialog,
-} from "../support/nav.js"
+import { gotoTab, trackRows, trackTitles, CYRILLIC, editLibraryLanguages } from "../support/nav.js"
 
 /**
  * `track_topics` is language-agnostic, so a topic can hold lectures in languages
@@ -23,24 +16,6 @@ async function openFirstTopic(page: import("@playwright/test").Page): Promise<vo
   await tile.waitFor({ state: "visible", timeout: 20_000 })
   await tile.click()
   await page.waitForURL("**/search/topic/**", { timeout: 10_000 })
-}
-
-/**
- * Edit the library-language set via Settings → Library (the same multi-select
- * checkbox dialog the settings test drives). `add`/`remove` match a checkbox by
- * its label text. Leaves the app on the Settings tab.
- */
-async function editLibraryLanguages(
-  page: import("@playwright/test").Page,
-  opts: { add?: string | RegExp; remove?: string | RegExp }
-): Promise<void> {
-  await gotoTab(page, "settings")
-  await libraryLanguageRow(page).click()
-  const dialog = libraryLanguageDialog(page)
-  await expect(dialog.locator("ion-checkbox").first()).toBeVisible({ timeout: 10_000 })
-  if (opts.add) await dialog.locator("ion-checkbox", { hasText: opts.add }).click()
-  if (opts.remove) await dialog.locator("ion-checkbox", { hasText: opts.remove }).click()
-  await dialog.getByRole("button", { name: /apply|примен/i }).click()
 }
 
 test(
