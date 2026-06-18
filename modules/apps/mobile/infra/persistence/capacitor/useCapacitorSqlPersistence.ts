@@ -132,15 +132,27 @@ export function useCapacitorSqlPersistence(): IPersistence {
 
       await db.open()
 
-      // Per-connection pragmas. `foreign_keys` is OFF by default on every
-      // SQLite connection, so the schema's `ON DELETE CASCADE`s (chat
-      // messages → proactive sidecar) would silently no-op and leave orphan
-      // rows — it MUST be set outside a transaction, hence `run(..., false)`
-      // (no auto-BEGIN wrap). `busy_timeout` makes a contended write wait
-      // briefly instead of throwing "database is locked" the instant the
-      // 15s listening-session writer overlaps a note/playlist write.
-      await db.run("PRAGMA foreign_keys = ON", [], false)
-      await db.run("PRAGMA busy_timeout = 3000", [], false)
+      // Per-connection pragmas, applied BEST-EFFORT. `foreign_keys` is OFF by
+      // default on every SQLite connection, so the schema's `ON DELETE
+      // CASCADE`s (chat messages → proactive sidecar) would silently no-op —
+      // it MUST be set outside a transaction, hence `run(..., false)`.
+      // `busy_timeout` makes a contended write wait instead of throwing
+      // "database is locked" when the 15s listening-session writer overlaps a
+      // note/playlist write.
+      //
+      // The prebuilt CONTENT database is opened read-only, and the Capacitor
+      // plugin rejects a `run` on a read-only connection ("not allowed in
+      // read-only mode") — which crashed bootstrap. The content DB needs
+      // NEITHER pragma (read-only: no writes to cascade or contend), so swallow
+      // the failure; the writable USER DB — the one that actually needs them —
+      // still applies them.
+      try {
+        await db.run("PRAGMA foreign_keys = ON", [], false)
+        await db.run("PRAGMA busy_timeout = 3000", [], false)
+      } catch {
+        // Read-only connection (content DB) — pragmas don't apply and aren't
+        // needed here.
+      }
 
       // SQLite has no nested transactions: two overlapping `transaction()`
       // callers on this one connection would issue `BEGIN` inside an open
