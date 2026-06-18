@@ -14,6 +14,7 @@ import {
   resolveTrackTitle as resolveTitleForLang,
 } from "@lib/domain/services/localizedName.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { reportError } from "@lectorium/services/monitoring/reportError.js"
 import { resolveShareArtifact } from "@lectorium/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
 import { withProgressLabels } from "@lectorium/services/withProgressLabels.js"
@@ -241,7 +242,7 @@ export function useStudioController(): StudioControllerReturn {
     const nextMeta: NoteMeta = { ...baseMeta, studio: nextStudio }
     const updated = await notes.update({ id: current.id, meta: nextMeta })
     if (!updated.ok) {
-      console.warn("[studio] failed to persist edit:", updated.error)
+      reportError("studio-note", updated.error)
       return current
     }
     return updated.value

@@ -1,4 +1,5 @@
 import type { INotificationScheduler } from "@ports/app/notifications.js"
+import { reportError } from "@lectorium/services/monitoring/reportError.js"
 import { notificationIdFor } from "./hash.js"
 
 /**
@@ -100,7 +101,7 @@ export async function reconcile(
       })
       managed.set(c.id, signature)
     } catch (err) {
-      console.warn("[notify-planner] schedule failed", c.kind, c.id, err)
+      reportError("notify-planner", err)
     }
   }
   for (const id of [...managed.keys()]) {
@@ -108,7 +109,7 @@ export async function reconcile(
     try {
       await notifications.cancel(id)
     } catch (err) {
-      console.warn("[notify-planner] cancel failed", id, err)
+      reportError("notify-planner", err)
     }
     managed.delete(id)
   }

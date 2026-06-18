@@ -9,6 +9,7 @@ import { useTrackUserState } from "@lectorium/composables/useTrackUserState.js"
 import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
 import { pauseGroup } from "@lectorium/composables/useAudioOrchestrator.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
+import { reportError } from "@lectorium/services/monitoring/reportError.js"
 
 export interface OutlineChapterPick {
   trackId: string
@@ -270,7 +271,7 @@ export function useChatController(): ChatControllerReturn {
                 }
                 toast.info(t("chat.clearedToast"))
               } catch (err) {
-                console.warn("chat: failed to clear all sessions", err)
+                reportError("chat", err)
                 void toast.error(t("chat.errNetwork"))
               }
             })()
