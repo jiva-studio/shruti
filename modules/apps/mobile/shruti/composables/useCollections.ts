@@ -13,12 +13,15 @@ export interface FeaturedCollection {
 }
 
 export interface UseCollectionsReturn {
-  /** Featured collections for the current locale, sorted by `sort_order ASC`. Empty when none. */
+  /** Featured collections for the given content language, sorted by `sort_order ASC`. Empty when none. */
   readonly collections: Ref<readonly FeaturedCollection[]>
 }
 
 /**
- * Reactive list of featured collections for the active UI locale.
+ * Reactive list of featured collections for a content language. Pass the
+ * library content language (see `useCollectionLanguage`), NOT the UI locale —
+ * the cards and the tracks they add must match the user's chosen library
+ * language.
  *
  * Reads `collections` + `collection_tags` (tag_featured) + `collection_tracks`
  * from the catalog DB via the SQL repo. Safe against an older bundled
@@ -26,8 +29,8 @@ export interface UseCollectionsReturn {
  * "none" and the composable surfaces an empty array, so the Home view degrades
  * to the pre-feature empty-state automatically.
  *
- * Reactive on `locale`: switching the UI language between RU and EN re-loads
- * the set. Loads on mount and on every locale change.
+ * Reactive on `locale`: changing the library content language re-loads the set.
+ * Loads on mount and on every language change.
  */
 export function useCollections(locale: Ref<string>): UseCollectionsReturn {
   const app = useShruti()

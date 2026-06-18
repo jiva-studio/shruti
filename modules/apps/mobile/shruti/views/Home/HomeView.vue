@@ -90,7 +90,7 @@ import {
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
-import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useCollectionLanguage } from "@shruti/composables/useCollectionLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
 import { useCollections } from "@shruti/composables/useCollections.js"
@@ -252,11 +252,13 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 // predates the schema, so the empty-state degrades to the pre-feature look
 // on older builds.
 const playlist = usePlaylistStore()
-const appLanguage = useAppLanguage()
+// Collections (featured cards + playlist-group labels) follow the chosen
+// library content language, not the UI locale.
+const collectionLanguage = useCollectionLanguage()
 // Derive collection groups (accordions) from the flat playlist rows.
-const { items: playlistItems } = usePlaylistGroups(rows, appLanguage)
+const { items: playlistItems } = usePlaylistGroups(rows, collectionLanguage)
 const toast = useToast()
-const { collections: featuredCollections } = useCollections(appLanguage)
+const { collections: featuredCollections } = useCollections(collectionLanguage)
 const addingCollection = ref(false)
 
 // Append the "or pick from the suggestions below" call-to-action only when
