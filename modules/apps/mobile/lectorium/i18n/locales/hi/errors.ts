@@ -6,4 +6,5 @@ export default {
   trackNotFound: "ट्रैक नहीं मिला।",
   languageListUnavailable: "भाषाएँ लोड नहीं हो सकीं — एक छोटी सूची दिखाई जा रही है।",
   dictionariesUnavailable: "नाम लोड नहीं हो सके — कुछ लेबल गायब हो सकते हैं।",
+  playbackFailed: "यह व्याख्यान चलाया नहीं जा सका। अपना कनेक्शन जांचें और फिर से प्रयास करें।",
 }
