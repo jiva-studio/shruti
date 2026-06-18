@@ -34,6 +34,7 @@ import { i18n } from "./i18n/index.js"
 import { initShruti } from "./shruti.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
 import { getRegions, hydrateRegions } from "@shruti/services/regionsRegistry.js"
+import { withAssetRegionFailover } from "@shruti/services/withAssetRegionFailover.js"
 import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
 import { useCapacitorSqlPersistence } from "@infra/persistence/capacitor/index.js"
 import { useDatabaseToIndexedDbFetcher } from "@infra/persistence/fetchers/idb/index.js"
@@ -112,9 +113,20 @@ initShruti({
   appConfig: config,
   persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
   databaseFetcher: isNative ? useDatabaseToFsFetcher() : useDatabaseToIndexedDbFetcher(),
-  filesStorage: isNative
-    ? useCapacitorRemoteFilesStorage({ cacheDir: "shruti" })
-    : useWebRemoteFilesStorage({ cacheName: "shruti" }),
+  // Wrap the platform files storage so an asset `get()` against a dead CDN
+  // region fails over to the others and promotes the working one — covers
+  // (and anything via files storage) recover mid-session instead of staying
+  // pinned to a dead region until restart.
+  filesStorage: withAssetRegionFailover(
+    isNative
+      ? useCapacitorRemoteFilesStorage({ cacheDir: "shruti" })
+      : useWebRemoteFilesStorage({ cacheName: "shruti" }),
+    {
+      getRegions,
+      getActiveServer: () => useShruti().activeServer.value,
+      promote: (id) => useShruti().setActiveServerById(id),
+    }
+  ),
   preferences,
   // Capacitor plugin selects native vs its own web fallback automatically.
   audioPlayer: useCapacitorAudioPlayer(),
