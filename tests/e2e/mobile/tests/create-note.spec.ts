@@ -1,34 +1,13 @@
-import { test, expect, type Page } from "../support/test.js"
+import { test, expect } from "../support/test.js"
 import { boot } from "../support/bootstrap.js"
-import { gotoTab, playFirstQueuedTrack } from "../support/nav.js"
+import { gotoTab, playFirstQueuedTrack, selectTranscriptText } from "../support/nav.js"
 
 /**
  * Notes are created by long-pressing a sentence in the transcript, then tapping
  * the bookmark action in the selection popover (TextSelector → SelectionActions
  * → createNote). There's no non-touch entry point, so we synthesize the
- * pointer/touch + long-press gesture on the first sentence span.
+ * touch + long-press + drag gesture via the shared `selectTranscriptText` helper.
  */
-async function selectTranscriptText(page: Page): Promise<void> {
-  // Real touch via CDP: long-press a sentence, then DRAG to a later sentence,
-  // then release. The drag (touchMove) is essential — TextSelector only commits
-  // a selection that has been extended; start→hold→release alone never opens the
-  // popover. center() of two spans gives the gesture path.
-  const spans = page.locator(".transcript-text [data-time-start][data-time-end]")
-  await spans.first().scrollIntoViewIfNeeded()
-  const n = await spans.count()
-  const b1 = await spans.nth(0).boundingBox()
-  const b2 = await spans.nth(Math.min(2, n - 1)).boundingBox()
-  if (!b1 || !b2) throw new Error("no transcript sentence spans found")
-  const p1 = { x: Math.round(b1.x + b1.width / 2), y: Math.round(b1.y + b1.height / 2) }
-  const p2 = { x: Math.round(b2.x + b2.width / 2), y: Math.round(b2.y + b2.height / 2) }
-
-  const cdp = await page.context().newCDPSession(page)
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p1] })
-  await page.waitForTimeout(650) // past the ~500ms long-press threshold
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [p2] })
-  await page.waitForTimeout(250)
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
-}
 
 test("transcript · creating a note from a selection", { tag: ["@offline", "@transcript"] }, async ({ page }) => {
   await boot(page)
