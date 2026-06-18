@@ -60,6 +60,7 @@ export default {
     trialDisclaimer:
       "Jederzeit kündbar. Nach dem Testzeitraum verlängert sich das Abo automatisch.",
     subscribed: "Abonnement abgeschlossen",
+    unavailable: "In-App-Käufe sind auf diesem Gerät nicht verfügbar.",
     manage: "Abonnement verwalten",
     restore: "Wiederherstellen",
     restored: "Dein Abonnement wurde erfolgreich wiederhergestellt!",
