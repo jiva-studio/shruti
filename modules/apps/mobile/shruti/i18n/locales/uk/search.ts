@@ -24,6 +24,7 @@ export default {
   },
   actions: {
     addToPlaylist: "Додати до плейлиста",
+    downloadAgain: "Завантажити знову",
     alreadyInPlaylist: "Вже у плейлисті",
     openTranscript: "Відкрити транскрипт",
     share: "Поділитися",

@@ -1,6 +1,13 @@
 <template>
   <Transition name="fade" mode="out-in">
-    <IconIndicator v-if="mode === 'icon'" slot="end" key="icon" :icon="icon" />
+    <IconIndicator
+      v-if="mode === 'icon'"
+      slot="end"
+      key="icon"
+      :icon="icon"
+      data-testid="track-state"
+      :data-state="state"
+    />
     <RadialIndicator
       v-else-if="mode === 'downloading'"
       slot="end"

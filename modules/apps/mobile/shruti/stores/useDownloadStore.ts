@@ -231,6 +231,16 @@ export const useDownloadStore = defineStore("downloads", () => {
             setState(trackId, "downloading")
           }
         }
+        // Offline guard: a transfer kicked off with no connectivity (airplane
+        // mode) otherwise enqueues a native job that waits indefinitely for the
+        // network — the row sticks on "downloading" forever and never surfaces
+        // a failure, so no red X and no retry affordance ever appears. Fail
+        // fast instead so the failed state (and the sheet's "Download again"
+        // button) show up immediately.
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+          if (fresh()) setState(trackId, "failed")
+          return null
+        }
         const result = await downloadMedia(
           { trackId, path, candidates: fallback.candidates() },
           {
