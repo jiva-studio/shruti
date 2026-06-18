@@ -5,6 +5,7 @@ import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { useChatStore, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import { useAnonymousSignInFlow } from "@shruti/composables/useAnonymousSignInFlow.js"
 import type { QuotaTier } from "@lib/domain/chatMessage.js"
+import { reportError } from "@shruti/services/monitoring/reportError.js"
 import { classifyChatNotice } from "./chatNotice.js"
 
 export interface ChatNoticeCta {
@@ -255,7 +256,7 @@ export function useChatMessageStatus(opts: {
     isUnknownQuotaTier,
     (unknown) => {
       if (!unknown) return
-      console.warn("[InlineNotice] unknown tier:", failedError.value?.tier)
+      reportError("chat-quota", new Error(`unknown quota tier: ${failedError.value?.tier}`))
     },
     { immediate: true }
   )
