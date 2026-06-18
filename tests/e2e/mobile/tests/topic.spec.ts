@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, trackRows } from "../support/nav.js"
 
@@ -7,7 +8,7 @@ import { gotoTab, trackRows } from "../support/nav.js"
 // topic-language.spec for that language-filtering coverage. This spec just
 // checks the tile → topic-page navigation, so it boots a locale whose library
 // has lectures for every topic.
-test("library · opening a topic shows its lectures", { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(43, "library · opening a topic shows its lectures"), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "ru")
   await gotoTab(page, "search")
 

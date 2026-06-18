@@ -10,9 +10,12 @@
     "test:live": "E2E_INCLUDE_LIVE=1 playwright test --project=stack",
     "test:all": "E2E_INCLUDE_LIVE=1 playwright test",
     "test:headed": "playwright test --project=mocked --headed",
+    "test:qase": "QASE_MODE=testops playwright test --project=mocked",
+    "test:qase:all": "QASE_MODE=testops E2E_INCLUDE_LIVE=1 playwright test",
     "report": "playwright show-report"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0"
+    "@playwright/test": "^1.52.0",
+    "playwright-qase-reporter": "^2.2.0"
   }
 }

@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test"
+import { qase } from "playwright-qase-reporter"
 import { bootLive } from "../support/live.js"
 
 // Real LLM turns are occasionally slow/transient under load — retry @live.
 test.describe.configure({ retries: 2 })
 
 test(
-  "chat · suggestion chip starts a conversation",
+  qase(84, "chat · suggestion chip starts a conversation"),
   { tag: ["@live", "@chat"] },
   async ({ page }) => {
     await bootLive(page)

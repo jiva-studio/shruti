@@ -1,8 +1,9 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../support/nav.js"
 
-test("library · share menu offers a PDF export", { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(65, "library · share menu offers a PDF export"), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page)
   await openLibrary(page)
   await openTrackSheet(page, trackRows(page).first())

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test"
+import { qase } from "playwright-qase-reporter"
 import { bootLive, askChat, assistantBubble } from "../support/live.js"
 
 // Real LLM turns are occasionally slow/transient under load — retry @live. The
@@ -12,7 +13,7 @@ test.describe.configure({ retries: 2, timeout: 240_000 })
  * couple of minutes, so the assertion timeout is deliberately generous.
  */
 test(
-  "chat · send a message → grounded streamed reply",
+  qase(82, "chat · send a message → grounded streamed reply"),
   { tag: ["@live", "@chat"] },
   async ({ page }) => {
     await bootLive(page)

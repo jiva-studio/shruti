@@ -1,5 +1,6 @@
 import fs from "fs"
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import {
   interceptContent,
   preseedUserDb,
@@ -39,7 +40,7 @@ function region(id: string, host: string) {
 }
 
 test(
-  "library · covers fail over to a live region when the active CDN host is dead",
+  qase(78, "library · covers fail over to a live region when the active CDN host is dead"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Base content routes (db / audio / transcripts), then override config.json

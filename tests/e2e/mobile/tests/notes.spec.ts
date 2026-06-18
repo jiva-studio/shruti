@@ -1,8 +1,9 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
-test("notes · the Notes tab lists saved bookmarks", { tag: ["@offline", "@notes"] }, async ({ page }) => {
+test(qase(3, "notes · the Notes tab lists saved bookmarks"), { tag: ["@offline", "@notes"] }, async ({ page }) => {
   await boot(page)
   await gotoTab(page, "notes")
 

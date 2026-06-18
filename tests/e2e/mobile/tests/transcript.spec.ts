@@ -1,8 +1,9 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { playFirstQueuedTrack } from "../support/nav.js"
 
-test("transcript · starting a track reveals the transcript", { tag: ["@offline", "@transcript"] }, async ({ page }) => {
+test(qase(60, "transcript · starting a track reveals the transcript"), { tag: ["@offline", "@transcript"] }, async ({ page }) => {
   await boot(page)
   await playFirstQueuedTrack(page)
 

@@ -1,9 +1,10 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
 test(
-  "library · a collection-group see-all opens the group page",
+  qase(15, "library · a collection-group see-all opens the group page"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)

@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
@@ -11,7 +12,7 @@ import { gotoTab } from "../support/nav.js"
 // full CitationCard (`.citation-card`) — no network needed.
 
 test(
-  "chat · a stored verse + citation card render from history",
+  qase([89, 90], "chat · a stored verse + citation card render from history"),
   { tag: ["@offline", "@chat"] },
   async ({ page }) => {
     await boot(page, "en")

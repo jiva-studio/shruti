@@ -1,9 +1,10 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openTranscript, selectTranscriptText, selectionAction } from "../support/nav.js"
 
 test(
-  "transcript · ask about a selection opens a chat",
+  qase(61, "transcript · ask about a selection opens a chat"),
   { tag: ["@offline", "@transcript"] },
   async ({ page }) => {
     await boot(page)
