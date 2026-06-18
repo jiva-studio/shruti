@@ -7,6 +7,7 @@ import {
   preseedDismissedNags,
 } from "../support/bootstrap.js"
 import { SILENT_MP3_PATH } from "../support/fixtures.js"
+import { qase } from "playwright-qase-reporter"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../support/nav.js"
 
 /**
@@ -21,7 +22,7 @@ import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../support/n
  * airplane-mode offline guard produces, but deterministically.)
  */
 test(
-  "library · a failed download shows the red X and retries from the sheet",
+  qase(31, "library · a failed download shows the red X and retries from the sheet"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Standard offline boot routes + seed, but register a GATED audio route
