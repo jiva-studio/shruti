@@ -5,4 +5,5 @@ export default {
     "Nije moguće pročitati indeks preuzimanja. Keširane datoteke su i dalje na disku.",
   trackNotFound: "Numera nije pronađena.",
   languageListUnavailable: "Nije moguće učitati jezike — prikazujemo kratku listu.",
+  dictionariesUnavailable: "Nije moguće učitati nazive — neke oznake možda nedostaju.",
 }

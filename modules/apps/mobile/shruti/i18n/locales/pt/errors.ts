@@ -5,4 +5,6 @@ export default {
     "Não foi possível ler o índice de downloads. Os arquivos em cache continuam no disco.",
   trackNotFound: "Faixa não encontrada.",
   languageListUnavailable: "Não foi possível carregar os idiomas — exibindo uma lista reduzida.",
+  dictionariesUnavailable:
+    "Não foi possível carregar os nomes — alguns rótulos podem estar ausentes.",
 }

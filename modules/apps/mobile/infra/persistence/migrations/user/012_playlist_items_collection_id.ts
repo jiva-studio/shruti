@@ -1,3 +1,4 @@
+import { addColumnIfMissing } from "./columns.js"
 import type { Migration } from "./types.js"
 
 /**
@@ -13,6 +14,6 @@ import type { Migration } from "./types.js"
 export const migration_012_playlist_items_collection_id: Migration = {
   name: "012_playlist_items_collection_id",
   up: async (db) => {
-    await db.execute("ALTER TABLE playlist_items ADD COLUMN collection_id TEXT")
+    await addColumnIfMissing(db, "playlist_items", "collection_id", "collection_id TEXT")
   },
 }
