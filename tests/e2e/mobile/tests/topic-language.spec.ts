@@ -20,7 +20,7 @@ async function openFirstTopic(page: import("@playwright/test").Page): Promise<vo
 }
 
 test(
-  qase(45, "Topic page respects the library language"),
+  qase(45, "Topic page respects the library language (lists matching lectures)"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")
@@ -37,7 +37,7 @@ test(
 )
 
 test(
-  qase(45, "Topic page respects the library language"),
+  qase(45, "Topic page respects the library language (re-scopes on language switch)"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Reach a (Russian-only) topic the only way it's reachable: under a Russian

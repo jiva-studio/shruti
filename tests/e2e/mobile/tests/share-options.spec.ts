@@ -25,7 +25,7 @@ test(
   qase(67, "Share an audio excerpt from a transcript selection"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { pro: true })
     await openLibrary(page)
     await openTrackSheet(page, trackRows(page).first())
 
