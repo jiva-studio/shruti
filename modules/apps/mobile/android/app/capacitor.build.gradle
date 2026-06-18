@@ -24,6 +24,7 @@ dependencies {
     implementation project(':shruti-plugin-audio-player')
     implementation project(':shruti-plugin-media-downloader')
     implementation project(':revenuecat-purchases-capacitor')
+    implementation project(':sentry-capacitor')
     implementation project(':capacitor-plugin-safe-area')
 
 }
