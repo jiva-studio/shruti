@@ -24,6 +24,7 @@ export default {
   },
   actions: {
     addToPlaylist: "Добавить в плейлист",
+    alreadyInPlaylist: "Уже в плейлисте",
     openTranscript: "Открыть транскрипт",
     share: "Поделиться",
   },
