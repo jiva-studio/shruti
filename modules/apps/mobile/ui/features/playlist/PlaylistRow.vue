@@ -10,7 +10,7 @@
         :tags="row.tags"
         :date="row.date"
         :duration="row.duration"
-        @select="emit('click', row.id)"
+        @select="onTap"
       >
         <template #state>
           <TrackStateIndicator :state="row.state" :progress="row.progressPct" />
@@ -30,7 +30,7 @@ import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
  * PlaylistItems so the same leaf renders both flat rows and the rows nested
  * inside a collection group's accordion.
  */
-defineProps<{
+const props = defineProps<{
   row: UiTrackRow
 }>()
 
@@ -38,6 +38,15 @@ const emit = defineEmits<{
   click: [trackId: string]
   delete: [trackId: string]
 }>()
+
+// A downloading row is non-interactive for TAP (you can't open a file that
+// isn't on disk yet), but swipe-to-delete must stay live so the user can
+// cancel the download. We guard the tap here instead of putting
+// `pointer-events: none` on the wrapper, which also killed the swipe.
+// Archiving the row then cancels the in-flight transfer via the download store.
+function onTap(): void {
+  if (!props.row.disabled) emit("click", props.row.id)
+}
 </script>
 
 <style scoped>
@@ -47,10 +56,10 @@ const emit = defineEmits<{
    inner wrappers. A regular <div> at the top level isn't touched by Ionic.
 
    `is-dimmed` is opacity-only (failed downloads stay tappable to retry).
-   `is-disabled` is the hard non-interactive flag (used while a download is in
-   flight). Both can coexist: a downloading row is both dimmed and
-   non-interactive. The dim is scoped to <ion-label> so the state indicator
-   slot stays vivid. */
+   `is-disabled` marks a downloading row: its TAP is suppressed in JS (onTap)
+   so the file can't be opened before it's on disk, but the swipe-to-delete
+   stays live so the user can cancel the download. The dim is scoped to
+   <ion-label> so the state indicator slot stays vivid. */
 .playlist-row {
   background-color: var(--ion-background-color);
 }
@@ -60,8 +69,5 @@ const emit = defineEmits<{
 }
 .playlist-row.is-dimmed :deep(ion-label) {
   opacity: 0.65;
-}
-.playlist-row.is-disabled {
-  pointer-events: none;
 }
 </style>
