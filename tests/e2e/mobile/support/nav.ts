@@ -133,11 +133,32 @@ export async function openTranscript(page: Page): Promise<void> {
  */
 export async function selectTranscriptText(page: Page): Promise<void> {
   const spans = page.locator(".transcript-text [data-time-start][data-time-end]")
-  await spans.first().scrollIntoViewIfNeeded()
+  await spans.first().waitFor({ state: "visible", timeout: 10_000 })
   const n = await spans.count()
+
+  // The transcript can sit below a description + lecture-outline overview, so the
+  // first sentence may render near the bottom edge with the later sentences off-
+  // screen — a drag whose endpoint is off-screen never extends the selection.
+  // Center the first sentence so the next few are on-screen too.
+  await spans.first().evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await page.waitForTimeout(200)
+
+  const viewport = page.viewportSize()
+  const maxY = viewport ? viewport.height : Number.POSITIVE_INFINITY
   const b1 = await spans.nth(0).boundingBox()
-  const b2 = await spans.nth(Math.min(2, n - 1)).boundingBox()
-  if (!b1 || !b2) throw new Error("no transcript sentence spans found")
+  if (!b1) throw new Error("no transcript sentence spans found")
+  // Drag to the furthest of the next sentences whose box is fully on-screen, so
+  // the touchMove endpoint is always a real, hittable point (and the selection
+  // still spans more than one sentence).
+  let b2 = b1
+  for (let i = Math.min(2, n - 1); i >= 1; i--) {
+    const b = await spans.nth(i).boundingBox()
+    if (b && b.y >= b1.y && b.y + b.height <= maxY) {
+      b2 = b
+      break
+    }
+  }
+  if (b2 === b1) throw new Error("no second on-screen transcript sentence to drag to")
   const p1 = { x: Math.round(b1.x + b1.width / 2), y: Math.round(b1.y + b1.height / 2) }
   const p2 = { x: Math.round(b2.x + b2.width / 2), y: Math.round(b2.y + b2.height / 2) }
   const cdp = await page.context().newCDPSession(page)
