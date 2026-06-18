@@ -83,10 +83,9 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     if (isPlayerOnThisTrack) return "playing"
     if (entry && playlist.getProgressMs(entry.item.id) > 0) return "queued"
 
-    // Completion across the union of active + archived items. Archive
-    // only removes the row from the active list; listening_sessions and
-    // the trackId-keyed set are untouched, so the badge survives.
-    if (playlist.hasCompletedTrack(trackId)) return "completed"
+    // Lifetime "listened" badge — but not once the track is re-added: the new
+    // item has its own fresh progress (SHRUTI-18/19).
+    if (!playlist.hasTrack(trackId) && playlist.hasCompletedTrack(trackId)) return "completed"
 
     if (playlist.hasTrack(trackId)) return "added"
     return "none"
