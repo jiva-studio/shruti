@@ -46,6 +46,11 @@ jobs:
       # purchases `available: false` → no prices, subscription unrecognized.
       REVENUECAT_IOS_KEY: ${{ secrets.SHRUTI_APPLE_REVENUE_CAT_KEY }}
       REVENUECAT_ANDROID_KEY: ${{ secrets.SHRUTI_GOOGLE_REVENUE_CAT_KEY }}
+      # Lets @sentry/vite-plugin upload JS source maps for the shipped native
+      # build so minified crash stacks de-obfuscate. Org/project default in
+      # vite.config (jiva-studio/shruti). Requires the matching
+      # SENTRY_AUTH_TOKEN passthrough in kit's mobile-binaries.yml.
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       GOOGLE_PLAY_KEYSTORE_BASE64: ${{ secrets.GOOGLE_PLAY_KEYSTORE_BASE64 }}
       GOOGLE_PLAY_KEYSTORE_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEYSTORE_PASSWORD }}
       GOOGLE_PLAY_KEY_ALIAS: ${{ secrets.GOOGLE_PLAY_KEY_ALIAS }}
