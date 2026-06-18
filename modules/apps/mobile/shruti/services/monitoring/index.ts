@@ -108,3 +108,21 @@ export function initMonitoring(app: App): void {
     console.warn("[monitoring] Sentry init failed", e)
   }
 }
+
+/**
+ * Associate (or clear) the current user with subsequent Sentry events so errors
+ * can be grouped per account ("this bug hit N users"). Only the opaque account
+ * id is sent — never name, email, or IP (sendDefaultPii is off). Safe to call
+ * before/without init — it's a no-op scope write when Sentry is disabled.
+ */
+export function setMonitoringUser(userId: string | null): void {
+  Sentry.setUser(userId ? { id: userId } : null)
+}
+
+/**
+ * Tag subsequent Sentry events with a low-cardinality, non-PII value (e.g. the
+ * subscription tier) so issues can be filtered — "is this bug Pro-specific?".
+ */
+export function setMonitoringTag(key: string, value: string): void {
+  Sentry.setTag(key, value)
+}
