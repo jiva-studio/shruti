@@ -174,6 +174,32 @@ export async function preseedNonPro(page: Page): Promise<void> {
   })
 }
 
+/**
+ * Seed a signed-in (non-anonymous) auth session so account / sign-out specs run
+ * without a real backend. The token expires a year out, so the app never tries
+ * to refresh (no `/auth/me` round-trip) and stays signed in offline. Call BEFORE
+ * boot(). The JWT's base64 middle carries `exp`/`tier`/`quota_id` claims.
+ */
+export async function preseedAuthTokens(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const exp = Math.floor(Date.now() / 1000) + 3600 * 24 * 365
+    const claims = btoa(JSON.stringify({ exp, tier: "free", quota_id: "q1" }))
+    const tokens = {
+      accessToken: `h.${claims}.s`,
+      refreshToken: "e2e-refresh",
+      email: "e2e@example.com",
+      name: "E2E Tester",
+      anonymous: false,
+      accessTokenExpiresAt: exp * 1000,
+    }
+    try {
+      localStorage.setItem("CapacitorStorage.auth.tokens", JSON.stringify(tokens))
+    } catch {
+      /* non-fatal */
+    }
+  })
+}
+
 /* ------------------------------ boot ------------------------------- */
 
 const KILL_ANIMATIONS_CSS = `
