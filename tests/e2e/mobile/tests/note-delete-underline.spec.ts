@@ -23,14 +23,21 @@ test(
     await selectTranscriptText(page)
     await page.locator(".selection-actions ion-button").nth(1).click() // bookmark
 
-    // The saved note paints a wavy underline (`.highlighted`).
+    // The saved note paints a wavy underline (`.highlighted`); the create
+    // popover closes once the bookmark is saved.
     const highlighted = page.locator(".transcript-text .highlighted")
     await expect(highlighted.first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator(".selection-actions")).toBeHidden({ timeout: 10_000 })
 
-    // Tap the underline → popover reopens in existing-note mode with a red Delete.
-    await highlighted.first().click()
+    // Tap the underline → popover reopens in existing-note mode with a red
+    // Delete. The block only emits `noteTapped` once its `noteIds` resolve
+    // (a beat after the underline paints); before that a tap just seeks. Retry
+    // the tap until the Delete affordance appears.
     const del = page.locator('.selection-actions ion-button[color="danger"]')
-    await expect(del).toBeVisible({ timeout: 10_000 })
+    await expect(async () => {
+      await highlighted.first().click()
+      await expect(del).toBeVisible({ timeout: 1500 })
+    }).toPass({ timeout: 20_000 })
     await del.click()
 
     // The underline is removed immediately.
