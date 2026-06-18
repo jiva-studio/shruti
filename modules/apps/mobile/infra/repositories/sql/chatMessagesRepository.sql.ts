@@ -20,7 +20,7 @@ import type {
   CreateChatMessageInput,
   IChatMessageRepository,
 } from "@lib/domain/ports/chatMessageRepository.js"
-import { mutate, queryMany } from "@kit/persistence"
+import { mutate, queryMany, runInTransaction } from "@kit/persistence"
 
 const FEEDBACK_CATEGORIES: ReadonlySet<ChatFeedbackCategory> = new Set([
   "off_topic",
@@ -346,81 +346,89 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       // Read-modify-write the `meta` envelope, same pattern as
       // `updateActionStates`. Used to persist server-generated
       // Ask-Sadhu chips onto a focus message after `/questions`.
-      const rows = await db.query<{ meta: string | null }>(
-        "SELECT meta FROM chat_messages WHERE id = ?",
-        [id]
-      )
-      if (rows.length === 0) return
-      const current = parseMeta(rows[0].meta)
-      const next = wrapMeta({
-        actions: current.actions,
-        outlines: current.outlines,
-        media: current.media,
-        verses: current.verses,
-        cites: current.cites,
-        chapters: current.chapters,
-        commentaries: current.commentaries,
-        actionStates: current.actionStates,
-        followups,
-        error: current.error,
-        aliases: current.aliases,
-        focus: current.focus,
-        feedback: current.feedback,
+      // Transactional so a concurrent meta update (a streaming turn writing
+      // actionStates while this runs) can't clobber the other's field.
+      await runInTransaction(db, async () => {
+        const rows = await db.query<{ meta: string | null }>(
+          "SELECT meta FROM chat_messages WHERE id = ?",
+          [id]
+        )
+        if (rows.length === 0) return
+        const current = parseMeta(rows[0].meta)
+        const next = wrapMeta({
+          actions: current.actions,
+          outlines: current.outlines,
+          media: current.media,
+          verses: current.verses,
+          cites: current.cites,
+          chapters: current.chapters,
+          commentaries: current.commentaries,
+          actionStates: current.actionStates,
+          followups,
+          error: current.error,
+          aliases: current.aliases,
+          focus: current.focus,
+          feedback: current.feedback,
+        })
+        await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
       })
-      await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
     },
 
     async updateActionStates(
       id: ChatMessageId,
       actionStates: Record<string, ChatActionState>
     ): Promise<void> {
-      const rows = await db.query<{ meta: string | null }>(
-        "SELECT meta FROM chat_messages WHERE id = ?",
-        [id]
-      )
-      if (rows.length === 0) return
-      const current = parseMeta(rows[0].meta)
-      const next = wrapMeta({
-        actions: current.actions,
-        outlines: current.outlines,
-        media: current.media,
-        verses: current.verses,
-        cites: current.cites,
-        chapters: current.chapters,
-        commentaries: current.commentaries,
-        actionStates,
-        followups: current.followups,
-        error: current.error,
-        aliases: current.aliases,
-        focus: current.focus,
-        feedback: current.feedback,
+      await runInTransaction(db, async () => {
+        const rows = await db.query<{ meta: string | null }>(
+          "SELECT meta FROM chat_messages WHERE id = ?",
+          [id]
+        )
+        if (rows.length === 0) return
+        const current = parseMeta(rows[0].meta)
+        const next = wrapMeta({
+          actions: current.actions,
+          outlines: current.outlines,
+          media: current.media,
+          verses: current.verses,
+          cites: current.cites,
+          chapters: current.chapters,
+          commentaries: current.commentaries,
+          actionStates,
+          followups: current.followups,
+          error: current.error,
+          aliases: current.aliases,
+          focus: current.focus,
+          feedback: current.feedback,
+        })
+        await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
       })
-      await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
     },
 
     async updateFeedback(id: ChatMessageId, feedback: ChatFeedbackState): Promise<void> {
-      const rows = await db.query<{ meta: string | null }>(
-        "SELECT meta FROM chat_messages WHERE id = ?",
-        [id]
-      )
-      if (rows.length === 0) return
-      const current = parseMeta(rows[0].meta)
-      const next = wrapMeta({
-        actions: current.actions,
-        outlines: current.outlines,
-        media: current.media,
-        verses: current.verses,
-        cites: current.cites,
-        chapters: current.chapters,
-        commentaries: current.commentaries,
-        actionStates: current.actionStates,
-        followups: current.followups,
-        error: current.error,
-        aliases: current.aliases,
-        focus: current.focus,
-        feedback,
+      await runInTransaction(db, async () => {
+        const rows = await db.query<{ meta: string | null }>(
+          "SELECT meta FROM chat_messages WHERE id = ?",
+          [id]
+        )
+        if (rows.length === 0) return
+        const current = parseMeta(rows[0].meta)
+        const next = wrapMeta({
+          actions: current.actions,
+          outlines: current.outlines,
+          media: current.media,
+          verses: current.verses,
+          cites: current.cites,
+          chapters: current.chapters,
+          commentaries: current.commentaries,
+          actionStates: current.actionStates,
+          followups: current.followups,
+          error: current.error,
+          aliases: current.aliases,
+          focus: current.focus,
+          feedback,
+        })
+        await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
       })
-      await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
     },
 
     async delete(id: ChatMessageId): Promise<void> {
