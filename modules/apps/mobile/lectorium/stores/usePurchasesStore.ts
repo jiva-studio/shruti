@@ -79,9 +79,17 @@ export const usePurchasesStore = defineStore("purchases", () => {
   // pick "Pro is unlocked" over "non-Pro flows are reproducible".
   const isPreviewWeb =
     typeof window !== "undefined" && window.location.hostname.endsWith(".pages.dev")
-  const isSubscribed = computed(
-    () => __BUILD_ID__ === "dev" || isPreviewWeb || activePackageId.value !== undefined
-  )
+  // E2E/dev escape hatch: force the NON-subscribed state so paywalled flows
+  // (paywall entry, Pro-gated toggles, Smart Library PRO badge) are
+  // reproducible on the dev build, which otherwise treats every user as Pro.
+  // Only defeats the dev/preview override above — it can never grant Pro, and a
+  // real purchase (`activePackageId`) still wins. Inert on production builds,
+  // where neither the dev nor preview flag is set.
+  const forceFreeTier =
+    typeof localStorage !== "undefined" &&
+    localStorage.getItem("CapacitorStorage.e2e.forceFreeTier") === "1"
+  const devPro = (__BUILD_ID__ === "dev" || isPreviewWeb) && !forceFreeTier
+  const isSubscribed = computed(() => devPro || activePackageId.value !== undefined)
 
   function applyState(s: CustomerState): void {
     activePackageId.value = s.activePackageId

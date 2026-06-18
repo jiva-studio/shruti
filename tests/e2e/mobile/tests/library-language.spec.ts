@@ -16,7 +16,7 @@ import { openLibrary, trackTitles, CYRILLIC } from "../support/nav.js"
  */
 
 test(
-  qase(35, "Library content is scoped to selected library languages"),
+  qase(35, "Library content is scoped to selected library languages (Russian)"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")
@@ -34,7 +34,7 @@ test(
 )
 
 test(
-  qase(35, "Library content is scoped to selected library languages"),
+  qase(35, "Library content is scoped to selected library languages (English)"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "en")

@@ -143,14 +143,31 @@ export async function preseedSearchFilter(
   )
 }
 
-/** Park the Home "enable reminders" nag in its cooldown so it can't cover rows. */
+/** Park the Home nags (reminders + subscription) in their cooldown so they can't
+ *  cover rows. The subscription nag only shows for non-Pro users, which is now
+ *  the e2e default — so dismiss both. */
 export async function preseedDismissedNags(page: Page): Promise<void> {
   await page.addInitScript(() => {
     try {
-      localStorage.setItem(
-        "CapacitorStorage.home.notificationsNag.dismissedAt",
-        JSON.stringify(2_000_000_000_000)
-      )
+      const far = JSON.stringify(2_000_000_000_000)
+      localStorage.setItem("CapacitorStorage.home.notificationsNag.dismissedAt", far)
+      localStorage.setItem("CapacitorStorage.home.subscriptionNag.dismissedAt", far)
+    } catch {
+      /* non-fatal */
+    }
+  })
+}
+
+/**
+ * Force the app to run as a NON-subscribed (free) user. The dev build treats
+ * everyone as Pro (see usePurchasesStore); this flag defeats that override so
+ * paywalls and Pro gates are reproducible. It can never grant Pro and is inert
+ * on production builds.
+ */
+export async function preseedNonPro(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("CapacitorStorage.e2e.forceFreeTier", "1")
     } catch {
       /* non-fatal */
     }
@@ -176,14 +193,18 @@ const KILL_ANIMATIONS_CSS = `
 export async function boot(
   page: Page,
   locale: Locale = "en",
-  opts: { dismissNags?: boolean; sourceIds?: string[] } = {}
+  opts: { dismissNags?: boolean; sourceIds?: string[]; pro?: boolean } = {}
 ): Promise<void> {
-  const { dismissNags = true } = opts
+  const { dismissNags = true, pro = false } = opts
   assertFixturesPresent()
   await interceptContent(page)
   await preseedUserDb(page, locale)
   await preseedSearchFilter(page, locale, opts.sourceIds)
   if (dismissNags) await preseedDismissedNags(page)
+  // The dev build treats every user as Pro. For the e2e suite we flip that:
+  // boot NON-Pro by default (so paywalls / Pro gates are reproducible) and
+  // turn Pro on explicitly with `boot(page, locale, { pro: true })`.
+  if (!pro) await preseedNonPro(page)
 
   await page.goto(`/?locale=${locale}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
