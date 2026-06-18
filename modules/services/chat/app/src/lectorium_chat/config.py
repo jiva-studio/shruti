@@ -199,8 +199,9 @@ class Settings(BaseSettings):
     feedback_pro_per_day: int = 2000
     # Per-IP cap (uniform across scopes). Defence-in-depth on top of the
     # per-user cap — covers an attacker spinning up many anon-JWTs from
-    # one IP. Caddy edge has its own per-IP limit (200/hour); this is the
-    # daily budget that survives short bursts.
+    # one IP. Caddy edge has its own per-IP limits (1000/hour on /chat,
+    # 120/min on /auth/anonymous); this is the daily budget that survives
+    # short bursts.
     ip_rate_limit_per_day: int = 2000
 
     # ── CORS ────────────────────────────────────────────────────────────
