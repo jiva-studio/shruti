@@ -64,6 +64,7 @@ import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
 import { installConsoleCapture } from "./services/logger/index.js"
 import { initMonitoring } from "./services/monitoring/index.js"
 import { reportError } from "./services/monitoring/reportError.js"
+import { withNetworkErrorContext } from "./services/http/networkError.js"
 
 // Capture console.* into the in-memory debug buffer (Settings → Debug →
 // "View logs") before anything else runs, so the subscription / proactive
@@ -138,7 +139,7 @@ initShruti({
   // `request` routes through the failover client so an unreachable
   // preferred backend transparently falls through to others.
   auth: useCapacitorAuth({
-    request: (path, init) => authHttp.request(path, init),
+    request: withNetworkErrorContext((path, init) => authHttp.request(path, init)),
     googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
     googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,
   }),
@@ -177,9 +178,9 @@ initShruti({
   serverProber: useHttpServerProber(() => getRegions()),
   proactiveChat: createHttpProactiveChatService({
     getAccessToken: () => useShruti().auth.getAccessToken(),
-    request: (path, init) => chatHttp.request(path, init),
+    request: withNetworkErrorContext((path, init) => chatHttp.request(path, init)),
   }),
-  chatHttpRequest: (path, init) => chatHttp.request(path, init),
+  chatHttpRequest: withNetworkErrorContext((path, init) => chatHttp.request(path, init)),
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)
