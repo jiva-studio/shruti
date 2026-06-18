@@ -15,6 +15,12 @@ export function useSqlJsPersistence(): IPersistence {
       const dbData = await getBlob(indexedDbName, storeName, key)
       const db: Database = dbData ? new SQL.Database(dbData) : new SQL.Database()
 
+      // SQLite defaults `foreign_keys` OFF per connection, so the schema's
+      // `ON DELETE CASCADE`s would silently no-op. Enable it to match the
+      // native adapter (keeps the chat-session → messages → proactive-state
+      // cascade honest on web too).
+      db.run("PRAGMA foreign_keys = ON")
+
       // SQL.js is single-threaded and SQLite has no nested transactions;
       // overlapping BEGIN calls explode with "cannot start a transaction
       // within a transaction". Serialise transaction-callers through a

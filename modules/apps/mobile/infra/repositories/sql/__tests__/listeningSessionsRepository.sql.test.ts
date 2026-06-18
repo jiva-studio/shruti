@@ -639,3 +639,44 @@ describe("startOfNextLocalDay (DST-safe boundary derivation)", () => {
     }
   })
 })
+
+describe("useListeningSessionTracker finish() failure", () => {
+  let db: IDatabase
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyUserSchemaForTests(db)
+  })
+
+  it("restores the active-session handle when finish() fails so a retry still closes it", async () => {
+    const real = createSqlListeningSessionRepository(db)
+    let failOnce = true
+    const repo = {
+      ...real,
+      finish: async (id: string, args: { position: number }) => {
+        if (failOnce) {
+          failOnce = false
+          throw new Error("database is locked")
+        }
+        return real.finish(id, args)
+      },
+    } as typeof real
+    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+
+    await tracker.start({ itemId: ITEM_A, positionMs: 0 })
+
+    // First close fails — the handle must survive so the span isn't orphaned.
+    await expect(tracker.finish({ positionMs: 60_000 })).rejects.toThrow()
+    expect(tracker.hasActiveSession()).toBe(true)
+
+    // Retry closes the SAME session — exactly one row, properly finished.
+    await tracker.finish({ positionMs: 60_000 })
+    expect(tracker.hasActiveSession()).toBe(false)
+
+    const rows = await db.query<{ to_position: number }>(
+      "SELECT to_position FROM listening_sessions"
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].to_position).toBe(60)
+  })
+})

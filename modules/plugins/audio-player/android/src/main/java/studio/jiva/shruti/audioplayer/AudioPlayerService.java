@@ -5,6 +5,7 @@ import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
+import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.audio.AudioProcessor;
@@ -90,7 +91,19 @@ public final class AudioPlayerService extends MediaSessionService {
             }
         };
 
+        // Speech-media audio attributes with ExoPlayer managing audio focus, so
+        // playback pauses/ducks for a phone call or another app and resumes
+        // after, instead of talking over them. `handleAudioBecomingNoisy` pauses
+        // when headphones are unplugged rather than blasting the speaker.
+        // (Default Builder is handleAudioFocus=false — the gap on Android; iOS
+        // already handles interruptions in AudioPlayerPlugin.swift.)
+        AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+                .build();
         exoPlayer = new ExoPlayer.Builder(context, renderersFactory)
+                .setAudioAttributes(audioAttributes, /* handleAudioFocus= */ true)
+                .setHandleAudioBecomingNoisy(true)
                 .build();
         // Battery optimization can force-close even a foreground media service
         // mid-queue; a local wake lock keeps long offline playback alive. Items

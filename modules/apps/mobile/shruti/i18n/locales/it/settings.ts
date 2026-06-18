@@ -59,6 +59,7 @@ export default {
     trialDisclaimer:
       "Disdici quando vuoi. Al termine della prova, l'abbonamento si rinnova automaticamente.",
     subscribed: "Abbonamento completato",
+    unavailable: "Gli acquisti in-app non sono disponibili su questo dispositivo.",
     manage: "Gestisci abbonamento",
     restore: "Ripristina",
     restored: "Il tuo abbonamento è stato ripristinato con successo!",

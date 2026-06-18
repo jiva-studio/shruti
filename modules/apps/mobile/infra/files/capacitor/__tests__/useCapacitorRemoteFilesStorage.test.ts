@@ -49,6 +49,7 @@ vi.mock("@shruti/plugin-media-downloader", () => ({
   },
 }))
 
+import { createJsonRemoteStorage } from "@kit/infra"
 import { useCapacitorRemoteFilesStorage } from "../useCapacitorRemoteFilesStorage.js"
 
 describe("useCapacitorRemoteFilesStorage — temp cleanup on rename failure (#29)", () => {
@@ -75,7 +76,7 @@ describe("useCapacitorRemoteFilesStorage — temp cleanup on rename failure (#29
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ fresh: true }), { status: 200 }))
     renameMock.mockRejectedValueOnce(new Error("rename failed"))
 
-    const storage = useCapacitorRemoteFilesStorage({ cacheDir: "cache" })
+    const storage = createJsonRemoteStorage(useCapacitorRemoteFilesStorage({ cacheDir: "cache" }))
     const result = await storage.getJson<{ cached: boolean }>("https://cdn/foo.json")
 
     // Cached value is still returned synchronously from the cold-start read.
@@ -95,7 +96,7 @@ describe("useCapacitorRemoteFilesStorage — temp cleanup on rename failure (#29
   it("does not delete anything when the rename succeeds", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ fresh: true }), { status: 200 }))
 
-    const storage = useCapacitorRemoteFilesStorage({ cacheDir: "cache" })
+    const storage = createJsonRemoteStorage(useCapacitorRemoteFilesStorage({ cacheDir: "cache" }))
     await storage.getJson("https://cdn/foo.json")
     await flush()
 

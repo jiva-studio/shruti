@@ -22,6 +22,6 @@ export {
 export { default as CachedImage } from "./CachedImage.vue"
 export { default as FlatHeader } from "./FlatHeader.vue"
 export { useCachedImageUrl } from "./useCachedImageUrl.js"
-export { FILES_STORAGE_KEY } from "./filesStorageKey.js"
+export { FILES_STORAGE_KEY, ASSET_FAILOVER_KEY } from "./filesStorageKey.js"
 export { default as HighlightText } from "./HighlightText.vue"
 export { default as WithDeleteAction } from "./WithDeleteAction.vue"

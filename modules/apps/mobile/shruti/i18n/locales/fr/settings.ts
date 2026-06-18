@@ -61,6 +61,7 @@ export default {
     trialDisclaimer:
       "Annulable à tout moment. À la fin de l'essai, l'abonnement se renouvelle automatiquement.",
     subscribed: "Abonnement effectué",
+    unavailable: "Les achats intégrés ne sont pas disponibles sur cet appareil.",
     manage: "Gérer l'abonnement",
     restore: "Restaurer",
     restored: "Votre abonnement a été restauré avec succès !",

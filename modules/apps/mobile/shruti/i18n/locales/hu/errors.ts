@@ -6,4 +6,6 @@ export default {
   trackNotFound: "A felvétel nem található.",
   languageListUnavailable: "Nem sikerült betölteni a nyelveket — egy rövid lista jelenik meg.",
   dictionariesUnavailable: "A nevek betöltése sikertelen — egyes címkék hiányozhatnak.",
+  playbackFailed:
+    "Nem sikerült lejátszani ezt az előadást. Ellenőrizd a kapcsolatot, és próbáld újra.",
 }
