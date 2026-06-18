@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import {
   deletePlaylistRow,
@@ -37,7 +38,7 @@ const COMPLETED_TITLE = "Original Person and Source"
  * library keeps the badge.
  */
 test(
-  "home · re-adding a completed+archived track resets queue progress, library keeps the badge",
+  qase([18, 19], "home · re-adding a completed+archived track resets queue progress, library keeps the badge"),
   { tag: ["@offline", "@home"] },
   async ({ page }) => {
     await boot(page, "en", { sourceIds: [] })
