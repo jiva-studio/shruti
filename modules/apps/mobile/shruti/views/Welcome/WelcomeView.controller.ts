@@ -126,7 +126,23 @@ export function useWelcomeController(
         shruti.storagePublicUrl.get(shruti.appConfig.publicRemoteConfigPath)
       ),
     // Phase 3 of startup: open the user DB + run pending user migrations.
-    runUserDatabaseMigrations: () => bootstrapUserDatabaseFromApp(shruti),
+    // Never let a user-DB failure brick the app — the content catalog is
+    // fully browsable without the user DB, but a migration that throws
+    // deterministically would otherwise strand EVERY launch on the Welcome
+    // error screen (retry just re-runs the same failing migration). Log and
+    // continue in a degraded state instead; the playlist / notes / chat-
+    // history stores already degrade on their own when their tables are
+    // missing or unreadable.
+    runUserDatabaseMigrations: async () => {
+      try {
+        await bootstrapUserDatabaseFromApp(shruti)
+      } catch (err) {
+        console.error(
+          "[shruti] user-DB bootstrap/migration failed; continuing in a degraded state:",
+          err
+        )
+      }
+    },
     // Best-effort background refresh: persist the winning preferred server so
     // the next cold start lands on the same region.
     onBackgroundRefreshComplete: () => {
