@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, settingToggle } from "../support/nav.js"
 
@@ -7,7 +8,7 @@ import { gotoTab, settingToggle } from "../support/nav.js"
 // app re-hydration (IndexedDB-backed user.db / Preferences).
 
 test(
-  "settings · a toggle persists across reload",
+  qase(117, "settings · a toggle persists across reload"),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
     await boot(page, "en")
@@ -36,7 +37,7 @@ test(
 )
 
 test(
-  "settings · turning Activity tracker off hides the home activity card",
+  qase(117, "settings · turning Activity tracker off hides the home activity card"),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
     await boot(page, "en")

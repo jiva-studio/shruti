@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { bootDeviceLocale } from "../support/bootstrap.js"
 import { openLibrary, searchInput, trackRows, trackSheet } from "../support/nav.js"
 
@@ -14,7 +15,7 @@ test.describe("track sheet · outline + topics", () => {
   test.use({ locale: "ru-RU" })
 
   test(
-    "track sheet shows topic chips and the lecture outline",
+    qase(62, "track sheet shows topic chips and the lecture outline"),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       await bootDeviceLocale(page, "ru")

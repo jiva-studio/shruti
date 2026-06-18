@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, playFirstQueuedTrack, selectTranscriptText } from "../support/nav.js"
 
@@ -9,7 +10,7 @@ import { gotoTab, playFirstQueuedTrack, selectTranscriptText } from "../support/
  * touch + long-press + drag gesture via the shared `selectTranscriptText` helper.
  */
 
-test("transcript · creating a note from a selection", { tag: ["@offline", "@transcript"] }, async ({ page }) => {
+test(qase(2, "transcript · creating a note from a selection"), { tag: ["@offline", "@transcript"] }, async ({ page }) => {
   await boot(page)
 
   await gotoTab(page, "notes")

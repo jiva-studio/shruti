@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openLibrary, trackRows } from "../support/nav.js"
 import type { Locator, Page } from "@playwright/test"
@@ -21,7 +22,7 @@ async function openTrackSheet(page: Page, row: Locator): Promise<void> {
 //   text:  "Transcript (text)"
 //   audio: "Audio"
 test(
-  "library · share menu lists text and audio options",
+  qase(67, "library · share menu lists text and audio options"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)

@@ -1,11 +1,12 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openTranscript, selectTranscriptText, selectionAction } from "../support/nav.js"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
 test(
-  "transcript · copy a selection to the clipboard",
+  qase(61, "transcript · copy a selection to the clipboard"),
   { tag: ["@offline", "@transcript"] },
   async ({ page }) => {
     await boot(page)

@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
@@ -10,7 +11,7 @@ import { gotoTab } from "../support/nav.js"
  * and stable across the localized "Delete" label.
  */
 test(
-  "deletes a note from the action sheet",
+  qase(5, "deletes a note from the action sheet"),
   { tag: ["@offline", "@notes"] },
   async ({ page }) => {
     await boot(page)

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test"
+import { qase } from "playwright-qase-reporter"
 import { bootLive, askChat } from "../support/live.js"
 
 // Real LLM turns are occasionally slow/transient under load — retry @live. Each
@@ -15,7 +16,7 @@ test.describe.configure({ retries: 2, timeout: 240_000 })
  */
 
 test(
-  "chat · verse lookup renders a scripture card",
+  qase(85, "chat · verse lookup renders a scripture card"),
   { tag: ["@live", "@chat"] },
   async ({ page }) => {
     await bootLive(page)
@@ -59,7 +60,7 @@ test.fixme(
 )
 
 test.fixme(
-  "chat · locate query renders a chapter card",
+  qase([87, 91], "chat · locate query renders a chapter card"),
   { tag: ["@live", "@chat"] },
   async ({ page }) => {
     await bootLive(page)

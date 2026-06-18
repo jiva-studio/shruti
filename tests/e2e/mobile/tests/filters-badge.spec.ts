@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot, bootDeviceLocale } from "../support/bootstrap.js"
 import { openLibrary } from "../support/nav.js"
 
@@ -13,7 +14,7 @@ import { openLibrary } from "../support/nav.js"
  */
 
 test(
-  "library · a pinned source shows an active filters badge",
+  qase(26, "library · a pinned source shows an active filters badge"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // boot() pins source `source_dsicuBsFvinZ`, a non-seed dimension, so the
@@ -34,7 +35,7 @@ test.describe("library · pristine locale-seed", () => {
   test.use({ locale: "en-US" })
 
   test(
-    "shows no active filters badge",
+    qase(28, "shows no active filters badge"),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       await bootDeviceLocale(page, "en")

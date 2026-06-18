@@ -1,8 +1,9 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openLibrary, searchInput, trackRows } from "../support/nav.js"
 
-test("library · search filters the catalog", { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase([20, 22], "library · search filters the catalog"), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page)
   await openLibrary(page)
 

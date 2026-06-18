@@ -1,9 +1,10 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, trackRows } from "../support/nav.js"
 
 test(
-  "library · opening a collection shows its lectures",
+  qase(38, "library · opening a collection shows its lectures"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)

@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import {
   gotoTab,
@@ -19,7 +20,7 @@ import {
  */
 
 test(
-  "settings · library language picker lists the content languages and persists the choice",
+  qase(116, "settings · library language picker lists the content languages and persists the choice"),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
     await boot(page, "en")
@@ -48,7 +49,7 @@ test(
 )
 
 test(
-  "settings · switching the library language to Russian surfaces Russian lectures",
+  qase(36, "settings · switching the library language to Russian surfaces Russian lectures"),
   { tag: ["@offline", "@settings", "@library"] },
   async ({ page }) => {
     // English UI + English library: the fixture's topics hold only Russian
