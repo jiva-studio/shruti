@@ -23,6 +23,7 @@ export default {
   },
   actions: {
     addToPlaylist: "Dodaj na listu numera",
+    alreadyInPlaylist: "Već na listi numera",
     openTranscript: "Otvori transkript",
     share: "Podeli",
   },
