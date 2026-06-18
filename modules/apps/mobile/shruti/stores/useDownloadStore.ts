@@ -1,5 +1,7 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
+import { useI18n } from "vue-i18n"
+import { useToast } from "@kit/composables"
 import { downloadMedia } from "@usecases/downloads/downloadMedia.js"
 import { removeDownloadedMedia } from "@usecases/downloads/removeDownloadedMedia.js"
 import { removeDownloadedTranscripts } from "@usecases/downloads/removeDownloadedTranscripts.js"
@@ -26,6 +28,8 @@ export const useDownloadStore = defineStore("downloads", () => {
   const app = useShruti()
   const fallback = useServerFallback()
   const transcriptPrefetch = useTranscriptPrefetch()
+  const { t } = useI18n()
+  const toast = useToast()
 
   const states = ref<Map<TrackId, DownloadState>>(new Map())
   // Per-track download progress 0..100. Populated only while a download
@@ -122,6 +126,9 @@ export const useDownloadStore = defineStore("downloads", () => {
         console.error("[downloads] hydrate failed:", err)
         hydrationError.value = err instanceof Error ? err.message : String(err)
         lastHydrateFailAt = Date.now()
+        // Surface it wherever the user is — not just Home. The 30s back-off
+        // above keeps this from repeating on every screen that hydrates.
+        void toast.error(t("errors.downloadsCacheUnavailable"))
       } finally {
         hydratePromise = null
       }

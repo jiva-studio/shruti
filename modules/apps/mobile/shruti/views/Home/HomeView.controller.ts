@@ -55,9 +55,8 @@ export function useHomeController(): HomeControllerReturn {
       downloads.hydrate(),
       heatmap.reload(),
     ])
-    if (downloads.hydrationError) {
-      void toast.error(t("errors.downloadsCacheUnavailable"))
-    }
+    // (A downloads-hydrate failure is surfaced by the store itself now, so it
+    // shows on whatever screen triggered the hydrate, not only Home.)
     // A dictionary load failure degrades silently otherwise — author /
     // location / topic labels render as raw ids or blanks and the Search
     // filters come up empty, with nothing telling the user why. Surface it.
