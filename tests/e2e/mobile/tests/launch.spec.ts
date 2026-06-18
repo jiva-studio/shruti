@@ -1,8 +1,9 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { playlistRows } from "../support/nav.js"
 
-test("home · launches to a populated Home", { tag: ["@offline", "@home"] }, async ({ page }) => {
+test(qase(145, "Launches to a populated Home"), { tag: ["@offline", "@home"] }, async ({ page }) => {
   await boot(page)
 
   // Booted past Welcome onto the Home tab with the bottom nav rendered.

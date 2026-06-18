@@ -20,7 +20,7 @@ import {
  */
 
 test(
-  qase(116, "settings · library language picker lists the content languages and persists the choice"),
+  qase(116, "Library languages multi-select dialog"),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
     await boot(page, "en")
@@ -49,7 +49,7 @@ test(
 )
 
 test(
-  qase(36, "settings · switching the library language to Russian surfaces Russian lectures"),
+  qase(36, "Library language is independent from UI language"),
   { tag: ["@offline", "@settings", "@library"] },
   async ({ page }) => {
     // English UI + English library: the fixture's topics hold only Russian

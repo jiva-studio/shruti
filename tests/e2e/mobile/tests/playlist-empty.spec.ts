@@ -18,7 +18,7 @@ async function badgeValue(page: import("@playwright/test").Page): Promise<number
 }
 
 test(
-  qase(17, "home · queue count badge tracks deletions"),
+  qase(17, "Up-next queue shows count and total duration"),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
     await boot(page)
@@ -45,7 +45,7 @@ test(
 )
 
 test(
-  qase(13, "home · emptying the queue shows starter packs, and a chip re-adds"),
+  qase(13, "Empty Home offers featured starter packs"),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
     await boot(page)

@@ -16,7 +16,7 @@ test.describe.configure({ retries: 2, timeout: 240_000 })
  */
 
 test(
-  qase(85, "chat · verse lookup renders a scripture card"),
+  qase(85, "Question type: find / show a verse"),
   { tag: ["@live", "@chat"] },
   async ({ page }) => {
     await bootLive(page)
@@ -60,7 +60,7 @@ test.fixme(
 )
 
 test.fixme(
-  qase([87, 91], "chat · locate query renders a chapter card"),
+  qase([87, 91], "Question type: locate a story"),
   { tag: ["@live", "@chat"] },
   async ({ page }) => {
     await bootLive(page)

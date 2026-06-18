@@ -4,7 +4,7 @@ import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
 test(
-  qase(15, "library · a collection-group see-all opens the group page"),
+  qase(15, "Consecutive tracks from one collection render as a group"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)

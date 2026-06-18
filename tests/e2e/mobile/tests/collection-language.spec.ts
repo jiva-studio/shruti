@@ -10,7 +10,7 @@ import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
  * filtered out, so every row that remains is a Russian lecture.
  */
 test(
-  qase(41, "collection · shows only lectures in the library language"),
+  qase(41, "Collection contents respect the library language"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")

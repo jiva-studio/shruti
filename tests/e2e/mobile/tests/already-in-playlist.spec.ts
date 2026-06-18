@@ -10,7 +10,7 @@ import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../support/n
  * re-opens the SAME lecture and asserts the button state.
  */
 test(
-  qase(29, "library · re-opening an added track disables the playlist button"),
+  qase(29, "Track row goes from none to added"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)

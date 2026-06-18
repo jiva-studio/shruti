@@ -58,6 +58,9 @@ const sharedUse = {
 
 export default defineConfig({
   testDir: "./tests",
+  // Pull / refresh the gitignored binary fixtures before the run so the suite
+  // never uses a missing or stale catalog snapshot (see support/globalSetup.ts).
+  globalSetup: "./support/globalSetup.ts",
   timeout: 120_000,
   expect: { timeout: 15_000 },
   retries: process.env.CI ? 1 : 0,

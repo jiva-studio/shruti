@@ -4,7 +4,7 @@ import { boot } from "../support/bootstrap.js"
 import { openTranscript, selectTranscriptText, selectionAction } from "../support/nav.js"
 
 test(
-  qase(61, "transcript · ask about a selection opens a chat"),
+  qase(61, "Select transcript text with a touch drag to open the popover"),
   { tag: ["@offline", "@transcript"] },
   async ({ page }) => {
     await boot(page)

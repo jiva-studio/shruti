@@ -3,7 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openLibrary } from "../support/nav.js"
 
-test(qase(25, "library · filters sheet opens"), { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(25, "Filter sheet shows all dimensions"), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page)
   await openLibrary(page)
 

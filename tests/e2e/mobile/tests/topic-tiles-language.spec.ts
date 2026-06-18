@@ -21,7 +21,7 @@ import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
  */
 
 test(
-  qase(45, "topic tiles · are present under a Russian library"),
+  qase(45, "Topic page respects the library language"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")
@@ -35,7 +35,7 @@ test(
 )
 
 test(
-  qase(45, "topic tiles · under an English library are scoped to English topics"),
+  qase(45, "Topic page respects the library language"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "en")

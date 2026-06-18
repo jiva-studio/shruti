@@ -17,7 +17,7 @@ import { gotoTab, trackRows, trackTitles, CYRILLIC, editLibraryLanguages } from 
  * non-empty — under the bug the English-named card opened onto an empty list.
  */
 test(
-  qase([41, 36], "collection · follows the library language, not the interface language"),
+  qase([41, 36], "Collection contents respect the library language"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Interface stays English; only the library content language flips to Russian.
