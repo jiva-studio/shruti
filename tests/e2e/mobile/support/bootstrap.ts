@@ -115,12 +115,18 @@ export async function preseedUserDb(page: Page, locale: Locale): Promise<void> {
  * populated, reference-sorted list. Capacitor Preferences on web → localStorage
  * under the `CapacitorStorage.` prefix.
  */
-export async function preseedSearchFilter(page: Page, locale: Locale): Promise<void> {
+export async function preseedSearchFilter(
+  page: Page,
+  locale: Locale,
+  sourceIds: string[] = ["source_dsicuBsFvinZ"]
+): Promise<void> {
   const filters = {
     authorIds: [],
     languageCodes: [locale],
     locationIds: [],
-    sourceIds: ["source_dsicuBsFvinZ"],
+    // Empty → no source constraint (full catalog). Defaults to the
+    // Bhagavad-gita source for a stable, reference-sorted list.
+    sourceIds,
     tagIds: [],
     duration: [],
     sort: "byReference",
@@ -170,13 +176,13 @@ const KILL_ANIMATIONS_CSS = `
 export async function boot(
   page: Page,
   locale: Locale = "en",
-  opts: { dismissNags?: boolean } = {}
+  opts: { dismissNags?: boolean; sourceIds?: string[] } = {}
 ): Promise<void> {
   const { dismissNags = true } = opts
   assertFixturesPresent()
   await interceptContent(page)
   await preseedUserDb(page, locale)
-  await preseedSearchFilter(page, locale)
+  await preseedSearchFilter(page, locale, opts.sourceIds)
   if (dismissNags) await preseedDismissedNags(page)
 
   await page.goto(`/?locale=${locale}`)
