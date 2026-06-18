@@ -25,6 +25,7 @@ export default {
   },
   actions: {
     addToPlaylist: "Додај на листу нумера",
+    alreadyInPlaylist: "Већ на листи нумера",
     openTranscript: "Отвори транскрипт",
     share: "Подели",
   },

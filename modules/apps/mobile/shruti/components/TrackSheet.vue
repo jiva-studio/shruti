@@ -31,9 +31,13 @@
           {{ t("search.actions.share") }}
           <span v-if="!isSubscribed" class="pro">PRO</span>
         </IonButton>
-        <IonButton class="act add-btn" @click="onAddToPlaylist">
+        <IonButton class="act add-btn" :disabled="alreadyInPlaylist" @click="onAddToPlaylist">
           <IconPlaylistAdd slot="start" :size="18" />
-          {{ t("search.actions.addToPlaylist") }}
+          {{
+            alreadyInPlaylist
+              ? t("search.actions.alreadyInPlaylist")
+              : t("search.actions.addToPlaylist")
+          }}
         </IonButton>
       </div>
     </IonFooter>
@@ -65,6 +69,7 @@ import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
+import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import LectureOutline from "@ui/components/LectureOutline.vue"
 import SimilarTracksRow from "@shruti/components/SimilarTracksRow.vue"
 
@@ -77,6 +82,7 @@ const dictionaries = useDictionariesStore()
 const purchases = usePurchasesStore()
 const paywall = usePaywallStore()
 const overlays = useOverlaysStore()
+const playlist = usePlaylistStore()
 const { addToPlaylist } = useAddToPlaylist()
 const { presentShareMenu } = useShareTrack()
 
@@ -86,6 +92,9 @@ const selectedLanguage = ref<LanguageCode | null>(null)
 
 const open = computed(() => sheet.trackId !== null)
 const isSubscribed = computed(() => purchases.isSubscribed)
+// The "Add to playlist" action is disabled once the track is already there —
+// the playlist usecase rejects a duplicate add, so there is nothing to do.
+const alreadyInPlaylist = computed(() => sheet.trackId !== null && playlist.hasTrack(sheet.trackId))
 
 // Content language for this track: the library language it actually has, so the
 // title + transcript match the language the track was surfaced in. Falls back to
