@@ -72,16 +72,14 @@ import role-proxy.conf
     # locally (origin) or reverse-proxies upstream (proxy) — so RU's edge
     # cap still bounds /chat traffic before forwarding to global.
     rate_limit {
-        # /auth/anonymous — CGNAT-tolerant. Carrier IP can serve hundreds
-        # of subscribers; 30/hour is wide enough for viral install spikes.
-        # The real cost-cap lives on /chat/* below.
+        # /auth/anonymous — cheap to mint; botnet burst-fence, not a usage cap.
         zone auth_anonymous {
             match {
                 path /auth/anonymous
             }
             key {client_ip}
-            events 30
-            window 1h
+            events 120
+            window 1m
         }
         # /auth/signin/* — brute-force defence. A legit signin happens 1-2
         # times in a user's lifetime; bot attempts come in bursts.
@@ -223,6 +221,19 @@ import role-proxy.conf
         # proxy  → role-proxy.conf  (reverse-proxies same paths upstream
         #          to {$LECTORIUM_GLOBAL_HOST} with X-Lectorium-Region: ru).
         import role-{$LECTORIUM_REGION_ROLE}
+    }
+
+    # Re-apply CORS on errors — the global header{} runs inside the route
+    # chain, so rate_limit 429s short-circuit without it and read as CORS
+    # failures in the WebView instead of a legible 429.
+    handle_errors {
+        header {
+            Access-Control-Allow-Origin "*"
+            Access-Control-Allow-Methods "GET, POST, OPTIONS"
+            Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, Accept"
+            Access-Control-Expose-Headers "Retry-After, X-Request-Id"
+        }
+        respond {err.status_code}
     }
 
     log {
