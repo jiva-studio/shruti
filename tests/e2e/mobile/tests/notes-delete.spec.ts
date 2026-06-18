@@ -11,7 +11,7 @@ import { gotoTab } from "../support/nav.js"
  * and stable across the localized "Delete" label.
  */
 test(
-  qase(5, "deletes a note from the action sheet"),
+  qase(5, "Delete a note from the Notes list"),
   { tag: ["@offline", "@notes"] },
   async ({ page }) => {
     await boot(page)

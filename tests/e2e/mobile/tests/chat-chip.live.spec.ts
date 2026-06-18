@@ -6,7 +6,7 @@ import { bootLive } from "../support/live.js"
 test.describe.configure({ retries: 2 })
 
 test(
-  qase(84, "chat · suggestion chip starts a conversation"),
+  qase(84, "Follow-up suggestion chips"),
   { tag: ["@live", "@chat"] },
   async ({ page }) => {
     await bootLive(page)

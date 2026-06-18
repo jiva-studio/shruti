@@ -3,7 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../support/nav.js"
 
-test(qase(65, "library · share menu offers a PDF export"), { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(65, "Share a transcript as PDF"), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page)
   await openLibrary(page)
   await openTrackSheet(page, trackRows(page).first())

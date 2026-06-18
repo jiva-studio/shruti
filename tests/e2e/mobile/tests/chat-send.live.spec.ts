@@ -13,7 +13,7 @@ test.describe.configure({ retries: 2, timeout: 240_000 })
  * couple of minutes, so the assertion timeout is deliberately generous.
  */
 test(
-  qase(82, "chat · send a message → grounded streamed reply"),
+  qase(82, "Send a question and receive a streamed answer"),
   { tag: ["@live", "@chat"] },
   async ({ page }) => {
     await bootLive(page)

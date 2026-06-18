@@ -3,7 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { playFirstQueuedTrack } from "../support/nav.js"
 
-test(qase(60, "transcript · starting a track reveals the transcript"), { tag: ["@offline", "@transcript"] }, async ({ page }) => {
+test(qase(60, "Transcript synchronizes to playback position"), { tag: ["@offline", "@transcript"] }, async ({ page }) => {
   await boot(page)
   await playFirstQueuedTrack(page)
 

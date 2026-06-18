@@ -2,7 +2,7 @@ import { test, expect } from "../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 
-test(qase(12, "home · activity tracker badges"), { tag: ["@offline", "@home"] }, async ({ page }) => {
+test(qase(12, "Activity widget appears after first track, hidden on fresh install"), { tag: ["@offline", "@home"] }, async ({ page }) => {
   await boot(page)
 
   // The seeded listening history drives the activity tracker: the heatmap, a

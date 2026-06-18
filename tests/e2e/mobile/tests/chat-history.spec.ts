@@ -3,7 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
-test(qase([93, 94], "chat · history lists past conversations"), { tag: ["@offline", "@chat"] }, async ({ page }) => {
+test(qase([93, 94], "Open chat history and search sessions"), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await boot(page)
   await gotoTab(page, "chat")
 

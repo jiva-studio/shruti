@@ -22,7 +22,7 @@ import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../support/n
  * airplane-mode offline guard produces, but deterministically.)
  */
 test(
-  qase(31, "library · a failed download shows the red X and retries from the sheet"),
+  qase(31, "Failed download shows red X and retries from the track sheet"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Standard offline boot routes + seed, but register a GATED audio route

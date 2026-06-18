@@ -3,7 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, playFirstQueuedTrack, settingToggle } from "../support/nav.js"
 
-test(qase(117, "settings · changing a setting takes effect"), { tag: ["@offline", "@settings"] }, async ({ page }) => {
+test(qase(117, "Appearance toggles"), { tag: ["@offline", "@settings"] }, async ({ page }) => {
   await boot(page)
   await gotoTab(page, "settings")
 

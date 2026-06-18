@@ -3,7 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
-test(qase(115, "settings · switching the app language"), { tag: ["@offline", "@settings"] }, async ({ page }) => {
+test(qase(115, "App language picker switches the UI"), { tag: ["@offline", "@settings"] }, async ({ page }) => {
   await boot(page)
   await gotoTab(page, "settings")
 

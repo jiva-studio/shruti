@@ -1,5 +1,6 @@
 import fs from "fs"
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import {
   interceptContent,
   preseedUserDb,
@@ -28,7 +29,7 @@ import { playlistRows } from "../support/nav.js"
  * flip the flag and tap Retry, so the next attempt is guaranteed to succeed.
  */
 test(
-  "welcome · a failed content-DB download shows Retry and recovers",
+  qase(144, "A failed content-DB download shows Retry and recovers"),
   { tag: ["@offline", "@welcome"] },
   async ({ page }) => {
     // config / audio / transcript routes + a default (always-success) DB route.

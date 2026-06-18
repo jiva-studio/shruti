@@ -4,7 +4,7 @@ import { boot } from "../support/bootstrap.js"
 import { gotoTab, trackRows } from "../support/nav.js"
 
 test(
-  qase(38, "library · opening a collection shows its lectures"),
+  qase(38, "Open a collection and view its contents"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)

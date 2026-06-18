@@ -6,7 +6,7 @@ import { openTranscript, selectTranscriptText, selectionAction } from "../suppor
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
 test(
-  qase(61, "transcript · copy a selection to the clipboard"),
+  qase(61, "Select transcript text with a touch drag to open the popover"),
   { tag: ["@offline", "@transcript"] },
   async ({ page }) => {
     await boot(page)

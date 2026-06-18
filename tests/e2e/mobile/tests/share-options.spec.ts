@@ -22,7 +22,7 @@ async function openTrackSheet(page: Page, row: Locator): Promise<void> {
 //   text:  "Transcript (text)"
 //   audio: "Audio"
 test(
-  qase(67, "library · share menu lists text and audio options"),
+  qase(67, "Share an audio excerpt from a transcript selection"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)
