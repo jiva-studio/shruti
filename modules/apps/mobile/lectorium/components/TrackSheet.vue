@@ -9,7 +9,7 @@
         <p v-if="author" class="author">{{ author }}</p>
       </div>
     </div>
-    <IonContent>
+    <IonContent ref="contentRef">
       <div class="sheet-body">
         <div v-if="topicChips.length" class="topic-chips">
           <span v-for="(name, i) in visibleChips" :key="i" class="topic-chip">
@@ -124,6 +124,8 @@ const topicChips = computed<string[]>(() =>
 const visibleChips = computed(() => topicChips.value.slice(0, VISIBLE_CHIPS))
 const overflowCount = computed(() => Math.max(0, topicChips.value.length - VISIBLE_CHIPS))
 
+const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
+
 watch(
   () => sheet.trackId,
   async (id) => {
@@ -157,6 +159,9 @@ watch(
       detail.value.availableLanguages.find((l: LanguageCode) => l === preferred) ??
       detail.value.availableLanguages[0] ??
       null
+    // Opening a similar lecture swaps content in the same sheet — reset scroll
+    // so the user starts at the top of the new lecture rather than mid-page.
+    void contentRef.value?.$el?.scrollToTop?.(300)
   }
 )
 
