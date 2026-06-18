@@ -80,6 +80,12 @@ function withDev(list: readonly CdnServer[]): readonly CdnServer[] {
 // is kept pinned at the front through `withDev()`.
 const regions = ref<readonly CdnServer[]>(withDev(SERVERS))
 
+// The active region id, mirrored here from the composition root's
+// `activeServer` so asset-URL resolution follows server promotions (CDN
+// failover) without the registry importing the composition root (which would
+// be circular — the root imports the registry). `null` until the root sets it.
+const activeRegionId = ref<string | null>(null)
+
 let prefs: IPreferences | null = null
 
 /** Current region list. Always non-empty (bootstrap seed never cleared). */
@@ -93,13 +99,28 @@ export function findRegion(id: string): CdnServer | undefined {
 }
 
 /**
- * Build a full asset URL for an S3 key against the active region, or undefined
- * for an empty key / no region. Single home for the `getRegions()[0]` +
- * `buildServerUrl` pattern that collection covers and avatars share.
+ * Mirror the composition root's active server id into the registry so
+ * `resolveAssetUrl` builds against the live region. Called from the
+ * `activeServer` watch in `initLectorium`.
+ */
+export function setActiveRegionId(id: string | null): void {
+  activeRegionId.value = id
+}
+
+/** The active region, or the first as a fallback before the root sets one. */
+export function activeRegion(): CdnServer | undefined {
+  return (activeRegionId.value ? findRegion(activeRegionId.value) : undefined) ?? regions.value[0]
+}
+
+/**
+ * Build a full asset URL for an S3 key against the ACTIVE region (so covers,
+ * avatars, etc. follow a CDN failover promotion), or undefined for an empty
+ * key / no region. Was pinned to `regions[0]`, which ignored the active server
+ * and could even start on a different region than streaming used.
  */
 export function resolveAssetUrl(key: string | undefined): string | undefined {
   if (!key) return undefined
-  const region = regions.value[0]
+  const region = activeRegion()
   return region ? buildServerUrl(region, key) : undefined
 }
 
