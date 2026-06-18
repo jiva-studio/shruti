@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
@@ -24,7 +25,7 @@ function pickHighlightWord(text: string): string | null {
 }
 
 test(
-  "search filters notes and highlights matches",
+  qase(4, "search filters notes and highlights matches"),
   { tag: ["@offline", "@notes"] },
   async ({ page }) => {
     await boot(page)

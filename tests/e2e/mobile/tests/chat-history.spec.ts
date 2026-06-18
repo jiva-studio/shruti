@@ -1,8 +1,9 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
-test("chat · history lists past conversations", { tag: ["@offline", "@chat"] }, async ({ page }) => {
+test(qase([93, 94], "chat · history lists past conversations"), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await boot(page)
   await gotoTab(page, "chat")
 

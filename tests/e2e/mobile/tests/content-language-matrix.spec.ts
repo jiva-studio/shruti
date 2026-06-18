@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { bootDeviceLocale } from "../support/bootstrap.js"
 import { gotoTab, openLibrary, searchInput, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
 
@@ -29,7 +30,7 @@ for (const c of MATRIX) {
     test.use({ locale: c.locale })
 
     test(
-      `library · seeds a ${c.reduces}-language catalog`,
+      qase(35, `library · seeds a ${c.reduces}-language catalog`),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
         await bootDeviceLocale(page, c.userDb)
@@ -50,7 +51,7 @@ for (const c of MATRIX) {
     )
 
     test(
-      "library · filters sheet opens",
+      qase(25, "library · filters sheet opens"),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
         await bootDeviceLocale(page, c.userDb)
@@ -66,7 +67,7 @@ for (const c of MATRIX) {
     )
 
     test(
-      "library · title search filters the catalog",
+      qase(22, "library · title search filters the catalog"),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
         await bootDeviceLocale(page, c.userDb)
@@ -83,7 +84,7 @@ for (const c of MATRIX) {
     )
 
     test(
-      "search · topic / category tiles are shown",
+      qase(45, "search · topic / category tiles are shown"),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
         await bootDeviceLocale(page, c.userDb)
@@ -101,7 +102,7 @@ test.describe("content-language · multiple languages selected", () => {
   test.use({ locale: "uk-UA" })
 
   test(
-    "library · selecting ru + en shows both scripts",
+    qase(35, "library · selecting ru + en shows both scripts"),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       // Explicit multi-language selection — the user broadened the library to
@@ -129,7 +130,7 @@ test.describe("content-language · Ukrainian topic detail", () => {
   test.use({ locale: "uk-UA" })
 
   test(
-    "topic · a Ukrainian user sees the topic's Russian lectures",
+    qase(45, "topic · a Ukrainian user sees the topic's Russian lectures"),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       await bootDeviceLocale(page, "ru")

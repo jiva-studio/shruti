@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openLibrary, trackRows, trackTitles } from "../support/nav.js"
 
@@ -67,7 +68,7 @@ async function closeSheet(page: Page, s: Locator): Promise<void> {
 /* -------------------------------- tests ---------------------------------- */
 
 test(
-  "library · filter by source changes the catalog",
+  qase(26, "library · filter by source changes the catalog"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)
@@ -153,7 +154,7 @@ test(
 )
 
 test(
-  "library · reset clears the filters and disables itself",
+  qase(27, "library · reset clears the filters and disables itself"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)

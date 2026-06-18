@@ -1,9 +1,10 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab } from "../support/nav.js"
 
 test(
-  "notes · draining all notes shows the empty state",
+  qase(9, "notes · draining all notes shows the empty state"),
   { tag: ["@offline", "@notes"] },
   async ({ page }) => {
     await boot(page)

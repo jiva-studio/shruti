@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { openLibrary, trackTitles, CYRILLIC } from "../support/nav.js"
 
@@ -15,7 +16,7 @@ import { openLibrary, trackTitles, CYRILLIC } from "../support/nav.js"
  */
 
 test(
-  "library · a Russian locale seeds a Russian-language catalog",
+  qase(35, "library · a Russian locale seeds a Russian-language catalog"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")
@@ -33,7 +34,7 @@ test(
 )
 
 test(
-  "library · an English locale seeds an English-language catalog",
+  qase(35, "library · an English locale seeds an English-language catalog"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "en")

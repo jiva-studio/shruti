@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
 
@@ -20,7 +21,7 @@ import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
  */
 
 test(
-  "topic tiles · are present under a Russian library",
+  qase(45, "topic tiles · are present under a Russian library"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")
@@ -34,7 +35,7 @@ test(
 )
 
 test(
-  "topic tiles · under an English library are scoped to English topics",
+  qase(45, "topic tiles · under an English library are scoped to English topics"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "en")

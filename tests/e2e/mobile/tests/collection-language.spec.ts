@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
 
@@ -9,7 +10,7 @@ import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
  * filtered out, so every row that remains is a Russian lecture.
  */
 test(
-  "collection · shows only lectures in the library language",
+  qase(41, "collection · shows only lectures in the library language"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")

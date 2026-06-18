@@ -1,8 +1,9 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { deletePlaylistRow, playlistRows } from "../support/nav.js"
 
-test("home · removing a track shrinks the queue", { tag: ["@offline", "@home"] }, async ({ page }) => {
+test(qase(18, "home · removing a track shrinks the queue"), { tag: ["@offline", "@home"] }, async ({ page }) => {
   await boot(page)
 
   await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
