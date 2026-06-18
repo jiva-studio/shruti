@@ -59,6 +59,7 @@ export default {
     trialDisclaimer:
       "Cancela cuando quieras. Tras la prueba, la suscripción se renueva automáticamente.",
     subscribed: "Suscripción completada",
+    unavailable: "Las compras dentro de la aplicación no están disponibles en este dispositivo.",
     manage: "Gestionar suscripción",
     restore: "Restaurar",
     restored: "¡Tu suscripción se ha restaurado correctamente!",
