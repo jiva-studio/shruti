@@ -22,6 +22,7 @@ export default {
   },
   actions: {
     addToPlaylist: "Zur Playlist hinzufügen",
+    downloadAgain: "Erneut herunterladen",
     alreadyInPlaylist: "Bereits in der Playlist",
     openTranscript: "Transkript öffnen",
     share: "Teilen",

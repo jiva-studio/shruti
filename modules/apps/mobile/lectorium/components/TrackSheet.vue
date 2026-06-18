@@ -31,13 +31,14 @@
           {{ t("search.actions.share") }}
           <span v-if="!isSubscribed" class="pro">PRO</span>
         </IonButton>
-        <IonButton class="act add-btn" :disabled="alreadyInPlaylist" @click="onAddToPlaylist">
-          <IconPlaylistAdd slot="start" :size="18" />
-          {{
-            alreadyInPlaylist
-              ? t("search.actions.alreadyInPlaylist")
-              : t("search.actions.addToPlaylist")
-          }}
+        <IonButton
+          class="act add-btn"
+          :disabled="alreadyInPlaylist && !downloadFailed"
+          @click="onPrimaryAction"
+        >
+          <IconReload v-if="downloadFailed" slot="start" :size="18" />
+          <IconPlaylistAdd v-else slot="start" :size="18" />
+          {{ primaryActionLabel }}
         </IonButton>
       </div>
     </IonFooter>
@@ -48,10 +49,10 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
-import { IconHash, IconPlaylistAdd, IconShare, IconX } from "@tabler/icons-vue"
+import { IconHash, IconPlaylistAdd, IconReload, IconShare, IconX } from "@tabler/icons-vue"
 import { loadTrackDetail } from "@usecases/playback/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
-import type { LanguageCode } from "@lib/domain/core.js"
+import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import {
@@ -69,6 +70,7 @@ import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
+import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import LectureOutline from "@ui/components/LectureOutline.vue"
 import SimilarTracksRow from "@lectorium/components/SimilarTracksRow.vue"
@@ -82,6 +84,7 @@ const dictionaries = useDictionariesStore()
 const purchases = usePurchasesStore()
 const paywall = usePaywallStore()
 const overlays = useOverlaysStore()
+const downloads = useDownloadStore()
 const playlist = usePlaylistStore()
 const { addToPlaylist } = useAddToPlaylist()
 const { presentShareMenu } = useShareTrack()
@@ -92,9 +95,22 @@ const selectedLanguage = ref<LanguageCode | null>(null)
 
 const open = computed(() => sheet.trackId !== null)
 const isSubscribed = computed(() => purchases.isSubscribed)
+// A failed/stuck download turns the primary button into a "Download again"
+// retry — the row no longer retries on tap, so the sheet is where the user
+// recovers from a download error.
+const downloadFailed = computed(
+  () => sheet.trackId !== null && downloads.getState(sheet.trackId as TrackId) === "failed"
+)
 // The "Add to playlist" action is disabled once the track is already there —
-// the playlist usecase rejects a duplicate add, so there is nothing to do.
+// the playlist usecase rejects a duplicate add, so there is nothing to do. A
+// failed download takes priority (the track is in the playlist but still needs
+// a retry), so it stays actionable as "Download again".
 const alreadyInPlaylist = computed(() => sheet.trackId !== null && playlist.hasTrack(sheet.trackId))
+const primaryActionLabel = computed(() => {
+  if (downloadFailed.value) return t("search.actions.downloadAgain")
+  if (alreadyInPlaylist.value) return t("search.actions.alreadyInPlaylist")
+  return t("search.actions.addToPlaylist")
+})
 
 // Content language for this track: the library language it actually has, so the
 // title + transcript match the language the track was surfaced in. Falls back to
@@ -178,10 +194,30 @@ function onDismiss(): void {
   sheet.close()
 }
 
+function onPrimaryAction(): void {
+  if (downloadFailed.value) {
+    onDownloadAgain()
+    return
+  }
+  onAddToPlaylist()
+}
+
 function onAddToPlaylist(): void {
   const id = sheet.trackId
   if (!id) return
   void addToPlaylist(id)
+  sheet.close()
+}
+
+function onDownloadAgain(): void {
+  const id = sheet.trackId
+  if (!id) return
+  // Re-run the audio download for the first variant that has one;
+  // `ensureDownloaded` takes the retry path off the "failed" state.
+  const audioVariant = track.value?.variants.find((v) => v.audio)
+  if (audioVariant?.audio) {
+    void downloads.ensureDownloaded(id as TrackId, audioVariant.audio.path)
+  }
   sheet.close()
 }
 
