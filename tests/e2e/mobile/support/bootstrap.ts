@@ -9,6 +9,7 @@ import {
   userDbPath,
   type Locale,
 } from "./fixtures.js"
+import { requireFixtures } from "./test.js"
 
 /**
  * The whole bootstrap is lifted from the screenshot pipeline
@@ -35,6 +36,7 @@ import {
  *    to match the request) so the reader renders offline + deterministically.
  */
 export async function interceptContent(page: Page): Promise<void> {
+  requireFixtures()
   const fakeConfig = JSON.stringify({
     databases: [
       { version: CONTENT_DB_VERSION, scheme: Number(String(CONTENT_DB_VERSION).slice(0, 8)) },

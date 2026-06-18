@@ -1,0 +1,132 @@
+{
+  "2": {
+    "title": "🏠 Home",
+    "parent_id": null,
+    "description": "Home screen (excluding the queue itself): activity/streak widget, nag banners (notifications/subscription), collection-group provenance, featured starter packs, opening the player. Child suite: Playlist."
+  },
+  "19": {
+    "title": "▶️ Playlist",
+    "parent_id": 2,
+    "description": "Up-next queue: order, swipe-to-archive, completion badge persistence, collection-group rendering, resume at saved position."
+  },
+  "3": {
+    "title": "🔍 Search",
+    "parent_id": null,
+    "description": "Search input and debounce, verse-reference search, pagination/infinite scroll, empty state, content-language scoping. Child suites: Filters, Tracks."
+  },
+  "20": {
+    "title": "🎚️ Filters",
+    "parent_id": 3,
+    "description": "Search filters: authors, sources, locations, languages, tags, topics, date range, duration, sort; active-filter badge, reset, immediate re-query."
+  },
+  "21": {
+    "title": "🎵 Tracks",
+    "parent_id": 3,
+    "description": "Track row states (none/added/downloading/failed/completed) on discovery surfaces, add/remove, failed-download retry on tap, bulk add."
+  },
+  "4": {
+    "title": "📚 Library",
+    "parent_id": null,
+    "description": "Library landing page, scripture/verse search, content-language scoping, original-script text / prose / recitation display. Child suites: Collections, Topics, Smart Library."
+  },
+  "5": {
+    "title": "✨ Smart Library",
+    "parent_id": 4,
+    "description": "Smart Library (Pro): banner with PRO badge and gating, settings dialog (duration target, auto-archive, filters), background auto-download/auto-archive, sync with Settings."
+  },
+  "12": {
+    "title": "🗂 Collections",
+    "parent_id": 4,
+    "description": "Opening a collection, collection groups, adding a single track / multiple / the whole collection, language-scoped contents, provenance grouping on Home."
+  },
+  "13": {
+    "title": "#️⃣ Topics",
+    "parent_id": 4,
+    "description": "Opening a topic from grid/shelf, topic detail page and covers, adding tracks, language-scoped contents, empty state."
+  },
+  "6": {
+    "title": "🎧 Player",
+    "parent_id": null,
+    "description": "Floating mini-player (pulse until tapped), full player, play/pause, skip ±15s, seek, playback speed, auto-play next (Pro). Child suites: Transcript, Notes, Sharing, Mixer."
+  },
+  "7": {
+    "title": "📝 Transcript",
+    "parent_id": 6,
+    "description": "Transcript view synced to audio, text selection via touch-drag + popover, outline/chapters, citations, transcript language switch, loading/error/empty states."
+  },
+  "8": {
+    "title": "🔖 Notes",
+    "parent_id": 6,
+    "description": "Notes/bookmarks: create from transcript selection, notes list, search with highlight, delete (from list and from transcript), share text/audio, empty state."
+  },
+  "9": {
+    "title": "📤 Sharing",
+    "parent_id": 6,
+    "description": "Sharing: audio excerpt (cut by timecodes, background job >3s), transcript PDF (CDN cache), native share sheet. PDF is offered for any track that has a transcript, regardless of language. Covers audio / transcript / PDF share types."
+  },
+  "22": {
+    "title": "🎚️ Mixer",
+    "parent_id": 6,
+    "description": "Stereo mixer (L↔R blend): puck drag, center deadzone snap-back, engagement boundary, haptic ticks, persistence across tracks, no-op on mono audio."
+  },
+  "10": {
+    "title": "⬇️ Downloads",
+    "parent_id": null,
+    "description": "Download a track, progress, state persistence, retry after failure, interrupted-download recovery, CDN rotation, concurrent-download dedup. Child suite: Offline playback."
+  },
+  "23": {
+    "title": "📴 Offline playback",
+    "parent_id": 10,
+    "description": "Playing a downloaded track with no network: local file:// playback, state hydrated after restart, transcript available offline."
+  },
+  "11": {
+    "title": "💬 Chat",
+    "parent_id": null,
+    "description": "AI chat: send a question, \"Thinking…\" streaming, answer rendering, follow-ups, question types (factual/philosophical/find-verse/make-PDF/locate-story), service-unavailable UX. Child suites: Answer cards, Session history, Rate limits."
+  },
+  "24": {
+    "title": "🃏 Answer cards",
+    "parent_id": 11,
+    "description": "Chip→card upgrade for verse/citation/chapter payloads, verse recitation audio, citation in-line player, share-PDF action card, broken-payload fallback."
+  },
+  "25": {
+    "title": "🕘 Session history",
+    "parent_id": 11,
+    "description": "Chat history sheet: list prior sessions, search, open a session, new session, delete one / delete all."
+  },
+  "26": {
+    "title": "🚦 Rate limits",
+    "parent_id": 11,
+    "description": "Free vs Pro daily quota, usage chip visibility threshold, quota-exhausted composer lock + upgrade CTA, UTC-midnight reset, rate-limit backend unavailable."
+  },
+  "14": {
+    "title": "💳 Subscription",
+    "parent_id": null,
+    "description": "Paywall: feature carousel, plans and free-trial badge (14 days), purchase, restore, manage subscription, RU \"Can't pay\" support email, legal links."
+  },
+  "15": {
+    "title": "👤 Account",
+    "parent_id": null,
+    "description": "Account profile, subscription/tier display and sync, account deletion (with/without local wipe), Pro expiry. Child suite: Authentication."
+  },
+  "27": {
+    "title": "🔐 Authentication",
+    "parent_id": 15,
+    "description": "Sign-in (Google), sign-out, anonymous vs authenticated, token refresh, what requires an account."
+  },
+  "16": {
+    "title": "⚙️ Settings",
+    "parent_id": null,
+    "description": "Settings: app language (single), library languages (multi-select dialog), appearance toggles, Pro toggles (auto-next/auto-scroll), chat settings, sadhana/reminders, DB export/import, debug section, build info."
+  },
+  "17": {
+    "title": "❓ Help",
+    "parent_id": null,
+    "description": "In-app help: opening HelpDialog, TOC and page navigation, multilingual content (en/ru)."
+  },
+  "18": {
+    "title": "📱 Platform-specific",
+    "parent_id": null,
+    "description": "Device-dependent behaviors (run once per device): background audio, lock-screen/notification media controls, audio focus/interruptions, native file:// playback, WorkManager/MIUI downloads, notification permission (Android 13+), IAP store differences + RU no-IAP, share sheet, haptics, keyboard, deep links, system bars."
+  }
+}
