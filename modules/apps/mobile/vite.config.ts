@@ -2,6 +2,7 @@ import vue from "@vitejs/plugin-vue"
 import path from "node:path"
 import { readFileSync } from "node:fs"
 import { defineConfig } from "vite"
+import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { kitVitePlugin } from "../../kit/vite.aliases"
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
@@ -20,6 +21,14 @@ const buildId =
 // Short git commit hash (CI passes github.sha), so the version line reveals
 // exactly which commit a build came from. Empty locally / when not provided.
 const commitSha = (process.env.COMMIT_SHA ?? "").slice(0, 7)
+
+// Single source of truth for the Sentry release name. Used BOTH as the runtime
+// SDK `release` (injected via __SENTRY_RELEASE__) and as the uploaded
+// source-map artifact name (sentryVitePlugin below) — they MUST match or the
+// maps won't resolve against incoming events.
+const sentryRelease = commitSha
+  ? `shruti@${pkg.version}+${commitSha}`
+  : `shruti@${pkg.version}`
 
 // `@shruti` is also the npm scope for our in-house Capacitor plugins
 // (`@shruti/plugin-*`, e.g. `@shruti/plugin-audio-player`). Vite 8
@@ -84,6 +93,15 @@ export default defineConfig({
       process.env.SHRUTI_GOOGLE_IOS_CLIENT_ID ??
         ""
     ),
+    // Public Sentry DSN — embed-by-design like the OAuth client IDs above, so
+    // it ships with a hard-coded default and can be overridden via env. An
+    // empty string disables Sentry (see shruti/services/monitoring).
+    __SENTRY_DSN__: JSON.stringify(
+      process.env.SENTRY_DSN ??
+        ""
+    ),
+    // Release name shared with the source-map upload (see sentryRelease above).
+    __SENTRY_RELEASE__: JSON.stringify(sentryRelease),
   },
   build: {
     minify: true,
@@ -100,7 +118,29 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: ["mobile.shruti.dev"],
   },
-  plugins: [shrutiAlias, kitVitePlugin(path.resolve(__dirname, "../../kit/src")), vue()],
+  plugins: [
+    shrutiAlias,
+    kitVitePlugin(path.resolve(__dirname, "../../kit/src")),
+    vue(),
+    // Upload JS source maps to Sentry so minified stack traces are
+    // de-obfuscated. Active only when SENTRY_AUTH_TOKEN is present (CI) — local
+    // `npm run build` has no token, so the plugin is omitted and the build runs
+    // unchanged. The release name MUST equal the runtime SDK `release`
+    // (sentryRelease, injected as __SENTRY_RELEASE__) for maps to resolve.
+    // `.map` files are deleted from dist after upload so they never ship inside
+    // the APK/IPA.
+    ...(process.env.SENTRY_AUTH_TOKEN
+      ? [
+          sentryVitePlugin({
+            org: process.env.SENTRY_ORG ?? "akdasa-studio",
+            project: process.env.SENTRY_PROJECT ?? "shruti",
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            release: { name: sentryRelease },
+            sourcemaps: { filesToDeleteAfterUpload: ["./dist/**/*.map"] },
+          }),
+        ]
+      : []),
+  ],
   resolve: {
     preserveSymlinks: true,
     // `vue-router` MUST be deduped alongside the Ionic packages: components
