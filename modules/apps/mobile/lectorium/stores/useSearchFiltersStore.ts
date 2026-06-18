@@ -1,5 +1,7 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
+import { useI18n } from "vue-i18n"
+import { useToast } from "@kit/composables"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
 import { useLectorium } from "@lectorium/lectorium.js"
@@ -49,6 +51,8 @@ const EMPTY: PersistedFilters = {
  */
 export const useSearchFiltersStore = defineStore("searchFilters", () => {
   const app = useLectorium()
+  const { t } = useI18n()
+  const toast = useToast()
 
   const authorIds = ref<readonly string[]>([])
   const languageCodes = ref<readonly string[]>([])
@@ -146,7 +150,16 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
       dateFrom: dateFrom.value,
       dateTo: dateTo.value,
     }
-    await app.preferences.set(STORAGE_KEY, JSON.stringify(payload))
+    try {
+      await app.preferences.set(STORAGE_KEY, JSON.stringify(payload))
+    } catch (e) {
+      // The in-memory selection is already applied, but it won't survive a
+      // restart. Tell the user (the translated string is the only consumer of
+      // errors.filtersNotSaved) instead of leaking an unhandled rejection from
+      // the setter that called persist().
+      console.warn("[filters] persist failed:", e)
+      void toast.error(t("errors.filtersNotSaved"))
+    }
   }
 
   async function setAuthors(ids: readonly string[]): Promise<void> {
