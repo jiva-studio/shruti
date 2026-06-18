@@ -1,6 +1,13 @@
 import { test, expect } from "../support/test.js"
 import { boot } from "../support/bootstrap.js"
-import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
+import {
+  gotoTab,
+  trackRows,
+  trackTitles,
+  CYRILLIC,
+  libraryLanguageRow,
+  libraryLanguageDialog,
+} from "../support/nav.js"
 
 /**
  * `track_topics` is language-agnostic, so a topic can hold lectures in languages
@@ -16,6 +23,24 @@ async function openFirstTopic(page: import("@playwright/test").Page): Promise<vo
   await tile.waitFor({ state: "visible", timeout: 20_000 })
   await tile.click()
   await page.waitForURL("**/search/topic/**", { timeout: 10_000 })
+}
+
+/**
+ * Edit the library-language set via Settings → Library (the same multi-select
+ * checkbox dialog the settings test drives). `add`/`remove` match a checkbox by
+ * its label text. Leaves the app on the Settings tab.
+ */
+async function editLibraryLanguages(
+  page: import("@playwright/test").Page,
+  opts: { add?: string | RegExp; remove?: string | RegExp }
+): Promise<void> {
+  await gotoTab(page, "settings")
+  await libraryLanguageRow(page).click()
+  const dialog = libraryLanguageDialog(page)
+  await expect(dialog.locator("ion-checkbox").first()).toBeVisible({ timeout: 10_000 })
+  if (opts.add) await dialog.locator("ion-checkbox", { hasText: opts.add }).click()
+  if (opts.remove) await dialog.locator("ion-checkbox", { hasText: opts.remove }).click()
+  await dialog.getByRole("button", { name: /apply|примен/i }).click()
 }
 
 test(
@@ -39,14 +64,34 @@ test(
   "topic · hides lectures absent from the library language",
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
+    // Reach a (Russian-only) topic the only way it's reachable: under a Russian
+    // library, where its tile is shown. It lists its Russian lectures.
     await boot(page, "en")
+    await editLibraryLanguages(page, { add: /Русский/, remove: "English" })
     await openFirstTopic(page)
+    await expect(trackRows(page).first()).toBeVisible({ timeout: 20_000 })
 
-    // The fixture's topics only have Russian lectures, so an English library
-    // leaves the page empty. The list flashes the unfiltered set before the
-    // persisted language filter hydrates, so settle first, then assert it has
-    // collapsed to nothing.
-    await page.waitForTimeout(2500)
-    await expect(trackRows(page)).toHaveCount(0)
+    // Sanity: under the Russian library the detail shows Russian lectures.
+    await expect
+      .poll(async () => (await trackTitles(page)).some((t) => CYRILLIC.test(t)), { timeout: 15_000 })
+      .toBe(true)
+
+    // Switch the library back to English. The still-open detail re-scopes
+    // (CollectionView watches the library language): a Russian-only topic
+    // collapses to empty, a mixed topic shows only its English lectures — either
+    // way NO Russian lecture is left on screen. Asserting "no Cyrillic title
+    // remains" rather than an exact count keeps this drift-proof across catalogs
+    // whose per-topic language coverage shifts. (A ru-only topic can't be opened
+    // directly under English — its tile is filtered out — so we open under RU
+    // then switch.)
+    await editLibraryLanguages(page, { add: "English", remove: /Русский/ })
+    await gotoTab(page, "search")
+    await expect(page).toHaveURL(/\/search\/topic\//)
+    await expect
+      .poll(async () => {
+        const titles = await trackTitles(page)
+        return titles.every((t) => !CYRILLIC.test(t))
+      }, { timeout: 15_000 })
+      .toBe(true)
   }
 )

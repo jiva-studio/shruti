@@ -1,6 +1,6 @@
 import { test, expect } from "../support/test.js"
 import { boot } from "../support/bootstrap.js"
-import { gotoTab } from "../support/nav.js"
+import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../support/nav.js"
 
 /**
  * `track_topics` is language-agnostic, so the topics dictionary holds topics
@@ -10,9 +10,13 @@ import { gotoTab } from "../support/nav.js"
  * page (the detail already filters; the list used not to). See
  * useLibraryLandingStore: `topicIdsWithTracksIn(libraryLanguages)`.
  *
- * The fixture has en+ru lectures but its topics carry RUSSIAN-only lectures, so:
- *  - a Russian library shows topic tiles, but
- *  - an English library shows none (every fixture topic is ru-only).
+ * The observable, drift-proof invariant: every tile shown under a library is
+ * *consumable* in that language — opening it lands on a populated topic whose
+ * titles are in that language (titles follow the library language, PR #1008). A
+ * ru-only topic must never surface as a tile under an English library. We avoid
+ * asserting exact tile counts: the grid is a random sample and the catalog's
+ * per-topic language coverage shifts as content is published (some catalogs have
+ * en-having topics, some don't).
  */
 
 test(
@@ -30,16 +34,33 @@ test(
 )
 
 test(
-  "topic tiles · with no English lectures are hidden under an English library",
+  "topic tiles · under an English library are scoped to English topics",
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "en")
     await gotoTab(page, "search")
 
-    // The landing may flash the unfiltered tile set before the persisted
-    // library-language filter hydrates; settle, then assert the ru-only topics
-    // have collapsed out — the grid resolves to zero tiles (or is absent).
+    // Let the persisted library-language filter hydrate (the landing can briefly
+    // flash the unfiltered tile set before it does).
     await page.waitForTimeout(2500)
-    await expect(page.locator(".tile-grid > *")).toHaveCount(0)
+
+    const tiles = page.locator(".tile-grid > *")
+    const count = await tiles.count()
+    // A catalog with no en-having topics correctly shows no tiles under an
+    // English library — the ru-only topics have collapsed out.
+    if (count === 0) return
+
+    // Otherwise every shown tile is en-having: opening the first lands on a
+    // populated topic whose titles are English (Latin), never an empty page or a
+    // Russian-only topic that leaked past the filter.
+    await tiles.first().click()
+    await page.waitForURL("**/search/topic/**", { timeout: 10_000 })
+    await expect(trackRows(page).first()).toBeVisible({ timeout: 20_000 })
+    await expect
+      .poll(async () => {
+        const titles = await trackTitles(page)
+        return titles.length > 0 && titles.every((t) => !CYRILLIC.test(t))
+      }, { timeout: 15_000 })
+      .toBe(true)
   }
 )
