@@ -54,6 +54,13 @@ export const useDownloadStore = defineStore("downloads", () => {
   const queuedTrackIds = new Set<TrackId>()
   let queueDraining = false
   let hydrated = false
+  // Coalesce concurrent hydrate() calls (Home + Search + Settings all call it
+  // defensively on mount) and back off after a failure, so a hard-failing DB
+  // doesn't re-run failStaleDownloads() (a write) + listReady() on every screen
+  // access — a tight retry-storm against an already-broken DB.
+  let hydratePromise: Promise<void> | null = null
+  let lastHydrateFailAt = 0
+  const HYDRATE_RETRY_COOLDOWN_MS = 30_000
   // Bumped by reset() so an in-flight task started before the wipe
   // cannot write back into the freshly-emptied state maps. Every task
   // captures the epoch at start and gates its state writes on a match.
@@ -92,23 +99,34 @@ export const useDownloadStore = defineStore("downloads", () => {
    */
   async function hydrate(): Promise<void> {
     if (hydrated) return
-    try {
-      const repo = app.repositories().mediaItems
-      // Recover rows the previous session left at "downloading" because
-      // the app was force-closed or crashed mid-transfer. Without this
-      // the Download button stays locked-out (downloadMedia rejects with
-      // already-in-progress) until the user wipes data.
-      await repo.failStaleDownloads()
-      const ready = await repo.listReady()
-      const next = new Map<TrackId, DownloadState>()
-      for (const item of ready) next.set(item.trackId, "completed")
-      states.value = next
-      hydrated = true
-      hydrationError.value = null
-    } catch (err) {
-      console.error("[downloads] hydrate failed:", err)
-      hydrationError.value = err instanceof Error ? err.message : String(err)
-    }
+    if (hydratePromise) return hydratePromise
+    // Back off after a recent failure instead of re-hammering a broken DB on
+    // every screen that defensively calls hydrate().
+    if (lastHydrateFailAt && Date.now() - lastHydrateFailAt < HYDRATE_RETRY_COOLDOWN_MS) return
+    hydratePromise = (async () => {
+      try {
+        const repo = app.repositories().mediaItems
+        // Recover rows the previous session left at "downloading" because
+        // the app was force-closed or crashed mid-transfer. Without this
+        // the Download button stays locked-out (downloadMedia rejects with
+        // already-in-progress) until the user wipes data.
+        await repo.failStaleDownloads()
+        const ready = await repo.listReady()
+        const next = new Map<TrackId, DownloadState>()
+        for (const item of ready) next.set(item.trackId, "completed")
+        states.value = next
+        hydrated = true
+        hydrationError.value = null
+        lastHydrateFailAt = 0
+      } catch (err) {
+        console.error("[downloads] hydrate failed:", err)
+        hydrationError.value = err instanceof Error ? err.message : String(err)
+        lastHydrateFailAt = Date.now()
+      } finally {
+        hydratePromise = null
+      }
+    })()
+    return hydratePromise
   }
 
   /**
@@ -453,6 +471,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     prefetchQueue.length = 0
     queuedTrackIds.clear()
     hydrated = false
+    lastHydrateFailAt = 0
   }
 
   return {
