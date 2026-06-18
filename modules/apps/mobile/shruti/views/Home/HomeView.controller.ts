@@ -58,6 +58,12 @@ export function useHomeController(): HomeControllerReturn {
     if (downloads.hydrationError) {
       void toast.error(t("errors.downloadsCacheUnavailable"))
     }
+    // A dictionary load failure degrades silently otherwise — author /
+    // location / topic labels render as raw ids or blanks and the Search
+    // filters come up empty, with nothing telling the user why. Surface it.
+    if (dictionaries.error) {
+      void toast.error(t("errors.dictionariesUnavailable"))
+    }
     playlist.prefetchAll()
   })
 

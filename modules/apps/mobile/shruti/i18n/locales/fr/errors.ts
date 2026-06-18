@@ -6,4 +6,5 @@ export default {
     "Impossible de lire l'index de vos téléchargements. Les fichiers en cache sont toujours sur le disque.",
   trackNotFound: "Conférence introuvable.",
   languageListUnavailable: "Impossible de charger les langues — liste réduite affichée.",
+  dictionariesUnavailable: "Impossible de charger les noms — certaines étiquettes peuvent manquer.",
 }

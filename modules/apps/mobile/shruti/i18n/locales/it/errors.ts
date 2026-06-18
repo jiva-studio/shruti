@@ -5,4 +5,5 @@ export default {
     "Impossibile leggere l'indice dei download. I file in cache sono ancora sul dispositivo.",
   trackNotFound: "Traccia non trovata.",
   languageListUnavailable: "Impossibile caricare le lingue — mostro un elenco ridotto.",
+  dictionariesUnavailable: "Impossibile caricare i nomi — alcune etichette potrebbero mancare.",
 }

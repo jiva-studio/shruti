@@ -1,3 +1,4 @@
+import { addColumnIfMissing } from "./columns.js"
 import type { Migration } from "./types.js"
 
 /**
@@ -21,7 +22,7 @@ import type { Migration } from "./types.js"
 export const migration_009_chat_sessions_track_id: Migration = {
   name: "009_chat_sessions_track_id",
   up: async (db) => {
-    await db.execute("ALTER TABLE chat_sessions ADD COLUMN track_id TEXT")
+    await addColumnIfMissing(db, "chat_sessions", "track_id", "track_id TEXT")
     await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_chat_sessions_track_id_updated " +
         "ON chat_sessions(track_id, updated_at DESC) WHERE track_id IS NOT NULL"

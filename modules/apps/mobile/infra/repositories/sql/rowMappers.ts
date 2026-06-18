@@ -82,6 +82,12 @@ function narrowMediaState(raw: string): MediaItemState {
     case "failed":
       return raw
     default:
-      throw new Error(`Invalid media_items.state value: ${raw}`)
+      // An unexpected state (a row written by a newer build, or a partially
+      // migrated row) must not throw and blank the playlist / downloads view.
+      // Fall back to "failed" — the media is treated as not available and is
+      // re-downloadable — and warn, mirroring narrowAudioKind in the content
+      // row mappers.
+      console.warn(`Unexpected media_items.state value "${raw}"; treating as "failed"`)
+      return "failed"
   }
 }
