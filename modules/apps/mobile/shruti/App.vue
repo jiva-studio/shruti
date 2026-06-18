@@ -72,7 +72,9 @@ import { computed, provide, useTemplateRef } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import router from "@shruti/router/index.js"
 import { TRACK_META_CONFIG_KEY } from "@ui/components/tracks/list/index.js"
-import { FILES_STORAGE_KEY } from "@ui/primitives/index.js"
+import { ASSET_FAILOVER_KEY, FILES_STORAGE_KEY } from "@ui/primitives/index.js"
+import { getRegions } from "@shruti/services/regionsRegistry.js"
+import { createAssetFailover } from "@shruti/services/withAssetRegionFailover.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
@@ -149,6 +151,18 @@ const showPlayerProgress = computed(() => showPlayerProgressConfig.value)
 // preference live; non-subscribers always get the default layout.
 provide(TRACK_META_CONFIG_KEY, useTrackMetadataFields().config)
 provide(FILES_STORAGE_KEY, app.filesStorage)
+// Last-resort CDN region failover for covers/avatars: when the active region
+// can't serve an asset (and same-region retries are spent), try the others and
+// promote the one that works so streaming / transcripts follow it too.
+provide(
+  ASSET_FAILOVER_KEY,
+  createAssetFailover({
+    getRegions,
+    getActiveServer: () => app.activeServer.value,
+    promote: (id) => app.setActiveServerById(id),
+    fetch: (url) => app.filesStorage.get(url),
+  })
+)
 
 const playButtonSize = app.platform === "android" ? 48 : 44
 

@@ -1,5 +1,5 @@
 import { ref, watch, onUnmounted, inject, type Ref } from "vue"
-import { FILES_STORAGE_KEY } from "./filesStorageKey.js"
+import { ASSET_FAILOVER_KEY, FILES_STORAGE_KEY } from "./filesStorageKey.js"
 
 export interface UseCachedImageUrlReturn {
   /** Locally-cached src for `<img>`, or undefined until the first resolve. */
@@ -33,11 +33,16 @@ const RETRY_BACKOFF_MS = 250
  */
 export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedImageUrlReturn {
   const filesStorage = inject(FILES_STORAGE_KEY, null)
+  // Last-resort CDN region failover (see ASSET_FAILOVER_KEY). Optional — tests
+  // and the no-cache path run without it.
+  const assetFailover = inject(ASSET_FAILOVER_KEY, null)
   const src = ref<string | undefined>(undefined)
   let objectUrl: string | undefined
   let token = 0
   // Attempts already spent on the current url (reset on every url change).
   let attempts = 0
+  // Whether the one-shot region failover has run for the current url.
+  let failoverTried = false
 
   function revoke(): void {
     if (objectUrl?.startsWith("blob:")) URL.revokeObjectURL(objectUrl)
@@ -58,6 +63,7 @@ export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedIma
     revoke()
     src.value = undefined
     attempts = 0
+    failoverTried = false
     if (!url) return
     if (!filesStorage) {
       // No cache wired (e.g. tests) — load the remote URL directly.
@@ -100,12 +106,32 @@ export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedIma
   // if we still have attempts left; otherwise gives up quietly.
   function retry(): void {
     const url = remote.value
-    if (!url || !filesStorage || attempts >= MAX_ATTEMPTS) return
-    const current = token
-    void (async () => {
-      await delay(RETRY_BACKOFF_MS * attempts, current)
-      await attempt(url, current)
-    })()
+    if (!url) return
+    // Same-region retry while we still have attempts left.
+    if (filesStorage && attempts < MAX_ATTEMPTS) {
+      const current = token
+      void (async () => {
+        await delay(RETRY_BACKOFF_MS * attempts, current)
+        await attempt(url, current)
+      })()
+      return
+    }
+    // Exhausted same-region attempts AND the raw-url fallback failed too — the
+    // active CDN region looks unreachable for this asset. Last resort: ask the
+    // injected failover to serve it from another region (and promote that
+    // region so streaming / other covers follow). One-shot per url.
+    if (assetFailover && !failoverTried) {
+      failoverTried = true
+      const current = token
+      void (async () => {
+        const local = await assetFailover(url).catch(() => null)
+        if (local && current === token) {
+          revoke()
+          objectUrl = local
+          src.value = local
+        }
+      })()
+    }
   }
 
   watch(remote, (u) => void load(u), { immediate: true })
