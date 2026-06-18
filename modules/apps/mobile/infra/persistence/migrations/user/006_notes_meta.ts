@@ -1,3 +1,4 @@
+import { addColumnIfMissing } from "./columns.js"
 import type { Migration } from "./types.js"
 
 /**
@@ -10,6 +11,6 @@ import type { Migration } from "./types.js"
 export const migration_006_notes_meta: Migration = {
   name: "006_notes_meta",
   up: async (db) => {
-    await db.execute("ALTER TABLE notes ADD COLUMN meta TEXT")
+    await addColumnIfMissing(db, "notes", "meta", "meta TEXT")
   },
 }
