@@ -1,4 +1,5 @@
 import { test, expect } from "../support/test.js"
+import { qase } from "playwright-qase-reporter"
 import { boot } from "../support/bootstrap.js"
 import { gotoTab, trackRows, trackTitles, CYRILLIC, editLibraryLanguages } from "../support/nav.js"
 
@@ -16,7 +17,7 @@ import { gotoTab, trackRows, trackTitles, CYRILLIC, editLibraryLanguages } from 
  * non-empty — under the bug the English-named card opened onto an empty list.
  */
 test(
-  "collection · follows the library language, not the interface language",
+  qase([41, 36], "collection · follows the library language, not the interface language"),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Interface stays English; only the library content language flips to Russian.
