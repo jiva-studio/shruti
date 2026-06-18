@@ -49,6 +49,25 @@ export function resolveTrackTitle(
 }
 
 /**
+ * Pick a display language from an ordered list of candidate languages: the UI
+ * language when it is one of the candidates, otherwise the first candidate.
+ * `undefined` when there are no candidates.
+ *
+ * This is the one selection rule shared by {@link preferredContentLanguage} and
+ * {@link preferredLibraryLanguage} — selection is candidate-driven, and the UI
+ * language only ORDERS an already-chosen set, never widens it. The two callers
+ * differ only in how they build the candidate list and what they fall back to.
+ */
+function preferLanguageAmong(
+  candidates: readonly LanguageCode[],
+  uiLanguage?: LanguageCode
+): LanguageCode | undefined {
+  if (candidates.length === 0) return undefined
+  if (uiLanguage && candidates.includes(uiLanguage)) return uiLanguage
+  return candidates[0]
+}
+
+/**
  * The content language to DISPLAY a track in (title / transcript / audio):
  * a library language the track actually has a variant in, else the track's own
  * first variant language. `undefined` only for a track with no variants.
@@ -60,11 +79,8 @@ export function resolveTrackTitle(
  * blank or in a language it doesn't have). NOT for labels (author/location/
  * source names, dates) — those follow the UI language.
  *
- * When several library languages match (both selected AND the track has both),
- * the tie is broken by `uiLanguage`: among equally-valid library languages,
- * prefer the one the user reads the interface in; otherwise the first in library
- * priority order. Selection stays 100% library-driven — the UI language only
- * orders an already-chosen set.
+ * Candidates are the library languages the track ACTUALLY has a variant in; the
+ * `uiLanguage` only breaks a tie among them (see {@link preferLanguageAmong}).
  */
 export function preferredContentLanguage(
   track: Pick<Track, "variants">,
@@ -73,7 +89,26 @@ export function preferredContentLanguage(
 ): LanguageCode | undefined {
   // Library languages the track actually has, in library priority order.
   const candidates = libraryLanguages.filter((l) => track.variants.some((v) => v.language === l))
-  if (candidates.length === 0) return track.variants[0]?.language
-  if (uiLanguage && candidates.includes(uiLanguage)) return uiLanguage
-  return candidates[0]
+  return preferLanguageAmong(candidates, uiLanguage) ?? track.variants[0]?.language
+}
+
+/**
+ * The single language to load a language-scoped library entity — a collection
+ * or collection group — in. Same selection rule as
+ * {@link preferredContentLanguage}, but these entities are curated per language
+ * and exist in EVERY library language, so there are no per-entity variants to
+ * intersect: the candidate set IS the selected library languages, and the
+ * fallback (no library language selected) is the UI language rather than a
+ * track variant.
+ *
+ * Selection follows the library languages, NOT the interface locale: with the
+ * library set to Russian on an English UI this returns `ru`, so the user sees
+ * the Russian collection and its Russian lectures rather than an English
+ * collection whose lectures are then all filtered out as off-language.
+ */
+export function preferredLibraryLanguage(
+  libraryLanguages: readonly LanguageCode[],
+  uiLanguage: LanguageCode
+): LanguageCode {
+  return preferLanguageAmong(libraryLanguages, uiLanguage) ?? uiLanguage
 }

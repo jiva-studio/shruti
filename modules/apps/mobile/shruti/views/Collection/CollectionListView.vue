@@ -35,7 +35,7 @@ import { FlatHeader } from "@ui/primitives/index.js"
 import { CollectionListItem } from "@ui/features/collections/index.js"
 import RowDivider from "@ui/components/RowDivider.vue"
 import { useShruti } from "@shruti/shruti.js"
-import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useCollectionLanguage } from "@shruti/composables/useCollectionLanguage.js"
 import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 
 const props = defineProps<{ groupId?: string }>()
@@ -43,7 +43,8 @@ const props = defineProps<{ groupId?: string }>()
 const { t } = useI18n()
 const router = useRouter()
 const app = useShruti()
-const appLanguage = useAppLanguage()
+// Collections follow the chosen library content language, not the UI locale.
+const collectionLanguage = useCollectionLanguage()
 
 interface Row {
   id: string
@@ -91,7 +92,7 @@ async function load(groupId: string | undefined, locale: string): Promise<void> 
 }
 
 watch(
-  () => [props.groupId, appLanguage.value] as const,
+  () => [props.groupId, collectionLanguage.value] as const,
   ([groupId, locale]) => void load(groupId, locale),
   { immediate: true }
 )

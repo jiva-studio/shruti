@@ -71,6 +71,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
+import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
 import { addTracksToPlaylist } from "@usecases"
 import { useToast } from "@kit/composables"
 import type { LanguageCode, TopicId, TrackId } from "@lib/domain/core.js"
@@ -183,8 +184,16 @@ async function load(kind: string, id: string, locale: string): Promise<void> {
   }
 }
 
+// A collection is curated per language, so load it in the library content
+// language (UI locale only as a tie-breaker). Loading it in the UI language
+// while the library is set elsewhere returns off-language track ids that the
+// library-language filter below then drops — the "empty collection" bug.
+const collectionLanguage = computed(() =>
+  preferredLibraryLanguage(libraryLanguages.value, appLanguage.value)
+)
+
 watch(
-  () => [props.id, props.kind ?? "collection", appLanguage.value, libraryLanguages.value] as const,
+  () => [props.id, props.kind ?? "collection", collectionLanguage.value] as const,
   ([id, kind, locale]) => void load(kind, id, locale),
   { immediate: true }
 )

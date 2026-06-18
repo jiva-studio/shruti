@@ -75,6 +75,25 @@ export function libraryLanguageDialog(page: Page): Locator {
   return page.locator("ion-modal.selector-dialog", { has: page.locator("ion-checkbox") })
 }
 
+/**
+ * Edit the library-language set via Settings → Library (the multi-select
+ * checkbox dialog). `add`/`remove` match a checkbox by its label text. Leaves
+ * the app on the Settings tab. Shared by the content-language specs (topic,
+ * collection) that flip the library language while the UI language stays put.
+ */
+export async function editLibraryLanguages(
+  page: Page,
+  opts: { add?: string | RegExp; remove?: string | RegExp }
+): Promise<void> {
+  await gotoTab(page, "settings")
+  await libraryLanguageRow(page).click()
+  const dialog = libraryLanguageDialog(page)
+  await expect(dialog.locator("ion-checkbox").first()).toBeVisible({ timeout: 10_000 })
+  if (opts.add) await dialog.locator("ion-checkbox", { hasText: opts.add }).click()
+  if (opts.remove) await dialog.locator("ion-checkbox", { hasText: opts.remove }).click()
+  await dialog.getByRole("button", { name: /apply|примен/i }).click()
+}
+
 /** The per-track detail bottom sheet (TrackSheet). */
 export function trackSheet(page: Page): Locator {
   return page.locator("ion-modal.track-sheet")
