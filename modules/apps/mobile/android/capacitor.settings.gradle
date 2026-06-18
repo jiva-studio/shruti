@@ -47,5 +47,8 @@ project(':lectorium-plugin-media-downloader').projectDir = new File('../../../pl
 include ':revenuecat-purchases-capacitor'
 project(':revenuecat-purchases-capacitor').projectDir = new File('../node_modules/@revenuecat/purchases-capacitor/android')
 
+include ':sentry-capacitor'
+project(':sentry-capacitor').projectDir = new File('../node_modules/@sentry/capacitor/android')
+
 include ':capacitor-plugin-safe-area'
 project(':capacitor-plugin-safe-area').projectDir = new File('../node_modules/capacitor-plugin-safe-area/android')
