@@ -1494,8 +1494,8 @@
     "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a share_pdf body listing \"The Eternal Soul\".",
     "steps": [
       {
-        "action": "Ask \"Make a PDF of this lecture\" in chat.",
-        "expected": "The answer renders a share-PDF card listing \"The Eternal Soul\" to export."
+        "action": "Ask \"make a PDF of this lecture\" in chat.",
+        "expected": "A share-PDF card renders listing the lecture as an enabled, tappable export row."
       }
     ],
     "tags": [
@@ -1511,8 +1511,8 @@
     "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a \"Chapter 3: Karma-linux-client\" chapter body.",
     "steps": [
       {
-        "action": "Ask \"Which chapter is about karma-linux-client?\" in chat.",
-        "expected": "The answer renders a chapter list whose items name the chapter's topics (karma / action / work)."
+        "action": "Ask a \"which chapter…\" question in chat.",
+        "expected": "A chapter-list card renders: the first item names the chapter topic and the list shows the expected chapter rows."
       }
     ],
     "tags": [
@@ -1576,112 +1576,28 @@
       "e2e"
     ]
   },
-  "91": {
-    "suite_id": 24,
-    "automation": 2,
-    "title": "Chapter marker renders as a chapter list",
-    "description": "Verifies the WIDGET, not the answer prose: a chapter marker in an answer upgrades into a full chapter list (its chapter/verse rows), not a bare chip. Offline — mocked SSE.",
-    "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a \"Chapter 3: Karma-linux-client\" chapter body with verse rows.",
-    "steps": [
-      {
-        "action": "Ask \"Which chapter is about karma-linux-client?\" in chat.",
-        "expected": "The chapter marker renders as a chapter list whose rows name the chapter's verses/topics."
-      }
-    ],
-    "tags": [
-      "chat",
-      "e2e"
-    ]
-  },
-  "92": {
-    "suite_id": 24,
-    "automation": 2,
-    "title": "Share-PDF marker renders an actionable card row",
-    "description": "Verifies the WIDGET: the share-PDF card lists each lecture as an actionable row that triggers the native share (a no-op on web; we assert it's an enabled, tappable control — not a bare chip). Offline — mocked SSE.",
-    "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a share_pdf body listing \"On Detachment\".",
-    "steps": [
-      {
-        "action": "Ask \"Share this as a PDF\" in chat.",
-        "expected": "The share-PDF card lists \"On Detachment\" as an actionable row (tap fires the native share)."
-      }
-    ],
-    "tags": [
-      "chat",
-      "e2e"
-    ]
-  },
   "93": {
     "suite_id": 25,
     "automation": 2,
-    "title": "Open chat history sheet",
+    "title": "Chat history: open, resume, new session, delete",
     "description": "Verifies the WIDGET, not session content: opening the history sheet renders the prior-sessions list. Offline — fixture-seeded session, no backend.",
     "preconditions": "Seeded offline chat history containing a \"What is the soul?\" session. No network.",
     "steps": [
       {
         "action": "Open the chat history sheet from the chat header.",
-        "expected": "The history sheet opens and the seeded prior session is listed."
-      }
-    ],
-    "tags": [
-      "chat",
-      "free",
-      "e2e"
-    ]
-  },
-  "94": {
-    "suite_id": 25,
-    "automation": 2,
-    "title": "Prior session listed in history",
-    "description": "Verifies the WIDGET, not session content: the history list renders an existing prior session entry. Offline — fixture-seeded; covered by the same test as opening the history sheet.",
-    "preconditions": "Seeded offline chat history containing a \"What is the soul?\" session. No network.",
-    "steps": [
-      {
-        "action": "Open the chat history sheet.",
-        "expected": "The seeded prior session appears as an entry in the history list."
-      }
-    ],
-    "tags": [
-      "chat",
-      "free",
-      "e2e"
-    ]
-  },
-  "95": {
-    "suite_id": 25,
-    "automation": 2,
-    "title": "Start a new session from a prior one",
-    "description": "Verifies the WIDGET, not session content: starting a new session clears the chat back to the empty/welcome state (suggestion chips) while the prior session stays in history. Offline — fixture-seeded, no backend.",
-    "preconditions": "Seeded offline chat history containing a \"What is the soul?\" session. No network.",
-    "steps": [
-      {
-        "action": "Open the seeded prior session from history.",
-        "expected": "The session loads and the New chat button is shown."
+        "expected": "The seeded prior session(s) are listed."
       },
       {
-        "action": "Tap New chat.",
-        "expected": "The chat returns to the empty state (suggestion chips visible) and the prior session is still listed in history."
-      }
-    ],
-    "tags": [
-      "chat",
-      "free",
-      "e2e"
-    ]
-  },
-  "96": {
-    "suite_id": 25,
-    "automation": 2,
-    "title": "Delete a session from the history list",
-    "description": "Verifies the WIDGET, not session content: opening the history sheet lists the seeded sessions, then swiping a session open and tapping its delete (danger) option removes it, shrinking the list by one. Offline — fixture-seeded, no backend.",
-    "preconditions": "Seeded offline chat history with at least one session. No network.",
-    "steps": [
-      {
-        "action": "Open the chat history sheet from the chat header.",
-        "expected": "The history sheet opens and the seeded sessions are listed (at least one entry)."
+        "action": "Open the prior \"What is the soul?\" session.",
+        "expected": "Its conversation loads."
       },
       {
-        "action": "Swipe the first session open and tap its delete (danger) option.",
-        "expected": "That session is removed and the list count drops by one."
+        "action": "Start a new chat.",
+        "expected": "The empty/welcome state with suggestion chips is shown."
+      },
+      {
+        "action": "Re-open history and delete a session.",
+        "expected": "The session is removed — the list count drops by one."
       }
     ],
     "tags": [
@@ -2243,61 +2159,25 @@
   "123": {
     "suite_id": 17,
     "automation": 2,
-    "title": "Open and close the Help dialog",
+    "title": "Help: open the dialog, read a page, close, and follow the app language",
     "description": "Verifies the Help dialog opens from Settings with a populated table of contents and closes cleanly. Offline.",
     "preconditions": "App booted in English, on the Settings tab.",
     "steps": [
       {
-        "action": "Tap \"Open help\" in Settings.",
-        "expected": "The Help dialog opens with a table of contents listing help pages."
+        "action": "Open the Help dialog from Settings.",
+        "expected": "The dialog opens with a table of contents of help pages."
       },
       {
-        "action": "Tap the close button.",
-        "expected": "The Help dialog is hidden."
-      }
-    ],
-    "tags": [
-      "help",
-      "free",
-      "e2e"
-    ]
-  },
-  "124": {
-    "suite_id": 17,
-    "automation": 2,
-    "title": "Open a help page and go back to the table of contents",
-    "description": "Verifies opening a help page renders its markdown body, and Back returns to the table of contents. Offline.",
-    "preconditions": "App booted in English, on the Settings tab.",
-    "steps": [
-      {
-        "action": "Open \"Open help\" from Settings, then tap the first page in the table of contents.",
-        "expected": "The page's markdown body renders."
+        "action": "Open the first help page.",
+        "expected": "Its markdown body renders."
       },
       {
-        "action": "Tap Back.",
-        "expected": "The markdown body is hidden and the table of contents is shown again."
-      }
-    ],
-    "tags": [
-      "help",
-      "free",
-      "e2e"
-    ]
-  },
-  "125": {
-    "suite_id": 17,
-    "automation": 2,
-    "title": "Help content follows the app language",
-    "description": "Booted in Russian, the Help dialog's table of contents renders in Russian (Cyrillic). Offline.",
-    "preconditions": "App booted in Russian, on the Settings tab.",
-    "steps": [
-      {
-        "action": "Tap \"Открыть справку\" in Settings.",
-        "expected": "The Help dialog (ion-modal.help-dialog) opens and becomes visible."
+        "action": "Go back, then close the dialog.",
+        "expected": "The table of contents returns, then the dialog closes cleanly."
       },
       {
-        "action": "Inspect the Help dialog's table of contents list.",
-        "expected": "The table of contents text is in Cyrillic, matching the Russian app language."
+        "action": "Re-open the dialog in Russian.",
+        "expected": "The table of contents text is Cyrillic, matching the app language."
       }
     ],
     "tags": [
