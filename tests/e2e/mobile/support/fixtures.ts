@@ -19,11 +19,17 @@ export type Locale = "en" | "ru"
 /** Which seeded user.db a test loads (mirrors the generator's strategy names):
  *  - "preseed" — playlist + listening history + notes + chat (the default).
  *  - "clean"   — schema + config only; for specs that bring their own state, so
- *    their screenshots show an empty home instead of the seeded dataset. */
-export type UserDbStrategy = "preseed" | "clean"
+ *    their screenshots show an empty home instead of the seeded dataset.
+ *  - "single"  — exactly one queued, downloaded track; for "play the first
+ *    queued track" specs that need one track, not the full demo queue. */
+export type UserDbStrategy = "preseed" | "clean" | "single"
 
 /** Filename suffix per strategy — must match generate-fixtures STRATEGIES. */
-const USER_DB_SUFFIX: Record<UserDbStrategy, string> = { preseed: "", clean: ".clean" }
+const USER_DB_SUFFIX: Record<UserDbStrategy, string> = {
+  preseed: "",
+  clean: ".clean",
+  single: ".single",
+}
 
 export function userDbPath(locale: Locale, strategy: UserDbStrategy = "preseed"): string {
   return path.resolve(FIXTURES_DIR, `user-${locale}${USER_DB_SUFFIX[strategy]}.db`)
@@ -51,6 +57,8 @@ const REQUIRED_FIXTURES = [
   userDbPath("ru"),
   userDbPath("en", "clean"),
   userDbPath("ru", "clean"),
+  userDbPath("en", "single"),
+  userDbPath("ru", "single"),
 ]
 
 /** Fixtures that haven't been prepared yet (gitignored binaries). */

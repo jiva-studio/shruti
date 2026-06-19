@@ -184,6 +184,22 @@ const STRATEGIES = {
       console.log("  clean strategy — schema + config only (no playlist/history/notes/chat)")
     },
   },
+  /** One queued, downloaded track and nothing else — for "play the first queued
+   *  track" specs (player / transcript / notes / mixer) that need exactly one
+   *  track. Keeps the Home queue a single row instead of the full demo set, so
+   *  the player screenshots aren't buried under nine seeded lectures. */
+  single: {
+    suffix: ".single",
+    seed: async (db, args, rng) => {
+      const [track] = playlistTracksFor(args.locale)
+      await db.execute(
+        "INSERT INTO playlist_items (id, track_id, added_at, archived_at) VALUES (?, ?, ?, NULL)",
+        [`pli_${nanoId(rng)}`, track, args.now]
+      )
+      await seedMediaItems(db, args, [track!], rng)
+      console.log(`  single strategy — 1 queued track (${track}), no history/notes/chat`)
+    },
+  },
 } satisfies Record<string, Strategy>
 
 type StrategyName = keyof typeof STRATEGIES

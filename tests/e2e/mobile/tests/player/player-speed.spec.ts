@@ -14,7 +14,7 @@ test(
   qase(56, caseTitle(56)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "single" })
     await playFirstQueuedTrack(page)
 
     await step(page, 56, 0, async (capture) => {

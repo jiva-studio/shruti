@@ -5,7 +5,7 @@ import { gotoTab, playFirstQueuedTrack, settingToggle } from "../../support/nav.
 import { step, caseTitle } from "../../support/steps.js"
 
 test(qase(117, caseTitle(117)), { tag: ["@offline", "@settings"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { userDb: "single" })
   await gotoTab(page, "settings")
 
   await step(page, 117, 0, async () => {

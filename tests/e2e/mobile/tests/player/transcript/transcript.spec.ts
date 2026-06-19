@@ -5,7 +5,7 @@ import { playFirstQueuedTrack } from "../../../support/nav.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 test(qase(60, caseTitle(60)), { tag: ["@offline", "@transcript"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { userDb: "single" })
   await playFirstQueuedTrack(page)
 
   const dialog = page.locator("ion-modal.transcript-dialog")

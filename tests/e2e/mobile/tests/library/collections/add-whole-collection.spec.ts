@@ -11,9 +11,10 @@ test(
   qase(40, caseTitle(40)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
-    await boot(page)
-    await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
-    const before = await playlistRows(page).count()
+    // Empty playlist (clean user.db): after "Add all" the queue holds exactly
+    // the collection's (language-filtered) lectures — the screenshot is the
+    // batch we added, not a seeded queue plus the batch.
+    await boot(page, "en", { userDb: "clean" })
 
     await gotoTab(page, "search")
     const card = page.locator(".carousel-section .collection-card").first()
@@ -39,7 +40,7 @@ test(
       await gotoTab(page, "home")
       await expect
         .poll(() => playlistRows(page).count(), { timeout: 15_000 })
-        .toBeGreaterThan(before)
+        .toBeGreaterThan(0)
     })
   }
 )

@@ -11,27 +11,20 @@ test(
   qase(33, caseTitle(33)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
-    await boot(page)
+    // Empty playlist (clean user.db): the queue starts at zero, so the two
+    // tracks we add are the only rows on Home — the screenshot shows exactly
+    // what the test did, with no seeded queue to disambiguate against.
+    await boot(page, "en", { userDb: "clean" })
 
-    let before = 0
+    const added: string[] = []
     await step(page, 33, 0, async () => {
-      await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
-      const queued = (await playlistRows(page).allInnerTexts()).map((t) => t.trim())
-      before = queued.length
-
       await openLibrary(page)
 
-      // Pick the first two library rows that aren't already queued.
+      // The playlist is empty, so the first two library rows are both un-queued.
       const rows = trackRows(page)
-      const n = await rows.count()
-      const picks: number[] = []
-      for (let i = 0; i < n && picks.length < 2; i++) {
-        const text = (await rows.nth(i).innerText()).trim()
-        if (!queued.includes(text)) picks.push(i)
-      }
-      expect(picks.length, "expected at least two un-queued lectures in the library").toBe(2)
-
-      for (const idx of picks) {
+      await expect(rows.first()).toBeVisible({ timeout: 20_000 })
+      for (const idx of [0, 1]) {
+        added.push((await rows.nth(idx).locator(".title").innerText()).trim())
         await openTrackSheet(page, rows.nth(idx))
         await trackSheet(page).locator(".add-btn").click()
         await expect(trackSheet(page)).toBeHidden()
@@ -40,7 +33,12 @@ test(
 
     await step(page, 33, 1, async () => {
       await gotoTab(page, "home")
-      await expect.poll(() => playlistRows(page).count(), { timeout: 15_000 }).toBe(before + 2)
+      // Started empty → the queue is exactly the two tracks we added.
+      await expect.poll(() => playlistRows(page).count(), { timeout: 15_000 }).toBe(2)
+      const titles = (await playlistRows(page).allInnerTexts()).map((t) => t.trim())
+      for (const a of added) {
+        expect(titles.some((t) => t.includes(a)), `queue should contain "${a}"`).toBe(true)
+      }
     })
   }
 )

@@ -39,7 +39,7 @@ test(
   qase(72, caseTitle(72)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "single" })
     await playFirstQueuedTrack(page)
 
     let engaged = 0
@@ -68,7 +68,7 @@ test(
   qase(70, caseTitle(70)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "single" })
     await playFirstQueuedTrack(page)
 
     await step(page, 70, 0, async (capture) => {
