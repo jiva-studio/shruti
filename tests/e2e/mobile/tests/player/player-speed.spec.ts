@@ -2,6 +2,7 @@ import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
 import { playFirstQueuedTrack } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 // The playback-speed slider snaps to presets (0.75…2.0). It lives on the
 // floating player's carousel (page 3 of 3), drag-only by its puck. We drive it
@@ -10,12 +11,13 @@ import { playFirstQueuedTrack } from "../../support/nav.js"
 // page. On release the value commits to the nearest preset and persists to the
 // audio config; we assert that persisted value.
 test(
-  qase(56, "Change playback speed with snap to presets"),
+  qase(56, caseTitle(56)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
     await boot(page)
     await playFirstQueuedTrack(page)
 
+    await step(page, 56, 0, async () => {
     const slider = page.locator(".speed-skip-panel .speed-slider")
     const trackEl = slider.locator(".track")
     const puck = slider.locator(".puck")
@@ -55,5 +57,6 @@ test(
         { timeout: 10_000 }
       )
       .toBe(1.5)
+    })
   }
 )

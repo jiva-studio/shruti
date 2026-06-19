@@ -376,18 +376,18 @@
   },
   "19": {
     "suite_id": 19,
-    "automation": 0,
-    "title": "Completed track shows a persistent double-check",
-    "description": "Manual: a track listened to completion shows the completed double-check indicator across the playlist, Search and Library; the badge persists after archiving, and re-adding the track starts a fresh entry from 0 (progress resets on re-add).",
-    "preconditions": "A track has been listened to completion.",
+    "automation": 2,
+    "title": "Re-adding a completed track starts a fresh pass but keeps the library badge",
+    "description": "Regression guard (SHRUTI-18/19): archiving a completed track and re-adding it queues a FRESH pass — the new queue row carries no completed double-check — while the library keeps its lifetime completion badge. Offline.",
+    "preconditions": "Offline boot (full catalog) with a completed track in the queue.",
     "steps": [
       {
-        "action": "View a completed track in the playlist and in Search/Library.",
-        "expected": "It shows the completed double-check indicator in every surface, and the badge persists even after the track is archived."
+        "action": "Confirm the completed track shows the double-check in the queue, then swipe-archive it.",
+        "expected": "The completed double-check is shown; after archiving, the track leaves the active queue."
       },
       {
-        "action": "Re-add the same track after it was completed and archived.",
-        "expected": "It comes back as a fresh entry starting from 0 — the old completed position is NOT resumed (progress resets on re-add)."
+        "action": "Re-add the track from the library and return to Home.",
+        "expected": "The library row still shows the lifetime completion badge, but the re-added queue row is a fresh pass with no completed double-check."
       }
     ],
     "tags": [
@@ -518,17 +518,13 @@
   "26": {
     "suite_id": 20,
     "automation": 2,
-    "title": "Source filter re-queries the list and lights the filter badge",
-    "description": "Two offline tests share this id. (1) In the filters sheet, dropping the seeded source and enabling a different one live re-queries so the visible title set differs from the baseline. (2) The header filter button carries the .is-active badge because boot() pins a non-seed source. Note: the test changes the Sources facet, not Authors, and does not assert a numeric badge increment.",
+    "title": "Source filter re-queries the library list",
+    "description": "Verifies applying a Sources filter live re-queries the catalog: swapping the pinned source to a different one changes the visible title set to a disjoint page of lectures. Offline.",
     "preconditions": "boot() pins source source_dsicuBsFvinZ (a non-seed dimension) with a populated, deterministic list.",
     "steps": [
       {
-        "action": "Capture the baseline titles, open the filters sheet, drill into Sources, uncheck the pinned source, enable a different source, and apply.",
-        "expected": "The list live-re-queries and the visible title set differs from the baseline."
-      },
-      {
-        "action": "Observe the header filter button (separate test).",
-        "expected": "The button shows the active-filter badge (.is-active) because a non-seed source is pinned."
+        "action": "Open the filters sheet, drill into Sources, drop the pinned source and enable a different one, and apply.",
+        "expected": "The visible title set changes to a different (disjoint) page of lectures."
       }
     ],
     "tags": [
@@ -1242,8 +1238,8 @@
   "61": {
     "suite_id": 7,
     "automation": 2,
-    "title": "Select transcript text with a touch drag to open the popover",
-    "description": "A touch-drag across the transcript opens the selection popover; its Copy action puts the selected text on the clipboard, and its Ask action hands the selection to the Chat surface. Offline (the streamed answer itself is a @live concern).",
+    "title": "Copy a transcript selection",
+    "description": "Verifies copying from the transcript: drag-selecting a passage opens the selection popover, and tapping Copy places the text on the clipboard. Offline.",
     "preconditions": "Offline (mocked). Transcript open over a playing track.",
     "steps": [
       {
@@ -1253,10 +1249,6 @@
       {
         "action": "Tap Copy in the popover.",
         "expected": "The selected transcript text is on the clipboard (non-empty)."
-      },
-      {
-        "action": "Tap Ask in the popover (separate run).",
-        "expected": "The app navigates to the Chat surface with the selection."
       }
     ],
     "tags": [
@@ -1729,10 +1721,6 @@
       {
         "action": "Open the chat tab in its empty state.",
         "expected": "The chat surface renders with an enabled composer textarea and a row of starter suggestion chips."
-      },
-      {
-        "action": "Tap a suggestion chip (@live).",
-        "expected": "A session starts: a user bubble appears and the URL carries the new session id."
       }
     ],
     "tags": [
@@ -3069,6 +3057,354 @@
       "free",
       "smoke",
       "e2e"
+    ]
+  },
+  "148": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "An English library excludes Russian lectures",
+    "description": "Verifies the library content-language facet (distinct from the UI language) scopes the catalog: on an English library every visible lecture title is Latin-script — no Russian lecture leaks in. Title script is the observable signal (titles follow the library language). Offline.",
+    "preconditions": "Offline boot with the library language seeded to English.",
+    "steps": [
+      {
+        "action": "Open the Library with the library language set to English.",
+        "expected": "The lecture list is populated and every visible title is Latin-script — no Cyrillic (Russian) titles appear."
+      }
+    ]
+  },
+  "149": {
+    "suite_id": 13,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "Switching the library language re-scopes an open topic",
+    "description": "Verifies a topic detail page re-filters live when the library language changes: opened under a Russian library it lists Russian lectures; after switching the library to English the still-open detail re-scopes so no Russian (Cyrillic) lecture remains. Offline.",
+    "preconditions": "Offline boot; the library is switched to Russian so a Russian-only topic is reachable.",
+    "steps": [
+      {
+        "action": "Under a Russian library, open the first topic.",
+        "expected": "The topic detail lists its Russian lectures (Cyrillic titles)."
+      },
+      {
+        "action": "Switch the library language to English and return to the open topic.",
+        "expected": "The detail re-scopes — no Russian (Cyrillic) lecture title remains on screen."
+      }
+    ]
+  },
+  "150": {
+    "suite_id": 13,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "Topic tiles render under a Russian library",
+    "description": "Verifies the Search-landing topic tile grid surfaces topics that have lectures in the selected library language: under a Russian library at least one topic tile renders. Offline.",
+    "preconditions": "Offline boot with the library language seeded to Russian.",
+    "steps": [
+      {
+        "action": "Open the Search landing under a Russian library.",
+        "expected": "At least one topic tile renders in the tile grid."
+      }
+    ]
+  },
+  "151": {
+    "suite_id": 13,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "Topic tiles are scoped to the English library",
+    "description": "Verifies the topic tile grid only surfaces topics consumable in the library language: under an English library, Russian-only topics collapse out — either no tiles show, or every shown tile opens onto a populated topic with English (Latin) titles, never an empty or Russian-only topic. Offline.",
+    "preconditions": "Offline boot with the library language seeded to English.",
+    "steps": [
+      {
+        "action": "Open the Search landing under an English library and let the filter hydrate.",
+        "expected": "The tile grid settles to only English-consumable topics (possibly none)."
+      },
+      {
+        "action": "If any tile is shown, open the first one.",
+        "expected": "It lands on a populated topic whose titles are all English (Latin) — never an empty page or a Russian-only topic."
+      }
+    ]
+  },
+  "152": {
+    "suite_id": 16,
+    "automation": 2,
+    "tags": [
+      "settings",
+      "e2e"
+    ],
+    "title": "A settings toggle persists across an app reload",
+    "description": "Verifies useConfig-backed settings survive full app re-hydration: flipping \"Open transcript automatically\" and reloading the bundle restores the flipped value from IndexedDB-backed storage, not the seeded default. Offline.",
+    "preconditions": "Offline boot on the Settings screen.",
+    "steps": [
+      {
+        "action": "Flip the \"Open transcript automatically\" toggle from its seeded value.",
+        "expected": "The toggle shows the new (flipped) state."
+      },
+      {
+        "action": "Reload the app and reopen Settings.",
+        "expected": "The toggle comes back in the flipped state — the change persisted across re-hydration."
+      }
+    ]
+  },
+  "153": {
+    "suite_id": 16,
+    "automation": 2,
+    "tags": [
+      "settings",
+      "e2e"
+    ],
+    "title": "Activity tracker toggle shows and hides the Home activity card",
+    "description": "Verifies the \"Activity tracker\" setting drives the Home activity card cross-tab: turning it off removes the card from Home, turning it back on restores it. Offline.",
+    "preconditions": "Offline boot; the seeded user has playlist + history so the activity card shows by default.",
+    "steps": [
+      {
+        "action": "With the activity card visible on Home, turn \"Activity tracker\" off in Settings.",
+        "expected": "Back on Home the activity card is gone."
+      },
+      {
+        "action": "Turn \"Activity tracker\" back on.",
+        "expected": "The Home activity card returns."
+      }
+    ]
+  },
+  "154": {
+    "suite_id": 21,
+    "automation": 2,
+    "tags": [
+      "tracks",
+      "e2e"
+    ],
+    "title": "Add a library lecture to the playlist",
+    "description": "Verifies adding a not-yet-queued lecture from the library: opening its track sheet and tapping Add closes the sheet and grows the Home playlist by exactly one. Offline.",
+    "preconditions": "Offline boot; at least one library lecture is not yet in the playlist.",
+    "steps": [
+      {
+        "action": "In the library, open a not-yet-queued lecture's track sheet and tap Add.",
+        "expected": "The track sheet closes."
+      },
+      {
+        "action": "Open the Home tab.",
+        "expected": "The Up-Next playlist has grown by exactly one."
+      }
+    ]
+  },
+  "155": {
+    "suite_id": 12,
+    "automation": 2,
+    "tags": [
+      "collections",
+      "e2e"
+    ],
+    "title": "Collection contents follow the library language, not the UI locale",
+    "description": "Verifies a collection loads in the selected library content language even when the UI is a different locale: on an English UI with a Russian library, the discovery shelf card and the opened collection are both Russian and non-empty (the bug emptied it on a UI/library mismatch). Offline.",
+    "preconditions": "Offline boot, English UI, library language switched to Russian.",
+    "steps": [
+      {
+        "action": "On a Russian library / English UI, open the Russian collection card from the discovery shelf.",
+        "expected": "The shelf card is Russian (Cyrillic) and the collection detail opens with a populated track list."
+      },
+      {
+        "action": "Inspect the collection's track list.",
+        "expected": "It is non-empty and every lecture title is Russian (Cyrillic) — not emptied by the UI/library language mismatch."
+      }
+    ]
+  },
+  "156": {
+    "suite_id": 20,
+    "automation": 2,
+    "tags": [
+      "filters",
+      "e2e"
+    ],
+    "title": "A pinned filter lights the active-filter badge",
+    "description": "Verifies the header filter button shows its active-state highlight when a non-seed filter (a pinned source) is set — the pristine locale-derived language seed alone does not light it. Offline.",
+    "preconditions": "Offline boot pinning a source (a non-seed filter dimension).",
+    "steps": [
+      {
+        "action": "Open the library with a pinned source filter.",
+        "expected": "The header filter button shows the active-filter highlight (.is-active)."
+      }
+    ]
+  },
+  "157": {
+    "suite_id": 7,
+    "automation": 2,
+    "tags": [
+      "transcript",
+      "e2e"
+    ],
+    "title": "Ask about a transcript selection opens the chat",
+    "description": "Verifies the transcript selection \"Ask\" action hands the selected text to chat: selecting a passage and tapping Ask lands on the chat surface (the streamed answer itself is a live concern). Offline.",
+    "preconditions": "Offline boot with a transcript open.",
+    "steps": [
+      {
+        "action": "Select a passage in the transcript.",
+        "expected": "The selection popover appears with its actions."
+      },
+      {
+        "action": "Tap \"Ask\" on the selection.",
+        "expected": "The app navigates to the chat surface, seeded with the selected passage."
+      }
+    ]
+  },
+  "158": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "First-launch content language on a Ukrainian device (→ Russian)",
+    "description": "Verifies first-launch derivation: a Ukrainian device locale reduces to the Russian content language, and the library, filters, search and topic tiles all come up populated in that language. Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to uk-UA (no pre-seeded filter).",
+    "steps": [
+      {
+        "action": "Open the library on a fresh Ukrainian-locale install.",
+        "expected": "The lecture list is populated and every visible title is Cyrillic (Russian) — the locale reduced to Russian."
+      },
+      {
+        "action": "Open the filters sheet.",
+        "expected": "The filters sheet opens."
+      },
+      {
+        "action": "Type a no-match query, then clear it.",
+        "expected": "The list empties on no match and is restored on clear — search is wired to the derived result set."
+      },
+      {
+        "action": "Open the Search landing.",
+        "expected": "The topic tile grid surfaces topics."
+      }
+    ]
+  },
+  "159": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "First-launch content language on a Hindi device (→ English)",
+    "description": "Verifies first-launch derivation: a Hindi device locale (no Hindi lectures) reduces to the English content language, and the library, filters, search and topic tiles all come up populated in English. Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to hi-IN (no pre-seeded filter).",
+    "steps": [
+      {
+        "action": "Open the library on a fresh Hindi-locale install.",
+        "expected": "The lecture list is populated and every visible title is Latin (English) — the locale reduced to English."
+      },
+      {
+        "action": "Open the filters sheet.",
+        "expected": "The filters sheet opens."
+      },
+      {
+        "action": "Type a no-match query, then clear it.",
+        "expected": "The list empties on no match and is restored on clear — search is wired to the derived result set."
+      },
+      {
+        "action": "Open the Search landing.",
+        "expected": "The topic tile grid surfaces topics."
+      }
+    ]
+  },
+  "160": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "First-launch content language on a German device (→ English)",
+    "description": "Verifies first-launch derivation: a German device locale (no German lectures) reduces to the English content language, and the library, filters, search and topic tiles all come up populated in English. Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to de-DE (no pre-seeded filter).",
+    "steps": [
+      {
+        "action": "Open the library on a fresh German-locale install.",
+        "expected": "The lecture list is populated and every visible title is Latin (English) — the locale reduced to English."
+      },
+      {
+        "action": "Open the filters sheet.",
+        "expected": "The filters sheet opens."
+      },
+      {
+        "action": "Type a no-match query, then clear it.",
+        "expected": "The list empties on no match and is restored on clear — search is wired to the derived result set."
+      },
+      {
+        "action": "Open the Search landing.",
+        "expected": "The topic tile grid surfaces topics."
+      }
+    ]
+  },
+  "161": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "First-launch content language on a Serbian device (→ English)",
+    "description": "Verifies first-launch derivation: a Serbian device locale (no Serbian lectures) reduces to the English content language, and the library, filters, search and topic tiles all come up populated in English. Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to sr-RS (no pre-seeded filter).",
+    "steps": [
+      {
+        "action": "Open the library on a fresh Serbian-locale install.",
+        "expected": "The lecture list is populated and every visible title is Latin (English) — the locale reduced to English."
+      },
+      {
+        "action": "Open the filters sheet.",
+        "expected": "The filters sheet opens."
+      },
+      {
+        "action": "Type a no-match query, then clear it.",
+        "expected": "The list empties on no match and is restored on clear — search is wired to the derived result set."
+      },
+      {
+        "action": "Open the Search landing.",
+        "expected": "The topic tile grid surfaces topics."
+      }
+    ]
+  },
+  "162": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "Selecting multiple library languages mixes scripts",
+    "description": "Verifies that explicitly selecting both content languages broadens the library: with Russian and English both selected, the lecture list mixes Cyrillic and Latin titles. Offline.",
+    "preconditions": "Offline boot with library languages set to both Russian and English.",
+    "steps": [
+      {
+        "action": "Open the library with both Russian and English selected.",
+        "expected": "The lecture list is populated and mixes Cyrillic and Latin titles."
+      }
+    ]
+  },
+  "163": {
+    "suite_id": 13,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "A topic detail on a Ukrainian device lists Russian lectures",
+    "description": "Verifies first-launch topic scoping: on a Ukrainian device (reduced to Russian) opening the first topic lands on a populated detail whose lectures are all Russian (Cyrillic). Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to uk-UA.",
+    "steps": [
+      {
+        "action": "On a Ukrainian-locale device, open the first topic from the Search landing.",
+        "expected": "The topic detail is populated and every lecture title is Russian (Cyrillic)."
+      }
     ]
   }
 }

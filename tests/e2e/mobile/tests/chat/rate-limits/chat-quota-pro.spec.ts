@@ -3,11 +3,12 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { gotoTab } from "../../../support/nav.js"
 import { mockChatAuth, askChat } from "../../../support/chat-mock.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 // A Pro user hitting the quota gets the lock notice but NO "Upgrade to Pro" CTA
 // (unlike free). The tier comes from the JWT claim in the mocked auth.
 test(
-  qase(98, "Pro tier has a higher limit"),
+  qase(98, caseTitle(98)),
   { tag: ["@offline", "@chat"] },
   async ({ page }) => {
     await mockChatAuth(page, "pro")
@@ -24,11 +25,14 @@ test(
 
     await boot(page)
     await gotoTab(page, "chat")
-    await askChat(page, "What is the soul?")
 
-    const notice = page.locator(".inline-notice").first()
-    await expect(notice).toBeVisible({ timeout: 20_000 })
-    // No upgrade CTA for a Pro user.
-    await expect(notice.locator(".btn")).toHaveCount(0)
+    await step(page, 98, 0, async () => {
+      await askChat(page, "What is the soul?")
+
+      const notice = page.locator(".inline-notice").first()
+      await expect(notice).toBeVisible({ timeout: 20_000 })
+      // No upgrade CTA for a Pro user.
+      await expect(notice.locator(".btn")).toHaveCount(0)
+    })
   }
 )

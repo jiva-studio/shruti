@@ -2,6 +2,7 @@ import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * `track_topics` is language-agnostic, so the topics dictionary holds topics
@@ -17,51 +18,63 @@ import { gotoTab, trackRows, trackTitles, CYRILLIC } from "../../../support/nav.
  * ru-only topic must never surface as a tile under an English library. We avoid
  * asserting exact tile counts: the grid is a random sample and the catalog's
  * per-topic language coverage shifts as content is published (some catalogs have
- * en-having topics, some don't).
+ * en-having topics, some don't). Two cases: tiles render under ru (150) and tiles
+ * are scoped to the English library (151).
  */
 
 test(
-  qase(45, "Topic page respects the library language (tiles under a Russian library)"),
+  qase(150, caseTitle(150)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")
-    await gotoTab(page, "search")
 
-    // At least one topic tile renders (the topics have Russian lectures).
-    await expect
-      .poll(async () => page.locator(".tile-grid > *").count(), { timeout: 20_000 })
-      .toBeGreaterThan(0)
+    await step(page, 150, 0, async () => {
+      await gotoTab(page, "search")
+
+      // At least one topic tile renders (the topics have Russian lectures).
+      await expect
+        .poll(async () => page.locator(".tile-grid > *").count(), { timeout: 20_000 })
+        .toBeGreaterThan(0)
+    })
   }
 )
 
 test(
-  qase(45, "Topic page respects the library language (tiles under an English library)"),
+  qase(151, caseTitle(151)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "en")
-    await gotoTab(page, "search")
-
-    // Let the persisted library-language filter hydrate (the landing can briefly
-    // flash the unfiltered tile set before it does).
-    await page.waitForTimeout(2500)
 
     const tiles = page.locator(".tile-grid > *")
-    const count = await tiles.count()
-    // A catalog with no en-having topics correctly shows no tiles under an
-    // English library — the ru-only topics have collapsed out.
-    if (count === 0) return
+    let count = 0
 
-    // Otherwise every shown tile is en-having: opening the first lands on a
-    // populated topic whose titles are English (Latin), never an empty page or a
-    // Russian-only topic that leaked past the filter.
-    await tiles.first().click()
-    await page.waitForURL("**/search/topic/**", { timeout: 10_000 })
-    await expect(trackRows(page).first()).toBeVisible({ timeout: 20_000 })
-    await expect
-      .poll(async () => {
-        const titles = await trackTitles(page)
-        return titles.length > 0 && titles.every((t) => !CYRILLIC.test(t))
-      }, { timeout: 15_000 })
-      .toBe(true)
+    await step(page, 151, 0, async () => {
+      await gotoTab(page, "search")
+
+      // Let the persisted library-language filter hydrate (the landing can briefly
+      // flash the unfiltered tile set before it does).
+      await page.waitForTimeout(2500)
+
+      count = await tiles.count()
+    })
+
+    await step(page, 151, 1, async () => {
+      // A catalog with no en-having topics correctly shows no tiles under an
+      // English library — the ru-only topics have collapsed out.
+      if (count === 0) return
+
+      // Otherwise every shown tile is en-having: opening the first lands on a
+      // populated topic whose titles are English (Latin), never an empty page or a
+      // Russian-only topic that leaked past the filter.
+      await tiles.first().click()
+      await page.waitForURL("**/search/topic/**", { timeout: 10_000 })
+      await expect(trackRows(page).first()).toBeVisible({ timeout: 20_000 })
+      await expect
+        .poll(async () => {
+          const titles = await trackTitles(page)
+          return titles.length > 0 && titles.every((t) => !CYRILLIC.test(t))
+        }, { timeout: 15_000 })
+        .toBe(true)
+    })
   }
 )

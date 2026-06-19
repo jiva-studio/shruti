@@ -2,6 +2,7 @@ import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot, bootDeviceLocale } from "../../../support/bootstrap.js"
 import { openLibrary } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * Library filters badge — the active-state highlight on the header filter
@@ -14,7 +15,7 @@ import { openLibrary } from "../../../support/nav.js"
  */
 
 test(
-  qase(26, "Applying an author filter narrows results and shows a count badge"),
+  qase(156, caseTitle(156)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // boot() pins source `source_dsicuBsFvinZ`, a non-seed dimension, so the
@@ -22,8 +23,10 @@ test(
     await boot(page)
     await openLibrary(page)
 
-    await expect(page.locator(".search-row-filter-button")).toHaveClass(/\bis-active\b/, {
-      timeout: 15_000,
+    await step(page, 156, 0, async () => {
+      await expect(page.locator(".search-row-filter-button")).toHaveClass(/\bis-active\b/, {
+        timeout: 15_000,
+      })
     })
   }
 )
@@ -35,19 +38,21 @@ test.describe("library · pristine locale-seed", () => {
   test.use({ locale: "en-US" })
 
   test(
-    qase(28, "Language filter scopes the catalog"),
+    qase(28, caseTitle(28)),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       await bootDeviceLocale(page, "en")
       await openLibrary(page)
 
-      const button = page.locator(".search-row-filter-button")
-      await expect(button).toBeVisible({ timeout: 15_000 })
-      // Give the binding time to hydrate before asserting the negative, so we
-      // don't pass on a not-yet-rendered class. The count derives from the
-      // seeded language alone → 0 → never active.
-      await page.waitForTimeout(600)
-      await expect(button).not.toHaveClass(/\bis-active\b/)
+      await step(page, 28, 0, async () => {
+        const button = page.locator(".search-row-filter-button")
+        await expect(button).toBeVisible({ timeout: 15_000 })
+        // Give the binding time to hydrate before asserting the negative, so we
+        // don't pass on a not-yet-rendered class. The count derives from the
+        // seeded language alone → 0 → never active.
+        await page.waitForTimeout(600)
+        await expect(button).not.toHaveClass(/\bis-active\b/)
+      })
     }
   )
 })

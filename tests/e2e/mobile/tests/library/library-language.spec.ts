@@ -2,6 +2,7 @@ import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
 import { openLibrary, trackTitles, CYRILLIC } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 /**
  * The library content language (a persisted facet, distinct from the UI
@@ -13,39 +14,44 @@ import { openLibrary, trackTitles, CYRILLIC } from "../../support/nav.js"
  *
  * The fixture catalog holds lectures in en and ru; the Bhagavad-gita source the
  * bootstrap pins has both, so each locale yields a full, single-script list.
+ * Two complementary cases: a Russian library (35) and an English library (148).
  */
 
 test(
-  qase(35, "Library content is scoped to selected library languages (Russian)"),
+  qase(35, caseTitle(35)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "ru")
     await openLibrary(page)
 
-    // Poll until the persisted language filter has hydrated and settled: a
-    // populated list whose every visible title is Cyrillic.
-    await expect
-      .poll(async () => {
-        const titles = await trackTitles(page)
-        return titles.length > 0 && titles.every((t) => CYRILLIC.test(t))
-      }, { timeout: 15_000 })
-      .toBe(true)
+    await step(page, 35, 0, async () => {
+      // Poll until the persisted language filter has hydrated and settled: a
+      // populated list whose every visible title is Cyrillic.
+      await expect
+        .poll(async () => {
+          const titles = await trackTitles(page)
+          return titles.length > 0 && titles.every((t) => CYRILLIC.test(t))
+        }, { timeout: 15_000 })
+        .toBe(true)
+    })
   }
 )
 
 test(
-  qase(35, "Library content is scoped to selected library languages (English)"),
+  qase(148, caseTitle(148)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "en")
     await openLibrary(page)
 
-    // No Russian lectures leak onto an English library once the filter settles.
-    await expect
-      .poll(async () => {
-        const titles = await trackTitles(page)
-        return titles.length > 0 && titles.every((t) => !CYRILLIC.test(t))
-      }, { timeout: 15_000 })
-      .toBe(true)
+    await step(page, 148, 0, async () => {
+      // No Russian lectures leak onto an English library once the filter settles.
+      await expect
+        .poll(async () => {
+          const titles = await trackTitles(page)
+          return titles.length > 0 && titles.every((t) => !CYRILLIC.test(t))
+        }, { timeout: 15_000 })
+        .toBe(true)
+    })
   }
 )

@@ -3,6 +3,7 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { gotoTab } from "../../../support/nav.js"
 import { mockChatStream, askChat, delta, done } from "../../../support/chat-mock.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /** A JWT whose base64 middle carries the claims the client reads (no sig check). */
 function jwt(expSec: number): string {
@@ -18,7 +19,7 @@ function jwt(expSec: number): string {
 // hand back a fresh token, then make an authed call (a chat send) that triggers
 // getAccessToken() → refresh.
 test(
-  qase(114, "Token refresh keeps the session alive"),
+  qase(114, caseTitle(114)),
   { tag: ["@offline", "@account"] },
   async ({ page }) => {
     // Seed a signed-in session expiring in ~30s (< the 60s refresh threshold).
@@ -69,18 +70,23 @@ test(
 
     await boot(page)
     await gotoTab(page, "chat")
-    await askChat(page, "Hello")
 
-    // The authed call triggered a refresh and the answer streamed back.
-    await expect(page.getByText(/Refreshed and answering/i)).toBeVisible({ timeout: 20_000 })
-    expect(refreshHits, "expected the client to call /auth/refresh").toBeGreaterThanOrEqual(1)
+    await step(page, 114, 0, async () => {
+      await askChat(page, "Hello")
 
-    // The session is alive on the fresh token: persisted expiry moved an hour
-    // out, and the user is still signed in (non-anonymous).
-    const tokens = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("CapacitorStorage.auth.tokens") || "{}")
-    )
-    expect(tokens.anonymous).toBe(false)
-    expect(tokens.accessTokenExpiresAt).toBeGreaterThan(Date.now() + 60_000)
+      // The authed call triggered a refresh and the answer streamed back.
+      await expect(page.getByText(/Refreshed and answering/i)).toBeVisible({ timeout: 20_000 })
+      expect(refreshHits, "expected the client to call /auth/refresh").toBeGreaterThanOrEqual(1)
+    })
+
+    await step(page, 114, 1, async () => {
+      // The session is alive on the fresh token: persisted expiry moved an hour
+      // out, and the user is still signed in (non-anonymous).
+      const tokens = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("CapacitorStorage.auth.tokens") || "{}")
+      )
+      expect(tokens.anonymous).toBe(false)
+      expect(tokens.accessTokenExpiresAt).toBeGreaterThan(Date.now() + 60_000)
+    })
   }
 )

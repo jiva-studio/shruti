@@ -9,6 +9,7 @@ import {
 import { SILENT_MP3_PATH } from "../../support/fixtures.js"
 import { qase } from "playwright-qase-reporter"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 // A download interrupted by a force-close must not be lost. We hang the audio
 // transfer so the row persists at "downloading", then reload (= force-close).
@@ -17,7 +18,7 @@ import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../suppor
 // no WorkManager background resume; this is the offline-observable equivalent:
 // the interrupted download is recovered and finishes on next launch.)
 test(
-  qase(77, "Recover an interrupted download after force-close"),
+  qase(77, caseTitle(77)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await interceptContent(page)
@@ -45,33 +46,39 @@ test(
     await page.waitForURL("**/tabs/home", { timeout: 60_000 })
     await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
 
-    await openLibrary(page)
-    const first = trackRows(page).first()
-    const title = (await first.locator(".title").innerText()).trim()
-    await openTrackSheet(page, first)
-    await trackSheet(page).locator(".add-btn").click()
-    await expect(trackSheet(page)).toBeHidden()
-
+    let title = ""
     const row = () => trackRows(page).filter({ hasText: title }).first()
-    // The transfer hangs → the row enters the downloading state, whose radial
-    // progress replaces the icon indicator (so the testid node disappears).
-    await expect(row().locator('[data-testid="track-state"]')).toHaveCount(0, {
-      timeout: 30_000,
+
+    await step(page, 77, 0, async () => {
+      await openLibrary(page)
+      const first = trackRows(page).first()
+      title = (await first.locator(".title").innerText()).trim()
+      await openTrackSheet(page, first)
+      await trackSheet(page).locator(".add-btn").click()
+      await expect(trackSheet(page)).toBeHidden()
+
+      // The transfer hangs → the row enters the downloading state, whose radial
+      // progress replaces the icon indicator (so the testid node disappears).
+      await expect(row().locator('[data-testid="track-state"]')).toHaveCount(0, {
+        timeout: 30_000,
+      })
     })
 
-    // The network comes back, then the app is force-closed and relaunched.
-    mode = "serve"
-    await page.reload()
-    await page.waitForURL("**/tabs/home", { timeout: 60_000 })
-    await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
-    await openLibrary(page)
+    await step(page, 77, 1, async () => {
+      // The network comes back, then the app is force-closed and relaunched.
+      mode = "serve"
+      await page.reload()
+      await page.waitForURL("**/tabs/home", { timeout: 60_000 })
+      await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
+      await openLibrary(page)
 
-    // Recovery: the persisted-but-unfinished download is re-driven on launch and
-    // now completes — the row reaches a downloaded terminal state on its own.
-    await expect(row().locator('[data-testid="track-state"]')).toHaveAttribute(
-      "data-state",
-      /added|completed/,
-      { timeout: 30_000 }
-    )
+      // Recovery: the persisted-but-unfinished download is re-driven on launch and
+      // now completes — the row reaches a downloaded terminal state on its own.
+      await expect(row().locator('[data-testid="track-state"]')).toHaveAttribute(
+        "data-state",
+        /added|completed/,
+        { timeout: 30_000 }
+      )
+    })
   }
 )

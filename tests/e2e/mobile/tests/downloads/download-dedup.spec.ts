@@ -9,6 +9,7 @@ import {
 import { SILENT_MP3_PATH } from "../../support/fixtures.js"
 import { qase } from "playwright-qase-reporter"
 import { playFirstQueuedTrack } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 // Concurrent download requests for the same track collapse to one transfer. On
 // boot the playlist prefetches its queued tracks; tapping one to play while its
@@ -16,7 +17,7 @@ import { playFirstQueuedTrack } from "../../support/nav.js"
 // audio URL. The store/plugin de-dup means that URL is fetched exactly once —
 // we slow every transfer to widen the race window and count requests per URL.
 test(
-  qase(79, "Concurrent download requests are de-duplicated"),
+  qase(79, caseTitle(79)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await interceptContent(page)
@@ -43,16 +44,18 @@ test(
     await page.waitForURL("**/tabs/home", { timeout: 60_000 })
     await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
 
-    // Play the first queued track while its prefetch is mid-flight: a second
-    // concurrent demand for the same URL.
-    await playFirstQueuedTrack(page)
+    await step(page, 79, 0, async () => {
+      // Play the first queued track while its prefetch is mid-flight: a second
+      // concurrent demand for the same URL.
+      await playFirstQueuedTrack(page)
 
-    // Let any in-flight transfers settle, then assert the de-dup invariant: no
-    // audio URL was ever fetched more than once.
-    await page.waitForTimeout(3000)
-    const dupes = [...counts.entries()].filter(([, n]) => n > 1)
-    expect(dupes, `URLs fetched more than once: ${JSON.stringify(dupes)}`).toEqual([])
-    // And at least one transfer actually happened (the played track).
-    expect([...counts.values()].some((n) => n >= 1)).toBe(true)
+      // Let any in-flight transfers settle, then assert the de-dup invariant: no
+      // audio URL was ever fetched more than once.
+      await page.waitForTimeout(3000)
+      const dupes = [...counts.entries()].filter(([, n]) => n > 1)
+      expect(dupes, `URLs fetched more than once: ${JSON.stringify(dupes)}`).toEqual([])
+      // And at least one transfer actually happened (the played track).
+      expect([...counts.values()].some((n) => n >= 1)).toBe(true)
+    })
   }
 )

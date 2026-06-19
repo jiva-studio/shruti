@@ -2,6 +2,7 @@ import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
 import { openTranscript } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 // Skip forward/back jumps playback ±15s. The skip buttons live on the floating
 // player's carousel (always in the DOM); we fire their click directly and read
@@ -9,7 +10,7 @@ import { openTranscript } from "../../support/nav.js"
 // same observable the seek-by-tap test (57) uses. (300s fixture audio so a
 // 15s jump isn't clamped.)
 test(
-  qase(55, "Skip back/forward 15 seconds"),
+  qase(55, caseTitle(55)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
     await boot(page)
@@ -42,14 +43,19 @@ test(
     const skipFwd = page.locator('button.skip[aria-label="Skip forward 15 seconds"]')
     const skipBack = page.locator('button.skip[aria-label="Skip back 15 seconds"]')
 
-    // Skip forward → the current line advances (position grew by ~15s).
-    await skipFwd.dispatchEvent("click")
-    await expect.poll(currentStart, { timeout: 10_000 }).toBeGreaterThan(base)
-    const afterFwd = await currentStart()
+    let afterFwd = 0
+    await step(page, 55, 0, async () => {
+      // Skip forward → the current line advances (position grew by ~15s).
+      await skipFwd.dispatchEvent("click")
+      await expect.poll(currentStart, { timeout: 10_000 }).toBeGreaterThan(base)
+      afterFwd = await currentStart()
+    })
 
-    // Skip back twice → the current line moves earlier than the forward point.
-    await skipBack.dispatchEvent("click")
-    await skipBack.dispatchEvent("click")
-    await expect.poll(currentStart, { timeout: 10_000 }).toBeLessThan(afterFwd)
+    await step(page, 55, 1, async () => {
+      // Skip back twice → the current line moves earlier than the forward point.
+      await skipBack.dispatchEvent("click")
+      await skipBack.dispatchEvent("click")
+      await expect.poll(currentStart, { timeout: 10_000 }).toBeLessThan(afterFwd)
+    })
   }
 )

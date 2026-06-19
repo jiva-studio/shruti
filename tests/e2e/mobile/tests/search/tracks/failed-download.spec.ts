@@ -1,5 +1,6 @@
 import fs from "fs"
 import { test, expect } from "../../../support/test.js"
+import type { Locator } from "@playwright/test"
 import {
   interceptContent,
   preseedUserDb,
@@ -9,6 +10,7 @@ import {
 import { SILENT_MP3_PATH } from "../../../support/fixtures.js"
 import { qase } from "playwright-qase-reporter"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * A failed audio download must (a) surface the red X on the row, (b) still open
@@ -22,7 +24,7 @@ import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../../sup
  * airplane-mode offline guard produces, but deterministically.)
  */
 test(
-  qase([31, 76], "Failed download shows red X and retries from the track sheet"),
+  qase([31, 76], caseTitle(31)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Standard offline boot routes + seed, but register a GATED audio route
@@ -53,32 +55,42 @@ test(
 
     await openLibrary(page)
 
-    // Add the first lecture; its audio download will fail.
     const rows = trackRows(page)
-    const first = rows.first()
-    const title = (await first.locator(".title").innerText()).trim()
-    await openTrackSheet(page, first)
-    await trackSheet(page).locator(".add-btn").click()
-    await expect(trackSheet(page)).toBeHidden()
+    let row: Locator
+    let indicator: Locator
+    let primary: Locator
 
-    // (a) The row surfaces the failed (red X) state.
-    const row = rows.filter({ hasText: title }).first()
-    const indicator = row.locator('[data-testid="track-state"]')
-    await expect(indicator).toHaveAttribute("data-state", "failed", {
-      timeout: 30_000,
+    await step(page, 31, 0, async () => {
+      // Add the first lecture; its audio download will fail.
+      const first = rows.first()
+      const title = (await first.locator(".title").innerText()).trim()
+      await openTrackSheet(page, first)
+      await trackSheet(page).locator(".add-btn").click()
+      await expect(trackSheet(page)).toBeHidden()
+
+      // (a) The row surfaces the failed (red X) state.
+      row = rows.filter({ hasText: title }).first()
+      indicator = row.locator('[data-testid="track-state"]')
+      await expect(indicator).toHaveAttribute("data-state", "failed", {
+        timeout: 30_000,
+      })
     })
 
-    // (b) Tapping the failed row OPENS THE SHEET (it no longer retries on tap).
-    await openTrackSheet(page, row)
-    const primary = trackSheet(page).locator(".add-btn")
-    await expect(primary).toHaveText(/Download again/)
+    await step(page, 31, 1, async () => {
+      // (b) Tapping the failed row OPENS THE SHEET (it no longer retries on tap).
+      await openTrackSheet(page, row)
+      primary = trackSheet(page).locator(".add-btn")
+      await expect(primary).toHaveText(/Download again/)
+    })
 
-    // (c) Retrying from the sheet recovers once the transfer is allowed through.
-    allowAudio = true
-    await primary.click()
-    await expect(trackSheet(page)).toBeHidden()
-    await expect(indicator).not.toHaveAttribute("data-state", "failed", {
-      timeout: 30_000,
+    await step(page, 31, 2, async () => {
+      // (c) Retrying from the sheet recovers once the transfer is allowed through.
+      allowAudio = true
+      await primary.click()
+      await expect(trackSheet(page)).toBeHidden()
+      await expect(indicator).not.toHaveAttribute("data-state", "failed", {
+        timeout: 30_000,
+      })
     })
   }
 )
