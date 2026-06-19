@@ -2,6 +2,7 @@ import { test, expect, type Page } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { playFirstQueuedTrack } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 const MIX_KEY = "CapacitorStorage.settings.audio.mixPosition"
 
@@ -35,39 +36,48 @@ const mixValue = (page: Page) =>
 // Dragging the puck well off-centre engages the mix; the position is a global
 // audio config that survives a restart (and applies to every track).
 test(
-  qase(72, "Mix setting persists across tracks and restarts"),
+  qase(72, caseTitle(72)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
     await boot(page)
     await playFirstQueuedTrack(page)
 
-    // Drag to ~+0.6 (x-fraction 0.8) — well past the ±0.15 deadzone.
-    await dragMix(page, 0.8)
-    await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBeGreaterThan(0.15)
-    const engaged = await mixValue(page)
+    let engaged = 0
+    await step(page, 72, 0, async () => {
+      // Drag to ~+0.6 (x-fraction 0.8) — well past the ±0.15 deadzone.
+      await dragMix(page, 0.8)
+      await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBeGreaterThan(0.15)
+      engaged = await mixValue(page)
+    })
 
-    // Restart: the localStorage-backed config persists across the reload.
-    await page.reload()
-    await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
-    expect(await mixValue(page)).toBeCloseTo(engaged, 5)
+    await step(page, 72, 1, async () => {
+      // Restart: the localStorage-backed config persists across the reload.
+      await page.reload()
+      await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
+      expect(await mixValue(page)).toBeCloseTo(engaged, 5)
+    })
   }
 )
 
 // Releasing the puck inside the centre detent snaps the mix back to exactly 0
 // (off) — `enabled` derives from `mixPosition !== 0`, so float-exact zero matters.
 test(
-  qase(70, "Center deadzone snaps back to off"),
+  qase(70, caseTitle(70)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
     await boot(page)
     await playFirstQueuedTrack(page)
 
-    // First engage the mix off-centre…
-    await dragMix(page, 0.8)
-    await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBeGreaterThan(0.15)
+    await step(page, 70, 0, async () => {
+      // First engage the mix off-centre…
+      await dragMix(page, 0.8)
+      await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBeGreaterThan(0.15)
+    })
 
-    // …then release inside the deadzone (x-fraction ~0.52 → |p|≈0.04): snaps to 0.
-    await dragMix(page, 0.52)
-    await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBe(0)
+    await step(page, 70, 1, async () => {
+      // …then release inside the deadzone (x-fraction ~0.52 → |p|≈0.04): snaps to 0.
+      await dragMix(page, 0.52)
+      await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBe(0)
+    })
   }
 )

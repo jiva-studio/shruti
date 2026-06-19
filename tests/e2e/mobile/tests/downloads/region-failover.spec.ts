@@ -9,6 +9,7 @@ import {
 } from "../../support/bootstrap.js"
 import { CONTENT_DB_VERSION } from "../../support/fixtures.js"
 import { gotoTab } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 /**
  * CDN region failover for assets: when the active region's host is dead,
@@ -40,7 +41,7 @@ function region(id: string, host: string) {
 }
 
 test(
-  qase(78, "CDN rotation on server failure"),
+  qase(78, caseTitle(78)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Base content routes (db / audio / transcripts), then override config.json
@@ -75,20 +76,24 @@ test(
     await page.goto("/?locale=en")
     await page.waitForURL("**/tabs/home", { timeout: 60_000 })
 
-    await gotoTab(page, "search")
-    const cards = page.locator(".carousel-section .collection-card, .tile-grid .collection-card")
-    await cards.first().waitFor({ state: "visible", timeout: 20_000 })
+    await step(page, 78, 0, async () => {
+      await gotoTab(page, "search")
+      const cards = page.locator(".carousel-section .collection-card, .tile-grid .collection-card")
+      await cards.first().waitFor({ state: "visible", timeout: 20_000 })
+    })
 
-    // With failover, covers decode (served from edge-b) and edge-b was hit.
-    await expect(async () => {
-      expect(edgeBHits).toBeGreaterThan(0)
-      const loaded = await page.locator(".collection-card .cached-image.is-loaded").count()
-      expect(loaded).toBeGreaterThan(0)
-    }).toPass({ timeout: 25_000 })
+    await step(page, 78, 1, async () => {
+      // With failover, covers decode (served from edge-b) and edge-b was hit.
+      await expect(async () => {
+        expect(edgeBHits).toBeGreaterThan(0)
+        const loaded = await page.locator(".collection-card .cached-image.is-loaded").count()
+        expect(loaded).toBeGreaterThan(0)
+      }).toPass({ timeout: 25_000 })
 
-    const decoded = await page
-      .locator(".collection-card .cached-image.is-loaded")
-      .evaluateAll((imgs) => imgs.every((el) => (el as HTMLImageElement).naturalWidth > 0))
-    expect(decoded).toBe(true)
+      const decoded = await page
+        .locator(".collection-card .cached-image.is-loaded")
+        .evaluateAll((imgs) => imgs.every((el) => (el as HTMLImageElement).naturalWidth > 0))
+      expect(decoded).toBe(true)
+    })
   }
 )

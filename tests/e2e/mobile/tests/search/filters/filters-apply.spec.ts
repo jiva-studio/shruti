@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { openLibrary, trackRows, trackTitles } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * Library filters — apply / sort / reset (live-apply bottom sheet).
@@ -68,12 +69,13 @@ async function closeSheet(page: Page, s: Locator): Promise<void> {
 /* -------------------------------- tests ---------------------------------- */
 
 test(
-  qase(26, "Applying an author filter narrows results and shows a count badge"),
+  qase(26, caseTitle(26)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)
     await openLibrary(page)
 
+    await step(page, 26, 0, async () => {
     // The seeded source has hundreds of tracks, so the first page (PAGE_SIZE=50)
     // is always full — the visible ROW COUNT can't observe a source change.
     // Compare the visible catalog itself instead: swap to a different source and
@@ -118,31 +120,37 @@ test(
         { timeout: 15_000 }
       )
       .toBe(true)
+    })
   }
 )
 
 test(
-  qase(142, "Sorting by date (oldest first) reorders the list"),
+  qase(142, caseTitle(142)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)
     await openLibrary(page)
 
-    const byReference = await trackTitles(page)
-    expect(byReference.length).toBeGreaterThan(1)
+    let byReference: string[] = []
 
-    const s = await openSheet(page)
-    await enterFacet(s, "Sort")
+    await step(page, 142, 0, async () => {
+      byReference = await trackTitles(page)
+      expect(byReference.length).toBeGreaterThan(1)
 
-    // Sort is single-select: button rows. Choose oldest-first.
-    await s.locator("ion-item", { hasText: "Date (oldest first)" }).first().click()
-    await page.waitForTimeout(200)
-    await backToList(s)
-    await closeSheet(page, s)
+      const s = await openSheet(page)
+      await enterFacet(s, "Sort")
 
-    // Live re-sort: assert the order differs from the byReference capture.
-    await expect
-      .poll(
+      // Sort is single-select: button rows. Choose oldest-first.
+      await s.locator("ion-item", { hasText: "Date (oldest first)" }).first().click()
+      await page.waitForTimeout(200)
+      await backToList(s)
+      await closeSheet(page, s)
+    })
+
+    await step(page, 142, 1, async () => {
+      // Live re-sort: assert the order differs from the byReference capture.
+      await expect
+        .poll(
         async () => {
           const next = await trackTitles(page)
           return next.length === byReference.length && next.join("") !== byReference.join("")
@@ -150,58 +158,65 @@ test(
         { timeout: 15_000 }
       )
       .toBe(true)
+    })
   }
 )
 
 test(
-  qase(27, "Reset clears all filters"),
+  qase(27, caseTitle(27)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)
     await openLibrary(page)
 
-    const s = await openSheet(page)
+    let s!: Locator
 
-    // boot() seeds a pinned source, so Reset is enabled from the start; modify
-    // further (enable a second source) so we exercise a genuinely dirty state.
-    await enterFacet(s, "Sources")
-    const checkboxes = s.locator("ion-checkbox")
-    await expect(checkboxes.first()).toBeVisible({ timeout: 10_000 })
-    const total = await checkboxes.count()
-    for (let i = 0; i < total; i++) {
-      const cb = checkboxes.nth(i)
-      const checked = await cb.evaluate(
-        (el) => (el as HTMLElement & { checked?: boolean }).checked === true
-      )
-      if (!checked) {
-        await cb.click()
-        break
+    await step(page, 27, 0, async () => {
+      s = await openSheet(page)
+
+      // boot() seeds a pinned source, so Reset is enabled from the start; modify
+      // further (enable a second source) so we exercise a genuinely dirty state.
+      await enterFacet(s, "Sources")
+      const checkboxes = s.locator("ion-checkbox")
+      await expect(checkboxes.first()).toBeVisible({ timeout: 10_000 })
+      const total = await checkboxes.count()
+      for (let i = 0; i < total; i++) {
+        const cb = checkboxes.nth(i)
+        const checked = await cb.evaluate(
+          (el) => (el as HTMLElement & { checked?: boolean }).checked === true
+        )
+        if (!checked) {
+          await cb.click()
+          break
+        }
       }
-    }
-    await backToList(s)
+      await backToList(s)
 
-    // Reset is enabled in the dirty state. A disabled IonButton carries the
-    // `button-disabled` class (and `aria-disabled="true"`); an enabled one
-    // doesn't. Assert against the class (a custom element isn't a native form
-    // control, so `toBeDisabled`/`aria-disabled="false"` are unreliable here).
-    await expect(resetButton(s)).not.toHaveClass(/\bbutton-disabled\b/)
+      // Reset is enabled in the dirty state. A disabled IonButton carries the
+      // `button-disabled` class (and `aria-disabled="true"`); an enabled one
+      // doesn't. Assert against the class (a custom element isn't a native form
+      // control, so `toBeDisabled`/`aria-disabled="false"` are unreliable here).
+      await expect(resetButton(s)).not.toHaveClass(/\bbutton-disabled\b/)
 
-    // The Sources facet summary is NOT the placeholder "Any" while a source is set.
-    const sourcesSummary = s
-      .locator("ion-item", { hasText: "Sources" })
-      .first()
-      .locator(".section-summary")
-    await expect(sourcesSummary).not.toHaveText("Any")
+      // The Sources facet summary is NOT the placeholder "Any" while a source is set.
+      const sourcesSummary = s
+        .locator("ion-item", { hasText: "Sources" })
+        .first()
+        .locator(".section-summary")
+      await expect(sourcesSummary).not.toHaveText("Any")
 
-    await resetButton(s).click()
+      await resetButton(s).click()
 
-    // After reset every facet summary collapses to "Any", the active badge
-    // clears (activeFilterCount → 0), and Reset disables itself.
-    await expect(sourcesSummary).toHaveText("Any", { timeout: 10_000 })
-    await expect(resetButton(s)).toHaveClass(/\bbutton-disabled\b/, { timeout: 10_000 })
-    await expect(page.locator(".search-row-filter-button")).not.toHaveClass(/\bis-active\b/)
+      // After reset every facet summary collapses to "Any", the active badge
+      // clears (activeFilterCount → 0), and Reset disables itself.
+      await expect(sourcesSummary).toHaveText("Any", { timeout: 10_000 })
+      await expect(resetButton(s)).toHaveClass(/\bbutton-disabled\b/, { timeout: 10_000 })
+      await expect(page.locator(".search-row-filter-button")).not.toHaveClass(/\bis-active\b/)
+    })
 
-    await closeSheet(page, s)
-    await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
+    await step(page, 27, 1, async () => {
+      await closeSheet(page, s)
+      await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
+    })
   }
 )

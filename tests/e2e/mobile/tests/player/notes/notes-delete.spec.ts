@@ -2,6 +2,7 @@ import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { gotoTab } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * Tapping a note opens an `IonActionSheet` (`onNoteClicked` in
@@ -11,31 +12,40 @@ import { gotoTab } from "../../../support/nav.js"
  * and stable across the localized "Delete" label.
  */
 test(
-  qase(5, "Delete a note from the Notes list"),
+  qase(5, caseTitle(5)),
   { tag: ["@offline", "@notes"] },
   async ({ page }) => {
     await boot(page)
-    await gotoTab(page, "notes")
 
-    const notes = page.locator("ion-item.note")
-    await expect(notes.first()).toBeVisible({ timeout: 20_000 })
-    const before = await notes.count()
-    expect(before).toBeGreaterThan(0)
-
-    // Open the per-note action sheet.
-    await notes.first().click()
     const sheet = page.locator("ion-action-sheet")
-    await expect(sheet).toBeVisible({ timeout: 10_000 })
+    let before = 0
 
-    // The destructive Delete button (role: "destructive" → action-sheet-destructive).
-    const deleteButton = sheet.locator("button.action-sheet-destructive")
-    await expect(deleteButton).toBeVisible({ timeout: 10_000 })
-    await deleteButton.click()
+    await step(page, 5, 0, async () => {
+      await gotoTab(page, "notes")
 
-    // The sheet dismisses and the list shrinks by exactly one.
-    await expect(sheet).toBeHidden({ timeout: 10_000 })
-    await expect
-      .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
-      .toBe(before - 1)
+      const notes = page.locator("ion-item.note")
+      await expect(notes.first()).toBeVisible({ timeout: 20_000 })
+      before = await notes.count()
+      expect(before).toBeGreaterThan(0)
+
+      // Open the per-note action sheet.
+      await notes.first().click()
+      await expect(sheet).toBeVisible({ timeout: 10_000 })
+
+      // The destructive Delete button (role: "destructive" → action-sheet-destructive).
+      const deleteButton = sheet.locator("button.action-sheet-destructive")
+      await expect(deleteButton).toBeVisible({ timeout: 10_000 })
+    })
+
+    await step(page, 5, 1, async () => {
+      const deleteButton = sheet.locator("button.action-sheet-destructive")
+      await deleteButton.click()
+
+      // The sheet dismisses and the list shrinks by exactly one.
+      await expect(sheet).toBeHidden({ timeout: 10_000 })
+      await expect
+        .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
+        .toBe(before - 1)
+    })
   }
 )

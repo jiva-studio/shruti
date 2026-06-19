@@ -2,6 +2,7 @@ import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { gotoTab } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * The Notes search box (NotesView.vue → `<SearchInput>`) filters the list and,
@@ -25,40 +26,47 @@ function pickHighlightWord(text: string): string | null {
 }
 
 test(
-  qase(4, "Search notes by text with highlight"),
+  qase(4, caseTitle(4)),
   { tag: ["@offline", "@notes"] },
   async ({ page }) => {
     await boot(page)
-    await gotoTab(page, "notes")
 
-    const notes = page.locator("ion-item.note")
-    await expect(notes.first()).toBeVisible({ timeout: 20_000 })
-    const total = await notes.count()
-    expect(total).toBeGreaterThan(0)
-
-    // Read a >= 4-char word from the first note's body (not its attribution).
-    const bodyText = (await notes.first().locator(".highlight-text").innerText()).trim()
-    const word = pickHighlightWord(bodyText)
-    expect(word, `no >=4-char word in first note body: "${bodyText}"`).not.toBeNull()
-
+    let total = 0
     const input = notesSearchInput(page)
-    await expect(input).toBeVisible({ timeout: 10_000 })
-    await input.fill(word!)
 
-    // Filtered list: at least one match, never more than the full set, and a
-    // visible `<mark>` proving the highlighter ran (length >= 4 → wrap).
-    await expect
-      .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
-      .toBeGreaterThan(0)
-    const filtered = await page.locator("ion-item.note").count()
-    expect(filtered).toBeGreaterThanOrEqual(1)
-    expect(filtered).toBeLessThanOrEqual(total)
-    await expect(page.locator("ion-item.note mark").first()).toBeVisible({ timeout: 10_000 })
+    await step(page, 4, 0, async () => {
+      await gotoTab(page, "notes")
 
-    // Clearing the box restores the full list.
-    await input.fill("")
-    await expect
-      .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
-      .toBe(total)
+      const notes = page.locator("ion-item.note")
+      await expect(notes.first()).toBeVisible({ timeout: 20_000 })
+      total = await notes.count()
+      expect(total).toBeGreaterThan(0)
+
+      // Read a >= 4-char word from the first note's body (not its attribution).
+      const bodyText = (await notes.first().locator(".highlight-text").innerText()).trim()
+      const word = pickHighlightWord(bodyText)
+      expect(word, `no >=4-char word in first note body: "${bodyText}"`).not.toBeNull()
+
+      await expect(input).toBeVisible({ timeout: 10_000 })
+      await input.fill(word!)
+
+      // Filtered list: at least one match, never more than the full set, and a
+      // visible `<mark>` proving the highlighter ran (length >= 4 → wrap).
+      await expect
+        .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
+        .toBeGreaterThan(0)
+      const filtered = await page.locator("ion-item.note").count()
+      expect(filtered).toBeGreaterThanOrEqual(1)
+      expect(filtered).toBeLessThanOrEqual(total)
+      await expect(page.locator("ion-item.note mark").first()).toBeVisible({ timeout: 10_000 })
+    })
+
+    await step(page, 4, 1, async () => {
+      // Clearing the box restores the full list.
+      await input.fill("")
+      await expect
+        .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
+        .toBe(total)
+    })
   }
 )

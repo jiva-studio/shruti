@@ -16,6 +16,7 @@ import {
   trackRows,
   trackSheet,
 } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 /** Standard offline routes + seed, but with a GATED audio route the test owns
  *  (registered last so it wins). `allow` toggles network availability. */
@@ -52,58 +53,70 @@ async function bootGatedAudio(page: import("@playwright/test").Page): Promise<{
 // ("added"/"completed") terminal state — the track is then available for
 // playback.
 test(
-  qase(74, "Download a track for offline playback"),
+  qase(74, caseTitle(74)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await bootGatedAudio(page)
-    await openLibrary(page)
 
-    const first = trackRows(page).first()
-    const title = (await first.locator(".title").innerText()).trim()
-    await openTrackSheet(page, first)
-    await trackSheet(page).locator(".add-btn").click()
-    await expect(trackSheet(page)).toBeHidden()
+    let title = ""
+    await step(page, 74, 0, async () => {
+      await openLibrary(page)
 
-    // The audio download reaches a downloaded terminal state.
-    const row = trackRows(page).filter({ hasText: title }).first()
-    await expect(row.locator('[data-testid="track-state"]')).toHaveAttribute(
-      "data-state",
-      /added|completed/,
-      { timeout: 30_000 }
-    )
+      const first = trackRows(page).first()
+      title = (await first.locator(".title").innerText()).trim()
+      await openTrackSheet(page, first)
+      await trackSheet(page).locator(".add-btn").click()
+      await expect(trackSheet(page)).toBeHidden()
+    })
+
+    await step(page, 74, 1, async () => {
+      // The audio download reaches a downloaded terminal state.
+      const row = trackRows(page).filter({ hasText: title }).first()
+      await expect(row.locator('[data-testid="track-state"]')).toHaveAttribute(
+        "data-state",
+        /added|completed/,
+        { timeout: 30_000 }
+      )
+    })
   }
 )
 
 // A downloaded track plays with the network gone: playback reads the cached
 // blob, so the player goes live even though every audio fetch now fails.
 test(
-  qase(80, "Play a downloaded track with no network"),
+  qase(80, caseTitle(80)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     const { allow } = await bootGatedAudio(page)
-    await openLibrary(page)
 
-    const first = trackRows(page).first()
-    const title = (await first.locator(".title").innerText()).trim()
-    await openTrackSheet(page, first)
-    await trackSheet(page).locator(".add-btn").click()
-    await expect(trackSheet(page)).toBeHidden()
+    let title = ""
+    await step(page, 80, 0, async () => {
+      await openLibrary(page)
 
-    const libRow = trackRows(page).filter({ hasText: title }).first()
-    await expect(libRow.locator('[data-testid="track-state"]')).toHaveAttribute(
-      "data-state",
-      /added|completed/,
-      { timeout: 30_000 }
-    )
+      const first = trackRows(page).first()
+      title = (await first.locator(".title").innerText()).trim()
+      await openTrackSheet(page, first)
+      await trackSheet(page).locator(".add-btn").click()
+      await expect(trackSheet(page)).toBeHidden()
 
-    // Network is gone — every further audio fetch fails.
-    allow(false)
+      const libRow = trackRows(page).filter({ hasText: title }).first()
+      await expect(libRow.locator('[data-testid="track-state"]')).toHaveAttribute(
+        "data-state",
+        /added|completed/,
+        { timeout: 30_000 }
+      )
+    })
 
-    // Play the now-cached track from the Home queue. The player must go live
-    // from the cached blob, not the (now-dead) network.
-    await gotoTab(page, "home")
-    const queued = playlistRows(page).filter({ hasText: title }).first()
-    await queued.locator("ion-item.track").click()
-    await expect(page.locator(".player")).not.toHaveClass(/\bhidden\b/, { timeout: 20_000 })
+    await step(page, 80, 1, async () => {
+      // Network is gone — every further audio fetch fails.
+      allow(false)
+
+      // Play the now-cached track from the Home queue. The player must go live
+      // from the cached blob, not the (now-dead) network.
+      await gotoTab(page, "home")
+      const queued = playlistRows(page).filter({ hasText: title }).first()
+      await queued.locator("ion-item.track").click()
+      await expect(page.locator(".player")).not.toHaveClass(/\bhidden\b/, { timeout: 20_000 })
+    })
   }
 )

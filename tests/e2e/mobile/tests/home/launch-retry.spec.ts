@@ -9,6 +9,7 @@ import {
 } from "../../support/bootstrap.js"
 import { CONTENT_DB_PATH } from "../../support/fixtures.js"
 import { playlistRows } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 /**
  * First-launch resilience: a brand-new user whose content-DB download FAILS on
@@ -29,7 +30,7 @@ import { playlistRows } from "../../support/nav.js"
  * flip the flag and tap Retry, so the next attempt is guaranteed to succeed.
  */
 test(
-  qase(144, "A failed content-DB download shows Retry and recovers"),
+  qase(144, caseTitle(144)),
   { tag: ["@offline", "@welcome"] },
   async ({ page }) => {
     // config / audio / transcript routes + a default (always-success) DB route.
@@ -56,20 +57,25 @@ test(
     await preseedSearchFilter(page, "en")
     await preseedDismissedNags(page)
 
-    await page.goto("/?locale=en")
-
-    // The download fails → Welcome surfaces the error state with a Retry button
-    // (it renders only in the error state), NOT an endless progress bar.
     const retry = page.getByRole("button", { name: "Retry" })
-    await expect(retry).toBeVisible({ timeout: 30_000 })
 
-    // Let the next attempt succeed, then retry.
-    allowDb = true
-    await retry.click()
+    await step(page, 144, 0, async () => {
+      await page.goto("/?locale=en")
 
-    // Recovers all the way to a populated Home.
-    await page.waitForURL("**/tabs/home", { timeout: 60_000 })
-    await expect(page.locator("ion-tab-bar")).toBeVisible()
-    await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
+      // The download fails → Welcome surfaces the error state with a Retry button
+      // (it renders only in the error state), NOT an endless progress bar.
+      await expect(retry).toBeVisible({ timeout: 30_000 })
+    })
+
+    await step(page, 144, 1, async () => {
+      // Let the next attempt succeed, then retry.
+      allowDb = true
+      await retry.click()
+
+      // Recovers all the way to a populated Home.
+      await page.waitForURL("**/tabs/home", { timeout: 60_000 })
+      await expect(page.locator("ion-tab-bar")).toBeVisible()
+      await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
+    })
   }
 )
