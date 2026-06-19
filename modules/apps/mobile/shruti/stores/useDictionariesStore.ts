@@ -87,18 +87,6 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
   const tagsById = computed<ReadonlyMap<TagId, Tag>>(
     () => new Map(tags.value.map((t) => [t.id, t]))
   )
-  /** Tag-id → localised display name in the active UI language. Used by the
-   *  list-row builder as the chip fallback when a track has no scripture
-   *  reference. Falls back to the first available locale, then the bare id. */
-  const tagNamesById = computed<ReadonlyMap<string, string>>(() => {
-    const lang = appLanguage.value
-    const out = new Map<string, string>()
-    for (const t of tags.value) {
-      const name = t.names.get(lang) ?? t.names.values().next().value ?? t.id
-      out.set(t.id, name)
-    }
-    return out
-  })
   const topicsById = computed<ReadonlyMap<TopicId, Topic>>(
     () => new Map(topics.value.map((t) => [t.id, t]))
   )
@@ -191,7 +179,6 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     locationsById,
     sourcesById,
     tagsById,
-    tagNamesById,
     topicsById,
     topicNamesById,
     topicShortNamesById,
