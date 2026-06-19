@@ -337,12 +337,12 @@
     "preconditions": "Seeded user.db with several playlist tracks (including one completed). Offline, mocked content.",
     "steps": [
       {
-        "action": "Boot to Home and read the Up-Next count badge against the visible rows.",
-        "expected": "Rows and the count badge are visible; the badge is a positive number not exceeding the visible row count."
+        "action": "Boot to Home; note the Up-Next count badge and a not-yet-completed row.",
+        "expected": "The playlist renders rows and the count badge (a positive number not exceeding the row count)."
       },
       {
-        "action": "Swipe-delete the first queue row.",
-        "expected": "The visible row count decreases by one."
+        "action": "Swipe-delete the not-completed row.",
+        "expected": "The visible row count AND the count badge each drop by one."
       }
     ],
     "tags": [
@@ -359,12 +359,12 @@
     "preconditions": "Seeded user.db with a non-empty Up-Next playlist. Offline, mocked content.",
     "steps": [
       {
-        "action": "Boot to Home with the seeded Up-Next playlist and note the first queue row (its text and the current row count).",
-        "expected": "The Up-Next playlist renders at least one row."
+        "action": "Boot to Home and note a not-yet-completed queue row and the count badge.",
+        "expected": "The Up-Next playlist renders rows and a count badge."
       },
       {
-        "action": "Swipe-delete the first queue row.",
-        "expected": "The row count decreases by one and no playlist row with the captured text remains."
+        "action": "Swipe-delete that row.",
+        "expected": "The row is gone, and the visible row count and the count badge each drop by one."
       }
     ],
     "tags": [
@@ -398,14 +398,18 @@
   },
   "20": {
     "suite_id": 3,
-    "automation": 0,
-    "title": "Search list is populated on open",
-    "description": "Opening the Search/Library list with no query shows the full catalog, paged in chunks (PAGE_SIZE 50). No automated test in the suite currently covers this id.",
-    "preconditions": "Catalog is populated.",
+    "automation": 2,
+    "title": "Library list populates on open and pages in on scroll",
+    "description": "Verifies the library list is populated on open and pages in the next page when scrolled to the bottom (PAGE_SIZE=50). Offline.",
+    "preconditions": "Offline boot on the library list.",
     "steps": [
       {
-        "action": "Open the Search/Library list with no query entered.",
-        "expected": "The catalog is shown as a non-empty list, paginated (about 50 tracks per page)."
+        "action": "Open the library.",
+        "expected": "The list is populated with lecture rows."
+      },
+      {
+        "action": "Scroll the list to the bottom.",
+        "expected": "The next page loads — the visible row count grows past the first page."
       }
     ],
     "tags": [
@@ -415,42 +419,20 @@
       "e2e"
     ]
   },
-  "21": {
-    "suite_id": 3,
-    "automation": 2,
-    "title": "Infinite scroll loads the next page",
-    "description": "Scrolling the library list to the bottom triggers Ionic infinite-scroll and appends the next page (PAGE_SIZE 50), so the visible row count grows past the first page. Offline. The test asserts only that the count grows; it does NOT verify the end-of-list stop.",
-    "preconditions": "Boot with a pinned source whose result set spans more than one page (offline fixture).",
-    "steps": [
-      {
-        "action": "Open the library list and note the initial row count.",
-        "expected": "The first page renders a non-empty list of tracks."
-      },
-      {
-        "action": "Scroll the list to the bottom to trigger infinite-scroll.",
-        "expected": "The next page loads automatically and the visible row count grows beyond the first page."
-      }
-    ],
-    "tags": [
-      "search",
-      "free",
-      "e2e"
-    ]
-  },
   "22": {
     "suite_id": 3,
     "automation": 2,
-    "title": "Title search filters the list and clears back to full",
-    "description": "Typing a no-match term into the title box empties the list; clearing it restores the full (derived-language) catalog. Offline; runs across the content-language locale matrix. Asserts the title box is wired to the result set, not that a specific term matches.",
-    "preconditions": "Device-locale boot (locale reduced to a content language) with a populated library.",
+    "title": "Search box is wired to the result set",
+    "description": "Verifies the search box drives the result set: a query that matches nothing empties the list, and clearing it restores the full catalog. Offline.",
+    "preconditions": "Offline boot on the library list.",
     "steps": [
       {
-        "action": "With the library populated, type a term that matches no title into the search input.",
-        "expected": "The list updates to zero rows."
+        "action": "Type a query that matches nothing.",
+        "expected": "The list empties (zero rows)."
       },
       {
-        "action": "Clear the search input.",
-        "expected": "The full library list is shown again."
+        "action": "Clear the search box.",
+        "expected": "The full catalog list is restored."
       }
     ],
     "tags": [
@@ -523,8 +505,12 @@
     "preconditions": "boot() pins source source_dsicuBsFvinZ (a non-seed dimension) with a populated, deterministic list.",
     "steps": [
       {
-        "action": "Open the filters sheet, drill into Sources, drop the pinned source and enable a different one, and apply.",
-        "expected": "The visible title set changes to a different (disjoint) page of lectures."
+        "action": "Open the filters sheet and switch the Sources facet to a different source.",
+        "expected": "The filters sheet shows the new Sources selection."
+      },
+      {
+        "action": "Apply the filter (close the sheet).",
+        "expected": "The library re-queries live — the visible title set becomes a different (disjoint) page of lectures."
       }
     ],
     "tags": [
@@ -542,12 +528,12 @@
     "preconditions": "boot() pins a source; the test enables a second source to ensure a genuinely dirty state.",
     "steps": [
       {
-        "action": "Open the filters sheet, enable a second source so Reset is enabled and the Sources summary is not \"Any\", return to the root list, then tap Reset.",
-        "expected": "Every facet summary collapses to \"Any\", the Reset button disables, and the header filter button loses its active badge."
+        "action": "Open the filters sheet, set a source, then tap Reset.",
+        "expected": "Every facet collapses to \"Any\", the active-filter badge clears, and Reset disables itself (shown on the still-open sheet)."
       },
       {
-        "action": "Close the sheet.",
-        "expected": "The list is repopulated against the full catalog."
+        "action": "Apply (close the sheet).",
+        "expected": "The library is back to the full catalog."
       }
     ],
     "tags": [
@@ -2939,12 +2925,12 @@
     "preconditions": "boot() pins a source giving a populated, deterministic by-reference order.",
     "steps": [
       {
-        "action": "Capture the default order, open the filters sheet, set Sort to \"Date (oldest first)\" and apply.",
-        "expected": "The list live-re-queries and re-orders (no full-page reload spinner)."
+        "action": "Open the filters sheet and choose the \"Date (oldest first)\" sort.",
+        "expected": "The filters sheet shows the chosen sort."
       },
       {
-        "action": "Compare the new order against the captured default order.",
-        "expected": "The visible order has changed — the same rows in a different order."
+        "action": "Apply the sort (close the sheet).",
+        "expected": "The library re-orders live — the row order differs from the default."
       }
     ],
     "tags": [
@@ -3404,6 +3390,23 @@
       {
         "action": "On a Ukrainian-locale device, open the first topic from the Search landing.",
         "expected": "The topic detail is populated and every lecture title is Russian (Cyrillic)."
+      }
+    ]
+  },
+  "164": {
+    "suite_id": 3,
+    "automation": 2,
+    "tags": [
+      "search",
+      "e2e"
+    ],
+    "title": "Searching by a title word filters the list",
+    "description": "Verifies title search: typing a word that appears in a lecture title narrows the library list to rows whose title contains that word. Offline.",
+    "preconditions": "Offline boot on the library list.",
+    "steps": [
+      {
+        "action": "Type a word taken from a lecture's title into the search box.",
+        "expected": "The list narrows to lectures whose titles contain that word."
       }
     ]
   }

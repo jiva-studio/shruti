@@ -14,6 +14,11 @@ import { step, caseTitle } from "../../../support/steps.js"
  * dimension. The list view is a drill-in `IonList`: one `IonItem` per facet,
  * its label in an `<h2>`. Drilling in shows the picker — multi facets render
  * `ion-checkbox` rows, single facets render `button` rows with a check icon.
+ *
+ * Each case is two steps: step 0 configures the sheet and screenshots it (via
+ * `capture()`, while the sheet is still open — the dismissing OK would otherwise
+ * leave an empty frame); step 1 applies it and screenshots the re-queried
+ * library, so the run shows both the filter that was set AND its effect.
  */
 
 /* ----------------------------- local helpers ----------------------------- */
@@ -75,51 +80,59 @@ test(
     await boot(page)
     await openLibrary(page)
 
-    await step(page, 26, 0, async () => {
-    // The seeded source has hundreds of tracks, so the first page (PAGE_SIZE=50)
-    // is always full — the visible ROW COUNT can't observe a source change.
-    // Compare the visible catalog itself instead: swap to a different source and
-    // assert the page of titles is a genuinely different set.
-    const baseline = await trackTitles(page)
-    expect(baseline.length).toBeGreaterThan(0)
+    let s!: Locator
+    let baseline: string[] = []
 
-    const s = await openSheet(page)
-    await enterFacet(s, "Sources")
+    await step(page, 26, 0, async (capture) => {
+      // The seeded source has hundreds of tracks, so the first page (PAGE_SIZE=50)
+      // is always full — the visible ROW COUNT can't observe a source change.
+      // Compare the visible catalog itself instead: swap to a different source and
+      // assert the page of titles is a genuinely different set.
+      baseline = await trackTitles(page)
+      expect(baseline.length).toBeGreaterThan(0)
 
-    const checkboxes = s.locator("ion-checkbox")
-    await expect(checkboxes.first()).toBeVisible({ timeout: 10_000 })
-    const total = await checkboxes.count()
+      s = await openSheet(page)
+      await enterFacet(s, "Sources")
 
-    // Drop the seeded source and pick a different one, so the catalog becomes a
-    // disjoint set (no overlap) — a robust, deterministic change signal.
-    let enabledOne = false
-    for (let i = 0; i < total; i++) {
-      const cb = checkboxes.nth(i)
-      const checked = await cb.evaluate(
-        (el) => (el as HTMLElement & { checked?: boolean }).checked === true
-      )
-      if (checked) {
-        await cb.click() // uncheck the seeded source
-      } else if (!enabledOne) {
-        await cb.click() // enable exactly one different source
-        enabledOne = true
+      const checkboxes = s.locator("ion-checkbox")
+      await expect(checkboxes.first()).toBeVisible({ timeout: 10_000 })
+      const total = await checkboxes.count()
+
+      // Drop the seeded source and pick a different one, so the catalog becomes a
+      // disjoint set (no overlap) — a robust, deterministic change signal.
+      let enabledOne = false
+      for (let i = 0; i < total; i++) {
+        const cb = checkboxes.nth(i)
+        const checked = await cb.evaluate(
+          (el) => (el as HTMLElement & { checked?: boolean }).checked === true
+        )
+        if (checked) {
+          await cb.click() // uncheck the seeded source
+        } else if (!enabledOne) {
+          await cb.click() // enable exactly one different source
+          enabledOne = true
+        }
       }
-    }
-    expect(enabledOne, "expected a different source to enable").toBe(true)
+      expect(enabledOne, "expected a different source to enable").toBe(true)
 
-    await backToList(s)
-    await closeSheet(page, s)
+      await backToList(s)
+      // Screenshot the filters sheet with the new Sources selection — before the
+      // next step applies it and the sheet closes.
+      await capture()
+    })
 
-    // Live re-query: the visible title set must differ from the seeded baseline.
-    await expect
-      .poll(
-        async () => {
-          const next = await trackTitles(page)
-          return next.length > 0 && next.join("") !== baseline.join("")
-        },
-        { timeout: 15_000 }
-      )
-      .toBe(true)
+    await step(page, 26, 1, async () => {
+      // Apply (close the sheet): the library re-queries live to a disjoint set.
+      await closeSheet(page, s)
+      await expect
+        .poll(
+          async () => {
+            const next = await trackTitles(page)
+            return next.length > 0 && next.join("") !== baseline.join("")
+          },
+          { timeout: 15_000 }
+        )
+        .toBe(true)
     })
   }
 )
@@ -131,33 +144,36 @@ test(
     await boot(page)
     await openLibrary(page)
 
+    let s!: Locator
     let byReference: string[] = []
 
-    await step(page, 142, 0, async () => {
+    await step(page, 142, 0, async (capture) => {
       byReference = await trackTitles(page)
       expect(byReference.length).toBeGreaterThan(1)
 
-      const s = await openSheet(page)
+      s = await openSheet(page)
       await enterFacet(s, "Sort")
 
       // Sort is single-select: button rows. Choose oldest-first.
       await s.locator("ion-item", { hasText: "Date (oldest first)" }).first().click()
       await page.waitForTimeout(200)
       await backToList(s)
-      await closeSheet(page, s)
+      // Screenshot the filters sheet with the chosen sort before it closes.
+      await capture()
     })
 
     await step(page, 142, 1, async () => {
-      // Live re-sort: assert the order differs from the byReference capture.
+      // Apply (close the sheet): live re-sort — the order differs from byReference.
+      await closeSheet(page, s)
       await expect
         .poll(
-        async () => {
-          const next = await trackTitles(page)
-          return next.length === byReference.length && next.join("") !== byReference.join("")
-        },
-        { timeout: 15_000 }
-      )
-      .toBe(true)
+          async () => {
+            const next = await trackTitles(page)
+            return next.length === byReference.length && next.join("") !== byReference.join("")
+          },
+          { timeout: 15_000 }
+        )
+        .toBe(true)
     })
   }
 )
@@ -208,13 +224,15 @@ test(
       await resetButton(s).click()
 
       // After reset every facet summary collapses to "Any", the active badge
-      // clears (activeFilterCount → 0), and Reset disables itself.
+      // clears (activeFilterCount → 0), and Reset disables itself. The sheet is
+      // still open here, so the auto end-of-step screenshot shows the reset sheet.
       await expect(sourcesSummary).toHaveText("Any", { timeout: 10_000 })
       await expect(resetButton(s)).toHaveClass(/\bbutton-disabled\b/, { timeout: 10_000 })
       await expect(page.locator(".search-row-filter-button")).not.toHaveClass(/\bis-active\b/)
     })
 
     await step(page, 27, 1, async () => {
+      // Apply (close the sheet): the library is back to the full catalog.
       await closeSheet(page, s)
       await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
     })
