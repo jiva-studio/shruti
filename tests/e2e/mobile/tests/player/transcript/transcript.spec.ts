@@ -8,11 +8,12 @@ test(qase(60, caseTitle(60)), { tag: ["@offline", "@transcript"] }, async ({ pag
   await boot(page)
   await playFirstQueuedTrack(page)
 
+  const dialog = page.locator("ion-modal.transcript-dialog")
+
   await step(page, 60, 0, async () => {
     // The documented gesture: tapping the floating player opens the transcript
     // reader (App.vue → transcriptStore.show). If `openTranscriptAutomatically`
     // already popped it, don't tap again — a second tap would close it.
-    const dialog = page.locator("ion-modal.transcript-dialog")
     if (!(await dialog.isVisible())) {
       await page.locator(".player").click()
     }
@@ -21,5 +22,11 @@ test(qase(60, caseTitle(60)), { tag: ["@offline", "@transcript"] }, async ({ pag
     // The transcript body is served from a fixture (trackId patched to match) and
     // rendered into the prompter — assert real text shows, not just the shell.
     await expect(dialog.locator(".transcript-text")).toBeVisible({ timeout: 20_000 })
+  })
+
+  await step(page, 60, 1, async () => {
+    // Tapping close dismisses the reader cleanly (hidden, not just covered).
+    await dialog.locator(".close-button").click()
+    await expect(dialog).toBeHidden({ timeout: 10_000 })
   })
 })

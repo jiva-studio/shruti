@@ -1,7 +1,7 @@
 import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
-import { openLibrary, trackTitles, CYRILLIC } from "../../support/nav.js"
+import { openLibrary, trackTitles, CYRILLIC, editLibraryLanguages } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
@@ -13,10 +13,12 @@ import { step, caseTitle } from "../../support/steps.js"
  * language too (PR #1008), so the script of the rows is the observable signal.
  *
  * The fixture catalog holds lectures in en and ru; the Bhagavad-gita source the
- * bootstrap pins has both, so each locale yields a full, single-script list.
- * Two complementary cases: a Russian library (35) and an English library (148).
+ * bootstrap pins has both, so each language yields a full, single-script list.
+ * One case demonstrating the scope via an in-app switch: open the library under
+ * a Russian library (every row Cyrillic), then flip the library language to
+ * English in Settings, reopen, and every row is Latin — no Russian lecture
+ * leaks in.
  */
-
 test(
   qase(35, caseTitle(35)),
   { tag: ["@offline", "@library"] },
@@ -25,27 +27,24 @@ test(
     await openLibrary(page)
 
     await step(page, 35, 0, async () => {
-      // Poll until the persisted language filter has hydrated and settled: a
-      // populated list whose every visible title is Cyrillic.
+      // cases.json holds one step for case 35, so the ru assertion, the in-app
+      // language switch, and the en assertion all live in this step.
+
+      // Under a Russian library every visible title is Cyrillic (poll until the
+      // persisted language filter has hydrated and settled).
       await expect
         .poll(async () => {
           const titles = await trackTitles(page)
           return titles.length > 0 && titles.every((t) => CYRILLIC.test(t))
         }, { timeout: 15_000 })
         .toBe(true)
-    })
-  }
-)
 
-test(
-  qase(148, caseTitle(148)),
-  { tag: ["@offline", "@library"] },
-  async ({ page }) => {
-    await boot(page, "en")
-    await openLibrary(page)
+      // Flip the library content language to English in Settings, then reopen the
+      // library. The list re-scopes — every visible title is Latin, no Cyrillic
+      // (Russian) title leaks in.
+      await editLibraryLanguages(page, { add: "English", remove: /Русский/ })
+      await openLibrary(page)
 
-    await step(page, 148, 0, async () => {
-      // No Russian lectures leak onto an English library once the filter settles.
       await expect
         .poll(async () => {
           const titles = await trackTitles(page)

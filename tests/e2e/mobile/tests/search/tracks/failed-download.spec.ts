@@ -24,7 +24,7 @@ import { step, caseTitle } from "../../../support/steps.js"
  * airplane-mode offline guard produces, but deterministically.)
  */
 test(
-  qase([31, 76], caseTitle(31)),
+  qase(31, caseTitle(31)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Standard offline boot routes + seed, but register a GATED audio route

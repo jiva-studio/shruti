@@ -2,23 +2,35 @@ import fs from "fs"
 import { test, expect } from "../../support/test.js"
 import {
   interceptContent,
+  preseedUserDbOnce,
   preseedSearchFilter,
   preseedDismissedNags,
-  preseedUserDbOnce,
 } from "../../support/bootstrap.js"
 import { SILENT_MP3_PATH } from "../../support/fixtures.js"
 import { qase } from "playwright-qase-reporter"
 import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
-// A download interrupted by a force-close must not be lost. We hang the audio
-// transfer so the row persists at "downloading", then reload (= force-close).
-// On restart the app rehydrates the persisted row and re-drives the unfinished
-// download; with the network back it now completes — no manual re-add. (Web has
-// no WorkManager background resume; this is the offline-observable equivalent:
-// the interrupted download is recovered and finishes on next launch.)
+// A download that does not finish — whether it FAILS outright or is INTERRUPTED
+// mid-transfer — recovers and reaches a downloaded terminal state. This merges
+// the two recovery paths into one multi-step case:
+//
+//   step 0 — the failed-download manual retry: the audio transfer aborts, the
+//            row surfaces the failed (red X) state, tapping it opens the sheet
+//            with "Download again", and tapping that starts a FRESH transfer
+//            (any stale partial discarded) once the network is allowed through.
+//   step 1 — the interrupted-download auto-recovery: with the transfer now able
+//            to complete, the unfinished download is re-driven — across an app
+//            force-close + relaunch (reload), the persisted row rehydrates and
+//            the download finishes on its own, no manual re-add — and the row
+//            reaches the downloaded/completed terminal state.
+//
+// Determinism comes from a mutable audio route, not timing: "abort" guarantees
+// the first download fails, "serve" guarantees the retry/resume succeeds. The
+// user DB is seeded only if absent so the reload is a real restart that keeps
+// the runtime-written download row.
 test(
-  qase(77, caseTitle(77)),
+  qase(76, caseTitle(76)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await interceptContent(page)
@@ -26,9 +38,9 @@ test(
     await preseedSearchFilter(page, "en")
     await preseedDismissedNags(page)
 
-    // A mutable-mode audio route: "hang" leaves the request pending (download
-    // stuck mid-transfer); "serve" fulfils it (the retry succeeds).
-    let mode: "hang" | "serve" = "hang"
+    // Mutable audio route. "abort": the transfer fails (download enters failed).
+    // "serve": the transfer fulfils (retry / resume succeeds).
+    let mode: "abort" | "serve" = "abort"
     const mp3 = fs.readFileSync(SILENT_MP3_PATH)
     await page.route("**/public/tracks/*/audio/*", (route) => {
       if (mode === "serve") {
@@ -38,8 +50,9 @@ test(
           headers: { "content-length": String(mp3.length) },
           body: mp3,
         })
+        return
       }
-      // mode === "hang": never respond — the transfer is "in progress".
+      void route.abort("failed")
     })
 
     await page.goto("/?locale=en")
@@ -48,37 +61,54 @@ test(
 
     let title = ""
     const row = () => trackRows(page).filter({ hasText: title }).first()
+    const indicator = () => row().locator('[data-testid="track-state"]')
 
-    await step(page, 77, 0, async () => {
+    await step(page, 76, 0, async () => {
       await openLibrary(page)
+
+      // Add the first lecture; its audio download fails.
       const first = trackRows(page).first()
       title = (await first.locator(".title").innerText()).trim()
       await openTrackSheet(page, first)
       await trackSheet(page).locator(".add-btn").click()
       await expect(trackSheet(page)).toBeHidden()
 
-      // The transfer hangs → the row enters the downloading state, whose radial
-      // progress replaces the icon indicator (so the testid node disappears).
-      await expect(row().locator('[data-testid="track-state"]')).toHaveCount(0, {
+      // The row surfaces the failed (red X) state.
+      await expect(indicator()).toHaveAttribute("data-state", "failed", {
+        timeout: 30_000,
+      })
+
+      // Tapping the failed row OPENS THE SHEET (it no longer retries on tap),
+      // whose primary action now reads "Download again".
+      await openTrackSheet(page, row())
+      const primary = trackSheet(page).locator(".add-btn")
+      await expect(primary).toHaveText(/Download again/)
+
+      // Retry from the sheet: a fresh transfer starts from the beginning (any
+      // stale partial discarded). Allow the transfer through and tap.
+      mode = "serve"
+      await primary.click()
+      await expect(trackSheet(page)).toBeHidden()
+
+      // The row leaves the failed state — a fresh download is underway.
+      await expect(indicator()).not.toHaveAttribute("data-state", "failed", {
         timeout: 30_000,
       })
     })
 
-    await step(page, 77, 1, async () => {
-      // The network comes back, then the app is force-closed and relaunched.
-      mode = "serve"
+    await step(page, 76, 1, async () => {
+      // Force-close + relaunch: the unfinished/just-restarted download must not
+      // be lost. On launch the persisted row rehydrates and the re-driven
+      // download completes on its own — no manual re-add.
       await page.reload()
       await page.waitForURL("**/tabs/home", { timeout: 60_000 })
       await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
       await openLibrary(page)
 
-      // Recovery: the persisted-but-unfinished download is re-driven on launch and
-      // now completes — the row reaches a downloaded terminal state on its own.
-      await expect(row().locator('[data-testid="track-state"]')).toHaveAttribute(
-        "data-state",
-        /added|completed/,
-        { timeout: 30_000 }
-      )
+      // The recovered download reaches the downloaded terminal state.
+      await expect(indicator()).toHaveAttribute("data-state", /added|completed/, {
+        timeout: 30_000,
+      })
     })
   }
 )
