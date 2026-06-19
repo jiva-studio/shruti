@@ -16,6 +16,8 @@ import type {
 } from "@lib/domain/core.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
+import { preferredLibraryLanguage } from "@lib/domain/services/localizedName.js"
 
 /**
  * Shared cache of content-DB dictionaries (authors / locations / sources /
@@ -30,6 +32,14 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 export const useDictionariesStore = defineStore("dictionaries", () => {
   const app = useShruti()
   const appLanguage = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
+  // Names of CONTENT categories (topics) follow the library content language so
+  // they read in the same language as the lectures — a uk UI on a ru library
+  // shows Russian topic names, not an English dictionary fallback. The UI
+  // language only breaks ties when it is itself a selected library language.
+  const labelLanguage = computed<LanguageCode>(() =>
+    preferredLibraryLanguage(libraryLanguages.value, appLanguage.value)
+  )
 
   const authors = ref<readonly Author[]>([])
   const locations = ref<readonly Location[]>([])
@@ -90,10 +100,11 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
   const topicsById = computed<ReadonlyMap<TopicId, Topic>>(
     () => new Map(topics.value.map((t) => [t.id, t]))
   )
-  /** Topic-id → localised display name in the active UI language (recommender
-   *  topic chips / shelf headers). Falls back to the first locale, then id. */
+  /** Topic-id → localised display name in the library content language
+   *  (recommender topic chips / shelf headers). Falls back to the first locale,
+   *  then id. */
   const topicNamesById = computed<ReadonlyMap<string, string>>(() => {
-    const lang = appLanguage.value
+    const lang = labelLanguage.value
     const out = new Map<string, string>()
     for (const t of topics.value) {
       const name = t.names.get(lang) ?? t.names.values().next().value ?? t.id
@@ -101,10 +112,10 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     }
     return out
   })
-  /** Topic-id → short display label in the active UI language (chips, shelf
+  /** Topic-id → short display label in the library content language (chips, shelf
    *  headers). Falls back to the full name when no short one exists. */
   const topicShortNamesById = computed<ReadonlyMap<string, string>>(() => {
-    const lang = appLanguage.value
+    const lang = labelLanguage.value
     const out = new Map<string, string>()
     for (const t of topics.value) {
       const short =

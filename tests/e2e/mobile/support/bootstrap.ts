@@ -9,6 +9,7 @@ import {
   userDbPath,
   type Locale,
 } from "./fixtures.js"
+import { requireFixtures } from "./test.js"
 
 /**
  * The whole bootstrap is lifted from the screenshot pipeline
@@ -35,6 +36,7 @@ import {
  *    to match the request) so the reader renders offline + deterministically.
  */
 export async function interceptContent(page: Page): Promise<void> {
+  requireFixtures()
   const fakeConfig = JSON.stringify({
     databases: [
       { version: CONTENT_DB_VERSION, scheme: Number(String(CONTENT_DB_VERSION).slice(0, 8)) },
@@ -111,6 +113,39 @@ export async function preseedUserDb(page: Page, locale: Locale): Promise<void> {
 }
 
 /**
+ * Like {@link preseedUserDb} but seeds ONLY when the user DB isn't already in
+ * IndexedDB. Use this for restart/persistence tests: the unconditional preseed
+ * re-runs on every reload and would clobber any runtime-written rows (e.g. a
+ * completed download), so a "restart" wouldn't represent real persistence.
+ */
+export async function preseedUserDbOnce(page: Page, locale: Locale): Promise<void> {
+  const base64 = fs.readFileSync(userDbPath(locale)).toString("base64")
+  await page.addInitScript(
+    ({ b64 }: { b64: string }) => {
+      const open = indexedDB.open("shruti", 1)
+      open.onupgradeneeded = () => open.result.createObjectStore("databases")
+      open.onsuccess = () => {
+        const db = open.result
+        const ro = db.transaction(["databases"], "readonly").objectStore("databases").get("user.db")
+        ro.onsuccess = () => {
+          if (ro.result) {
+            db.close()
+            return
+          }
+          const bin = atob(b64)
+          const arr = new Uint8Array(bin.length)
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+          const tx = db.transaction(["databases"], "readwrite")
+          tx.objectStore("databases").put(arr, "user.db")
+          tx.oncomplete = () => db.close()
+        }
+      }
+    },
+    { b64: base64 }
+  )
+}
+
+/**
  * Pin the library (TracksView) to the Bhagavad-gita source so it shows a stable,
  * populated, reference-sorted list. Capacitor Preferences on web → localStorage
  * under the `CapacitorStorage.` prefix.
@@ -143,14 +178,57 @@ export async function preseedSearchFilter(
   )
 }
 
-/** Park the Home "enable reminders" nag in its cooldown so it can't cover rows. */
+/** Park the Home nags (reminders + subscription) in their cooldown so they can't
+ *  cover rows. The subscription nag only shows for non-Pro users, which is now
+ *  the e2e default — so dismiss both. */
 export async function preseedDismissedNags(page: Page): Promise<void> {
   await page.addInitScript(() => {
     try {
-      localStorage.setItem(
-        "CapacitorStorage.home.notificationsNag.dismissedAt",
-        JSON.stringify(2_000_000_000_000)
-      )
+      const far = JSON.stringify(2_000_000_000_000)
+      localStorage.setItem("CapacitorStorage.home.notificationsNag.dismissedAt", far)
+      localStorage.setItem("CapacitorStorage.home.subscriptionNag.dismissedAt", far)
+    } catch {
+      /* non-fatal */
+    }
+  })
+}
+
+/**
+ * Force the app to run as a NON-subscribed (free) user. The dev build treats
+ * everyone as Pro (see usePurchasesStore); this flag defeats that override so
+ * paywalls and Pro gates are reproducible. It can never grant Pro and is inert
+ * on production builds.
+ */
+export async function preseedNonPro(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("CapacitorStorage.e2e.forceFreeTier", "1")
+    } catch {
+      /* non-fatal */
+    }
+  })
+}
+
+/**
+ * Seed a signed-in (non-anonymous) auth session so account / sign-out specs run
+ * without a real backend. The token expires a year out, so the app never tries
+ * to refresh (no `/auth/me` round-trip) and stays signed in offline. Call BEFORE
+ * boot(). The JWT's base64 middle carries `exp`/`tier`/`quota_id` claims.
+ */
+export async function preseedAuthTokens(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const exp = Math.floor(Date.now() / 1000) + 3600 * 24 * 365
+    const claims = btoa(JSON.stringify({ exp, tier: "free", quota_id: "q1" }))
+    const tokens = {
+      accessToken: `h.${claims}.s`,
+      refreshToken: "e2e-refresh",
+      email: "e2e@example.com",
+      name: "E2E Tester",
+      anonymous: false,
+      accessTokenExpiresAt: exp * 1000,
+    }
+    try {
+      localStorage.setItem("CapacitorStorage.auth.tokens", JSON.stringify(tokens))
     } catch {
       /* non-fatal */
     }
@@ -176,14 +254,18 @@ const KILL_ANIMATIONS_CSS = `
 export async function boot(
   page: Page,
   locale: Locale = "en",
-  opts: { dismissNags?: boolean; sourceIds?: string[] } = {}
+  opts: { dismissNags?: boolean; sourceIds?: string[]; pro?: boolean } = {}
 ): Promise<void> {
-  const { dismissNags = true } = opts
+  const { dismissNags = true, pro = false } = opts
   assertFixturesPresent()
   await interceptContent(page)
   await preseedUserDb(page, locale)
   await preseedSearchFilter(page, locale, opts.sourceIds)
   if (dismissNags) await preseedDismissedNags(page)
+  // The dev build treats every user as Pro. For the e2e suite we flip that:
+  // boot NON-Pro by default (so paywalls / Pro gates are reproducible) and
+  // turn Pro on explicitly with `boot(page, locale, { pro: true })`.
+  if (!pro) await preseedNonPro(page)
 
   await page.goto(`/?locale=${locale}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
