@@ -4,7 +4,7 @@ import { boot } from "../../support/bootstrap.js"
 import { playFirstQueuedTrack } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
-test(qase([16, 54], caseTitle(16)), { tag: ["@offline", "@player"] }, async ({ page }) => {
+test(qase(16, caseTitle(16)), { tag: ["@offline", "@player"] }, async ({ page }) => {
   await boot(page, "en", { userDb: "single" })
 
   await step(page, 16, 0, async () => {
