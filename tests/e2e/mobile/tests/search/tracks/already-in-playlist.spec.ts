@@ -1,7 +1,7 @@
 import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
-import { openLibrary, openTrackSheet, playlistRows, trackRows, trackSheet } from "../../../support/nav.js"
+import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../../support/nav.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 // The track-row lifecycle in one case: open a not-yet-queued lecture's sheet
@@ -12,31 +12,21 @@ test(
   qase(29, caseTitle(29)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
-    await boot(page)
+    // Empty playlist (clean user.db): the first library row is un-queued, so Add
+    // is enabled — and the row's later "Already in playlist" state is the only
+    // queued track on screen, not lost among a seeded queue.
+    await boot(page, "en", { userDb: "clean" })
 
     let title = ""
 
     await step(page, 29, 0, async () => {
-      // Snapshot the queue, then pick a library row NOT already in it so Add is
-      // enabled.
-      await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
-      const queued = (await playlistRows(page).allInnerTexts()).map((t) => t.trim())
-
       await openLibrary(page)
       const rows = trackRows(page)
-      const n = await rows.count()
-      let pick = -1
-      for (let i = 0; i < n; i++) {
-        if (!queued.includes((await rows.nth(i).innerText()).trim())) {
-          pick = i
-          break
-        }
-      }
-      expect(pick, "expected an un-queued library lecture").toBeGreaterThanOrEqual(0)
-      title = (await rows.nth(pick).locator(".title").innerText()).trim()
+      await expect(rows.first()).toBeVisible({ timeout: 20_000 })
+      title = (await rows.first().locator(".title").innerText()).trim()
 
       // The track sheet (card) shows a title and the Add / Share actions.
-      await openTrackSheet(page, rows.nth(pick))
+      await openTrackSheet(page, rows.first())
       const sheet = trackSheet(page)
       await expect(sheet.locator(".sheet-title")).not.toHaveText("")
       await expect(sheet.locator(".add-btn")).toBeVisible()

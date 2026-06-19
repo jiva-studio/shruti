@@ -13,15 +13,11 @@ import { step, caseTitle } from "../../../support/steps.js"
 // topic-language.spec for that language-filtering coverage. Booting ru gives a
 // topic with lectures to navigate and add from.
 test(qase(43, caseTitle(43)), { tag: ["@offline", "@library"] }, async ({ page }) => {
-  await boot(page, "ru")
-
-  // Baseline the Home queue before navigating away.
-  await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
-  const queued = (await playlistRows(page).allInnerTexts()).map((t) => t.trim())
-  const before = queued.length
+  // Empty playlist (clean user.db): after the single add, Home holds exactly
+  // that one lecture — the screenshot shows precisely what was added.
+  await boot(page, "ru", { userDb: "clean" })
 
   const rows = trackRows(page)
-  let pick = -1
 
   await step(page, 43, 0, async () => {
     await gotoTab(page, "search")
@@ -35,24 +31,14 @@ test(qase(43, caseTitle(43)), { tag: ["@offline", "@library"] }, async ({ page }
     // Let the Ionic page transition settle — until it finishes the outgoing
     // SearchView's router-outlet intercepts taps on the topic rows.
     await page.waitForTimeout(800)
+    // The playlist is empty, so the first topic lecture is un-queued.
     await expect(rows.first()).toBeVisible({ timeout: 20_000 })
-
-    // Pick the first topic lecture not already in the queue.
-    const n = await rows.count()
-    for (let i = 0; i < n; i++) {
-      const text = (await rows.nth(i).innerText()).trim()
-      if (!queued.includes(text)) {
-        pick = i
-        break
-      }
-    }
-    expect(pick, "expected an un-queued lecture in the topic").toBeGreaterThanOrEqual(0)
   })
 
   await step(page, 43, 1, async (capture) => {
-    // Open the chosen lecture's track sheet and tap Add — screenshot the sheet
+    // Open the first lecture's track sheet and tap Add — screenshot the sheet
     // first because tapping Add dismisses it.
-    await openTrackSheet(page, rows.nth(pick))
+    await openTrackSheet(page, rows.first())
     await expect(trackSheet(page).locator(".add-btn")).toBeVisible()
     await capture()
     await trackSheet(page).locator(".add-btn").click()
@@ -60,8 +46,8 @@ test(qase(43, caseTitle(43)), { tag: ["@offline", "@library"] }, async ({ page }
   })
 
   await step(page, 43, 2, async () => {
-    // Back on Home the queue has grown by exactly one.
+    // Back on Home the queue holds exactly the one lecture we added.
     await gotoTab(page, "home")
-    await expect.poll(() => playlistRows(page).count(), { timeout: 15_000 }).toBe(before + 1)
+    await expect.poll(() => playlistRows(page).count(), { timeout: 15_000 }).toBe(1)
   })
 })

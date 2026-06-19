@@ -28,7 +28,9 @@ test(
   { tag: ["@offline", "@search"] },
   async ({ page }) => {
     await interceptContent(page)
-    await preseedUserDb(page, "en")
+    // Empty playlist (clean user.db): the one track we add+play is the only Home
+    // row, so the radial-vs-icon contrast is unambiguous in the screenshot.
+    await preseedUserDb(page, "en", "clean")
     await preseedSearchFilter(page, "en")
     await preseedDismissedNags(page)
 

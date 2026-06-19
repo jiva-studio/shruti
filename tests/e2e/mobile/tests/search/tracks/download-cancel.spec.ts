@@ -27,7 +27,9 @@ test(
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await interceptContent(page)
-    await preseedUserDb(page, "en")
+    // Empty playlist (clean user.db): adding then cancelling the one track takes
+    // the queue 1 → 0, so the cancel is the whole story in the screenshot.
+    await preseedUserDb(page, "en", "clean")
     await preseedSearchFilter(page, "en")
     await preseedDismissedNags(page)
 

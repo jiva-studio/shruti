@@ -10,7 +10,7 @@ test(
   qase(64, caseTitle(64)),
   { tag: ["@offline", "@transcript"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "single" })
 
     // The transcript is prefetched + cached on boot, so a route failure alone is
     // bypassed by the cache. Clear the cache so the reader must hit the network,
