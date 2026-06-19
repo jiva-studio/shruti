@@ -382,12 +382,16 @@
     "preconditions": "Offline boot (full catalog) with a completed track in the queue.",
     "steps": [
       {
-        "action": "Confirm the completed track shows the double-check in the queue, then swipe-archive it.",
-        "expected": "The completed double-check is shown; after archiving, the track leaves the active queue."
+        "action": "In the queue, confirm the completed track shows the double-check, then swipe-archive it.",
+        "expected": "The completed double-check is shown in the queue; archiving removes the track from the active queue."
+      },
+      {
+        "action": "Open the library and find the same track.",
+        "expected": "Its library row still shows the lifetime completion badge (the rosette double-check)."
       },
       {
         "action": "Re-add the track from the library and return to Home.",
-        "expected": "The library row still shows the lifetime completion badge, but the re-added queue row is a fresh pass with no completed double-check."
+        "expected": "The re-added queue row is a fresh pass — a progress radial, not the completed double-check; the library keeps its lifetime badge."
       }
     ],
     "tags": [
@@ -422,60 +426,27 @@
   "22": {
     "suite_id": 3,
     "automation": 2,
-    "title": "Search box is wired to the result set",
-    "description": "Verifies the search box drives the result set: a query that matches nothing empties the list, and clearing it restores the full catalog. Offline.",
+    "title": "Search by verse reference, title word, and the no-results empty state",
+    "description": "Verifies the three ways the search box narrows the library — a verse reference matches the exact verse (no prefix bleed), a title word filters to matching titles, and a no-match query shows the empty state. Offline.",
     "preconditions": "Offline boot on the library list.",
     "steps": [
       {
-        "action": "Type a query that matches nothing.",
-        "expected": "The list empties (zero rows)."
+        "action": "Search a verse reference (\"bg 1.1\").",
+        "expected": "The list narrows to the exact verse — no prefix bleed into 1.10–1.19."
       },
       {
-        "action": "Clear the search box.",
-        "expected": "The full catalog list is restored."
+        "action": "Search a word taken from a lecture title.",
+        "expected": "The list narrows to lectures whose titles contain that word."
+      },
+      {
+        "action": "Search a query that matches nothing.",
+        "expected": "The centered no-results empty state is shown with zero rows."
       }
     ],
     "tags": [
       "search",
       "free",
       "smoke",
-      "e2e"
-    ]
-  },
-  "23": {
-    "suite_id": 3,
-    "automation": 2,
-    "title": "Verse-reference search matches the exact reference (no prefix bleed)",
-    "description": "A dotted verse reference matches the exact verse and does not bleed into adjacent verses: searching \"bg 1.1\" returns no titles referencing 1.10-1.19. Offline.",
-    "preconditions": "Offline fixture catalog with verse-referenced tracks.",
-    "steps": [
-      {
-        "action": "Enter \"bg 1.1\" into the search input.",
-        "expected": "Results appear and no visible title references 1.10-1.19 (the dotted reference matches the exact verse, not a prefix)."
-      }
-    ],
-    "tags": [
-      "search",
-      "free",
-      "smoke",
-      "e2e"
-    ]
-  },
-  "24": {
-    "suite_id": 3,
-    "automation": 2,
-    "title": "No-results empty state",
-    "description": "A query that matches nothing shows the centered empty state (.no-results with a title) and renders zero track rows. Offline.",
-    "preconditions": "Offline fixture catalog.",
-    "steps": [
-      {
-        "action": "Enter a query that matches nothing (e.g. \"zzzqqxnomatch\").",
-        "expected": "The centered no-results empty state with its title is shown and the list has zero rows."
-      }
-    ],
-    "tags": [
-      "search",
-      "free",
       "e2e"
     ]
   },
@@ -500,45 +471,35 @@
   "26": {
     "suite_id": 20,
     "automation": 2,
-    "title": "Source filter re-queries the library list",
-    "description": "Verifies applying a Sources filter live re-queries the catalog: swapping the pinned source to a different one changes the visible title set to a disjoint page of lectures. Offline.",
+    "title": "Library filters: source re-query, active badge, sort, and reset",
+    "description": "Verifies the live-apply filters journey: switching the Sources facet re-queries the list and the active-filter badge stays highlighted; changing the Sort re-orders the list; Reset clears every facet and the badge. Offline.",
     "preconditions": "boot() pins source source_dsicuBsFvinZ (a non-seed dimension) with a populated, deterministic list.",
     "steps": [
       {
         "action": "Open the filters sheet and switch the Sources facet to a different source.",
-        "expected": "The filters sheet shows the new Sources selection."
+        "expected": "The sheet shows the new Sources selection."
       },
       {
-        "action": "Apply the filter (close the sheet).",
-        "expected": "The library re-queries live — the visible title set becomes a different (disjoint) page of lectures."
+        "action": "Apply (close the sheet).",
+        "expected": "The library re-queries to a disjoint set and the active-filter badge stays highlighted."
+      },
+      {
+        "action": "Open the filters sheet and choose the \"Date (oldest first)\" sort.",
+        "expected": "The sheet shows the chosen sort."
+      },
+      {
+        "action": "Apply (close the sheet).",
+        "expected": "The list re-orders live — the order differs from the default."
+      },
+      {
+        "action": "Open the filters sheet and tap Reset.",
+        "expected": "Every facet collapses to \"Any\", the active-filter badge clears, and Reset disables itself."
       }
     ],
     "tags": [
       "search",
       "free",
       "smoke",
-      "e2e"
-    ]
-  },
-  "27": {
-    "suite_id": 20,
-    "automation": 2,
-    "title": "Reset clears all filters",
-    "description": "From a dirty filter state (pinned source plus a second enabled source), tapping Reset collapses every facet summary to \"Any\", disables the Reset button, clears the header active badge, and the list re-queries to a populated full catalog. Offline.",
-    "preconditions": "boot() pins a source; the test enables a second source to ensure a genuinely dirty state.",
-    "steps": [
-      {
-        "action": "Open the filters sheet, set a source, then tap Reset.",
-        "expected": "Every facet collapses to \"Any\", the active-filter badge clears, and Reset disables itself (shown on the still-open sheet)."
-      },
-      {
-        "action": "Apply (close the sheet).",
-        "expected": "The library is back to the full catalog."
-      }
-    ],
-    "tags": [
-      "search",
-      "free",
       "e2e"
     ]
   },
@@ -563,16 +524,20 @@
   "29": {
     "suite_id": 21,
     "automation": 2,
-    "title": "Track row goes from none to added and the sheet blocks re-adding",
-    "description": "Two offline tests share this id. Adding a not-yet-queued lecture via the sheet's Add button grows the Home queue by one. Re-opening the same lecture shows the primary button disabled and labelled \"Already in playlist\".",
+    "title": "Track row: add a lecture (download indicator), then re-adding is blocked",
+    "description": "Verifies the track-row lifecycle: a not-yet-queued lecture's sheet shows the card with Add/Share; tapping Add closes the sheet and the row gains a download indicator; re-opening the same lecture disables the primary button (\"Already in playlist\"). Offline.",
     "preconditions": "Offline boot with an existing queue and a populated library.",
     "steps": [
       {
-        "action": "Open a not-yet-queued library track's sheet and tap Add to playlist.",
-        "expected": "The sheet closes and the Home queue grows by one (the track is added)."
+        "action": "Open a not-yet-queued lecture's track sheet.",
+        "expected": "The card shows the title and the Add / Share actions; Add is enabled."
       },
       {
-        "action": "Re-open the sheet for the same lecture.",
+        "action": "Tap Add.",
+        "expected": "The sheet closes and the library row gains a download indicator (downloading / added)."
+      },
+      {
+        "action": "Re-open the same lecture's sheet.",
         "expected": "The primary button is disabled and reads \"Already in playlist\"."
       }
     ],
@@ -580,28 +545,6 @@
       "search",
       "free",
       "smoke",
-      "e2e"
-    ]
-  },
-  "30": {
-    "suite_id": 21,
-    "automation": 2,
-    "title": "Adding a track moves its row to a downloaded state",
-    "description": "Adding a library track via its sheet transitions the discovery-row state icon to added/downloading/completed (data-state). The live 0-100% radial is not exposed in the DOM, so the test asserts the state transition, not a percentage ring. Offline.",
-    "preconditions": "Offline boot with an existing queue and a populated library.",
-    "steps": [
-      {
-        "action": "Open the library, pick a not-yet-queued track, open its sheet and tap Add to playlist.",
-        "expected": "The Add action is accepted and the track sheet dismisses, returning to the library list."
-      },
-      {
-        "action": "Observe the picked track's discovery row back on the library list.",
-        "expected": "The row's state reflects the download (data-state added / downloading / completed)."
-      }
-    ],
-    "tags": [
-      "search",
-      "free",
       "e2e"
     ]
   },
@@ -945,92 +888,30 @@
       "smoke"
     ]
   },
-  "48": {
-    "suite_id": 5,
-    "automation": 2,
-    "title": "Smart Library banner is hidden without subscription or IAP",
-    "description": "Offline default boot is non-Pro and the web build has no IAP. Verifies the Library landing renders some banner but the Smart Library banner (smart-bg background) is absent.",
-    "preconditions": "Offline; default boot (non-Pro, no IAP available).",
-    "steps": [
-      {
-        "action": "Open the Search tab and view the Library landing.",
-        "expected": "A library banner is visible, but the Smart Library banner (smart-bg) is not rendered (count 0)."
-      }
-    ],
-    "tags": [
-      "smart-library",
-      "edge",
-      "e2e"
-    ]
-  },
   "49": {
     "suite_id": 5,
     "automation": 2,
-    "title": "Subscriber opens the Smart Library dialog",
-    "description": "Pro boot treats the user as subscribed, so tapping the Smart Library banner opens the dialog (not the paywall). Verifies the banner is visible on the landing and that tapping it opens the dialog with the Enable toggle. Offline.",
+    "title": "Smart Library dialog: open, toggle Enable, open the filter sheet",
+    "description": "Verifies the Smart Library dialog (Pro): a subscriber taps the banner to open the dialog, flips the Enable toggle on and back off, and opens the Filter row → the search-filters sheet. Offline (treated as subscribed).",
     "preconditions": "Offline; Pro boot (subscribed).",
     "steps": [
-      {
-        "action": "Open the Search tab and locate the Smart Library banner (smart-bg background) on the Library landing.",
-        "expected": "The Smart Library banner is visible."
-      },
       {
         "action": "Tap the Smart Library banner.",
-        "expected": "The Smart Library dialog opens and shows the Enable toggle."
-      }
-    ],
-    "tags": [
-      "smart-library",
-      "pro",
-      "smoke",
-      "e2e"
-    ]
-  },
-  "50": {
-    "suite_id": 5,
-    "automation": 2,
-    "title": "Enable toggle flips on and off in the Smart Library dialog",
-    "description": "Verifies only the toggle state: opening the dialog, clicking the Enable toggle flips aria-checked, and clicking again restores it. The background auto-download loop is not exercised offline (see case 52).",
-    "preconditions": "Offline; Pro boot (subscribed).",
-    "steps": [
-      {
-        "action": "Open the Search tab, tap the Smart Library banner, and open the Smart Library dialog.",
-        "expected": "The dialog is visible and the Enable toggle is shown."
+        "expected": "The Smart Library dialog opens with the Enable toggle."
       },
       {
-        "action": "Click the Enable toggle.",
-        "expected": "The toggle flips to the opposite state (aria-checked changes)."
+        "action": "Flip the Enable toggle on and back off.",
+        "expected": "The toggle reflects each state."
       },
       {
-        "action": "Click the Enable toggle again.",
-        "expected": "The toggle returns to its original state."
-      }
-    ],
-    "tags": [
-      "smart-library",
-      "pro",
-      "e2e"
-    ]
-  },
-  "51": {
-    "suite_id": 5,
-    "automation": 2,
-    "title": "Filter row opens the filters sheet from the Smart Library dialog",
-    "description": "Tapping the Filter row (with the feature enabled so the row is interactive) opens the shared search-filters sheet so the user can scope what auto-downloads. Only the sheet opening is asserted (no selection, target, or archive config). Offline.",
-    "preconditions": "Offline; Pro boot (subscribed).",
-    "steps": [
-      {
-        "action": "Open the Search tab, tap the Smart Library banner, and open the Smart Library dialog (enabling the feature so the Filter row is interactive).",
-        "expected": "The Smart Library dialog is visible."
-      },
-      {
-        "action": "Tap the Filter row.",
+        "action": "With the feature enabled, open the Filter row.",
         "expected": "The search-filters sheet opens."
       }
     ],
     "tags": [
       "smart-library",
       "pro",
+      "smoke",
       "e2e"
     ]
   },
@@ -2917,29 +2798,6 @@
       "e2e"
     ]
   },
-  "142": {
-    "suite_id": 20,
-    "automation": 2,
-    "title": "Sorting by date (oldest first) reorders the list",
-    "description": "Switching Sort to \"Date (oldest first)\" in the filters sheet live re-orders the list so the visible order differs from the default (by-reference) order. Offline; same row set, different order.",
-    "preconditions": "boot() pins a source giving a populated, deterministic by-reference order.",
-    "steps": [
-      {
-        "action": "Open the filters sheet and choose the \"Date (oldest first)\" sort.",
-        "expected": "The filters sheet shows the chosen sort."
-      },
-      {
-        "action": "Apply the sort (close the sheet).",
-        "expected": "The library re-orders live — the row order differs from the default."
-      }
-    ],
-    "tags": [
-      "search",
-      "filters",
-      "free",
-      "e2e"
-    ]
-  },
   "143": {
     "suite_id": 4,
     "automation": 2,
@@ -3018,30 +2876,6 @@
     "tags": [
       "player",
       "free",
-      "e2e"
-    ]
-  },
-  "147": {
-    "suite_id": 21,
-    "automation": 2,
-    "title": "Tapping a track opens its card",
-    "description": "Tapping a track row opens the track sheet showing a non-empty title and the two primary actions (Add to playlist, Share); the close button dismisses it cleanly. Offline.",
-    "preconditions": "Offline boot with a populated library list.",
-    "steps": [
-      {
-        "action": "Tap a track row.",
-        "expected": "The track sheet opens with a non-empty title and the Add to playlist and Share buttons visible."
-      },
-      {
-        "action": "Tap the sheet's close button.",
-        "expected": "The sheet dismisses cleanly."
-      }
-    ],
-    "tags": [
-      "search",
-      "tracks",
-      "free",
-      "smoke",
       "e2e"
     ]
   },
@@ -3163,27 +2997,6 @@
       }
     ]
   },
-  "154": {
-    "suite_id": 21,
-    "automation": 2,
-    "tags": [
-      "tracks",
-      "e2e"
-    ],
-    "title": "Add a library lecture to the playlist",
-    "description": "Verifies adding a not-yet-queued lecture from the library: opening its track sheet and tapping Add closes the sheet and grows the Home playlist by exactly one. Offline.",
-    "preconditions": "Offline boot; at least one library lecture is not yet in the playlist.",
-    "steps": [
-      {
-        "action": "In the library, open a not-yet-queued lecture's track sheet and tap Add.",
-        "expected": "The track sheet closes."
-      },
-      {
-        "action": "Open the Home tab.",
-        "expected": "The Up-Next playlist has grown by exactly one."
-      }
-    ]
-  },
   "155": {
     "suite_id": 12,
     "automation": 2,
@@ -3202,23 +3015,6 @@
       {
         "action": "Inspect the collection's track list.",
         "expected": "It is non-empty and every lecture title is Russian (Cyrillic) — not emptied by the UI/library language mismatch."
-      }
-    ]
-  },
-  "156": {
-    "suite_id": 20,
-    "automation": 2,
-    "tags": [
-      "filters",
-      "e2e"
-    ],
-    "title": "A pinned filter lights the active-filter badge",
-    "description": "Verifies the header filter button shows its active-state highlight when a non-seed filter (a pinned source) is set — the pristine locale-derived language seed alone does not light it. Offline.",
-    "preconditions": "Offline boot pinning a source (a non-seed filter dimension).",
-    "steps": [
-      {
-        "action": "Open the library with a pinned source filter.",
-        "expected": "The header filter button shows the active-filter highlight (.is-active)."
       }
     ]
   },
@@ -3390,23 +3186,6 @@
       {
         "action": "On a Ukrainian-locale device, open the first topic from the Search landing.",
         "expected": "The topic detail is populated and every lecture title is Russian (Cyrillic)."
-      }
-    ]
-  },
-  "164": {
-    "suite_id": 3,
-    "automation": 2,
-    "tags": [
-      "search",
-      "e2e"
-    ],
-    "title": "Searching by a title word filters the list",
-    "description": "Verifies title search: typing a word that appears in a lecture title narrows the library list to rows whose title contains that word. Offline.",
-    "preconditions": "Offline boot on the library list.",
-    "steps": [
-      {
-        "action": "Type a word taken from a lecture's title into the search box.",
-        "expected": "The list narrows to lectures whose titles contain that word."
       }
     ]
   }
