@@ -52,10 +52,12 @@ test(
       // Let any in-flight transfers settle, then assert the de-dup invariant: no
       // audio URL was ever fetched more than once.
       await page.waitForTimeout(3000)
-      const dupes = [...counts.entries()].filter(([, n]) => n > 1)
+      // De-dup invariant as one strict statement: at least one audio URL was
+      // actually fetched (the played track) AND none was fetched more than once.
+      const fetched = [...counts.entries()]
+      expect(fetched.length, "no audio URL was fetched at all").toBeGreaterThan(0)
+      const dupes = fetched.filter(([, n]) => n > 1)
       expect(dupes, `URLs fetched more than once: ${JSON.stringify(dupes)}`).toEqual([])
-      // And at least one transfer actually happened (the played track).
-      expect([...counts.values()].some((n) => n >= 1)).toBe(true)
     })
   }
 )
