@@ -37,7 +37,7 @@ for (const c of MATRIX) {
       qase(c.id, caseTitle(c.id)),
       { tag: ["@offline", "@library"] },
       async ({ page }) => {
-        await bootDeviceLocale(page, c.userDb)
+        await bootDeviceLocale(page, c.userDb, { userDbStrategy: "clean" })
 
         await step(page, c.id, 0, async () => {
           // Library: poll until the locale-derived language filter has hydrated —
@@ -93,7 +93,7 @@ test.describe("content-language · multiple languages selected", () => {
       // Explicit multi-language selection — the user broadened the library to
       // both content languages. The Bhagavad-gita source carries en and ru, so
       // the list must mix Cyrillic and Latin titles.
-      await bootDeviceLocale(page, "ru", { filterLangs: ["ru", "en"] })
+      await bootDeviceLocale(page, "ru", { filterLangs: ["ru", "en"], userDbStrategy: "clean" })
       await openLibrary(page)
 
       await step(page, 162, 0, async () => {
@@ -120,7 +120,7 @@ test.describe("content-language · Ukrainian topic detail", () => {
     qase(163, caseTitle(163)),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
-      await bootDeviceLocale(page, "ru")
+      await bootDeviceLocale(page, "ru", { userDbStrategy: "clean" })
       await gotoTab(page, "search")
 
       await step(page, 163, 0, async () => {

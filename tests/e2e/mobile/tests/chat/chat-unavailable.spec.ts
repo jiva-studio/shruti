@@ -14,7 +14,7 @@ test(
     await mockChatAuth(page)
     await page.route("**/chat", (route) => route.fulfill({ status: 500, body: "" }))
 
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "chat")
 
     await step(page, 88, 0, async () => {

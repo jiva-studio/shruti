@@ -11,7 +11,7 @@ test(
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
     await preseedAuthTokens(page)
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
 
     let row
     await step(page, 109, 0, async () => {

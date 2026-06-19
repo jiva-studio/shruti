@@ -36,6 +36,7 @@ interface Args {
   seed: number
   days: number
   now: number
+  strategy: StrategyName
 }
 
 /** Raw CLI options. `locale`/`out` are resolved per-locale in main(). */
@@ -45,17 +46,30 @@ interface CliOpts {
   seed: number
   days: number
   now: number
+  strategy: StrategyName
 }
 
 function parseArgs(argv: string[]): CliOpts {
   const opts: Record<string, string> = {}
   for (const arg of argv) {
+    // `--clean` is sugar for `--strategy=clean`.
+    if (arg === "--clean") {
+      opts.strategy = "clean"
+      continue
+    }
     const m = /^--([^=]+)=(.*)$/.exec(arg)
     if (m) opts[m[1]!] = m[2]!
+  }
+  const strategy = (opts.strategy ?? "preseed") as StrategyName
+  if (!(strategy in STRATEGIES)) {
+    throw new Error(
+      `unknown --strategy=${strategy}; known: ${Object.keys(STRATEGIES).join(", ")}`
+    )
   }
   return {
     locale: opts.locale,
     out: opts.out,
+    strategy,
     seed: opts.seed ? Number(opts.seed) : 42,
     days: opts.days ? Number(opts.days) : 120,
     // Anchor to the START of the generation day (local midnight), NOT a
@@ -133,6 +147,46 @@ function nanoId(rng: () => number, len = 12): string {
   for (let i = 0; i < len; i++) id += alphabet[Math.floor(rng() * alphabet.length)]
   return id
 }
+
+/* ------------------------------ Strategies ----------------------------- */
+
+/**
+ * A fixture strategy decides what user state a generated `user.db` carries
+ * beyond the always-present schema + config. Adding a new flavour (e.g. a
+ * signed-in or notes-only fixture) is one new entry here — no boolean flags.
+ *
+ *  - `suffix` — appended to the default output filename (`user-<locale><suffix>.db`).
+ *  - `seed`   — populates the db after migrations + config have run.
+ */
+interface Strategy {
+  suffix: string
+  seed: (db: IDatabase, args: Args, rng: () => number) => Promise<void>
+}
+
+const STRATEGIES = {
+  /** Full demo dataset: playlist, listening history, notes, chat. */
+  preseed: {
+    suffix: "",
+    seed: async (db, args, rng) => {
+      const itemIds = await seedPlaylist(db, args, rng)
+      console.log(`  wrote ${itemIds.length} playlist_items`)
+      await seedMediaItems(db, args, playlistTracksFor(args.locale), rng)
+      await seedSessions(db, args, itemIds, rng)
+      await seedNotes(db, args, rng)
+      await seedChat(db, args)
+    },
+  },
+  /** Minimal: schema + config only, so specs that bring their own state show
+   *  an empty home (no seeded playlist / history / notes) in screenshots. */
+  clean: {
+    suffix: ".clean",
+    seed: async () => {
+      console.log("  clean strategy — schema + config only (no playlist/history/notes/chat)")
+    },
+  },
+} satisfies Record<string, Strategy>
+
+type StrategyName = keyof typeof STRATEGIES
 
 /* ------------------------------- Seeders ------------------------------ */
 
@@ -438,7 +492,10 @@ async function seedChat(db: IDatabase, args: Args): Promise<void> {
 async function buildOne(args: Args): Promise<void> {
   const rng = mulberry32(args.seed)
 
-  console.log(`→ generating user fixture: locale=${args.locale} seed=${args.seed} days=${args.days}`)
+  console.log(
+    `→ generating user fixture: locale=${args.locale} strategy=${args.strategy} ` +
+      `seed=${args.seed} days=${args.days}`
+  )
   console.log(`  output: ${args.out}`)
 
   const SQL = await initSqlJs()
@@ -447,12 +504,7 @@ async function buildOne(args: Args): Promise<void> {
 
   await runUserMigrations(db)
   await seedConfig(db, args)
-  const itemIds = await seedPlaylist(db, args, rng)
-  console.log(`  wrote ${itemIds.length} playlist_items`)
-  await seedMediaItems(db, args, playlistTracksFor(args.locale), rng)
-  await seedSessions(db, args, itemIds, rng)
-  await seedNotes(db, args, rng)
-  await seedChat(db, args)
+  await STRATEGIES[args.strategy].seed(db, args, rng)
 
   fs.mkdirSync(path.dirname(args.out), { recursive: true })
   const bytes = raw.export()
@@ -467,9 +519,10 @@ async function main(): Promise<void> {
   // No --locale → build the whole capture set (config.CAPTURE_LOCALES);
   // --locale=xx builds just that one.
   const locales = cli.locale ? [cli.locale] : [...CAPTURE_LOCALES]
+  const { suffix } = STRATEGIES[cli.strategy]
   for (const locale of locales) {
-    const out = cli.out ?? path.join(DEFAULT_OUT_DIR, `user-${locale}.db`)
-    await buildOne({ locale, out, seed: cli.seed, days: cli.days, now: cli.now })
+    const out = cli.out ?? path.join(DEFAULT_OUT_DIR, `user-${locale}${suffix}.db`)
+    await buildOne({ locale, out, seed: cli.seed, days: cli.days, now: cli.now, strategy: cli.strategy })
   }
 }
 

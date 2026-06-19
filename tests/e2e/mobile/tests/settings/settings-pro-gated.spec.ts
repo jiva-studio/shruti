@@ -10,7 +10,7 @@ test(
   qase(118, caseTitle(118)),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "settings")
 
     await step(page, 118, 0, async () => {

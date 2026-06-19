@@ -11,7 +11,7 @@ test(
   qase(120, caseTitle(120)),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "settings")
 
     const notifications = page

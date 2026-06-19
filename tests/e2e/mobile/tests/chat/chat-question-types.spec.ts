@@ -55,7 +55,7 @@ const sharePdf = (id: string, title: string, track: string) =>
 test(qase(85, caseTitle(85)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [VERSE, delta("Krishna explains:\n\n[verse:source_x/2.13|BG 2.13]\n\nEternal."), done()])
-  await boot(page)
+  await boot(page, "en", { userDb: "clean" })
   await gotoTab(page, "chat")
   await step(page, 85, 0, async () => {
     await askChat(page, "BG 2.13")
@@ -73,7 +73,7 @@ test(qase(85, caseTitle(85)), { tag: ["@offline", "@chat"] }, async ({ page }) =
 test(qase(87, caseTitle(87)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [CHAPTER, delta("That story is here:\n\n[chapter:source_bg/ch3|Chapter 3]"), done()])
-  await boot(page)
+  await boot(page, "en", { userDb: "clean" })
   await gotoTab(page, "chat")
   await step(page, 87, 0, async () => {
     await askChat(page, "Which chapter is about karma-linux-client?")
@@ -94,7 +94,7 @@ test(qase(86, caseTitle(86)), { tag: ["@offline", "@chat"] }, async ({ page }) =
     delta("Here is the lecture as a PDF:\n\n[action:share_pdf|id=pdf12345]"),
     done(),
   ])
-  await boot(page)
+  await boot(page, "en", { userDb: "clean" })
   await gotoTab(page, "chat")
   await step(page, 86, 0, async () => {
     await askChat(page, "Make a PDF of this lecture")

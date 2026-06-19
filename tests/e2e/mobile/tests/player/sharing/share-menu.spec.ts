@@ -5,7 +5,7 @@ import { openLibrary, openTrackSheet, trackRows, trackSheet } from "../../../sup
 import { step, caseTitle } from "../../../support/steps.js"
 
 test(qase(65, caseTitle(65)), { tag: ["@offline", "@library"] }, async ({ page }) => {
-  await boot(page, "en", { pro: true })
+  await boot(page, "en", { pro: true, userDb: "clean" })
   await openLibrary(page)
 
   await step(page, 65, 0, async () => {

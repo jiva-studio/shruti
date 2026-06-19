@@ -24,7 +24,7 @@ test(
   qase(116, caseTitle(116)),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
-    await boot(page, "en")
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "settings")
 
     const dialog = libraryLanguageDialog(page)
@@ -59,7 +59,7 @@ test(
   async ({ page }) => {
     // English UI + English library: the fixture's topics hold only Russian
     // lectures, so they have nothing to show yet.
-    await boot(page, "en")
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "settings")
 
     await step(page, 36, 0, async () => {

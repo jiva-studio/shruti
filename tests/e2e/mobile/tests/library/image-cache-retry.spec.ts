@@ -76,7 +76,7 @@ test(
     const loadedCovers = page.locator(".collection-card .cached-image.is-loaded")
 
     await step(page, 143, 0, async () => {
-      await boot(page)
+      await boot(page, "en", { userDb: "clean" })
       // Search landing: collection / topic tiles render through CachedImage.
       await gotoTab(page, "search")
 

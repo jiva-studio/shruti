@@ -10,7 +10,7 @@ test(
   qase(122, caseTitle(122)),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "settings")
 
     const buildInfo = page.locator(".kit-build-info")

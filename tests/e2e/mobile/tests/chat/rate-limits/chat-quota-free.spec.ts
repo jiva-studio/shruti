@@ -22,7 +22,7 @@ test(
       })
     )
 
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "chat")
 
     await step(page, 97, 0, async () => {

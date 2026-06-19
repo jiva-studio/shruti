@@ -19,7 +19,7 @@ test.describe("track sheet · outline + topics", () => {
     qase(62, caseTitle(62)),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
-      await bootDeviceLocale(page, "ru")
+      await bootDeviceLocale(page, "ru", { userDbStrategy: "clean" })
       await openLibrary(page)
 
       let sheet = trackSheet(page)
