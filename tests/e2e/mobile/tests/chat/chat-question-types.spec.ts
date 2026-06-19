@@ -59,7 +59,9 @@ test(qase(85, caseTitle(85)), { tag: ["@offline", "@chat"] }, async ({ page }) =
   await gotoTab(page, "chat")
   await step(page, 85, 0, async () => {
     await askChat(page, "BG 2.13")
-    const verse = page.locator(".verse-card-addr, .scripture-chip")
+    // The mock ships the full verse body, so VerseCard renders the block card
+    // (not the inline chip fallback) — assert the card's address header itself.
+    const verse = page.locator(".verse-card-addr")
     await expect(verse.first()).toBeVisible({ timeout: 20_000 })
     await expect(verse.first()).toContainText("2.13")
   })
