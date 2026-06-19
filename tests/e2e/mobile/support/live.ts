@@ -1,4 +1,5 @@
 import { type Page } from "@playwright/test"
+import { requireFixtures } from "./test.js"
 
 /**
  * Boot for @live tests. Unlike the offline `boot()`, this intercepts NOTHING:
@@ -10,6 +11,7 @@ import { type Page } from "@playwright/test"
  * Prereq: the stack is up (`make stack-up`, chat `/readyz` green). See README.
  */
 export async function bootLive(page: Page, locale: "en" | "ru" = "en"): Promise<void> {
+  requireFixtures()
   await page.goto(`/?locale=${locale}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
   await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
