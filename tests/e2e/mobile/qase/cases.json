@@ -898,13 +898,13 @@
   "54": {
     "suite_id": 6,
     "automation": 0,
-    "title": "Play / pause from the floating player",
-    "description": "Verifies the floating player's play/pause control toggles playback state and resumes from the paused position.",
-    "preconditions": "A track is loaded in the player.",
+    "title": "Tapping a playlist track opens the player at the saved position",
+    "description": "Manual: tapping a track in the Up-Next playlist that has saved progress opens the player and resumes from the saved position, not from the start.",
+    "preconditions": "A track in the playlist has saved progress greater than zero.",
     "steps": [
       {
-        "action": "Tap the play/pause button on the floating player.",
-        "expected": "Playback toggles and the button state updates; position resumes from where it paused."
+        "action": "Tap a playlist track that has prior progress.",
+        "expected": "The player opens and resumes from the saved position, not from the start."
       }
     ],
     "tags": [

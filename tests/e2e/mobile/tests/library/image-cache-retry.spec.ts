@@ -27,7 +27,7 @@ import { step, caseTitle } from "../../support/steps.js"
 
 // A real, decodable cover image so naturalWidth ends up > 0 AND the mocked
 // cover looks like an actual cover in the screenshot (not a coloured block).
-const COVER = fs.readFileSync(new URL("../../fixtures/cover-sample.webp", import.meta.url))
+const COVER = fs.readFileSync(new URL("../../fixtures/cover-sample.png", import.meta.url))
 
 const COVER_GLOB = "**/public/collections/**"
 
@@ -66,7 +66,7 @@ test(
         return
       }
       // Every other cover, and every request past the abort budget → a real PNG.
-      await route.fulfill({ status: 200, contentType: "image/webp", body: COVER })
+      await route.fulfill({ status: 200, contentType: "image/png", body: COVER })
     })
 
     // The chosen-flaky cover's <img>. Its src points at the targetUrl's cached
