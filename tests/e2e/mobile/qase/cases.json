@@ -312,7 +312,7 @@
   },
   "16": {
     "suite_id": 2,
-    "automation": 2,
+    "automation": 0,
     "title": "Tapping a Home row opens the player at the saved position",
     "description": "Manual: a playlist track with saved progress, when tapped from Home, opens the player and resumes from the saved position rather than from the start.",
     "preconditions": "A playlist track has saved progress greater than zero.",
@@ -376,7 +376,7 @@
   },
   "19": {
     "suite_id": 19,
-    "automation": 2,
+    "automation": 0,
     "title": "Completed track shows a persistent double-check",
     "description": "Manual: a track listened to completion shows the completed double-check indicator across the playlist, Search and Library; the badge persists after archiving, and re-adding the track starts a fresh entry from 0 (progress resets on re-add).",
     "preconditions": "A track has been listened to completion.",
@@ -398,7 +398,7 @@
   },
   "20": {
     "suite_id": 3,
-    "automation": 2,
+    "automation": 0,
     "title": "Search list is populated on open",
     "description": "Opening the Search/Library list with no query shows the full catalog, paged in chunks (PAGE_SIZE 50). No automated test in the suite currently covers this id.",
     "preconditions": "Catalog is populated.",
@@ -625,7 +625,7 @@
   },
   "31": {
     "suite_id": 21,
-    "automation": 2,
+    "automation": 0,
     "title": "Failed download retries from the track sheet",
     "description": "A failed download shows a failed (red X) row state; tapping the row always opens the track sheet, whose primary button reads \"Download again\" and re-triggers the download. No automated test in the suite currently covers this id.",
     "preconditions": "A track whose download can be made to fail (e.g. no network during the transfer).",
@@ -1098,7 +1098,7 @@
   },
   "54": {
     "suite_id": 6,
-    "automation": 2,
+    "automation": 0,
     "title": "Play / pause from the floating player",
     "description": "Verifies the floating player's play/pause control toggles playback state and resumes from the paused position.",
     "preconditions": "A track is loaded in the player.",
@@ -1550,7 +1550,7 @@
   },
   "76": {
     "suite_id": 10,
-    "automation": 2,
+    "automation": 0,
     "title": "Retry a failed download",
     "description": "After a download fails, retrying it deletes any stale partial file and starts a fresh transfer from the beginning; on success the row becomes completed.",
     "preconditions": "A library track whose download has failed (failed/red-X state).",
