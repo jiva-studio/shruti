@@ -61,9 +61,11 @@ export async function trackTitles(page: Page): Promise<string[]> {
   return (await trackRows(page).locator(".title").allInnerTexts()).map((t) => t.trim())
 }
 
-/** The Settings → Library "Lecture languages" row that opens the picker. */
+/** The Settings → Library "Lecture languages" row that opens the picker. Matches
+ *  both the English and Russian labels so it works whatever the UI language is
+ *  (the content-language specs boot ru and switch the library language). */
 export function libraryLanguageRow(page: Page): Locator {
-  return page.locator("ion-item", { hasText: "Lecture languages" })
+  return page.locator("ion-item", { hasText: /Lecture languages|Языки лекций/ })
 }
 
 /**
