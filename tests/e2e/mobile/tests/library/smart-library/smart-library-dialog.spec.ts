@@ -12,7 +12,7 @@ test(
   qase(49, caseTitle(49)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
-    await boot(page, "en", { pro: true })
+    await boot(page, "en", { pro: true, userDb: "clean" })
     await gotoTab(page, "search")
 
     const banner = page.locator(".library-banner", { has: page.locator('img[src*="smart-bg"]') })

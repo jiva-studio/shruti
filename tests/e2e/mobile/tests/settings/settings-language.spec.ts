@@ -5,7 +5,7 @@ import { gotoTab } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 test(qase(115, caseTitle(115)), { tag: ["@offline", "@settings"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { userDb: "clean" })
   await gotoTab(page, "settings")
 
   const dialog = page.locator(".selector-dialog")

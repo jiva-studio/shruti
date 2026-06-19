@@ -31,12 +31,20 @@ else
 fi
 
 # Reuse the screenshot pipeline's seeded user DBs (generate them if absent).
+# Two strategies: `preseed` (full demo dataset) and `clean` (schema + config
+# only) for specs that bring their own state.
 if [[ ! -f "$SHOTS/fixtures/user-en.db" || ! -f "$SHOTS/fixtures/user-ru.db" ]]; then
-  echo ">> generating user fixtures via screenshots pipeline"
+  echo ">> generating seeded user fixtures via screenshots pipeline"
   ( cd "$SHOTS" && npm run generate-user-fixture )
+fi
+if [[ ! -f "$SHOTS/fixtures/user-en.clean.db" || ! -f "$SHOTS/fixtures/user-ru.clean.db" ]]; then
+  echo ">> generating clean user fixtures via screenshots pipeline"
+  ( cd "$SHOTS" && npm run generate-user-fixture -- --clean )
 fi
 cp "$SHOTS/fixtures/user-en.db" "$FIX/user-en.db"
 cp "$SHOTS/fixtures/user-ru.db" "$FIX/user-ru.db"
+cp "$SHOTS/fixtures/user-en.clean.db" "$FIX/user-en.clean.db"
+cp "$SHOTS/fixtures/user-ru.clean.db" "$FIX/user-ru.clean.db"
 
 echo ">> fixtures ready in $FIX"
 ls -la "$FIX"

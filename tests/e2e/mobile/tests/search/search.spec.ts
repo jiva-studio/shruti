@@ -7,7 +7,7 @@ import { step, caseTitle } from "../../support/steps.js"
 // Case 20: the library list populates on open and pages in more on scroll
 // (merged with the former infinite-scroll spec). PAGE_SIZE = 50.
 test(qase(20, caseTitle(20)), { tag: ["@offline", "@library"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { userDb: "clean" })
   await openLibrary(page)
 
   const rows = trackRows(page)
@@ -36,7 +36,7 @@ test(qase(20, caseTitle(20)), { tag: ["@offline", "@library"] }, async ({ page }
 // Case 22: the three ways the search box narrows the library — by verse
 // reference, by a title word, and the no-results empty state — one per step.
 test(qase(22, caseTitle(22)), { tag: ["@offline", "@library"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { userDb: "clean" })
   await openLibrary(page)
 
   await step(page, 22, 0, async () => {

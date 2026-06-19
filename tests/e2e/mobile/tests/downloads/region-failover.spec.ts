@@ -68,7 +68,7 @@ test(
       route.fulfill({ status: 200, contentType: "image/png", body: COVER })
     })
 
-    await preseedUserDb(page, "en")
+    await preseedUserDb(page, "en", "clean")
     await preseedSearchFilter(page, "en")
     await preseedDismissedNags(page)
 

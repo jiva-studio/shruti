@@ -15,7 +15,7 @@ test(
     const seeAll = page.locator(".section-more").first()
 
     await step(page, 15, 0, async () => {
-      await boot(page)
+      await boot(page, "en", { userDb: "clean" })
       await gotoTab(page, "search")
 
       await seeAll.waitFor({ state: "visible", timeout: 20_000 })

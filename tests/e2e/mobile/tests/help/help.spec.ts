@@ -10,7 +10,7 @@ test(
   qase(123, caseTitle(123)),
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "settings")
 
     const dialog = helpDialog(page)
@@ -54,7 +54,7 @@ test(
     // re-opens the dialog and asserts the localized TOC. boot() re-navigates with
     // a fresh ?locale and re-seeds the ru user.db, so the last boot wins.
     await step(page, 123, 3, async () => {
-      await boot(page, "ru")
+      await boot(page, "ru", { userDb: "clean" })
       await gotoTab(page, "settings")
 
       const ruDialog = helpDialog(page)

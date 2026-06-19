@@ -23,7 +23,7 @@ test(
   qase(35, caseTitle(35)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
-    await boot(page, "ru")
+    await boot(page, "ru", { userDb: "clean" })
     await openLibrary(page)
 
     await step(page, 35, 0, async () => {
