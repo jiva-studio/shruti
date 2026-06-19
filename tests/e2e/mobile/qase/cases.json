@@ -29,13 +29,17 @@
   "3": {
     "suite_id": 8,
     "automation": 2,
-    "title": "Notes list renders seeded notes with text",
+    "title": "Notes list renders and persists across an app restart",
     "description": "Offline. Asserts the seeded notes are listed and each note row renders non-empty excerpt text.",
     "preconditions": "Seeded offline fixture with notes on the demo transcript.",
     "steps": [
       {
         "action": "Open the Notes tab.",
-        "expected": "At least one note row is shown and the first row renders non-empty excerpt text."
+        "expected": "At least one note is listed with non-empty excerpt text."
+      },
+      {
+        "action": "Reload the app (restart) and reopen the Notes tab.",
+        "expected": "The same number of notes is still listed after the restart."
       }
     ],
     "tags": [
@@ -181,29 +185,6 @@
     "tags": [
       "notes",
       "free",
-      "e2e"
-    ]
-  },
-  "10": {
-    "suite_id": 8,
-    "automation": 2,
-    "title": "Notes persist across app restart",
-    "description": "Offline. Records the seeded note count, reloads the app, and asserts the same number of notes is still listed.",
-    "preconditions": "Seeded offline fixture with at least one note.",
-    "steps": [
-      {
-        "action": "Open the Notes tab and record the number of notes listed.",
-        "expected": "At least one note is listed; its count is noted as the baseline."
-      },
-      {
-        "action": "Reload (restart) the app, wait for the tab bar, and reopen the Notes tab.",
-        "expected": "The same number of notes is still present as before the restart."
-      }
-    ],
-    "tags": [
-      "notes",
-      "free",
-      "offline",
       "e2e"
     ]
   },
@@ -550,22 +531,22 @@
   },
   "31": {
     "suite_id": 21,
-    "automation": 0,
+    "automation": 2,
     "title": "Failed download retries from the track sheet",
     "description": "A failed download shows a failed (red X) row state; tapping the row always opens the track sheet, whose primary button reads \"Download again\" and re-triggers the download. No automated test in the suite currently covers this id.",
     "preconditions": "A track whose download can be made to fail (e.g. no network during the transfer).",
     "steps": [
       {
-        "action": "Cause a download to fail and observe the row.",
-        "expected": "The row shows the failed (red X) state."
+        "action": "Add the first library track while its audio download is forced to fail.",
+        "expected": "The row surfaces the failed (red X) state."
       },
       {
         "action": "Tap the failed row.",
-        "expected": "The track sheet opens and its primary button reads \"Download again\"."
+        "expected": "The track sheet opens (no silent retry) with a \"Download again\" button."
       },
       {
-        "action": "Tap \"Download again\".",
-        "expected": "The download retries; on success the row becomes added/completed."
+        "action": "Tap \"Download again\" with the transfer allowed through.",
+        "expected": "The download recovers — the row leaves the failed state."
       }
     ],
     "tags": [
@@ -640,13 +621,13 @@
   "35": {
     "suite_id": 4,
     "automation": 2,
-    "title": "Library content is scoped to selected library languages",
+    "title": "Library content follows the selected library language",
     "description": "Verifies the library list is scoped to the selected content language(s): every visible track title is in that language's script. Covers a Russian library (all Cyrillic), an English library (no Cyrillic), the first-launch locale reduction (uk→ru, hi/de/sr→en), and an explicit ru+en multi-select (mixed scripts). Pure offline — fixture catalog holds en + ru lectures.",
     "preconditions": "Offline boot; library content language seeded from the device locale or set explicitly (single language, or ru+en for the multi-select case).",
     "steps": [
       {
-        "action": "Open the library under the selected content language.",
-        "expected": "The list is populated and every visible title is in the selected language's script (Cyrillic for ru, Latin for en; both scripts when ru+en are selected)."
+        "action": "Open the library under a Russian library, then switch the library language to English in Settings and reopen.",
+        "expected": "Every row is Cyrillic under ru and Latin under en — no Russian lecture leaks onto an English library."
       }
     ],
     "tags": [
@@ -681,44 +662,21 @@
   "38": {
     "suite_id": 12,
     "automation": 2,
-    "title": "Open a collection and view its contents",
+    "title": "Open a collection and add a track from it",
     "description": "Verifies tapping a collection card from a discovery carousel navigates to the collection detail route and renders its track list. Pure offline.",
     "preconditions": "Offline boot; Search landing loaded with collection carousels.",
     "steps": [
       {
-        "action": "Boot and open the Search landing, then locate the first collection card in a discovery carousel.",
-        "expected": "The Search landing shows a discovery carousel with at least one collection card visible."
+        "action": "From a discovery carousel, open the first collection.",
+        "expected": "The collection detail opens with its track list."
       },
       {
-        "action": "Tap the first collection card.",
-        "expected": "The collection detail page opens (/search/collection/…) and its track list is shown."
-      }
-    ],
-    "tags": [
-      "collections",
-      "free",
-      "smoke",
-      "e2e"
-    ]
-  },
-  "39": {
-    "suite_id": 12,
-    "automation": 2,
-    "title": "Add a single track from a collection",
-    "description": "Verifies adding one un-queued lecture from an open collection: opening its track sheet and tapping Add closes the sheet and grows the Home playlist by exactly one. No confirmation toast for a single add. Pure offline.",
-    "preconditions": "Offline boot; the initial Home playlist count captured as a baseline.",
-    "steps": [
-      {
-        "action": "From the Search landing, open the first collection card and pick the first lecture not already in the Home playlist.",
-        "expected": "The collection detail page opens (/search/collection/…) with its track list, and an un-queued lecture is available."
+        "action": "Open an un-queued lecture's track sheet and tap Add.",
+        "expected": "The sheet (shown) then closes."
       },
       {
-        "action": "Open the chosen lecture's track sheet and tap Add.",
-        "expected": "The track sheet closes."
-      },
-      {
-        "action": "Return to the Home tab and read the playlist count.",
-        "expected": "The Home playlist count has grown by exactly one (no confirmation toast for a single add)."
+        "action": "Return to Home.",
+        "expected": "The playlist count grew by exactly one."
       }
     ],
     "tags": [
@@ -759,12 +717,12 @@
     "preconditions": "Offline boot with a Russian library; a collection that mixes languages.",
     "steps": [
       {
-        "action": "Under a Russian library, open the first collection card from a discovery carousel.",
-        "expected": "The collection detail page opens (/search/collection/…) and its track list is rendered."
+        "action": "Under a Russian library, open the first collection card.",
+        "expected": "The collection list is rendered and every row is Cyrillic."
       },
       {
-        "action": "Wait for the library-language filter to settle and inspect the listed rows.",
-        "expected": "Every listed row is a Russian (Cyrillic) lecture; the collection's English-only tracks are dropped."
+        "action": "Switch the library language to English in Settings and reopen the collection.",
+        "expected": "The card and list are now English (Latin), non-empty — not emptied by a UI/library mismatch."
       }
     ],
     "tags": [
@@ -776,17 +734,21 @@
   "43": {
     "suite_id": 13,
     "automation": 2,
-    "title": "Open a topic from the grid",
+    "title": "Open a topic and add a track from it",
     "description": "Verifies tapping a topic tile in the Search-landing grid navigates to the topic detail route and renders its track list. Booted Russian so the fixture's (ru-only) topics have lectures. Pure offline.",
     "preconditions": "Offline boot with a Russian library; Search landing loaded with a topics tile grid.",
     "steps": [
       {
-        "action": "Under a Russian library, open the Search landing and locate the first tile in the topics grid.",
-        "expected": "The Search landing shows the topics tile grid with at least one tile visible."
+        "action": "Open the first topic from the Search-landing grid.",
+        "expected": "The topic detail opens with its track list."
       },
       {
-        "action": "Tap the first topic tile.",
-        "expected": "The topic detail page opens (/search/topic/…) and its track list is shown."
+        "action": "Open an un-queued lecture's track sheet and tap Add.",
+        "expected": "The sheet (shown) then closes."
+      },
+      {
+        "action": "Return to Home.",
+        "expected": "The playlist count grew by exactly one."
       }
     ],
     "tags": [
@@ -826,38 +788,12 @@
     "preconditions": "Offline boot; library language set (Russian or English), switched mid-test for the re-scope case. Topics are language-agnostic in the fixture.",
     "steps": [
       {
-        "action": "Open a topic under the Russian library.",
-        "expected": "The detail lists only Russian (Cyrillic) lectures; the tile grid only surfaces topics with lectures in the selected language."
+        "action": "Under a Russian library, open the first topic.",
+        "expected": "The detail lists only Russian (Cyrillic) lectures."
       },
       {
-        "action": "Switch the library language to English.",
-        "expected": "The open topic detail re-scopes — no Cyrillic title remains (a ru-only topic collapses to empty, a mixed topic keeps only its English lectures)."
-      }
-    ],
-    "tags": [
-      "topics",
-      "free",
-      "e2e"
-    ]
-  },
-  "46": {
-    "suite_id": 13,
-    "automation": 2,
-    "title": "Add tracks from a topic",
-    "description": "Verifies adding a lecture from a topic detail page: opening an un-queued lecture's track sheet and tapping Add closes the sheet and grows the Home playlist by exactly one. Booted Russian (the fixture's topics hold only Russian lectures). Pure offline.",
-    "preconditions": "Offline boot with a Russian library; the initial Home playlist count captured as a baseline.",
-    "steps": [
-      {
-        "action": "From the Search landing, open the first topic tile and pick the first lecture not already in the Home playlist.",
-        "expected": "The topic detail page opens (/search/topic/…) with its track list, and an un-queued lecture is available."
-      },
-      {
-        "action": "Open the chosen lecture's track sheet and tap Add.",
-        "expected": "The track sheet closes."
-      },
-      {
-        "action": "Return to the Home tab and read the playlist count.",
-        "expected": "The Home playlist count has grown by exactly one."
+        "action": "Switch the library language to English in Settings.",
+        "expected": "The still-open detail re-scopes — no Cyrillic lecture remains."
       }
     ],
     "tags": [
@@ -1086,13 +1022,17 @@
   "60": {
     "suite_id": 7,
     "automation": 2,
-    "title": "Transcript opens and renders text for the playing track",
+    "title": "Transcript opens, renders, and closes cleanly",
     "description": "Tapping the floating player opens the transcript reader and real fixture transcript text renders into the prompter (not just the shell). Offline.",
     "preconditions": "Offline (mocked). The first queued track is playing.",
     "steps": [
       {
-        "action": "Open the transcript dialog (tap the floating player if it didn't auto-open).",
-        "expected": "The transcript dialog is visible and the transcript text body renders real content."
+        "action": "Open the transcript dialog.",
+        "expected": "The transcript dialog is visible and renders real transcript text."
+      },
+      {
+        "action": "Tap the close button.",
+        "expected": "The transcript dialog dismisses cleanly (hidden)."
       }
     ],
     "tags": [
@@ -1173,11 +1113,7 @@
     "steps": [
       {
         "action": "Play a track and open the transcript with the fetch forced to fail.",
-        "expected": "The transcript dialog opens and shows the error state."
-      },
-      {
-        "action": "Tap the close button.",
-        "expected": "The dialog dismisses cleanly (becomes hidden)."
+        "expected": "The transcript dialog opens and shows the error state (not an endless spinner)."
       }
     ],
     "tags": [
@@ -1189,45 +1125,23 @@
   "65": {
     "suite_id": 9,
     "automation": 2,
-    "title": "Track share sheet offers a transcript PDF option",
+    "title": "Share offers Transcript PDF, text and Audio",
     "description": "Offline, Pro-booted. Opens a library track sheet and taps Share; asserts the export action sheet appears with a PDF option. The actual server-side render is a @live concern not exercised here.",
     "preconditions": "Seeded offline fixture, booted as Pro (dev/web build is treated as subscribed). A library track with a transcript.",
     "steps": [
       {
-        "action": "Open the library and open the first track's sheet.",
-        "expected": "The track sheet opens showing its actions, including Share."
+        "action": "Open the first library track's sheet.",
+        "expected": "The track sheet opens with its actions, including Share."
       },
       {
         "action": "Tap Share.",
-        "expected": "The export action sheet opens with a PDF option visible."
+        "expected": "The export action sheet lists Transcript (PDF), Transcript (text), and Audio."
       }
     ],
     "tags": [
       "sharing",
       "pro",
       "smoke",
-      "e2e"
-    ]
-  },
-  "67": {
-    "suite_id": 9,
-    "automation": 2,
-    "title": "Track share sheet offers PDF, text and audio export options",
-    "description": "Offline, Pro-booted. Opens a library track sheet and taps Share; asserts the export action sheet lists all three options (Transcript PDF, Transcript text, Audio), with Audio enabled by the seeded silent-MP3 variant stub.",
-    "preconditions": "Seeded offline fixture, booted as Pro. A library track with a transcript and an audio variant stub.",
-    "steps": [
-      {
-        "action": "Open the library and open the first track's sheet.",
-        "expected": "The track sheet opens showing its actions, including Share."
-      },
-      {
-        "action": "Tap Share.",
-        "expected": "The export action sheet opens showing Transcript (PDF), Transcript (text) and Audio options, all visible."
-      }
-    ],
-    "tags": [
-      "sharing",
-      "free",
       "e2e"
     ]
   },
@@ -1367,17 +1281,17 @@
   "74": {
     "suite_id": 10,
     "automation": 2,
-    "title": "Download a track for offline playback",
+    "title": "Download a track for offline playback (persists across restart)",
     "description": "Adds a library track and verifies its audio download reaches a downloaded terminal state (added/completed). Offline — content routes mocked, audio served from a silent fixture.",
     "preconditions": "Library track not yet downloaded; user DB seeded; mocked content + audio routes (network available).",
     "steps": [
       {
         "action": "Open the Library, open the first track's sheet, and tap Add.",
-        "expected": "The track sheet closes."
+        "expected": "The sheet closes and the row reaches a downloaded terminal state (added/completed)."
       },
       {
-        "action": "Watch the track row's state.",
-        "expected": "The row's track-state reaches a downloaded terminal state (added/completed)."
+        "action": "Kill the network, reload the app (restart), and reopen the Library.",
+        "expected": "The same row is still added/completed — rehydrated from the persisted DB + cached blob, with no re-download."
       }
     ],
     "tags": [
@@ -1386,62 +1300,20 @@
       "e2e"
     ]
   },
-  "75": {
-    "suite_id": 10,
-    "automation": 2,
-    "title": "Download state persists across restart",
-    "description": "Downloads a track, then reloads the app (= restart) and verifies the downloaded state rehydrates from the persisted user DB + cached blob with no re-download. Offline — content + audio routes mocked; user DB seeded only if absent so the reload is a real restart.",
-    "preconditions": "Library track not yet downloaded; user DB seeded once (if absent); mocked content + audio routes.",
-    "steps": [
-      {
-        "action": "Open the Library, add the first track, and wait for its row to reach a downloaded terminal state (added/completed).",
-        "expected": "The track sheet closes and the row shows added/completed."
-      },
-      {
-        "action": "Reload the app (restart) and reopen the Library.",
-        "expected": "The same row is still added/completed — state rehydrated from the local DB, no re-download."
-      }
-    ],
-    "tags": [
-      "library",
-      "e2e"
-    ]
-  },
   "76": {
     "suite_id": 10,
     "automation": 0,
-    "title": "Retry a failed download",
+    "title": "A failed download recovers (retry, and auto-recovers on relaunch)",
     "description": "After a download fails, retrying it deletes any stale partial file and starts a fresh transfer from the beginning; on success the row becomes completed.",
     "preconditions": "A library track whose download has failed (failed/red-X state).",
     "steps": [
       {
-        "action": "Tap the failed download to retry it.",
-        "expected": "Any stale partial file is discarded and a fresh transfer starts from the beginning; the row shows download progress."
+        "action": "Add a track while its audio transfer aborts (failed / red X), then tap the row and Download again with the transfer allowed.",
+        "expected": "The stale partial is discarded and a fresh transfer starts; the row leaves the failed state."
       },
       {
-        "action": "Wait for the fresh transfer to finish.",
-        "expected": "The download completes and the row reaches the downloaded/completed terminal state."
-      }
-    ],
-    "tags": [
-      "library",
-      "e2e"
-    ]
-  },
-  "77": {
-    "suite_id": 10,
-    "automation": 2,
-    "title": "Recover an interrupted download after force-close",
-    "description": "Hangs the audio transfer so the row is stuck downloading, then restores the network and reloads (= force-close + relaunch). On launch the app re-drives the persisted unfinished download and it completes on its own — no manual re-add. Offline — content mocked, audio route mutable (hang then serve).",
-    "preconditions": "Library track being added with a stalled audio transfer; user DB seeded once; mocked content routes.",
-    "steps": [
-      {
-        "action": "Add the first library track while its audio transfer hangs.",
-        "expected": "The row enters the downloading state (the radial replaces the track-state indicator, so that node disappears)."
-      },
-      {
-        "action": "Restore the network, then reload the app (force-close + relaunch) and reopen the Library.",
-        "expected": "The recovered download is re-driven on launch and the row reaches a downloaded terminal state (added/completed) on its own."
+        "action": "Force-close and relaunch the app.",
+        "expected": "The persisted unfinished download is re-driven on launch and completes on its own."
       }
     ],
     "tags": [
@@ -2879,44 +2751,6 @@
       "e2e"
     ]
   },
-  "148": {
-    "suite_id": 4,
-    "automation": 2,
-    "tags": [
-      "library",
-      "e2e"
-    ],
-    "title": "An English library excludes Russian lectures",
-    "description": "Verifies the library content-language facet (distinct from the UI language) scopes the catalog: on an English library every visible lecture title is Latin-script — no Russian lecture leaks in. Title script is the observable signal (titles follow the library language). Offline.",
-    "preconditions": "Offline boot with the library language seeded to English.",
-    "steps": [
-      {
-        "action": "Open the Library with the library language set to English.",
-        "expected": "The lecture list is populated and every visible title is Latin-script — no Cyrillic (Russian) titles appear."
-      }
-    ]
-  },
-  "149": {
-    "suite_id": 13,
-    "automation": 2,
-    "tags": [
-      "library",
-      "e2e"
-    ],
-    "title": "Switching the library language re-scopes an open topic",
-    "description": "Verifies a topic detail page re-filters live when the library language changes: opened under a Russian library it lists Russian lectures; after switching the library to English the still-open detail re-scopes so no Russian (Cyrillic) lecture remains. Offline.",
-    "preconditions": "Offline boot; the library is switched to Russian so a Russian-only topic is reachable.",
-    "steps": [
-      {
-        "action": "Under a Russian library, open the first topic.",
-        "expected": "The topic detail lists its Russian lectures (Cyrillic titles)."
-      },
-      {
-        "action": "Switch the library language to English and return to the open topic.",
-        "expected": "The detail re-scopes — no Russian (Cyrillic) lecture title remains on screen."
-      }
-    ]
-  },
   "150": {
     "suite_id": 13,
     "automation": 2,
@@ -2924,34 +2758,13 @@
       "library",
       "e2e"
     ],
-    "title": "Topic tiles render under a Russian library",
+    "title": "Topic tiles follow the selected library language",
     "description": "Verifies the Search-landing topic tile grid surfaces topics that have lectures in the selected library language: under a Russian library at least one topic tile renders. Offline.",
     "preconditions": "Offline boot with the library language seeded to Russian.",
     "steps": [
       {
-        "action": "Open the Search landing under a Russian library.",
-        "expected": "At least one topic tile renders in the tile grid."
-      }
-    ]
-  },
-  "151": {
-    "suite_id": 13,
-    "automation": 2,
-    "tags": [
-      "library",
-      "e2e"
-    ],
-    "title": "Topic tiles are scoped to the English library",
-    "description": "Verifies the topic tile grid only surfaces topics consumable in the library language: under an English library, Russian-only topics collapse out — either no tiles show, or every shown tile opens onto a populated topic with English (Latin) titles, never an empty or Russian-only topic. Offline.",
-    "preconditions": "Offline boot with the library language seeded to English.",
-    "steps": [
-      {
-        "action": "Open the Search landing under an English library and let the filter hydrate.",
-        "expected": "The tile grid settles to only English-consumable topics (possibly none)."
-      },
-      {
-        "action": "If any tile is shown, open the first one.",
-        "expected": "It lands on a populated topic whose titles are all English (Latin) — never an empty page or a Russian-only topic."
+        "action": "Open the Search landing under a Russian library, then switch to English in Settings and reopen.",
+        "expected": "Tiles render under ru; under en the grid scopes to English-consumable topics (any shown tile opens onto a populated Latin-titled topic)."
       }
     ]
   },
@@ -2994,27 +2807,6 @@
       {
         "action": "Turn \"Activity tracker\" back on.",
         "expected": "The Home activity card returns."
-      }
-    ]
-  },
-  "155": {
-    "suite_id": 12,
-    "automation": 2,
-    "tags": [
-      "collections",
-      "e2e"
-    ],
-    "title": "Collection contents follow the library language, not the UI locale",
-    "description": "Verifies a collection loads in the selected library content language even when the UI is a different locale: on an English UI with a Russian library, the discovery shelf card and the opened collection are both Russian and non-empty (the bug emptied it on a UI/library mismatch). Offline.",
-    "preconditions": "Offline boot, English UI, library language switched to Russian.",
-    "steps": [
-      {
-        "action": "On a Russian library / English UI, open the Russian collection card from the discovery shelf.",
-        "expected": "The shelf card is Russian (Cyrillic) and the collection detail opens with a populated track list."
-      },
-      {
-        "action": "Inspect the collection's track list.",
-        "expected": "It is non-empty and every lecture title is Russian (Cyrillic) — not emptied by the UI/library language mismatch."
       }
     ]
   },

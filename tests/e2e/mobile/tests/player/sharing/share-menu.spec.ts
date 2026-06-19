@@ -16,10 +16,15 @@ test(qase(65, caseTitle(65)), { tag: ["@offline", "@library"] }, async ({ page }
     await trackSheet(page).locator(".share-btn").click()
 
     // The dev/web build is treated as subscribed, so Share opens the export action
-    // sheet (PDF / text / audio) rather than the paywall. Rendering the PDF itself
-    // is server-side (a @live concern) — here we assert the entry point exists.
+    // sheet rather than the paywall. Rendering the PDF itself is server-side (a
+    // @live concern) — here we assert the export entry points exist. Labels come
+    // from i18n locales/en/search.ts → search.share.*: "Transcript (PDF)",
+    // "Transcript (text)", "Audio". Audio is enabled because the seeded track
+    // variant has the silent-MP3 stub. Match by rendered i18n label, not index.
     const sheet = page.locator("ion-action-sheet")
     await expect(sheet).toBeVisible({ timeout: 15_000 })
-    await expect(sheet.getByRole("button", { name: /pdf/i })).toBeVisible()
+    await expect(sheet.getByRole("button", { name: /transcript \(pdf\)/i })).toBeVisible()
+    await expect(sheet.getByRole("button", { name: /transcript \(text\)/i })).toBeVisible()
+    await expect(sheet.getByRole("button", { name: /^audio$/i })).toBeVisible()
   })
 })

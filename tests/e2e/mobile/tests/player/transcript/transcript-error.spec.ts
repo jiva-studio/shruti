@@ -5,7 +5,7 @@ import { playFirstQueuedTrack } from "../../../support/nav.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 // When the transcript fails to load, the reader shows an error state (not an
-// endless spinner) and can be dismissed.
+// endless spinner).
 test(
   qase(64, caseTitle(64)),
   { tag: ["@offline", "@transcript"] },
@@ -28,12 +28,6 @@ test(
 
       await expect(dialog).toBeVisible({ timeout: 20_000 })
       await expect(dialog.locator(".transcript-error")).toBeVisible({ timeout: 25_000 })
-    })
-
-    await step(page, 64, 1, async () => {
-      // The dialog dismisses cleanly.
-      await dialog.locator(".close-button").click()
-      await expect(dialog).toBeHidden({ timeout: 10_000 })
     })
   }
 )
