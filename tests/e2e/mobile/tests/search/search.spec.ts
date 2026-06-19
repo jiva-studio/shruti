@@ -33,41 +33,33 @@ test(qase(20, caseTitle(20)), { tag: ["@offline", "@library"] }, async ({ page }
   })
 })
 
-// Case 22: the search box is wired to the result set — a no-match query empties
-// the list, clearing it restores the catalog.
+// Case 22: the three ways the search box narrows the library — by verse
+// reference, by a title word, and the no-results empty state — one per step.
 test(qase(22, caseTitle(22)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page)
   await openLibrary(page)
 
   await step(page, 22, 0, async () => {
-    await expect(trackRows(page).first()).toBeVisible()
-    await searchInput(page).fill("zzzqqxnomatch")
-    await expect(trackRows(page)).toHaveCount(0, { timeout: 15_000 })
+    // Verse reference: "bg 1.1" matches the exact verse, with no prefix bleed
+    // into 1.10–1.19.
+    await searchInput(page).fill("bg 1.1")
+    await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
+    await expect
+      .poll(async () => (await trackTitles(page)).some((t) => /\b1\.1[0-9]\b/.test(t)), {
+        timeout: 10_000,
+      })
+      .toBe(false)
   })
 
   await step(page, 22, 1, async () => {
+    // Title word: a word taken from a lecture title narrows to matching titles.
     await searchInput(page).fill("")
     await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
-  })
-})
-
-// Case 164: searching by a title word narrows the list to matching lectures.
-test(qase(164, caseTitle(164)), { tag: ["@offline", "@library"] }, async ({ page }) => {
-  await boot(page)
-  await openLibrary(page)
-
-  await step(page, 164, 0, async () => {
-    await expect(trackRows(page).first()).toBeVisible({ timeout: 20_000 })
-
-    // Take a distinctive word from the first lecture's title (≥ 4 ASCII letters)
-    // so the query is real catalog content without hardcoding a specific word.
     const firstTitle = (await trackTitles(page))[0] ?? ""
     const word = (firstTitle.match(/[A-Za-z]{4,}/g) ?? [])[0]
     expect(word, `no searchable word in title "${firstTitle}"`).toBeTruthy()
 
     await searchInput(page).fill(word)
-
-    // The list narrows to rows whose titles all contain the query (case-insensitive).
     await expect
       .poll(
         async () => {
@@ -79,5 +71,13 @@ test(qase(164, caseTitle(164)), { tag: ["@offline", "@library"] }, async ({ page
         { timeout: 15_000 }
       )
       .toBe(true)
+  })
+
+  await step(page, 22, 2, async () => {
+    // No match: a query that matches nothing shows the centered empty state.
+    await searchInput(page).fill("zzzqqxnomatch")
+    await expect(page.locator(".no-results")).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator(".no-results-title")).toBeVisible()
+    await expect(trackRows(page)).toHaveCount(0)
   })
 })
