@@ -42,6 +42,7 @@ const emit = defineEmits<{ (e: "click"): void }>()
   border: none;
   background: transparent;
   text-align: left;
+  color: var(--ion-text-color);
   padding: 8px 16px;
   overflow: hidden;
   cursor: pointer;
