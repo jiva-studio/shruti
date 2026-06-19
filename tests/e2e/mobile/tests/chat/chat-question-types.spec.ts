@@ -65,7 +65,9 @@ test(qase(85, caseTitle(85)), { tag: ["@offline", "@chat"] }, async ({ page }) =
   })
 })
 
-// locate intent: a "which chapter" question renders the chapter list card.
+// locate intent: a "which chapter" question renders the chapter list card. The
+// same chapter marker upgrades into a full multi-row list (one row per chapter),
+// each row naming the chapter's topics — not a bare chip. (Merged 87 + 91.)
 test(qase(87, caseTitle(87)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [CHAPTER, delta("That story is here:\n\n[chapter:source_bg/ch3|Chapter 3]"), done()])
@@ -75,23 +77,14 @@ test(qase(87, caseTitle(87)), { tag: ["@offline", "@chat"] }, async ({ page }) =
     await askChat(page, "Which chapter is about karma-linux-client?")
     await expect(page.locator(".chapter-card-list").first()).toBeVisible({ timeout: 20_000 })
     await expect(page.locator(".chapter-card-item").first()).toContainText(/karma|action|work/i)
-  })
-})
-
-// chapter WIDGET: the same chapter marker upgrades into a multi-row list.
-test(qase(91, caseTitle(91)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
-  await mockChatAuth(page)
-  await mockChatStream(page, [CHAPTER, delta("That story is here:\n\n[chapter:source_bg/ch3|Chapter 3]"), done()])
-  await boot(page)
-  await gotoTab(page, "chat")
-  await step(page, 91, 0, async () => {
-    await askChat(page, "Which chapter is about karma-linux-client?")
-    await expect(page.locator(".chapter-card-list").first()).toBeVisible({ timeout: 20_000 })
     await expect(page.locator(".chapter-card-item")).toHaveCount(2)
   })
 })
 
-// create_action (pdf) intent: a "make a PDF" request renders the share-PDF card.
+// create_action (pdf) intent: a "make a PDF" request renders the share-PDF card,
+// listing each lecture as an actionable, tappable export row (tap fires the
+// native share — a no-op on web; we assert it's an enabled control, not a bare
+// chip). (Merged 86 + 92.)
 test(qase(86, caseTitle(86)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [
@@ -105,24 +98,8 @@ test(qase(86, caseTitle(86)), { tag: ["@offline", "@chat"] }, async ({ page }) =
     await askChat(page, "Make a PDF of this lecture")
     await expect(page.locator(".pdf-list").first()).toBeVisible({ timeout: 20_000 })
     await expect(page.locator(".pdf-title").first()).toContainText("Eternal Soul")
-  })
-})
-
-// share-PDF WIDGET: each listed lecture is a tappable export row.
-test(qase(92, caseTitle(92)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
-  await mockChatAuth(page)
-  await mockChatStream(page, [
-    sharePdf("pdf67890", "On Detachment", "track_y"),
-    delta("Download it here:\n\n[action:share_pdf|id=pdf67890]"),
-    done(),
-  ])
-  await boot(page)
-  await gotoTab(page, "chat")
-  await step(page, 92, 0, async () => {
-    await askChat(page, "Share this as a PDF")
     const row = page.locator(".pdf-row").first()
     await expect(row).toBeVisible({ timeout: 20_000 })
-    await expect(row).toContainText("Detachment")
     await expect(row).toBeEnabled()
   })
 })
