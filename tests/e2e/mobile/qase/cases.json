@@ -1,0 +1,2864 @@
+{
+  "2": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Create a note from a transcript selection",
+    "description": "Offline. Drag-selects a sentence in an open transcript and taps the popover's bookmark action; asserts the Notes tab count grows by one.",
+    "preconditions": "Seeded offline fixture with at least one existing note. A queued track can be played and its transcript opened.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and record the current note count, then play a queued track and open its transcript.",
+        "expected": "The transcript reader opens with its text visible."
+      },
+      {
+        "action": "Touch-and-drag across a sentence to select it, then tap the bookmark action in the selection popover.",
+        "expected": "The note is saved and the popover closes."
+      },
+      {
+        "action": "Close the transcript reader and reopen the Notes tab.",
+        "expected": "The note count has increased by exactly one."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "3": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Notes list renders and persists across an app restart",
+    "description": "Offline. Asserts the seeded notes are listed and each note row renders non-empty excerpt text.",
+    "preconditions": "Seeded offline fixture with notes on the demo transcript.",
+    "steps": [
+      {
+        "action": "Open the Notes tab.",
+        "expected": "At least one note is listed with non-empty excerpt text."
+      },
+      {
+        "action": "Reload the app (restart) and reopen the Notes tab.",
+        "expected": "The same number of notes is still listed after the restart."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "e2e"
+    ]
+  },
+  "4": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Search notes by text with highlight",
+    "description": "Offline. Filters the notes list by a word taken from a note's body; for queries of 4+ characters the matches are wrapped in a highlight mark. Clearing restores the full list.",
+    "preconditions": "Seeded offline fixture with at least one note whose body contains a word of 4+ characters.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and type a 4+ character word from a note's body into the search field.",
+        "expected": "The list filters to between one and the original count of notes, and at least one match is wrapped in a visible highlight mark."
+      },
+      {
+        "action": "Clear the search field.",
+        "expected": "The full notes list is shown again."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "e2e"
+    ]
+  },
+  "5": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Delete a note from the Notes list",
+    "description": "Offline. Taps a note to open its action sheet and taps the destructive Delete; asserts the sheet dismisses and the list shrinks by one.",
+    "preconditions": "Seeded offline fixture with at least one note.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and tap a note.",
+        "expected": "A per-note action sheet opens with a destructive Delete button."
+      },
+      {
+        "action": "Tap Delete.",
+        "expected": "The action sheet dismisses and the notes list shrinks by exactly one."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "6": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Delete a note from the transcript underline",
+    "description": "Offline. Creates a note from a transcript selection, taps the resulting wavy underline to reopen the popover in existing-note mode, and taps the red Delete; asserts the underline is removed and the note disappears from the Notes tab.",
+    "preconditions": "Seeded offline fixture with existing notes. A queued track can be played and its transcript opened.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and record the count, then open the transcript and create a note by drag-selecting a sentence and tapping bookmark.",
+        "expected": "The selection is painted with a wavy underline and the create popover closes."
+      },
+      {
+        "action": "Tap the underlined span to reopen the popover in existing-note mode, then tap the red Delete.",
+        "expected": "The underline is removed immediately."
+      },
+      {
+        "action": "Close the transcript reader and reopen the Notes tab.",
+        "expected": "The note count is back to its original value (the new note is gone)."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "e2e"
+    ]
+  },
+  "7": {
+    "suite_id": 8,
+    "automation": 0,
+    "title": "Share a note as text",
+    "description": "Manual. Sharing a note as text opens the native share sheet with the note text formatted together with its track attribution.",
+    "preconditions": "At least one note exists.",
+    "steps": [
+      {
+        "action": "On the Notes tab, tap a note.",
+        "expected": "The note's action sheet opens, offering a Share option."
+      },
+      {
+        "action": "Tap Share.",
+        "expected": "The share submenu lists the share formats, including Share Text."
+      },
+      {
+        "action": "Tap Share Text.",
+        "expected": "The native share sheet opens with the note text formatted together with the track author, title, reference and date."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free"
+    ]
+  },
+  "8": {
+    "suite_id": 8,
+    "automation": 0,
+    "title": "Share a note as an audio excerpt",
+    "description": "Manual. Sharing a note as audio cuts the excerpt between the note's start and end; if rendering exceeds ~3s it finishes as a background job before the share sheet opens.",
+    "preconditions": "At least one note exists on a track with available audio.",
+    "steps": [
+      {
+        "action": "Tap a note, then Share, then Share Audio.",
+        "expected": "A 'Preparing audio' spinner appears while the excerpt (note start to end) is cut."
+      },
+      {
+        "action": "Wait for the excerpt to be ready.",
+        "expected": "If ready within ~3s the share sheet opens with the audio file; otherwise a toast indicates sharing continues in the background and the share sheet opens once the file is ready."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "platform-dependent"
+    ]
+  },
+  "9": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Empty notes state appears when all notes are deleted",
+    "description": "Offline. Deletes every seeded note one at a time, then asserts the list is empty and the empty-state sticker with a 'no notes' heading renders in its place.",
+    "preconditions": "Seeded offline fixture with one or more notes.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and delete every note via its action sheet's destructive Delete.",
+        "expected": "Each delete shrinks the list until no notes remain."
+      },
+      {
+        "action": "Observe the Notes tab once the list is empty.",
+        "expected": "The empty-state sticker renders with a non-empty heading containing 'no notes'."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "e2e"
+    ]
+  },
+  "11": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Share video from a note is Pro-gated",
+    "description": "Offline. A free user tapping a note's Share then Share video (the Pro-gated Studio entry) is sent to the paywall.",
+    "preconditions": "Seeded offline fixture with a note; the user is not subscribed.",
+    "steps": [
+      {
+        "action": "On the Notes tab, tap a note, then tap Share.",
+        "expected": "The note's share options are listed, including the Share video (Studio) entry."
+      },
+      {
+        "action": "Tap Share video.",
+        "expected": "The subscription paywall page opens."
+      }
+    ],
+    "tags": [
+      "notes",
+      "pro",
+      "e2e"
+    ]
+  },
+  "12": {
+    "suite_id": 2,
+    "automation": 2,
+    "title": "Activity widget shows completed count and time listened",
+    "description": "Offline, fixture-seeded. Asserts the Home activity card renders with a completed-lectures badge and a total-time-listened badge. The current-streak badge is deliberately NOT asserted (it requires consecutive days ending today, which a fixed-date fixture can't satisfy), and the test does NOT cover the empty/fresh-install hidden state.",
+    "preconditions": "Seeded user.db with listening history (completed lectures and total time). Offline, mocked content.",
+    "steps": [
+      {
+        "action": "Boot to Home with the seeded listening history.",
+        "expected": "The activity card is visible and shows a completed-lectures badge plus a total-time-listened badge."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "e2e"
+    ]
+  },
+  "13": {
+    "suite_id": 2,
+    "automation": 2,
+    "title": "Draining the queue shows the empty state and a starter pack re-adds tracks",
+    "description": "Offline, fixture-seeded. Deletes every Up-Next row until the queue is empty, asserts the \"Playlist is empty\" sticker appears, then taps a starter-pack chip and asserts the queue grows back above zero.",
+    "preconditions": "Seeded user.db with a non-empty Up-Next playlist (~9 tracks). Offline, mocked content.",
+    "steps": [
+      {
+        "action": "Swipe-delete every playlist row until the queue is empty.",
+        "expected": "The empty-state sticker appears with the header \"Playlist is empty\"."
+      },
+      {
+        "action": "Tap a starter-pack chip in the empty-state sticker.",
+        "expected": "The starter pack adds tracks and the playlist row count grows back above zero."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "e2e"
+    ]
+  },
+  "14": {
+    "suite_id": 2,
+    "automation": 2,
+    "title": "Reminders nag banner shows on Home when notifications are not granted",
+    "description": "Offline, fixture-seeded. Boots Home WITHOUT pre-dismissing the nags; since the playlist is non-empty and web notifications aren't granted, asserts that a nag banner is visible. Does NOT verify precedence over the subscription nag, nor the dismiss/cooldown behavior.",
+    "preconditions": "Seeded user.db with a non-empty playlist; nags NOT pre-dismissed; notifications permission not granted (web). Offline, mocked content.",
+    "steps": [
+      {
+        "action": "Boot to Home without dismissing the nags.",
+        "expected": "A nag banner is visible on Home."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "edge",
+      "e2e"
+    ]
+  },
+  "15": {
+    "suite_id": 2,
+    "automation": 2,
+    "title": "Collection list route renders collection cards",
+    "description": "Offline, fixture-seeded. From the Search landing it taps the first \"see all\" chevron, lands on either the collection-group or all-collections list route (annotated), and asserts at least one collection card row is visible. Does NOT verify Home grouping/folding of consecutive same-collection tracks.",
+    "preconditions": "Seeded content DB with collections (and a collection group when the fixture has one). Offline, mocked content.",
+    "steps": [
+      {
+        "action": "Boot the app and open the Search tab.",
+        "expected": "The Search landing renders with at least one \"see all\" chevron on a collection section."
+      },
+      {
+        "action": "Tap the first \"see all\" chevron and let the collection list route load.",
+        "expected": "The collection list view (collection-group or all-collections route) renders at least one collection card row."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "e2e"
+    ]
+  },
+  "16": {
+    "suite_id": 2,
+    "automation": 0,
+    "title": "Tapping a Home row opens the player at the saved position",
+    "description": "Manual: a playlist track with saved progress, when tapped from Home, opens the player and resumes from the saved position rather than from the start.",
+    "preconditions": "A playlist track has saved progress greater than zero.",
+    "steps": [
+      {
+        "action": "Tap a track row on Home that has prior progress.",
+        "expected": "The player opens and resumes from the saved position, not from the start."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "17": {
+    "suite_id": 19,
+    "automation": 2,
+    "title": "Up-next queue shows a count badge and shrinks when a row is deleted",
+    "description": "Offline, fixture-seeded. Asserts the Up-Next playlist rows and the count badge are visible, the badge is a positive number no greater than the visible row count, and that swipe-deleting the first row decreases the row count by one. Does NOT verify the total-duration badge or infinite scroll.",
+    "preconditions": "Seeded user.db with several playlist tracks (including one completed). Offline, mocked content.",
+    "steps": [
+      {
+        "action": "Boot to Home; note the Up-Next count badge and a not-yet-completed row.",
+        "expected": "The playlist renders rows and the count badge (a positive number not exceeding the row count)."
+      },
+      {
+        "action": "Swipe-delete the not-completed row.",
+        "expected": "The visible row count AND the count badge each drop by one."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "e2e"
+    ]
+  },
+  "18": {
+    "suite_id": 19,
+    "automation": 2,
+    "title": "Swipe-deleting a queue row removes that exact track",
+    "description": "Offline, fixture-seeded. Captures the first row's text, swipe-deletes it, and asserts the row count drops by one and no row with that text remains. Does NOT verify completion-badge persistence, Search/Library state, or re-adding the track.",
+    "preconditions": "Seeded user.db with a non-empty Up-Next playlist. Offline, mocked content.",
+    "steps": [
+      {
+        "action": "Boot to Home and note a not-yet-completed queue row and the count badge.",
+        "expected": "The Up-Next playlist renders rows and a count badge."
+      },
+      {
+        "action": "Swipe-delete that row.",
+        "expected": "The row is gone, and the visible row count and the count badge each drop by one."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "19": {
+    "suite_id": 19,
+    "automation": 2,
+    "title": "Re-adding a completed track starts a fresh pass but keeps the library badge",
+    "description": "Regression guard (LECTORIUM-18/19): archiving a completed track and re-adding it queues a FRESH pass — the new queue row carries no completed double-check — while the library keeps its lifetime completion badge. Offline.",
+    "preconditions": "Offline boot (full catalog) with a completed track in the queue.",
+    "steps": [
+      {
+        "action": "In the queue, confirm the completed track shows the double-check, then swipe-archive it.",
+        "expected": "The completed double-check is shown in the queue; archiving removes the track from the active queue."
+      },
+      {
+        "action": "Open the library and find the same track.",
+        "expected": "Its library row still shows the lifetime completion badge (the rosette double-check)."
+      },
+      {
+        "action": "Re-add the track from the library and return to Home.",
+        "expected": "The re-added queue row is a fresh pass — a progress radial, not the completed double-check; the library keeps its lifetime badge."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "e2e"
+    ]
+  },
+  "20": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Library list populates on open and pages in on scroll",
+    "description": "Verifies the library list is populated on open and pages in the next page when scrolled to the bottom (PAGE_SIZE=50). Offline.",
+    "preconditions": "Offline boot on the library list.",
+    "steps": [
+      {
+        "action": "Open the library.",
+        "expected": "The list is populated with lecture rows."
+      },
+      {
+        "action": "Scroll the list to the bottom.",
+        "expected": "The next page loads — the visible row count grows past the first page."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "22": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Search by verse reference, title word, and the no-results empty state",
+    "description": "Verifies the three ways the search box narrows the library — a verse reference matches the exact verse (no prefix bleed), a title word filters to matching titles, and a no-match query shows the empty state. Offline.",
+    "preconditions": "Offline boot on the library list.",
+    "steps": [
+      {
+        "action": "Search a verse reference (\"bg 1.1\").",
+        "expected": "The list narrows to the exact verse — no prefix bleed into 1.10–1.19."
+      },
+      {
+        "action": "Search a word taken from a lecture title.",
+        "expected": "The list narrows to lectures whose titles contain that word."
+      },
+      {
+        "action": "Search a query that matches nothing.",
+        "expected": "The centered no-results empty state is shown with zero rows."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "25": {
+    "suite_id": 20,
+    "automation": 2,
+    "title": "Filters sheet opens",
+    "description": "Tapping the header filter button presents the filters bottom sheet (ion-modal.filters-sheet.show-modal). The test asserts the sheet presents; it does NOT enumerate the individual filter dimensions. Offline; also exercised across the content-language locale matrix.",
+    "preconditions": "On the library/search list (offline boot).",
+    "steps": [
+      {
+        "action": "Tap the header filter button.",
+        "expected": "The filters bottom sheet is presented (visible)."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "26": {
+    "suite_id": 20,
+    "automation": 2,
+    "title": "Library filters: source re-query, active badge, sort, and reset",
+    "description": "Verifies the live-apply filters journey: switching the Sources facet re-queries the list and the active-filter badge stays highlighted; changing the Sort re-orders the list; Reset clears every facet and the badge. Offline.",
+    "preconditions": "boot() pins source source_dsicuBsFvinZ (a non-seed dimension) with a populated, deterministic list.",
+    "steps": [
+      {
+        "action": "Open the filters sheet and switch the Sources facet to a different source.",
+        "expected": "The sheet shows the new Sources selection."
+      },
+      {
+        "action": "Apply (close the sheet).",
+        "expected": "The library re-queries to a disjoint set and the active-filter badge stays highlighted."
+      },
+      {
+        "action": "Open the filters sheet and choose the \"Date (oldest first)\" sort.",
+        "expected": "The sheet shows the chosen sort."
+      },
+      {
+        "action": "Apply (close the sheet).",
+        "expected": "The list re-orders live — the order differs from the default."
+      },
+      {
+        "action": "Open the filters sheet and tap Reset.",
+        "expected": "Every facet collapses to \"Any\", the active-filter badge clears, and Reset disables itself."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "28": {
+    "suite_id": 20,
+    "automation": 2,
+    "title": "Pristine locale language seed does not count as an active filter",
+    "description": "On a fresh device-locale first launch (en derived from the locale, no pinned source), the only set dimension is the seeded language, which activeFilterCount ignores — so the header filter button stays inactive (no badge). Offline. Note: the test asserts the badge stays off; it does NOT exercise language-scoped results or an empty-state combination.",
+    "preconditions": "Device-locale boot (en-US → en) with no pinned source.",
+    "steps": [
+      {
+        "action": "Boot from the device locale with no user-applied filters and observe the header filter button.",
+        "expected": "The button never gains the active-filter badge — the locale-seeded language alone does not count as an active filter."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "29": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "Track row: add a lecture (download indicator), then re-adding is blocked",
+    "description": "Verifies the track-row lifecycle: a not-yet-queued lecture's sheet shows the card with Add/Share; tapping Add closes the sheet and the row gains a download indicator; re-opening the same lecture disables the primary button (\"Already in playlist\"). Offline.",
+    "preconditions": "Offline boot with an existing queue and a populated library.",
+    "steps": [
+      {
+        "action": "Open a not-yet-queued lecture's track sheet.",
+        "expected": "The card shows the title and the Add / Share actions; Add is enabled."
+      },
+      {
+        "action": "Tap Add.",
+        "expected": "The sheet closes and the library row gains a download indicator (downloading / added)."
+      },
+      {
+        "action": "Re-open the same lecture's sheet.",
+        "expected": "The primary button is disabled and reads \"Already in playlist\"."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "31": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "Failed download retries from the track sheet",
+    "description": "A failed download shows a failed (red X) row state; tapping the row always opens the track sheet, whose primary button reads \"Download again\" and re-triggers the download. No automated test in the suite currently covers this id.",
+    "preconditions": "A track whose download can be made to fail (e.g. no network during the transfer).",
+    "steps": [
+      {
+        "action": "Add the first library track while its audio download is forced to fail.",
+        "expected": "The row surfaces the failed (red X) state."
+      },
+      {
+        "action": "Tap the failed row.",
+        "expected": "The track sheet opens (no silent retry) with a \"Download again\" button."
+      },
+      {
+        "action": "Tap \"Download again\" with the transfer allowed through.",
+        "expected": "The download recovers — the row leaves the failed state."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "32": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "Discovery surfaces fold playback progress to a binary state",
+    "description": "A playing/queued track shows the binary \"added\" state icon (data-state added/completed) in the Library discovery surface, while the same track in the Home queue renders the live progress radial (no state icon). Offline with mocked content and silent audio.",
+    "preconditions": "Offline (mocked content + silent mp3). A library track is added and played from the Home queue.",
+    "steps": [
+      {
+        "action": "Add a library track, then check its row in the Library list.",
+        "expected": "The Library row shows the binary added/completed state icon — no progress radial."
+      },
+      {
+        "action": "Play the same track from the Home queue and check its queue row.",
+        "expected": "The Home queue row shows the live progress radial instead (the state icon is absent)."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "33": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "Add multiple tracks",
+    "description": "Adding two not-yet-queued library tracks one after another via their sheets grows the Home queue by exactly two. Offline.",
+    "preconditions": "Offline boot with an existing queue and at least two un-queued library tracks.",
+    "steps": [
+      {
+        "action": "Note the current Home queue length, then open the library and add two un-queued tracks one after another, each via its track sheet (Add to playlist, sheet dismisses each time).",
+        "expected": "Both Add actions are accepted and each track sheet dismisses after adding."
+      },
+      {
+        "action": "Switch to the Home tab and check the queue length.",
+        "expected": "The Home queue has grown by exactly two (both tracks added)."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "34": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "Library landing shows its sections",
+    "description": "Verifies the Search (library) landing comes up fully formed: collection-group carousels, the topics tile grid, the Full Library banner, and the all-lectures preview are all visible. Pure offline. (The IAP-gated Smart Library banner and topic shelves are NOT asserted.)",
+    "preconditions": "Offline boot with the seeded fixture catalog; library content loaded.",
+    "steps": [
+      {
+        "action": "Boot and open the Search (library) landing.",
+        "expected": "Collection-group carousels, the topics tile grid, the Full Library banner, and the all-lectures preview are all visible on the one landing screen."
+      }
+    ],
+    "tags": [
+      "library",
+      "free",
+      "e2e"
+    ]
+  },
+  "35": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "Library content follows the selected library language",
+    "description": "Verifies the library list is scoped to the selected content language(s): every visible track title is in that language's script. Covers a Russian library (all Cyrillic), an English library (no Cyrillic), the first-launch locale reduction (uk→ru, hi/de/sr→en), and an explicit ru+en multi-select (mixed scripts). Pure offline — fixture catalog holds en + ru lectures.",
+    "preconditions": "Offline boot; library content language seeded from the device locale or set explicitly (single language, or ru+en for the multi-select case).",
+    "steps": [
+      {
+        "action": "Open the library under a Russian library, then switch the library language to English in Settings and reopen.",
+        "expected": "Every row is Cyrillic under ru and Latin under en — no Russian lecture leaks onto an English library."
+      }
+    ],
+    "tags": [
+      "library",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "36": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "Library language is independent from UI language",
+    "description": "Verifies the library content language is decoupled from the UI language: starting from an English UI + English library, switching only the library language to Russian keeps the UI English (the Settings row label stays English) while content follows the library — an opened topic now lists lectures with Russian (Cyrillic) titles. Pure offline.",
+    "preconditions": "Offline boot with English UI and English library; fixture topics hold only Russian lectures.",
+    "steps": [
+      {
+        "action": "In Settings → Library, switch the library to Russian only (add Russian, remove English) and apply.",
+        "expected": "The UI stays English (the row label is still in English) while the row subtitle reports the Russian library selection."
+      },
+      {
+        "action": "Open a topic from the Search landing.",
+        "expected": "The topic now lists lectures and every title is Russian (Cyrillic), even though the UI remains English."
+      }
+    ],
+    "tags": [
+      "library",
+      "free",
+      "e2e"
+    ]
+  },
+  "38": {
+    "suite_id": 12,
+    "automation": 2,
+    "title": "Open a collection and add a track from it",
+    "description": "Verifies tapping a collection card from a discovery carousel navigates to the collection detail route and renders its track list. Pure offline.",
+    "preconditions": "Offline boot; Search landing loaded with collection carousels.",
+    "steps": [
+      {
+        "action": "From a discovery carousel, open the first collection.",
+        "expected": "The collection detail opens with its track list."
+      },
+      {
+        "action": "Open an un-queued lecture's track sheet and tap Add.",
+        "expected": "The sheet (shown) then closes."
+      },
+      {
+        "action": "Return to Home.",
+        "expected": "The playlist count grew by exactly one."
+      }
+    ],
+    "tags": [
+      "collections",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "40": {
+    "suite_id": 12,
+    "automation": 2,
+    "title": "Add the whole collection at once",
+    "description": "Verifies the toolbar Add-collection action: it raises an \"Add N lectures?\" confirm alert, and confirming it batch-adds the collection's tracks so the Home playlist count grows. Pure offline.",
+    "preconditions": "Offline boot; a collection opened from a discovery carousel.",
+    "steps": [
+      {
+        "action": "Tap the toolbar Add-collection (Add all) action.",
+        "expected": "An \"Add N lectures?\" confirmation alert appears."
+      },
+      {
+        "action": "Confirm the alert.",
+        "expected": "The collection's tracks are added and the Home playlist count grows."
+      }
+    ],
+    "tags": [
+      "collections",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "41": {
+    "suite_id": 12,
+    "automation": 2,
+    "title": "Collection contents respect the library language",
+    "description": "Verifies a collection that mixes languages surfaces only tracks the user can consume: on a Russian library, the opened collection lists only Russian (Cyrillic) rows — its English-only tracks are filtered out. Pure offline.",
+    "preconditions": "Offline boot with a Russian library; a collection that mixes languages.",
+    "steps": [
+      {
+        "action": "Under a Russian library, open the first collection card.",
+        "expected": "The collection list is rendered and every row is Cyrillic."
+      },
+      {
+        "action": "Switch the library language to English in Settings and reopen the collection.",
+        "expected": "The card and list are now English (Latin), non-empty — not emptied by a UI/library mismatch."
+      }
+    ],
+    "tags": [
+      "collections",
+      "free",
+      "e2e"
+    ]
+  },
+  "43": {
+    "suite_id": 13,
+    "automation": 2,
+    "title": "Open a topic and add a track from it",
+    "description": "Verifies tapping a topic tile in the Search-landing grid navigates to the topic detail route and renders its track list. Booted Russian so the fixture's (ru-only) topics have lectures. Pure offline.",
+    "preconditions": "Offline boot with a Russian library; Search landing loaded with a topics tile grid.",
+    "steps": [
+      {
+        "action": "Open the first topic from the Search-landing grid.",
+        "expected": "The topic detail opens with its track list."
+      },
+      {
+        "action": "Open an un-queued lecture's track sheet and tap Add.",
+        "expected": "The sheet (shown) then closes."
+      },
+      {
+        "action": "Return to Home.",
+        "expected": "The playlist count grew by exactly one."
+      }
+    ],
+    "tags": [
+      "topics",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "44": {
+    "suite_id": 13,
+    "automation": 2,
+    "title": "Open a topic from a shelf",
+    "description": "Verifies the personalized topic shelves on the library landing: tapping a hashtag shelf's See all navigates to that topic's detail page and renders its track list. Pure offline.",
+    "preconditions": "Offline boot; Search landing showing hashtag topic shelves with a See-all action.",
+    "steps": [
+      {
+        "action": "Open the Search landing and locate a hashtag topic shelf's See all action.",
+        "expected": "A hashtag topic shelf with a See all button is visible on the landing."
+      },
+      {
+        "action": "Tap See all on the hashtag topic shelf.",
+        "expected": "The topic detail page opens (/search/topic/…) and its track list is shown."
+      }
+    ],
+    "tags": [
+      "topics",
+      "free",
+      "e2e"
+    ]
+  },
+  "45": {
+    "suite_id": 13,
+    "automation": 2,
+    "title": "Topic page respects the library language",
+    "description": "Verifies topics are scoped to the library language across detail pages and tiles: a topic detail under a Russian library lists Russian (Cyrillic) titles; switching the library to English re-scopes the open detail so no Cyrillic title remains; and the landing tile grid only surfaces topics consumable in the selected language. Pure offline.",
+    "preconditions": "Offline boot; library language set (Russian or English), switched mid-test for the re-scope case. Topics are language-agnostic in the fixture.",
+    "steps": [
+      {
+        "action": "Under a Russian library, open the first topic.",
+        "expected": "The detail lists only Russian (Cyrillic) lectures."
+      },
+      {
+        "action": "Switch the library language to English in Settings.",
+        "expected": "The still-open detail re-scopes — no Cyrillic lecture remains."
+      }
+    ],
+    "tags": [
+      "topics",
+      "free",
+      "e2e"
+    ]
+  },
+  "47": {
+    "suite_id": 5,
+    "automation": 0,
+    "title": "Smart Library banner shows PRO badge and opens the paywall when not subscribed",
+    "description": "Manual: on a build with IAP available but no active subscription, the Smart Library banner carries a PRO badge and tapping it opens the subscription paywall instead of the dialog.",
+    "preconditions": "Not subscribed; IAP available in this build.",
+    "steps": [
+      {
+        "action": "Open the Library landing and locate the Smart Library banner.",
+        "expected": "The banner is shown with a PRO badge."
+      },
+      {
+        "action": "Tap the banner.",
+        "expected": "The subscription paywall for the Smart Library feature opens."
+      }
+    ],
+    "tags": [
+      "smart-library",
+      "pro",
+      "smoke"
+    ]
+  },
+  "49": {
+    "suite_id": 5,
+    "automation": 2,
+    "title": "Smart Library dialog: open, toggle Enable, open the filter sheet",
+    "description": "Verifies the Smart Library dialog (Pro): a subscriber taps the banner to open the dialog, flips the Enable toggle on and back off, and opens the Filter row → the search-filters sheet. Offline (treated as subscribed).",
+    "preconditions": "Offline; Pro boot (subscribed).",
+    "steps": [
+      {
+        "action": "Tap the Smart Library banner.",
+        "expected": "The Smart Library dialog opens with the Enable toggle."
+      },
+      {
+        "action": "Flip the Enable toggle on and back off.",
+        "expected": "The toggle reflects each state."
+      },
+      {
+        "action": "With the feature enabled, open the Filter row.",
+        "expected": "The search-filters sheet opens."
+      }
+    ],
+    "tags": [
+      "smart-library",
+      "pro",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "52": {
+    "suite_id": 5,
+    "automation": 0,
+    "title": "Smart Library auto-download honors the target",
+    "description": "Manual: with Smart Library enabled, the background loop downloads matching tracks until total downloaded duration reaches the target, then pauses; it resumes when the total drops below target, and completed tracks auto-archive after the configured delay.",
+    "preconditions": "Pro; Smart Library enabled with filters and a download target.",
+    "steps": [
+      {
+        "action": "Leave the app running with the target set above the currently downloaded duration.",
+        "expected": "Matching tracks download in the background until total downloaded duration reaches the target, then downloading pauses."
+      },
+      {
+        "action": "Listen to or archive some downloaded tracks so the total drops below the target.",
+        "expected": "Auto-download resumes to top back up to the target; completed tracks auto-archive after the configured delay."
+      }
+    ],
+    "tags": [
+      "smart-library",
+      "pro",
+      "edge"
+    ]
+  },
+  "53": {
+    "suite_id": 6,
+    "automation": 2,
+    "title": "Floating mini-player pulses until the transcript is opened",
+    "description": "Asserts the `pulsing` class on the floating player: it loops until the transcript is opened, then clears for good (not a 3-second one-shot). Offline; boot() zeroes animation durations so the class is the stable signal.",
+    "preconditions": "First-time user, no transcript opened yet. A queued track is played. Offline (mocked).",
+    "steps": [
+      {
+        "action": "Play the first queued track and inspect the floating player.",
+        "expected": "The floating player carries the `pulsing` class (looping invite animation)."
+      },
+      {
+        "action": "Tap the floating player to open the transcript dialog.",
+        "expected": "The transcript dialog opens and the `pulsing` class is removed permanently."
+      }
+    ],
+    "tags": [
+      "player",
+      "free",
+      "e2e"
+    ]
+  },
+  "54": {
+    "suite_id": 6,
+    "automation": 0,
+    "title": "Tapping a playlist track opens the player at the saved position",
+    "description": "Manual: tapping a track in the Up-Next playlist that has saved progress opens the player and resumes from the saved position, not from the start.",
+    "preconditions": "A track in the playlist has saved progress greater than zero.",
+    "steps": [
+      {
+        "action": "Tap a playlist track that has prior progress.",
+        "expected": "The player opens and resumes from the saved position, not from the start."
+      }
+    ],
+    "tags": [
+      "player",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "55": {
+    "suite_id": 6,
+    "automation": 2,
+    "title": "Skip back/forward 15 seconds",
+    "description": "Skip forward/back moves playback ±15s, observed via the transcript's highlighted current line. Offline, with 300s fixture audio so the jumps aren't clamped.",
+    "preconditions": "Offline (mocked). Transcript open over a playing 300s fixture track; a mid-transcript sentence is tapped to seed a known position.",
+    "steps": [
+      {
+        "action": "Tap skip-forward on the floating player.",
+        "expected": "The current (highlighted) transcript line advances past the seeded position (~15s later)."
+      },
+      {
+        "action": "Tap skip-back twice.",
+        "expected": "The current line moves to an earlier position than the post-forward point."
+      }
+    ],
+    "tags": [
+      "player",
+      "e2e"
+    ]
+  },
+  "56": {
+    "suite_id": 6,
+    "automation": 2,
+    "title": "Change playback speed with snap to presets",
+    "description": "Dragging the floating player's speed slider and releasing snaps to the nearest preset (0.75-2.0x) and persists it; the test drags toward 1.5x and asserts the committed value in stored audio config. Offline.",
+    "preconditions": "Offline (mocked). A track is playing so the floating player (with its speed slider) is present.",
+    "steps": [
+      {
+        "action": "Drag the speed slider puck toward the 1.5x position and release.",
+        "expected": "The value snaps to the 1.5x preset and is persisted to the audio playback-speed setting in storage."
+      }
+    ],
+    "tags": [
+      "player",
+      "e2e"
+    ]
+  },
+  "57": {
+    "suite_id": 6,
+    "automation": 2,
+    "title": "Seek by tapping a transcript sentence",
+    "description": "Tapping a transcript sentence seeks playback to it: the tapped block becomes the highlighted current line. Offline, with fixture audio long enough that the seek target isn't clamped.",
+    "preconditions": "Offline (mocked). A track is playing.",
+    "steps": [
+      {
+        "action": "Open the transcript reader over the playing track.",
+        "expected": "The transcript dialog is visible and its sentence blocks render."
+      },
+      {
+        "action": "Tap a later transcript sentence whose start is within the audio length.",
+        "expected": "Playback seeks to it and the tapped sentence becomes the current (highlighted) line."
+      }
+    ],
+    "tags": [
+      "free",
+      "transcript",
+      "e2e"
+    ]
+  },
+  "58": {
+    "suite_id": 6,
+    "automation": 2,
+    "title": "Floating player hides on the Chat tab",
+    "description": "The floating player hides in overlapping contexts; this test asserts the Chat-tab case - hidden on Chat, restored on leaving. (Keyboard/action-sheet contexts are native-only and not asserted offline.)",
+    "preconditions": "Offline (mocked). A track is playing so the floating player is visible.",
+    "steps": [
+      {
+        "action": "Navigate to the Chat tab.",
+        "expected": "The floating player gains the `hidden` class and is no longer shown."
+      },
+      {
+        "action": "Navigate back to Home.",
+        "expected": "The floating player loses the `hidden` class and is visible again."
+      }
+    ],
+    "tags": [
+      "player",
+      "free",
+      "edge",
+      "e2e"
+    ]
+  },
+  "59": {
+    "suite_id": 6,
+    "automation": 2,
+    "title": "Auto-play next is Pro-gated for free users",
+    "description": "Verifies the free-user gate only: the Autoplay toggle in Settings is off, and tapping it opens the paywall instead of enabling it. (The Pro auto-advance path is not covered by this test.)",
+    "preconditions": "Offline (mocked), free user.",
+    "steps": [
+      {
+        "action": "As a free user, open the Settings tab and locate the Autoplay toggle.",
+        "expected": "The Autoplay toggle is present and off (aria-checked false)."
+      },
+      {
+        "action": "Tap the Autoplay toggle.",
+        "expected": "The toggle does not enable; the subscription/paywall page opens."
+      }
+    ],
+    "tags": [
+      "player",
+      "pro",
+      "e2e"
+    ]
+  },
+  "60": {
+    "suite_id": 7,
+    "automation": 2,
+    "title": "Transcript opens, renders, and closes cleanly",
+    "description": "Tapping the floating player opens the transcript reader and real fixture transcript text renders into the prompter (not just the shell). Offline.",
+    "preconditions": "Offline (mocked). The first queued track is playing.",
+    "steps": [
+      {
+        "action": "Open the transcript dialog.",
+        "expected": "The transcript dialog is visible and renders real transcript text."
+      },
+      {
+        "action": "Tap the close button.",
+        "expected": "The transcript dialog dismisses cleanly (hidden)."
+      }
+    ],
+    "tags": [
+      "transcript",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "61": {
+    "suite_id": 7,
+    "automation": 2,
+    "title": "Copy a transcript selection",
+    "description": "Verifies copying from the transcript: drag-selecting a passage opens the selection popover, and tapping Copy places the text on the clipboard. Offline.",
+    "preconditions": "Offline (mocked). Transcript open over a playing track.",
+    "steps": [
+      {
+        "action": "Touch and drag across transcript words/sentences (a drag, not a tap).",
+        "expected": "On release the selection popover opens anchored to the selection."
+      },
+      {
+        "action": "Tap Copy in the popover.",
+        "expected": "The selected transcript text is on the clipboard (non-empty)."
+      }
+    ],
+    "tags": [
+      "transcript",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "62": {
+    "suite_id": 7,
+    "automation": 2,
+    "title": "Track sheet renders topic chips and the lecture outline",
+    "description": "On a ru fixture track that has both (track_2VQqmis6tnmR \"Как очистить ум\"), opening its TrackSheet renders the topic chips and the lecture outline (one row per chapter). Asserts rendering only - no playback seek. Offline.",
+    "preconditions": "Offline (mocked), ru device locale -> full Russian catalog.",
+    "steps": [
+      {
+        "action": "Search \"очистить\" in the library and open the matching track's sheet.",
+        "expected": "The matching track row surfaces and its TrackSheet presents with its actions."
+      },
+      {
+        "action": "Inspect the open track sheet's content.",
+        "expected": "Topic chips render and the lecture outline lists one row per chapter."
+      }
+    ],
+    "tags": [
+      "transcript",
+      "free",
+      "e2e"
+    ]
+  },
+  "63": {
+    "suite_id": 7,
+    "automation": 0,
+    "title": "Switch transcript language",
+    "description": "Manual: switching the transcript language re-renders the text in the selected language while timestamps and chapter references carry over.",
+    "preconditions": "Track has transcripts in more than one language.",
+    "steps": [
+      {
+        "action": "Open the language selector and switch language.",
+        "expected": "The transcript re-renders in the selected language; timestamps and chapter references carry over."
+      }
+    ],
+    "tags": [
+      "transcript",
+      "free"
+    ]
+  },
+  "64": {
+    "suite_id": 7,
+    "automation": 2,
+    "title": "Transcript shows an error state on fetch failure",
+    "description": "With the cache cleared and the transcript request forced to fail, the reader surfaces an error state (not an endless spinner) and dismisses cleanly. Offline.",
+    "preconditions": "Offline (mocked). Transcript caches cleared and the transcript JSON request routed to abort, so the reader must hit the network.",
+    "steps": [
+      {
+        "action": "Play a track and open the transcript with the fetch forced to fail.",
+        "expected": "The transcript dialog opens and shows the error state (not an endless spinner)."
+      }
+    ],
+    "tags": [
+      "transcript",
+      "free",
+      "e2e"
+    ]
+  },
+  "65": {
+    "suite_id": 9,
+    "automation": 2,
+    "title": "Share offers Transcript PDF, text and Audio",
+    "description": "Offline, Pro-booted. Opens a library track sheet and taps Share; asserts the export action sheet appears with a PDF option. The actual server-side render is a @live concern not exercised here.",
+    "preconditions": "Seeded offline fixture, booted as Pro (dev/web build is treated as subscribed). A library track with a transcript.",
+    "steps": [
+      {
+        "action": "Open the first library track's sheet.",
+        "expected": "The track sheet opens with its actions, including Share."
+      },
+      {
+        "action": "Tap Share.",
+        "expected": "The export action sheet lists Transcript (PDF), Transcript (text), and Audio."
+      }
+    ],
+    "tags": [
+      "sharing",
+      "pro",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "68": {
+    "suite_id": 9,
+    "automation": 0,
+    "title": "Background share job when rendering is slow",
+    "description": "Manual. A share-audio render that exceeds ~3s falls back to a background job: a toast announces it and the share sheet opens automatically once ready; a second concurrent share is blocked.",
+    "preconditions": "A share-audio action that takes longer than ~3 seconds to render.",
+    "steps": [
+      {
+        "action": "Trigger a share-audio that takes more than 3s to render and wait.",
+        "expected": "A spinner shows for about 3 seconds while the render runs."
+      },
+      {
+        "action": "Keep waiting past the ~3s threshold and attempt a second concurrent share.",
+        "expected": "A toast indicates the job continues in the background; the second concurrent share is prevented."
+      },
+      {
+        "action": "Wait for the background render to finish.",
+        "expected": "The share sheet opens automatically once the file is ready."
+      }
+    ],
+    "tags": [
+      "sharing",
+      "edge"
+    ]
+  },
+  "69": {
+    "suite_id": 22,
+    "automation": 0,
+    "title": "Stereo mixer blends left and right channels",
+    "description": "Manual. The stereo mixer routes one channel to both ears depending on puck position; center is native stereo (mix off).",
+    "preconditions": "A track with two-channel (e.g. EN/RU) audio is playing and the mixer control is visible.",
+    "steps": [
+      {
+        "action": "Drag the mixer puck toward the left label.",
+        "expected": "The left channel is routed to both ears."
+      },
+      {
+        "action": "Drag the puck back to center.",
+        "expected": "Playback returns to native stereo (mix off)."
+      },
+      {
+        "action": "Drag the puck toward the right label.",
+        "expected": "The right channel is routed to both ears."
+      }
+    ],
+    "tags": [
+      "player",
+      "free",
+      "smoke"
+    ]
+  },
+  "70": {
+    "suite_id": 22,
+    "automation": 2,
+    "title": "Center deadzone snaps the mix back to off",
+    "description": "Offline. After engaging the mix off-center, releasing the puck inside the center deadzone commits the stored mix position to exactly 0 (off).",
+    "preconditions": "Seeded offline fixture with a track playing and the mixer visible.",
+    "steps": [
+      {
+        "action": "Drag the puck well off-center to engage the mix.",
+        "expected": "The stored mix position becomes greater than the 0.15 deadzone threshold."
+      },
+      {
+        "action": "Drag the puck back inside the center deadzone and release.",
+        "expected": "The stored mix position commits to exactly 0 (off)."
+      }
+    ],
+    "tags": [
+      "player",
+      "e2e"
+    ]
+  },
+  "71": {
+    "suite_id": 22,
+    "automation": 0,
+    "title": "Crossing the engagement boundary fires one haptic tick",
+    "description": "Manual. The mix engages or disengages as the puck crosses the deadzone boundary, with exactly one light haptic tick per crossing.",
+    "preconditions": "Mixer visible with the puck at center.",
+    "steps": [
+      {
+        "action": "Drag the puck past the deadzone boundary.",
+        "expected": "The mix engages at the boundary and exactly one light haptic tick fires."
+      },
+      {
+        "action": "Drag the puck back across the boundary toward center.",
+        "expected": "The mix disengages at the boundary and exactly one more light haptic tick fires."
+      }
+    ],
+    "tags": [
+      "player",
+      "free",
+      "platform-dependent"
+    ]
+  },
+  "72": {
+    "suite_id": 22,
+    "automation": 2,
+    "title": "Mix position persists across an app restart",
+    "description": "Offline. Dragging the puck well off-center stores a non-zero mix position; the localStorage-backed value survives an app reload unchanged.",
+    "preconditions": "Seeded offline fixture with a track playing and the mixer visible.",
+    "steps": [
+      {
+        "action": "Drag the puck well past the deadzone to engage the mix.",
+        "expected": "The stored mix position is greater than the 0.15 deadzone threshold."
+      },
+      {
+        "action": "Reload (restart) the app.",
+        "expected": "The stored mix position is restored to the same engaged value."
+      }
+    ],
+    "tags": [
+      "player",
+      "e2e"
+    ]
+  },
+  "73": {
+    "suite_id": 22,
+    "automation": 0,
+    "title": "Mixer is a no-op on mono audio",
+    "description": "Manual. On a single-channel track the mixer puck moves visually but produces no audible change and no error.",
+    "preconditions": "A track with only single-channel (mono) original audio.",
+    "steps": [
+      {
+        "action": "Open the mixer on a mono track and move the puck.",
+        "expected": "The puck responds visually but there is no audible change and no error (graceful degrade)."
+      }
+    ],
+    "tags": [
+      "player",
+      "free",
+      "edge"
+    ]
+  },
+  "74": {
+    "suite_id": 10,
+    "automation": 2,
+    "title": "Download a track for offline playback (persists across restart)",
+    "description": "Adds a library track and verifies its audio download reaches a downloaded terminal state (added/completed). Offline — content routes mocked, audio served from a silent fixture.",
+    "preconditions": "Library track not yet downloaded; user DB seeded; mocked content + audio routes (network available).",
+    "steps": [
+      {
+        "action": "Open the Library, open the first track's sheet, and tap Add.",
+        "expected": "The sheet closes and the row reaches a downloaded terminal state (added/completed)."
+      },
+      {
+        "action": "Kill the network, reload the app (restart), and reopen the Library.",
+        "expected": "The same row is still added/completed — rehydrated from the persisted DB + cached blob, with no re-download."
+      }
+    ],
+    "tags": [
+      "smoke",
+      "library",
+      "e2e"
+    ]
+  },
+  "76": {
+    "suite_id": 10,
+    "automation": 0,
+    "title": "A failed download recovers (retry, and auto-recovers on relaunch)",
+    "description": "After a download fails, retrying it deletes any stale partial file and starts a fresh transfer from the beginning; on success the row becomes completed.",
+    "preconditions": "A library track whose download has failed (failed/red-X state).",
+    "steps": [
+      {
+        "action": "Add a track while its audio transfer aborts (failed / red X), then tap the row and Download again with the transfer allowed.",
+        "expected": "The stale partial is discarded and a fresh transfer starts; the row leaves the failed state."
+      },
+      {
+        "action": "Force-close and relaunch the app.",
+        "expected": "The persisted unfinished download is re-driven on launch and completes on its own."
+      }
+    ],
+    "tags": [
+      "library",
+      "e2e"
+    ]
+  },
+  "78": {
+    "suite_id": 10,
+    "automation": 2,
+    "title": "Failover to another CDN region when the active host is dead",
+    "description": "Publishes a two-region config (edge-a active, edge-b fallback), kills edge-a's cover host, and verifies covers still decode from edge-b and that edge-b is actually requested — proving region failover ran, not a cache hit. Offline — config + region hosts mocked.",
+    "preconditions": "Two-region config (edge-a active, edge-b fallback); edge-a cover host returns failure, edge-b serves a 1x1 PNG; user DB seeded; mocked content routes.",
+    "steps": [
+      {
+        "action": "Boot the app on the two-region config and open the Search tab so collection cards load.",
+        "expected": "Collection cards become visible."
+      },
+      {
+        "action": "Wait for the covers to resolve.",
+        "expected": "edge-b is hit at least once and the cover images decode (loaded, naturalWidth > 0) — served from the fallback region."
+      }
+    ],
+    "tags": [
+      "downloads",
+      "edge",
+      "e2e"
+    ]
+  },
+  "79": {
+    "suite_id": 10,
+    "automation": 2,
+    "title": "Concurrent download requests are de-duplicated",
+    "description": "On boot the playlist prefetches its queued tracks; playing the first queued track while its prefetch is still in flight is a second concurrent request for the same audio URL. Every transfer is slowed to widen the race, then asserts no audio URL was ever fetched more than once. Offline — content + audio routes mocked.",
+    "preconditions": "Queued playlist with prefetch in flight; user DB seeded; audio route slowed and counted per URL.",
+    "steps": [
+      {
+        "action": "Play the first queued track while its boot prefetch is still mid-transfer.",
+        "expected": "No audio URL is fetched more than once (concurrent requests collapse to a single transfer), and at least one transfer happened."
+      }
+    ],
+    "tags": [
+      "library",
+      "e2e"
+    ]
+  },
+  "80": {
+    "suite_id": 23,
+    "automation": 2,
+    "title": "Play a downloaded track with no network",
+    "description": "Downloads a track, then severs the network (every further audio fetch fails) and plays it from the Home queue. The player goes live from the cached blob, not the network. Offline — content mocked, audio route gated off after download.",
+    "preconditions": "Track downloaded to added/completed; audio route then gated to fail all fetches (no network).",
+    "steps": [
+      {
+        "action": "Add the first library track and wait for it to reach a downloaded terminal state.",
+        "expected": "The row shows added/completed."
+      },
+      {
+        "action": "Disable the network, then open the track from the Home queue and play it.",
+        "expected": "The player goes live (not hidden) from the cached blob despite every audio fetch failing."
+      }
+    ],
+    "tags": [
+      "offline",
+      "library",
+      "e2e"
+    ]
+  },
+  "81": {
+    "suite_id": 23,
+    "automation": 2,
+    "title": "Transcript is available offline",
+    "description": "The transcript is prefetched + cached on boot; the test then blocks the transcript JSON route entirely and verifies the reader still renders from cache. Offline — content mocked, transcript route aborted.",
+    "preconditions": "Booted app with the first track's transcript prefetched into cache; transcript JSON route then aborted (no network).",
+    "steps": [
+      {
+        "action": "After the boot-time prefetch, block the transcript JSON route and play the first queued track.",
+        "expected": "The track starts playing and the player is shown."
+      },
+      {
+        "action": "Open the transcript reader from the player.",
+        "expected": "The transcript dialog opens and the transcript text renders from cache despite the blocked route."
+      }
+    ],
+    "tags": [
+      "downloads",
+      "free",
+      "offline",
+      "e2e"
+    ]
+  },
+  "82": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Send a question and stream an answer",
+    "description": "Verifies the WIDGET, not the answer prose: sending a question echoes the user message and renders the streamed assistant answer container. Covered offline (mocked SSE: the question bubble plus the streamed answer text appear) and @live (a substantial grounded answer of 80+ chars streams in from the local stack).",
+    "preconditions": "Chat reachable. Offline: mocked auth + mocked SSE stream of two answer deltas + done. Live: local stack (chat + auth) up.",
+    "steps": [
+      {
+        "action": "Type a question in the chat composer and send it.",
+        "expected": "The user's question echoes into the thread as a user bubble."
+      },
+      {
+        "action": "Wait for the answer to stream.",
+        "expected": "The assistant answer container renders the streamed text (offline: the mocked answer text appears; live: a substantial answer of 80+ characters streams in)."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "83": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Failed answer offers a Retry that re-sends",
+    "description": "Verifies the WIDGET, not the answer prose: a failed turn renders an inline notice carrying a Retry button, and tapping it re-sends the same question. Offline — the /chat call is mocked to fail (500).",
+    "preconditions": "Chat reachable offline (mocked auth); /chat is mocked to return 500 on every call.",
+    "steps": [
+      {
+        "action": "Send a question whose /chat call fails (500).",
+        "expected": "An inline notice with a Retry button is shown."
+      },
+      {
+        "action": "Tap Retry.",
+        "expected": "The same question is re-sent — a second /chat request fires."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "84": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Empty state shows starter suggestion chips",
+    "description": "Verifies the WIDGET, not the answer prose: the chat empty state renders the composer (ready for input) and a row of starter suggestion chips, and tapping a chip starts a session. Covered offline (the chat surface renders, the textarea is enabled, suggestion chips are visible) and @live (tapping a chip opens a session: a user bubble appears and the URL carries the new session id).",
+    "preconditions": "Chat reachable. Offline: mocked boot, no backend needed. Live: local stack up, chat tab opened.",
+    "steps": [
+      {
+        "action": "Open the chat tab in its empty state.",
+        "expected": "The chat surface renders with an enabled composer textarea and a row of starter suggestion chips."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "85": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Show-verse question renders a verse card",
+    "description": "Verifies the WIDGET, not the answer prose: a find/show-verse question's mocked SSE (a verse `action` body + inline `[verse:…]` marker) must render a verse card carrying the scripture address. Offline — stream is mocked.",
+    "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a BG 2.13 verse body and a prose delta referencing it.",
+    "steps": [
+      {
+        "action": "Ask \"BG 2.13\" in chat.",
+        "expected": "The answer's verse marker renders as a verse card carrying the BG 2.13 address."
+      }
+    ],
+    "tags": [
+      "chat",
+      "e2e",
+      "smoke"
+    ]
+  },
+  "86": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Make-PDF question renders a share-PDF card",
+    "description": "Verifies the make-a-PDF intent: a \"make a PDF\" question's mocked SSE (a `share_pdf` action body + `[action:share_pdf|…]` marker) must render a share-PDF card listing the lecture(s) to export. Asserts the card, not the prose.",
+    "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a share_pdf body listing \"The Eternal Soul\".",
+    "steps": [
+      {
+        "action": "Ask \"make a PDF of this lecture\" in chat.",
+        "expected": "A share-PDF card renders listing the lecture as an enabled, tappable export row."
+      }
+    ],
+    "tags": [
+      "chat",
+      "e2e"
+    ]
+  },
+  "87": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Locate-story question renders a chapter list",
+    "description": "Verifies the locate-a-story intent: a \"which chapter\" question's mocked SSE (a chapter `action` body + `[chapter:…]` marker) must render a chapter list. Asserts the card, not the prose.",
+    "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a \"Chapter 3: Karma-linux-client\" chapter body.",
+    "steps": [
+      {
+        "action": "Ask a \"which chapter…\" question in chat.",
+        "expected": "A chapter-list card renders: the first item names the chapter topic and the list shows the expected chapter rows."
+      }
+    ],
+    "tags": [
+      "chat",
+      "e2e"
+    ]
+  },
+  "88": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Service-down send keeps the question and shows a notice",
+    "description": "Verifies the WIDGET, not the answer prose: when /chat is down, the sent question stays on screen (not silently lost) and an inline unavailable notice renders. Offline — /chat is mocked to return 500.",
+    "preconditions": "Chat reachable offline (mocked auth); /chat is mocked to return 500.",
+    "steps": [
+      {
+        "action": "Send a question while the chat service is down (500).",
+        "expected": "The question remains visible in the thread and an inline unavailable notice appears; the message is not silently lost."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "89": {
+    "suite_id": 24,
+    "automation": 2,
+    "title": "Verse marker renders as a verse card",
+    "description": "Verifies the WIDGET, not the answer prose: an assistant message carrying a verse body upgrades its inline `[verse:…]` marker into a full verse card (address + verse body), not a bare chip. Pure offline — the session is fixture-seeded.",
+    "preconditions": "Seeded offline chat session \"What is the soul?\" (chat_demo_soul) whose assistant answer carries a BG 2.20 verse body in its `meta`. No network.",
+    "steps": [
+      {
+        "action": "Open the seeded \"What is the soul?\" chat session.",
+        "expected": "The BG 2.20 verse marker renders as a verse card showing the address and verse body (not a bare chip)."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "90": {
+    "suite_id": 24,
+    "automation": 2,
+    "title": "Citation marker renders as a citation card",
+    "description": "Verifies the WIDGET, not the answer prose: an assistant message carrying a citation snippet upgrades its inline `[cite:…]` marker into a full citation card (snippet + inline player), not a bare chip. Pure offline — the session is fixture-seeded.",
+    "preconditions": "Seeded offline chat session \"What is the soul?\" (chat_demo_soul) whose assistant answer carries a citation snippet in its `meta`. No network.",
+    "steps": [
+      {
+        "action": "Open the seeded \"What is the soul?\" chat session.",
+        "expected": "The citation marker renders as a citation card (snippet + inline player), not a bare chip."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "93": {
+    "suite_id": 25,
+    "automation": 2,
+    "title": "Chat history: open, resume, new session, delete",
+    "description": "Verifies the WIDGET, not session content: opening the history sheet renders the prior-sessions list. Offline — fixture-seeded session, no backend.",
+    "preconditions": "Seeded offline chat history containing a \"What is the soul?\" session. No network.",
+    "steps": [
+      {
+        "action": "Open the chat history sheet from the chat header.",
+        "expected": "The seeded prior session(s) are listed."
+      },
+      {
+        "action": "Open the prior \"What is the soul?\" session.",
+        "expected": "Its conversation loads."
+      },
+      {
+        "action": "Start a new chat.",
+        "expected": "The empty/welcome state with suggestion chips is shown."
+      },
+      {
+        "action": "Re-open history and delete a session.",
+        "expected": "The session is removed — the list count drops by one."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "97": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Free quota exhaustion locks the composer",
+    "description": "Verifies the WIDGET, not the answer prose: a free-tier quota 429 disables the composer and renders the limit notice. Offline — auth mocked as free, /chat mocked to return a free-tier 429 quota body.",
+    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to return 429 with a free-tier quota body (current=limit=5, future reset).",
+    "steps": [
+      {
+        "action": "Send a question that hits the free quota limit (429).",
+        "expected": "The composer textarea is disabled and an inline limit notice is shown."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "98": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Pro quota lock shows no upgrade CTA",
+    "description": "Verifies the WIDGET, not the answer prose: a Pro-tier quota 429 renders the lock notice WITHOUT an \"Upgrade to Pro\" button (unlike free). Tier comes from the mocked JWT claim. Offline — auth mocked as pro, /chat mocked to return a pro-tier 429 quota body.",
+    "preconditions": "Chat reachable offline; mocked auth (pro tier); /chat mocked to return 429 with a pro-tier quota body (current=limit=50, future reset).",
+    "steps": [
+      {
+        "action": "Send a question that hits the Pro quota limit (429).",
+        "expected": "The inline lock notice is shown and contains no upgrade-CTA button."
+      }
+    ],
+    "tags": [
+      "chat",
+      "pro",
+      "e2e"
+    ]
+  },
+  "99": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Quota reset auto-unlocks the composer",
+    "description": "Verifies the WIDGET, not the answer prose: after a quota 429 locks the composer, it auto-unlocks once the reset deadline passes (a near-future reset stands in for UTC midnight). Offline — auth mocked as free, /chat mocked to return a 429 with a reset a few seconds out.",
+    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to return 429 with a reset epoch ~4 seconds in the future.",
+    "steps": [
+      {
+        "action": "Send a question that hits the quota limit (429).",
+        "expected": "The composer textarea is disabled (locked)."
+      },
+      {
+        "action": "Wait for the reset deadline to pass.",
+        "expected": "The composer textarea auto-unlocks (no longer disabled)."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "edge",
+      "e2e"
+    ]
+  },
+  "100": {
+    "suite_id": 26,
+    "automation": 2,
+    "title": "Rate-limit backend unavailable keeps composer usable",
+    "description": "Verifies the WIDGET, not the answer prose: when the server cannot check quota (503 rate_limit_backend_unavailable), the composer stays usable rather than hard-locking. Offline — auth mocked, /chat mocked to return the 503 backend-unavailable body.",
+    "preconditions": "Chat reachable offline; mocked auth; /chat mocked to return 503 with code rate_limit_backend_unavailable.",
+    "steps": [
+      {
+        "action": "Send a question when the server cannot check quota (503).",
+        "expected": "The composer textarea stays enabled and editable — no hard quota lock (after the client's transient-503 retries settle)."
+      }
+    ],
+    "tags": [
+      "chat",
+      "edge",
+      "e2e"
+    ]
+  },
+  "101": {
+    "suite_id": 14,
+    "automation": 2,
+    "title": "Pro-gated toggle opens the paywall",
+    "description": "A non-Pro user tapping a Pro-gated entry opens the subscription screen. Offline build boots non-Pro, so the Autoplay (Pro) toggle in Settings is a working entry point. Asserts only that the paywall opens.",
+    "preconditions": "Offline build booted non-Pro (default); Settings tab.",
+    "steps": [
+      {
+        "action": "On the Settings tab, tap the Autoplay (Pro) toggle.",
+        "expected": "The subscription / paywall screen (.subscription-page) opens."
+      }
+    ],
+    "tags": [
+      "subscription",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "102": {
+    "suite_id": 14,
+    "automation": 0,
+    "title": "Plans show price and 14-day free-trial badge",
+    "description": "Manual: with store products loaded, each plan shows its price and billing period, and the introductory plan shows a 14-day free-trial badge (visible across locales, including ru). Plan selection is single-select.",
+    "preconditions": "Paywall open; store products loaded.",
+    "steps": [
+      {
+        "action": "View the plan list.",
+        "expected": "Each plan shows name, price and billing period; an introductory plan shows a '14-day free trial' badge followed by the recurring price (badge visible across locales, including ru)."
+      },
+      {
+        "action": "Select a plan, then select another.",
+        "expected": "Only one plan is selected at a time (radio behavior)."
+      }
+    ],
+    "tags": [
+      "subscription",
+      "free",
+      "smoke"
+    ]
+  },
+  "103": {
+    "suite_id": 14,
+    "automation": 0,
+    "title": "Purchase a subscription through the store",
+    "description": "Manual: tapping Subscribe opens the native store purchase sheet; confirming unlocks Pro, while cancel/decline leave the paywall unchanged or show a retryable error. Real store account required.",
+    "preconditions": "Paywall open; a plan selected; test store account.",
+    "steps": [
+      {
+        "action": "Tap Subscribe.",
+        "expected": "The button shows a loading state and the native store purchase sheet opens."
+      },
+      {
+        "action": "Confirm the purchase in the store sheet.",
+        "expected": "On success the screen updates to 'subscription active', Pro features unlock, and the user returns to the prior screen. Cancel leaves the paywall unchanged; a declined payment shows a retryable error."
+      }
+    ],
+    "tags": [
+      "subscription",
+      "platform-dependent",
+      "smoke"
+    ]
+  },
+  "104": {
+    "suite_id": 14,
+    "automation": 0,
+    "title": "Restore purchases",
+    "description": "Manual: tapping Restore re-checks store entitlements and restores an active subscription if one exists, otherwise reports none found. Real store account required.",
+    "preconditions": "Store account with a prior purchase; paywall open.",
+    "steps": [
+      {
+        "action": "Tap Restore.",
+        "expected": "Entitlements are checked; if found, the subscription is restored and the screen shows 'subscription active'; if none, a 'no active subscriptions' message is shown."
+      }
+    ],
+    "tags": [
+      "subscription",
+      "platform-dependent"
+    ]
+  },
+  "105": {
+    "suite_id": 14,
+    "automation": 0,
+    "title": "Manage subscription opens the store page",
+    "description": "Manual: tapping Manage opens the platform's native subscription management page (App Store / Google Play).",
+    "preconditions": "Subscribed.",
+    "steps": [
+      {
+        "action": "Tap Manage on the subscription row / paywall.",
+        "expected": "The platform's native subscription management page opens (App Store / Google Play)."
+      }
+    ],
+    "tags": [
+      "subscription",
+      "platform-dependent"
+    ]
+  },
+  "106": {
+    "suite_id": 14,
+    "automation": 2,
+    "title": "RU paywall shows the 'Can't pay' support entry",
+    "description": "On the RU build (no working IAP) the paywall shows a 'Can't pay' support entry. Reaches the paywall via a Pro toggle, then asserts the 'Не могу оплатить' support entry is visible. Offline.",
+    "preconditions": "Offline build booted in ru; Settings tab.",
+    "steps": [
+      {
+        "action": "On the Settings tab, tap the first PRO-badged toggle (Autoplay).",
+        "expected": "The paywall (.subscription-page) opens."
+      },
+      {
+        "action": "On the paywall, locate the support entry.",
+        "expected": "The 'Не могу оплатить' (Can't pay) support entry is visible."
+      }
+    ],
+    "tags": [
+      "subscription",
+      "edge",
+      "e2e"
+    ]
+  },
+  "107": {
+    "suite_id": 14,
+    "automation": 2,
+    "title": "Paywall renders legal links",
+    "description": "Verifies the paywall renders at least one legal link (Terms is iOS-only and absent on the web build). Reaches the paywall as a free user via the Autoplay toggle, then asserts at least one .legal anchor points to akdasa-studios.github.io and every href is a valid http(s) URL. Does not tap the links. Offline.",
+    "preconditions": "Offline build booted non-Pro; Settings tab.",
+    "steps": [
+      {
+        "action": "On the Settings tab, tap the Autoplay (Pro) toggle.",
+        "expected": "The paywall (.subscription-page) opens."
+      },
+      {
+        "action": "Inspect the legal links on the paywall.",
+        "expected": "At least one .legal anchor is visible; one href points to akdasa-studios.github.io and every href is a valid http(s) URL."
+      }
+    ],
+    "tags": [
+      "subscription",
+      "free",
+      "e2e"
+    ]
+  },
+  "108": {
+    "suite_id": 15,
+    "automation": 2,
+    "title": "Anonymous account row prompts sign-in",
+    "description": "An anonymous (default boot, not signed in) user sees a \"Sign in\" call-to-action on the account row in Settings. Offline — default anonymous boot.",
+    "preconditions": "Anonymous (not signed-in) session; app booted offline.",
+    "steps": [
+      {
+        "action": "Open Settings.",
+        "expected": "The account row shows a \"Sign in\" call-to-action and is visible."
+      }
+    ],
+    "tags": [
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "109": {
+    "suite_id": 15,
+    "automation": 2,
+    "title": "Signed-in account row shows profile and manage options",
+    "description": "A signed-in user (preseeded auth tokens) sees their profile name on the account row; tapping it opens a sheet offering Sign out and Delete account. Offline — mocked auth tokens.",
+    "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); app booted offline.",
+    "steps": [
+      {
+        "action": "Open Settings and locate the account row.",
+        "expected": "The account row shows the profile name \"E2E Tester\"."
+      },
+      {
+        "action": "Tap the account row.",
+        "expected": "A sheet offers a \"Sign out\" button and a \"Delete account\" button."
+      }
+    ],
+    "tags": [
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "110": {
+    "suite_id": 15,
+    "automation": 2,
+    "title": "Delete account offers wipe-or-keep local data",
+    "description": "From the account sheet, choosing Delete account drives the UI to a second sheet that lets the user wipe local data or keep it. The test stops at that choice without confirming (the actual delete would hit the backend). Offline — mocked auth tokens.",
+    "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); app booted offline.",
+    "steps": [
+      {
+        "action": "Open Settings and tap the account row (\"E2E Tester\").",
+        "expected": "The account sheet opens, showing a \"Delete account\" option."
+      },
+      {
+        "action": "Tap Delete account.",
+        "expected": "A second sheet appears offering a \"wipe data\" option (vs keep)."
+      }
+    ],
+    "tags": [
+      "auth",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "111": {
+    "suite_id": 15,
+    "automation": 2,
+    "title": "Pro expiry re-locks a Pro toggle",
+    "description": "Enables a Pro-gated toggle (Autoplay) while Pro, then forces the free tier (e2e flag) across a reload — the toggle is gated again and tapping it opens the paywall. Offline — boot with pro:true plus the e2e force-free flag.",
+    "preconditions": "App booted offline as Pro (pro:true).",
+    "steps": [
+      {
+        "action": "Open Settings and toggle Autoplay on.",
+        "expected": "As Pro the toggle enables (aria-checked=true), no paywall."
+      },
+      {
+        "action": "Set the e2e force-free flag, reload, return to Settings, and tap the Autoplay toggle.",
+        "expected": "Pro is now expired so the toggle is gated again and tapping it opens the subscription paywall page."
+      }
+    ],
+    "tags": [
+      "auth",
+      "pro",
+      "edge",
+      "e2e"
+    ]
+  },
+  "112": {
+    "suite_id": 27,
+    "automation": 0,
+    "title": "Sign in with Google",
+    "description": "Manual check of the Google sign-in flow: completing the provider flow signs the user in and updates the account UI. Manual because it requires the real Google OAuth provider.",
+    "preconditions": "Not signed in; a usable Google account.",
+    "steps": [
+      {
+        "action": "From the anonymous account row, tap Sign in with Google.",
+        "expected": "The Google provider sign-in flow opens."
+      },
+      {
+        "action": "Complete the Google provider flow.",
+        "expected": "On return the profile (email/name/avatar) syncs, the account row updates to signed-in, and the subscription row refreshes."
+      }
+    ],
+    "tags": [
+      "auth",
+      "platform-dependent",
+      "smoke"
+    ]
+  },
+  "113": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Sign out clears the authenticated session",
+    "description": "Signing out from the account sheet reverts the account row from the profile name back to the anonymous state. Offline — mocked auth tokens.",
+    "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); app booted offline.",
+    "steps": [
+      {
+        "action": "Open Settings.",
+        "expected": "The account row shows the signed-in profile name \"E2E Tester\"."
+      },
+      {
+        "action": "Tap the account row to open the account sheet, then tap Sign out.",
+        "expected": "The profile name \"E2E Tester\" disappears — the session is cleared back to anonymous."
+      }
+    ],
+    "tags": [
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "114": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Token refresh keeps the session alive",
+    "description": "A signed-in session with a near-expiry access token (~30s, under the 60s threshold) is silently refreshed on the next authed call. Seeds the session, mocks /auth/refresh and /auth/me, then sends a (mocked) chat message that triggers the refresh. Offline — mocked auth + SSE.",
+    "preconditions": "Signed-in session seeded with an access token expiring in ~30s; /auth/refresh, /auth/me and the chat stream mocked.",
+    "steps": [
+      {
+        "action": "Open Chat and send a message that requires an authed call.",
+        "expected": "The client calls /auth/refresh at least once and the mocked answer streams back."
+      },
+      {
+        "action": "Inspect the persisted auth tokens.",
+        "expected": "The session is still non-anonymous and the persisted expiry has moved well into the future (no re-login)."
+      }
+    ],
+    "tags": [
+      "account",
+      "e2e"
+    ]
+  },
+  "115": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "App language picker switches the UI",
+    "description": "Opens the interface-language selector (distinct from the chat-language row), picks Russian, and applies. Asserts the UI re-renders in Russian. Offline.",
+    "preconditions": "Booted user on the Settings tab.",
+    "steps": [
+      {
+        "action": "Open the \"Language of an interface\" row.",
+        "expected": "A single-select radio dialog opens listing the supported UI locales."
+      },
+      {
+        "action": "Select Russian and tap Apply.",
+        "expected": "The UI re-renders in Russian; the same settings row now reads \"Язык\"."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "116": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Library languages are chosen in a multi-select dialog",
+    "description": "The Settings → Library row opens a checkbox dialog listing only the languages the catalog actually has lectures in (en + ru), not the full UI-language list. Adds Russian and confirms the row subtitle reflects both. Offline.",
+    "preconditions": "Booted with English UI/library on the Settings tab; fixture catalog has lectures in en and ru only.",
+    "steps": [
+      {
+        "action": "Open the library-language row (subtitle reads \"English\").",
+        "expected": "A checkbox multi-select dialog opens with exactly two boxes — English and Русский — with the current pick checked."
+      },
+      {
+        "action": "Check Русский and tap Apply.",
+        "expected": "The selection persists and the row subtitle now shows both English and Русский."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "117": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Open-transcript-automatically toggle takes effect on playback",
+    "description": "Flips the \"Open transcript automatically\" appearance toggle on (seeded OFF), then plays a track and asserts the transcript reader pops on its own without tapping the player. Offline.",
+    "preconditions": "Booted seeded user on the Settings tab; \"Open transcript automatically\" starts OFF.",
+    "steps": [
+      {
+        "action": "Toggle \"Open transcript automatically\" on.",
+        "expected": "The toggle reports checked."
+      },
+      {
+        "action": "Go to Home and play the first queued track.",
+        "expected": "The transcript reader modal opens automatically without tapping the player."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "e2e"
+    ]
+  },
+  "118": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Pro appearance toggle opens the paywall for a free user",
+    "description": "For a free user, tapping the Pro \"Autoplay\" toggle does not enable it — it opens the subscription page. After going back the toggle is still off. Offline.",
+    "preconditions": "Free (not subscribed) booted user on the Settings tab; Autoplay starts OFF.",
+    "steps": [
+      {
+        "action": "Tap the \"Autoplay\" Pro toggle.",
+        "expected": "The subscription/paywall page opens instead of the toggle enabling."
+      },
+      {
+        "action": "Go back to Settings.",
+        "expected": "The Autoplay toggle is still off — it never enabled."
+      }
+    ],
+    "tags": [
+      "settings",
+      "pro",
+      "e2e"
+    ]
+  },
+  "119": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Translate-quotes chat toggle persists across restart",
+    "description": "Flips the \"Translate quotes\" chat-settings toggle and reloads the app, asserting the new value comes back after re-hydration. Answer-language generation is a live backend concern and is not asserted offline.",
+    "preconditions": "Booted user on the Settings tab (Chat group).",
+    "steps": [
+      {
+        "action": "Flip the \"Translate quotes\" toggle.",
+        "expected": "The toggle reports the opposite of its prior value."
+      },
+      {
+        "action": "Reload the app and return to Settings.",
+        "expected": "The \"Translate quotes\" toggle retains the flipped value."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "e2e"
+    ]
+  },
+  "120": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Enabling notifications reveals the daily reminder time row",
+    "description": "In the Sadhana group, enabling the Notifications toggle reveals the \"Reminder time\" row; disabling it hides the row again. Native notification scheduling is platform-dependent and not asserted offline.",
+    "preconditions": "Booted user on the Settings tab (Sadhana group).",
+    "steps": [
+      {
+        "action": "Enable the Notifications toggle.",
+        "expected": "The \"Reminder time\" row appears."
+      },
+      {
+        "action": "Disable the Notifications toggle.",
+        "expected": "The \"Reminder time\" row is hidden again."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "platform-dependent",
+      "e2e"
+    ]
+  },
+  "121": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Export user data produces a downloadable file",
+    "description": "Tapping the \"Export user data\" row triggers a browser download with a non-empty filename (web path). Import is not exercised. Offline.",
+    "preconditions": "Booted user on the Settings tab.",
+    "steps": [
+      {
+        "action": "On the Settings tab, scroll to the \"Export user data\" row.",
+        "expected": "The \"Export user data\" row is visible."
+      },
+      {
+        "action": "Tap the \"Export user data\" row.",
+        "expected": "A file download is triggered with a non-empty suggested filename."
+      }
+    ],
+    "tags": [
+      "settings",
+      "platform-dependent",
+      "e2e"
+    ]
+  },
+  "122": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Tapping build info unlocks the Debug section",
+    "description": "The build-info line shows the version; tapping it past the unlock threshold (5 taps, kit default) reveals the hidden Debug section with its \"View logs\" action. Offline.",
+    "preconditions": "Booted user on the Settings tab, scrolled to the build-info line.",
+    "steps": [
+      {
+        "action": "Confirm the build-info version line is visible.",
+        "expected": "The build-info block and its version line are shown."
+      },
+      {
+        "action": "Tap the build-info line repeatedly past the unlock threshold.",
+        "expected": "The hidden Debug section appears with its \"View logs\" action."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "edge",
+      "e2e"
+    ]
+  },
+  "123": {
+    "suite_id": 17,
+    "automation": 2,
+    "title": "Help: open the dialog, read a page, close, and follow the app language",
+    "description": "Verifies the Help dialog opens from Settings with a populated table of contents and closes cleanly. Offline.",
+    "preconditions": "App booted in English, on the Settings tab.",
+    "steps": [
+      {
+        "action": "Open the Help dialog from Settings.",
+        "expected": "The dialog opens with a table of contents of help pages."
+      },
+      {
+        "action": "Open the first help page.",
+        "expected": "Its markdown body renders."
+      },
+      {
+        "action": "Go back, then close the dialog.",
+        "expected": "The table of contents returns, then the dialog closes cleanly."
+      },
+      {
+        "action": "Re-open the dialog in Russian.",
+        "expected": "The table of contents text is Cyrillic, matching the app language."
+      }
+    ],
+    "tags": [
+      "help",
+      "free",
+      "e2e"
+    ]
+  },
+  "126": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Audio keeps playing in the background and when locked",
+    "description": "Verifies that native background playback survives backgrounding and screen lock (iOS background audio mode / Android foreground media service). Needs a real device because the WebView is suspended in the background, so only the native audio service keeps the stream alive.",
+    "preconditions": "iOS or Android device. A track is playing. Run once per device.",
+    "steps": [
+      {
+        "action": "Start playback, then background the app (Home) and lock the screen.",
+        "expected": "Audio keeps playing through the lock without interruption."
+      },
+      {
+        "action": "Wait ~30s with the screen locked, then unlock and reopen the app.",
+        "expected": "Playback is still running and the player position has advanced; it never stopped while backgrounded."
+      }
+    ],
+    "tags": [
+      "player",
+      "platform-dependent",
+      "ios",
+      "android",
+      "smoke"
+    ]
+  },
+  "127": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Lock-screen and notification media controls work",
+    "description": "Verifies the OS-level now-playing controls (iOS lock screen / Control Center, Android media notification) drive the native audio service. Needs a real device because these controls live outside the app and are wired through the native media session.",
+    "preconditions": "iOS or Android device. Playback is active and the app is backgrounded. Run once per device.",
+    "steps": [
+      {
+        "action": "From the lock screen / Control Center (iOS) or the media notification (Android), tap play then pause.",
+        "expected": "Playback toggles in step with the controls."
+      },
+      {
+        "action": "Drag the seek bar on the lock-screen / notification control.",
+        "expected": "Playback jumps to the new position."
+      },
+      {
+        "action": "Inspect the now-playing metadata.",
+        "expected": "The track title and author shown on the lock screen / notification are correct."
+      }
+    ],
+    "tags": [
+      "player",
+      "platform-dependent",
+      "ios",
+      "android",
+      "smoke"
+    ]
+  },
+  "128": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Audio focus handles interruptions and headphone unplug",
+    "description": "Verifies the native audio session reacts to OS audio-focus events: it ducks/pauses for calls or other audio and pauses on the becoming-noisy event. Needs a real device because these interruptions are driven by the OS audio session, not reproducible in a browser.",
+    "preconditions": "iOS or Android device with headphones (wired or Bluetooth). Playback is active. Run once per device.",
+    "steps": [
+      {
+        "action": "During playback, receive a phone call or start audio in another app.",
+        "expected": "Playback pauses or ducks for the interruption and resumes (or stays paused as the OS dictates) once it ends."
+      },
+      {
+        "action": "Unplug the wired headphones or disconnect the Bluetooth device mid-playback.",
+        "expected": "Playback pauses immediately (becoming-noisy handling) rather than blasting through the speaker."
+      }
+    ],
+    "tags": [
+      "player",
+      "platform-dependent",
+      "ios",
+      "android"
+    ]
+  },
+  "129": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Offline playback uses the raw native file path",
+    "description": "Verifies that a downloaded track plays from its local cache via a raw file:// URI handed straight to native ExoPlayer/AVPlayer (resolveLocalUrl output is used as the queue item URL without being wrapped by Capacitor.convertFileSrc). Needs a real device because file:// playback only exists on the native players, and offline correctness can't be observed on web.",
+    "preconditions": "iOS or Android device with a fully downloaded track. Run once per device.",
+    "steps": [
+      {
+        "action": "Confirm the track is fully downloaded, then enable airplane mode (or otherwise disable Wi-Fi and cellular) so the device has no network connectivity.",
+        "expected": "The track still shows as downloaded/available offline and remains tappable; no network is reachable."
+      },
+      {
+        "action": "Open the downloaded track and tap play.",
+        "expected": "Playback starts immediately with no spinner or buffering delay, confirming audio is served from the local file rather than fetched from the server."
+      },
+      {
+        "action": "Let the track continue playing for a while and observe the progress through to the end.",
+        "expected": "Audio plays smoothly to completion with no stalls or re-buffering despite the network being off, confirming the raw local file path is used by the native player."
+      }
+    ],
+    "tags": [
+      "downloads",
+      "platform-dependent",
+      "ios",
+      "android",
+      "offline",
+      "smoke"
+    ]
+  },
+  "130": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Background downloads continue and recover after an OS kill",
+    "description": "Verifies durable native downloads: Android runs the transfer under WorkManager and recovers a stalled job on relaunch (critical on MIUI, which aggressively kills background work), while iOS continues via background URLSession. Needs a real device because background scheduling and OS-kill recovery cannot be exercised on web.",
+    "preconditions": "iOS or Android device; include a MIUI/Xiaomi device for the Android pass. A large track is downloading. Run once per device.",
+    "steps": [
+      {
+        "action": "Start downloading a large track, background the app and let the device sleep.",
+        "expected": "The download keeps progressing in the background (Android WorkManager / iOS background URLSession)."
+      },
+      {
+        "action": "On Android (especially MIUI), force the OS to kill the app, then relaunch it.",
+        "expected": "The download resumes or is re-enqueued on relaunch and eventually completes; it is never stuck forever."
+      }
+    ],
+    "tags": [
+      "downloads",
+      "platform-dependent",
+      "ios",
+      "android"
+    ]
+  },
+  "131": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Notification permission prompt and daily reminder fire",
+    "description": "Verifies the OS notification-permission request (Android 13+ POST_NOTIFICATIONS / iOS prompt) and that a scheduled daily reminder fires at the set time and survives an Android reboot. Needs a real device because OS permission dialogs and the reboot-persistent scheduler are device-only.",
+    "preconditions": "iOS or Android device (include Android 13+), fresh install with notifications not yet granted. Run once per device.",
+    "steps": [
+      {
+        "action": "Trigger the enable-notifications flow in the app.",
+        "expected": "The OS permission dialog appears (Android 13+ POST_NOTIFICATIONS / iOS prompt); grant it."
+      },
+      {
+        "action": "Set a daily reminder and wait until the scheduled time.",
+        "expected": "The reminder notification fires at the set time."
+      },
+      {
+        "action": "On Android, reboot the device and wait for the next scheduled time.",
+        "expected": "The daily reminder still fires after the reboot."
+      }
+    ],
+    "tags": [
+      "settings",
+      "platform-dependent",
+      "ios",
+      "android"
+    ]
+  },
+  "132": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "IAP packages and restore work per store",
+    "description": "Verifies the paywall surfaces the correct store packages (App Store on iOS with intro-offer eligibility, Google Play on Android) and that Restore recovers entitlements, while the RU build shows a 'Can't pay' support path instead of purchases (locale==ru gate, RU has no IAP). Needs a real device with a store account because billing flows can't run on web.",
+    "preconditions": "iOS or Android device with a store sandbox/test account; for the RU pass use the RU locale build. Run once per device.",
+    "steps": [
+      {
+        "action": "Open the paywall on the iOS and Android builds.",
+        "expected": "iOS lists App Store packages with intro-offer eligibility; Android lists Google Play packages. The RU build instead shows the 'Can't pay' support-email path with no purchase buttons."
+      },
+      {
+        "action": "On a fresh device signed in with an already-entitled account, tap Restore.",
+        "expected": "The subscription is recovered silently and Pro features unlock."
+      }
+    ],
+    "tags": [
+      "subscription",
+      "platform-dependent",
+      "ios",
+      "android"
+    ]
+  },
+  "133": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Native share sheet hands off generated files",
+    "description": "Verifies the native share sheet opens for a generated audio excerpt and PDF and that the file URI is handed off correctly so other apps can open it. Needs a real device because the share sheet and inter-app file handoff are OS features absent on web.",
+    "preconditions": "iOS or Android device. Run once per device.",
+    "steps": [
+      {
+        "action": "Generate and share an audio excerpt, then pick a target app from the share sheet.",
+        "expected": "The native share sheet opens and the receiving app can play/open the shared audio file."
+      },
+      {
+        "action": "Generate and share a PDF, then pick a target app from the share sheet.",
+        "expected": "The native share sheet opens and the receiving app can open the shared PDF (correct file URI handoff)."
+      }
+    ],
+    "tags": [
+      "sharing",
+      "platform-dependent",
+      "ios",
+      "android"
+    ]
+  },
+  "134": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Haptic feedback fires on slider boundary crossings",
+    "description": "Verifies a light haptic tick (Capacitor Haptics impact) fires when the speed slider crosses a preset and when the mixer crosses its deadzone boundary. Needs a real device because haptics are a no-op in the browser.",
+    "preconditions": "iOS or Android device with the player visible. Run once per device.",
+    "steps": [
+      {
+        "action": "Drag the speed slider across a preset value.",
+        "expected": "A light haptic tick is felt as each preset boundary is crossed."
+      },
+      {
+        "action": "Drag the mixer across its center deadzone boundary.",
+        "expected": "A light haptic tick is felt at the deadzone edge; no haptics fire on the web build."
+      }
+    ],
+    "tags": [
+      "player",
+      "platform-dependent",
+      "ios",
+      "android"
+    ]
+  },
+  "135": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Keyboard fades the floating player",
+    "description": "Verifies the floating player hides while the soft keyboard is open (driven by the Capacitor keyboard-visibility listener) and returns when it closes. Needs a real device because the soft keyboard and its show/hide events are native.",
+    "preconditions": "iOS or Android device with a track playing and the floating player visible. Run once per device.",
+    "steps": [
+      {
+        "action": "Tap a text field (e.g. chat or search) to raise the soft keyboard.",
+        "expected": "The floating player fades out as the keyboard appears."
+      },
+      {
+        "action": "Dismiss the keyboard.",
+        "expected": "The floating player fades back in."
+      }
+    ],
+    "tags": [
+      "player",
+      "platform-dependent",
+      "ios",
+      "android"
+    ]
+  },
+  "136": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Deep link from a notification opens chat on cold start",
+    "description": "Verifies that tapping a proactive notification while the app is fully closed cold-starts it and lands on the referenced chat session, with navigation deferred until the content and user databases are open (survives the DB-init race that would otherwise bounce the deep link to Welcome). Needs a real device because cold-start notification handling and the OS scheduler are native.",
+    "preconditions": "iOS or Android device with a proactive notification (one carrying a chatSessionId) scheduled and delivered to the system tray. Run once per device.",
+    "steps": [
+      {
+        "action": "Confirm the proactive notification is visible in the system notification tray, then fully close the app by swiping it away from the recent-apps switcher.",
+        "expected": "The app is no longer running in the background; the notification remains in the tray."
+      },
+      {
+        "action": "Tap the proactive notification.",
+        "expected": "The app cold-starts from scratch (launch/splash), rather than resuming an existing process."
+      },
+      {
+        "action": "Wait for the app to finish initializing and observe where it lands.",
+        "expected": "Once the content and user databases finish opening, the app navigates straight to the referenced chat session (the deep link is deferred and then flushed), instead of stopping on the home screen or Welcome."
+      }
+    ],
+    "tags": [
+      "chat",
+      "platform-dependent",
+      "ios",
+      "android",
+      "edge"
+    ]
+  },
+  "137": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Safe-area insets and system bars adapt on a notched device",
+    "description": "Verifies content respects safe-area insets (notch / dynamic island / home indicator) and that Android status/navigation bar icons adapt to the screen (e.g. light icons over the dark transcript). Needs a real notched device because insets and system-bar styling are device- and OS-specific.",
+    "preconditions": "A device with a notch or dynamic island (iOS) / display cutout (Android). Run once per device.",
+    "steps": [
+      {
+        "action": "Navigate the key screens (home, library, player, settings).",
+        "expected": "Content and controls clear the notch / dynamic island and home indicator with no clipping or overlap."
+      },
+      {
+        "action": "Open the transcript modal.",
+        "expected": "Content respects the safe-area insets and, on Android, the status/navigation bar icons switch to light over the dark transcript so they stay legible."
+      }
+    ],
+    "tags": [
+      "settings",
+      "platform-dependent",
+      "ios",
+      "android"
+    ]
+  },
+  "138": {
+    "suite_id": 18,
+    "automation": 0,
+    "title": "Outdated-protocol update link points to the right store",
+    "description": "Verifies that when the server reports an out-of-date protocol (HTTP 426) the app shows an update toast whose Update Now action opens the correct store listing (App Store on iOS, Google Play on Android). Needs a real device because the action opens the platform store app.",
+    "preconditions": "iOS or Android device, with the server configured to return an out-of-date protocol (HTTP 426). Run once per device.",
+    "steps": [
+      {
+        "action": "Perform an action that hits the server while it returns HTTP 426.",
+        "expected": "The update toast appears with an Update Now action."
+      },
+      {
+        "action": "Tap Update Now.",
+        "expected": "iOS opens the App Store listing for the app; Android opens its Google Play listing."
+      }
+    ],
+    "tags": [
+      "platform-dependent",
+      "ios",
+      "android",
+      "edge"
+    ]
+  },
+  "139": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "Tapping a similar lecture swaps the card in place",
+    "description": "In the track sheet, tapping a lecture in the \"Similar by topic\" list keeps the sheet open and swaps its content to the tapped lecture — the sheet title changes. Offline. The test asserts the in-place title swap only.",
+    "preconditions": "Offline boot; a track whose sheet shows a Similar-by-topic list.",
+    "steps": [
+      {
+        "action": "Open a track sheet that has a Similar-by-topic list and note the current sheet title.",
+        "expected": "The track sheet is shown with a visible Similar-by-topic list."
+      },
+      {
+        "action": "Tap one of the lectures in the Similar-by-topic list.",
+        "expected": "The same sheet stays open and its title changes to the tapped lecture (content swapped in place)."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "140": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "Cancel a track while it is downloading removes it from the playlist",
+    "description": "A track added while its audio transfer is hung stays mid-download in the Home queue (state icon replaced by the radial); swiping it away removes it from the playlist even though the download is in flight. Offline; the audio route is hung to keep the transfer mid-flight. The test asserts removal, not partial-file cleanup or the tap-does-nothing behavior.",
+    "preconditions": "Offline (mocked content). The audio route never responds, so the added track stays downloading.",
+    "steps": [
+      {
+        "action": "Add a library track whose audio download hangs, go to the Home queue and confirm it is mid-download (state icon replaced by the radial).",
+        "expected": "The track is queued and shows the in-progress download (no binary state icon)."
+      },
+      {
+        "action": "Swipe the downloading queue row to delete it.",
+        "expected": "The row is removed from the playlist even though the download was still in flight."
+      }
+    ],
+    "tags": [
+      "library",
+      "e2e"
+    ]
+  },
+  "143": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "A cover that fails once on a flaky network recovers",
+    "description": "Regression: a collection/topic cover whose first requests are aborted must recover, not stay invisible forever. With a per-URL counter dropping the first few requests to one chosen cover (all others served a real PNG), the test asserts the flaky cover is re-requested past the abort budget (bounded retry fired) and that loaded cover images decode (naturalWidth > 0). Pure offline — covers mocked via page.route.",
+    "preconditions": "Offline boot; Search landing with collection/topic cover tiles. page.route makes one chosen cover abort its first 3 requests, then serves a real 1x1 PNG; all other covers are served the PNG immediately.",
+    "steps": [
+      {
+        "action": "Open the Search landing while one cover's first requests are aborted, then let later requests succeed.",
+        "expected": "The flaky cover is re-requested beyond the abort budget (bounded retry) and at least one cover layer is loaded."
+      },
+      {
+        "action": "Inspect the loaded covers after recovery.",
+        "expected": "Every loaded cover image is decoded (naturalWidth > 0); no permanently broken cover remains."
+      }
+    ],
+    "tags": [
+      "library",
+      "free",
+      "e2e"
+    ]
+  },
+  "144": {
+    "suite_id": 2,
+    "automation": 2,
+    "title": "A failed content-DB download shows Retry and recovers",
+    "description": "Offline. The first content-DB download is forced to fail; asserts the Welcome screen surfaces an error state with a working Retry button (not an endless splash). After the failure is cleared, tapping Retry recovers all the way to a populated Home (tab bar + playlist rows visible).",
+    "preconditions": "Brand-new install with no cached catalog; the content-DB request is gated to fail until the test flips the flag. User DB, search filter and dismissed nags pre-seeded for the post-recovery Home.",
+    "steps": [
+      {
+        "action": "Launch the app while the content-DB download fails.",
+        "expected": "The Welcome screen shows an error state with a visible Retry button, not an endless \"Downloading…\" splash."
+      },
+      {
+        "action": "Allow the download to succeed and tap Retry.",
+        "expected": "The app recovers to the Home tab with the bottom tab bar and at least one Up-Next playlist row visible."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "e2e"
+    ]
+  },
+  "145": {
+    "suite_id": 2,
+    "automation": 2,
+    "title": "Launches to a populated Home",
+    "description": "Offline, fixture-seeded. Asserts a returning user with a seeded playlist cold-boots past Welcome straight onto the Home tab, with the bottom tab bar visible and at least one Up-Next row rendered.",
+    "preconditions": "Seeded user.db with ~9 playlist tracks. Offline, mocked content.",
+    "steps": [
+      {
+        "action": "Cold-launch the app.",
+        "expected": "It boots past Welcome to the Home tab (URL /tabs/home) with the bottom tab bar visible and at least one Up-Next playlist row rendered."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "146": {
+    "suite_id": 6,
+    "automation": 2,
+    "title": "Swiping the floating player changes its page",
+    "description": "A vertical (upward) touch-drag on the floating player advances its carousel: the active page-dot moves to a different dot than before the swipe. Offline.",
+    "preconditions": "Offline (mocked). A track is playing and the floating player is visible with its page dots.",
+    "steps": [
+      {
+        "action": "Swipe vertically upward across the floating player (CDP touch drag).",
+        "expected": "The carousel advances - the active page-dot index differs from before the swipe."
+      }
+    ],
+    "tags": [
+      "player",
+      "free",
+      "e2e"
+    ]
+  },
+  "150": {
+    "suite_id": 13,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "Topic tiles follow the selected library language",
+    "description": "Verifies the Search-landing topic tile grid surfaces topics that have lectures in the selected library language: under a Russian library at least one topic tile renders. Offline.",
+    "preconditions": "Offline boot with the library language seeded to Russian.",
+    "steps": [
+      {
+        "action": "Open the Search landing under a Russian library, then switch to English in Settings and reopen.",
+        "expected": "Tiles render under ru; under en the grid scopes to English-consumable topics (any shown tile opens onto a populated Latin-titled topic)."
+      }
+    ]
+  },
+  "152": {
+    "suite_id": 16,
+    "automation": 2,
+    "tags": [
+      "settings",
+      "e2e"
+    ],
+    "title": "A settings toggle persists across an app reload",
+    "description": "Verifies useConfig-backed settings survive full app re-hydration: flipping \"Open transcript automatically\" and reloading the bundle restores the flipped value from IndexedDB-backed storage, not the seeded default. Offline.",
+    "preconditions": "Offline boot on the Settings screen.",
+    "steps": [
+      {
+        "action": "Flip the \"Open transcript automatically\" toggle from its seeded value.",
+        "expected": "The toggle shows the new (flipped) state."
+      },
+      {
+        "action": "Reload the app and reopen Settings.",
+        "expected": "The toggle comes back in the flipped state — the change persisted across re-hydration."
+      }
+    ]
+  },
+  "153": {
+    "suite_id": 16,
+    "automation": 2,
+    "tags": [
+      "settings",
+      "e2e"
+    ],
+    "title": "Activity tracker toggle shows and hides the Home activity card",
+    "description": "Verifies the \"Activity tracker\" setting drives the Home activity card cross-tab: turning it off removes the card from Home, turning it back on restores it. Offline.",
+    "preconditions": "Offline boot; the seeded user has playlist + history so the activity card shows by default.",
+    "steps": [
+      {
+        "action": "With the activity card visible on Home, turn \"Activity tracker\" off in Settings.",
+        "expected": "Back on Home the activity card is gone."
+      },
+      {
+        "action": "Turn \"Activity tracker\" back on.",
+        "expected": "The Home activity card returns."
+      }
+    ]
+  },
+  "157": {
+    "suite_id": 7,
+    "automation": 2,
+    "tags": [
+      "transcript",
+      "e2e"
+    ],
+    "title": "Ask about a transcript selection opens the chat",
+    "description": "Verifies the transcript selection \"Ask\" action hands the selected text to chat: selecting a passage and tapping Ask lands on the chat surface (the streamed answer itself is a live concern). Offline.",
+    "preconditions": "Offline boot with a transcript open.",
+    "steps": [
+      {
+        "action": "Select a passage in the transcript.",
+        "expected": "The selection popover appears with its actions."
+      },
+      {
+        "action": "Tap \"Ask\" on the selection.",
+        "expected": "The app navigates to the chat surface, seeded with the selected passage."
+      }
+    ]
+  },
+  "158": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "First-launch content language on a Ukrainian device (→ Russian)",
+    "description": "Verifies first-launch derivation: a Ukrainian device locale reduces to the Russian content language, and the library, filters, search and topic tiles all come up populated in that language. Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to uk-UA (no pre-seeded filter).",
+    "steps": [
+      {
+        "action": "Open the library on a fresh Ukrainian-locale install.",
+        "expected": "The lecture list is populated and every visible title is Cyrillic (Russian) — the locale reduced to Russian."
+      },
+      {
+        "action": "Open the filters sheet.",
+        "expected": "The filters sheet opens."
+      },
+      {
+        "action": "Type a no-match query, then clear it.",
+        "expected": "The list empties on no match and is restored on clear — search is wired to the derived result set."
+      },
+      {
+        "action": "Open the Search landing.",
+        "expected": "The topic tile grid surfaces topics."
+      }
+    ]
+  },
+  "159": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "First-launch content language on a Hindi device (→ English)",
+    "description": "Verifies first-launch derivation: a Hindi device locale (no Hindi lectures) reduces to the English content language, and the library, filters, search and topic tiles all come up populated in English. Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to hi-IN (no pre-seeded filter).",
+    "steps": [
+      {
+        "action": "Open the library on a fresh Hindi-locale install.",
+        "expected": "The lecture list is populated and every visible title is Latin (English) — the locale reduced to English."
+      },
+      {
+        "action": "Open the filters sheet.",
+        "expected": "The filters sheet opens."
+      },
+      {
+        "action": "Type a no-match query, then clear it.",
+        "expected": "The list empties on no match and is restored on clear — search is wired to the derived result set."
+      },
+      {
+        "action": "Open the Search landing.",
+        "expected": "The topic tile grid surfaces topics."
+      }
+    ]
+  },
+  "160": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "First-launch content language on a German device (→ English)",
+    "description": "Verifies first-launch derivation: a German device locale (no German lectures) reduces to the English content language, and the library, filters, search and topic tiles all come up populated in English. Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to de-DE (no pre-seeded filter).",
+    "steps": [
+      {
+        "action": "Open the library on a fresh German-locale install.",
+        "expected": "The lecture list is populated and every visible title is Latin (English) — the locale reduced to English."
+      },
+      {
+        "action": "Open the filters sheet.",
+        "expected": "The filters sheet opens."
+      },
+      {
+        "action": "Type a no-match query, then clear it.",
+        "expected": "The list empties on no match and is restored on clear — search is wired to the derived result set."
+      },
+      {
+        "action": "Open the Search landing.",
+        "expected": "The topic tile grid surfaces topics."
+      }
+    ]
+  },
+  "161": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "First-launch content language on a Serbian device (→ English)",
+    "description": "Verifies first-launch derivation: a Serbian device locale (no Serbian lectures) reduces to the English content language, and the library, filters, search and topic tiles all come up populated in English. Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to sr-RS (no pre-seeded filter).",
+    "steps": [
+      {
+        "action": "Open the library on a fresh Serbian-locale install.",
+        "expected": "The lecture list is populated and every visible title is Latin (English) — the locale reduced to English."
+      },
+      {
+        "action": "Open the filters sheet.",
+        "expected": "The filters sheet opens."
+      },
+      {
+        "action": "Type a no-match query, then clear it.",
+        "expected": "The list empties on no match and is restored on clear — search is wired to the derived result set."
+      },
+      {
+        "action": "Open the Search landing.",
+        "expected": "The topic tile grid surfaces topics."
+      }
+    ]
+  },
+  "162": {
+    "suite_id": 4,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "Selecting multiple library languages mixes scripts",
+    "description": "Verifies that explicitly selecting both content languages broadens the library: with Russian and English both selected, the lecture list mixes Cyrillic and Latin titles. Offline.",
+    "preconditions": "Offline boot with library languages set to both Russian and English.",
+    "steps": [
+      {
+        "action": "Open the library with both Russian and English selected.",
+        "expected": "The lecture list is populated and mixes Cyrillic and Latin titles."
+      }
+    ]
+  },
+  "163": {
+    "suite_id": 13,
+    "automation": 2,
+    "tags": [
+      "library",
+      "e2e"
+    ],
+    "title": "A topic detail on a Ukrainian device lists Russian lectures",
+    "description": "Verifies first-launch topic scoping: on a Ukrainian device (reduced to Russian) opening the first topic lands on a populated detail whose lectures are all Russian (Cyrillic). Offline; locale driven via navigator.language.",
+    "preconditions": "Fresh offline install with the device locale set to uk-UA.",
+    "steps": [
+      {
+        "action": "On a Ukrainian-locale device, open the first topic from the Search landing.",
+        "expected": "The topic detail is populated and every lecture title is Russian (Cyrillic)."
+      }
+    ]
+  }
+}
