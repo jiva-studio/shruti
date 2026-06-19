@@ -66,21 +66,35 @@ export async function shot(page: Page, name: string): Promise<void> {
 
 /**
  * Run step `index` of case `caseId`: its action + expected come from the
- * registry, `body` performs it, and a screenshot is captured at the end.
+ * registry and `body` performs it.
+ *
+ * Screenshot timing: by default a screenshot is captured at the END of the step
+ * (the settled result). But some actions DISMISS the UI they act on — tapping
+ * "Add" closes the track sheet, applying a filter closes the filter sheet — so
+ * an end-of-step shot would capture an empty/next screen. For those, `body`
+ * receives a `capture()` callback and calls it at the meaningful moment (e.g.
+ * while the sheet is still open, before the dismissing tap). Calling `capture()`
+ * suppresses the automatic end-of-step shot, so the step's screenshot is the one
+ * the test chose. Call it more than once to attach several frames.
  */
 export async function step<T>(
   page: Page,
   caseId: number,
   index: number,
-  body: () => Promise<T>
+  body: (capture: () => Promise<void>) => Promise<T>
 ): Promise<T> {
   const c = registry[String(caseId)]
   if (!c) throw new Error(`qase registry: no case ${caseId} in cases.json`)
   const s = c.steps[index]
   if (!s) throw new Error(`qase registry: case ${caseId} has no step #${index}`)
   return test.step(qase.step(s.action, s.expected), async () => {
-    const result = await body()
-    await shot(page, s.action)
+    let captured = false
+    const capture = async () => {
+      captured = true
+      await shot(page, s.action)
+    }
+    const result = await body(capture)
+    if (!captured) await shot(page, s.action)
     return result
   })
 }
