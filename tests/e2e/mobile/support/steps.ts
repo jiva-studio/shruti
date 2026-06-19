@@ -47,10 +47,18 @@ function slug(name: string): string {
 }
 
 /** Attach a full-page screenshot of the current state to the active Qase step.
- * No-op unless publishing to Qase. */
+ * No-op unless publishing to Qase.
+ *
+ * The capture is taken AFTER the step asserted its expected state, but Ionic
+ * page/modal transitions and fade-ins can still be mid-flight — a naive
+ * screenshot then catches a half-rendered frame. We let a short reflow settle
+ * and pass `animations: "disabled"`, which fast-forwards finite CSS/Web
+ * animations to their finished state before capturing, so the image shows the
+ * settled UI, not a transition frame. */
 export async function shot(page: Page, name: string): Promise<void> {
   if (!PUBLISHING) return
-  const png = await page.screenshot()
+  await page.waitForTimeout(200)
+  const png = await page.screenshot({ animations: "disabled" })
   qase.attach({ name: `${slug(name)}.png`, content: png, contentType: "image/png" })
 }
 
