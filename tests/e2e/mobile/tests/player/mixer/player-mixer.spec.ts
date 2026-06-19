@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
-import { playFirstQueuedTrack } from "../../../support/nav.js"
+import { playFirstQueuedTrack, revealPlayerPanel } from "../../../support/nav.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 const MIX_KEY = "CapacitorStorage.settings.audio.mixPosition"
@@ -43,11 +43,14 @@ test(
     await playFirstQueuedTrack(page)
 
     let engaged = 0
-    await step(page, 72, 0, async () => {
+    await step(page, 72, 0, async (capture) => {
       // Drag to ~+0.6 (x-fraction 0.8) — well past the ±0.15 deadzone.
       await dragMix(page, 0.8)
       await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBeGreaterThan(0.15)
       engaged = await mixValue(page)
+      // Reveal the mixer panel so the screenshot shows the engaged puck.
+      await revealPlayerPanel(page, ".mix-control")
+      await capture()
     })
 
     await step(page, 72, 1, async () => {
@@ -68,16 +71,20 @@ test(
     await boot(page)
     await playFirstQueuedTrack(page)
 
-    await step(page, 70, 0, async () => {
+    await step(page, 70, 0, async (capture) => {
       // First engage the mix off-centre…
       await dragMix(page, 0.8)
       await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBeGreaterThan(0.15)
+      await revealPlayerPanel(page, ".mix-control")
+      await capture()
     })
 
-    await step(page, 70, 1, async () => {
+    await step(page, 70, 1, async (capture) => {
       // …then release inside the deadzone (x-fraction ~0.52 → |p|≈0.04): snaps to 0.
       await dragMix(page, 0.52)
       await expect.poll(() => mixValue(page), { timeout: 10_000 }).toBe(0)
+      await revealPlayerPanel(page, ".mix-control")
+      await capture()
     })
   }
 )
