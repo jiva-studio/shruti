@@ -18,11 +18,19 @@ async function badgeValue(page: import("@playwright/test").Page): Promise<number
   return m ? Number(m[1]) : NaN
 }
 
+// `queueCount` (the badge) EXCLUDES completed entries, while `.playlist-row`
+// renders every entry; the fixture seeds one completed track. To make a delete
+// visible in the badge we target the first NOT-completed row, which carries no
+// completion icon.
+const COMPLETED_ICON = ".tabler-icon-rosette-discount-check-filled"
+
 test(
   qase(17, caseTitle(17)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
-    let before = 0
+    let beforeRows = 0
+    let beforeBadge = 0
+    let targetTitle = ""
 
     await step(page, 17, 0, async () => {
       await boot(page)
@@ -30,23 +38,25 @@ test(
       await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
       await expect(countBadge(page)).toBeVisible({ timeout: 20_000 })
 
-      // The badge IS readable, but `queueCount` excludes already-completed
-      // entries (useHomeRowBuilder), while `.playlist-row` renders EVERY entry.
-      // The fixture seeds a completed track, so deleting the first row may or may
-      // not move the badge (badge=8 vs rows=9). We therefore assert on the
-      // deterministic signal — the visible row count — and only sanity-check that
-      // the badge is a positive number that never exceeds the row count.
-      before = await playlistRows(page).count()
-      expect(before).toBeGreaterThan(0)
-      const badge = await badgeValue(page)
-      expect(badge).toBeGreaterThan(0)
-      expect(badge).toBeLessThanOrEqual(before)
+      beforeRows = await playlistRows(page).count()
+      expect(beforeRows).toBeGreaterThan(0)
+      beforeBadge = await badgeValue(page)
+      expect(beforeBadge).toBeGreaterThan(0)
+      expect(beforeBadge).toBeLessThanOrEqual(beforeRows)
+
+      // Target the first NOT-completed row so its removal drops the badge too.
+      const target = playlistRows(page).filter({ hasNot: page.locator(COMPLETED_ICON) }).first()
+      await expect(target).toBeVisible({ timeout: 10_000 })
+      targetTitle = (await target.locator(".title").innerText()).trim()
     })
 
     await step(page, 17, 1, async () => {
-      await deletePlaylistRow(page, playlistRows(page).first())
+      const target = playlistRows(page).filter({ hasText: targetTitle }).first()
+      await deletePlaylistRow(page, target)
 
-      await expect.poll(() => playlistRows(page).count(), { timeout: 15_000 }).toBe(before - 1)
+      await expect.poll(() => playlistRows(page).count(), { timeout: 15_000 }).toBe(beforeRows - 1)
+      // The count badge drops by one too — the removed row was not completed.
+      await expect.poll(() => badgeValue(page), { timeout: 15_000 }).toBe(beforeBadge - 1)
     })
   }
 )
