@@ -99,6 +99,8 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
     if (!purchases.isSubscribed) return
     const target = targetSeconds.value
     if (target <= 0) return
+    // The databases open after this loop mounts; skip until both are ready.
+    if (!app.databases.content || !app.databases.user) return
     // Cheap lower-bound short-circuit: the paged `entries` are a SUBSET of
     // the active set, so their remaining-duration sum can only be ≤ the
     // true total. If even that partial sum already meets the target, the
