@@ -14,10 +14,13 @@ test(
     const sheet = page.locator("ion-action-sheet")
     const deleteButton = sheet.locator("button.action-sheet-destructive")
 
-    await step(page, 9, 0, async () => {
+    await step(page, 9, 0, async (capture) => {
       await gotoTab(page, "notes")
 
       await expect(notes.first()).toBeVisible({ timeout: 20_000 })
+      // Screenshot the populated notes list BEFORE draining it, so this step
+      // shows the "has notes" state (step 1 shows the resulting empty state).
+      await capture()
 
       // Delete notes one at a time. Each tap opens the action sheet; the
       // destructive button removes the note and dismisses the sheet. Cap the loop

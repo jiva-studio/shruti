@@ -1,7 +1,7 @@
 import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
-import { playFirstQueuedTrack } from "../../support/nav.js"
+import { playFirstQueuedTrack, revealPlayerPanel } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 // The playback-speed slider snaps to presets (0.75…2.0). It lives on the
@@ -17,7 +17,7 @@ test(
     await boot(page)
     await playFirstQueuedTrack(page)
 
-    await step(page, 56, 0, async () => {
+    await step(page, 56, 0, async (capture) => {
     const slider = page.locator(".speed-skip-panel .speed-slider")
     const trackEl = slider.locator(".track")
     const puck = slider.locator(".puck")
@@ -57,6 +57,10 @@ test(
         { timeout: 10_000 }
       )
       .toBe(1.5)
+
+    // Reveal the speed panel so the screenshot shows the slider at 1.5×.
+    await revealPlayerPanel(page, ".speed-skip-panel .speed-slider")
+    await capture()
     })
   }
 )

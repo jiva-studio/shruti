@@ -27,11 +27,13 @@ test(
       await expect(newSession).toBeVisible({ timeout: 10_000 })
     })
 
-    await step(page, 95, 1, async () => {
+    await step(page, 95, 1, async (capture) => {
       await newSession.click()
 
       // Back to the empty/welcome state: the PageSticker + suggestion chips show.
       await expect(page.locator(".suggestions")).toBeVisible({ timeout: 10_000 })
+      // Screenshot the fresh empty state with chips — before opening history.
+      await capture()
 
       // The prior session is still in history.
       await page.locator('.chat-page .action-btn[aria-label="Chat history"]').click()

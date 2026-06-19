@@ -194,3 +194,52 @@ export function selectionAction(page: Page, which: "copy" | "bookmark" | "share"
   const index = { copy: 0, bookmark: 1, share: 2, ask: 3 }[which]
   return page.locator(".selection-actions ion-button").nth(index)
 }
+
+/**
+ * Swipe the floating player's carousel up until `selector` is on screen, so a
+ * value-only spec (speed / stereo-mix — driven via synthetic events on the
+ * off-screen control) can SCREENSHOT the actual control. Best-effort and for
+ * screenshots only: it never throws and never fails the test, so the assertion
+ * stays on the deterministic stored value.
+ */
+export async function revealPlayerPanel(page: Page, selector: string, maxSwipes = 4): Promise<void> {
+  try {
+    const player = page.locator(".player")
+    const target = page.locator(selector).first()
+    // The carousel is vertical (translateY): mix is page 0 (above the default
+    // now-playing page), speed is page 2 (below). Swipe TOWARD the target — up to
+    // bring a below-viewport page in, down for an above-viewport page.
+    const probe = () =>
+      target
+        .evaluate((el) => {
+          const r = (el as HTMLElement).getBoundingClientRect()
+          return { top: r.top, bottom: r.bottom, h: r.height, vh: window.innerHeight }
+        })
+        .catch(() => null)
+
+    const cdp = await page.context().newCDPSession(page)
+    for (let i = 0; i < maxSwipes; i++) {
+      const r = await probe()
+      if (!r) return
+      if (r.h > 0 && r.top >= 0 && r.bottom <= r.vh) return // already on screen
+      const box = await player.boundingBox()
+      if (!box) return
+      const cx = Math.round(box.x + box.width / 2)
+      const down = r.top < 0 // target sits above the viewport → move the track down
+      const yStart = Math.round(down ? box.y + box.height * 0.25 : box.y + box.height * 0.8)
+      const yEnd = Math.round(down ? box.y + box.height * 1.5 : box.y - box.height * 0.6)
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: yStart }] })
+      for (const f of [0.25, 0.5, 0.75, 1]) {
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: cx, y: Math.round(yStart + (yEnd - yStart) * f) }],
+        })
+        await page.waitForTimeout(40)
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+      await page.waitForTimeout(350)
+    }
+  } catch {
+    /* best-effort: the screenshot just stays on the current frame */
+  }
+}
