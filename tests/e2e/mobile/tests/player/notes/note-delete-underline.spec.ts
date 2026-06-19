@@ -35,7 +35,7 @@ test(
       await expect(page.locator(".selection-actions")).toBeHidden({ timeout: 10_000 })
     })
 
-    await step(page, 6, 1, async () => {
+    await step(page, 6, 1, async (capture) => {
       // Tap the underline → popover reopens in existing-note mode with a red
       // Delete. The block only emits `noteTapped` once its `noteIds` resolve
       // (a beat after the underline paints); before that a tap just seeks. Retry
@@ -45,6 +45,9 @@ test(
         await highlighted.first().click()
         await expect(del).toBeVisible({ timeout: 1500 })
       }).toPass({ timeout: 20_000 })
+      // Screenshot the reopened popover with the red Delete — before the tap
+      // dismisses it.
+      await capture()
       await del.click()
 
       // The underline is removed immediately.
