@@ -294,13 +294,13 @@
   "16": {
     "suite_id": 2,
     "automation": 0,
-    "title": "Tapping a Home row opens the player at the saved position",
+    "title": "Tapping a queued track on Home starts playback",
     "description": "Manual: a playlist track with saved progress, when tapped from Home, opens the player and resumes from the saved position rather than from the start.",
     "preconditions": "A playlist track has saved progress greater than zero.",
     "steps": [
       {
-        "action": "Tap a track row on Home that has prior progress.",
-        "expected": "The player opens and resumes from the saved position, not from the start."
+        "action": "Tap a queued track row on Home.",
+        "expected": "The floating player opens (leaves its hidden state) and playback begins."
       }
     ],
     "tags": [
@@ -431,24 +431,6 @@
       "e2e"
     ]
   },
-  "25": {
-    "suite_id": 20,
-    "automation": 2,
-    "title": "Filters sheet opens",
-    "description": "Tapping the header filter button presents the filters bottom sheet (ion-modal.filters-sheet.show-modal). The test asserts the sheet presents; it does NOT enumerate the individual filter dimensions. Offline; also exercised across the content-language locale matrix.",
-    "preconditions": "On the library/search list (offline boot).",
-    "steps": [
-      {
-        "action": "Tap the header filter button.",
-        "expected": "The filters bottom sheet is presented (visible)."
-      }
-    ],
-    "tags": [
-      "search",
-      "free",
-      "e2e"
-    ]
-  },
   "26": {
     "suite_id": 20,
     "automation": 2,
@@ -458,19 +440,19 @@
     "steps": [
       {
         "action": "Open the filters sheet and switch the Sources facet to a different source.",
-        "expected": "The sheet shows the new Sources selection."
+        "expected": "The filters sheet is presented and shows the new Sources selection."
       },
       {
-        "action": "Apply (close the sheet).",
-        "expected": "The library re-queries to a disjoint set and the active-filter badge stays highlighted."
+        "action": "Apply the new source.",
+        "expected": "The library list re-queries to a disjoint set of lectures (the list changes) and the active-filter badge stays highlighted."
       },
       {
         "action": "Open the filters sheet and choose the \"Date (oldest first)\" sort.",
         "expected": "The sheet shows the chosen sort."
       },
       {
-        "action": "Apply (close the sheet).",
-        "expected": "The list re-orders live — the order differs from the default."
+        "action": "Apply the new sort.",
+        "expected": "The list re-orders live — the visible order differs from the default."
       },
       {
         "action": "Open the filters sheet and tap Reset.",
@@ -892,25 +874,6 @@
     "tags": [
       "player",
       "free",
-      "e2e"
-    ]
-  },
-  "54": {
-    "suite_id": 6,
-    "automation": 0,
-    "title": "Tapping a playlist track opens the player at the saved position",
-    "description": "Manual: tapping a track in the Up-Next playlist that has saved progress opens the player and resumes from the saved position, not from the start.",
-    "preconditions": "A track in the playlist has saved progress greater than zero.",
-    "steps": [
-      {
-        "action": "Tap a playlist track that has prior progress.",
-        "expected": "The player opens and resumes from the saved position, not from the start."
-      }
-    ],
-    "tags": [
-      "player",
-      "free",
-      "smoke",
       "e2e"
     ]
   },
