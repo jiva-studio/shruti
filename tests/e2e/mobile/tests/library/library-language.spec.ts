@@ -1,7 +1,7 @@
 import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
-import { openLibrary, trackTitles, CYRILLIC, editLibraryLanguages } from "../../support/nav.js"
+import { openLibrary, gotoTab, trackTitles, CYRILLIC, editLibraryLanguages } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
@@ -43,7 +43,10 @@ test(
       // library. The list re-scopes — every visible title is Latin, no Cyrillic
       // (Russian) title leaks in.
       await editLibraryLanguages(page, { add: "English", remove: /Русский/ })
-      await openLibrary(page)
+      // The all-lectures list re-scopes live to the English library (the search
+      // filters now mirror the library language from the store), so just return to
+      // the search tab — no remount needed.
+      await gotoTab(page, "search")
 
       await expect
         .poll(async () => {

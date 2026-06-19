@@ -92,6 +92,19 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
     { deep: true }
   )
 
+  // The library content language(s) can also change OUTSIDE this view — Settings →
+  // Library writes them straight to the store. Mirror that back into the local
+  // filters so the list re-scopes live (the collection/topic detail views already
+  // watch the library language; the all-lectures list must too).
+  watch(
+    () => [...store.languageCodes].join("|"),
+    (next) => {
+      if ((filters.value.languages ?? []).join("|") === next) return
+      hydrating = true // skip the echo back to the store
+      filters.value = { ...filters.value, languages: [...store.languageCodes] }
+    }
+  )
+
   function hasActiveFilter(): boolean {
     const f = filters.value
     return (
