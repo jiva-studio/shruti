@@ -2,21 +2,30 @@ import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { gotoTab, trackRows } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 // Booted in Russian: the fixture's topics only hold Russian lectures, so an
 // English library would (correctly) leave the topic page empty — see
 // topic-language.spec for that language-filtering coverage. This spec just
 // checks the tile → topic-page navigation, so it boots a locale whose library
 // has lectures for every topic.
-test(qase(43, "Open a topic from the grid"), { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(43, caseTitle(43)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "ru")
-  await gotoTab(page, "search")
 
-  // The discovery page has a grid of topic tiles; tap the first one.
-  const tile = page.locator(".tile-grid > *").first()
-  await tile.waitFor({ state: "visible", timeout: 20_000 })
-  await tile.click()
+  let tile = page.locator(".tile-grid > *").first()
 
-  await page.waitForURL("**/search/topic/**", { timeout: 10_000 })
-  await expect(trackRows(page).first()).toBeVisible({ timeout: 20_000 })
+  await step(page, 43, 0, async () => {
+    await gotoTab(page, "search")
+
+    // The discovery page has a grid of topic tiles; tap the first one.
+    tile = page.locator(".tile-grid > *").first()
+    await tile.waitFor({ state: "visible", timeout: 20_000 })
+  })
+
+  await step(page, 43, 1, async () => {
+    await tile.click()
+
+    await page.waitForURL("**/search/topic/**", { timeout: 10_000 })
+    await expect(trackRows(page).first()).toBeVisible({ timeout: 20_000 })
+  })
 })

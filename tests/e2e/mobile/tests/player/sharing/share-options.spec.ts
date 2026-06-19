@@ -2,6 +2,7 @@ import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { openLibrary, trackRows } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 import type { Locator, Page } from "@playwright/test"
 
 // Local mirror of nav.ts helpers (imports are restricted to
@@ -22,29 +23,34 @@ async function openTrackSheet(page: Page, row: Locator): Promise<void> {
 //   text:  "Transcript (text)"
 //   audio: "Audio"
 test(
-  qase(67, "Share an audio excerpt from a transcript selection"),
+  qase(67, caseTitle(67)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page, "en", { pro: true })
     await openLibrary(page)
-    await openTrackSheet(page, trackRows(page).first())
 
-    await trackSheet(page).locator(".share-btn").click()
+    await step(page, 67, 0, async () => {
+      await openTrackSheet(page, trackRows(page).first())
+    })
 
-    // Dev/web build is treated as subscribed → Share opens the export
-    // action sheet (PDF / text / audio) rather than the paywall.
-    const sheet = page.locator("ion-action-sheet")
-    await expect(sheet).toBeVisible({ timeout: 15_000 })
+    await step(page, 67, 1, async () => {
+      await trackSheet(page).locator(".share-btn").click()
 
-    // PDF entry point (mirrors share-menu.spec.ts) plus the two extra
-    // options. Match by rendered i18n label, not by index. Audio is
-    // enabled because the seeded track variant has the silent-MP3 stub.
-    const pdfOption = sheet.getByRole("button", { name: /transcript \(pdf\)/i })
-    const textOption = sheet.getByRole("button", { name: /transcript \(text\)/i })
-    const audioOption = sheet.getByRole("button", { name: /^audio$/i })
+      // Dev/web build is treated as subscribed → Share opens the export
+      // action sheet (PDF / text / audio) rather than the paywall.
+      const sheet = page.locator("ion-action-sheet")
+      await expect(sheet).toBeVisible({ timeout: 15_000 })
 
-    await expect(pdfOption).toBeVisible()
-    await expect(textOption).toBeVisible()
-    await expect(audioOption).toBeVisible()
+      // PDF entry point (mirrors share-menu.spec.ts) plus the two extra
+      // options. Match by rendered i18n label, not by index. Audio is
+      // enabled because the seeded track variant has the silent-MP3 stub.
+      const pdfOption = sheet.getByRole("button", { name: /transcript \(pdf\)/i })
+      const textOption = sheet.getByRole("button", { name: /transcript \(text\)/i })
+      const audioOption = sheet.getByRole("button", { name: /^audio$/i })
+
+      await expect(pdfOption).toBeVisible()
+      await expect(textOption).toBeVisible()
+      await expect(audioOption).toBeVisible()
+    })
   }
 )

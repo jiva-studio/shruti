@@ -11,6 +11,7 @@ import {
   trackRows,
   trackSheet,
 } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * The completed "double-check" indicator (IconRosetteDiscountCheckFilled →
@@ -38,48 +39,52 @@ const COMPLETED_TITLE = "Original Person and Source"
  * library keeps the badge.
  */
 test(
-  qase([18, 19], "Swipe-to-archive removes a track but keeps its completion badge"),
+  qase(19, caseTitle(19)),
   { tag: ["@offline", "@home"] },
   async ({ page }) => {
     await boot(page, "en", { sourceIds: [] })
 
-    // The completed track shows the double-check badge in the queue.
-    const queueRow = playlistRows(page).filter({ hasText: COMPLETED_TITLE })
-    await expect(queueRow.first()).toBeVisible({ timeout: 20_000 })
-    await expect(queueRow.first().locator(COMPLETED_ICON)).toBeVisible()
+    await step(page, 19, 0, async () => {
+      // The completed track shows the double-check badge in the queue.
+      const queueRow = playlistRows(page).filter({ hasText: COMPLETED_TITLE })
+      await expect(queueRow.first()).toBeVisible({ timeout: 20_000 })
+      await expect(queueRow.first().locator(COMPLETED_ICON)).toBeVisible()
 
-    // Archive it — it leaves the active queue.
-    await deletePlaylistRow(page, queueRow.first())
-    await expect(playlistRows(page).filter({ hasText: COMPLETED_TITLE })).toHaveCount(0, {
-      timeout: 15_000,
+      // Archive it — it leaves the active queue.
+      await deletePlaylistRow(page, queueRow.first())
+      await expect(playlistRows(page).filter({ hasText: COMPLETED_TITLE })).toHaveCount(0, {
+        timeout: 15_000,
+      })
     })
 
-    // In the library the completed badge survives the archive.
-    await openLibrary(page)
-    await searchInput(page).fill(COMPLETED_TITLE)
-    const libRow = trackRows(page).filter({ hasText: COMPLETED_TITLE })
-    await expect(libRow.first()).toBeVisible({ timeout: 15_000 })
-    await expect(libRow.first().locator(COMPLETED_ICON)).toBeVisible()
+    await step(page, 19, 1, async () => {
+      // In the library the completed badge survives the archive.
+      await openLibrary(page)
+      await searchInput(page).fill(COMPLETED_TITLE)
+      const libRow = trackRows(page).filter({ hasText: COMPLETED_TITLE })
+      await expect(libRow.first()).toBeVisible({ timeout: 15_000 })
+      await expect(libRow.first().locator(COMPLETED_ICON)).toBeVisible()
 
-    // Re-add it from the library detail sheet.
-    await openTrackSheet(page, libRow.first())
-    await trackSheet(page).locator(".add-btn").click()
-    await expect(trackSheet(page)).toBeHidden()
+      // Re-add it from the library detail sheet.
+      await openTrackSheet(page, libRow.first())
+      await trackSheet(page).locator(".add-btn").click()
+      await expect(trackSheet(page)).toBeHidden()
 
-    // Back on Home: the re-added queue row is a FRESH pass — no completed
-    // double-check (and so no 100% radial). This is the bug being guarded.
-    await gotoTab(page, "home")
-    const readded = playlistRows(page).filter({ hasText: COMPLETED_TITLE })
-    await expect(readded.first()).toBeVisible({ timeout: 20_000 })
-    await expect(readded.first().locator(COMPLETED_ICON)).toHaveCount(0)
+      // Back on Home: the re-added queue row is a FRESH pass — no completed
+      // double-check (and so no 100% radial). This is the bug being guarded.
+      await gotoTab(page, "home")
+      const readded = playlistRows(page).filter({ hasText: COMPLETED_TITLE })
+      await expect(readded.first()).toBeVisible({ timeout: 20_000 })
+      await expect(readded.first().locator(COMPLETED_ICON)).toHaveCount(0)
 
-    // …while the library still shows the lifetime completion badge. The search
-    // tab kept its `/tabs/search/tracks` stack, so return to it directly rather
-    // than re-running openLibrary (whose "All lectures" entry point is gone).
-    await gotoTab(page, "search")
-    await searchInput(page).fill(COMPLETED_TITLE)
-    const libRow2 = trackRows(page).filter({ hasText: COMPLETED_TITLE })
-    await expect(libRow2.first()).toBeVisible({ timeout: 15_000 })
-    await expect(libRow2.first().locator(COMPLETED_ICON)).toBeVisible()
+      // …while the library still shows the lifetime completion badge. The search
+      // tab kept its `/tabs/search/tracks` stack, so return to it directly rather
+      // than re-running openLibrary (whose "All lectures" entry point is gone).
+      await gotoTab(page, "search")
+      await searchInput(page).fill(COMPLETED_TITLE)
+      const libRow2 = trackRows(page).filter({ hasText: COMPLETED_TITLE })
+      await expect(libRow2.first()).toBeVisible({ timeout: 15_000 })
+      await expect(libRow2.first().locator(COMPLETED_ICON)).toBeVisible()
+    })
   }
 )

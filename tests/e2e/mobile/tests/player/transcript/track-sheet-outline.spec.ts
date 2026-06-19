@@ -2,6 +2,7 @@ import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { bootDeviceLocale } from "../../../support/bootstrap.js"
 import { openLibrary, searchInput, trackRows, trackSheet } from "../../../support/nav.js"
+import { step, caseTitle } from "../../../support/steps.js"
 
 /**
  * The TrackSheet (`ion-modal.track-sheet`) renders, for a track that has them,
@@ -15,33 +16,39 @@ test.describe("track sheet · outline + topics", () => {
   test.use({ locale: "ru-RU" })
 
   test(
-    qase(62, "Outline / chapters navigation"),
+    qase(62, caseTitle(62)),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
       await bootDeviceLocale(page, "ru")
       await openLibrary(page)
 
-      // Narrow the catalog to the target lecture by a distinctive title word, then
-      // tap the row that surfaces with that title.
-      await searchInput(page).fill("очистить")
-      const row = trackRows(page).filter({ hasText: "очистить" }).first()
-      await expect(row).toBeVisible({ timeout: 20_000 })
-      await row.click()
+      let sheet = trackSheet(page)
 
-      // Wait for the modal to actually present (`.show-modal` is added once the
-      // open transition has run), then for its body to settle.
-      const sheet = trackSheet(page)
-      await expect(sheet).toHaveClass(/show-modal/, { timeout: 20_000 })
-      await expect(sheet.locator(".sheet-actions")).toBeVisible()
+      await step(page, 62, 0, async () => {
+        // Narrow the catalog to the target lecture by a distinctive title word, then
+        // tap the row that surfaces with that title.
+        await searchInput(page).fill("очистить")
+        const row = trackRows(page).filter({ hasText: "очистить" }).first()
+        await expect(row).toBeVisible({ timeout: 20_000 })
+        await row.click()
 
-      // Topic chips render (includes a possible `.topic-chip.more` overflow tag).
-      await expect(sheet.locator(".topic-chip").first()).toBeVisible({ timeout: 20_000 })
-      expect(await sheet.locator(".topic-chip").count()).toBeGreaterThan(0)
+        // Wait for the modal to actually present (`.show-modal` is added once the
+        // open transition has run), then for its body to settle.
+        sheet = trackSheet(page)
+        await expect(sheet).toHaveClass(/show-modal/, { timeout: 20_000 })
+        await expect(sheet.locator(".sheet-actions")).toBeVisible()
+      })
 
-      // The lecture outline renders one row per chapter.
-      const chapters = sheet.locator(".chapters > li.chapter")
-      await expect(chapters.first()).toBeVisible({ timeout: 20_000 })
-      expect(await chapters.count()).toBeGreaterThan(0)
+      await step(page, 62, 1, async () => {
+        // Topic chips render (includes a possible `.topic-chip.more` overflow tag).
+        await expect(sheet.locator(".topic-chip").first()).toBeVisible({ timeout: 20_000 })
+        expect(await sheet.locator(".topic-chip").count()).toBeGreaterThan(0)
+
+        // The lecture outline renders one row per chapter.
+        const chapters = sheet.locator(".chapters > li.chapter")
+        await expect(chapters.first()).toBeVisible({ timeout: 20_000 })
+        expect(await chapters.count()).toBeGreaterThan(0)
+      })
     }
   )
 })

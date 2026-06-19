@@ -2,6 +2,7 @@ import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
 import { gotoTab } from "../../support/nav.js"
+import { step, caseTitle } from "../../support/steps.js"
 
 /**
  * Regression for the "flaky cover never recovers" bug. Collection / topic covers
@@ -38,7 +39,7 @@ const COVER_GLOB = "**/public/collections/**"
 const ABORTS = 3
 
 test(
-  qase(143, "A cover that fails once on a flaky network recovers"),
+  qase(143, caseTitle(143)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     // Per-URL request counter: drives a deterministic "first request fails,
@@ -69,37 +70,41 @@ test(
       await route.fulfill({ status: 200, contentType: "image/png", body: PNG_1x1 })
     })
 
-    await boot(page)
-    // Search landing: collection / topic tiles render through CachedImage.
-    await gotoTab(page, "search")
-
-    const cards = page.locator(".carousel-section .collection-card")
-    await cards.first().waitFor({ state: "visible", timeout: 20_000 })
-
     // The chosen-flaky cover's <img>. Its src points at the targetUrl's cached
     // blob (or raw url); the only stable handle is the loaded class on the
     // CachedImage layer, so assert that at least one cover recovered to loaded
     // AND that the flaky cover specifically was re-requested (retry happened).
     const loadedCovers = page.locator(".collection-card .cached-image.is-loaded")
 
-    // With the fix, the once-aborted cover re-requests and decodes, so every
-    // visible cover (including the flaky one) ends up loaded. Without the fix
-    // the flaky cover stays invisible and this never reaches the full count.
-    await expect(async () => {
-      // The flaky cover must have been retried PAST the abort budget — proof the
-      // bounded retry kept going where the buggy code gave up.
-      expect(targetUrl).toBeTruthy()
-      expect(calls.get(targetUrl!) ?? 0).toBeGreaterThan(ABORTS)
-      // And at least one cover layer is decoded + visible.
-      expect(await loadedCovers.count()).toBeGreaterThan(0)
-    }).toPass({ timeout: 25_000 })
+    await step(page, 143, 0, async () => {
+      await boot(page)
+      // Search landing: collection / topic tiles render through CachedImage.
+      await gotoTab(page, "search")
 
-    // Stronger: the flaky cover's own <img> decoded (naturalWidth > 0). Find the
-    // CachedImage whose currentSrc traces back to a successful retry — every
-    // loaded cover satisfies naturalWidth > 0, and the flaky one is among them.
-    const decoded = await loadedCovers.evaluateAll((imgs) =>
-      imgs.every((el) => (el as HTMLImageElement).naturalWidth > 0)
-    )
-    expect(decoded).toBe(true)
+      const cards = page.locator(".carousel-section .collection-card")
+      await cards.first().waitFor({ state: "visible", timeout: 20_000 })
+
+      // With the fix, the once-aborted cover re-requests and decodes, so every
+      // visible cover (including the flaky one) ends up loaded. Without the fix
+      // the flaky cover stays invisible and this never reaches the full count.
+      await expect(async () => {
+        // The flaky cover must have been retried PAST the abort budget — proof the
+        // bounded retry kept going where the buggy code gave up.
+        expect(targetUrl).toBeTruthy()
+        expect(calls.get(targetUrl!) ?? 0).toBeGreaterThan(ABORTS)
+        // And at least one cover layer is decoded + visible.
+        expect(await loadedCovers.count()).toBeGreaterThan(0)
+      }).toPass({ timeout: 25_000 })
+    })
+
+    await step(page, 143, 1, async () => {
+      // Stronger: the flaky cover's own <img> decoded (naturalWidth > 0). Find the
+      // CachedImage whose currentSrc traces back to a successful retry — every
+      // loaded cover satisfies naturalWidth > 0, and the flaky one is among them.
+      const decoded = await loadedCovers.evaluateAll((imgs) =>
+        imgs.every((el) => (el as HTMLImageElement).naturalWidth > 0)
+      )
+      expect(decoded).toBe(true)
+    })
   }
 )
