@@ -21,7 +21,7 @@ test.describe("library · pristine locale-seed", () => {
     qase(28, caseTitle(28)),
     { tag: ["@offline", "@library"] },
     async ({ page }) => {
-      await bootDeviceLocale(page, "en")
+      await bootDeviceLocale(page, "en", { userDbStrategy: "clean" })
       await openLibrary(page)
 
       await step(page, 28, 0, async () => {

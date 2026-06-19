@@ -5,7 +5,7 @@ import { openLibrary } from "../../../support/nav.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 test(qase(25, caseTitle(25)), { tag: ["@offline", "@library"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { userDb: "clean" })
   await openLibrary(page)
 
   await step(page, 25, 0, async () => {

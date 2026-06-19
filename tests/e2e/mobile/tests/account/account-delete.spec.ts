@@ -12,7 +12,7 @@ test(
   { tag: ["@offline", "@settings"] },
   async ({ page }) => {
     await preseedAuthTokens(page)
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
 
     await step(page, 110, 0, async () => {
       await gotoTab(page, "settings")

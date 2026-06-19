@@ -16,8 +16,17 @@ export const TRANSCRIPT_JSON_PATH = path.resolve(FIXTURES_DIR, "transcript.json"
 
 export type Locale = "en" | "ru"
 
-export function userDbPath(locale: Locale): string {
-  return path.resolve(FIXTURES_DIR, `user-${locale}.db`)
+/** Which seeded user.db a test loads (mirrors the generator's strategy names):
+ *  - "preseed" — playlist + listening history + notes + chat (the default).
+ *  - "clean"   — schema + config only; for specs that bring their own state, so
+ *    their screenshots show an empty home instead of the seeded dataset. */
+export type UserDbStrategy = "preseed" | "clean"
+
+/** Filename suffix per strategy — must match generate-fixtures STRATEGIES. */
+const USER_DB_SUFFIX: Record<UserDbStrategy, string> = { preseed: "", clean: ".clean" }
+
+export function userDbPath(locale: Locale, strategy: UserDbStrategy = "preseed"): string {
+  return path.resolve(FIXTURES_DIR, `user-${locale}${USER_DB_SUFFIX[strategy]}.db`)
 }
 
 /**
@@ -40,6 +49,8 @@ const REQUIRED_FIXTURES = [
   TRANSCRIPT_JSON_PATH,
   userDbPath("en"),
   userDbPath("ru"),
+  userDbPath("en", "clean"),
+  userDbPath("ru", "clean"),
 ]
 
 /** Fixtures that haven't been prepared yet (gitignored binaries). */

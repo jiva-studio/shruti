@@ -8,6 +8,7 @@ import {
   TRANSCRIPT_JSON_PATH,
   userDbPath,
   type Locale,
+  type UserDbStrategy,
 } from "./fixtures.js"
 import { requireFixtures } from "./test.js"
 
@@ -89,11 +90,17 @@ export async function interceptContent(page: Page): Promise<void> {
  * Write the seeded user.db into IndexedDB BEFORE the app boots. The web
  * `useSqlJsPersistence` reads `(shruti, databases, user.db)` on open() and
  * only creates an empty DB when the key is missing, so a pre-seeded blob is
- * picked up transparently and migrations no-op. The fixture carries ~9 playlist
- * tracks, listening history and notes (see screenshots/generate-fixtures).
+ * picked up transparently and migrations no-op. The default `preseed` fixture
+ * carries ~9 playlist tracks, listening history and notes; the `clean` strategy
+ * loads a schema+config-only db so specs that bring their own state show an
+ * empty home (see screenshots/generate-fixtures).
  */
-export async function preseedUserDb(page: Page, locale: Locale): Promise<void> {
-  const base64 = fs.readFileSync(userDbPath(locale)).toString("base64")
+export async function preseedUserDb(
+  page: Page,
+  locale: Locale,
+  strategy: UserDbStrategy = "preseed"
+): Promise<void> {
+  const base64 = fs.readFileSync(userDbPath(locale, strategy)).toString("base64")
   await page.addInitScript(
     ({ b64 }: { b64: string }) => {
       const bin = atob(b64)
@@ -254,12 +261,12 @@ const KILL_ANIMATIONS_CSS = `
 export async function boot(
   page: Page,
   locale: Locale = "en",
-  opts: { dismissNags?: boolean; sourceIds?: string[]; pro?: boolean } = {}
+  opts: { dismissNags?: boolean; sourceIds?: string[]; pro?: boolean; userDb?: UserDbStrategy } = {}
 ): Promise<void> {
-  const { dismissNags = true, pro = false } = opts
+  const { dismissNags = true, pro = false, userDb = "preseed" } = opts
   assertFixturesPresent()
   await interceptContent(page)
-  await preseedUserDb(page, locale)
+  await preseedUserDb(page, locale, userDb)
   await preseedSearchFilter(page, locale, opts.sourceIds)
   if (dismissNags) await preseedDismissedNags(page)
   // The dev build treats every user as Pro. For the e2e suite we flip that:
@@ -314,11 +321,11 @@ export async function preseedSearchFilterLangs(page: Page, langs: string[]): Pro
 export async function bootDeviceLocale(
   page: Page,
   userDb: Locale = "en",
-  opts: { filterLangs?: string[] } = {}
+  opts: { filterLangs?: string[]; userDbStrategy?: UserDbStrategy } = {}
 ): Promise<void> {
   assertFixturesPresent()
   await interceptContent(page)
-  await preseedUserDb(page, userDb)
+  await preseedUserDb(page, userDb, opts.userDbStrategy ?? "preseed")
   if (opts.filterLangs) await preseedSearchFilterLangs(page, opts.filterLangs)
   await preseedDismissedNags(page)
 

@@ -10,7 +10,7 @@ test(
   qase(139, caseTitle(139)),
   { tag: ["@offline", "@search"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await openLibrary(page)
 
     const sheet = trackSheet(page)

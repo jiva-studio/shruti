@@ -18,7 +18,7 @@ test(
       void route.fulfill({ status: 500, body: "" })
     })
 
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "chat")
 
     let retry = page.locator(".inline-notice").first().locator(".btn")

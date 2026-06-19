@@ -68,7 +68,7 @@ test(
     )
     await mockChatStream(page, [delta("Refreshed and answering."), done()])
 
-    await boot(page)
+    await boot(page, "en", { userDb: "clean" })
     await gotoTab(page, "chat")
 
     await step(page, 114, 0, async () => {

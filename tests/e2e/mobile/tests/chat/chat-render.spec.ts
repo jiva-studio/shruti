@@ -7,7 +7,7 @@ import { step, caseTitle } from "../../support/steps.js"
 // Sending a message needs the chat backend — that's a @live test. Here we only
 // assert the chat surface renders and is ready for input (no network).
 test(qase(84, caseTitle(84)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { userDb: "clean" })
   await gotoTab(page, "chat")
 
   await step(page, 84, 0, async () => {
@@ -17,7 +17,9 @@ test(qase(84, caseTitle(84)), { tag: ["@offline", "@chat"] }, async ({ page }) =
     await expect(input).toBeVisible()
     await expect(input).toBeEnabled()
 
-    // Empty state offers starter suggestion chips.
-    await expect(page.locator(".suggestions")).toBeVisible()
+    // Empty state offers starter suggestion chips. Scope to the chat surface:
+    // on a clean user.db the Home tab (kept mounted by Ionic) shows the empty-
+    // playlist starter packs, which also carry a `.suggestions` class.
+    await expect(page.locator(".chat-page .suggestions")).toBeVisible()
   })
 })
