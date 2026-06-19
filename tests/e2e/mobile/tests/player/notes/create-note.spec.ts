@@ -12,14 +12,22 @@ import { step, caseTitle } from "../../../support/steps.js"
  */
 
 test(qase(2, caseTitle(2)), { tag: ["@offline", "@transcript"] }, async ({ page }) => {
-  await boot(page)
+  await boot(page, "en", { userDb: "single" })
 
   let before = 0
   const dialog = page.locator("ion-modal.transcript-dialog")
 
   await step(page, 2, 0, async () => {
     await gotoTab(page, "notes")
-    await expect(page.locator("ion-item.note").first()).toBeVisible({ timeout: 20_000 })
+    // The single-track user.db carries no seeded notes, so the baseline is 0 —
+    // don't require a pre-existing note. But still wait for the Notes view to
+    // settle (a note row, or the empty-state sticker) before reading the
+    // baseline and navigating away: otherwise the next gotoTab fires mid-
+    // transition and is dropped, stranding us on Notes. The before+1 check
+    // below then genuinely proves THIS test created a note (not seeded noise).
+    await expect(
+      page.locator("ion-item.note").first().or(page.locator(".page-sticker").filter({ hasText: /note/i }))
+    ).toBeVisible({ timeout: 20_000 })
     before = await page.locator("ion-item.note").count()
 
     // Open a transcript: play a queued track, then tap the player to reveal it.

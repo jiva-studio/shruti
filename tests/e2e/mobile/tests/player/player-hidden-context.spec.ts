@@ -11,7 +11,7 @@ test(
   qase(58, caseTitle(58)),
   { tag: ["@offline", "@player"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "single" })
     await playFirstQueuedTrack(page)
 
     const player = page.locator(".player")

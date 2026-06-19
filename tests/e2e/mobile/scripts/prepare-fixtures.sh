@@ -41,10 +41,16 @@ if [[ ! -f "$SHOTS/fixtures/user-en.clean.db" || ! -f "$SHOTS/fixtures/user-ru.c
   echo ">> generating clean user fixtures via screenshots pipeline"
   ( cd "$SHOTS" && npm run generate-user-fixture -- --clean )
 fi
+if [[ ! -f "$SHOTS/fixtures/user-en.single.db" || ! -f "$SHOTS/fixtures/user-ru.single.db" ]]; then
+  echo ">> generating single-track user fixtures via screenshots pipeline"
+  ( cd "$SHOTS" && npm run generate-user-fixture -- --strategy=single )
+fi
 cp "$SHOTS/fixtures/user-en.db" "$FIX/user-en.db"
 cp "$SHOTS/fixtures/user-ru.db" "$FIX/user-ru.db"
 cp "$SHOTS/fixtures/user-en.clean.db" "$FIX/user-en.clean.db"
 cp "$SHOTS/fixtures/user-ru.clean.db" "$FIX/user-ru.clean.db"
+cp "$SHOTS/fixtures/user-en.single.db" "$FIX/user-en.single.db"
+cp "$SHOTS/fixtures/user-ru.single.db" "$FIX/user-ru.single.db"
 
 echo ">> fixtures ready in $FIX"
 ls -la "$FIX"

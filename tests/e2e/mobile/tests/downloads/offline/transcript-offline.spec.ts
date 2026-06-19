@@ -10,7 +10,7 @@ test(
   qase(81, caseTitle(81)),
   { tag: ["@offline", "@transcript"] },
   async ({ page }) => {
-    await boot(page)
+    await boot(page, "en", { userDb: "single" })
     // Let the boot-time prefetch cache the first track's transcript.
     await page.waitForTimeout(2500)
 
