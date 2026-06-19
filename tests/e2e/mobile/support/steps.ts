@@ -51,14 +51,16 @@ function slug(name: string): string {
  *
  * The capture is taken AFTER the step asserted its expected state, but Ionic
  * page/modal transitions and fade-ins can still be mid-flight — a naive
- * screenshot then catches a half-rendered frame. We let a short reflow settle
- * and pass `animations: "disabled"`, which fast-forwards finite CSS/Web
- * animations to their finished state before capturing, so the image shows the
- * settled UI, not a transition frame. */
+ * screenshot then catches a half-rendered frame. We let the transition settle
+ * (longer than a typical Ionic page/modal transition) so the captured frame is
+ * the finished UI. We deliberately do NOT use Playwright's
+ * `animations: "disabled"`: it fast-forwards Web-Animations-driven Ionic
+ * transitions, which can complete a modal dismiss early and break a step that
+ * interacts with that modal afterwards (e.g. the filters-sheet Reset flow). */
 export async function shot(page: Page, name: string): Promise<void> {
   if (!PUBLISHING) return
-  await page.waitForTimeout(200)
-  const png = await page.screenshot({ animations: "disabled" })
+  await page.waitForTimeout(350)
+  const png = await page.screenshot()
   qase.attach({ name: `${slug(name)}.png`, content: png, contentType: "image/png" })
 }
 
