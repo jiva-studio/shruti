@@ -2,6 +2,7 @@ import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { Location } from "@lib/domain/location.js"
 import type { Source } from "@lib/domain/source.js"
+import type { Tag } from "@lib/domain/tag.js"
 import type { Track } from "@lib/domain/track.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
@@ -9,22 +10,27 @@ import { groupReferences } from "@lib/domain/services/references.js"
 import { formatTrackDate } from "./formatTrackDate.js"
 import {
   preferredContentLanguage,
+  resolveLocalizedName,
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
 } from "@lib/domain/services/localizedName.js"
 
 export interface BuildTrackRowDeps {
-  /** UI language — drives LABELS: author/location/source names, date, ref
-   *  prefixes. Not the lecture title (see `contentLanguages`). */
+  /** UI language — used only for the locale-formatted date. Author/location/
+   *  source/tag labels follow the lecture's CONTENT language (see
+   *  `contentLanguages`) so a row reads in one language, not three. */
   readonly preferredLanguage: LanguageCode
-  /** The user's library languages — drive the lecture TITLE so it matches the
-   *  language the track was surfaced in. Empty → title follows preferredLanguage. */
+  /** The user's library languages — drive the lecture TITLE *and* its metadata
+   *  labels (author/location/source/tags) so a lecture surfaced in Russian reads
+   *  fully in Russian. Empty → everything follows the track's own variant
+   *  language. */
   readonly contentLanguages: readonly LanguageCode[]
   readonly authorsById: ReadonlyMap<string, Author>
   readonly locationsById?: ReadonlyMap<string, Location>
   readonly sourcesById?: ReadonlyMap<string, Source>
-  /** Tag display names keyed by tag id. Used as a fallback when a track has no references. */
-  readonly tagNamesById?: ReadonlyMap<string, string>
+  /** Tags keyed by id — resolved to the track's content language. Used as the
+   *  chip fallback when a track has no scripture references. */
+  readonly tagsById?: ReadonlyMap<string, Tag>
   /** Optional per-track state override (playlist/downloader state). */
   readonly state?: UiTrackState
   /**
@@ -54,27 +60,34 @@ export interface BuildTrackRowDeps {
  * localised source short-names.
  */
 export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow {
-  // Title follows the content language (the library language this track has),
-  // so a lecture surfaced in Russian reads in Russian even on an English UI.
-  // Labels below stay on the UI language.
+  // Title AND its metadata labels follow the content language (the library
+  // language this track has), so a lecture surfaced in Russian reads fully in
+  // Russian even on an English/Ukrainian UI — not a three-language row (title
+  // ru, author/tags en). Only the date stays on the UI language (locale-
+  // formatted chrome).
   const contentLang =
     preferredContentLanguage(track, deps.contentLanguages, deps.preferredLanguage) ??
     deps.preferredLanguage
   const title = resolveTrackTitle(track, contentLang) ?? track.id
   const author = track.authorId ? deps.authorsById.get(track.authorId) : null
-  const authorName = resolveLocalizedNameOrEmpty(author, deps.preferredLanguage)
+  const authorName = resolveLocalizedNameOrEmpty(author, contentLang)
   const location = track.locationId ? deps.locationsById?.get(track.locationId) : null
-  const locationName = resolveLocalizedNameOrEmpty(location, deps.preferredLanguage)
+  const locationName = resolveLocalizedNameOrEmpty(location, contentLang)
 
-  const references = groupReferences(track.references, deps.sourcesById, deps.preferredLanguage)
+  const references = groupReferences(track.references, deps.sourcesById, contentLang)
   // 0 (no playable audio) collapses to undefined so the duration field
   // just renders nothing rather than a bogus "0m".
   const durationMs = maxAudioDurationMs(track)
   const duration =
     durationMs > 0 && deps.formatDuration ? deps.formatDuration(durationMs) : undefined
   const tagDisplay =
-    deps.tagNamesById && track.tagIds.length > 0
-      ? track.tagIds.map((id) => deps.tagNamesById?.get(id)).filter((v): v is string => Boolean(v))
+    deps.tagsById && track.tagIds.length > 0
+      ? track.tagIds
+          .map((id) => {
+            const tag = deps.tagsById?.get(id)
+            return tag ? resolveLocalizedName(tag, contentLang) : undefined
+          })
+          .filter((v): v is string => Boolean(v))
       : []
 
   return {
