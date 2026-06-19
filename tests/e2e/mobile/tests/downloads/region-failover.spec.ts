@@ -22,10 +22,9 @@ import { step, caseTitle } from "../../support/steps.js"
  * proof the failover ran, not just a cache hit.
  */
 
-const PNG_1x1 = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  "base64"
-)
+// A real, decodable cover image so naturalWidth ends up > 0 AND the mocked
+// cover looks like an actual cover in the screenshot (not a coloured block).
+const COVER = fs.readFileSync(new URL("../../fixtures/cover-sample.webp", import.meta.url))
 
 function region(id: string, host: string) {
   return {
@@ -66,7 +65,7 @@ test(
     let edgeBHits = 0
     await page.route("https://edge-b.test/public/collections/**", (route) => {
       edgeBHits++
-      route.fulfill({ status: 200, contentType: "image/png", body: PNG_1x1 })
+      route.fulfill({ status: 200, contentType: "image/webp", body: COVER })
     })
 
     await preseedUserDb(page, "en")
