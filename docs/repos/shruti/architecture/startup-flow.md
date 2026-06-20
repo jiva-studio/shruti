@@ -1,5 +1,13 @@
 # Shruti app startup flow
 
+> **Note (onboarding update):** the dedicated **Welcome view** described below
+> has been removed. The bootstrap now runs **headlessly in `main.ts` before
+> mount** (no loading screen — the DB ships bundled), then routes first-launch
+> users to `/onboarding` and returning users straight to `/tabs/home`. The
+> resolve / probe / scheme / background-refresh mechanics below are unchanged;
+> only their host moved from `WelcomeView.controller` to
+> `shruti/services/startup.ts`. See [Onboarding](onboarding.md).
+
 This document describes what happens from `main.ts` to the first time the
 content database answers a query: how the runtime region list is hydrated, how
 CDN servers are probed, the remote config is fetched, which content database is
