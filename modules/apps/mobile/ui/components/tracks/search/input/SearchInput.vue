@@ -10,26 +10,22 @@
       <slot name="leading" />
     </button>
 
-    <SearchInputIOS
-      v-if="isIOS"
-      v-model="searchQuery"
-      :placeholder="placeholder"
-      @focus-change="(v) => emit('focusChange', v)"
-    />
-    <SearchInputAndroid
-      v-else
-      v-model="searchQuery"
-      :placeholder="placeholder"
-      @focus-change="(v) => emit('focusChange', v)"
-    />
+    <div class="search">
+      <IonInput
+        v-model="searchQuery"
+        mode="md"
+        fill="outline"
+        :placeholder="placeholder"
+        @ion-focus="emit('focusChange', true)"
+        @ion-blur="emit('focusChange', false)"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, useSlots } from "vue"
-import { isPlatform } from "@ionic/vue"
-import SearchInputAndroid from "./SearchInputAndroid.vue"
-import SearchInputIOS from "./SearchInputIOS.vue"
+import { IonInput } from "@ionic/vue"
 
 const searchQuery = defineModel<string>({ type: String, default: "" })
 
@@ -46,12 +42,15 @@ const emit = defineEmits<{
 
 const slots = useSlots()
 const hasLeading = computed(() => !!slots.leading)
-const isIOS = isPlatform("ios")
 </script>
 
 <style scoped>
 .search-input {
   position: relative;
+}
+
+.search {
+  margin: 10px;
 }
 
 /* Leading icon sits over the field's left edge; the field gets extra start
@@ -75,15 +74,5 @@ const isIOS = isPlatform("ios")
 
 .has-leading :deep(ion-input) {
   --padding-start: 44px;
-}
-
-/* iOS IonSearchbar: drop the built-in magnifier and indent the field so the
-   leading icon takes its place. */
-.has-leading :deep(.searchbar-search-icon) {
-  display: none;
-}
-
-.has-leading :deep(.searchbar-input) {
-  padding-inline-start: 44px;
 }
 </style>
