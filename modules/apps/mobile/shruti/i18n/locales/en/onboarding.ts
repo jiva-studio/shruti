@@ -28,6 +28,9 @@ export default {
   paywall: {
     title: "Full access to lectures on your topics",
     subtitle: "Unlimited listening, playlists, chat, and progress tracking.",
+    b1: "All lectures, no limits",
+    b2: "AI chat to dig into the hard parts",
+    b3: "Save to playlists and track your path",
     later: "Later",
   },
   finish: "Start listening",

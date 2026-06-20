@@ -36,6 +36,7 @@
         />
       </div>
       <IonButton
+        v-if="showPrimary"
         expand="block"
         class="ob-primary"
         :disabled="primaryDisabled"
@@ -59,9 +60,10 @@ const props = withDefaults(
     modelValue: number
     primaryLabel: string
     primaryDisabled?: boolean
+    showPrimary?: boolean
     showSkip?: boolean
   }>(),
-  { primaryDisabled: false, showSkip: true }
+  { primaryDisabled: false, showPrimary: true, showSkip: true }
 )
 
 const emit = defineEmits<{
