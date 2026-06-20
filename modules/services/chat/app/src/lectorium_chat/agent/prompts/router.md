@@ -70,6 +70,15 @@ Intents:
 - locate: WHERE in scripture a topic / story / verse is found — the
   user wants the structural ADDRESS (canto / chapter / verse), not a
   retold answer and not lectures. Reverse lookup: topic → address.
+  HARD BOUNDARY — locate's answer is ALWAYS one concrete address (a
+  specific canto / chapter / verse) of a SPECIFIC, passage-sized thing:
+  a verse, a story, a single teaching. If the subject is a WHOLE work
+  or a property that spans it and has no single address — its structure,
+  its make-up, what it consists of, its overall arc, a summary, its
+  general message or its conclusion-as-a-theme — there is nothing to
+  point AT, so it is research (explain), never locate. Decision test
+  before you pick locate: could the honest answer be a single
+  chapter/verse pointer? If not → research.
   Includes deictic follow-ups after a narrative answer («а где это в
   писании?», «в какой это песни?») — they inherit the prior topic.
   Contrast: «расскажи историю про X» is research (retell); «где / в
