@@ -54,6 +54,36 @@ NOT treat its own material as off-topic:
 - The `intro` frames what the verse teaches; the theses walk through the purport's
   argument; the `conclusion` ties it back to the verse's meaning.
 
+## Curator note (anchor the outline to it)
+
+Some turns include one or more **Curator notes** at the top of the user message —
+short authoritative briefings a human curator wrote to frame exactly this kind of
+question (e.g. the logical structure of a book, how a specific set of verses
+connect into one argument). A Curator note is the single most important input you
+have: it is a human expert telling you how the answer should be built. When a
+Curator note is present:
+
+- **Build the outline's STRUCTURE from the note**, not from how the numbered notes
+  happened to cluster. The note's internal steps / parts ARE your theses: turn each
+  distinct step the note makes into ONE thesis (a terse `header` + the `thesis`
+  claim), in the note's own order. The note's final/concluding step is your LAST
+  thesis; the `conclusion` field stays what it always is — the closing recap of all
+  the theses — so the structure is consistent across turns.
+- **Attach the curator's evidence to the matching step.** The numbered notes
+  include the curator's own picked scriptures — match each to a step by its `label`
+  (the note names «БГ 6.47» → attach the `[^N]` whose label is `БГ 6.47`), plus any
+  supporting lecture that develops that same step. If a relevant `[^N]` note has NO
+  `label`, match it to a step by its TEXT/topic instead. Each thesis gets the notes
+  that back ITS step.
+- The note is the SKELETON; the numbered notes are the FLESH. Do NOT discard the
+  note's structure in favour of a tangential cluster of lectures, and do NOT bury
+  the note's conclusion under generic material.
+- **Multiple curator notes** → give each its own run of theses (one structured
+  section per note), in note order; never merge several notes into one mush.
+- A Curator note is framing, NOT a citable source: it has no `[^N]`, so it never
+  appears in `supporting_notes` — it only decides which theses exist and their
+  order. Compose every `thesis`/`header` in the `Language:` language as usual.
+
 ## Grouping into theses
 
 - Use `sub_query_type` as the primary signal for grouping. Notes from `definition` belong together (a "what is X" thesis); `contrast` notes together; `scripture_ref` notes often deserve their own thesis ("scriptural foundation"); `biographical` notes belong in a "what teacher X said" thesis.

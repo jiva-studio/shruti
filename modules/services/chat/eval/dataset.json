@@ -1,0 +1,43 @@
+{
+  "gold_sets": {
+    "memory_gita_structure": {
+      "note": "The single curated memory (attribution_sIhXJ5h6e5Db): 'three-step proof' of the Bhagavad-gita's structure. Its 8 curator-picked shlokas are the gold citation set used to measure memory dilution.",
+      "verses": ["BG 6.47", "BG 7.7", "BG 9.22", "BG 10.8", "BG 10.9", "BG 10.10", "BG 10.11", "BG 18.66"]
+    }
+  },
+  "queries": [
+    {"id": "mem-ru-01", "bucket": "memory_correct", "lang": "ru", "q": "из чего состоит Бхагавад-гита", "gold": "memory_gita_structure", "expect_path": "short", "note": "baseline measured SHORT, cited 7/8"},
+    {"id": "mem-ru-02", "bucket": "memory_correct", "lang": "ru", "q": "структура Бхагавад-гиты", "gold": "memory_gita_structure", "expect_path": "long", "note": "baseline measured LONG, cited 1-3/8 — the dilution case"},
+    {"id": "mem-ru-03", "bucket": "memory_correct", "lang": "ru", "q": "на какие части делится Гита", "gold": "memory_gita_structure", "expect_path": "any"},
+    {"id": "mem-ru-04", "bucket": "memory_correct", "lang": "ru", "q": "какова общая структура Бхагавад-гиты", "gold": "memory_gita_structure", "expect_path": "any"},
+    {"id": "mem-ru-05", "bucket": "memory_correct", "lang": "ru", "q": "расскажи как устроена Бхагавад-гита", "gold": "memory_gita_structure", "expect_path": "any"},
+    {"id": "mem-ru-06", "bucket": "memory_correct", "lang": "ru", "q": "о чём Бхагавад-гита и как она построена", "gold": "memory_gita_structure", "expect_path": "any"},
+    {"id": "mem-ru-07", "bucket": "memory_correct", "lang": "ru", "q": "в чём внутренняя логика Бхагавад-гиты", "gold": "memory_gita_structure", "expect_path": "any"},
+    {"id": "mem-ru-08", "bucket": "memory_correct", "lang": "ru", "q": "к какому главному выводу ведёт Бхагавад-гита", "gold": "memory_gita_structure", "expect_path": "any"},
+    {"id": "mem-en-01", "bucket": "memory_correct", "lang": "en", "q": "what is the overall structure of the Bhagavad-gita", "gold": "memory_gita_structure", "expect_path": "any"},
+    {"id": "mem-en-02", "bucket": "memory_correct", "lang": "en", "q": "how is the Bhagavad-gita organized and what is its conclusion", "gold": "memory_gita_structure", "expect_path": "any"},
+
+    {"id": "pin-ru-01", "bucket": "pinned_correct", "lang": "ru", "q": "с чего начинается бхакти-йога", "gold": null, "expect_path": "short"},
+    {"id": "pin-ru-02", "bucket": "pinned_correct", "lang": "ru", "q": "как понять что готов к бхакти", "gold": null, "expect_path": "short"},
+    {"id": "pin-ru-03", "bucket": "pinned_correct", "lang": "ru", "q": "какие цели у ИСККОН", "gold": null, "expect_path": "short"},
+    {"id": "pin-ru-04", "bucket": "pinned_correct", "lang": "ru", "q": "что такое ананья-бхакти", "gold": null, "expect_path": "short"},
+    {"id": "pin-ru-05", "bucket": "pinned_correct", "lang": "ru", "q": "кому Кришна передал знание первым", "gold": null, "expect_path": "short"},
+    {"id": "pin-ru-06", "bucket": "pinned_correct", "lang": "ru", "q": "признаки саттвической пищи", "gold": null, "expect_path": "short"},
+
+    {"id": "open-ru-01", "bucket": "open_philosophical", "lang": "ru", "q": "Что такое душа согласно Бхагавад-гите?", "gold": null, "expect_path": "long"},
+    {"id": "open-ru-02", "bucket": "open_philosophical", "lang": "ru", "q": "Почему душа страдает в материальном мире?", "gold": null, "expect_path": "long"},
+    {"id": "open-ru-03", "bucket": "open_philosophical", "lang": "ru", "q": "Что происходит с душой после смерти?", "gold": null, "expect_path": "long"},
+    {"id": "open-ru-04", "bucket": "open_philosophical", "lang": "ru", "q": "Чем отличается душа от тела?", "gold": null, "expect_path": "long"},
+    {"id": "open-ru-05", "bucket": "open_philosophical", "lang": "ru", "q": "Что Прабхупада говорил о медитации и повторении мантры?", "gold": null, "expect_path": "long"},
+    {"id": "open-en-01", "bucket": "open_philosophical", "lang": "en", "q": "What does the Bhagavad-gita say about the nature of the self?", "gold": null, "expect_path": "long"},
+
+    {"id": "facet-ru-01", "bucket": "multi_facet", "lang": "ru", "q": "какова структура Бхагавад-гиты и когда и где она была рассказана", "gold": "memory_gita_structure", "expect_path": "any", "note": "structure facet matches memory; date/place facet does not — facet-coverage AND gate must still expand"},
+    {"id": "facet-ru-02", "bucket": "multi_facet", "lang": "ru", "q": "из чего состоит Гита и кто её рассказал Арджуне", "gold": "memory_gita_structure", "expect_path": "any"},
+    {"id": "facet-ru-03", "bucket": "multi_facet", "lang": "ru", "q": "в чём суть преданного служения и чем оно отличается от карма-йоги", "gold": null, "expect_path": "long"},
+    {"id": "facet-ru-04", "bucket": "multi_facet", "lang": "ru", "q": "что такое гуна благости и как она связана с освобождением", "gold": null, "expect_path": "long"},
+
+    {"id": "anti-ru-01", "bucket": "antithesis_prone", "lang": "ru", "q": "правда ли что без гуру невозможно достичь освобождения", "gold": null, "expect_path": "long"},
+    {"id": "anti-ru-02", "bucket": "antithesis_prone", "lang": "ru", "q": "обязательно ли отказываться от семейной жизни ради духовного прогресса", "gold": null, "expect_path": "long"},
+    {"id": "anti-ru-03", "bucket": "antithesis_prone", "lang": "ru", "q": "можно ли достичь совершенства только философией без преданности", "gold": null, "expect_path": "long"}
+  ]
+}

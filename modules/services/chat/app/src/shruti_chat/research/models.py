@@ -166,6 +166,29 @@ class AttributionMatch:
     stage: Literal["native", "cross"]    # which lookup stage produced it
 
 
+@dataclass(frozen=True)
+class MemoryResolution:
+    """A resolved curator-memory match for one turn, as produced by
+    `pipeline._resolve_memory` and consumed by the sufficiency gate +
+    `_attach_memory`.
+
+    `note` is the non-citable background briefing; `envelopes` are the curator's
+    refs resolved into citable chunks; `score`/`stage` are the lookup match
+    strength used by the sufficiency gate (a LOOSE match still injects the note
+    but must NOT short-circuit the corpus sweep — that needs a stronger bar than
+    the inject threshold). `attribution_id` is None on no match."""
+
+    note: str | None = None
+    attribution_id: str | None = None
+    envelopes: list[dict[str, Any]] = field(default_factory=list)
+    score: float = 0.0
+    stage: Literal["native", "cross"] = "native"
+
+    @property
+    def matched(self) -> bool:
+        return self.attribution_id is not None
+
+
 # ---- Fanout / coverage ----------------------------------------------------
 
 
