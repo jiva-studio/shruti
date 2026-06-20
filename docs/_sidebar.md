@@ -17,6 +17,7 @@
   * [Startup flow](repos/lectorium/architecture/startup-flow.md)
   * [Multi-language chat & UI](repos/lectorium/architecture/multilanguage.md)
   * [Attribution lookup](repos/lectorium/architecture/attribution.md)
+  * [Memory (curator context)](repos/lectorium/architecture/memory.md)
   * [Proactive messages](repos/lectorium/architecture/proactive-messages.md)
   * [Authentication](repos/lectorium/architecture/auth.md)
   * [Subscriptions & RevenueCat](repos/lectorium/architecture/subscriptions.md)
