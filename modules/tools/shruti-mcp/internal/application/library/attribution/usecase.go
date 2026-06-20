@@ -35,34 +35,59 @@ type UseCase struct {
 // (sourceLang, sourceText) variant, its id is returned and nothing is
 // created. This lets a bulk import (or a retried single create) re-run
 // safely without minting duplicates — no external checkpoint needed.
-func (uc UseCase) Create(ctx context.Context, kind library.AttributionKind, sourceLang, sourceText string) (string, error) {
+// `note` is only meaningful for kind=memory — the long curator note set in
+// `sourceLang` and (best-effort) auto-translated into every other supported
+// language. Empty for pinned/boost.
+func (uc UseCase) Create(ctx context.Context, kind library.AttributionKind, sourceLang, sourceText, note string) (string, error) {
 	if sourceText == "" {
 		return "", fmt.Errorf("create attribution: text required")
 	}
 	if sourceLang == "" {
 		return "", fmt.Errorf("create attribution: language required")
 	}
-	if kind != library.AttrPinned && kind != library.AttrBoost {
+	if kind != library.AttrPinned && kind != library.AttrBoost && kind != library.AttrMemory {
 		return "", fmt.Errorf("create attribution: invalid kind %q", kind)
 	}
-	if existing, found, err := uc.Repo.AttributionFindByText(ctx, kind, sourceLang, sourceText); err != nil {
+	existing, found, err := uc.Repo.AttributionFindByText(ctx, kind, sourceLang, sourceText)
+	if err != nil {
 		return "", err
-	} else if found {
-		return existing, nil
 	}
-	id := idPrefix + uc.Minter.MintTail()
-	if err := uc.Repo.AttributionCreate(ctx, id, kind, sourceLang, sourceText); err != nil {
-		return "", err
+	id := existing
+	if !found {
+		id = idPrefix + uc.Minter.MintTail()
+		if err := uc.Repo.AttributionCreate(ctx, id, kind, sourceLang, sourceText); err != nil {
+			return "", err
+		}
+		uc.autoTranslateTriggers(ctx, id, kind, sourceLang, sourceText)
 	}
 
+	// Note handling is idempotent-safe: setting it on an existing memory
+	// re-runs the set/translate (note_set is an upsert) so a retried create
+	// still lands the note.
+	if kind == library.AttrMemory && note != "" {
+		uc.setAndTranslateNote(ctx, id, sourceLang, note)
+	}
+	return id, nil
+}
+
+// autoTranslateTriggers best-effort translates the source trigger text into
+// every other supported language. Failures are logged, never fatal.
+func (uc UseCase) autoTranslateTriggers(ctx context.Context, id string, kind library.AttributionKind, sourceLang, sourceText string) {
 	if uc.Translator == nil {
-		return id, nil
+		return
+	}
+	// A trigger is a short search phrase. For memory it's query-like, so use the
+	// pinned prompt (short, register-preserving) rather than the long-note
+	// memory prompt — the note itself is translated separately.
+	triggerKind := kind
+	if triggerKind == library.AttrMemory {
+		triggerKind = library.AttrPinned
 	}
 	for _, lang := range uc.Langs {
 		if lang == sourceLang {
 			continue
 		}
-		translated, err := uc.Translator.Translate(ctx, sourceText, sourceLang, lang, kind)
+		translated, err := uc.Translator.Translate(ctx, sourceText, sourceLang, lang, triggerKind)
 		if err != nil {
 			slog.WarnContext(ctx, "attribution auto-translate failed",
 				"attribution_id", id, "from", sourceLang, "to", lang, "err", err)
@@ -76,7 +101,37 @@ func (uc UseCase) Create(ctx context.Context, kind library.AttributionKind, sour
 				"attribution_id", id, "to", lang, "err", err)
 		}
 	}
-	return id, nil
+}
+
+// setAndTranslateNote sets the note in sourceLang then best-effort translates
+// it into every other supported language (kind=memory prompt). Failures are
+// logged, never fatal. Existing translations are overwritten.
+func (uc UseCase) setAndTranslateNote(ctx context.Context, id, sourceLang, note string) {
+	if err := uc.Repo.AttributionNoteSet(ctx, id, sourceLang, note); err != nil {
+		slog.WarnContext(ctx, "attribution note set failed", "attribution_id", id, "lang", sourceLang, "err", err)
+		return
+	}
+	if uc.Translator == nil {
+		return
+	}
+	for _, lang := range uc.Langs {
+		if lang == sourceLang {
+			continue
+		}
+		translated, err := uc.Translator.Translate(ctx, note, sourceLang, lang, library.AttrMemory)
+		if err != nil {
+			slog.WarnContext(ctx, "attribution note auto-translate failed",
+				"attribution_id", id, "from", sourceLang, "to", lang, "err", err)
+			continue
+		}
+		if translated == "" || translated == note {
+			continue
+		}
+		if err := uc.Repo.AttributionNoteSet(ctx, id, lang, translated); err != nil {
+			slog.WarnContext(ctx, "attribution note translate insert failed",
+				"attribution_id", id, "to", lang, "err", err)
+		}
+	}
 }
 
 func (uc UseCase) Get(ctx context.Context, id string) (library.Attribution, bool, error) {
@@ -99,6 +154,79 @@ func (uc UseCase) TextRemove(ctx context.Context, id, language, text string) err
 		return fmt.Errorf("text_remove: id, language, text required")
 	}
 	return uc.Repo.AttributionTextRemove(ctx, id, language, text)
+}
+
+func (uc UseCase) NoteSet(ctx context.Context, id, language, note string) error {
+	if id == "" || language == "" || note == "" {
+		return fmt.Errorf("note_set: id, language, note required")
+	}
+	return uc.Repo.AttributionNoteSet(ctx, id, language, note)
+}
+
+func (uc UseCase) NoteRemove(ctx context.Context, id, language string) error {
+	if id == "" || language == "" {
+		return fmt.Errorf("note_remove: id, language required")
+	}
+	return uc.Repo.AttributionNoteRemove(ctx, id, language)
+}
+
+// NoteTranslate fills in missing `toLang` notes by translating from `fromLang`.
+// If `ids` is empty it walks every memory attribution. Existing `toLang` notes
+// are left untouched (never overwrites a human edit). Returns the count of
+// notes written.
+func (uc UseCase) NoteTranslate(ctx context.Context, fromLang, toLang string, ids []string) (int, error) {
+	if fromLang == "" || toLang == "" {
+		return 0, fmt.Errorf("note_translate: from and to language required")
+	}
+	if fromLang == toLang {
+		return 0, fmt.Errorf("note_translate: from and to language must differ")
+	}
+	if uc.Translator == nil {
+		return 0, fmt.Errorf("note_translate: translator not configured")
+	}
+
+	targets := ids
+	if len(targets) == 0 {
+		items, err := uc.Repo.AttributionList(ctx, library.ListAttributionsOpts{Kind: library.AttrMemory, Limit: 500})
+		if err != nil {
+			return 0, err
+		}
+		for _, it := range items {
+			targets = append(targets, it.ID)
+		}
+	}
+
+	written := 0
+	for _, id := range targets {
+		a, ok, err := uc.Repo.AttributionGet(ctx, id)
+		if err != nil {
+			return written, err
+		}
+		if !ok || a.Kind != library.AttrMemory {
+			continue
+		}
+		src, hasSrc := a.Notes[fromLang]
+		if !hasSrc || src == "" {
+			continue
+		}
+		if _, hasDst := a.Notes[toLang]; hasDst {
+			continue // never overwrite an existing translation / human edit
+		}
+		translated, err := uc.Translator.Translate(ctx, src, fromLang, toLang, library.AttrMemory)
+		if err != nil {
+			slog.WarnContext(ctx, "note_translate failed", "attribution_id", id, "to", toLang, "err", err)
+			continue
+		}
+		if translated == "" {
+			continue
+		}
+		if err := uc.Repo.AttributionNoteSet(ctx, id, toLang, translated); err != nil {
+			slog.WarnContext(ctx, "note_translate insert failed", "attribution_id", id, "to", toLang, "err", err)
+			continue
+		}
+		written++
+	}
+	return written, nil
 }
 
 func (uc UseCase) RefAdd(ctx context.Context, id string, ref library.AttributionRef) error {

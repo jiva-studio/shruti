@@ -21,6 +21,8 @@ type AttributionRepository interface {
 	AttributionList(ctx context.Context, opts library.ListAttributionsOpts) ([]library.Attribution, error)
 	AttributionTextAdd(ctx context.Context, id, language, text string) error
 	AttributionTextRemove(ctx context.Context, id, language, text string) error
+	AttributionNoteSet(ctx context.Context, id, language, note string) error
+	AttributionNoteRemove(ctx context.Context, id, language string) error
 	AttributionRefAdd(ctx context.Context, id string, ref library.AttributionRef) error
 	AttributionRefRemove(ctx context.Context, id string, ref library.AttributionRef) error
 	AttributionDelete(ctx context.Context, id string) error

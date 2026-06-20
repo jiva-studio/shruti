@@ -24,7 +24,8 @@ func TestApplyLocalMigrations_FromEmpty(t *testing.T) {
 
 	want := []string{
 		"library_attributions",
-		"library_attribution_texts",
+		"library_attribution_triggers",
+		"library_attribution_notes",
 		"library_attribution_refs",
 	}
 	for _, name := range want {
@@ -148,9 +149,14 @@ func TestApplyLocalMigrations_CascadeDelete(t *testing.T) {
 		t.Fatalf("insert parent: %v", err)
 	}
 	if _, err := db.ExecContext(ctx,
-		`INSERT INTO library_attribution_texts (attribution_id, language, text) VALUES (?,?,?)`,
+		`INSERT INTO library_attribution_triggers (attribution_id, language, text) VALUES (?,?,?)`,
 		"attribution_q", "ru", "что такое разум"); err != nil {
-		t.Fatalf("insert text: %v", err)
+		t.Fatalf("insert trigger: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO library_attribution_notes (attribution_id, language, note) VALUES (?,?,?)`,
+		"attribution_q", "ru", "длинная заметка"); err != nil {
+		t.Fatalf("insert note: %v", err)
 	}
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO library_attribution_refs (attribution_id, ref_kind, target_id) VALUES (?,?,?)`,
@@ -162,12 +168,19 @@ func TestApplyLocalMigrations_CascadeDelete(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 	var n int
-	row := db.QueryRowContext(ctx, "SELECT count(*) FROM library_attribution_texts WHERE attribution_id='attribution_q'")
+	row := db.QueryRowContext(ctx, "SELECT count(*) FROM library_attribution_triggers WHERE attribution_id='attribution_q'")
 	if err := row.Scan(&n); err != nil {
-		t.Fatalf("query texts: %v", err)
+		t.Fatalf("query triggers: %v", err)
 	}
 	if n != 0 {
-		t.Fatalf("expected cascade delete of texts (got %d rows)", n)
+		t.Fatalf("expected cascade delete of triggers (got %d rows)", n)
+	}
+	row = db.QueryRowContext(ctx, "SELECT count(*) FROM library_attribution_notes WHERE attribution_id='attribution_q'")
+	if err := row.Scan(&n); err != nil {
+		t.Fatalf("query notes: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("expected cascade delete of notes (got %d rows)", n)
 	}
 	row = db.QueryRowContext(ctx, "SELECT count(*) FROM library_attribution_refs WHERE attribution_id='attribution_q'")
 	if err := row.Scan(&n); err != nil {
@@ -260,13 +273,14 @@ func TestApplyLocalMigrations_KindRenamePinnedBoost(t *testing.T) {
 		t.Fatalf("topic should map to boost, got %q", kind)
 	}
 
-	// Children survived the FK-parent rebuild (no cascade).
+	// Children survived the FK-parent rebuild (no cascade). The legacy
+	// library_attribution_texts was renamed to library_attribution_triggers.
 	var n int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM library_attribution_texts WHERE attribution_id='attribution_q'`).Scan(&n); err != nil {
-		t.Fatalf("count texts: %v", err)
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM library_attribution_triggers WHERE attribution_id='attribution_q'`).Scan(&n); err != nil {
+		t.Fatalf("count triggers: %v", err)
 	}
 	if n != 1 {
-		t.Fatalf("expected text to survive, got %d", n)
+		t.Fatalf("expected trigger to survive, got %d", n)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM library_attribution_refs WHERE attribution_id='attribution_q'`).Scan(&n); err != nil {
 		t.Fatalf("count refs: %v", err)
@@ -290,5 +304,117 @@ func TestApplyLocalMigrations_KindRenamePinnedBoost(t *testing.T) {
 	// Migration is idempotent — second run is a no-op.
 	if err := applyLocalMigrations(ctx, db); err != nil {
 		t.Fatalf("re-apply: %v", err)
+	}
+}
+
+// TestApplyLocalMigrations_RenameTextsToTriggers seeds a DB that still has the
+// old library_attribution_texts table (with a row) and asserts the migration
+// renames it to library_attribution_triggers, preserving the row, and drops
+// the old name.
+func TestApplyLocalMigrations_RenameTextsToTriggers(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "library.db")
+	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	legacy := []string{
+		`CREATE TABLE library_attributions (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL CHECK (kind IN ('pinned', 'boost')),
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL
+		)`,
+		`CREATE TABLE library_attribution_texts (
+			attribution_id TEXT NOT NULL REFERENCES library_attributions(id) ON DELETE CASCADE,
+			language TEXT NOT NULL,
+			text TEXT NOT NULL,
+			PRIMARY KEY (attribution_id, language, text)
+		)`,
+		`INSERT INTO library_attributions (id, kind, created_at, updated_at) VALUES ('attribution_q','pinned','t','t')`,
+		`INSERT INTO library_attribution_texts (attribution_id, language, text) VALUES ('attribution_q','ru','структура гиты')`,
+	}
+	for _, s := range legacy {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			t.Fatalf("legacy ddl: %v", err)
+		}
+	}
+
+	if err := applyLocalMigrations(ctx, db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// Old name gone, new name present with the row.
+	var n int
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='library_attribution_texts'").Scan(&n); err != nil {
+		t.Fatalf("query old: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("expected library_attribution_texts to be gone, got %d", n)
+	}
+	var text string
+	if err := db.QueryRowContext(ctx, `SELECT text FROM library_attribution_triggers WHERE attribution_id='attribution_q'`).Scan(&text); err != nil {
+		t.Fatalf("read trigger: %v", err)
+	}
+	if text != "структура гиты" {
+		t.Fatalf("trigger row not preserved, got %q", text)
+	}
+}
+
+// TestApplyLocalMigrations_AddsMemoryKindAndRefLanguage seeds a DB with the
+// pinned/boost-only CHECK and a refs table without a language column, then
+// asserts the migration allows kind='memory' and adds the optional ref language.
+func TestApplyLocalMigrations_AddsMemoryKindAndRefLanguage(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "library.db")
+	db, err := sql.Open("sqlite3", "file:"+path+"?_foreign_keys=ON")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	legacy := []string{
+		`CREATE TABLE library_attributions (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL CHECK (kind IN ('pinned', 'boost')),
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL
+		)`,
+		`CREATE TABLE library_attribution_refs (
+			attribution_id TEXT NOT NULL REFERENCES library_attributions(id) ON DELETE CASCADE,
+			ref_kind TEXT NOT NULL,
+			target_id TEXT NOT NULL,
+			position INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (attribution_id, ref_kind, target_id)
+		)`,
+	}
+	for _, s := range legacy {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			t.Fatalf("legacy ddl: %v", err)
+		}
+	}
+
+	if err := applyLocalMigrations(ctx, db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// kind='memory' now accepted.
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO library_attributions (id, kind, created_at, updated_at) VALUES ('attribution_m','memory','t','t')`); err != nil {
+		t.Fatalf("expected memory kind accepted: %v", err)
+	}
+	// refs has a language column.
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO library_attribution_refs (attribution_id, ref_kind, target_id, language) VALUES ('attribution_m','track','track_x@0-1000','en')`); err != nil {
+		t.Fatalf("expected ref language column: %v", err)
+	}
+	var lang string
+	if err := db.QueryRowContext(ctx, `SELECT language FROM library_attribution_refs WHERE attribution_id='attribution_m'`).Scan(&lang); err != nil {
+		t.Fatalf("read ref language: %v", err)
+	}
+	if lang != "en" {
+		t.Fatalf("expected ref language 'en', got %q", lang)
 	}
 }

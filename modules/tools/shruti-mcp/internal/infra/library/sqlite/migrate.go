@@ -21,14 +21,28 @@ import (
 //
 // Mirrors the pattern in internal/infra/catalog/sqlite/migrate.go.
 func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
+	// Rename library_attribution_texts → library_attribution_triggers BEFORE
+	// ensureAttributionTables so its IF NOT EXISTS sees the renamed table and
+	// doesn't create an empty duplicate.
+	if err := renameAttributionTextsToTriggers(ctx, db); err != nil {
+		return fmt.Errorf("rename attribution texts to triggers: %w", err)
+	}
 	if err := ensureAttributionTables(ctx, db); err != nil {
 		return fmt.Errorf("ensure attribution tables: %w", err)
 	}
 	if err := relaxAttributionRefKindCheck(ctx, db); err != nil {
 		return fmt.Errorf("relax attribution ref_kind check: %w", err)
 	}
+	if err := addLanguageToAttributionRefs(ctx, db); err != nil {
+		return fmt.Errorf("add language to attribution refs: %w", err)
+	}
 	if err := migrateAttributionKindToPinnedBoost(ctx, db); err != nil {
 		return fmt.Errorf("migrate attribution kind to pinned/boost: %w", err)
+	}
+	// After pinned/boost so an ancient question/topic DB lands on pinned/boost
+	// first, then gains 'memory'.
+	if err := addAttributionKindMemory(ctx, db); err != nil {
+		return fmt.Errorf("add attribution kind memory: %w", err)
 	}
 	if err := ensureMediaTable(ctx, db); err != nil {
 		return fmt.Errorf("ensure media table: %w", err)
@@ -76,45 +90,65 @@ func ensureMediaTable(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// ensureAttributionTables creates the three library_attribution* tables
+// ensureAttributionTables creates the four library_attribution* tables
 // used by the chat-service's code-driven research pipeline. Idempotent.
 //
 // Schema rationale:
 //   - library_attributions: just (id, kind, timestamps). kind enum is
-//     'question' | 'topic' — same shape, different consumer policy.
-//   - library_attribution_texts: N text variants per (id, language). PK
-//     includes text itself so multiple phrasings of one attribution can
-//     coexist (e.g. "что такое разум" + "природа разума" both index).
-//   - library_attribution_refs: opaque target_id pointing at either a
-//     library_verses.id or library_documents.id depending on ref_kind.
-//     Application layer validates existence on insert (cross-table FK
-//     not enforceable in SQLite).
+//     'pinned' | 'boost' | 'memory' — same shape, different consumer policy.
+//   - library_attribution_triggers: N short search phrases per (id, language).
+//     PK includes text itself so multiple phrasings of one attribution can
+//     coexist (e.g. "что такое разум" + "природа разума" both index). These
+//     are the search keys; for memory one of them reads like a title.
+//   - library_attribution_notes: the long curator note, ONE per (id, language).
+//     For kind='memory' it is embedded (chunked) AND injected into the
+//     synthesizer prompt as non-citable background context. Empty for
+//     pinned/boost.
+//   - library_attribution_refs: opaque target_id pointing at a library_verses.id
+//     / library_documents.id / "source/tokens" / "track@start-end" depending on
+//     ref_kind. Optional `language` scopes a ref to one answer language (a verse
+//     is language-agnostic → NULL; an EN vs RU lecture is language-specific).
+//     Application layer validates existence on insert (cross-table FK not
+//     enforceable in SQLite).
 func ensureAttributionTables(ctx context.Context, db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS library_attributions (
 			id          TEXT PRIMARY KEY,
-			kind        TEXT NOT NULL CHECK (kind IN ('pinned', 'boost')),
+			kind        TEXT NOT NULL CHECK (kind IN ('pinned', 'boost', 'memory')),
 			created_at  TIMESTAMP NOT NULL,
 			updated_at  TIMESTAMP NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS library_attributions_by_kind
 			ON library_attributions(kind)`,
 
-		`CREATE TABLE IF NOT EXISTS library_attribution_texts (
+		`CREATE TABLE IF NOT EXISTS library_attribution_triggers (
 			attribution_id TEXT NOT NULL REFERENCES library_attributions(id) ON DELETE CASCADE,
 			language       TEXT NOT NULL,
 			text           TEXT NOT NULL,
 			PRIMARY KEY (attribution_id, language, text)
 		)`,
 
-		// No CHECK on ref_kind: kinds (verse | document | title | …) are
+		// One note per (attribution, language): long, curator-authored, injected
+		// as background context for kind='memory'. PK is (id, language) — exactly
+		// one note per language, unlike the many-per-language triggers.
+		`CREATE TABLE IF NOT EXISTS library_attribution_notes (
+			attribution_id TEXT NOT NULL REFERENCES library_attributions(id) ON DELETE CASCADE,
+			language       TEXT NOT NULL,
+			note           TEXT NOT NULL,
+			PRIMARY KEY (attribution_id, language)
+		)`,
+
+		// No CHECK on ref_kind: kinds (verse | document | title | track) are
 		// validated in the repo layer, so new ref kinds never need a schema
 		// migration. relaxAttributionRefKindCheck() rebuilds older DBs that
-		// still carry the original CHECK constraint.
+		// still carry the original CHECK constraint. `language` is optional
+		// (NULL = language-agnostic); addLanguageToAttributionRefs() backfills
+		// older DBs that predate the column.
 		`CREATE TABLE IF NOT EXISTS library_attribution_refs (
 			attribution_id TEXT NOT NULL REFERENCES library_attributions(id) ON DELETE CASCADE,
 			ref_kind       TEXT NOT NULL,
 			target_id      TEXT NOT NULL,
+			language       TEXT,
 			position       INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (attribution_id, ref_kind, target_id)
 		)`,
@@ -253,6 +287,138 @@ func migrateAttributionKindToPinnedBoost(ctx context.Context, db *sql.DB) error 
 		return err
 	}
 	// Verify the FK graph is still intact after the parent swap.
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_key_check`); err != nil {
+		return fmt.Errorf("foreign_key_check after rebuild: %w", err)
+	}
+	return nil
+}
+
+// renameAttributionTextsToTriggers renames library_attribution_texts →
+// library_attribution_triggers. The table carries only a composite PRIMARY KEY
+// (no named secondary index) and nothing references it, so a plain atomic
+// ALTER TABLE … RENAME TO preserves all rows and the FK to library_attributions.
+// Idempotent: a no-op once the old table is gone (fresh or already-migrated DBs).
+func renameAttributionTextsToTriggers(ctx context.Context, db *sql.DB) error {
+	var name string
+	err := db.QueryRowContext(ctx,
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='library_attribution_texts'`,
+	).Scan(&name)
+	if err == sql.ErrNoRows {
+		return nil // already renamed, or fresh DB (ensureAttributionTables makes the new name)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx,
+		`ALTER TABLE library_attribution_texts RENAME TO library_attribution_triggers`,
+	); err != nil {
+		return fmt.Errorf("rename library_attribution_texts: %w", err)
+	}
+	return nil
+}
+
+// addLanguageToAttributionRefs adds the optional `language` column to
+// library_attribution_refs for DBs created before it existed. SQLite supports
+// ADD COLUMN for a nullable, constraint-free column in place (no rebuild).
+// Idempotent: a no-op once the column is present.
+func addLanguageToAttributionRefs(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(library_attribution_refs)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	hasLanguage := false
+	tableExists := false
+	for rows.Next() {
+		var cid int
+		var colName, colType string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &colName, &colType, &notNull, &dflt, &pk); err != nil {
+			return err
+		}
+		tableExists = true
+		if colName == "language" {
+			hasLanguage = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if !tableExists || hasLanguage {
+		return nil // fresh DB already has it, or not present yet
+	}
+	if _, err := db.ExecContext(ctx,
+		`ALTER TABLE library_attribution_refs ADD COLUMN language TEXT`,
+	); err != nil {
+		return fmt.Errorf("add language column: %w", err)
+	}
+	return nil
+}
+
+// addAttributionKindMemory extends the library_attributions kind CHECK to allow
+// 'memory'. SQLite cannot alter a CHECK in place, so this is the same
+// FK-pinned create-copy-drop-rename rebuild as migrateAttributionKindToPinnedBoost
+// (kind values are copied unchanged). Idempotent: a no-op once the CHECK already
+// mentions 'memory' (fresh DBs, or already-migrated ones).
+func addAttributionKindMemory(ctx context.Context, db *sql.DB) error {
+	var ddl string
+	err := db.QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_master WHERE type='table' AND name='library_attributions'`,
+	).Scan(&ddl)
+	if err == sql.ErrNoRows {
+		return nil // table not present yet
+	}
+	if err != nil {
+		return err
+	}
+	// Only act on a CHECK-constrained table that lacks 'memory'. A table with
+	// no CHECK at all already accepts 'memory' (and everything else), so there
+	// is nothing to do — don't impose a new constraint on it.
+	if !strings.Contains(strings.ToUpper(ddl), "CHECK") || strings.Contains(ddl, "'memory'") {
+		return nil // no CHECK to widen, or already extended
+	}
+
+	// Same FK-OFF rebuild as migrateAttributionKindToPinnedBoost: the children
+	// (triggers, notes, refs) reference id (unchanged) so they survive the swap.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("disable foreign_keys: %w", err)
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmts := []string{
+		`CREATE TABLE library_attributions_new (
+			id          TEXT PRIMARY KEY,
+			kind        TEXT NOT NULL CHECK (kind IN ('pinned', 'boost', 'memory')),
+			created_at  TIMESTAMP NOT NULL,
+			updated_at  TIMESTAMP NOT NULL
+		)`,
+		`INSERT INTO library_attributions_new (id, kind, created_at, updated_at)
+			SELECT id, kind, created_at, updated_at FROM library_attributions`,
+		`DROP TABLE library_attributions`,
+		`ALTER TABLE library_attributions_new RENAME TO library_attributions`,
+		`CREATE INDEX IF NOT EXISTS library_attributions_by_kind
+			ON library_attributions(kind)`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("rebuild %q: %w", firstLine(s), err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
 	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_key_check`); err != nil {
 		return fmt.Errorf("foreign_key_check after rebuild: %w", err)
 	}
