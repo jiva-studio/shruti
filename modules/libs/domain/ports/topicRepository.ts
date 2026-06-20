@@ -10,6 +10,9 @@ export interface TrackTopicWeight {
 
 export interface ITopicRepository {
   getById(id: TopicId): Promise<Topic | null>
+  /** Topics for the given ids, in the SAME order as `ids` (unknown ids are
+   *  dropped). Used by the onboarding picker to render a curated, ordered set. */
+  getByIds(ids: readonly TopicId[]): Promise<readonly Topic[]>
   listAll(): Promise<readonly Topic[]>
   /** (topic, weight) rows for the given tracks — feeds the taste profile. */
   weightsForTracks(trackIds: readonly TrackId[]): Promise<readonly TrackTopicWeight[]>

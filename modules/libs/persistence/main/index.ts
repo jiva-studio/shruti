@@ -117,3 +117,22 @@ export interface MigrationRow {
   readonly scheme: number | null
   readonly applied_at: number
 }
+
+/** General-purpose settings store. Value is an opaque (usually JSON) string. */
+export interface KeyValueRow {
+  readonly key: string
+  readonly value: string
+  readonly updated_at: number
+}
+
+/** One playable daily-wisdom fragment tied to a topic. */
+export interface DailyWisdomRow {
+  readonly id: string
+  readonly track_id: string
+  readonly language: string
+  readonly start_ms: number
+  readonly end_ms: number
+  readonly text: string
+  readonly topic_id: string
+  readonly created_at: number
+}
