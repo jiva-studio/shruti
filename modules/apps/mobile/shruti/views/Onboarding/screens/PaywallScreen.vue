@@ -52,7 +52,11 @@ const emit = defineEmits<{ (e: "done"): void }>()
 
 const subscription = useSubscriptionBinding()
 
-const shots = ["/onboarding/paywall-1.webp", "/onboarding/paywall-2.webp", "/onboarding/paywall-3.webp"]
+const shots = [
+  "/onboarding/paywall-1.webp",
+  "/onboarding/paywall-2.webp",
+  "/onboarding/paywall-3.webp",
+]
 const failed = reactive(new Set<string>())
 
 // Once the purchase lands, leave onboarding for Home.

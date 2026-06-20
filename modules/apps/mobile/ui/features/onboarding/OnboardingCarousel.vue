@@ -52,7 +52,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { IonButton } from "@ionic/vue"
-import { useHorizontalCarousel } from "@ui/features/subscription/useHorizontalCarousel.js"
+import { useHorizontalCarousel } from "@ui/components/useHorizontalCarousel.js"
 
 const props = withDefaults(
   defineProps<{
@@ -160,7 +160,9 @@ const trackStyle = computed(() => {
   border: none;
   border-radius: 50%;
   background: var(--ion-color-step-300, #ccc);
-  transition: background 0.2s ease, width 0.2s ease;
+  transition:
+    background 0.2s ease,
+    width 0.2s ease;
   cursor: pointer;
 }
 
