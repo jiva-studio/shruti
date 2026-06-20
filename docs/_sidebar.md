@@ -15,6 +15,7 @@
   * [Overview](repos/lectorium/architecture/)
   * [Layer rules](repos/lectorium/architecture/layers.md)
   * [Startup flow](repos/lectorium/architecture/startup-flow.md)
+  * [Onboarding](repos/lectorium/architecture/onboarding.md)
   * [Multi-language chat & UI](repos/lectorium/architecture/multilanguage.md)
   * [Attribution lookup](repos/lectorium/architecture/attribution.md)
   * [Memory (curator context)](repos/lectorium/architecture/memory.md)
