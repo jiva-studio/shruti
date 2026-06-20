@@ -31,6 +31,9 @@ from shruti_chat.research.constants import (
     BOOST_ACCEPT_SCORE_CROSS,
     BOOST_ACCEPT_SCORE_NATIVE,
     BOOST_MAX_MATCHES_PER_TOPIC,
+    MEMORY_ACCEPT_SCORE_CROSS,
+    MEMORY_ACCEPT_SCORE_NATIVE,
+    MEMORY_MAX_MATCHES,
 )
 from shruti_chat.research.models import AttributionMatch, AttributionRef
 
@@ -41,7 +44,7 @@ log = get_logger(__name__)
 # Lookup is parameterised so the same helper covers pinned + boost.
 async def find_attributions(
     *,
-    kind: Literal["pinned", "boost"],
+    kind: Literal["pinned", "boost", "memory"],
     user_q_embedding: list[float],
     lang: str,
     embed_model: str,
@@ -68,6 +71,14 @@ async def find_attributions(
         ac = accept_cross if accept_cross is not None else BOOST_ACCEPT_SCORE_CROSS
         bs = None  # topic does not use LLM-confirm
         mm = max_matches if max_matches is not None else BOOST_MAX_MATCHES_PER_TOPIC
+    elif kind == "memory":
+        # Same boost-style path (native → cross, no LLM-confirm). The note is
+        # advisory background context, so a sub-threshold cosine just means "no
+        # memory this turn" — no need to second-guess with a judge.
+        an = accept_native if accept_native is not None else MEMORY_ACCEPT_SCORE_NATIVE
+        ac = accept_cross if accept_cross is not None else MEMORY_ACCEPT_SCORE_CROSS
+        bs = None
+        mm = max_matches if max_matches is not None else MEMORY_MAX_MATCHES
     else:
         return []
 
@@ -186,7 +197,11 @@ async def _query(
     for r in rows:
         refs_raw = json.loads(r["refs_json"]) if r["refs_json"] else []
         refs = [
-            AttributionRef(ref_kind=ref.get("ref_kind", ""), target_id=ref.get("target_id", ""))
+            AttributionRef(
+                ref_kind=ref.get("ref_kind", ""),
+                target_id=ref.get("target_id", ""),
+                language=ref.get("language") or "",
+            )
             for ref in refs_raw
             if ref.get("target_id")
         ]

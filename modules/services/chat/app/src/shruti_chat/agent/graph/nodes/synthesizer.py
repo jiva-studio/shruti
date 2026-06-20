@@ -251,6 +251,7 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         system_prompt=system_prompt,
         history=state.get("history") or None,
         outline=state.get("outline"),
+        memory_note=state.get("memory_note"),
         request_id=ctx.request_id,
         callbacks=[cb] if cb is not None else None,
     )
