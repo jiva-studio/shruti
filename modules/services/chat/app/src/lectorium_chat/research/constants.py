@@ -37,10 +37,13 @@ BOOST_MAX_MATCHES_PER_TOPIC = 3
 # memory-attribution (curator note → non-citable background context).
 # Matched by trigger phrases AND note chunks against the user query. No
 # LLM-confirm gate (the note is advisory, not an authoritative source claim),
-# so the bar sits between pinned and boost. One memory per turn keeps the
-# injected context focused.
-MEMORY_ACCEPT_SCORE_NATIVE = 0.72
-MEMORY_ACCEPT_SCORE_CROSS = 0.68
+# so the bar sits LOW — measured on prod data, structure-paraphrases of one
+# trigger cluster at 0.62-0.69 while unrelated same-book queries top out at
+# ~0.49, so 0.60 catches paraphrases without a trigger per phrasing and keeps a
+# clean margin. The note being non-citable makes a loose match cheap (the
+# synthesizer just ignores an off-topic briefing). One memory per turn.
+MEMORY_ACCEPT_SCORE_NATIVE = 0.60
+MEMORY_ACCEPT_SCORE_CROSS = 0.55
 MEMORY_MAX_MATCHES = 1
 # Cross-encoder gate for fetched boost (topic-attribution) refs. boost matches
 # come from the EXTRACTED-TOPIC embedding (not the user question) and are pinned

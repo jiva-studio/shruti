@@ -1023,18 +1023,22 @@ async def test_boost_topic_refs_ungated_without_reranker():
 # ---- memory layer --------------------------------------------------------
 
 
-def test_attach_memory_folds_note_and_refs() -> None:
+def test_attach_memory_refs_are_authoritative() -> None:
+    # Curator-picked refs ride with authoritative_refs (pinned ahead of the
+    # reranked fanout pool), NOT thrown into the reranked research_chunks.
     result = ResearchResult(
-        authoritative_refs=[],
+        authoritative_refs=[{"type": "verse", "ref": 5}],
         research_chunks=[{"type": "verse", "ref": 1}],
     )
-    env = {"type": "lecture", "ref": 9}
+    env = {"type": "verse", "ref": 9}
     _attach_memory(result, ("Бэкграунд про Гиту.", "attribution_m", [env]))
     assert result.memory_note == "Бэкграунд про Гиту."
     assert result.matched_memory_id == "attribution_m"
-    # Memory refs join the citable pool; the original chunk is preserved.
-    assert env in result.research_chunks
-    assert len(result.research_chunks) == 2
+    assert env in result.authoritative_refs
+    assert len(result.authoritative_refs) == 2
+    # The reranked pool is untouched.
+    assert env not in result.research_chunks
+    assert len(result.research_chunks) == 1
 
 
 def test_attach_memory_no_match_is_noop() -> None:
@@ -1043,12 +1047,15 @@ def test_attach_memory_no_match_is_noop() -> None:
     assert result.memory_note is None
     assert result.matched_memory_id is None
     assert len(result.research_chunks) == 1
+    assert len(result.authoritative_refs) == 0
 
 
 @pytest.mark.asyncio
 async def test_resolve_memory_no_pool_is_noop() -> None:
     note, mem_id, envs = await _resolve_memory(
         user_q_embedding=[0.1, 0.2],
+        sub_query_texts=[],
+        embedder=None,
         retrieval_lang="ru",
         answer_lang="ru",
         embed_model="m",
@@ -1061,3 +1068,42 @@ async def test_resolve_memory_no_pool_is_noop() -> None:
         on_event=None,
     )
     assert (note, mem_id, envs) == (None, None, [])
+
+
+@pytest.mark.asyncio
+async def test_resolve_memory_probes_sub_queries(monkeypatch) -> None:
+    """The lookup runs against the raw query AND each sub-query, keeping the
+    best match — so a paraphrase the raw query misses still fires when a
+    sub-query matches the trigger strongly."""
+    import lectorium_chat.research.pipeline as pl
+
+    class _Emb:
+        async def embed_queries(self, texts):
+            return [[0.0] for _ in texts]
+
+    # Raw query → weak match (0.40); sub-query #2 → strong match (0.88).
+    scores = iter([0.40, 0.20, 0.88])
+
+    async def fake_find(**kwargs):
+        s = next(scores)
+        return [AttributionMatch(attribution_id="attribution_m", kind="memory",
+                                 refs=[], score=s, stage="native")]
+
+    async def fake_note(pool, aid, lang):
+        return "note-body"
+
+    monkeypatch.setattr(pl, "find_attributions", fake_find)
+    monkeypatch.setattr(pl, "_fetch_memory_note", fake_note)
+
+    note, mem_id, envs = await _resolve_memory(
+        user_q_embedding=[0.1],
+        sub_query_texts=["структура Бхагавад-гиты", "темы частей"],
+        embedder=_Emb(),
+        retrieval_lang="ru", answer_lang="ru",
+        embed_model="m", embed_dim=1024, pool=object(),
+        chunk_repo=None, alias_map=None, library_db=None,
+        catalog_repo=None, on_event=None,
+    )
+    # Best across all 3 probes (raw + 2 sub-queries) is the 0.88 one → fires.
+    assert mem_id == "attribution_m"
+    assert note == "note-body"
