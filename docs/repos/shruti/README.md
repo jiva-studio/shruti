@@ -1,3 +1,6 @@
+<!-- BEGIN AUTOGEN -->
+# shruti
+
 <p align="center">
     <img src="assets/logo.png" height="184px"/>
 </p>
@@ -48,7 +51,7 @@ The **mobile app** (Ionic + Capacitor + Vue 3) ships a prebuilt SQLite catalog i
 
 A small **backend** powers the online features: a Go `auth` service (JWT over Google/Apple/device identities), a Python `chat` service (semantic, cited AI answers over the transcript corpus), and `share-audio` / `share-transcript` / `share-video` for generating shareable clips. These run behind a shared `infra/` stack (Postgres + Caddy). Content is produced and published by the `shruti-mcp` toolchain, which owns the catalog SQLite and the transcription/denoising pipelines.
 
-The codebase follows **hexagonal / clean / DDD** architecture. Internal documentation (architecture layers, startup flow, storage layout, DB schemas) lives in [`docs/`](./docs) and is served as a docsify site.
+The codebase follows **hexagonal / clean / DDD** architecture. Internal documentation (architecture layers, startup flow, storage layout, DB schemas) lives in `docs/` and is served as a docsify site.
 
 # Repository layout
 
@@ -94,3 +97,63 @@ modules/
 1. First-time setup: `make mobile-install` (installs npm deps for the mobile app).
 2. `make help` from the repo root lists every entry point — dev server, Android/iOS builds, Fastlane screenshots, transcriber/MCP daemons, worktrees.
 3. Common starting points: `make mobile` (dev server on :11001), `make mobile-build` (debug APK — runs `npm ci` itself, no setup needed), `make mobile-deploy` (install on connected device).
+<!-- END AUTOGEN -->
+
+<!-- USER NOTES -->
+<!-- Anything below is preserved across regeneration. -->
+
+## Documentation
+
+- **Architecture**
+  - [Overview](architecture/) — entry point: hexagonal/clean, top-level layout, no backend.
+  - [Layer rules](architecture/layers.md) — authoritative dependency rules, allowed imports, decision tree.
+  - [Startup flow](architecture/startup-flow.md) — `main.ts` → first DB query, CDN probing, offline fallback, retry loop.
+  - Chat — [pipeline](architecture/chat-pipeline.md), [intents & routing](architecture/chat-intents.md), [mobile ↔ server protocol](architecture/chat-protocol.md).
+  - [Multi-language chat & UI](architecture/multilanguage.md) — content vs UI language, fallback rules.
+  - [Attribution lookup](architecture/attribution.md) — pinned shlokas / boosts, the `locate` intent.
+  - [Proactive messages](architecture/proactive-messages.md) — rule engine, arbitration, one winner per day.
+  - [Authentication](architecture/auth.md) — JWT refresh rotation, RevenueCat reconcile.
+  - [Subscriptions & RevenueCat](architecture/subscriptions.md) — tiers, webhook→reconcile→token, paywall, chat quota.
+  - [Background playlist (Pro)](architecture/background-playlist.md) — native-owned queue, durable journal, resume reconcile.
+  - [Observability (Langfuse)](architecture/observability.md) — trace ids, prompt management.
+  - **Flows** — sequence diagrams: [play track](architecture/flows/playback.md), [transcript load](architecture/flows/transcript-load.md), [DB refresh](architecture/flows/content-db-refresh.md), [note create](architecture/flows/note-create.md), [media download](architecture/flows/media-download.md).
+- **Domain**
+  - [Overview](domain/) — pure layer, ports, error policy.
+  - [Entities](domain/entities.md) — Track, TrackVariant, Note, PlaylistItem, MediaItem with class diagrams + state machines.
+  - [Value objects](domain/value-objects.md) — id aliases, `Result<T,E>`, scalars.
+  - [Ports](domain/ports.md) — 16 repository / unit-of-work interfaces with implementations map.
+- **Database**
+  - [Overview](db/) — two-DB architecture, engines per platform.
+  - [ER diagram](db/er-diagram.md) — Mermaid diagram of the content DB.
+  - [Content DB tables](db/content-db.md) — table-by-table walkthrough.
+  - [User DB](db/user-db.md) — migrations, tables, lifecycle.
+  - [ID generation](db/ids.md) — prefixed nanoid scheme, stable mapping for catalog ids.
+  - [Scheme 20260420 (raw SQL)](db/scheme.20260420.md) — versioned snapshot.
+- **Infrastructure**
+  - [Overview](infra/) — bucket + CDN big picture.
+  - [S3 layout](infra/s3-layout.md) — keys, content types, producer pipeline.
+  - [CDN](infra/cdn.md) — mirror list, probe algorithm with timeouts, version selection, caching.
+- **API**
+  - [Use cases](api/use-cases.md) — 31 application use cases across 8 feature groups, with signatures and error tags.
+- **UI**
+  - [Components](components/) — view / feature / component / primitive layer stack, controller pattern, mirror types.
+- **Modules & services**
+  - [Audio player plugin](modules/audio-player.md) — Capacitor plugin (Android/iOS/web).
+  - [media-downloader](modules/media-downloader.md) — offline-download orchestration.
+  - [share-audio](modules/share-audio.md) — stream-copy MP3 excerpt cutter (Go, in-process dispatcher).
+  - [share-video](modules/share-video.md) — 9:16 reel renderer (Go, Postgres queue + ffmpeg, JWT + quotas).
+  - [share-transcript](modules/share-transcript.md) — on-demand transcript-PDF renderer (extracted out of chat).
+  - [search-mcp](modules/search-mcp.md) — read-only pgvector MCP for curating library attributions.
+  - [cleanup-worker](modules/cleanup-worker.md) — app.outbox consumer (Langfuse purge, retention crons).
+- **Runbooks**
+  - [Development environment](runbooks/development-environment.md) — local mobile-app workflow (no backend stack).
+  - [Testing & Qase](runbooks/testing.md) — unit/e2e layout, Qase release runs.
+  - [shruti-mcp](runbooks/shruti-mcp.md) — catalog MCP daemon, pipeline stages, publishing.
+  - [track-selector](runbooks/track-selector.md) — selector syntax for pipeline fan-out.
+  - [RevenueCat webhook secret rotation](../../runbooks/rc-webhook-secret-rotation.md) — dual-slot Bearer rotation.
+  - [App Store certificates](runbooks/certificates.md) — signing setup, `APPLE_CERTIFICATES` secret, Fastlane.
+  - [Storage layout (legacy)](runbooks/storage.md) — preserved; superseded by Infrastructure section above.
+
+---
+
+> _Docs last reconciled to source at commit **`63323203`** on **2026-06-20**. Machine state in `docs/.docs-sync.json`; maintained by the `docs-generate` skill — the next update only has to diff `63323203..HEAD`._
