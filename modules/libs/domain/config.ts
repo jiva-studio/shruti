@@ -38,6 +38,7 @@ export type ProactiveRuleId =
   | "enable_notifications_hint"
   | "smart_library_hint"
   | "next_shloka"
+  | "daily_wisdom"
   | "unfinished_lecture"
 
 /**
