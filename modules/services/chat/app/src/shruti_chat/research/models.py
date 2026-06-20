@@ -144,10 +144,15 @@ class TopicExtractionResult(BaseModel):
 @dataclass(frozen=True)
 class AttributionRef:
     """One ref entry as stored in `attributions.refs` JSONB and returned
-    from find_attributions matches."""
+    from find_attributions matches.
+
+    `language` optionally scopes a ref to one answer language ("" =
+    language-agnostic, e.g. a verse; "en"/"ru" = a language-specific resource
+    like an EN vs RU lecture of the same talk)."""
 
     ref_kind: str   # "verse" | "document" | "title" | "track"
     target_id: str
+    language: str = ""
 
 
 @dataclass(frozen=True)
@@ -155,7 +160,7 @@ class AttributionMatch:
     """A single attribution returned by `find_attributions`."""
 
     attribution_id: str
-    kind: Literal["pinned", "boost"]
+    kind: Literal["pinned", "boost", "memory"]
     refs: list[AttributionRef]
     score: float
     stage: Literal["native", "cross"]    # which lookup stage produced it
@@ -247,9 +252,17 @@ class ResearchResult:
 
     `matched_question_ids` / `matched_topic_ids` — for observability +
     optional rendering of "based on N curated questions" hints in the UI.
+
+    `memory_note` — a curator memory note matched for this turn, injected by
+    the synthesizer as NON-citable background context (shapes the prose, never
+    cited). None when no memory matched. `matched_memory_id` is for
+    observability. A matched memory's refs are folded into `research_chunks`
+    (the citable pool) like boost refs.
     """
 
     authoritative_refs: list[Any] = field(default_factory=list)
     research_chunks: list[Any] = field(default_factory=list)
     matched_question_ids: list[str] = field(default_factory=list)
     matched_topic_ids: list[str] = field(default_factory=list)
+    memory_note: str | None = None
+    matched_memory_id: str | None = None
