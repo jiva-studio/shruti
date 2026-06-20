@@ -4,7 +4,8 @@ export default {
   back: "Back",
   welcome: {
     appName: "Shruti",
-    punch: "Thousands of lectures on Vedic scripture — and a spiritual assistant ready to answer any question.",
+    punch:
+      "Thousands of lectures on Vedic scripture — and a spiritual assistant ready to answer any question.",
     cta: "Get started",
   },
   topics: {
@@ -13,7 +14,8 @@ export default {
   },
   wisdom: {
     title: "Daily wisdom",
-    subtitle: "A short aphorism from the lectures, delivered to your chat once a day. Turn it off anytime.",
+    subtitle:
+      "A short aphorism from the lectures, delivered to your chat once a day. Turn it off anytime.",
     toggle: "Send me daily wisdom",
     time: "Preferred time",
     morning: "Morning",
