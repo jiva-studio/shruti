@@ -22,6 +22,37 @@ from dataclasses import dataclass
 WINDOW_MS = 45_000
 OVERLAP_BLOCKS = 2
 
+# Hard char cap per emitted chunk. The window is bounded by TIME (45s), not
+# size, so a degenerate block — e.g. a `verse:translation` carrying a whole
+# translation in one zero-duration block (26k+ chars observed in prod) — would
+# otherwise produce one unembeddable chunk: OpenRouter answers /embeddings with
+# 200 + an empty `data` array on such oversize input (not a 429), the call
+# fails after retries, the track is never marked indexed, and it re-processes
+# every run. 8000 chars ≈ ~2k tokens is safely under the model limit and a sane
+# retrieval granularity; well-formed 45s windows sit far below it, so only
+# pathological blocks get split.
+MAX_CHARS = 8000
+
+
+def _split_oversize(text: str, limit: int = MAX_CHARS) -> list[str]:
+    """Split text into <=limit-char pieces on whitespace boundaries.
+
+    Falls back to a hard slice for a single token longer than the limit.
+    """
+    if len(text) <= limit:
+        return [text]
+    pieces: list[str] = []
+    rest = text
+    while len(rest) > limit:
+        cut = rest.rfind(" ", 0, limit + 1)
+        if cut <= 0:
+            cut = limit
+        pieces.append(rest[:cut].strip())
+        rest = rest[cut:].strip()
+    if rest:
+        pieces.append(rest)
+    return [p for p in pieces if p]
+
 
 @dataclass
 class Chunk:
@@ -85,14 +116,15 @@ def chunk_reviewed(reviewed: dict) -> list[Chunk]:
             j += 1
         joined = " ".join(t for t in texts if t)
         if joined:
-            out.append(Chunk(
-                track_id=track_id,
-                lang=lang,
-                start_ms=win_start_ms,
-                end_ms=last_end_ms,
-                text=joined,
-                reference_source_id=ref_source,
-            ))
+            for piece in _split_oversize(joined):
+                out.append(Chunk(
+                    track_id=track_id,
+                    lang=lang,
+                    start_ms=win_start_ms,
+                    end_ms=last_end_ms,
+                    text=piece,
+                    reference_source_id=ref_source,
+                ))
         if j >= n:
             break
         # Overlap: rewind 2 blocks (but always make forward progress).
