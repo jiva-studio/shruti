@@ -32,6 +32,7 @@ import (
 	catalogregions "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/regions"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/topiccover"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/commit"
+	configregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/config/registry"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/ingest"
 	attributionapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
@@ -589,6 +590,18 @@ func main() {
 		Uploader: assetUploader,
 	}
 
+	// Config registry: the extensible catalog of key_value config keys the
+	// config.* tools can read/write. Validators check referential integrity
+	// against the catalog (e.g. onboarding.topics ids must exist).
+	configTopicLazy := sqlitecatalog.NewLazy(currentDBPath)
+	configRegistry := configregistry.New(configregistry.ValidateDeps{
+		TopicExists: func(ctx context.Context, id string) (bool, error) {
+			_, ok, err := configTopicLazy.GetDict(ctx, catalog.KindTopic, id)
+			return ok, err
+		},
+	})
+	configRegistry.Register(configregistry.OnboardingTopicsDescriptor())
+
 	deps := tools.Deps{
 		Registry:    registry,
 		Transcripts: transcriptStore,
@@ -628,6 +641,10 @@ func main() {
 				}
 				return sqlitecatalog.Open(ctx, currentDBPath)
 			},
+		},
+		ConfigKV: tools.ConfigDeps{
+			KV:       sqlitecatalog.NewLazy(currentDBPath),
+			Registry: configRegistry,
 		},
 		Metadata: extractmeta.UseCase{
 			Registry:        registry,
