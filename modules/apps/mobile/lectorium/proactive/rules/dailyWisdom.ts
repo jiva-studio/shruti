@@ -55,7 +55,10 @@ const handler: ProactiveRuleHandler = {
     const intro = ctx.t("chat.proactiveDailyWisdomBody")
     // Cite markers can't contain `]` or newlines in the caption (see the
     // chat marker parser), so flatten the excerpt before embedding it.
-    const caption = wisdom.text.replace(/[\r\n]+/g, " ").replace(/\]/g, ")").trim()
+    const caption = wisdom.text
+      .replace(/[\r\n]+/g, " ")
+      .replace(/\]/g, ")")
+      .trim()
     const marker = `[cite:${wisdom.trackId}@${wisdom.startMs}-${wisdom.endMs}|${caption}]`
     return { bodyMd: `${intro}\n\n${marker}` }
   },

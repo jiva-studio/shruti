@@ -11,11 +11,7 @@
       >
         <template #slide="{ index }">
           <WelcomeScreen v-if="index === 0" />
-          <TopicsScreen
-            v-else-if="index === 1"
-            :topics="topicOptions"
-            v-model="selectedTopicIds"
-          />
+          <TopicsScreen v-else-if="index === 1" :topics="topicOptions" v-model="selectedTopicIds" />
           <DailyWisdomScreen
             v-else-if="index === 2"
             :enabled="wisdomEnabled"
@@ -100,9 +96,7 @@ watch(page, async (p) => {
 
 async function loadValueLectures(): Promise<OnboardingLecture[]> {
   const seeds = (
-    selectedTopicIds.value.length > 0
-      ? selectedTopicIds.value
-      : topicOptions.value.map((t) => t.id)
+    selectedTopicIds.value.length > 0 ? selectedTopicIds.value : topicOptions.value.map((t) => t.id)
   ).slice(0, 1) as TopicId[]
   if (seeds.length === 0) return []
   const langs = filtersStore.languageCodes as readonly LanguageCode[]

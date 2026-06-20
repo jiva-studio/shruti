@@ -43,8 +43,8 @@ export const useOnboardingStore = defineStore("onboarding", () => {
 
 /** Read the completed flag without Pinia — used by startup routing before the
  *  app (and an active pinia) is mounted. */
-export async function readOnboardingCompleted(
-  preferences: { get(key: string): Promise<string | null> }
-): Promise<boolean> {
+export async function readOnboardingCompleted(preferences: {
+  get(key: string): Promise<string | null>
+}): Promise<boolean> {
   return (await preferences.get(ONBOARDING_COMPLETED_KEY)) === "true"
 }

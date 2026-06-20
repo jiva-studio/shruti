@@ -83,7 +83,10 @@ function toggle(id: string): void {
   font-size: 0.92rem;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 .ob-chip--on {
   border-color: var(--ion-color-primary);
