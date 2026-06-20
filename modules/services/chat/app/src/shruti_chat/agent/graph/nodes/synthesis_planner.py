@@ -209,6 +209,7 @@ async def synthesis_planner_node(
             model=None,
             callbacks=[cb] if cb is not None else None,
             lang_name=lang_name,
+            memory_notes=memory_notes,
         )
         if rewritten:
             resolved_intro = rewritten
