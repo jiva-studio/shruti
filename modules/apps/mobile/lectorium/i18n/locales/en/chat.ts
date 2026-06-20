@@ -269,6 +269,11 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Unfinished lecture",
   proactiveSessionTitleInactivity: "Return to your practice",
   proactiveSessionTitleWeeklyDigest: "Your week",
+  proactiveSessionTitleDailyWisdom: "Daily wisdom",
+
+  // Pre-baked intro for the `daily_wisdom` rule; the playable excerpt cite
+  // marker follows on its own line.
+  proactiveDailyWisdomBody: "A thought from the lectures for today:",
 
   // Static body for the `inactivity` re-engagement session. The escalating
   // copy lives on the notifications; the chat session itself carries one

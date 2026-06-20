@@ -18,12 +18,29 @@ function rowToWisdom(r: DailyWisdomRow): DailyWisdom {
 
 export function createSqlDailyWisdomRepository(contentDb: IDatabase): IDailyWisdomRepository {
   return {
-    async byTopic(topicId: TopicId, language: LanguageCode): Promise<readonly DailyWisdom[]> {
+    async byId(id: string): Promise<DailyWisdom | null> {
       try {
         const rows = await contentDb.query<DailyWisdomRow>(
-          "SELECT * FROM daily_wisdom WHERE topic_id = ? AND language = ?",
-          [topicId, language]
+          "SELECT * FROM daily_wisdom WHERE id = ?",
+          [id]
         )
+        return rows.length > 0 ? rowToWisdom(rows[0]) : null
+      } catch {
+        return null
+      }
+    },
+
+    async byTopic(topicId: TopicId, language?: LanguageCode): Promise<readonly DailyWisdom[]> {
+      try {
+        const rows = language
+          ? await contentDb.query<DailyWisdomRow>(
+              "SELECT * FROM daily_wisdom WHERE topic_id = ? AND language = ?",
+              [topicId, language]
+            )
+          : await contentDb.query<DailyWisdomRow>(
+              "SELECT * FROM daily_wisdom WHERE topic_id = ?",
+              [topicId]
+            )
         return rows.map(rowToWisdom)
       } catch {
         return []
@@ -32,15 +49,16 @@ export function createSqlDailyWisdomRepository(contentDb: IDatabase): IDailyWisd
 
     async topicsWithWisdom(
       topicIds: readonly TopicId[],
-      language: LanguageCode
+      language?: LanguageCode
     ): Promise<readonly TopicId[]> {
       if (topicIds.length === 0) return []
       try {
         const placeholders = topicIds.map(() => "?").join(", ")
+        const where = language ? `language = ? AND topic_id IN (${placeholders})` : `topic_id IN (${placeholders})`
+        const params = language ? [language, ...topicIds] : [...topicIds]
         const rows = await contentDb.query<{ topic_id: string }>(
-          `SELECT DISTINCT topic_id FROM daily_wisdom
-            WHERE language = ? AND topic_id IN (${placeholders})`,
-          [language, ...topicIds]
+          `SELECT DISTINCT topic_id FROM daily_wisdom WHERE ${where}`,
+          params
         )
         return rows.map((r) => r.topic_id as TopicId)
       } catch {

@@ -1,4 +1,5 @@
 import type { ProactiveRuleConfig, ProactiveRuleId } from "@lib/domain/config.js"
+import type { TopicId } from "@lib/domain/core.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
 import type { IProactiveChatService } from "@lib/contracts"
@@ -17,6 +18,10 @@ export interface ProactiveContext {
   readonly timezone: string // IANA, e.g. 'Europe/Moscow'
   readonly locale: string // app language code, e.g. 'ru'
   readonly hasNotificationsPermission: boolean
+  /** Whether the user turned on daily engagement (settings.notificationsEnabled).
+   *  The daily-wisdom rule gates on this so a silent wisdom still posts to chat
+   *  when the toggle is on even if the OS permission was denied. */
+  readonly notificationsEnabled: boolean
   readonly isSubscribed: boolean
   readonly totalListenedSeconds: number
   readonly currentStreak: number
@@ -33,6 +38,9 @@ export interface ProactiveContext {
   /** Backend HTTP client for `kind=proactive` SSE turns. Bound via
    *  port so rules don't import infra directly. */
   readonly proactiveChat: IProactiveChatService
+  /** Topic ids the user picked during onboarding (the daily-wisdom rule
+   *  samples one of these). Empty when onboarding was skipped. */
+  readonly interestTopicIds: readonly TopicId[]
 }
 
 /**
