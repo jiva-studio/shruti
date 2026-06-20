@@ -13,6 +13,18 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
       return rowToTopic(rows)
     },
 
+    async getByIds(ids: readonly TopicId[]): Promise<readonly Topic[]> {
+      if (ids.length === 0) return []
+      const placeholders = ids.map(() => "?").join(", ")
+      const rows = await contentDb.query<TopicRow>(
+        `SELECT * FROM topics WHERE id IN (${placeholders})`,
+        [...ids]
+      )
+      const byId = foldDictRows(rows, rowToTopic)
+      // Preserve the caller's order; drop ids that resolved to nothing.
+      return ids.map((id) => byId.get(id)).filter((t): t is Topic => t != null)
+    },
+
     async listAll(): Promise<readonly Topic[]> {
       const rows = await contentDb.query<TopicRow>("SELECT * FROM topics ORDER BY id ASC")
       const byId = foldDictRows(rows, rowToTopic)
