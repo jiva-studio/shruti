@@ -1,0 +1,8 @@
+{
+  "repo": "shruti",
+  "source_path": "source/shruti",
+  "synced_to_commit": "63323203e0aec477327058d813bc8ec59846d927",
+  "synced_to_commit_short": "63323203",
+  "synced_at": "2026-06-20",
+  "note": "Docs were last reconciled to source at this commit. To update: diff with `git -C source/shruti log 63323203..HEAD --stat`, document the changed areas, then rewrite this file with the new HEAD + today's date. Maintained by the docs-generate skill."
+}
