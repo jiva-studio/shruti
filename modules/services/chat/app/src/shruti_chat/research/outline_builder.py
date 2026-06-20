@@ -266,6 +266,7 @@ async def synthesize_intro(
     model: str | None = None,
     callbacks: list[Any] | None = None,
     lang_name: str | None = None,
+    memory_notes: list[str] | None = None,
 ) -> str | None:
     """Write the intro from the FINISHED theses, in a dedicated pass.
 
@@ -283,8 +284,21 @@ async def synthesize_intro(
     theses_block = "\n".join(
         f"  {i+1}. {t.thesis}" for i, t in enumerate(outline.theses)
     )
+    curator_block = ""
+    if memory_notes:
+        rendered = "\n\n".join(
+            f"[Curator note {i}]\n{txt.strip()}"
+            for i, txt in enumerate((t for t in memory_notes if t and t.strip()), start=1)
+        )
+        if rendered:
+            curator_block = (
+                "Curator notes (the answer's intended overarching framing — "
+                "see the \"Curator note\" rule):\n"
+                f"{rendered}\n\n"
+            )
     user_msg = (
         f"Language: {_lang_directive(lang, lang_name)}\n\n"
+        f"{curator_block}"
         f"Theses:\n{theses_block}"
     )
 
