@@ -17,6 +17,7 @@ from pathlib import Path
 from lectorium_chat.research.models import (
     AttributionMatch,
     AttributionRef,
+    MemoryResolution,
     QueryPlan,
     ResearchResult,
     SubQuery,
@@ -1031,7 +1032,10 @@ def test_attach_memory_refs_are_authoritative() -> None:
         research_chunks=[{"type": "verse", "ref": 1}],
     )
     env = {"type": "verse", "ref": 9}
-    _attach_memory(result, ("Бэкграунд про Гиту.", "attribution_m", [env]))
+    _attach_memory(result, MemoryResolution(
+        note="Бэкграунд про Гиту.", attribution_id="attribution_m",
+        envelopes=[env], score=0.88,
+    ))
     assert result.memory_note == "Бэкграунд про Гиту."
     assert result.matched_memory_id == "attribution_m"
     assert env in result.authoritative_refs
@@ -1043,7 +1047,7 @@ def test_attach_memory_refs_are_authoritative() -> None:
 
 def test_attach_memory_no_match_is_noop() -> None:
     result = ResearchResult(research_chunks=[{"type": "verse", "ref": 1}])
-    _attach_memory(result, (None, None, []))
+    _attach_memory(result, MemoryResolution())
     assert result.memory_note is None
     assert result.matched_memory_id is None
     assert len(result.research_chunks) == 1
@@ -1052,7 +1056,7 @@ def test_attach_memory_no_match_is_noop() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_memory_no_pool_is_noop() -> None:
-    note, mem_id, envs = await _resolve_memory(
+    mem = await _resolve_memory(
         user_q_embedding=[0.1, 0.2],
         sub_query_texts=[],
         embedder=None,
@@ -1067,7 +1071,8 @@ async def test_resolve_memory_no_pool_is_noop() -> None:
         catalog_repo=None,
         on_event=None,
     )
-    assert (note, mem_id, envs) == (None, None, [])
+    assert not mem.matched
+    assert (mem.note, mem.attribution_id, mem.envelopes) == (None, None, [])
 
 
 @pytest.mark.asyncio
@@ -1095,7 +1100,7 @@ async def test_resolve_memory_probes_sub_queries(monkeypatch) -> None:
     monkeypatch.setattr(pl, "find_attributions", fake_find)
     monkeypatch.setattr(pl, "_fetch_memory_note", fake_note)
 
-    note, mem_id, envs = await _resolve_memory(
+    mem = await _resolve_memory(
         user_q_embedding=[0.1],
         sub_query_texts=["структура Бхагавад-гиты", "темы частей"],
         embedder=_Emb(),
@@ -1105,5 +1110,49 @@ async def test_resolve_memory_probes_sub_queries(monkeypatch) -> None:
         catalog_repo=None, on_event=None,
     )
     # Best across all 3 probes (raw + 2 sub-queries) is the 0.88 one → fires.
-    assert mem_id == "attribution_m"
-    assert note == "note-body"
+    assert mem.attribution_id == "attribution_m"
+    assert mem.note == "note-body"
+    assert mem.score == 0.88
+
+
+@pytest.mark.asyncio
+async def test_memory_only_takes_lean_path(monkeypatch) -> None:
+    """A strong memory match with NO pinned attribution → the sufficiency gate
+    returns CORRECT and run_research takes the LEAN path: the memory's shlokas
+    ride as authoritative_refs, the note is set, and the WIDE topic lookup never
+    runs. This is the new branch the sufficiency gate added (#1068)."""
+    import lectorium_chat.research.pipeline as pl
+
+    async def fake_note(pool, aid, lang):
+        return "Гиту можно читать как доказательство в три шага."
+
+    monkeypatch.setattr(pl, "_fetch_memory_note", fake_note)
+
+    pool = FakePool({
+        # memory match clears MEMORY_CORRECT_SCORE_NATIVE (0.70); no pinned/boost.
+        ("ru", "memory"): [_row("attribution_mem", 0.90, [
+            {"ref_kind": "verse", "target_id": "verse_BG_6_47"},
+            {"ref_kind": "verse", "target_id": "verse_BG_7_7"},
+            {"ref_kind": "verse", "target_id": "verse_BG_9_22"},
+        ])],
+    })
+    chunk_repo = FakeChunkRepo(by_target={
+        ("verse", "verse_BG_6_47"): [_LibChunk("verse_BG_6_47", "verse", "6.47", "ru", source_id="src", tokens="6.47", addr_label="БГ 6.47")],
+        ("verse", "verse_BG_7_7"): [_LibChunk("verse_BG_7_7", "verse", "7.7", "ru", source_id="src", tokens="7.7", addr_label="БГ 7.7")],
+        ("verse", "verse_BG_9_22"): [_LibChunk("verse_BG_9_22", "verse", "9.22", "ru", source_id="src", tokens="9.22", addr_label="БГ 9.22")],
+    })
+    llm = FakeLLM(by_schema={"QueryPlan": _plan("структура Бхагавад-гиты")})
+
+    result = await run_research(
+        question="структура Бхагавад-гиты", lang="ru", router_args={},
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+
+    # memory-only CORRECT → lean: note set, 3 curator shlokas pinned as
+    # authoritative, and NO topic-attribution lookup (that's the WIDE path).
+    assert result.memory_note == "Гиту можно читать как доказательство в три шага."
+    assert result.matched_memory_id == "attribution_mem"
+    assert result.matched_question_ids == []   # no pinned
+    assert result.matched_topic_ids == []      # WIDE path never ran
+    tokens = sorted(e["meta"]["tokens"] for e in result.authoritative_refs)
+    assert tokens == ["6.47", "7.7", "9.22"]

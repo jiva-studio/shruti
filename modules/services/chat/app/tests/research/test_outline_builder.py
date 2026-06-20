@@ -55,6 +55,32 @@ def _note(idx: int, *, text: str = "x", score: float = 0.7, **meta) -> dict:
 
 
 @pytest.mark.asyncio
+async def test_curator_note_anchors_the_planner(monkeypatch) -> None:
+    """A memory_note rides into the planner's user message as an AUTHORITATIVE
+    curator-note block (Phase 4 — thesis-anchoring)."""
+    llm = FakeLLM(Outline(theses=[
+        Thesis(thesis="t", supporting_notes=[1]),
+    ]))
+    await build_outline(
+        "структура Бхагавад-гиты", "ru",
+        [_note(1, text="atma", label="БГ 6.47")],
+        llm=llm,
+        memory_notes=["Шаг 1 — бхакти выше всех путей (БГ 6.47)."],
+    )
+    user_msg = llm.calls[0][0][1]["content"]
+    assert "Curator note" in user_msg
+    assert "ANCHOR" in user_msg
+    assert "Шаг 1 — бхакти выше всех" in user_msg
+
+
+@pytest.mark.asyncio
+async def test_no_curator_block_without_memory_note() -> None:
+    llm = FakeLLM(Outline(theses=[Thesis(thesis="t", supporting_notes=[1])]))
+    await build_outline("q", "ru", [_note(1)], llm=llm)
+    assert "Curator note" not in llm.calls[0][0][1]["content"]
+
+
+@pytest.mark.asyncio
 async def test_returns_outline_for_good_notes() -> None:
     llm = FakeLLM(Outline(theses=[
         Thesis(thesis="первое", supporting_notes=[1, 2], sub_query_types=["definition"]),

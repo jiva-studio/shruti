@@ -1,16 +1,26 @@
 """run_research — the orchestrator that replaces the LLM-driven ReAct loop
 for `router.intent == "research"` turns.
 
-Two paths:
-  SHORT (pinned-attribution match):
-    plan_queries ∥ find_attributions(kind=pinned)
-    → if matches: fetch_refs + supplementary fanout → return authoritative
+A sufficiency gate (`research.sufficiency.assess_sufficiency`) buckets the turn
+from curated evidence already in hand — a pinned question-attribution OR a strong
+memory match → CORRECT, else INCORRECT — and `policy_for` maps the bucket to a
+`RetrievalPolicy` preset that drives one of two paths (the legacy SHORT/LONG,
+now LEAN/WIDE presets of one policy object):
 
-  LONG (no match):
-    plan_queries ∥ find_attributions(kind=pinned) → no matches
-    → extract_topics → embed topics → find_attributions(kind=boost)
-    → fanout_search_with_boost (boost-matched item_ids get +0.15)
-    → coverage gate; up to MAX_FANOUT_ROUNDS with regenerate_queries between
+  LEAN (`_lean_path`, policy.wide_fanout=False):
+    curated authoritative refs (pinned question refs and/or a matched memory's
+    shlokas) + a bounded supplementary fanout over the first
+    `policy.supplementary_subqueries` sub-queries → slate capped at
+    `policy.slate_size`.
+
+  WIDE (`_research_path`, policy.wide_fanout=True):
+    extract_topics → embed topics → find_attributions(kind=boost) →
+    fanout_search_with_boost with a coverage gate, up to
+    `policy.max_fanout_rounds` rounds with regenerate_queries between.
+
+A matched memory is awaited BEFORE the fork so it can take the LEAN path instead
+of paying the full WIDE sweep; its note + curator refs are folded onto the result
+by `_attach_memory` regardless of path.
 
 Every external call is wrapped in `asyncio.wait_for` with a stage-specific
 timeout. On timeout: graceful fall-through with partial results, never
@@ -40,7 +50,8 @@ from lectorium_chat.research.constants import (
     BOOST_REF_RERANK_ACCEPT,
     FINAL_CUT_MIN_LIBRARY,
     FINAL_CUT_MIN_VERSES,
-    MAX_FANOUT_ROUNDS,
+    MEMORY_REF_SCORE,
+    MEMORY_SUBQUERY_CAP,
     REGEN_MAX_SUBQUERIES,
     RERANK_RESERVE_FLOOR,
     TIMEOUT_FANOUT_S,
@@ -51,6 +62,8 @@ from lectorium_chat.research.constants import (
     TIMEOUT_REGENERATE_S,
     TIMEOUT_TOPIC_EXTRACT_S,
     TIMEOUT_TOPIC_LOOKUP_S,
+    WIDE_POLICY,
+    RetrievalPolicy,
 )
 from lectorium_chat.research.corpus_fanout import (
     emit_library_research_source,
@@ -66,11 +79,13 @@ from lectorium_chat.research.models import (
     AttributionMatch,
     AttributionRef,
     FanoutResult,
+    MemoryResolution,
     QueryPlan,
     ResearchResult,
     SubQuery,
 )
 from lectorium_chat.research.query_planner import plan_queries
+from lectorium_chat.research.sufficiency import assess_sufficiency, policy_for
 from lectorium_chat.research.topic_extractor import extract_topics
 
 
@@ -305,16 +320,6 @@ def _dedupe_refs(refs: list[AttributionRef]) -> list[AttributionRef]:
     return out
 
 
-# Canonical score for a matched memory's refs in the citable pool — same flat
-# value boost refs use (floats them above ordinary fanout without claiming
-# pinned authority).
-MEMORY_REF_SCORE = 0.75
-
-# Max planner rephrasings (sub-query texts + alt_phrasings) the memory lookup
-# probes in addition to the raw query — each is one extra pgvector lookup, so
-# bound it. Raw query + up to this many keeps latency in check.
-MEMORY_SUBQUERY_CAP = 6
-
 
 async def _fetch_memory_note(pool: Any, attribution_id: str, lang: str) -> str | None:
     """The full note for a matched memory. Prefer the answer language; fall
@@ -349,9 +354,8 @@ async def _resolve_memory(
     library_db: Any | None,
     catalog_repo: Any | None,
     on_event: OnEvent | None,
-) -> tuple[str | None, str | None, list[dict[str, Any]]]:
-    """Find the best-matching memory for this turn and resolve it into
-    (note, attribution_id, ref_envelopes).
+) -> MemoryResolution:
+    """Find the best-matching memory for this turn and resolve it.
 
     The lookup runs against the raw query AND each planner sub-query, taking the
     best match. A paraphrase the raw query embeds too far from a trigger ("как
@@ -361,9 +365,12 @@ async def _resolve_memory(
 
     The note is injected as non-citable background context; the refs (scoped to
     the answer language) are resolved into citable envelopes folded into the
-    pool like boost. Best-effort — returns (None, None, []) on no match."""
+    pool like boost. The match `score`/`stage` ride along so the sufficiency
+    gate can require a STRONGER signal to short-circuit the sweep than the
+    (loose) inject threshold. Best-effort — returns an empty `MemoryResolution`
+    on no match."""
     if pool is None or not embed_model:
-        return None, None, []
+        return MemoryResolution()
 
     embeddings: list[list[float]] = [user_q_embedding]
     if sub_query_texts and embedder is not None:
@@ -381,7 +388,7 @@ async def _resolve_memory(
         if matches and (top is None or matches[0].score > top.score):
             top = matches[0]
     if top is None:
-        return None, None, []
+        return MemoryResolution()
     note = await _fetch_memory_note(pool, top.attribution_id, retrieval_lang)
     # Keep refs that are language-agnostic OR scoped to this answer language
     # (e.g. drop the EN lecture ref when answering in RU).
@@ -401,13 +408,16 @@ async def _resolve_memory(
         has_note=note is not None,
         refs=len(envelopes),
     )
-    return note, top.attribution_id, envelopes
+    return MemoryResolution(
+        note=note,
+        attribution_id=top.attribution_id,
+        envelopes=envelopes,
+        score=top.score,
+        stage=top.stage,
+    )
 
 
-def _attach_memory(
-    result: ResearchResult,
-    mem: tuple[str | None, str | None, list[dict[str, Any]]],
-) -> ResearchResult:
+def _attach_memory(result: ResearchResult, mem: MemoryResolution) -> ResearchResult:
     """Fold a resolved memory onto a ResearchResult: the note rides as
     non-citable background; the refs are AUTHORITATIVE.
 
@@ -416,11 +426,10 @@ def _attach_memory(
     — pinned ahead of the reranked fanout pool — rather than being thrown into
     the pool and reranked against ordinary chunks where the planner can drop
     them. The note builds the theses; these refs are their intended evidence."""
-    note, mem_id, envelopes = mem
-    result.memory_note = note
-    result.matched_memory_id = mem_id
-    if envelopes:
-        result.authoritative_refs = list(result.authoritative_refs) + envelopes
+    result.memory_note = mem.note
+    result.matched_memory_id = mem.attribution_id
+    if mem.envelopes:
+        result.authoritative_refs = list(result.authoritative_refs) + mem.envelopes
     return result
 
 
@@ -762,110 +771,46 @@ async def run_research(
             pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
             library_db=library_db, catalog_repo=catalog_repo, on_event=on_event,
         ),
-        default=(None, None, []),
+        default=MemoryResolution(),
         timeout=TIMEOUT_MEMORY_LOOKUP_S,
         name="memory_lookup", request_id=request_id,
     ))
 
-    # 2. SHORT PATH — question-attribution found.
-    if question_matches:
-        # Topic extraction was speculative; SHORT path doesn't use it.
+    # 2. SUFFICIENCY GATE. Await the curated memory match and decide BEFORE the
+    # wide fanout whether curated authoritative evidence already answers the
+    # turn. A pinned question-attribution is the legacy SHORT trigger; a strong
+    # memory match is now ALSO a CORRECT trigger — so a memory-answered turn
+    # takes the lean path instead of paying the full WIDE corpus sweep (100-200
+    # sources). This is the latency seam the binary SHORT/LONG fork left open.
+    #
+    # NOTE on cost: memory_task is created only AFTER the plan resolves (it
+    # consumes the plan's sub-queries), so it does NOT overlap the plan; and it
+    # was previously awaited AFTER the fork, hidden under fanout. Awaiting it
+    # here moves the lookup onto the pre-fork critical path. The gate genuinely
+    # needs the result to choose the path, so this is inherent — but the cost is
+    # small in practice: the lookup overlaps the still-running speculative
+    # topic_task, and the eval measured WIDE-bucket latency flat. It is small,
+    # not free.
+    memory_result = await memory_task
+    bucket = assess_sufficiency(question_matches, memory_result)
+    policy = policy_for(bucket)
+
+    if not policy.wide_fanout:
+        # Topic extraction was speculative; the lean path doesn't use it.
         if topic_task is not None:
             topic_task.cancel()
             topic_task = None
-        all_refs = _dedupe_refs(list(chain.from_iterable(m.refs for m in question_matches)))
-        top_score = max(m.score for m in question_matches)
-        log.info(
-            "pipeline_short_path",
-            request_id=request_id,
-            matches=len(question_matches),
-            top_score=round(top_score, 3),
-            refs=len(all_refs),
-            stage=question_matches[0].stage,
+        result = await _lean_path(
+            policy=policy,
+            question_matches=question_matches,
+            memory_envelopes=memory_result.envelopes,
+            plan=plan, question=question, lang=lang, retrieval_lang=retrieval_lang,
+            chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
+            alias_map=alias_map, llm=llm, router_args=router_args,
+            expand_model=expand_model, library_db=library_db,
+            request_id=request_id, on_event=on_event, reranker=reranker,
         )
-
-        # Supplementary fanout — broader semantic exploration around the
-        # canonical theme. No topic-boost in SHORT path. We cap at the
-        # first 3 sub_queries' primary texts only (no alt_phrasings) so
-        # SHORT path stays lean — authoritative refs already provide the
-        # core grounding.
-        supplementary_queries = [
-            (sq.id, sq.text) for sq in plan.sub_queries[:3]
-        ]
-        # fetch_refs (authoritative) and the supplementary fanout are
-        # independent reads — run them concurrently so the SHORT path costs
-        # max(fetch, fanout) instead of their sum (~2-3s saved). Each keeps
-        # its own stage timeout + stage_timing through its own `_safe`.
-        authoritative, supplementary = await asyncio.gather(
-            _safe(
-                lambda: _fetch_refs(
-                    all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-                    lang=retrieval_lang, canonical_score=top_score, on_event=on_event,
-                    library_db=library_db, catalog_repo=catalog_repo,
-                ),
-                default=[], timeout=TIMEOUT_FETCH_REFS_S,
-                name="fetch_refs", request_id=request_id,
-            ),
-            _safe(
-                lambda: fanout_search_with_boost(
-                    queries=supplementary_queries,
-                    embedder=embedder, chunk_repo=chunk_repo,
-                    catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang,
-                    author_id=router_args.get("author_id"),
-                    location_id=router_args.get("location_id"),
-                    tag_ids=router_args.get("tag_ids"),
-                    date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
-                    date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
-                    book_id=router_args.get("source_id"),
-                    on_event=on_event,
-                    reranker=reranker,
-                    rerank_query=question,
-                    boost_kinds=boost_kinds_from(question, router_args),
-                ),
-                default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
-                name="supplementary_fanout", request_id=request_id,
-            ),
-        )
-
-        # Drop supplementary fanout chunks that belong to a document already
-        # pulled IN FULL via the authoritative pinned refs. The pinned ref
-        # fetches every chunk of the document (get_chunks_by_target by
-        # item_id), so any fanout hit from the same item_id is a redundant
-        # fragment of a source we already have whole — keeping it just lets
-        # the LLM cite the document piecemeal alongside the full version.
-        # Both envelope paths key `_dedup_key = (kind, item_id, segment)`;
-        # element [1] is the library item_id (or a track_id for lectures,
-        # which never collides with an item_id namespace).
-        authoritative_item_ids = {
-            env["_dedup_key"][1]
-            for env in authoritative
-            if env.get("_dedup_key")
-        }
-        deduped_supplementary = [
-            ch for ch in supplementary.chunks
-            if not (ch.get("_dedup_key") and ch["_dedup_key"][1] in authoritative_item_ids)
-        ]
-        dropped = len(supplementary.chunks) - len(deduped_supplementary)
-        if dropped:
-            log.info(
-                "short_path_supplementary_deduped",
-                request_id=request_id,
-                dropped=dropped,
-                kept=len(deduped_supplementary),
-            )
-        supplementary_top = _balanced_cut(deduped_supplementary, 8)
-        # Commentary attachment moved POST-planner: `synthesis_planner_node`
-        # calls `rerank_and_attach_commentaries` which pulls purports only
-        # for verses the planner actually picked into supporting_notes, then
-        # cosine-reranks them against each thesis text. Avoids the 12-per-
-        # verse flood that previously inflated tool_results to ~92 notes.
-        result = ResearchResult(
-            authoritative_refs=authoritative,
-            research_chunks=supplementary_top,
-            matched_question_ids=[m.attribution_id for m in question_matches],
-            matched_topic_ids=[],
-        )
-        _attach_memory(result, await memory_task)
+        _attach_memory(result, memory_result)
         _kick_caption_gen(
             result, alias_map=alias_map, question=question, lang=lang,
             llm=llm, model=expand_model, request_id=request_id,
@@ -873,8 +818,9 @@ async def run_research(
         )
         return result
 
-    # 3. LONG PATH. If the speculative topic task is done by now, hand
-    # it through so `_research_path` can skip its own re-extraction.
+    # 3. LONG PATH (INCORRECT — no curated authoritative evidence). If the
+    # speculative topic task is done by now, hand it through so `_research_path`
+    # can skip its own re-extraction.
     speculative_topics: list[str] = []
     if topic_task is not None:
         try:
@@ -882,6 +828,7 @@ async def run_research(
         except (asyncio.CancelledError, Exception):
             speculative_topics = []
     long_result = await _research_path(
+        policy=policy,
         question=question, lang=lang, retrieval_lang=retrieval_lang, plan=plan,
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
@@ -895,13 +842,140 @@ async def run_research(
         reranker=reranker,
         callbacks=callbacks,
     )
-    _attach_memory(long_result, await memory_task)
+    _attach_memory(long_result, memory_result)
     _kick_caption_gen(
         long_result, alias_map=alias_map, question=question, lang=lang,
         llm=llm, model=expand_model, request_id=request_id,
         callbacks=callbacks,
     )
     return long_result
+
+
+async def _lean_path(
+    *,
+    policy: RetrievalPolicy,
+    question_matches: list[AttributionMatch],
+    memory_envelopes: list[dict[str, Any]] | None = None,
+    plan: QueryPlan,
+    question: str,
+    lang: str,
+    retrieval_lang: str,
+    chunk_repo: Any,
+    catalog_repo: Any,
+    embedder: Any,
+    alias_map: Any,
+    llm: Any,
+    router_args: dict[str, Any],
+    expand_model: str | None,
+    library_db: Any | None,
+    request_id: str | None,
+    on_event: OnEvent | None,
+    reranker: Any,
+) -> ResearchResult:
+    """Lean retrieval taken whenever the sufficiency gate returns CORRECT —
+    a pinned question-attribution (legacy SHORT) OR a strong memory match (new).
+
+    Curated authoritative refs are PINNED ahead of a bounded supplementary
+    fanout. On a pinned match the question-attribution refs are fetched here; on
+    a memory-only CORRECT there are no pinned refs (the memory's own shlokas are
+    folded in by `_attach_memory` in the caller). `memory_envelopes` (the
+    already-resolved memory refs) are passed in so the supplementary dedup can
+    suppress fragments of memory-pinned documents even though the attach happens
+    later. Either way the supplementary fanout explores the canonical theme
+    around the curated core without the full WIDE corpus sweep."""
+    # Pinned question-attribution refs (empty on a memory-only CORRECT).
+    all_refs = _dedupe_refs(
+        list(chain.from_iterable(m.refs for m in question_matches))
+    )
+    top_score = max((m.score for m in question_matches), default=MEMORY_REF_SCORE)
+    log.info(
+        "pipeline_lean_path",
+        request_id=request_id,
+        policy=policy.name,
+        pinned_matches=len(question_matches),
+        top_score=round(top_score, 3),
+        pinned_refs=len(all_refs),
+        stage=question_matches[0].stage if question_matches else "memory",
+    )
+
+    # Supplementary fanout — broader semantic exploration around the canonical
+    # theme. No topic-boost. Capped at the first 3 sub_queries' primary texts
+    # only (no alt_phrasings) so the lean path stays lean — authoritative refs
+    # already provide the core grounding. fetch_refs and the fanout are
+    # independent reads, run concurrently so the lean path costs max(fetch,
+    # fanout) not their sum.
+    supplementary_queries = [
+        (sq.id, sq.text) for sq in plan.sub_queries[: policy.supplementary_subqueries]
+    ]
+    authoritative, supplementary = await asyncio.gather(
+        _safe(
+            lambda: _fetch_refs(
+                all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
+                lang=retrieval_lang, canonical_score=top_score, on_event=on_event,
+                library_db=library_db, catalog_repo=catalog_repo,
+            ),
+            default=[], timeout=TIMEOUT_FETCH_REFS_S,
+            name="fetch_refs", request_id=request_id,
+        ),
+        _safe(
+            lambda: fanout_search_with_boost(
+                queries=supplementary_queries,
+                embedder=embedder, chunk_repo=chunk_repo,
+                catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang,
+                author_id=router_args.get("author_id"),
+                location_id=router_args.get("location_id"),
+                tag_ids=router_args.get("tag_ids"),
+                date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
+                date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
+                book_id=router_args.get("source_id"),
+                on_event=on_event,
+                reranker=reranker,
+                rerank_query=question,
+                boost_kinds=boost_kinds_from(question, router_args),
+            ),
+            default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
+            name="supplementary_fanout", request_id=request_id,
+        ),
+    )
+
+    # Drop supplementary fanout chunks that belong to a document already pulled
+    # IN FULL via the authoritative refs. The ref fetch pulls every chunk of the
+    # document by item_id, so any fanout hit from the same item_id is a redundant
+    # fragment of a source we already have whole. `_dedup_key = (kind, item_id,
+    # segment)`; element [1] is the library item_id (or a track_id for lectures,
+    # which never collides with an item_id namespace).
+    #
+    # `memory_envelopes` are folded in too: on a memory-only CORRECT turn there
+    # are NO pinned refs (question_matches == []), so the memory's curator-picked
+    # docs are the only authoritative material — and they're appended to the
+    # result by `_attach_memory` AFTER this function returns. Without them here, a
+    # memory-pinned full document would be cited piecemeal alongside its fanout
+    # fragments (the worker's exact-key dedup misses it: full-body segment 0 vs a
+    # fragment's segment N). Including their item_ids closes that hole.
+    authoritative_item_ids = {
+        env["_dedup_key"][1]
+        for env in (*authoritative, *(memory_envelopes or []))
+        if env.get("_dedup_key")
+    }
+    deduped_supplementary = [
+        ch for ch in supplementary.chunks
+        if not (ch.get("_dedup_key") and ch["_dedup_key"][1] in authoritative_item_ids)
+    ]
+    dropped = len(supplementary.chunks) - len(deduped_supplementary)
+    if dropped:
+        log.info(
+            "lean_path_supplementary_deduped",
+            request_id=request_id, dropped=dropped, kept=len(deduped_supplementary),
+        )
+    supplementary_top = _balanced_cut(deduped_supplementary, policy.slate_size)
+    # Commentary attachment moved POST-planner: `synthesis_planner_node` calls
+    # `rerank_and_attach_commentaries` for verses the planner actually picked.
+    return ResearchResult(
+        authoritative_refs=authoritative,
+        research_chunks=supplementary_top,
+        matched_question_ids=[m.attribution_id for m in question_matches],
+        matched_topic_ids=[],
+    )
 
 
 def _kick_caption_gen(
@@ -1014,6 +1088,7 @@ async def _gate_topic_refs(
 
 async def _research_path(
     *,
+    policy: RetrievalPolicy = WIDE_POLICY,
     question: str,
     lang: str,
     retrieval_lang: str | None = None,
@@ -1037,87 +1112,88 @@ async def _research_path(
     reranker: Any = None,
     callbacks: list[Any] | None = None,
 ) -> ResearchResult:
-    """LONG path: topic-extract → topic-lookup → fanout with coverage gate
-    and up to MAX_FANOUT_ROUNDS rounds.
+    """WIDE path: topic-extract → topic-lookup → fanout with coverage gate
+    and up to `policy.max_fanout_rounds` rounds (default WIDE_POLICY).
 
     `retrieval_lang` (corpus-constrained) drives every retrieval call;
     `lang` (answer language) drives the topic-extraction prose only.
     Defaults to `lang` for legacy callers."""
     if retrieval_lang is None:
         retrieval_lang = lang
-    topic_matches: list[AttributionMatch] = []
+    # Topic-attribution refs (extract → embed → lookup → fetch → gate) are
+    # INDEPENDENT of the fanout: the fanout's only inputs are the plan queries +
+    # boost_kinds(question, router_args) — never topic_matches — and the two
+    # outputs are merged below by keyed dedup (order-independent). So produce the
+    # topic refs in a task that runs CONCURRENTLY with the fanout loop instead of
+    # serially before it, hiding the topic embed+lookup+fetch+gate latency under
+    # the fanout (measured ~1s / ~22% off the WIDE research-stage wall). Both
+    # touch alias_map / on_event, which is asyncio-safe (alias minting is
+    # synchronous between awaits); only the research_source event order
+    # interleaves, which the client dedups by id.
+    async def _produce_topic_refs() -> tuple[list[AttributionMatch], list[dict[str, Any]]]:
+        topic_matches: list[AttributionMatch] = []
+        if (
+            pool is not None
+            and embed_model_for_lookup is not None
+            and embed_dim_for_lookup is not None
+        ):
+            # Step A: LLM extracts topics from the question. Use the
+            # speculative result from `run_research` if it's available
+            # (already paid for under `plan_queries` latency); otherwise
+            # extract synchronously here.
+            topics: list[str]
+            if precomputed_topics:
+                topics = precomputed_topics
+            else:
+                topics = await _safe(
+                    lambda: extract_topics(
+                        question, lang, [sq.text for sq in plan.sub_queries],
+                        llm=llm, model=topic_model, kv_cache=kv_cache,
+                        callbacks=callbacks,
+                    ),
+                    default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
+                    name="extract_topics", request_id=request_id,
+                )
 
-    if (
-        pool is not None
-        and embed_model_for_lookup is not None
-        and embed_dim_for_lookup is not None
-    ):
-        # Step A: LLM extracts topics from the question. Use the
-        # speculative result from `run_research` if it's available
-        # (already paid for under `plan_queries` latency); otherwise
-        # extract synchronously here. The topic-extractor receives
-        # `plan.sub_queries`'s texts as extra context (same role the
-        # old `expansion.queries` list played).
-        topics: list[str]
-        if precomputed_topics:
-            topics = precomputed_topics
-        else:
-            topics = await _safe(
-                lambda: extract_topics(
-                    question, lang, [sq.text for sq in plan.sub_queries],
-                    llm=llm, model=topic_model, kv_cache=kv_cache,
-                    callbacks=callbacks,
-                ),
-                default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
-                name="extract_topics", request_id=request_id,
+            # Step B: embed all topics in one HTTP call, then parallel pgvector
+            # lookups for each.
+            if topics:
+                topic_embeddings: list[list[float]] = await _safe(
+                    lambda: embedder.embed_queries(topics),
+                    default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
+                    name="embed_topics", request_id=request_id,
+                )
+                if topic_embeddings:
+                    lookup_tasks = [
+                        _safe(
+                            lambda emb=emb: find_attributions(
+                                kind="boost", user_q_embedding=emb, lang=retrieval_lang,
+                                embed_model=embed_model_for_lookup,
+                                embed_dim=embed_dim_for_lookup,
+                                pool=pool,
+                            ),
+                            default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
+                            name="topic_lookup", request_id=request_id,
+                        )
+                        for emb in topic_embeddings
+                    ]
+                    topic_match_lists = await asyncio.gather(*lookup_tasks)
+                    for matches in topic_match_lists:
+                        topic_matches.extend(matches)
+
+            log.info(
+                "pipeline_long_path",
+                request_id=request_id,
+                topics_extracted=len(topics),
+                topic_matches=len(topic_matches),
             )
 
-        # Step B: embed all topics in one HTTP call, then parallel pgvector
-        # lookups for each.
-        if topics:
-            # Topics are QUERY text (each becomes a `user_q_embedding` for
-            # attribution lookup), so route through the query embed path.
-            topic_embeddings: list[list[float]] = await _safe(
-                lambda: embedder.embed_queries(topics),
-                default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
-                name="embed_topics", request_id=request_id,
-            )
-            if topic_embeddings:
-                lookup_tasks = [
-                    _safe(
-                        lambda emb=emb: find_attributions(
-                            kind="boost", user_q_embedding=emb, lang=retrieval_lang,
-                            embed_model=embed_model_for_lookup,
-                            embed_dim=embed_dim_for_lookup,
-                            pool=pool,
-                        ),
-                        default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
-                        name="topic_lookup", request_id=request_id,
-                    )
-                    for emb in topic_embeddings
-                ]
-                topic_match_lists = await asyncio.gather(*lookup_tasks)
-                for matches in topic_match_lists:
-                    topic_matches.extend(matches)
-
-        log.info(
-            "pipeline_long_path",
-            request_id=request_id,
-            topics_extracted=len(topics),
-            topic_matches=len(topic_matches),
-        )
-
-    # Explicit-fetch attribution-flagged refs so they're GUARANTEED in
-    # the candidate pool. Library ANN top-K is narrow (8 per query across
-    # all library kinds combined); a short verse-chunk under-scores against
-    # long queries and may never enter the pool by cosine alone. By fetching
-    # topic-attribution refs directly (same path SHORT uses for question
-    # refs), the curator's "this is relevant" decision survives past the ANN
-    # bottleneck. Score 0.75 sits below SHORT's authoritative 0.85 (topic is
-    # a weaker signal than question) but above any sensible ANN ranking, so
-    # these chunks naturally surface in top-20.
-    topic_refs_fetched: list[dict[str, Any]] = []
-    if topic_matches:
+        # Explicit-fetch attribution-flagged refs so they're GUARANTEED in the
+        # candidate pool (library ANN top-K is narrow; a short verse-chunk may
+        # never enter the pool by cosine alone). Score 0.75 floats them above
+        # ordinary fanout but below SHORT's authoritative 0.85.
+        if not topic_matches:
+            return topic_matches, []
         topic_refs = _dedupe_refs(
             list(chain.from_iterable(m.refs for m in topic_matches))
         )
@@ -1137,9 +1213,8 @@ async def _research_path(
             envelopes=len(topic_refs_fetched),
         )
         # boost refs are pinned at 0.75 without going through the rerank the
-        # fanout pool does — gate them against the user question so a
-        # tangential topic match can't sit above on-topic fanout. No-op when
-        # no reranker is wired (cosine-only path stays as before).
+        # fanout pool does — gate them against the user question. No-op when no
+        # reranker is wired.
         if reranker is not None:
             topic_refs_fetched = await _safe(
                 lambda: _gate_topic_refs(
@@ -1149,14 +1224,18 @@ async def _research_path(
                 default=topic_refs_fetched, timeout=TIMEOUT_FETCH_REFS_S,
                 name="gate_topic_refs", request_id=request_id,
             )
+        return topic_matches, topic_refs_fetched
 
-    # Step C: fanout, coverage gate, up to N rounds.
+    topic_refs_task = asyncio.create_task(_produce_topic_refs())
+
+    # Step C: fanout, coverage gate, up to N rounds — runs CONCURRENTLY with the
+    # topic-refs task above.
     accumulated = FanoutResult()
     queries: list[tuple[int, str]] = (
         _plan_to_fanout_queries(plan) or [(0, question)]
     )
 
-    for round_idx in range(MAX_FANOUT_ROUNDS):
+    for round_idx in range(policy.max_fanout_rounds):
         result = await _safe(
             lambda queries=queries: fanout_search_with_boost(
                 queries=queries,
@@ -1194,7 +1273,7 @@ async def _research_path(
             )
             break
 
-        if round_idx + 1 < MAX_FANOUT_ROUNDS:
+        if round_idx + 1 < policy.max_fanout_rounds:
             queries = await _safe(
                 lambda: _regenerate_queries(
                     question, lang, [q[1] for q in queries], accumulated.chunks,
@@ -1207,10 +1286,13 @@ async def _research_path(
             if not queries:
                 break
 
+    # Collect the concurrently-produced topic refs now that the fanout is done.
+    topic_matches, topic_refs_fetched = await topic_refs_task
+
     # Merge topic-fetched refs with fanout candidates, dedup by _dedup_key,
-    # take top-20 by score. Topic refs have score=0.75; most fanout chunks
-    # land 0.45-0.75, so attribution-flagged items naturally float to the
-    # top while still letting strongly-matching lectures surface.
+    # take the top `policy.slate_size` by score. Topic refs have score=0.75;
+    # most fanout chunks land 0.45-0.75, so attribution-flagged items naturally
+    # float to the top while still letting strongly-matching lectures surface.
     merged_by_key: dict[tuple, dict[str, Any]] = {}
     for env in topic_refs_fetched + list(accumulated.chunks):
         key = env.get("_dedup_key")
@@ -1235,7 +1317,8 @@ async def _research_path(
             return (1, e.get("score") or 0.0)   # authoritative ref tier
         return (0, rs)                           # reranked chunk tier
     top_chunks = _balanced_cut(
-        sorted(merged_by_key.values(), key=_tier_key, reverse=True), 20,
+        sorted(merged_by_key.values(), key=_tier_key, reverse=True),
+        policy.slate_size,
     )
 
     # Commentary attachment moved POST-planner: see SHORT path comment

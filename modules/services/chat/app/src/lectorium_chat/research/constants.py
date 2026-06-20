@@ -10,6 +10,8 @@ named after the search-industry pin/boost distinction):
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 # ---- Attribution lookup ----------------------------------------------------
 
 # pinned-attribution (authoritative; SHORT path)
@@ -45,6 +47,39 @@ BOOST_MAX_MATCHES_PER_TOPIC = 3
 MEMORY_ACCEPT_SCORE_NATIVE = 0.60
 MEMORY_ACCEPT_SCORE_CROSS = 0.55
 MEMORY_MAX_MATCHES = 1
+
+# A matched memory whose curator refs RESOLVE to at least this many citable
+# envelopes is a sufficient (CORRECT) answer on its own: the sufficiency gate
+# takes the lean path (authoritative refs + bounded supplementary fanout)
+# instead of the full LONG corpus sweep (100-200 sources). The curator picked
+# exactly these shlokas for this note — stronger ground truth than any fanout
+# pool — so the wide sweep is wasted latency once they resolve. Counts RESOLVED
+# envelopes (a ref to a verse missing from the chunk repo doesn't count).
+MEMORY_SUFFICIENT_REFS = 3
+
+# Match-score bar a memory must clear to SHORT-CIRCUIT the corpus sweep (take
+# the lean path). Strictly higher than the inject thresholds (0.60/0.55): a
+# LOOSE memory match still injects its note as ambient background (cheap — the
+# synthesizer just ignores an off-topic briefing) but must NOT change the
+# retrieval path on a weak signal. Measured on prod data: genuine structure
+# paraphrases score 0.72-1.0, a false same-book match ("что такое душа" vs the
+# structure memory) tops out ~0.57, so 0.70 separates them with margin. The
+# asymmetry is deliberately safe — a borderline genuine match that dips below
+# just reverts to the LONG path, where the memory refs STILL attach as
+# authoritative and cite in full (only the latency win is lost, never quality).
+MEMORY_CORRECT_SCORE_NATIVE = 0.70
+MEMORY_CORRECT_SCORE_CROSS = 0.65
+
+# Canonical score for a matched memory's refs in the citable pool — same flat
+# value boost refs use (floats them above ordinary fanout without claiming
+# pinned authority). Also the `top_score` default the lean fetch scores against
+# on a memory-only CORRECT turn (no pinned match to take the max over).
+MEMORY_REF_SCORE = 0.75
+
+# Max planner rephrasings (sub-query texts + alt_phrasings) the memory lookup
+# probes in addition to the raw query — each is one extra pgvector lookup, so
+# bound it. Raw query + up to this many keeps latency in check.
+MEMORY_SUBQUERY_CAP = 6
 # Cross-encoder gate for fetched boost (topic-attribution) refs. boost matches
 # come from the EXTRACTED-TOPIC embedding (not the user question) and are pinned
 # at a flat 0.75 cosine that floats them above ordinary fanout — but they never
@@ -180,3 +215,41 @@ AUGMENT_FRESH_TOP_K = 10
 # Stage 2 ANN total budget. Used by `_safe` to avoid runaway on a thin
 # thesis if pgvector hangs.
 TIMEOUT_AUGMENT_S = 6.0
+
+
+# ---- Retrieval policy (sufficiency-gated path presets) ---------------------
+# The legacy SHORT/LONG fork is now the LEAN/WIDE presets of one policy object:
+# `assess_sufficiency` buckets the turn (CORRECT/INCORRECT) and `policy_for`
+# maps the bucket to a preset that both retrieval paths read their knobs from.
+# Only knobs that are actually WIRED live here — the replace-slate / antithesis
+# / thesis-anchoring knobs from the original #1068 design were dropped after the
+# eval showed their motivating dilution was already resolved upstream (#1064),
+# so they would have been dead config. The presets preserve the exact prior
+# numbers (slate 8/20, lean fans out the first 3 sub-queries, wide runs
+# MAX_FANOUT_ROUNDS coverage rounds), so collapsing the fork is behaviour-neutral.
+
+
+@dataclass(frozen=True)
+class RetrievalPolicy:
+    """How a turn retrieves, once the sufficiency gate has bucketed it.
+
+    `wide_fanout` picks the path: LEAN = curated authoritative refs + a bounded
+    supplementary fanout (the old SHORT path); WIDE = topic extraction + boosted
+    full-plan fanout with coverage-gated rounds (the old LONG path). The numeric
+    knobs are what the two paths used to hardcode, now named in one place."""
+
+    name: str
+    wide_fanout: bool
+    slate_size: int               # cap on the research_chunks pool handed to the planner
+    supplementary_subqueries: int # LEAN: how many sub_queries' primary text to fan out
+    max_fanout_rounds: int        # WIDE: coverage-gated fanout rounds (0 on LEAN)
+
+
+LEAN_POLICY = RetrievalPolicy(
+    name="lean", wide_fanout=False, slate_size=8,
+    supplementary_subqueries=3, max_fanout_rounds=0,
+)
+WIDE_POLICY = RetrievalPolicy(
+    name="wide", wide_fanout=True, slate_size=20,
+    supplementary_subqueries=0, max_fanout_rounds=MAX_FANOUT_ROUNDS,
+)

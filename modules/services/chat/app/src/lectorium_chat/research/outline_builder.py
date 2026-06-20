@@ -128,13 +128,27 @@ def _format_user(
     notes: list[dict[str, Any]],
     *,
     lang_name: str | None = None,
+    memory_notes: list[str] | None = None,
 ) -> str:
     note_blocks = "\n\n".join(
         _render_note(i, n) for i, n in enumerate(notes, start=1)
     )
+    curator_block = ""
+    if memory_notes:
+        rendered = "\n\n".join(
+            f"[Curator note {i}]\n{txt.strip()}"
+            for i, txt in enumerate((t for t in memory_notes if t and t.strip()), start=1)
+        )
+        if rendered:
+            curator_block = (
+                "Curator notes (AUTHORITATIVE framing — ANCHOR the outline to "
+                "these; see the \"Curator note\" rule):\n"
+                f"{rendered}\n\n"
+            )
     return (
         f"Question: {json.dumps(question, ensure_ascii=False)}\n"
         f"Language: {_lang_directive(lang, lang_name)}\n\n"
+        f"{curator_block}"
         f"Notes:\n{note_blocks}"
     )
 
@@ -324,6 +338,7 @@ async def build_outline(
     conclusion_model: str | None = None,
     callbacks: list[Any] | None = None,
     lang_name: str | None = None,
+    memory_notes: list[str] | None = None,
 ) -> Outline | None:
     """Run one structured-output LLM call. Returns:
 
@@ -331,6 +346,14 @@ async def build_outline(
     - `Outline(theses=[])` when the planner deliberately rejected all
       notes (caller emits refusal).
     - `Outline(theses=[...])` when the planner proposed a structured plan.
+
+    `memory_notes` (curator-authored framing notes for this turn, if any) are
+    handed to the planner as AUTHORITATIVE structure: the planner anchors the
+    outline to each note's internal steps (note step → thesis) and attaches the
+    curator's picked scriptures (already present among `notes`) to the matching
+    thesis. See the "Curator note" rule in the planner prompt. The note itself
+    is never a `supporting_notes` index — it shapes which theses exist, not the
+    evidence.
 
     For 3+ thesis outlines where the planner left `conclusion=None`,
     runs a cheap fallback LLM call to synthesise a closing paragraph
@@ -351,7 +374,8 @@ async def build_outline(
             {
                 "role": "user",
                 "content": _format_user(
-                    question, lang, notes, lang_name=lang_name
+                    question, lang, notes, lang_name=lang_name,
+                    memory_notes=memory_notes,
                 ),
             },
         ]
