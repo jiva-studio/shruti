@@ -84,3 +84,10 @@ class ChatState(TypedDict, total=False):
     # it strips `intro` from the Outline it writes here, so the synthesizer
     # renders an intro-less plan and never reproduces the intro.
     outline: Outline | None
+
+    # ── Curator memory (background context) ───────────────────────────
+    # A matched memory note, set by `research_worker_node`. Injected by the
+    # synthesizer as NON-citable background context (shapes the prose, never
+    # cited). None when no memory matched. The memory's refs are already folded
+    # into `tool_results` as ordinary citable notes.
+    memory_note: str | None
