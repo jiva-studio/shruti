@@ -52,6 +52,7 @@ import ukShare from "./locales/uk/share.js"
 import ukStudio from "./locales/uk/studio.js"
 import ukTranscript from "./locales/uk/transcript.js"
 import ukWelcome from "./locales/uk/welcome.js"
+import ukOnboarding from "./locales/uk/onboarding.js"
 
 import srLatnActivity from "./locales/sr-Latn/activity.js"
 import srLatnApp from "./locales/sr-Latn/app.js"
@@ -69,6 +70,7 @@ import srLatnShare from "./locales/sr-Latn/share.js"
 import srLatnStudio from "./locales/sr-Latn/studio.js"
 import srLatnTranscript from "./locales/sr-Latn/transcript.js"
 import srLatnWelcome from "./locales/sr-Latn/welcome.js"
+import srLatnOnboarding from "./locales/sr-Latn/onboarding.js"
 
 import srCyrlActivity from "./locales/sr-Cyrl/activity.js"
 import srCyrlApp from "./locales/sr-Cyrl/app.js"
@@ -86,6 +88,7 @@ import srCyrlShare from "./locales/sr-Cyrl/share.js"
 import srCyrlStudio from "./locales/sr-Cyrl/studio.js"
 import srCyrlTranscript from "./locales/sr-Cyrl/transcript.js"
 import srCyrlWelcome from "./locales/sr-Cyrl/welcome.js"
+import srCyrlOnboarding from "./locales/sr-Cyrl/onboarding.js"
 
 import esActivity from "./locales/es/activity.js"
 import esApp from "./locales/es/app.js"
@@ -103,6 +106,7 @@ import esShare from "./locales/es/share.js"
 import esStudio from "./locales/es/studio.js"
 import esTranscript from "./locales/es/transcript.js"
 import esWelcome from "./locales/es/welcome.js"
+import esOnboarding from "./locales/es/onboarding.js"
 
 import ptActivity from "./locales/pt/activity.js"
 import ptApp from "./locales/pt/app.js"
@@ -120,6 +124,7 @@ import ptShare from "./locales/pt/share.js"
 import ptStudio from "./locales/pt/studio.js"
 import ptTranscript from "./locales/pt/transcript.js"
 import ptWelcome from "./locales/pt/welcome.js"
+import ptOnboarding from "./locales/pt/onboarding.js"
 
 import itActivity from "./locales/it/activity.js"
 import itApp from "./locales/it/app.js"
@@ -137,6 +142,7 @@ import itShare from "./locales/it/share.js"
 import itStudio from "./locales/it/studio.js"
 import itTranscript from "./locales/it/transcript.js"
 import itWelcome from "./locales/it/welcome.js"
+import itOnboarding from "./locales/it/onboarding.js"
 
 import deActivity from "./locales/de/activity.js"
 import deApp from "./locales/de/app.js"
@@ -154,6 +160,7 @@ import deShare from "./locales/de/share.js"
 import deStudio from "./locales/de/studio.js"
 import deTranscript from "./locales/de/transcript.js"
 import deWelcome from "./locales/de/welcome.js"
+import deOnboarding from "./locales/de/onboarding.js"
 
 import frActivity from "./locales/fr/activity.js"
 import frApp from "./locales/fr/app.js"
@@ -171,6 +178,7 @@ import frShare from "./locales/fr/share.js"
 import frStudio from "./locales/fr/studio.js"
 import frTranscript from "./locales/fr/transcript.js"
 import frWelcome from "./locales/fr/welcome.js"
+import frOnboarding from "./locales/fr/onboarding.js"
 
 import plActivity from "./locales/pl/activity.js"
 import plApp from "./locales/pl/app.js"
@@ -188,6 +196,7 @@ import plShare from "./locales/pl/share.js"
 import plStudio from "./locales/pl/studio.js"
 import plTranscript from "./locales/pl/transcript.js"
 import plWelcome from "./locales/pl/welcome.js"
+import plOnboarding from "./locales/pl/onboarding.js"
 
 import huActivity from "./locales/hu/activity.js"
 import huApp from "./locales/hu/app.js"
@@ -205,6 +214,7 @@ import huShare from "./locales/hu/share.js"
 import huStudio from "./locales/hu/studio.js"
 import huTranscript from "./locales/hu/transcript.js"
 import huWelcome from "./locales/hu/welcome.js"
+import huOnboarding from "./locales/hu/onboarding.js"
 
 import hiActivity from "./locales/hi/activity.js"
 import hiApp from "./locales/hi/app.js"
@@ -315,6 +325,7 @@ const uk = {
   studio: ukStudio,
   transcript: ukTranscript,
   welcome: ukWelcome,
+  onboarding: ukOnboarding,
 }
 
 const srLatn = {
@@ -334,6 +345,7 @@ const srLatn = {
   studio: srLatnStudio,
   transcript: srLatnTranscript,
   welcome: srLatnWelcome,
+  onboarding: srLatnOnboarding,
 }
 
 const srCyrl = {
@@ -353,6 +365,7 @@ const srCyrl = {
   studio: srCyrlStudio,
   transcript: srCyrlTranscript,
   welcome: srCyrlWelcome,
+  onboarding: srCyrlOnboarding,
 }
 
 const es = {
@@ -372,6 +385,7 @@ const es = {
   studio: esStudio,
   transcript: esTranscript,
   welcome: esWelcome,
+  onboarding: esOnboarding,
 }
 
 const pt = {
@@ -391,6 +405,7 @@ const pt = {
   studio: ptStudio,
   transcript: ptTranscript,
   welcome: ptWelcome,
+  onboarding: ptOnboarding,
 }
 
 const it = {
@@ -410,6 +425,7 @@ const it = {
   studio: itStudio,
   transcript: itTranscript,
   welcome: itWelcome,
+  onboarding: itOnboarding,
 }
 
 const de = {
@@ -429,6 +445,7 @@ const de = {
   studio: deStudio,
   transcript: deTranscript,
   welcome: deWelcome,
+  onboarding: deOnboarding,
 }
 
 const fr = {
@@ -448,6 +465,7 @@ const fr = {
   studio: frStudio,
   transcript: frTranscript,
   welcome: frWelcome,
+  onboarding: frOnboarding,
 }
 
 const pl = {
@@ -467,6 +485,7 @@ const pl = {
   studio: plStudio,
   transcript: plTranscript,
   welcome: plWelcome,
+  onboarding: plOnboarding,
 }
 
 const hu = {
@@ -486,6 +505,7 @@ const hu = {
   studio: huStudio,
   transcript: huTranscript,
   welcome: huWelcome,
+  onboarding: huOnboarding,
 }
 
 const hi = {
