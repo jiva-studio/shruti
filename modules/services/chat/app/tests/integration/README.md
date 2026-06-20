@@ -15,7 +15,7 @@ env var so unit-test CI runs stay fast.
 4. Trigger chat-service indexer
 5. Assert: `SELECT * FROM attribution_embeddings WHERE attribution_id=…` has rows for ru AND en (auto-translate)
 6. `POST /chat` "природа души" lang=ru → SSE includes `[verse:N|...]` markers for all 3 БГ verses
-7. Assert log: `pipeline_short_path` fired with stage=native
+7. Assert log: `pipeline_lean_path` fired with stage=native (pinned → CORRECT)
 
 **B. Topic-attribution long path:**
 1. Seed a topic-attribution "вечность души" → refs БГ 2.20, ШБ 7.7.19

@@ -112,6 +112,15 @@ async def synthesis_planner_node(
         except Exception:  # noqa: BLE001 — language hint must never fail the turn
             lang_name = None
 
+    # Curator memory note(s) for this turn (set by research_worker). They are
+    # AUTHORITATIVE framing — the planner anchors the outline's structure to
+    # them (note step → thesis) instead of building sections from whatever the
+    # chunk pool happened to cluster into. A list (one element today, since the
+    # lookup caps at one memory per turn) so multiple notes compose as separate
+    # structured sections if the cap is ever raised.
+    memory_note = state.get("memory_note")
+    memory_notes = [memory_note] if memory_note and memory_note.strip() else None
+
     # `model=None` / `conclusion_model=None` lets `prompt_with_fallback`
     # resolve the model from the respective Langfuse prompt-config (set
     # to `llm_synthesis_planner` / `llm_conclusion_writer` at bootstrap
@@ -125,6 +134,7 @@ async def synthesis_planner_node(
         conclusion_model=None,
         callbacks=[cb] if cb is not None else None,
         lang_name=lang_name,
+        memory_notes=memory_notes,
     )
 
     if outline is None:
