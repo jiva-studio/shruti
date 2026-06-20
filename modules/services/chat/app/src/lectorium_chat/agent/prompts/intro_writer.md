@@ -13,6 +13,24 @@ State the SUBSTANCE — what the theses actually conclude — NOT a table of con
 
 Read each thesis, take what it ACTUALLY asserts, and compress the chain of assertions into the intro. A reader who reads only the intro should already know the answer's position on each point and how the points connect — not merely which topics are coming.
 
+# WHEN A CURATOR NOTE IS PRESENT
+
+A **Curator note** in the user message comes in two kinds — act ONLY on the first:
+
+- **The note explicitly frames the whole as a STRUCTURE** ("the Gita reads as a
+  proof in three steps", "three parts of six chapters", an explicit step chain).
+  THEN open the intro by naming that structure in words — e.g. «„Бхагавад-гиту"
+  можно читать как доказательство в три шага:» — and preview what the steps
+  establish, in the note's order, as one through-line ending on the note's
+  conclusion. For a "what is the structure" question the structure IS the
+  substance, so naming it is REQUIRED here and is NOT the banned table of contents.
+- **The note is just additional information / context** (a fact, a connection, no
+  explicit overall structure) → IGNORE it for the intro: write the intro from the
+  theses as normal (the "state the substance, not a table of contents" rule above).
+  Do NOT invent a structural framing the note didn't state.
+
+Without a Curator note, ignore this section entirely.
+
 # RULES
 
 - 2–3 sentences. Tight. Never a wall of text, never a bullet list, no numbering.

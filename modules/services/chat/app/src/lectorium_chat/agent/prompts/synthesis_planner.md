@@ -54,35 +54,47 @@ NOT treat its own material as off-topic:
 - The `intro` frames what the verse teaches; the theses walk through the purport's
   argument; the `conclusion` ties it back to the verse's meaning.
 
-## Curator note (anchor the outline to it)
+## Curator note (use it — and let its KIND decide HOW)
 
 Some turns include one or more **Curator notes** at the top of the user message —
-short authoritative briefings a human curator wrote to frame exactly this kind of
-question (e.g. the logical structure of a book, how a specific set of verses
-connect into one argument). A Curator note is the single most important input you
-have: it is a human expert telling you how the answer should be built. When a
-Curator note is present:
+authoritative briefings a human curator wrote for exactly this kind of question. A
+curator note is the single most important input you have. But notes come in two
+kinds; first read the note and decide which it is, then use it accordingly. (When
+unsure, treat it as kind (b).)
 
-- **Build the outline's STRUCTURE from the note**, not from how the numbered notes
-  happened to cluster. The note's internal steps / parts ARE your theses: turn each
-  distinct step the note makes into ONE thesis (a terse `header` + the `thesis`
-  claim), in the note's own order. The note's final/concluding step is your LAST
-  thesis; the `conclusion` field stays what it always is — the closing recap of all
-  the theses — so the structure is consistent across turns.
-- **Attach the curator's evidence to the matching step.** The numbered notes
-  include the curator's own picked scriptures — match each to a step by its `label`
-  (the note names «БГ 6.47» → attach the `[^N]` whose label is `БГ 6.47`), plus any
-  supporting lecture that develops that same step. If a relevant `[^N]` note has NO
-  `label`, match it to a step by its TEXT/topic instead. Each thesis gets the notes
-  that back ITS step.
-- The note is the SKELETON; the numbered notes are the FLESH. Do NOT discard the
-  note's structure in favour of a tangential cluster of lectures, and do NOT bury
-  the note's conclusion under generic material.
-- **Multiple curator notes** → give each its own run of theses (one structured
-  section per note), in note order; never merge several notes into one mush.
-- A Curator note is framing, NOT a citable source: it has no `[^N]`, so it never
-  appears in `supporting_notes` — it only decides which theses exist and their
-  order. Compose every `thesis`/`header` in the `Language:` language as usual.
+**(a) The note lays out a STRUCTURE or line of argument** — it walks explicit steps
+or parts, or a because→therefore chain ("the Gita reads as a proof in three steps",
+"three parts of six chapters", "first X, which is why Y, therefore Z"). Then BUILD
+THE ANSWER FROM IT:
+- The note's steps ARE your theses, in its order. Each `thesis` must carry that
+  step's actual REASONING and connective logic (the note's "because → therefore"
+  links — WHY each step follows the previous), NOT a flattened topic label. E.g. if
+  the note says "to practise bhakti one must know whom one surrenders to, so the
+  middle part reveals Krishna's nature", the thesis IS that connective claim, not a
+  bare "Krishna's nature". The links between steps are the whole point.
+- Name the note's overarching frame in words in the `conclusion` (which here you DO
+  write): a closing paragraph that names the frame and walks the steps to the note's
+  final conclusion. Don't leave the structure implicit in the section titles alone.
+
+**(b) The note is just ADDITIONAL INFORMATION / context** — a fact, a connection, a
+clarification, background the curator wants present, NOT a blueprint for the
+answer's shape. This is the common case. Then DO NOT force the note's shape onto the
+outline: build the structure from the question + numbered notes as normal (see
+"Grouping into theses" below), and treat the note's content as AUTHORITATIVE
+background — weave its facts/connections into the relevant theses and let nothing in
+the answer contradict it. Do not invent a "three-part structure" the note didn't
+state.
+
+In BOTH kinds:
+- **Attach the curator's evidence.** When the note names scriptures, match each to
+  the `[^N]` whose `label` is that address (note names «БГ 6.47» → attach the `[^N]`
+  labelled `БГ 6.47`), plus any supporting lecture; if a relevant `[^N]` has no
+  `label`, match by its TEXT/topic. Put each on the thesis it backs.
+- A curator note is framing/background, NOT a citable source: it has no `[^N]`, so
+  it never appears in `supporting_notes`. Compose every `thesis`/`header`/
+  `conclusion` in the `Language:` language as usual.
+- **Multiple curator notes** → use each by its own kind; never merge several into
+  one mush.
 
 ## Grouping into theses
 
