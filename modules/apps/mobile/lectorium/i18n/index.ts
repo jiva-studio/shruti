@@ -16,6 +16,7 @@ import enShare from "./locales/en/share.js"
 import enStudio from "./locales/en/studio.js"
 import enTranscript from "./locales/en/transcript.js"
 import enWelcome from "./locales/en/welcome.js"
+import enOnboarding from "./locales/en/onboarding.js"
 
 import ruActivity from "./locales/ru/activity.js"
 import ruApp from "./locales/ru/app.js"
@@ -33,6 +34,7 @@ import ruShare from "./locales/ru/share.js"
 import ruStudio from "./locales/ru/studio.js"
 import ruTranscript from "./locales/ru/transcript.js"
 import ruWelcome from "./locales/ru/welcome.js"
+import ruOnboarding from "./locales/ru/onboarding.js"
 
 import ukActivity from "./locales/uk/activity.js"
 import ukApp from "./locales/uk/app.js"
@@ -273,6 +275,7 @@ const en = {
   studio: enStudio,
   transcript: enTranscript,
   welcome: enWelcome,
+  onboarding: enOnboarding,
 }
 
 const ru = {
@@ -292,6 +295,7 @@ const ru = {
   studio: ruStudio,
   transcript: ruTranscript,
   welcome: ruWelcome,
+  onboarding: ruOnboarding,
 }
 
 const uk = {
