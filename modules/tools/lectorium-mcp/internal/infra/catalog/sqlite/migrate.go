@@ -32,6 +32,31 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureTopicsTables(ctx, db); err != nil {
 		return fmt.Errorf("ensure topics tables: %w", err)
 	}
+	if err := ensureKeyValueTable(ctx, db); err != nil {
+		return fmt.Errorf("ensure key_value table: %w", err)
+	}
+	return nil
+}
+
+// ensureKeyValueTable creates a general-purpose settings store: one row per
+// config key, value an opaque (usually JSON) string. The onboarding topic
+// picker reads `onboarding.topics` from here; the MCP `config.*` tools write
+// it (validated against a registry).
+//
+// It lives in the DB rather than config.json deliberately: the client bundles
+// and downloads current.db anyway, so the curated list is available offline
+// without a second network fetch. Additive under the SAME scheme — older
+// binaries never query it; newer ones read it defensively (missing table →
+// fallback). Idempotent.
+func ensureKeyValueTable(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx,
+		`CREATE TABLE IF NOT EXISTS key_value (
+			key        TEXT NOT NULL PRIMARY KEY,
+			value      TEXT NOT NULL,
+			updated_at INTEGER NOT NULL DEFAULT (CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))
+		)`); err != nil {
+		return fmt.Errorf("create key_value: %w", err)
+	}
 	return nil
 }
 
