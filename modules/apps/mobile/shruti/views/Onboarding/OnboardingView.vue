@@ -5,6 +5,7 @@
         v-model="page"
         :page-count="PAGE_COUNT"
         :primary-label="primaryLabel"
+        :show-primary="page < PAGE_COUNT - 1"
         @primary="onPrimary"
         @skip="finish"
       >
@@ -23,7 +24,7 @@
             @update:time="wisdomTime = $event"
           />
           <ValueMomentScreen v-else-if="index === 3" :lectures="lectures" />
-          <PaywallScreen v-else />
+          <PaywallScreen v-else @done="finish" />
         </template>
       </OnboardingCarousel>
     </IonContent>
