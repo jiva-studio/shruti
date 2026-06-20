@@ -15,6 +15,7 @@
   * [Overview](repos/shruti/architecture/)
   * [Layer rules](repos/shruti/architecture/layers.md)
   * [Startup flow](repos/shruti/architecture/startup-flow.md)
+  * [Onboarding](repos/shruti/architecture/onboarding.md)
   * [Multi-language chat & UI](repos/shruti/architecture/multilanguage.md)
   * [Attribution lookup](repos/shruti/architecture/attribution.md)
   * [Memory (curator context)](repos/shruti/architecture/memory.md)
