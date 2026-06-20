@@ -2,12 +2,13 @@
 
 Curated mapping between **canonical phrasings** (questions a user might ask, or short topical labels extracted from their query) and **library refs** (verses, documents, or chapter titles). The chat-service uses them to short-circuit semantic search: if the user query matches a curated *pinned* phrasing, the attached refs become an authoritative answer; if it matches a *boost* label, the score of chunks referencing those refs is lifted in the fanout.
 
-Two kinds, same shape. The kinds are named after the search-industry pin/boost distinction (cf. Elasticsearch pinned queries vs boosting):
+Three kinds, same shape. `pinned`/`boost` are named after the search-industry pin/boost distinction (cf. Elasticsearch pinned queries vs boosting); `memory` adds a curator note injected as background context (see **[Memory](memory.md)**):
 
 | Kind | Source phrasing | Consumer policy in chat-service |
 |---|---|---|
 | `pinned` | User-style query: *"что такое реинкарнация"*, *"как достичь Бога"* | **SHORT path** — refs become authoritative for the synthesizer turn |
 | `boost` | Short label (1–4 words): *"природа души"*, *"бхакти-йога"* | **BOOST** — chunks referencing these refs get a score lift (`KIND_BOOST_DELTA` = +0.15 in `research/corpus_fanout.py`) in the fanout |
+| `memory` | Triggers + a note: *"структура Бхагавад-гиты"* → note | **BACKGROUND** — the note is injected as non-citable context; refs join the pool like boost. Full details in **[Memory](memory.md)** |
 
 Each attribution carries N text variants per language. The same attribution can ref multiple verses (e.g. *"что такое душа"* → BG 2.13, 2.20, 2.22), and the same verse can be referenced by multiple attributions.
 
@@ -60,11 +61,12 @@ Stages:
 
 ## Storage schema — `library.db` (SQLite, server-authoritative)
 
-This is the curator-facing source of truth. Three tables, additive migrations applied on every MCP daemon `Open()`.
+This is the curator-facing source of truth. Four tables (the parent + triggers, notes, refs), additive migrations applied on every MCP daemon `Open()`.
 
 ```mermaid
 erDiagram
-    library_attributions ||--o{ library_attribution_texts : has
+    library_attributions ||--o{ library_attribution_triggers : has
+    library_attributions ||--o{ library_attribution_notes : "memory only"
     library_attributions ||--o{ library_attribution_refs : has
     library_attribution_refs }o--|| library_verses : "ref_kind=verse"
     library_attribution_refs }o--|| library_documents : "ref_kind=document"
@@ -72,30 +74,37 @@ erDiagram
 
     library_attributions {
         TEXT id PK "attribution_<nanoid>"
-        TEXT kind "pinned | boost"
+        TEXT kind "pinned | boost | memory"
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
-    library_attribution_texts {
+    library_attribution_triggers {
         TEXT attribution_id FK
         TEXT language "ru | en | …"
-        TEXT text
+        TEXT text "search phrase"
+    }
+    library_attribution_notes {
+        TEXT attribution_id FK
+        TEXT language "ru | en | …"
+        TEXT note "memory background note"
     }
     library_attribution_refs {
         TEXT attribution_id FK
         TEXT ref_kind "verse | document | title | track"
         TEXT target_id "verse.id / library_document.id / <source>/<tokens>"
+        TEXT language "optional answer-language scope"
         INT position
     }
 ```
 
 Constraints:
 
-- `library_attributions.kind` ∈ `('pinned', 'boost')` (CHECK constraint).
-- `library_attribution_texts` PK is `(attribution_id, language, text)` — multiple phrasings of one attribution in one language are allowed; exact duplicates collapse to one row.
-- `library_attribution_refs` PK is `(attribution_id, ref_kind, target_id)`; `position` is a non-key ordering hint (default 0). There is **no CHECK on `ref_kind`** — the original `('verse','document')` CHECK was dropped (`relaxAttributionRefKindCheck`) so newer kinds (`title`, `track`) need no schema bump; validation lives in the repo layer.
-- `library_attribution_refs.target_id` is opaque. For `verse`/`document` it is the entity id (`library_verses.id` / `library_documents.id`); for `title` it is a composite `"<source_id>/<tokens>"` addressing a `library_titles` chapter/canto heading. SQLite cannot enforce cross-table FK, so the MCP write tool validates existence on insert.
-- `ON DELETE CASCADE` from `library_attributions` removes the texts and refs together.
+- `library_attributions.kind` ∈ `('pinned', 'boost', 'memory')` (CHECK constraint).
+- `library_attribution_triggers` (the renamed `library_attribution_texts`) PK is `(attribution_id, language, text)` — multiple phrasings of one attribution in one language are allowed; exact duplicates collapse to one row.
+- `library_attribution_notes` (memory only) PK is `(attribution_id, language)` — exactly one note per language. See **[Memory](memory.md)**.
+- `library_attribution_refs` PK is `(attribution_id, ref_kind, target_id)`; `position` is a non-key ordering hint (default 0); `language` is an optional answer-language scope (`NULL` = language-agnostic). There is **no CHECK on `ref_kind`** — the original `('verse','document')` CHECK was dropped (`relaxAttributionRefKindCheck`) so newer kinds (`title`, `track`) need no schema bump; validation lives in the repo layer.
+- `library_attribution_refs.target_id` is opaque. For `verse`/`document` it is the entity id (`library_verses.id` / `library_documents.id`); for `title` it is a composite `"<source_id>/<tokens>"`; for `track` a composite `"<track_id>@<start_ms>-<end_ms>"`. SQLite cannot enforce cross-table FK, so the MCP write tool validates existence (or, for tracks, the shape) on insert.
+- `ON DELETE CASCADE` from `library_attributions` removes the triggers, notes and refs together.
 
 Files referenced:
 
@@ -115,8 +124,8 @@ erDiagram
 
     attributions {
         TEXT id PK
-        TEXT kind "pinned | boost"
-        JSONB refs "[{ref_kind, target_id}, …]"
+        TEXT kind "pinned | boost | memory"
+        JSONB refs "[{ref_kind, target_id, language?}, …]"
         TIMESTAMPTZ updated_at
     }
     attribution_embeddings {
@@ -243,7 +252,7 @@ How it works (`UseCase.Import`):
 4. **Ref-add** — one `RefAdd` per `(attribution_id, ref)` in deterministic order; `RefAdd` is `INSERT OR IGNORE`, so re-adding an existing ref is a no-op.
 5. **Fail-soft** — per-item errors are counted and sampled (up to 10), not fatal.
 
-Because both `Create` (dedupe-by-text) and `RefAdd` (`INSERT OR IGNORE`) are idempotent, **re-running the same plan never duplicates** — there is no checkpoint file and no `--reset-state`. Editing existing rows still goes through the per-operation tools (`library.attribution.text_add` / `text_remove` / `ref_remove`); import only ever `Create`s and `RefAdd`s.
+Because both `Create` (dedupe-by-text) and `RefAdd` (`INSERT OR IGNORE`) are idempotent, **re-running the same plan never duplicates** — there is no checkpoint file and no `--reset-state`. Editing existing rows still goes through the per-operation tools (`library.attribution.trigger_add` / `trigger_remove` / `ref_remove`); import only ever `Create`s and `RefAdd`s.
 
 Publishing stays a separate, deliberate step (`library.publish`).
 
@@ -309,8 +318,8 @@ Verse-centric YAML plans are authored ad hoc (inline or as a file on the server)
 
 ## Operational notes
 
-- **Translations**: `library.attribution.create` (and therefore `import`) auto-translates the source text into every other supported language as a best-effort side effect (handled MCP-side). Curator can adjust via `library.attribution.text_add` / `text_remove` after creation.
+- **Translations**: `library.attribution.create` (and therefore `import`) auto-translates the source text into every other supported language as a best-effort side effect (handled MCP-side). Curator can adjust via `library.attribution.trigger_add` / `trigger_remove` after creation (these were renamed from `text_add` / `text_remove`).
 - **Target must exist**: `library.attribution.ref_add` validates `target_id` against the referenced entity (`library_verses` for `verse`, etc.). If it is missing, the call fails with `validation_failed` — make sure the source has been imported (`library.import` MCP tool) first.
 - **Idempotent re-runs**: `import` reuses attributions by text and `RefAdd` is `INSERT OR IGNORE`, so re-running the same plan never duplicates. No checkpoint, no `--reset-state`. Safe to re-run after editing the YAML.
 - **Publish is a separate step**: production publishing is deliberate. Run `library.publish` manually after reviewing the `ImportResult` summary.
-- **Editing existing rows**: import only `Create`s and `RefAdd`s. To edit text or remove refs use the per-operation MCP tools directly (`library.attribution.text_add` / `text_remove` / `ref_add` / `ref_remove`).
+- **Editing existing rows**: import only `Create`s and `RefAdd`s. To edit text or remove refs use the per-operation MCP tools directly (`library.attribution.trigger_add` / `trigger_remove` / `ref_add` / `ref_remove`).

@@ -33,6 +33,15 @@ PINNED_RERANK_CANDIDATE_POOL = 5       # rerank curated phrasings from the top-N
 BOOST_ACCEPT_SCORE_NATIVE = 0.70
 BOOST_ACCEPT_SCORE_CROSS = 0.65
 BOOST_MAX_MATCHES_PER_TOPIC = 3
+
+# memory-attribution (curator note → non-citable background context).
+# Matched by trigger phrases AND note chunks against the user query. No
+# LLM-confirm gate (the note is advisory, not an authoritative source claim),
+# so the bar sits between pinned and boost. One memory per turn keeps the
+# injected context focused.
+MEMORY_ACCEPT_SCORE_NATIVE = 0.72
+MEMORY_ACCEPT_SCORE_CROSS = 0.68
+MEMORY_MAX_MATCHES = 1
 # Cross-encoder gate for fetched boost (topic-attribution) refs. boost matches
 # come from the EXTRACTED-TOPIC embedding (not the user question) and are pinned
 # at a flat 0.75 cosine that floats them above ordinary fanout — but they never
@@ -119,6 +128,7 @@ TIMEOUT_PLAN_S = 8.0
 TIMEOUT_QUESTION_LOOKUP_S = 6.0
 TIMEOUT_TOPIC_EXTRACT_S = 8.0
 TIMEOUT_TOPIC_LOOKUP_S = 6.0
+TIMEOUT_MEMORY_LOOKUP_S = 6.0
 TIMEOUT_FANOUT_S = 30.0
 TIMEOUT_REGENERATE_S = 8.0
 TIMEOUT_FETCH_REFS_S = 5.0

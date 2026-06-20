@@ -17,6 +17,7 @@
   * [Startup flow](repos/shruti/architecture/startup-flow.md)
   * [Multi-language chat & UI](repos/shruti/architecture/multilanguage.md)
   * [Attribution lookup](repos/shruti/architecture/attribution.md)
+  * [Memory (curator context)](repos/shruti/architecture/memory.md)
   * [Proactive messages](repos/shruti/architecture/proactive-messages.md)
   * [Authentication](repos/shruti/architecture/auth.md)
   * [Subscriptions & RevenueCat](repos/shruti/architecture/subscriptions.md)

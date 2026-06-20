@@ -167,5 +167,9 @@ async def research_worker_node(
         research=len(research_result.research_chunks),
         matched_question_ids=research_result.matched_question_ids,
         matched_topic_ids=research_result.matched_topic_ids[:5],
+        matched_memory_id=research_result.matched_memory_id,
     )
-    return {"tool_results": tool_results}
+    return {
+        "tool_results": tool_results,
+        "memory_note": research_result.memory_note,
+    }

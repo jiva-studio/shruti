@@ -103,28 +103,36 @@ type ListTitlesOpts struct {
 //     answer is pinned to these sources).
 //   - AttrBoost:  a short topical label; matched extracted topics BOOST
 //     scores (+0.15) of referenced chunks in the fanout.
+//   - AttrMemory: a curator note (connective background knowledge) plus refs.
+//     The note is embedded so the memory is findable, and injected into the
+//     synthesizer prompt as NON-citable background context (it shapes the
+//     prose but is never cited); its refs flow into the citable pool like
+//     boost. Triggers are optional extra search phrases.
 type AttributionKind string
 
 const (
 	AttrPinned AttributionKind = "pinned"
 	AttrBoost  AttributionKind = "boost"
+	AttrMemory AttributionKind = "memory"
 )
 
 // Attribution is a curated mapping: one or more text phrasings (per language)
-// → a set of authoritative library refs. Same shape for both kinds; the kind
-// only changes how the chat-service pipeline uses the matched refs.
+// → a set of authoritative library refs. Same shape for all kinds; the kind
+// only changes how the chat-service pipeline uses the matched refs (and, for
+// memory, the injected note).
 type Attribution struct {
-	ID        string                // "attribution_<nanoid>"
-	Kind      AttributionKind       // "pinned" | "boost"
-	Texts     map[string][]string   // language → list of phrasings (N variants per lang)
+	ID        string              // "attribution_<nanoid>"
+	Kind      AttributionKind     // "pinned" | "boost" | "memory"
+	Texts     map[string][]string // language → list of trigger phrasings (N per lang)
+	Notes     map[string]string   // language → the one note (memory only; empty otherwise)
 	Refs      []AttributionRef
-	CreatedAt string                // RFC3339, set by repo on insert
-	UpdatedAt string                // RFC3339, bumped on any mutation
+	CreatedAt string // RFC3339, set by repo on insert
+	UpdatedAt string // RFC3339, bumped on any mutation
 }
 
 // AttributionRef points to a library entity. Kind here is the REFERENCED
 // entity type (verse|document|title|track) — separate from Attribution.Kind
-// (pinned|boost).
+// (pinned|boost|memory).
 //
 // TargetID encoding by Kind:
 //   - verse / document: the opaque entity id (verse.id / library_document.id).
@@ -132,9 +140,17 @@ type Attribution struct {
 //     row (a canto/chapter heading). Verse-structured books (SB/BG/CC) have no
 //     chapter document to point at, so a chapter is referenced by its title
 //     row instead. The locate pipeline resolves it via library_titles.
+//   - track: a composite "<track_id>@<start_ms>-<end_ms>" addressing a
+//     lecture transcript fragment (resolved chat-side; tracks live in the
+//     catalog DB, not library.db, so existence is not validated here).
+//
+// Language optionally scopes a ref to one answer language: empty = applies to
+// every language (e.g. a verse, language-agnostic); "en"/"ru" = used only when
+// answering in that language (e.g. an EN vs RU lecture of the same talk).
 type AttributionRef struct {
-	Kind     string // "verse" | "document" | "title"
-	TargetID string // verse.id / library_document.id, OR "<source_id>/<tokens>" for title
+	Kind     string // "verse" | "document" | "title" | "track"
+	TargetID string // verse.id / library_document.id, "<source_id>/<tokens>", or "<track_id>@<start>-<end>"
+	Language string // optional answer-language scope ("" = language-agnostic)
 	Position int    // ordering hint within the attribution (default 0)
 }
 

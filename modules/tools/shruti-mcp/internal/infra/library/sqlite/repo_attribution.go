@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +32,7 @@ func (r *Repo) AttributionCreate(ctx context.Context, id string, kind library.At
 		return fmt.Errorf("insert attribution: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO library_attribution_texts (attribution_id, language, text) VALUES (?,?,?)`,
+		`INSERT INTO library_attribution_triggers (attribution_id, language, text) VALUES (?,?,?)`,
 		id, language, firstText); err != nil {
 		return fmt.Errorf("insert first text: %w", err)
 	}
@@ -50,7 +51,7 @@ func (r *Repo) AttributionFindByText(ctx context.Context, kind library.Attributi
 	err := r.db.QueryRowContext(ctx,
 		`SELECT a.id
 		   FROM library_attributions a
-		   JOIN library_attribution_texts t ON t.attribution_id = a.id
+		   JOIN library_attribution_triggers t ON t.attribution_id = a.id
 		  WHERE a.kind = ? AND t.language = ? AND t.text = ?
 		  LIMIT 1`,
 		string(kind), language, text,
@@ -91,12 +92,40 @@ func (r *Repo) AttributionGet(ctx context.Context, id string) (library.Attributi
 	}
 	a.Refs = refs
 
+	notes, err := r.readAttributionNotes(ctx, a.ID)
+	if err != nil {
+		return library.Attribution{}, false, err
+	}
+	a.Notes = notes
+
 	return a, true, nil
+}
+
+// readAttributionNotes loads the per-language notes (one note per language).
+// Empty map for pinned/boost attributions.
+func (r *Repo) readAttributionNotes(ctx context.Context, attrID string) (map[string]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT language, note FROM library_attribution_notes WHERE attribution_id = ? ORDER BY language`,
+		attrID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]string)
+	for rows.Next() {
+		var lang, note string
+		if err := rows.Scan(&lang, &note); err != nil {
+			return nil, err
+		}
+		out[lang] = note
+	}
+	return out, rows.Err()
 }
 
 func (r *Repo) readAttributionTexts(ctx context.Context, attrID string) (map[string][]string, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT language, text FROM library_attribution_texts WHERE attribution_id = ? ORDER BY language, text`,
+		`SELECT language, text FROM library_attribution_triggers WHERE attribution_id = ? ORDER BY language, text`,
 		attrID,
 	)
 	if err != nil {
@@ -116,7 +145,7 @@ func (r *Repo) readAttributionTexts(ctx context.Context, attrID string) (map[str
 
 func (r *Repo) readAttributionRefs(ctx context.Context, attrID string) ([]library.AttributionRef, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT ref_kind, target_id, position FROM library_attribution_refs
+		`SELECT ref_kind, target_id, language, position FROM library_attribution_refs
 		 WHERE attribution_id = ?
 		 ORDER BY position, ref_kind, target_id`,
 		attrID,
@@ -128,9 +157,11 @@ func (r *Repo) readAttributionRefs(ctx context.Context, attrID string) ([]librar
 	var out []library.AttributionRef
 	for rows.Next() {
 		var ref library.AttributionRef
-		if err := rows.Scan(&ref.Kind, &ref.TargetID, &ref.Position); err != nil {
+		var lang sql.NullString
+		if err := rows.Scan(&ref.Kind, &ref.TargetID, &lang, &ref.Position); err != nil {
 			return nil, err
 		}
+		ref.Language = lang.String
 		out = append(out, ref)
 	}
 	return out, rows.Err()
@@ -151,7 +182,7 @@ func (r *Repo) AttributionList(ctx context.Context, opts library.ListAttribution
 	)
 	q.WriteString(`SELECT DISTINCT a.id, a.kind, a.created_at, a.updated_at FROM library_attributions a`)
 	if opts.Query != "" {
-		q.WriteString(` JOIN library_attribution_texts t ON t.attribution_id = a.id`)
+		q.WriteString(` JOIN library_attribution_triggers t ON t.attribution_id = a.id`)
 	}
 	q.WriteString(` WHERE 1=1`)
 	if opts.Kind != "" {
@@ -207,7 +238,7 @@ func (r *Repo) AttributionTextAdd(ctx context.Context, id, language, text string
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO library_attribution_texts (attribution_id, language, text) VALUES (?,?,?)`,
+		`INSERT OR IGNORE INTO library_attribution_triggers (attribution_id, language, text) VALUES (?,?,?)`,
 		id, language, text); err != nil {
 		return fmt.Errorf("insert text: %w", err)
 	}
@@ -230,9 +261,60 @@ func (r *Repo) AttributionTextRemove(ctx context.Context, id, language, text str
 	}
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM library_attribution_texts WHERE attribution_id = ? AND language = ? AND text = ?`,
+		`DELETE FROM library_attribution_triggers WHERE attribution_id = ? AND language = ? AND text = ?`,
 		id, language, text); err != nil {
 		return fmt.Errorf("delete text: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE library_attributions SET updated_at = ? WHERE id = ?`, now, id); err != nil {
+		return fmt.Errorf("bump updated_at: %w", err)
+	}
+	return tx.Commit()
+}
+
+// AttributionNoteSet upserts the single note for (id, language). One note per
+// language — re-setting replaces it.
+func (r *Repo) AttributionNoteSet(ctx context.Context, id, language, note string) error {
+	if id == "" || language == "" || note == "" {
+		return fmt.Errorf("note_set: id, language, note required")
+	}
+	if !r.attributionExists(ctx, id) {
+		return ErrAttributionNotFound
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO library_attribution_notes (attribution_id, language, note) VALUES (?,?,?)
+		 ON CONFLICT(attribution_id, language) DO UPDATE SET note = excluded.note`,
+		id, language, note); err != nil {
+		return fmt.Errorf("upsert note: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE library_attributions SET updated_at = ? WHERE id = ?`, now, id); err != nil {
+		return fmt.Errorf("bump updated_at: %w", err)
+	}
+	return tx.Commit()
+}
+
+// AttributionNoteRemove deletes the note for (id, language). No-op if absent.
+func (r *Repo) AttributionNoteRemove(ctx context.Context, id, language string) error {
+	if !r.attributionExists(ctx, id) {
+		return ErrAttributionNotFound
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM library_attribution_notes WHERE attribution_id = ? AND language = ?`,
+		id, language); err != nil {
+		return fmt.Errorf("delete note: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE library_attributions SET updated_at = ? WHERE id = ?`, now, id); err != nil {
@@ -295,8 +377,16 @@ func (r *Repo) AttributionRefAdd(ctx context.Context, id string, ref library.Att
 		if !exists {
 			return ErrRefTargetNotFound
 		}
+	case "track":
+		// A track ref addresses a lecture transcript FRAGMENT
+		// "<track_id>@<start_ms>-<end_ms>". Tracks live in the catalog DB, not
+		// library.db, so existence can't be validated here — the chat service
+		// resolves it via transcript-chunk overlap. Validate the shape only.
+		if !validTrackTarget(ref.TargetID) {
+			return fmt.Errorf("ref_add: track target_id must be \"<track_id>@<start_ms>-<end_ms>\", got %q", ref.TargetID)
+		}
 	default:
-		return fmt.Errorf("ref_add: invalid kind %q (must be 'verse', 'document' or 'title')", ref.Kind)
+		return fmt.Errorf("ref_add: invalid kind %q (must be 'verse', 'document', 'title' or 'track')", ref.Kind)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -304,9 +394,13 @@ func (r *Repo) AttributionRefAdd(ctx context.Context, id string, ref library.Att
 		return err
 	}
 	defer tx.Rollback()
+	var lang any
+	if ref.Language != "" {
+		lang = ref.Language
+	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO library_attribution_refs (attribution_id, ref_kind, target_id, position) VALUES (?,?,?,?)`,
-		id, ref.Kind, ref.TargetID, ref.Position); err != nil {
+		`INSERT OR IGNORE INTO library_attribution_refs (attribution_id, ref_kind, target_id, language, position) VALUES (?,?,?,?,?)`,
+		id, ref.Kind, ref.TargetID, lang, ref.Position); err != nil {
 		return fmt.Errorf("insert ref: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -368,6 +462,27 @@ func splitTitleTarget(target string) (sourceID, tokens string, ok bool) {
 		return "", "", false
 	}
 	return target[:i], target[i+1:], true
+}
+
+// validTrackTarget checks the shape "<track_id>@<start_ms>-<end_ms>" (digits
+// for the bounds, end >= start). Tracks are not in library.db so we validate
+// the encoding, not existence.
+func validTrackTarget(target string) bool {
+	at := strings.LastIndexByte(target, '@')
+	if at <= 0 || at == len(target)-1 {
+		return false
+	}
+	span := target[at+1:]
+	dash := strings.IndexByte(span, '-')
+	if dash <= 0 || dash == len(span)-1 {
+		return false
+	}
+	start, err1 := strconv.Atoi(span[:dash])
+	end, err2 := strconv.Atoi(span[dash+1:])
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return start >= 0 && end >= start
 }
 
 // escapeLikeAny escapes LIKE wildcards inside a substring pattern; the

@@ -505,6 +505,7 @@ async def run_synthesizer_turn(
     system_prompt: str,
     history: list[dict[str, Any]] | None = None,
     outline: Any | None = None,
+    memory_note: str | None = None,
     request_id: str | None = None,
     model: str | None = None,
     temperature: float | None = 0.5,
@@ -575,8 +576,24 @@ async def run_synthesizer_turn(
     outline_section = (
         f"\n\n{_SEP}\n{outline_block}\n{_SEP}" if outline_block else ""
     )
+    # Curator memory: background context that SHAPES the answer but is NOT a
+    # source. It carries no `[^N]` marker, so it is physically uncitable — the
+    # only thing to enforce in prose is "don't quote it as scripture". Sits
+    # before the numbered notes so the model reads it as ambient framing.
+    memory_section = ""
+    if memory_note and memory_note.strip():
+        memory_section = (
+            f"{_SEP}\n"
+            f"BACKGROUND CONTEXT (curator briefing — use it to shape and connect "
+            f"your answer, but it is NOT a source: it has no [^N], never cite or "
+            f"quote it verbatim, and answer in the user's language regardless of "
+            f"the language it is written in)\n"
+            f"{_SEP}\n"
+            f"{memory_note.strip()}\n\n"
+        )
     system_block = (
         f"{system_prompt}\n\n"
+        f"{memory_section}"
         f"{_SEP}\n"
         f"RESEARCH NOTES (private context — do NOT mention or echo)\n"
         f"{_SEP}\n"

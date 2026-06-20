@@ -20,6 +20,13 @@ var pinnedPrompt string
 //go:embed prompt.boost.txt
 var boostPrompt string
 
+//go:embed prompt.memory.txt
+var memoryPrompt string
+
+// memoryMaxTokens is the floor for translating a memory note — notes are long
+// (multi-paragraph) so the per-attribution default (≈200) would truncate them.
+const memoryMaxTokens = 4000
+
 const ProviderName = "openai-compat-attribution"
 
 type Translator struct {
@@ -64,8 +71,15 @@ func (t *Translator) Translate(ctx context.Context, text, fromLang, toLang strin
 		return "", fmt.Errorf("attribution translate: empty text")
 	}
 	prompt := pinnedPrompt
-	if kind == library.AttrBoost {
+	maxTok := t.MaxTokens
+	switch kind {
+	case library.AttrBoost:
 		prompt = boostPrompt
+	case library.AttrMemory:
+		prompt = memoryPrompt
+		if maxTok < memoryMaxTokens {
+			maxTok = memoryMaxTokens // notes are long; don't truncate
+		}
 	}
 	system, user := splitPrompt(prompt)
 	user = strings.ReplaceAll(user, "__FROM__", fromLang)
@@ -77,7 +91,7 @@ func (t *Translator) Translate(ctx context.Context, text, fromLang, toLang strin
 	var raw response
 	if _, err := t.Client.RunJSON(ctx, openaicompat.Call{
 		Model:     t.Model,
-		MaxTokens: t.MaxTokens,
+		MaxTokens: maxTok,
 		System:    system,
 		User:      user,
 	}, &raw); err != nil {
