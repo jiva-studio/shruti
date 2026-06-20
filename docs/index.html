@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lectorium — docs</title>
+  <link rel="icon" type="image/png" href="assets/app-icon.png">
+
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/dark.css">
+  <style>
+    /* --- Catppuccin Mocha tokens --- */
+    :root {
+      --cp-base: #1e1e2e; --cp-mantle: #181825; --cp-crust: #11111b;
+      --cp-surface0: #313244; --cp-surface1: #45475a; --cp-surface2: #585b70;
+      --cp-text: #cdd6f4; --cp-subtext: #a6adc8; --cp-overlay: #6c7086;
+      --cp-mauve: #cba6f7; --cp-blue: #89b4fa; --cp-green: #a6e3a1;
+      --cp-yellow: #f9e2af; --cp-red: #f38ba8; --cp-peach: #fab387;
+    }
+    body, .sidebar, .markdown-section, section.cover { background: var(--cp-base) !important; color: var(--cp-text) !important; }
+    .sidebar { background: var(--cp-mantle) !important; border-right: 1px solid var(--cp-surface0); }
+    .sidebar-nav li > a, .app-nav li > a { color: var(--cp-subtext) !important; border-right: 0 !important; }
+    .sidebar-nav li.active > a, .sidebar-nav li > a:hover, .app-nav li > a.active, .app-nav li > a:hover { color: var(--cp-mauve) !important; }
+    /* Active item: left accent bar instead of right (right looks dangling on long sidebars) */
+    .sidebar-nav li.active > a { border-left: 3px solid var(--cp-mauve) !important; padding-left: 9px !important; background: var(--cp-base) !important; }
+    /* Sidebar toggle (hamburger at bottom-left): blend into palette */
+    .sidebar-toggle { background: var(--cp-mantle) !important; border-top: 1px solid var(--cp-surface0) !important; }
+    .sidebar-toggle .sidebar-toggle-button { color: var(--cp-mauve) !important; }
+    .sidebar-toggle span { background: var(--cp-mauve) !important; }
+    .markdown-section h1, .markdown-section h2, .markdown-section h3, .markdown-section h4 { color: var(--cp-mauve) !important; }
+    .markdown-section a { color: var(--cp-blue) !important; }
+    .markdown-section code, .markdown-section pre { background: var(--cp-mantle) !important; color: var(--cp-peach) !important; }
+    .markdown-section pre > code { color: var(--cp-text) !important; }
+    .markdown-section blockquote { border-left: 4px solid var(--cp-mauve) !important; background: var(--cp-mantle) !important; color: var(--cp-subtext) !important; }
+    .markdown-section table th, .markdown-section table td { border-color: var(--cp-surface0) !important; }
+    .markdown-section table tr:nth-child(2n) { background: var(--cp-mantle) !important; }
+    /* Search bar (docsify-search): blend with sidebar, no separator strip */
+    .search { background: var(--cp-mantle) !important; border-bottom: 0 !important; }
+    .search input, .search .input-wrap input { background: var(--cp-surface0) !important; color: var(--cp-text) !important; border: 1px solid var(--cp-surface1) !important; outline: none !important; box-shadow: none !important; }
+    .search input:focus, .search .input-wrap input:focus { border-color: var(--cp-mauve) !important; box-shadow: 0 0 0 1px var(--cp-mauve) !important; }
+    .search .clear-button { color: var(--cp-overlay) !important; }
+    .search .results-panel { background: var(--cp-mantle) !important; }
+    .search .matching-post { border-bottom: 1px solid var(--cp-surface0) !important; background: var(--cp-mantle) !important; }
+    .search .matching-post a { color: var(--cp-text) !important; }
+    .search .matching-post .em { color: var(--cp-mauve) !important; font-style: normal; font-weight: 600; }
+    /* Mermaid: blend with page bg, allow pan-zoom */
+    .mermaid { background: var(--cp-mantle); border: 1px solid var(--cp-surface0); border-radius: 6px; padding: 8px; margin: 1em 0; overflow: hidden; }
+    .mermaid svg { max-width: 100%; height: auto; cursor: grab; display: block; margin: 0 auto; }
+    .mermaid:active svg { cursor: grabbing; }
+    .mermaid .pan-hint { position: absolute; right: 8px; top: 8px; font-size: 10px; color: var(--cp-overlay); pointer-events: none; opacity: .5; }
+    /* --- Prism syntax highlighting (Catppuccin Mocha) --- */
+    .markdown-section pre[class*="language-"], .markdown-section pre > code[class*="language-"] {
+      background: var(--cp-mantle) !important; color: var(--cp-text) !important;
+      text-shadow: none !important;
+    }
+    .token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--cp-overlay) !important; font-style: italic; }
+    .token.punctuation { color: var(--cp-subtext) !important; }
+    .token.namespace   { opacity: .7; }
+    .token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol, .token.deleted { color: var(--cp-peach) !important; }
+    .token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted { color: var(--cp-green) !important; }
+    .token.operator, .token.entity, .token.url, .language-css .token.string, .style .token.string { color: var(--cp-sky, #89dceb) !important; background: transparent !important; }
+    .token.atrule, .token.attr-value, .token.keyword { color: var(--cp-mauve) !important; }
+    .token.function, .token.class-name { color: var(--cp-blue) !important; }
+    .token.regex, .token.important, .token.variable { color: var(--cp-yellow) !important; }
+    .token.important, .token.bold { font-weight: bold; }
+    .token.italic { font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="app">Loading…</div>
+  <script>
+    window.$docsify = {
+      name: '<img src="assets/app-icon.png" alt="" style="height:28px;vertical-align:middle;margin-right:8px;border-radius:6px"> Lectorium',
+      repo: false,
+      loadSidebar: true,
+      loadNavbar: true,
+      subMaxLevel: 3,
+      auto2top: true,
+      search: {
+        maxAge: 86400000,
+        paths: 'auto',
+        placeholder: 'Search…',
+        noData: 'No results.',
+        depth: 4
+      }
+    };
+  </script>
+  <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+  <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/docsify-copy-code@2"></script>
+  <!-- Prism language components — docsify v4 ships with markup/css/js only. -->
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-sql.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-typescript.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-jsx.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-tsx.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-rust.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-go.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-nix.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-toml.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-docker.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-markdown.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-fish.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-lua.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-diff.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/docsify-mermaid@2/dist/docsify-mermaid.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.2/dist/svg-pan-zoom.min.js"></script>
+  <script>
+    // Mermaid: themed to Catppuccin Mocha so node fills, edges, and text match the page.
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'loose',
+      theme: 'base',
+      themeVariables: {
+        background:        '#181825',
+        primaryColor:      '#313244',
+        primaryTextColor:  '#cdd6f4',
+        primaryBorderColor:'#cba6f7',
+        secondaryColor:    '#45475a',
+        tertiaryColor:     '#1e1e2e',
+        lineColor:         '#a6adc8',
+        textColor:         '#cdd6f4',
+        nodeTextColor:     '#cdd6f4',
+        clusterBkg:        '#11111b',
+        clusterBorder:     '#45475a',
+        edgeLabelBackground:'#181825',
+        labelBoxBkgColor:  '#313244',
+        labelBoxBorderColor:'#cba6f7',
+        labelTextColor:    '#cdd6f4',
+        actorBkg:          '#313244',
+        actorBorder:       '#cba6f7',
+        actorTextColor:    '#cdd6f4',
+        signalColor:       '#a6adc8',
+        signalTextColor:   '#cdd6f4'
+      }
+    });
+    /* erDiagram: dark fills + muted gray borders (mauve is too loud for cell grids) */
+    var ER_STYLE = document.createElement('style');
+    ER_STYLE.textContent = [
+      '.mermaid .er.entityBox        { stroke: #45475a !important; }',
+      '.mermaid .er.attributeBoxOdd  { fill: #1e1e2e !important; stroke: #45475a !important; }',
+      '.mermaid .er.attributeBoxEven { fill: #181825 !important; stroke: #45475a !important; }',
+      '.mermaid text { fill: #cdd6f4 !important; }'
+    ].join('\n');
+    document.head.appendChild(ER_STYLE);
+    // Pan-zoom on click. svg-pan-zoom replaces the SVG <g> transform; one-time per diagram.
+    document.addEventListener('click', function (e) {
+      var host = e.target.closest('.mermaid');
+      if (!host) return;
+      var svg = host.querySelector('svg');
+      if (!svg || svg.dataset.panZoomed) return;
+      svg.dataset.panZoomed = '1';
+      svg.removeAttribute('height');
+      svg.style.height = '500px';
+      try { svgPanZoom(svg, { controlIconsEnabled: true, fit: true, center: true, minZoom: 0.2, maxZoom: 10 }); } catch (_){}
+    }, true);
+  </script>
+</body>
+</html>
