@@ -26,7 +26,7 @@ from pathlib import Path
 from lectorium_chat.config import Settings, get_settings
 from lectorium_chat.db.client import get_pool
 from lectorium_chat.indexer.embed import get_embedder
-from lectorium_chat.indexer.library import db as library_db
+from lectorium_chat.indexer.library.chunker import split_into_chunks
 from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from lectorium_chat.observability.logging import get_logger
 
@@ -37,17 +37,27 @@ INDEXED_KIND_ATTRIBUTION = "attribution"
 
 def _walk_attributions(library_db_path: Path) -> tuple[
     dict[str, str],                            # id → kind
-    dict[tuple[str, str], list[str]],          # (id, lang) → sorted texts
+    dict[tuple[str, str], list[str]],          # (id, lang) → sorted embed texts
     dict[str, list[dict]],                     # id → refs list
+    dict[tuple[str, str], str],                # (id, lang) → note text (memory)
 ]:
-    """Single pass over library.db. Returns (kinds, variants, refs_map).
+    """Single pass over library.db. Returns (kinds, embed_sets, refs_map, notes).
 
-    Texts are sorted within each (id, lang) so the etag is stable regardless
-    of SQLite row order. Refs are sorted by (position, ref_kind, target_id)
-    for the same reason — refs JSONB is normalised before upsert.
+    `embed_sets[(id, lang)]` is everything to embed for that pair: the trigger
+    phrases PLUS the chunks of the memory note (so a query close to the note
+    content surfaces the memory, not only its triggers). Sorted within each
+    pair so the etag is stable regardless of SQLite row order.
+
+    `notes[(id, lang)]` is the FULL note text (one per language) — embedded via
+    `embed_sets`, but kept whole here so the indexer can mirror it into
+    `attribution_notes` for injection-time fetch.
+
+    Refs are sorted by (position, ref_kind, target_id); the optional `language`
+    key is included only when set — refs JSONB is normalised before upsert.
     """
     attrs: dict[str, str] = {}
-    variants: dict[tuple[str, str], list[str]] = defaultdict(list)
+    triggers: dict[tuple[str, str], list[str]] = defaultdict(list)
+    notes: dict[tuple[str, str], str] = {}
     refs_map: dict[str, list[dict]] = defaultdict(list)
 
     with sqlite3.connect(f"file:{library_db_path}?mode=ro", uri=True) as conn:
@@ -56,22 +66,37 @@ def _walk_attributions(library_db_path: Path) -> tuple[
 
         for aid, lang, text in conn.execute(
             "SELECT attribution_id, language, text "
-            "FROM library_attribution_texts "
+            "FROM library_attribution_triggers "
             "ORDER BY attribution_id, language, text"
         ):
-            variants[(aid, lang)].append(text)
+            triggers[(aid, lang)].append(text)
 
-        for aid, ref_kind, target_id, _position in conn.execute(
-            "SELECT attribution_id, ref_kind, target_id, position "
+        for aid, lang, note in conn.execute(
+            "SELECT attribution_id, language, note "
+            "FROM library_attribution_notes "
+            "ORDER BY attribution_id, language"
+        ):
+            notes[(aid, lang)] = note
+
+        for aid, ref_kind, target_id, language, _position in conn.execute(
+            "SELECT attribution_id, ref_kind, target_id, language, position "
             "FROM library_attribution_refs "
             "ORDER BY attribution_id, position, ref_kind, target_id"
         ):
-            refs_map[aid].append({"ref_kind": ref_kind, "target_id": target_id})
+            ref: dict[str, str] = {"ref_kind": ref_kind, "target_id": target_id}
+            if language:
+                ref["language"] = language
+            refs_map[aid].append(ref)
 
-    # Defensive sort (SQLite ORDER BY on TEXT is deterministic but explicit is safer).
-    for v in variants.values():
+    # Embed set per (id, lang) = trigger phrases + note chunks (union of keys).
+    embed_sets: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for key, texts in triggers.items():
+        embed_sets[key].extend(texts)
+    for key, note in notes.items():
+        embed_sets[key].extend(split_into_chunks(note))
+    for v in embed_sets.values():
         v.sort()
-    return attrs, dict(variants), dict(refs_map)
+    return attrs, dict(embed_sets), dict(refs_map), notes
 
 
 def _etag(texts: list[str]) -> str:
@@ -93,9 +118,9 @@ async def run_once_attribution(settings: Settings | None = None) -> dict:
     pool = get_pool()
 
     t0 = time.monotonic()
-    attrs, variants, refs_map = _walk_attributions(s.library_db_path)
+    attrs, embed_sets, refs_map, notes_map = _walk_attributions(s.library_db_path)
 
-    items_total = len(variants)
+    items_total = len(embed_sets)
     log.info(
         "attribution_walk_complete",
         attributions_total=len(attrs),
@@ -114,16 +139,17 @@ async def run_once_attribution(settings: Settings | None = None) -> dict:
 
     # Detect changed (id, lang) pairs.
     changed: list[tuple[tuple[str, str], list[str], str]] = []
-    for (aid, lang), texts in variants.items():
+    for (aid, lang), texts in embed_sets.items():
         # Dedup on the off-chance SQLite has duplicates (PK normally prevents
-        # this, but guard against future schema drift).
+        # this, but guard against future schema drift). A trigger phrase that
+        # equals a note chunk collapses to one row here.
         deduped = sorted(set(texts))
         h = _etag(deduped)
         if indexed_hash.get((aid, lang)) != h:
             changed.append(((aid, lang), deduped, h))
 
     # GC pass 1: (id, lang) pairs that vanished from library.db
-    current_pairs = set(variants.keys())
+    current_pairs = set(embed_sets.keys())
     stale_pairs = [k for k in indexed_hash if k not in current_pairs]
 
     # GC pass 2: attribution_id orphans (whole attribution removed)
@@ -156,6 +182,37 @@ async def run_once_attribution(settings: Settings | None = None) -> dict:
                     (aid, kind, json.dumps(refs_map.get(aid, []), sort_keys=True, ensure_ascii=False))
                     for aid, kind in attrs.items()
                 ],
+            )
+
+    # Step A2: mirror memory notes (full text, for injection-time fetch). Notes
+    # are small and not embedded here (their chunks ride in `embed_sets`), so
+    # just upsert the current set and delete any that vanished while their
+    # attribution stayed (orphan attributions cascade their notes in Step D).
+    async with pool.acquire() as conn:
+        existing_note_keys = {
+            (r["attribution_id"], r["language"])
+            for r in await conn.fetch("SELECT attribution_id, language FROM attribution_notes")
+        }
+    if notes_map:
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO attribution_notes (attribution_id, language, note, updated_at)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (attribution_id, language) DO UPDATE
+                SET note = EXCLUDED.note, updated_at = NOW()
+                """,
+                [(aid, lang, note) for (aid, lang), note in notes_map.items()],
+            )
+    stale_notes = [
+        k for k in existing_note_keys
+        if k not in notes_map and k[0] not in removed_ids
+    ]
+    if stale_notes:
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                "DELETE FROM attribution_notes WHERE attribution_id = $1 AND language = $2",
+                stale_notes,
             )
 
     # Step B: for each changed (id, lang), replace-all embeddings.
@@ -247,6 +304,7 @@ async def run_once_attribution(settings: Settings | None = None) -> dict:
         attributions_total=len(attrs),
         items_changed=len(changed),
         embeddings_written=embeddings_total,
+        notes_total=len(notes_map),
         stale_pairs_removed=len(stale_pairs),
         orphan_attributions_removed=len(removed_ids),
         duration_ms=int((time.monotonic() - t0) * 1000),

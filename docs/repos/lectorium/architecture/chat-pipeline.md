@@ -87,6 +87,13 @@ exception is a provider-availability failure (out of credits / key rejected), wh
 re-raises so the turn becomes a calm `chat_unavailable` instead of a confident ungrounded
 answer.
 
+A third curator signal, the **`memory` attribution**, runs concurrently and applies to
+**both** paths: `_resolve_memory` finds the best-matching memory, carries its **note** on
+`ResearchResult.memory_note`, and folds its (answer-language-scoped) refs into the citable
+pool. The synthesizer injects the note as a **non-citable BACKGROUND CONTEXT** block — it
+shapes and connects the answer but has no `[^N]`, so it can't be cited. See
+[Memory](memory.md).
+
 ```mermaid
 sequenceDiagram
   autonumber

@@ -165,6 +165,24 @@ func (l *Lazy) AttributionTextRemove(ctx context.Context, id, language, text str
 	return r.AttributionTextRemove(ctx, id, language, text)
 }
 
+func (l *Lazy) AttributionNoteSet(ctx context.Context, id, language, note string) error {
+	r, err := l.openRW(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	return r.AttributionNoteSet(ctx, id, language, note)
+}
+
+func (l *Lazy) AttributionNoteRemove(ctx context.Context, id, language string) error {
+	r, err := l.openRW(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	return r.AttributionNoteRemove(ctx, id, language)
+}
+
 func (l *Lazy) AttributionRefAdd(ctx context.Context, id string, ref library.AttributionRef) error {
 	r, err := l.openRW(ctx)
 	if err != nil {

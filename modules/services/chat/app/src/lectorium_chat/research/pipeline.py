@@ -46,6 +46,7 @@ from lectorium_chat.research.constants import (
     TIMEOUT_FANOUT_S,
     TIMEOUT_FETCH_REFS_S,
     TIMEOUT_PLAN_S,
+    TIMEOUT_MEMORY_LOOKUP_S,
     TIMEOUT_QUESTION_LOOKUP_S,
     TIMEOUT_REGENERATE_S,
     TIMEOUT_TOPIC_EXTRACT_S,
@@ -302,6 +303,95 @@ def _dedupe_refs(refs: list[AttributionRef]) -> list[AttributionRef]:
         seen.add(key)
         out.append(r)
     return out
+
+
+# Canonical score for a matched memory's refs in the citable pool — same flat
+# value boost refs use (floats them above ordinary fanout without claiming
+# pinned authority).
+MEMORY_REF_SCORE = 0.75
+
+
+async def _fetch_memory_note(pool: Any, attribution_id: str, lang: str) -> str | None:
+    """The full note for a matched memory. Prefer the answer language; fall
+    back to English, then any language (the synthesizer reads any language and
+    still answers in the user's, so a fallback note is fine)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT note FROM attribution_notes WHERE attribution_id = $1 AND language = $2",
+            attribution_id, lang,
+        )
+        if row is None:
+            row = await conn.fetchrow(
+                "SELECT note FROM attribution_notes WHERE attribution_id = $1 "
+                "ORDER BY (language = 'en') DESC, language LIMIT 1",
+                attribution_id,
+            )
+    return row["note"] if row else None
+
+
+async def _resolve_memory(
+    *,
+    user_q_embedding: list[float],
+    retrieval_lang: str,
+    answer_lang: str,
+    embed_model: str | None,
+    embed_dim: int,
+    pool: Any,
+    chunk_repo: Any,
+    alias_map: Any,
+    library_db: Any | None,
+    catalog_repo: Any | None,
+    on_event: OnEvent | None,
+) -> tuple[str | None, str | None, list[dict[str, Any]]]:
+    """Find the best-matching memory for this turn and resolve it into
+    (note, attribution_id, ref_envelopes).
+
+    The note is injected as non-citable background context; the refs (scoped to
+    the answer language) are resolved into citable envelopes folded into the
+    pool like boost. Best-effort — returns (None, None, []) on no match."""
+    if pool is None or not embed_model:
+        return None, None, []
+    matches = await find_attributions(
+        kind="memory", user_q_embedding=user_q_embedding, lang=retrieval_lang,
+        embed_model=embed_model, embed_dim=embed_dim, pool=pool,
+    )
+    if not matches:
+        return None, None, []
+    top = matches[0]
+    note = await _fetch_memory_note(pool, top.attribution_id, retrieval_lang)
+    # Keep refs that are language-agnostic OR scoped to this answer language
+    # (e.g. drop the EN lecture ref when answering in RU).
+    scoped_refs = [r for r in top.refs if not r.language or r.language == answer_lang]
+    envelopes: list[dict[str, Any]] = []
+    if scoped_refs:
+        envelopes = await _fetch_refs(
+            scoped_refs, chunk_repo=chunk_repo, alias_map=alias_map,
+            lang=retrieval_lang, canonical_score=MEMORY_REF_SCORE, on_event=on_event,
+            library_db=library_db, catalog_repo=catalog_repo,
+        )
+    log.info(
+        "pipeline_memory_match",
+        attribution_id=top.attribution_id,
+        score=round(top.score, 3),
+        stage=top.stage,
+        has_note=note is not None,
+        refs=len(envelopes),
+    )
+    return note, top.attribution_id, envelopes
+
+
+def _attach_memory(
+    result: ResearchResult,
+    mem: tuple[str | None, str | None, list[dict[str, Any]]],
+) -> ResearchResult:
+    """Fold a resolved memory onto a ResearchResult: the note rides as
+    non-citable background; the refs join the citable pool."""
+    note, mem_id, envelopes = mem
+    result.memory_note = note
+    result.matched_memory_id = mem_id
+    if envelopes:
+        result.research_chunks = list(result.research_chunks) + envelopes
+    return result
 
 
 async def _fetch_refs(
@@ -600,6 +690,19 @@ async def run_research(
         default=[], timeout=TIMEOUT_QUESTION_LOOKUP_S,
         name="question_lookup", request_id=request_id,
     ))
+    # Memory lookup runs concurrently and applies to BOTH paths. Best-effort:
+    # the note shapes the answer as background, its refs join the citable pool.
+    memory_task = asyncio.create_task(_safe(
+        lambda: _resolve_memory(
+            user_q_embedding=user_q_embedding, retrieval_lang=retrieval_lang,
+            answer_lang=lang, embed_model=embed_model, embed_dim=embed_dim,
+            pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
+            library_db=library_db, catalog_repo=catalog_repo, on_event=on_event,
+        ),
+        default=(None, None, []),
+        timeout=TIMEOUT_MEMORY_LOOKUP_S,
+        name="memory_lookup", request_id=request_id,
+    ))
     topic_task: asyncio.Task[list[str]] | None = None
     if pool is not None and embed_model is not None:
         topic_task = asyncio.create_task(_safe(
@@ -719,6 +822,7 @@ async def run_research(
             matched_question_ids=[m.attribution_id for m in question_matches],
             matched_topic_ids=[],
         )
+        _attach_memory(result, await memory_task)
         _kick_caption_gen(
             result, alias_map=alias_map, question=question, lang=lang,
             llm=llm, model=expand_model, request_id=request_id,
@@ -748,6 +852,7 @@ async def run_research(
         reranker=reranker,
         callbacks=callbacks,
     )
+    _attach_memory(long_result, await memory_task)
     _kick_caption_gen(
         long_result, alias_map=alias_map, question=question, lang=lang,
         llm=llm, model=expand_model, request_id=request_id,

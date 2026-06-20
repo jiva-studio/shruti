@@ -18,10 +18,15 @@ from lectorium_chat.research.models import (
     AttributionMatch,
     AttributionRef,
     QueryPlan,
+    ResearchResult,
     SubQuery,
     TopicExtractionResult,
 )
-from lectorium_chat.research.pipeline import run_research
+from lectorium_chat.research.pipeline import (
+    _attach_memory,
+    _resolve_memory,
+    run_research,
+)
 
 
 def _plan(*texts: str) -> QueryPlan:
@@ -1013,3 +1018,46 @@ async def test_boost_topic_refs_ungated_without_reranker():
     )
     texts = {e["text"] for e in result.research_chunks}
     assert {"A", "B"} <= texts
+
+
+# ---- memory layer --------------------------------------------------------
+
+
+def test_attach_memory_folds_note_and_refs() -> None:
+    result = ResearchResult(
+        authoritative_refs=[],
+        research_chunks=[{"type": "verse", "ref": 1}],
+    )
+    env = {"type": "lecture", "ref": 9}
+    _attach_memory(result, ("Бэкграунд про Гиту.", "attribution_m", [env]))
+    assert result.memory_note == "Бэкграунд про Гиту."
+    assert result.matched_memory_id == "attribution_m"
+    # Memory refs join the citable pool; the original chunk is preserved.
+    assert env in result.research_chunks
+    assert len(result.research_chunks) == 2
+
+
+def test_attach_memory_no_match_is_noop() -> None:
+    result = ResearchResult(research_chunks=[{"type": "verse", "ref": 1}])
+    _attach_memory(result, (None, None, []))
+    assert result.memory_note is None
+    assert result.matched_memory_id is None
+    assert len(result.research_chunks) == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_memory_no_pool_is_noop() -> None:
+    note, mem_id, envs = await _resolve_memory(
+        user_q_embedding=[0.1, 0.2],
+        retrieval_lang="ru",
+        answer_lang="ru",
+        embed_model="m",
+        embed_dim=1024,
+        pool=None,
+        chunk_repo=None,
+        alias_map=None,
+        library_db=None,
+        catalog_repo=None,
+        on_event=None,
+    )
+    assert (note, mem_id, envs) == (None, None, [])
