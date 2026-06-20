@@ -63,6 +63,7 @@ type Deps struct {
 	Regions             RegionsDeps
 	ConfigPublish       ConfigPublishDeps
 	ConfigKV            ConfigDeps
+	Wisdom              WisdomDeps
 	Find                FindDeps
 	InDir               string
 	OutDir              string

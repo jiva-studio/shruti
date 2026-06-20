@@ -646,6 +646,10 @@ func main() {
 			KV:       sqlitecatalog.NewLazy(currentDBPath),
 			Registry: configRegistry,
 		},
+		Wisdom: tools.WisdomDeps{
+			Catalog: sqlitecatalog.NewLazy(currentDBPath),
+			Minter:  minter,
+		},
 		Metadata: extractmeta.UseCase{
 			Registry:        registry,
 			Audio:           audioStore,

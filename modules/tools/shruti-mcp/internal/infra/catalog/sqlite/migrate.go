@@ -35,6 +35,37 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureKeyValueTable(ctx, db); err != nil {
 		return fmt.Errorf("ensure key_value table: %w", err)
 	}
+	if err := ensureDailyWisdomTable(ctx, db); err != nil {
+		return fmt.Errorf("ensure daily_wisdom table: %w", err)
+	}
+	return nil
+}
+
+// ensureDailyWisdomTable creates the daily-wisdom corpus: one row is a short,
+// playable lecture fragment (track + [start,end] ms + excerpt text) tied to a
+// topic. The mobile "daily wisdom" proactive rule samples a row for one of the
+// user's chosen topics and posts it into chat as a playable cite.
+//
+// Additive under the SAME scheme — older binaries never query it. Idempotent.
+func ensureDailyWisdomTable(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS daily_wisdom (
+			id         TEXT NOT NULL PRIMARY KEY,
+			track_id   TEXT NOT NULL,
+			language   TEXT NOT NULL,
+			start_ms   INTEGER NOT NULL,
+			end_ms     INTEGER NOT NULL,
+			text       TEXT NOT NULL,
+			topic_id   TEXT NOT NULL,
+			created_at INTEGER NOT NULL DEFAULT (CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_daily_wisdom_topic ON daily_wisdom(topic_id, language)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("apply %q: %w", s, err)
+		}
+	}
 	return nil
 }
 
