@@ -16,6 +16,8 @@ import { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
 import { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
 import { createSqlProactiveStateRepository } from "./proactiveStateRepository.sql.js"
 import { createSqlCollectionRepository } from "./collectionsRepository.sql.js"
+import { createSqlKeyValueRepository } from "./keyValueRepository.sql.js"
+import { createSqlDailyWisdomRepository } from "./dailyWisdomRepository.sql.js"
 
 export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
@@ -34,6 +36,8 @@ export { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
 export { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
 export { createSqlProactiveStateRepository } from "./proactiveStateRepository.sql.js"
 export { createSqlCollectionRepository } from "./collectionsRepository.sql.js"
+export { createSqlKeyValueRepository } from "./keyValueRepository.sql.js"
+export { createSqlDailyWisdomRepository } from "./dailyWisdomRepository.sql.js"
 export type {
   FeaturedCollectionRow,
   CollectionDetail,
@@ -59,6 +63,8 @@ export interface SqlAppRepositories {
   readonly chatMessages: ReturnType<typeof createSqlChatMessageRepository>
   readonly proactiveState: ReturnType<typeof createSqlProactiveStateRepository>
   readonly collections: ReturnType<typeof createSqlCollectionRepository>
+  readonly keyValue: ReturnType<typeof createSqlKeyValueRepository>
+  readonly dailyWisdom: ReturnType<typeof createSqlDailyWisdomRepository>
 }
 
 export interface CreateSqlAppRepositoriesDeps {
@@ -98,5 +104,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     chatMessages: createSqlChatMessageRepository(deps.userDb),
     proactiveState: createSqlProactiveStateRepository(deps.userDb),
     collections: createSqlCollectionRepository(deps.contentDb),
+    keyValue: createSqlKeyValueRepository(deps.contentDb),
+    dailyWisdom: createSqlDailyWisdomRepository(deps.contentDb),
   }
 }
