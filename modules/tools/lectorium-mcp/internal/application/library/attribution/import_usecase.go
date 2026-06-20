@@ -137,7 +137,7 @@ func (uc UseCase) Import(ctx context.Context, p ImportPlan) (ImportResult, error
 				uc.sampleErr(&res, fmt.Sprintf("find %s %q: %v", kind, text, ferr))
 				continue
 			}
-			id, err := uc.Create(ctx, kind, p.Language, text)
+			id, err := uc.Create(ctx, kind, p.Language, text, "")
 			if err != nil {
 				res.Errors++
 				uc.sampleErr(&res, fmt.Sprintf("create %s %q: %v", kind, text, err))

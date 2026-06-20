@@ -76,6 +76,79 @@ func TestAttributionCreate_BasicFlow(t *testing.T) {
 	}
 }
 
+func TestAttributionNote_SetGetRemove(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	if err := r.AttributionCreate(ctx, "attribution_m", library.AttrMemory, "ru", "структура гиты"); err != nil {
+		t.Fatalf("create memory: %v", err)
+	}
+	if err := r.AttributionNoteSet(ctx, "attribution_m", "ru", "Гита делится на три части по шесть глав."); err != nil {
+		t.Fatalf("note set ru: %v", err)
+	}
+	if err := r.AttributionNoteSet(ctx, "attribution_m", "en", "The Gita splits into three sections of six chapters."); err != nil {
+		t.Fatalf("note set en: %v", err)
+	}
+	// Upsert: re-setting the same language replaces (still one note per lang).
+	if err := r.AttributionNoteSet(ctx, "attribution_m", "ru", "обновлённая заметка"); err != nil {
+		t.Fatalf("note upsert ru: %v", err)
+	}
+	got, ok, err := r.AttributionGet(ctx, "attribution_m")
+	if err != nil || !ok {
+		t.Fatalf("get: ok=%v err=%v", ok, err)
+	}
+	if got.Notes["ru"] != "обновлённая заметка" {
+		t.Fatalf("ru note mismatch: %q", got.Notes["ru"])
+	}
+	if got.Notes["en"] == "" {
+		t.Fatalf("en note missing")
+	}
+	if err := r.AttributionNoteRemove(ctx, "attribution_m", "ru"); err != nil {
+		t.Fatalf("note remove: %v", err)
+	}
+	got, _, _ = r.AttributionGet(ctx, "attribution_m")
+	if _, exists := got.Notes["ru"]; exists {
+		t.Fatalf("expected ru note removed, got %q", got.Notes["ru"])
+	}
+	if got.Notes["en"] == "" {
+		t.Fatalf("en note should survive ru removal")
+	}
+}
+
+func TestAttributionRefAdd_TrackWithLanguage(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	_ = r.AttributionCreate(ctx, "attribution_m", library.AttrMemory, "ru", "история арджуны")
+	// Track refs are opaque (not in library.db) but format-validated, and carry
+	// an optional answer-language scope.
+	if err := r.AttributionRefAdd(ctx, "attribution_m", library.AttributionRef{
+		Kind: "track", TargetID: "track_abc@1200000-1500000", Language: "en",
+	}); err != nil {
+		t.Fatalf("track ref add: %v", err)
+	}
+	if err := r.AttributionRefAdd(ctx, "attribution_m", library.AttributionRef{
+		Kind: "track", TargetID: "track_xyz@900000-1100000", Language: "ru",
+	}); err != nil {
+		t.Fatalf("track ref add ru: %v", err)
+	}
+	// A malformed track target is rejected on shape.
+	if err := r.AttributionRefAdd(ctx, "attribution_m", library.AttributionRef{
+		Kind: "track", TargetID: "track_nope",
+	}); err == nil {
+		t.Fatalf("expected malformed track target to be rejected")
+	}
+	got, _, _ := r.AttributionGet(ctx, "attribution_m")
+	if len(got.Refs) != 2 {
+		t.Fatalf("expected 2 track refs, got %d", len(got.Refs))
+	}
+	langs := map[string]string{}
+	for _, ref := range got.Refs {
+		langs[ref.TargetID] = ref.Language
+	}
+	if langs["track_abc@1200000-1500000"] != "en" || langs["track_xyz@900000-1100000"] != "ru" {
+		t.Fatalf("ref language not round-tripped: %v", langs)
+	}
+}
+
 func TestAttributionTextAdd_MultipleVariants(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "", "", "")
@@ -264,11 +337,11 @@ func TestAttributionDelete_CascadesTextsAndRefs(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 	var n int
-	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM library_attribution_texts WHERE attribution_id='attribution_a'`).Scan(&n); err != nil {
-		t.Fatalf("count texts: %v", err)
+	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM library_attribution_triggers WHERE attribution_id='attribution_a'`).Scan(&n); err != nil {
+		t.Fatalf("count triggers: %v", err)
 	}
 	if n != 0 {
-		t.Fatalf("cascade texts failed: %d remain", n)
+		t.Fatalf("cascade triggers failed: %d remain", n)
 	}
 	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM library_attribution_refs WHERE attribution_id='attribution_a'`).Scan(&n); err != nil {
 		t.Fatalf("count refs: %v", err)

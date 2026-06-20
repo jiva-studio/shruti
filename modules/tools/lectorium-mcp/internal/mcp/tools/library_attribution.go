@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -27,8 +28,11 @@ func RegisterLibraryAttribution(s *server.MCPServer, deps LibraryAttributionDeps
 	registerAttributionCreate(s, deps)
 	registerAttributionGet(s, deps)
 	registerAttributionList(s, deps)
-	registerAttributionTextAdd(s, deps)
-	registerAttributionTextRemove(s, deps)
+	registerAttributionTriggerAdd(s, deps)
+	registerAttributionTriggerRemove(s, deps)
+	registerAttributionNoteSet(s, deps)
+	registerAttributionNoteRemove(s, deps)
+	registerAttributionNoteTranslate(s, deps)
 	registerAttributionRefAdd(s, deps)
 	registerAttributionRefRemove(s, deps)
 	registerAttributionDelete(s, deps)
@@ -40,10 +44,11 @@ func RegisterLibraryAttribution(s *server.MCPServer, deps LibraryAttributionDeps
 func registerAttributionCreate(s *server.MCPServer, deps LibraryAttributionDeps) {
 	const kind = "library.attribution.create"
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("Create a new attribution (kind=pinned or kind=boost). Auto-translates the source text into every supported language as a best-effort side-effect."),
-		mcp.WithString("kind", mcp.Required(), mcp.Description("pinned | boost")),
+		mcp.WithDescription("Create a new attribution (kind=pinned, boost, or memory). Auto-translates the source text (and, for memory, the note) into every supported language as a best-effort side-effect."),
+		mcp.WithString("kind", mcp.Required(), mcp.Description("pinned | boost | memory")),
 		mcp.WithString("language", mcp.Required(), mcp.Description("Source-text language (ISO-639-1, e.g. \"ru\" or \"en\").")),
-		mcp.WithString("text", mcp.Required(), mcp.Description("Canonical text (the query phrasing for kind=pinned; the topical label for kind=boost).")),
+		mcp.WithString("text", mcp.Required(), mcp.Description("Canonical text: the query phrasing for kind=pinned; the topical label for kind=boost; the first trigger phrase (a concentrated title-like search key) for kind=memory.")),
+		mcp.WithString("note", mcp.Description("kind=memory only: the long curator note (background context injected into the answer, never cited). Auto-translated into every language.")),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		kindIn, err := req.RequireString("kind")
@@ -59,11 +64,12 @@ func registerAttributionCreate(s *server.MCPServer, deps LibraryAttributionDeps)
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 		ak := library.AttributionKind(kindIn)
-		if ak != library.AttrPinned && ak != library.AttrBoost {
+		if ak != library.AttrPinned && ak != library.AttrBoost && ak != library.AttrMemory {
 			return envelope.Err(kind, envelope.CodeValidationFailed,
-				fmt.Sprintf("invalid kind %q (must be 'pinned' or 'boost')", kindIn), nil), nil
+				fmt.Sprintf("invalid kind %q (must be 'pinned', 'boost' or 'memory')", kindIn), nil), nil
 		}
-		id, err := deps.UseCase.Create(ctx, ak, lang, text)
+		note := req.GetString("note", "")
+		id, err := deps.UseCase.Create(ctx, ak, lang, text, note)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
@@ -109,8 +115,8 @@ func registerAttributionGet(s *server.MCPServer, deps LibraryAttributionDeps) {
 func registerAttributionList(s *server.MCPServer, deps LibraryAttributionDeps) {
 	const kind = "library.attribution.list"
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("List attributions (paginated). Filter by kind (pinned|boost), by substring match on any text, optionally restricted to a language."),
-		mcp.WithString("kind", mcp.Description("pinned | boost")),
+		mcp.WithDescription("List attributions (paginated). Filter by kind (pinned|boost|memory), by substring match on any text, optionally restricted to a language."),
+		mcp.WithString("kind", mcp.Description("pinned | boost | memory")),
 		mcp.WithString("query", mcp.Description("Substring match (LIKE) on any text variant.")),
 		mcp.WithString("language", mcp.Description("Restrict the query substring-match to this language only.")),
 		mcp.WithNumber("limit", mcp.Description("Page size (default 50, max 500).")),
@@ -124,7 +130,7 @@ func registerAttributionList(s *server.MCPServer, deps LibraryAttributionDeps) {
 			Limit:    int(req.GetFloat("limit", 50)),
 			Cursor:   req.GetString("cursor", ""),
 		}
-		if opts.Kind != "" && opts.Kind != library.AttrPinned && opts.Kind != library.AttrBoost {
+		if opts.Kind != "" && opts.Kind != library.AttrPinned && opts.Kind != library.AttrBoost && opts.Kind != library.AttrMemory {
 			return envelope.Err(kind, envelope.CodeValidationFailed,
 				fmt.Sprintf("invalid kind filter %q", opts.Kind), nil), nil
 		}
@@ -143,12 +149,12 @@ func registerAttributionList(s *server.MCPServer, deps LibraryAttributionDeps) {
 	})
 }
 
-// ---------- TEXT ADD ----------
+// ---------- TRIGGER ADD ----------
 
-func registerAttributionTextAdd(s *server.MCPServer, deps LibraryAttributionDeps) {
-	const kind = "library.attribution.text_add"
+func registerAttributionTriggerAdd(s *server.MCPServer, deps LibraryAttributionDeps) {
+	const kind = "library.attribution.trigger_add"
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("Add one text variant to an attribution. Duplicate (id, language, text) is a graceful no-op."),
+		mcp.WithDescription("Add one trigger phrase (a short search key) to an attribution. Duplicate (id, language, text) is a graceful no-op."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 		mcp.WithString("text", mcp.Required()),
@@ -176,12 +182,12 @@ func registerAttributionTextAdd(s *server.MCPServer, deps LibraryAttributionDeps
 	})
 }
 
-// ---------- TEXT REMOVE ----------
+// ---------- TRIGGER REMOVE ----------
 
-func registerAttributionTextRemove(s *server.MCPServer, deps LibraryAttributionDeps) {
-	const kind = "library.attribution.text_remove"
+func registerAttributionTriggerRemove(s *server.MCPServer, deps LibraryAttributionDeps) {
+	const kind = "library.attribution.trigger_remove"
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("Remove one specific text variant. No-op if absent."),
+		mcp.WithDescription("Remove one specific trigger phrase. No-op if absent."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 		mcp.WithString("text", mcp.Required()),
@@ -200,6 +206,88 @@ func registerAttributionTextRemove(s *server.MCPServer, deps LibraryAttributionD
 		return envelope.Result(kind, struct {
 			Attribution library.Attribution `json:"attribution"`
 		}{attr}), nil
+	})
+}
+
+// ---------- NOTE SET / REMOVE / TRANSLATE (memory) ----------
+
+func registerAttributionNoteSet(s *server.MCPServer, deps LibraryAttributionDeps) {
+	const kind = "library.attribution.note_set"
+	t := mcp.NewTool(kind,
+		mcp.WithDescription("Set (upsert) the note for a memory attribution in one language. One note per language — re-setting replaces it. The note is injected as non-citable background context."),
+		mcp.WithString("id", mcp.Required()),
+		mcp.WithString("language", mcp.Required()),
+		mcp.WithString("note", mcp.Required()),
+	)
+	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, _ := req.RequireString("id")
+		lang, _ := req.RequireString("language")
+		note, _ := req.RequireString("note")
+		if id == "" || lang == "" || note == "" {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, "id, language, note required", nil), nil
+		}
+		if err := deps.UseCase.NoteSet(ctx, id, lang, note); err != nil {
+			return mapAttributionError(kind, err), nil
+		}
+		attr, _, _ := deps.UseCase.Get(ctx, id)
+		return envelope.Result(kind, struct {
+			Attribution library.Attribution `json:"attribution"`
+		}{attr}), nil
+	})
+}
+
+func registerAttributionNoteRemove(s *server.MCPServer, deps LibraryAttributionDeps) {
+	const kind = "library.attribution.note_remove"
+	t := mcp.NewTool(kind,
+		mcp.WithDescription("Remove the note for a memory attribution in one language. No-op if absent."),
+		mcp.WithString("id", mcp.Required()),
+		mcp.WithString("language", mcp.Required()),
+	)
+	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, _ := req.RequireString("id")
+		lang, _ := req.RequireString("language")
+		if id == "" || lang == "" {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, "id, language required", nil), nil
+		}
+		if err := deps.UseCase.NoteRemove(ctx, id, lang); err != nil {
+			return mapAttributionError(kind, err), nil
+		}
+		attr, _, _ := deps.UseCase.Get(ctx, id)
+		return envelope.Result(kind, struct {
+			Attribution library.Attribution `json:"attribution"`
+		}{attr}), nil
+	})
+}
+
+func registerAttributionNoteTranslate(s *server.MCPServer, deps LibraryAttributionDeps) {
+	const kind = "library.attribution.note_translate"
+	t := mcp.NewTool(kind,
+		mcp.WithDescription("Translate memory notes from one language to another (e.g. ru→en). Fills only MISSING target notes — never overwrites an existing one. With no ids, walks every memory attribution."),
+		mcp.WithString("from", mcp.Required(), mcp.Description("Source language (ISO-639-1).")),
+		mcp.WithString("to", mcp.Required(), mcp.Description("Target language (ISO-639-1).")),
+		mcp.WithString("ids", mcp.Description("Optional comma-separated attribution ids to limit the run. Empty = all memory attributions.")),
+	)
+	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		from, _ := req.RequireString("from")
+		to, _ := req.RequireString("to")
+		if from == "" || to == "" {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, "from and to required", nil), nil
+		}
+		var ids []string
+		if raw := req.GetString("ids", ""); raw != "" {
+			for _, p := range strings.Split(raw, ",") {
+				if id := strings.TrimSpace(p); id != "" {
+					ids = append(ids, id)
+				}
+			}
+		}
+		written, err := deps.UseCase.NoteTranslate(ctx, from, to, ids)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
+		}
+		return envelope.Result(kind, struct {
+			Translated int `json:"translated"`
+		}{written}), nil
 	})
 }
 
@@ -225,6 +313,7 @@ func registerAttributionRefAdd(s *server.MCPServer, deps LibraryAttributionDeps)
 		mcp.WithString("track_id", mcp.Description("For ref_kind=track shortcut: lecture track id (e.g. track_05IvjZ0RI7vs).")),
 		mcp.WithNumber("start_ms", mcp.Description("For ref_kind=track shortcut: fragment start in ms.")),
 		mcp.WithNumber("end_ms", mcp.Description("For ref_kind=track shortcut: fragment end in ms.")),
+		mcp.WithString("language", mcp.Description("Optional answer-language scope (ISO-639-1). Empty = applies to every language (e.g. a verse). Set it for language-specific refs like an EN vs RU lecture of the same talk.")),
 		mcp.WithNumber("position", mcp.Description("Ordering hint within the attribution (default 0).")),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -247,6 +336,7 @@ func registerAttributionRefAdd(s *server.MCPServer, deps LibraryAttributionDeps)
 		ref := library.AttributionRef{
 			Kind:     refKind,
 			TargetID: target,
+			Language: req.GetString("language", ""),
 			Position: int(req.GetFloat("position", 0)),
 		}
 		if err := deps.UseCase.RefAdd(ctx, id, ref); err != nil {
