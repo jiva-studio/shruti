@@ -310,6 +310,11 @@ def _dedupe_refs(refs: list[AttributionRef]) -> list[AttributionRef]:
 # pinned authority).
 MEMORY_REF_SCORE = 0.75
 
+# Max planner rephrasings (sub-query texts + alt_phrasings) the memory lookup
+# probes in addition to the raw query — each is one extra pgvector lookup, so
+# bound it. Raw query + up to this many keeps latency in check.
+MEMORY_SUBQUERY_CAP = 6
+
 
 async def _fetch_memory_note(pool: Any, attribution_id: str, lang: str) -> str | None:
     """The full note for a matched memory. Prefer the answer language; fall
@@ -332,6 +337,8 @@ async def _fetch_memory_note(pool: Any, attribution_id: str, lang: str) -> str |
 async def _resolve_memory(
     *,
     user_q_embedding: list[float],
+    sub_query_texts: list[str],
+    embedder: Any,
     retrieval_lang: str,
     answer_lang: str,
     embed_model: str | None,
@@ -346,18 +353,35 @@ async def _resolve_memory(
     """Find the best-matching memory for this turn and resolve it into
     (note, attribution_id, ref_envelopes).
 
+    The lookup runs against the raw query AND each planner sub-query, taking the
+    best match. A paraphrase the raw query embeds too far from a trigger ("как
+    устроена Гита") often decomposes into a sub-query ("структура Бхагавад-гиты")
+    that matches the trigger strongly — so this widens recall WITHOUT authoring a
+    trigger per phrasing, and lifts borderline matches clear of the accept floor.
+
     The note is injected as non-citable background context; the refs (scoped to
     the answer language) are resolved into citable envelopes folded into the
     pool like boost. Best-effort — returns (None, None, []) on no match."""
     if pool is None or not embed_model:
         return None, None, []
-    matches = await find_attributions(
-        kind="memory", user_q_embedding=user_q_embedding, lang=retrieval_lang,
-        embed_model=embed_model, embed_dim=embed_dim, pool=pool,
-    )
-    if not matches:
+
+    embeddings: list[list[float]] = [user_q_embedding]
+    if sub_query_texts and embedder is not None:
+        try:
+            embeddings.extend(await embedder.embed_queries(sub_query_texts))
+        except Exception as exc:  # noqa: BLE001 — best-effort
+            log.warning("memory_subquery_embed_failed", error=str(exc))
+
+    top: AttributionMatch | None = None
+    for emb in embeddings:
+        matches = await find_attributions(
+            kind="memory", user_q_embedding=emb, lang=retrieval_lang,
+            embed_model=embed_model, embed_dim=embed_dim, pool=pool,
+        )
+        if matches and (top is None or matches[0].score > top.score):
+            top = matches[0]
+    if top is None:
         return None, None, []
-    top = matches[0]
     note = await _fetch_memory_note(pool, top.attribution_id, retrieval_lang)
     # Keep refs that are language-agnostic OR scoped to this answer language
     # (e.g. drop the EN lecture ref when answering in RU).
@@ -385,12 +409,18 @@ def _attach_memory(
     mem: tuple[str | None, str | None, list[dict[str, Any]]],
 ) -> ResearchResult:
     """Fold a resolved memory onto a ResearchResult: the note rides as
-    non-citable background; the refs join the citable pool."""
+    non-citable background; the refs are AUTHORITATIVE.
+
+    A memory's refs are curator-picked (a human deliberately selected exactly
+    these shlokas for exactly this note), so they ride with `authoritative_refs`
+    — pinned ahead of the reranked fanout pool — rather than being thrown into
+    the pool and reranked against ordinary chunks where the planner can drop
+    them. The note builds the theses; these refs are their intended evidence."""
     note, mem_id, envelopes = mem
     result.memory_note = note
     result.matched_memory_id = mem_id
     if envelopes:
-        result.research_chunks = list(result.research_chunks) + envelopes
+        result.authoritative_refs = list(result.authoritative_refs) + envelopes
     return result
 
 
@@ -690,19 +720,6 @@ async def run_research(
         default=[], timeout=TIMEOUT_QUESTION_LOOKUP_S,
         name="question_lookup", request_id=request_id,
     ))
-    # Memory lookup runs concurrently and applies to BOTH paths. Best-effort:
-    # the note shapes the answer as background, its refs join the citable pool.
-    memory_task = asyncio.create_task(_safe(
-        lambda: _resolve_memory(
-            user_q_embedding=user_q_embedding, retrieval_lang=retrieval_lang,
-            answer_lang=lang, embed_model=embed_model, embed_dim=embed_dim,
-            pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
-            library_db=library_db, catalog_repo=catalog_repo, on_event=on_event,
-        ),
-        default=(None, None, []),
-        timeout=TIMEOUT_MEMORY_LOOKUP_S,
-        name="memory_lookup", request_id=request_id,
-    ))
     topic_task: asyncio.Task[list[str]] | None = None
     if pool is not None and embed_model is not None:
         topic_task = asyncio.create_task(_safe(
@@ -723,6 +740,32 @@ async def run_research(
     # alt_phrasings are NOT surfaced to keep the panel readable.
     for sq in plan.sub_queries:
         _emit_question(on_event, sq.text, question)
+
+    # Memory lookup runs concurrently with retrieval and applies to BOTH paths.
+    # Reuses the planner's rephrasings (sub-query texts + their alt_phrasings) so
+    # a memory matches on ANY angle of the question, not just the raw wording —
+    # no trigger-per-phrasing needed. Deduped + capped to bound the lookups.
+    _seen_mem_q: set[str] = set()
+    sub_query_texts: list[str] = []
+    for sq in plan.sub_queries:
+        for txt in (sq.text, *sq.alt_phrasings):
+            t = (txt or "").strip()
+            if t and t != question and t.lower() not in _seen_mem_q:
+                _seen_mem_q.add(t.lower())
+                sub_query_texts.append(t)
+    sub_query_texts = sub_query_texts[:MEMORY_SUBQUERY_CAP]
+    memory_task = asyncio.create_task(_safe(
+        lambda: _resolve_memory(
+            user_q_embedding=user_q_embedding, sub_query_texts=sub_query_texts,
+            embedder=embedder, retrieval_lang=retrieval_lang,
+            answer_lang=lang, embed_model=embed_model, embed_dim=embed_dim,
+            pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
+            library_db=library_db, catalog_repo=catalog_repo, on_event=on_event,
+        ),
+        default=(None, None, []),
+        timeout=TIMEOUT_MEMORY_LOOKUP_S,
+        name="memory_lookup", request_id=request_id,
+    ))
 
     # 2. SHORT PATH — question-attribution found.
     if question_matches:
