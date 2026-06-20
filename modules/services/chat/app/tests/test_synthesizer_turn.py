@@ -571,6 +571,60 @@ async def test_notes_in_system_block_not_assistant_role() -> None:
         assert "[result " not in m["content"]
 
 
+async def test_memory_note_injected_as_noncitable_background() -> None:
+    """A curator memory note rides in the system block as BACKGROUND CONTEXT —
+    it shapes the answer but carries no `[^N]`, so it can't be cited. It must
+    not leak into a non-system message either."""
+    aliases = TurnAliasMap()
+    expander = MarkerExpander(aliases)
+    llm = StreamingLLM(chunks=["ok"])
+
+    note = "Бхагавад-гита делится на три части по шесть глав."
+    await _drain(
+        run_synthesizer_turn(
+            "из чего состоит Гита",
+            tool_results=[
+                {"type": "lecture", "ref": 1, "label": "L", "text": "Body…", "meta": {}}
+            ],
+            llm=llm,
+            expander=expander,
+            system_prompt="SYS",
+            history=None,
+            memory_note=note,
+        )
+    )
+    msgs = llm.seen_messages[0]
+    sys_content = msgs[0]["content"]
+    assert msgs[0]["role"] == "system"
+    # The note appears as background context, above the numbered notes.
+    assert "BACKGROUND CONTEXT" in sys_content
+    assert note in sys_content
+    assert sys_content.index(note) < sys_content.index("RESEARCH NOTES")
+    # No numbered marker is minted for the note (it is uncitable by construction).
+    assert "[^" not in note
+    # And it never leaks into a user/assistant message.
+    for m in msgs[1:]:
+        assert note not in m["content"]
+
+
+async def test_no_memory_note_no_background_block() -> None:
+    """Without a memory note the BACKGROUND CONTEXT block is absent entirely."""
+    aliases = TurnAliasMap()
+    expander = MarkerExpander(aliases)
+    llm = StreamingLLM(chunks=["ok"])
+    await _drain(
+        run_synthesizer_turn(
+            "q",
+            tool_results=[{"type": "lecture", "ref": 1, "label": "L", "text": "B", "meta": {}}],
+            llm=llm,
+            expander=expander,
+            system_prompt="SYS",
+            history=None,
+        )
+    )
+    assert "BACKGROUND CONTEXT" not in llm.seen_messages[0][0]["content"]
+
+
 # ─── Regressions for tracks_list note rendering ─────────────────────
 #
 # Production bug: "Покажи лекции по БГ 2.13" routed correctly to
