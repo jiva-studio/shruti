@@ -1,6 +1,6 @@
 import type { ProactiveRuleConfig, ProactiveRuleId } from "@lib/domain/config.js"
 import type { TopicId } from "@lib/domain/core.js"
-import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
+import type { ChatActionPayload, ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
 import type { IProactiveChatService } from "@lib/contracts"
 import type { AppRepositories } from "@shruti/repositories.js"
@@ -115,6 +115,11 @@ export interface ProactiveRuleHandler {
      *  from `IProactiveChatService` (LLM-emitted markers). The scheduler
      *  runs `validateAndScrubActions` to narrow before persistence. */
     readonly actions?: Record<string, ChatActionPayload | unknown>
+    /** Transcript snippets for `[cite:…]` markers the body embeds, keyed
+     *  `"<trackId>|<startMs>-<endMs>"`. A client-side rule (daily wisdom)
+     *  has no server to stream these, so it pre-seeds them here — without
+     *  it the marker degrades to a chip whose server-cut excerpt 404s. */
+    readonly cites?: Record<string, ChatCiteSnippet>
   } | null>
 
   /**

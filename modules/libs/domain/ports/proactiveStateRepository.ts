@@ -1,4 +1,4 @@
-import type { ChatActionPayload } from "../chatMessage.js"
+import type { ChatActionPayload, ChatCiteSnippet } from "../chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "../core.js"
 import type { ProactiveRuleId } from "../config.js"
 
@@ -147,14 +147,15 @@ export interface IProactiveStateRepository {
     preparedAt?: number
   ): Promise<void>
 
-  /** Overwrite the body markdown — and optionally the `actions` map
-   *  inside the meta envelope — on the underlying chat_messages row.
-   *  Called after a content builder returns. When `actions` is omitted
-   *  the existing payload map is left untouched. */
+  /** Overwrite the body markdown — and optionally the `actions` and/or
+   *  `cites` maps inside the meta envelope — on the underlying
+   *  chat_messages row. Called after a content builder returns. An omitted
+   *  map is left untouched (each is preserved independently). */
   updateContent(
     chatMessageId: ChatMessageId,
     content: string,
-    actions?: Record<string, ChatActionPayload>
+    actions?: Record<string, ChatActionPayload>,
+    cites?: Record<string, ChatCiteSnippet>
   ): Promise<void>
 
   /**

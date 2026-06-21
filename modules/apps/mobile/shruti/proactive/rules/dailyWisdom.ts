@@ -60,7 +60,16 @@ const handler: ProactiveRuleHandler = {
       .replace(/\]/g, ")")
       .trim()
     const marker = `[cite:${wisdom.trackId}@${wisdom.startMs}-${wisdom.endMs}|${caption}]`
-    return { bodyMd: `${intro}\n\n${marker}` }
+    // Pre-seed the cite snippet so CitationCard renders the full quote card
+    // (with text + an inline player that cuts from the track audio), instead of
+    // degrading to a chip whose server-cut excerpt doesn't exist for a
+    // client-minted cite — see the `cites` note on ProactiveRuleHandler.
+    return {
+      bodyMd: `${intro}\n\n${marker}`,
+      cites: {
+        [`${wisdom.trackId}|${wisdom.startMs}-${wisdom.endMs}`]: { text: wisdom.text },
+      },
+    }
   },
 }
 

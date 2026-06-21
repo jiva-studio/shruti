@@ -53,7 +53,16 @@
       v-model:notifications-enabled="notificationsEnabled"
       v-model:notifications-time="notificationsTime"
       :smart-library-subtitle="smartLibrary.subtitle.value"
+      :daily-wisdom-subtitle="dailyWisdomSubtitle"
       @open-smart-library="onSmartLibraryEntry"
+      @open-daily-wisdom="dailyWisdomDialogOpen = true"
+    />
+
+    <DailyWisdomDialog
+      v-model:selected="dailyWisdomTopicIds"
+      :open="dailyWisdomDialogOpen"
+      :topics="dailyWisdomTopics"
+      @update:open="dailyWisdomDialogOpen = $event"
     />
 
     <SmartLibraryDialog
@@ -130,6 +139,7 @@ import {
   SettingsLibraryGroup,
   SettingsSadhanaGroup,
   SmartLibraryDialog,
+  DailyWisdomDialog,
   TrackInfoDialog,
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"
@@ -172,6 +182,8 @@ const {
   openTranscriptAutomatically,
   notificationsEnabled,
   notificationsTime,
+  dailyWisdomTopicIds,
+  dailyWisdomTopics,
   autoDownloadTargetSeconds,
   smartLibrary,
   libraryLanguages,
@@ -205,6 +217,13 @@ const logsOpen = ref(false)
 const trackInfoOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
+const dailyWisdomDialogOpen = ref(false)
+
+const dailyWisdomSubtitle = computed(() =>
+  dailyWisdomTopicIds.value.length > 0
+    ? t("settings.dailyWisdom.subtitleOn", { count: dailyWisdomTopicIds.value.length })
+    : t("settings.dailyWisdom.subtitleOff")
+)
 
 async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<void> {
   // The action sheet that produced this emit has already dismissed
