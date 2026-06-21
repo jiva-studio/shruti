@@ -51,8 +51,11 @@ const props = withDefaults(
     pageCount: number
     modelValue: number
     showSkip?: boolean
+    /** Disable page-swipe (e.g. on the paywall, whose own screenshot strip
+     *  would otherwise fight the gesture). Dots still navigate. */
+    swipeDisabled?: boolean
   }>(),
-  { showSkip: true }
+  { showSkip: true, swipeDisabled: false }
 )
 
 const emit = defineEmits<{
@@ -65,6 +68,7 @@ const { page, dragOffset, viewportWidth, onPointerDown, goTo } = useHorizontalCa
   pageCount: props.pageCount,
   initialPage: props.modelValue,
   viewportEl: () => viewportRef.value,
+  swipeDisabled: () => props.swipeDisabled,
 })
 
 watch(page, (p) => emit("update:modelValue", p))
@@ -153,6 +157,11 @@ const trackStyle = computed(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ob-slide::-webkit-scrollbar {
+  display: none;
 }
 /* Vertically centre each screen's content in the viewport; tall content
    (e.g. the value-moment lecture list) still scrolls via the auto margins. */

@@ -46,6 +46,19 @@ export function createSqlDailyWisdomRepository(contentDb: IDatabase): IDailyWisd
       }
     },
 
+    async list(language?: LanguageCode): Promise<readonly DailyWisdom[]> {
+      try {
+        const rows = language
+          ? await contentDb.query<DailyWisdomRow>("SELECT * FROM daily_wisdom WHERE language = ?", [
+              language,
+            ])
+          : await contentDb.query<DailyWisdomRow>("SELECT * FROM daily_wisdom")
+        return rows.map(rowToWisdom)
+      } catch {
+        return []
+      }
+    },
+
     async topicsWithWisdom(
       topicIds: readonly TopicId[],
       language?: LanguageCode
