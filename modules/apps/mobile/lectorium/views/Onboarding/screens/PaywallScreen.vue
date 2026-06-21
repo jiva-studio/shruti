@@ -94,7 +94,7 @@ const failed = reactive(new Set<string>())
 .ob-paywall {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   /* Fill the slide so the legal links can sit at the bottom, near the footer
      buttons, instead of floating mid-screen. */
   min-height: 100%;
@@ -151,7 +151,7 @@ const failed = reactive(new Set<string>())
 .ob-paywall__img {
   width: 100%;
   /* Top-crop: show the head of each screen, the rest cut off. */
-  height: clamp(260px, 42vh, 380px);
+  height: clamp(200px, 32vh, 300px);
   object-fit: cover;
   object-position: top center;
   border-radius: 12px;
