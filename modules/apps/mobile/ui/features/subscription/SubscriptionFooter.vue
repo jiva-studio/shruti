@@ -31,7 +31,7 @@
         {{ ctaLabel }}
       </IonButton>
 
-      <IonNote class="trial-disclaimer">
+      <IonNote v-if="!hideDisclaimer" class="trial-disclaimer">
         {{
           selectedHasTrial
             ? $t("settings.subscription.trialDisclaimer")
@@ -70,7 +70,7 @@
       {{ $t("settings.subscription.cantPay") }}
     </IonButton>
 
-    <div class="secondary">
+    <div v-if="!hideSecondary" class="secondary">
       <RowDivider class="secondary-divider" />
       <div class="secondary-links">
         <a
@@ -138,6 +138,10 @@ const props = defineProps<{
   restoring: boolean
   legalDocuments: LegalDocumentView[]
   showCantPay?: boolean
+  /** Hide the trial/renewal disclaimer note (onboarding shows plans + CTA only). */
+  hideDisclaimer?: boolean
+  /** Hide the Restore + legal-links row (onboarding renders them elsewhere). */
+  hideSecondary?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -157,7 +161,10 @@ watch(
   (next) => {
     if (selectedPackageId.value) return
     if (next.length === 0) return
-    selectedPackageId.value = next[0]?.packageId
+    // Default to the plan that carries a free trial (typically the annual),
+    // falling back to the first package.
+    const withTrial = next.find((p) => p.introOffer?.isFree)
+    selectedPackageId.value = (withTrial ?? next[0])?.packageId
   },
   { immediate: true }
 )
@@ -226,12 +233,11 @@ function onSubscribeClick(): void {
 
 <style scoped>
 .footer {
-  padding: 4px 0 8px;
   background: var(--ion-background-color);
 }
 
 .plan {
-  margin: 0 16px 8px;
+  margin: 0 0 8px;
   border-radius: 12px;
   --border-radius: 12px;
   --min-height: 56px;
@@ -246,7 +252,7 @@ function onSubscribeClick(): void {
 }
 
 .cta {
-  margin: 12px 16px 4px;
+  margin: 12px 0 0;
   --box-shadow: none;
   --border-radius: 12px;
 }
@@ -286,14 +292,14 @@ function onSubscribeClick(): void {
 }
 
 .cant-pay {
-  margin: 0 16px;
+  margin: 0;
   --box-shadow: none;
   font-size: 0.9rem;
 }
 
 .footer-status {
   display: block;
-  margin: 12px 16px;
+  margin: 12px 0;
   font-size: 0.9rem;
   line-height: 1.3;
   color: var(--ion-color-medium);
@@ -305,7 +311,7 @@ function onSubscribeClick(): void {
 }
 
 .secondary-divider {
-  margin: 0 16px 14px;
+  margin: 0 0 14px;
 }
 
 .secondary-links {
@@ -313,7 +319,7 @@ function onSubscribeClick(): void {
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
-  padding: 0 16px 12px;
+  padding: 0 0 12px;
 }
 
 .secondary-link {

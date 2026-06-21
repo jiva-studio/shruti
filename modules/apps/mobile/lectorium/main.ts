@@ -61,6 +61,8 @@ import { createFailoverClient } from "@kit/servers"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
 import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
+import { runStartupBootstrap } from "./services/startup.js"
+import { readOnboardingCompleted, ONBOARDING_COMPLETED_KEY } from "./stores/useOnboardingStore.js"
 import { installConsoleCapture } from "./services/logger/index.js"
 import { initMonitoring } from "./services/monitoring/index.js"
 import { reportError } from "./services/monitoring/reportError.js"
@@ -159,7 +161,7 @@ initLectorium({
           // Hard reload: bootstrap re-opens the user DB and `runUserMigrations`
           // brings any older imported schema forward to current.
           onImported: () => {
-            window.location.href = "/welcome"
+            window.location.href = "/"
           },
         })
       : useWebDatabaseTransfer({
@@ -167,7 +169,7 @@ initLectorium({
           getUserDb,
           exportFileName: () => `lectorium.${Date.now()}.db`,
           onImported: () => {
-            window.location.href = "/welcome"
+            window.location.href = "/"
           },
         }),
   platform,
@@ -198,36 +200,56 @@ if (import.meta.env.VITE_DEBUG_API === "true") {
   })
 }
 
-// Hydrate the region list from the last-persisted (downloaded) config
-// BEFORE mounting, so the first CDN probe in the Welcome flow goes to the
-// latest regions from the file rather than the bundled bootstrap seed.
-// Failure is non-fatal — hydrateRegions falls back to the bundled list.
-void hydrateRegions(preferences)
-  .then(() => router.isReady())
-  .then(() => {
-    app.mount("#app")
-    // Fire-and-forget: RevenueCat SDK configure + initial customer fetch
-    // + live-update subscription. Failures must not block app startup —
-    // the purchase UI just stays hidden if init fails.
-    void usePurchasesStore()
-      .init()
-      .catch((e) => {
-        reportError("purchases", e)
-      })
-    // Bootstrap anonymous-by-device session. Resolves the persistent
-    // userId asynchronously; the rest of the app reads it via useAuthStore.
-    void useAuthStore()
-      .restore()
-      .catch((e) => {
-        reportError("auth", e)
-      })
-    // Warm the Search landing page in the background so it renders fully formed
-    // (no section-by-section pop-in) the moment the user opens the tab. Failures
-    // are non-fatal — the view re-runs ensureLoaded() on mount and shows its
-    // spinner if the data isn't ready yet.
-    void useLibraryLandingStore()
-      .ensureLoaded()
-      .catch((e) => {
-        console.warn("library landing preload failed", e)
-      })
+// Headless startup, all before the first paint — there is NO loading screen.
+// 1) Hydrate the region list from the last-persisted (downloaded) config so the
+//    first CDN probe targets the latest regions, not the bundled seed.
+// 2) Open the databases (the bundled DB makes this instant + offline on first
+//    launch; cached on later launches). Failure is logged, not fatal.
+// 3) Choose the initial route: first launch → onboarding, otherwise Home.
+// The OS-native splash covers this brief, invisible work.
+async function start(): Promise<void> {
+  await hydrateRegions(preferences).catch((e) => {
+    console.warn("[lectorium] region hydration failed; using bundled defaults", e)
   })
+
+  const startup = await runStartupBootstrap()
+  if (!startup.ready) {
+    reportError("startup", new Error(startup.error ?? "content database failed to open"))
+  }
+
+  // Skip first-launch onboarding for established users: the explicit
+  // `onboarding.completed` flag (set at the end of the flow), OR any prior
+  // listening session — the reliable signal for someone upgrading from a
+  // pre-onboarding build, where the flag was never written. Stamp the flag
+  // once inferred so later launches skip the DB probe.
+  const completedFlag = await readOnboardingCompleted(preferences).catch(() => false)
+  let hasHistory = false
+  if (!completedFlag && startup.ready) {
+    hasHistory = await useLectorium()
+      .repositories()
+      .listeningSessions.hasAny()
+      .catch(() => false)
+    if (hasHistory) await preferences.set(ONBOARDING_COMPLETED_KEY, "true").catch(() => undefined)
+  }
+  const onboarded = completedFlag || hasHistory
+  const target = onboarded ? "/tabs/home" : "/onboarding"
+
+  await router.isReady()
+  if (router.currentRoute.value.path !== target) {
+    await router.replace(target)
+  }
+  app.mount("#app")
+
+  // Fire-and-forget post-mount work. Failures must not block startup.
+  void usePurchasesStore()
+    .init()
+    .catch((e) => reportError("purchases", e))
+  void useAuthStore()
+    .restore()
+    .catch((e) => reportError("auth", e))
+  void useLibraryLandingStore()
+    .ensureLoaded()
+    .catch((e) => console.warn("library landing preload failed", e))
+}
+
+void start()

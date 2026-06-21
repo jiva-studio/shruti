@@ -28,6 +28,7 @@
           </FeatureCarousel>
         </div>
         <SubscriptionFooter
+          class="settings-footer"
           :packages="subscription.packages"
           :is-subscribed="subscription.isSubscribed"
           :ready="subscription.ready"
@@ -67,6 +68,10 @@ const defaultBackHref = "/tabs/settings"
 </script>
 
 <style scoped>
+.settings-footer {
+  padding-inline: 16px;
+}
+
 .layout {
   display: flex;
   flex-direction: column;

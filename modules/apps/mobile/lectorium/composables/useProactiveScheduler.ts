@@ -5,7 +5,7 @@ import type { PluginListenerHandle } from "@capacitor/core"
 import { createJsonRemoteStorage } from "@kit/infra"
 import type { ProactiveConfig, RemoteAppConfig } from "@lib/domain/config.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
-import type { ChatMessageId } from "@lib/domain/core.js"
+import type { ChatMessageId, TopicId } from "@lib/domain/core.js"
 import type {
   IProactiveStateRepository,
   ProactiveStateEntry,
@@ -14,6 +14,7 @@ import { getActivityOverview } from "@usecases/activity/getActivityOverview.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { ONBOARDING_INTERESTS_KEY } from "@lectorium/stores/useOnboardingStore.js"
 import { isEligible } from "@lectorium/proactive/eligibility.js"
 import { isWithinCooldown } from "@lectorium/proactive/cooldown.js"
 import { validateAndScrubActions } from "@lectorium/proactive/markerValidator.js"
@@ -167,6 +168,20 @@ export function useProactiveScheduler(): void {
       firstSeenAt.value = nowMs
     }
 
+    // The user's onboarding topic interests — fuel for the daily-wisdom rule.
+    let interestTopicIds: readonly TopicId[] = []
+    try {
+      const raw = await app.preferences.get(ONBOARDING_INTERESTS_KEY)
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          interestTopicIds = parsed.filter((x): x is string => typeof x === "string") as TopicId[]
+        }
+      }
+    } catch {
+      // Corrupt / unset — leave empty; the rule simply doesn't fire.
+    }
+
     return {
       nowMs,
       localDate: localDate(now),
@@ -174,6 +189,7 @@ export function useProactiveScheduler(): void {
       timezone,
       locale: language.value,
       hasNotificationsPermission: permission === "granted",
+      notificationsEnabled: dailyEnabled.value,
       isSubscribed: purchases.isSubscribed,
       totalListenedSeconds,
       currentStreak,
@@ -187,6 +203,7 @@ export function useProactiveScheduler(): void {
       // top of tick().
       repos: app.repositories(),
       proactiveChat: app.proactiveChat,
+      interestTopicIds,
     }
   }
 
@@ -267,7 +284,7 @@ export function useProactiveScheduler(): void {
         (result.actions ?? {}) as Record<string, ChatActionPayload>,
         app.repositories().tracks
       )
-      await repo.updateContent(entry.chatMessageId, scrubbed.bodyMd, scrubbed.actions)
+      await repo.updateContent(entry.chatMessageId, scrubbed.bodyMd, scrubbed.actions, result.cites)
       await repo.updatePrepState(
         entry.chatMessageId,
         scrubbed.degraded ? "degraded" : "ready",

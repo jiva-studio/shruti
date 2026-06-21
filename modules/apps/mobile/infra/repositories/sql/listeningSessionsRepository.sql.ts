@@ -170,6 +170,13 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       return result
     },
 
+    async hasAny(): Promise<boolean> {
+      const rows = await db.query<{ one: number }>(
+        "SELECT 1 AS one FROM listening_sessions LIMIT 1"
+      )
+      return rows.length > 0
+    },
+
     async getTotalListenedSeconds(): Promise<number> {
       // MAX(0, …) per row so any legacy negative-delta sessions (written
       // before the `start()` clamp) can't drag the total below the truth.

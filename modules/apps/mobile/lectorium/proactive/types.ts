@@ -1,5 +1,6 @@
 import type { ProactiveRuleConfig, ProactiveRuleId } from "@lib/domain/config.js"
-import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
+import type { TopicId } from "@lib/domain/core.js"
+import type { ChatActionPayload, ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
 import type { IProactiveChatService } from "@lib/contracts"
 import type { AppRepositories } from "@lectorium/repositories.js"
@@ -17,6 +18,10 @@ export interface ProactiveContext {
   readonly timezone: string // IANA, e.g. 'Europe/Moscow'
   readonly locale: string // app language code, e.g. 'ru'
   readonly hasNotificationsPermission: boolean
+  /** Whether the user turned on daily engagement (settings.notificationsEnabled).
+   *  The daily-wisdom rule gates on this so a silent wisdom still posts to chat
+   *  when the toggle is on even if the OS permission was denied. */
+  readonly notificationsEnabled: boolean
   readonly isSubscribed: boolean
   readonly totalListenedSeconds: number
   readonly currentStreak: number
@@ -33,6 +38,9 @@ export interface ProactiveContext {
   /** Backend HTTP client for `kind=proactive` SSE turns. Bound via
    *  port so rules don't import infra directly. */
   readonly proactiveChat: IProactiveChatService
+  /** Topic ids the user picked during onboarding (the daily-wisdom rule
+   *  samples one of these). Empty when onboarding was skipped. */
+  readonly interestTopicIds: readonly TopicId[]
 }
 
 /**
@@ -107,6 +115,11 @@ export interface ProactiveRuleHandler {
      *  from `IProactiveChatService` (LLM-emitted markers). The scheduler
      *  runs `validateAndScrubActions` to narrow before persistence. */
     readonly actions?: Record<string, ChatActionPayload | unknown>
+    /** Transcript snippets for `[cite:…]` markers the body embeds, keyed
+     *  `"<trackId>|<startMs>-<endMs>"`. A client-side rule (daily wisdom)
+     *  has no server to stream these, so it pre-seeds them here — without
+     *  it the marker degrades to a chip whose server-cut excerpt 404s. */
+    readonly cites?: Record<string, ChatCiteSnippet>
   } | null>
 
   /**

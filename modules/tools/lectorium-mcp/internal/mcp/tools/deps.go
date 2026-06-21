@@ -62,6 +62,8 @@ type Deps struct {
 	Proactive           ProactiveDeps
 	Regions             RegionsDeps
 	ConfigPublish       ConfigPublishDeps
+	ConfigStore         ConfigDeps
+	Wisdom              WisdomDeps
 	Find                FindDeps
 	InDir               string
 	OutDir              string

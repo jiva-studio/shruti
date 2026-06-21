@@ -56,6 +56,19 @@ const BUNDLED_DEFAULTS: ProactiveRuleConfig[] = [
     ],
   },
   {
+    id: "daily_wisdom",
+    enabled: true,
+    mode: "pre_baked",
+    prep_window_hours: 0,
+    refresh_if_older_than_hours: 24,
+    // Its own chat session so the daily excerpt doesn't crash an existing
+    // conversation; the handler emits a localised sessionTitleOverride.
+    session_strategy: "new_session",
+    // One excerpt per day. The handler also gates on the user's daily-
+    // engagement toggle + a non-empty interest set.
+    cooldown_hours: 24,
+  },
+  {
     id: "weekly_digest",
     enabled: true,
     mode: "pre_baked",

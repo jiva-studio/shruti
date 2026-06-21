@@ -297,6 +297,14 @@ export default {
     },
   },
 
+  dailyWisdom: {
+    title: "Napi bölcsesség",
+    subtitleOn: "Be · {count} téma",
+    subtitleOff: "Ki · csak emlékeztető",
+    hint: "Válaszd ki a témákat, amelyekről napi rövid gondolatot szeretnél — az emlékeztető idején lejátszható részletet küldünk a csevegésbe. Választás nélkül csak az emlékeztetőt kapod.",
+    empty: "Még nincs napi bölcsességgel rendelkező téma.",
+  },
+
   data: {
     export: {
       title: "Felhasználói adatok exportálása",

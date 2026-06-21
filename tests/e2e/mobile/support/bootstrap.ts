@@ -242,6 +242,21 @@ export async function preseedAuthTokens(page: Page): Promise<void> {
   })
 }
 
+/**
+ * Mark first-launch onboarding as already completed so `boot()` lands straight
+ * on Home. Without this, a fresh origin replays onboarding and the Home specs
+ * would never reach the tab bar. The dedicated onboarding spec omits this.
+ */
+export async function preseedOnboardingDone(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("CapacitorStorage.onboarding.completed", "true")
+    } catch {
+      /* non-fatal */
+    }
+  })
+}
+
 /* ------------------------------ boot ------------------------------- */
 
 const KILL_ANIMATIONS_CSS = `
@@ -269,6 +284,9 @@ export async function boot(
   await preseedUserDb(page, locale, userDb)
   await preseedSearchFilter(page, locale, opts.sourceIds)
   if (dismissNags) await preseedDismissedNags(page)
+  // Skip first-launch onboarding so we land on Home (the dedicated onboarding
+  // spec omits this to exercise the flow).
+  await preseedOnboardingDone(page)
   // The dev build treats every user as Pro. For the e2e suite we flip that:
   // boot NON-Pro by default (so paywalls / Pro gates are reproducible) and
   // turn Pro on explicitly with `boot(page, locale, { pro: true })`.
@@ -328,6 +346,7 @@ export async function bootDeviceLocale(
   await preseedUserDb(page, userDb, opts.userDbStrategy ?? "preseed")
   if (opts.filterLangs) await preseedSearchFilterLangs(page, opts.filterLangs)
   await preseedDismissedNags(page)
+  await preseedOnboardingDone(page)
 
   // No `?locale=` override: detectLocale()/Device.getLanguageCode() fall through
   // to navigator.language, set by the Playwright `locale` context option.

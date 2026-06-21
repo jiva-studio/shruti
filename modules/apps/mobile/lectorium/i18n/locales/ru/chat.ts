@@ -269,6 +269,11 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Незаконченная лекция",
   proactiveSessionTitleInactivity: "Вернись к практике",
   proactiveSessionTitleWeeklyDigest: "Итоги недели",
+  proactiveSessionTitleDailyWisdom: "Ежедневная мудрость",
+
+  // Pre-baked intro for the `daily_wisdom` rule; the playable excerpt cite
+  // marker follows on its own line.
+  proactiveDailyWisdomBody: "Мысль из лекций на сегодня:",
 
   // Статичный текст сессии возврата (`inactivity`). Эскалация — на
   // уведомлениях, а сама сессия несёт одно тёплое приветствие, готовое
