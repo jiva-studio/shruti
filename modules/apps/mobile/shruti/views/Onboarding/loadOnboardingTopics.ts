@@ -2,7 +2,6 @@ import type { LanguageCode, TopicId } from "@lib/domain/core.js"
 import type { Topic } from "@lib/domain/topic.js"
 import type { ITopicRepository } from "@lib/domain/ports/topicRepository.js"
 import type { ISettingsRepository } from "@lib/domain/ports/settingsRepository.js"
-import type { IDailyWisdomRepository } from "@lib/domain/ports/dailyWisdomRepository.js"
 
 /** One selectable topic chip in the onboarding picker. */
 export interface OnboardingTopicOption {
@@ -63,22 +62,5 @@ export async function loadOnboardingTopics(
     topics = await repos.topics.getByIds(usable.slice(0, CURATED_FALLBACK_LIMIT))
   }
 
-  return topics.map((t) => ({ id: t.id, label: label(t, lang) }))
-}
-
-/**
- * Topics that actually have a daily-wisdom fragment in the corpus — the options
- * for the Settings "Daily wisdom" picker. Selecting any of these (persisted to
- * the same `onboarding.interestTopicIds` the rule samples) turns on the
- * in-chat wisdom; an empty pick leaves only the plain daily reminder.
- */
-export async function loadDailyWisdomTopics(
-  repos: { topics: ITopicRepository; dailyWisdom: IDailyWisdomRepository },
-  lang: LanguageCode
-): Promise<OnboardingTopicOption[]> {
-  const all = await repos.dailyWisdom.list()
-  const ids = [...new Set(all.map((w) => w.topicId))] as TopicId[]
-  if (ids.length === 0) return []
-  const topics = await repos.topics.getByIds(ids)
   return topics.map((t) => ({ id: t.id, label: label(t, lang) }))
 }

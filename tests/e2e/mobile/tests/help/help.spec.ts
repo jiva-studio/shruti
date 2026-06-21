@@ -49,11 +49,15 @@ test(
     // step 3 — (language) under a Russian app/library the TOC text is Cyrillic.
     // Steps 0-2 exercise the English UI (the "Open help" item and the Back
     // button are matched by their English labels, and the en help pages render).
-    // The Cyrillic-TOC check needs a Russian boot, which a single boot() can't
-    // share with the English steps above — so this step re-boots the app in ru,
-    // re-opens the dialog and asserts the localized TOC. boot() re-navigates with
-    // a fresh ?locale and re-seeds the ru user.db, so the last boot wins.
+    // Re-boot in Russian for the Cyrillic-TOC check.
     await step(page, 123, 3, async () => {
+      await page.addInitScript(() => {
+        try {
+          localStorage.setItem("CapacitorStorage.settings.appLanguage", JSON.stringify("ru"))
+        } catch {
+          /* non-fatal */
+        }
+      })
       await boot(page, "ru", { userDb: "clean" })
       await gotoTab(page, "settings")
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/sqliteutil"
@@ -41,9 +42,11 @@ func (r *Repo) SetSetting(ctx context.Context, key, value string) error {
 // ListSettings returns all rows whose key starts with prefix (empty = all),
 // ordered by key.
 func (r *Repo) ListSettings(ctx context.Context, prefix string) ([]catalog.Setting, error) {
+	// Escape LIKE metacharacters in the prefix so a key like `a_b` is matched
+	// literally instead of `_` acting as a single-char wildcard.
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT key, value, updated_at FROM settings WHERE key LIKE ? ORDER BY key`,
-		prefix+"%")
+		`SELECT key, value, updated_at FROM settings WHERE key LIKE ? ESCAPE '\' ORDER BY key`,
+		escapeLikePrefix(prefix)+"%")
 	if err != nil {
 		return nil, fmt.Errorf("list settings: %w", err)
 	}
@@ -57,4 +60,11 @@ func (r *Repo) ListSettings(ctx context.Context, prefix string) ([]catalog.Setti
 		out = append(out, kv)
 	}
 	return out, rows.Err()
+}
+
+// escapeLikePrefix backslash-escapes the LIKE wildcards (`\`, `%`, `_`) in a
+// literal prefix, paired with `ESCAPE '\'` in the query.
+func escapeLikePrefix(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
 }
