@@ -23,8 +23,9 @@ test(
 
     await step(page, 107, 1, async () => {
       // At least the Privacy Policy link is present (Terms is iOS-only and absent
-      // on the web build).
-      const links = page.locator(".legal a")
+      // on the web build). Legal links render as href-bearing secondary-links in
+      // the footer (the Restore action is a secondary-link WITHOUT an href).
+      const links = page.locator(".subscription-page a.secondary-link[href]")
       await expect(links.first()).toBeVisible({ timeout: 10_000 })
       expect(await links.count()).toBeGreaterThanOrEqual(1)
 
