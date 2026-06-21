@@ -236,7 +236,10 @@ async function start(): Promise<void> {
 
   await router.isReady()
   if (router.currentRoute.value.path !== target) {
-    await router.replace(target)
+    // Preserve the query (notably `?locale=…`, used by the screenshots pipeline
+    // and e2e to pin the UI language) — a bare path replace would strip it
+    // before `detectLocale()` reads it, falling back to the device language.
+    await router.replace({ path: target, query: router.currentRoute.value.query })
   }
   app.mount("#app")
 

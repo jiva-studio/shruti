@@ -10,6 +10,16 @@ test(
   qase(106, caseTitle(106)),
   { tag: ["@offline", "@subscription"] },
   async ({ page }) => {
+    // Pin the UI language to Russian (the "Can't pay" entry is RU-only). The
+    // `?locale` query the boot uses only seeds the default and can be lost to the
+    // startup route replace, so persist it as the Settings picker would.
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("CapacitorStorage.settings.appLanguage", JSON.stringify("ru"))
+      } catch {
+        /* non-fatal */
+      }
+    })
     await boot(page, "ru", { userDb: "clean" })
     await gotoTab(page, "settings")
 
