@@ -1,6 +1,7 @@
 import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
-import { interceptContent, preseedUserDb, preseedNonPro } from "../../support/bootstrap.js"
+import { interceptContent, preseedUserDbOnce, preseedNonPro } from "../../support/bootstrap.js"
+import { playlistRows } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
@@ -15,7 +16,9 @@ import { step, caseTitle } from "../../support/steps.js"
  */
 test(qase(165, caseTitle(165)), { tag: ["@offline", "@onboarding"] }, async ({ page }) => {
   await interceptContent(page)
-  await preseedUserDb(page, "en", "clean")
+  // Seed clean ONCE so the relaunch (step 3) keeps what onboarding wrote —
+  // the unconditional preseed re-runs on every navigation and would wipe it.
+  await preseedUserDbOnce(page, "en", "clean")
   await preseedNonPro(page)
 
   const primary = page.getByTestId("onboarding-primary")
@@ -31,25 +34,27 @@ test(qase(165, caseTitle(165)), { tag: ["@offline", "@onboarding"] }, async ({ p
 
   await step(page, 165, 1, async () => {
     await primary.click() // Welcome → Topics
+    await page.getByTestId("onboarding-topics").locator("button").first().click()
     await primary.click() // Topics → Daily wisdom
-    // Enable daily wisdom via the morning preset (radio group: off / morning /
-    // afternoon / evening), clickable once the slide is active.
     await page.getByTestId("onboarding-wisdom-morning").click()
   })
 
   await step(page, 165, 2, async () => {
     await primary.click() // Daily wisdom → Value moment
     await primary.click() // Value moment → Paywall
-    // On the paywall the generic primary is hidden; finish via Skip ("Later").
     await expect(primary).toHaveCount(0)
     await page.getByTestId("onboarding-skip").click()
     await page.waitForURL("**/tabs/home", { timeout: 30_000 })
     await expect(page.locator("ion-tab-bar")).toBeVisible()
+    // The matched lectures were auto-added to the playlist during onboarding.
+    await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
   })
 
   await step(page, 165, 3, async () => {
     await page.goto("/")
     await page.waitForURL("**/tabs/home", { timeout: 30_000 })
     await expect(page.getByTestId("onboarding-primary")).toHaveCount(0)
+    // The seeded playlist persists across a relaunch.
+    await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
   })
 })

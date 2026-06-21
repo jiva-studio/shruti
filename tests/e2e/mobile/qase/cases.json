@@ -2843,11 +2843,11 @@
       },
       {
         "action": "Advance through the Value moment to the paywall, then tap Skip ('Later').",
-        "expected": "On the paywall the generic primary is hidden; Skip finishes onboarding and the app navigates to Home with the tab bar visible."
+        "expected": "On the paywall the generic primary is hidden; Skip finishes onboarding and the app navigates to Home with the tab bar visible. The lectures matched during onboarding are in the playlist."
       },
       {
         "action": "Relaunch the app.",
-        "expected": "Onboarding is not replayed — the app opens directly on Home (the completed flag persisted)."
+        "expected": "Onboarding is not replayed — the app opens directly on Home (the completed flag persisted), and the onboarding-seeded playlist is still there."
       }
     ]
   },
