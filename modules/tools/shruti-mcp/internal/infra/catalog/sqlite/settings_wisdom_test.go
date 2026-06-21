@@ -17,6 +17,12 @@ func newMigratedTestRepo(t *testing.T) (*Repo, func()) {
 		t.Fatalf("open: %v", err)
 	}
 	ctx := context.Background()
+	// The published schema always ships a `migrations` table; the onboarding
+	// migration records its scheme row there. Stand it up for the bare in-memory DB.
+	if _, err := db.ExecContext(ctx,
+		`CREATE TABLE migrations (name TEXT PRIMARY KEY, scheme INTEGER, applied_at INTEGER)`); err != nil {
+		t.Fatalf("create migrations: %v", err)
+	}
 	// Idempotency: run each ensure twice.
 	for i := 0; i < 2; i++ {
 		if err := ensureSettingsTable(ctx, db); err != nil {
