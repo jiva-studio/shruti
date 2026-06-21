@@ -1,5 +1,5 @@
 import type { ProactiveRuleConfig, ProactiveRuleId } from "@lib/domain/config.js"
-import type { LanguageCode, TopicId } from "@lib/domain/core.js"
+import type { LanguageCode } from "@lib/domain/core.js"
 import type { ChatActionPayload, ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
 import type { IProactiveChatService } from "@lib/contracts"
@@ -38,9 +38,6 @@ export interface ProactiveContext {
   /** Backend HTTP client for `kind=proactive` SSE turns. Bound via
    *  port so rules don't import infra directly. */
   readonly proactiveChat: IProactiveChatService
-  /** Topic ids the user picked during onboarding (the daily-wisdom rule
-   *  samples one of these). Empty when onboarding was skipped. */
-  readonly interestTopicIds: readonly TopicId[]
   /** The user's chosen library (lecture content) languages — the same set
    *  that filters lectures everywhere. The daily-wisdom rule restricts its
    *  fragment to these so it never delivers an excerpt in a language the

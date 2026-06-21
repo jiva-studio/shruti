@@ -2,43 +2,40 @@ import { registerRule } from "../registry.js"
 import type { ProactiveRuleHandler } from "../types.js"
 
 /**
- * Daily wisdom: once a day, drop a short playable lecture excerpt into chat,
- * sampled from one of the topics the user picked during onboarding.
+ * Daily wisdom: once a day, drop a short playable lecture excerpt into chat.
+ *
+ * The fragment is picked **at random from the whole corpus** — not by the
+ * user's topics. Scoping it to a few interest topics drains the small per-topic
+ * pool fast (it would repeat or run dry), so we draw from everything and only
+ * constrain by language.
  *
  * Flow:
  * 1. Restrict to the user's library (lecture) languages — a fragment is only
  *    eligible if it's in a language the user actually reads. Better to skip a
  *    day than deliver an excerpt the user can't understand.
- * 2. From the user's interest topics, keep those that have a fragment in one of
- *    those languages.
- * 3. Pick a random language, topic, then fragment.
- * 4. Emit it as a SILENT chat message (`visibleAt: null`, `notify: false`) —
+ * 2. Pick a random fragment in one of those languages.
+ * 3. Emit it as a SILENT chat message (`visibleAt: null`, `notify: false`) —
  *    the fragment renders as a playable cite card. The separate daily-reminder
  *    push (notificationPlanner) provides the OS nudge, so the message still
  *    appears in chat even when notification permission was denied.
  *
  * `ruleDate = wisdom.id` so `UNIQUE(rule_kind, rule_date)` shows each fragment
  * at most once across the retention window; `cooldown_hours: 24` caps it to one
- * per day. Gated on the user's daily-engagement toggle + a non-empty interest
- * set — both off → the rule stays silent.
+ * per day. Gated only on the user's daily-engagement toggle
+ * (`settings.notificationsEnabled`) — off → the rule stays silent.
  */
 export const dailyWisdomRule: ProactiveRuleHandler = {
   id: "daily_wisdom",
 
   async detect(ctx) {
-    if (!ctx.notificationsEnabled || ctx.interestTopicIds.length === 0) return []
+    if (!ctx.notificationsEnabled) return []
 
     // Each library language, in random order, so a multi-language user isn't
     // biased to the first. `undefined` (no library filter set) = any language.
     const langs = ctx.libraryLanguages.length > 0 ? shuffle(ctx.libraryLanguages) : [undefined]
 
     for (const lang of langs) {
-      const topicsWith = await ctx.repos.dailyWisdom.topicsWithWisdom(ctx.interestTopicIds, lang)
-      const topic = pickRandom(topicsWith)
-      if (topic === null) continue
-
-      const candidates = await ctx.repos.dailyWisdom.byTopic(topic, lang)
-      const wisdom = pickRandom(candidates)
+      const wisdom = pickRandom(await ctx.repos.dailyWisdom.list(lang))
       if (wisdom === null) continue
 
       return [

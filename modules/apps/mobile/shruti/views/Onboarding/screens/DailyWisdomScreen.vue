@@ -47,12 +47,11 @@ import { ToggleChip } from "@ui/primitives/index.js"
 import OnboardingHeading from "@ui/features/onboarding/OnboardingHeading.vue"
 import CitationCard from "@shruti/views/Chat/components/CitationCard.vue"
 import type { DailyWisdom } from "@lib/domain/dailyWisdom.js"
-import type { LanguageCode, TopicId } from "@lib/domain/core.js"
+import type { LanguageCode } from "@lib/domain/core.js"
 
 const props = defineProps<{
   enabled: boolean
   time: [number, number]
-  topicIds: readonly string[]
   active?: boolean
 }>()
 
@@ -74,22 +73,13 @@ function pickRandom<T>(arr: readonly T[]): T | null {
   return arr.length === 0 ? null : arr[Math.floor(Math.random() * arr.length)]
 }
 
-// One fragment for the preview: prefer the user's picked topics, then fall back
-// to any fragment. Each step walks the library languages (then en/ru) so the
-// example reads in a language the user has content in — the same fallback chain
-// the value screen uses for lectures.
+// One random fragment for the preview — same as what the rule delivers: a
+// random excerpt in the user's library language (then en/ru, then anything),
+// not scoped to the picked topics.
 async function loadPreview(): Promise<void> {
   if (wisdom.value) return
   const repos = app.repositories()
   const langs = [...new Set([...libraryLanguages.value, "en", "ru"])] as LanguageCode[]
-  const topics = props.topicIds as readonly TopicId[]
-
-  for (const lang of langs) {
-    const topic = pickRandom(await repos.dailyWisdom.topicsWithWisdom(topics, lang))
-    if (!topic) continue
-    const w = pickRandom(await repos.dailyWisdom.byTopic(topic, lang))
-    if (w) return void (wisdom.value = w)
-  }
   for (const lang of langs) {
     const w = pickRandom(await repos.dailyWisdom.list(lang))
     if (w) return void (wisdom.value = w)

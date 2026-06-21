@@ -14,7 +14,6 @@
             v-else-if="index === 2"
             :enabled="wisdomEnabled"
             :time="wisdomTime"
-            :topic-ids="selectedTopicIds"
             :active="active"
             @update:enabled="onWisdomEnabledChange"
             @update:time="wisdomTime = $event"
