@@ -46,7 +46,11 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 // topic. The mobile "daily wisdom" proactive rule samples a row for one of the
 // user's chosen topics and posts it into chat as a playable cite.
 //
-// Additive under the SAME scheme — older binaries never query it. Idempotent.
+// This runs after ensureSettingsTable in applyLocalMigrations, so by the time
+// the migrations row below is recorded both onboarding tables (settings +
+// daily_wisdom) exist. The bumped scheme (20260621) advertises their presence;
+// the migrations `name` ('006_…') sorts after '005_add_track_audio', so the
+// mobile SchemeReader (ORDER BY name DESC LIMIT 1) picks it. Idempotent.
 func ensureDailyWisdomTable(ctx context.Context, db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS daily_wisdom (
@@ -60,6 +64,11 @@ func ensureDailyWisdomTable(ctx context.Context, db *sql.DB) error {
 			created_at INTEGER NOT NULL DEFAULT (CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_daily_wisdom_topic ON daily_wisdom(topic_id, language)`,
+		// Bump the scheme to 20260621 for the onboarding tables (settings +
+		// daily_wisdom). Exact-match gate on the client, so the new app only
+		// loads a DB that carries these tables.
+		`INSERT OR IGNORE INTO migrations (name, scheme, applied_at)
+		 VALUES ('006_add_settings_and_daily_wisdom', 20260621, CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))`,
 	}
 	for _, s := range stmts {
 		if _, err := db.ExecContext(ctx, s); err != nil {
@@ -76,9 +85,10 @@ func ensureDailyWisdomTable(ctx context.Context, db *sql.DB) error {
 //
 // It lives in the DB rather than config.json deliberately: the client bundles
 // and downloads current.db anyway, so the curated list is available offline
-// without a second network fetch. Additive under the SAME scheme — older
-// binaries never query it; newer ones read it defensively (missing table →
-// fallback). Idempotent.
+// without a second network fetch. Part of the scheme-20260621 bump (the
+// migrations row is recorded in ensureDailyWisdomTable, which runs after this);
+// the mobile reads are still defensive so an older cached DB degrades to the
+// fallback rather than crashing. Idempotent.
 func ensureSettingsTable(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx,
 		`CREATE TABLE IF NOT EXISTS settings (
