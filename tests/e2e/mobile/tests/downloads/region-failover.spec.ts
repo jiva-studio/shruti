@@ -4,6 +4,7 @@ import { qase } from "playwright-qase-reporter"
 import {
   interceptContent,
   preseedUserDb,
+  preseedOnboardingDone,
   preseedSearchFilter,
   preseedDismissedNags,
 } from "../../support/bootstrap.js"
@@ -46,6 +47,7 @@ test(
     // Base content routes (db / audio / transcripts), then override config.json
     // with a two-region block so the app has edge-a (active) + edge-b (fallback).
     await interceptContent(page)
+    await preseedOnboardingDone(page)
     const config = JSON.stringify({
       databases: [
         { version: CONTENT_DB_VERSION, scheme: Number(String(CONTENT_DB_VERSION).slice(0, 8)) },

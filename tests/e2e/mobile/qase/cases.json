@@ -2536,23 +2536,19 @@
     ]
   },
   "144": {
-    "suite_id": 2,
+    "suite_id": 35,
     "automation": 2,
-    "title": "A failed content-DB download shows Retry and recovers",
-    "description": "Offline. The first content-DB download is forced to fail; asserts the Welcome screen surfaces an error state with a working Retry button (not an endless splash). After the failure is cleared, tapping Retry recovers all the way to a populated Home (tab bar + playlist rows visible).",
-    "preconditions": "Brand-new install with no cached catalog; the content-DB request is gated to fail until the test flips the flag. User DB, search filter and dismissed nags pre-seeded for the post-recovery Home.",
+    "title": "A failed content-DB load degrades gracefully (no infinite splash)",
+    "description": "Offline. The content-DB download is forced to fail. Since the Welcome screen was removed and the bootstrap runs headless (DB bundled, failure non-fatal), there is no error/Retry page anymore; the guarantee is that the launch never hangs on a splash — a brand-new user still reaches the onboarding carousel.",
+    "preconditions": "Brand-new install (onboarding.completed unset, clean user DB with no listening history); every content-DB request is aborted.",
     "steps": [
       {
-        "action": "Launch the app while the content-DB download fails.",
-        "expected": "The Welcome screen shows an error state with a visible Retry button, not an endless \"Downloading…\" splash."
-      },
-      {
-        "action": "Allow the download to succeed and tap Retry.",
-        "expected": "The app recovers to the Home tab with the bottom tab bar and at least one Up-Next playlist row visible."
+        "action": "Launch the app while every content-DB request fails.",
+        "expected": "No endless \"Downloading…\" splash: the app still mounts and a fresh user lands on the onboarding carousel (/onboarding, no tab bar, primary button visible)."
       }
     ],
     "tags": [
-      "home",
+      "onboarding",
       "free",
       "e2e"
     ]

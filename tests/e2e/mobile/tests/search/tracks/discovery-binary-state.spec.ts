@@ -3,6 +3,7 @@ import { test, expect } from "../../../support/test.js"
 import {
   interceptContent,
   preseedUserDb,
+  preseedOnboardingDone,
   preseedSearchFilter,
   preseedDismissedNags,
 } from "../../../support/bootstrap.js"
@@ -28,6 +29,7 @@ test(
   { tag: ["@offline", "@search"] },
   async ({ page }) => {
     await interceptContent(page)
+    await preseedOnboardingDone(page)
     // Empty playlist (clean user.db): the one track we add+play is the only Home
     // row, so the radial-vs-icon contrast is unambiguous in the screenshot.
     await preseedUserDb(page, "en", "clean")
