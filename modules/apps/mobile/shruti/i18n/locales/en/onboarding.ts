@@ -27,6 +27,8 @@ export default {
   },
   paywall: {
     title: "More features with Pro",
+    subtitle:
+      "All lectures are free. A subscription helps us keep developing the app — adding new features and lectures.",
     shots: {
       chat: "Ask Sadhu",
       library: "Thousands of lectures",
