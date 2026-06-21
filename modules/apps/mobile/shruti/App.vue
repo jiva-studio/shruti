@@ -91,6 +91,7 @@ import { useAutoArchiveSweep } from "@shruti/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useKeyboardVisibility } from "@shruti/composables/useKeyboardVisibility.js"
 import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
+import { useAppLanguageSeed } from "@shruti/composables/useAppLanguageSeed.js"
 import { usePlayerProgressFlush } from "@shruti/composables/usePlayerProgressFlush.js"
 import { usePlayerProgressCadence } from "@shruti/composables/usePlayerProgressCadence.js"
 import { usePlayerTutorialPulse } from "@shruti/composables/usePlayerTutorialPulse.js"
@@ -167,6 +168,7 @@ provide(
 const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
+useAppLanguageSeed(appLanguage)
 usePlayerProgressFlush()
 usePlayerProgressCadence()
 useAutoArchiveSweep()

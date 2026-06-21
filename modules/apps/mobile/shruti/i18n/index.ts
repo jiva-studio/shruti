@@ -576,8 +576,18 @@ export function detectLocale(): SupportedLocale {
  * Asks the native Capacitor Device plugin for the device language; on
  * failure (e.g. plugin not registered, web environment without the
  * shim) falls back to {@link detectLocale}.
+ *
+ * The `?locale=` query override wins first — same precedence as
+ * {@link detectLocale} — so the screenshots/e2e pipelines that pin a
+ * locale via the URL stay authoritative over the device language.
  */
 export async function detectDeviceLocaleAsync(): Promise<SupportedLocale> {
+  if (typeof window !== "undefined") {
+    const fromQuery = new URLSearchParams(window.location.search).get("locale")
+    if (fromQuery && (SUPPORTED_LOCALES as readonly string[]).includes(fromQuery)) {
+      return fromQuery as SupportedLocale
+    }
+  }
   try {
     const { Device } = await import("@capacitor/device")
     const { value } = await Device.getLanguageCode()

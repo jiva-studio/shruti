@@ -16,6 +16,7 @@ import {
   useChatLanguage,
   useChatTranslateCitations,
 } from "@shruti/composables/useChatLanguage.js"
+import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useAutoPlayNext } from "@shruti/composables/useAutoPlayNext.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import type { TrackMetaConfig } from "@ui/components/tracks/list/index.js"
@@ -108,7 +109,7 @@ export function useSettingsController(): SettingsControllerReturn {
   })
 
   /* Config v-models */
-  const appLanguage = useConfig<string>("settings.appLanguage", "en")
+  const appLanguage = useAppLanguage()
   const chatLanguage = useChatLanguage()
   const chatTranslateCitations = useChatTranslateCitations()
   const { raw: trackMetaConfig } = useTrackMetadataFields()
