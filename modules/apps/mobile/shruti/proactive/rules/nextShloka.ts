@@ -1,6 +1,7 @@
 import type { LanguageCode, SourceId, TrackId } from "@lib/domain/core.js"
 import type { Source } from "@lib/domain/source.js"
 import { formatReference } from "@lib/domain/services/references.js"
+import { preferredContentLanguage } from "@lib/domain/services/localizedName.js"
 import { registerRule } from "../registry.js"
 import type { ProactiveRuleHandler } from "../types.js"
 
@@ -82,7 +83,13 @@ const handler: ProactiveRuleHandler = {
     const track = await ctx.repos.tracks.getById(entry.ruleDate as TrackId)
     if (track === null || track.references.length === 0) return null
     const ref = track.references[track.references.length - 1]
-    const lang: LanguageCode = ctx.locale.startsWith("en") ? "en" : "ru"
+    // Resolve the title + reference label in the user's library (content)
+    // language — what they see for this lecture elsewhere — not the UI locale.
+    // `preferredContentLanguage` picks among the user's library languages and
+    // falls back to the track's own first variant, so undefined only means the
+    // track has no variants at all → nothing to render.
+    const lang = preferredContentLanguage(track, ctx.libraryLanguages, ctx.locale as LanguageCode)
+    if (lang === undefined) return null
     const allSources = await ctx.repos.sources.listAll()
     const sourcesById = new Map<SourceId, Source>(allSources.map((s) => [s.id, s]))
     const refLabel = formatReference(ref, sourcesById, lang)
