@@ -13,6 +13,9 @@ export interface IDailyWisdomRepository {
    *  (omit = any language). Empty when none exist (or the table predates
    *  this feature on an older bundled DB). */
   byTopic(topicId: TopicId, language?: LanguageCode): Promise<readonly DailyWisdom[]>
+  /** All fragments, optionally filtered to `language` — the "any wisdom"
+   *  fallback when the user's picked topics have none. */
+  list(language?: LanguageCode): Promise<readonly DailyWisdom[]>
   /** Of `topicIds`, those that have at least one fragment (optionally in
    *  `language`) — lets the rule sample only topics it can deliver. */
   topicsWithWisdom(

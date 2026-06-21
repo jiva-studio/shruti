@@ -1,7 +1,7 @@
 <template>
   <div class="ob-welcome">
     <div class="ob-welcome__hero">
-      <img class="ob-welcome__logo" src="/app-icon.png" :alt="$t('onboarding.welcome.appName')" />
+      <img class="ob-welcome__logo" src="/welcome.png" :alt="$t('onboarding.welcome.appName')" />
     </div>
     <div class="ob-welcome__body">
       <h1 class="ob-welcome__title">{{ $t("onboarding.welcome.appName") }}</h1>
@@ -29,12 +29,11 @@
   justify-content: center;
 }
 .ob-welcome__logo {
-  width: clamp(120px, 40vw, 200px);
+  width: clamp(200px, 64vw, 320px);
   aspect-ratio: 1 / 1;
   height: auto;
   object-fit: contain;
-  border-radius: 28px;
-  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.12));
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.14));
 }
 .ob-welcome__body {
   max-width: 440px;

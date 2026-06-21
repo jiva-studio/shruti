@@ -1,7 +1,12 @@
 <template>
   <IonPage>
     <IonContent :scroll-y="false">
-      <OnboardingCarousel v-model="page" :page-count="PAGE_COUNT" @skip="finish">
+      <OnboardingCarousel
+        v-model="page"
+        :page-count="PAGE_COUNT"
+        :swipe-disabled="page === PAGE_COUNT - 1"
+        @skip="finish"
+      >
         <template #slide="{ index, active }">
           <WelcomeScreen v-if="index === 0" />
           <TopicsScreen v-else-if="index === 1" :topics="topicOptions" v-model="selectedTopicIds" />
@@ -9,6 +14,8 @@
             v-else-if="index === 2"
             :enabled="wisdomEnabled"
             :time="wisdomTime"
+            :topic-ids="selectedTopicIds"
+            :active="active"
             @update:enabled="onWisdomEnabledChange"
             @update:time="wisdomTime = $event"
           />
