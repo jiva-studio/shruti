@@ -15,10 +15,8 @@ export default {
   },
   wisdom: {
     title: "Tägliche Weisheit",
-    subtitle:
-      "Ein kurzer Aphorismus aus den Vorträgen, einmal täglich in deinem Chat. Jederzeit abschaltbar.",
-    toggle: "Tägliche Weisheit senden",
-    time: "Bevorzugte Zeit",
+    subtitle: "Ein kurzer Aphorismus aus den Vorträgen, einmal täglich. Jederzeit abschaltbar.",
+    off: "Nicht senden",
     morning: "Morgens",
     afternoon: "Mittags",
     evening: "Abends",

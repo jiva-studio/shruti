@@ -15,10 +15,8 @@ export default {
   },
   wisdom: {
     title: "Sagesse quotidienne",
-    subtitle:
-      "Un court aphorisme des conférences, dans ton chat une fois par jour. Désactivable à tout moment.",
-    toggle: "M'envoyer la sagesse quotidienne",
-    time: "Heure préférée",
+    subtitle: "Un court aphorisme des conférences, une fois par jour. Désactivable à tout moment.",
+    off: "Ne pas envoyer",
     morning: "Matin",
     afternoon: "Après-midi",
     evening: "Soir",

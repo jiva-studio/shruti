@@ -25,32 +25,40 @@
       <li>{{ $t("onboarding.paywall.b3") }}</li>
     </ul>
 
-    <!-- Reused purchase machinery: plan selection, CTA, trial/intro price,
-         restore, legal links — identical to the Settings paywall. -->
-    <SubscriptionFooter
-      :packages="subscription.packages"
-      :is-subscribed="subscription.isSubscribed"
-      :ready="subscription.ready"
-      :purchasing="subscription.purchasing"
-      :restoring="subscription.restoring"
-      :legal-documents="subscription.legalDocuments"
-      :show-cant-pay="subscription.showCantPay"
-      @subscribe="subscription.onSubscribe"
-      @restore="subscription.onRestore"
-      @manage="subscription.onManage"
-      @cant-pay="subscription.onCantPay"
-    />
+    <!-- Restore + legal links, moved up here out of the footer actions. -->
+    <div class="ob-paywall__links">
+      <a
+        class="ob-paywall__link"
+        role="button"
+        tabindex="0"
+        :class="{ 'is-busy': restoring }"
+        @click="!restoring && emit('restore')"
+        @keydown.enter="!restoring && emit('restore')"
+      >
+        {{ $t("settings.subscription.restore") }}
+      </a>
+      <a
+        v-for="doc in legalDocuments"
+        :key="doc.title"
+        class="ob-paywall__link"
+        :href="doc.link"
+        target="_blank"
+      >
+        {{ doc.title }}
+      </a>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from "vue"
-import { SubscriptionFooter } from "@ui/features/subscription/index.js"
-import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
+import { reactive } from "vue"
+import type { LegalDocumentView } from "@ui/features/subscription/SubscriptionFooter.vue"
 
-const emit = defineEmits<{ (e: "done"): void }>()
-
-const subscription = useSubscriptionBinding()
+defineProps<{
+  legalDocuments: LegalDocumentView[]
+  restoring: boolean
+}>()
+const emit = defineEmits<{ restore: [] }>()
 
 const shots = [
   "/onboarding/paywall-1.webp",
@@ -58,14 +66,6 @@ const shots = [
   "/onboarding/paywall-3.webp",
 ]
 const failed = reactive(new Set<string>())
-
-// Once the purchase lands, leave onboarding for Home.
-watch(
-  () => subscription.isSubscribed,
-  (now, was) => {
-    if (now && !was) emit("done")
-  }
-)
 </script>
 
 <style scoped>
@@ -73,7 +73,7 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 8px 16px 24px;
+  padding: 8px 16px 16px;
   box-sizing: border-box;
 }
 .ob-paywall__head {
@@ -101,7 +101,7 @@ watch(
   padding: 4px 0;
 }
 .ob-paywall__shot {
-  height: clamp(180px, 30vh, 280px);
+  height: clamp(160px, 26vh, 240px);
   width: auto;
   border-radius: 16px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
@@ -113,5 +113,22 @@ watch(
   color: var(--ion-text-color);
   font-size: 0.95rem;
   line-height: 1.7;
+}
+.ob-paywall__links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+.ob-paywall__link {
+  color: var(--ion-color-medium);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+.ob-paywall__link.is-busy {
+  opacity: 0.5;
+  pointer-events: none;
 }
 </style>

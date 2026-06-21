@@ -1,14 +1,7 @@
 <template>
   <IonPage>
     <IonContent :scroll-y="false">
-      <OnboardingCarousel
-        v-model="page"
-        :page-count="PAGE_COUNT"
-        :primary-label="primaryLabel"
-        :show-primary="page < PAGE_COUNT - 1"
-        @primary="onPrimary"
-        @skip="finish"
-      >
+      <OnboardingCarousel v-model="page" :page-count="PAGE_COUNT" @skip="finish">
         <template #slide="{ index, active }">
           <WelcomeScreen v-if="index === 0" />
           <TopicsScreen v-else-if="index === 1" :topics="topicOptions" v-model="selectedTopicIds" />
@@ -24,7 +17,38 @@
             :topic-ids="selectedTopicIds"
             :active="active"
           />
-          <PaywallScreen v-else @done="finish" />
+          <PaywallScreen
+            v-else
+            :legal-documents="subscription.legalDocuments"
+            :restoring="subscription.restoring"
+            @restore="subscription.onRestore"
+          />
+        </template>
+
+        <!-- Bottom actions: the paywall's plans + CTA live here (footer); the
+             disclaimer is hidden and Restore/legal move up into the page. Other
+             screens show the primary Continue button. -->
+        <template #actions>
+          <SubscriptionFooter
+            v-if="page === PAGE_COUNT - 1"
+            class="ob-paywall-footer"
+            :packages="subscription.packages"
+            :is-subscribed="subscription.isSubscribed"
+            :ready="subscription.ready"
+            :purchasing="subscription.purchasing"
+            :restoring="subscription.restoring"
+            :legal-documents="subscription.legalDocuments"
+            :show-cant-pay="subscription.showCantPay"
+            :hide-disclaimer="true"
+            :hide-secondary="true"
+            @subscribe="subscription.onSubscribe"
+            @restore="subscription.onRestore"
+            @manage="subscription.onManage"
+            @cant-pay="subscription.onCantPay"
+          />
+          <IonButton v-else expand="block" :strong="true" class="ob-primary" @click="onPrimary">
+            {{ primaryLabel }}
+          </IonButton>
         </template>
       </OnboardingCarousel>
     </IonContent>
@@ -32,9 +56,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue"
-import { IonContent, IonPage, useIonRouter } from "@ionic/vue"
+import { computed, onMounted, ref, watch } from "vue"
+import { IonButton, IonContent, IonPage, useIonRouter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
+import { SubscriptionFooter } from "@ui/features/subscription/index.js"
+import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
@@ -60,6 +86,15 @@ const { t } = useI18n()
 const appLanguage = useAppLanguage()
 const filtersStore = useSearchFiltersStore()
 const onboarding = useOnboardingStore()
+const subscription = useSubscriptionBinding()
+
+// A successful purchase on the paywall completes onboarding.
+watch(
+  () => subscription.isSubscribed,
+  (now, was) => {
+    if (now && !was) void finish()
+  }
+)
 
 const page = ref(0)
 const topicOptions = ref<OnboardingTopicOption[]>([])
@@ -121,3 +156,19 @@ async function finish(): Promise<void> {
   ionRouter.replace("/tabs/home")
 }
 </script>
+
+<style scoped>
+/* The Continue button and the paywall CTA share radius (12px) + strong text so
+   they look identical across screens. */
+.ob-primary {
+  width: 100%;
+  max-width: 440px;
+  margin: 0;
+  --box-shadow: none;
+  --border-radius: 12px;
+}
+.ob-paywall-footer {
+  width: 100%;
+  max-width: 440px;
+}
+</style>
