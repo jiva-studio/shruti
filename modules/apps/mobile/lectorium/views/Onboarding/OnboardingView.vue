@@ -36,20 +36,18 @@
              disclaimer is hidden and Restore/legal move up into the page. Other
              screens show the primary Continue button. -->
         <template #actions>
-          <SubscriptionFooter
+          <!-- The onboarding paywall composes just the purchase block; its
+               Restore/legal links live in PaywallScreen and there's no
+               disclaimer here. -->
+          <SubscriptionPlans
             v-if="page === PAGE_COUNT - 1"
             class="ob-paywall-footer"
             :packages="subscription.packages"
             :is-subscribed="subscription.isSubscribed"
             :ready="subscription.ready"
             :purchasing="subscription.purchasing"
-            :restoring="subscription.restoring"
-            :legal-documents="subscription.legalDocuments"
             :show-cant-pay="subscription.showCantPay"
-            :hide-disclaimer="true"
-            :hide-secondary="true"
             @subscribe="subscription.onSubscribe"
-            @restore="subscription.onRestore"
             @manage="subscription.onManage"
             @cant-pay="subscription.onCantPay"
           />
@@ -66,7 +64,7 @@
 import { computed, onMounted, ref, watch } from "vue"
 import { IonButton, IonContent, IonPage, useIonRouter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
-import { SubscriptionFooter } from "@ui/features/subscription/index.js"
+import { SubscriptionPlans } from "@ui/features/subscription/index.js"
 import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"

@@ -46,7 +46,7 @@
 <script setup lang="ts">
 import { computed, reactive } from "vue"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import type { LegalDocumentView } from "@ui/features/subscription/SubscriptionFooter.vue"
+import type { LegalDocumentView } from "@ui/features/subscription/index.js"
 
 defineProps<{
   legalDocuments: LegalDocumentView[]
