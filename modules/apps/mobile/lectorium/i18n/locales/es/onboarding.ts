@@ -29,14 +29,14 @@ export default {
   paywall: {
     title: "Más funciones con Pro",
     shots: {
-      chat: "Chat de IA espiritual",
+      chat: "Pregunta a Sadhu",
       library: "Miles de conferencias",
       transcript: "Transcripciones para seguir",
       notes: "Marcadores y notas",
       home: "Sigue tu progreso",
     },
     shotDesc: {
-      chat: "Haz cualquier pregunta espiritual, respondida desde las conferencias.",
+      chat: "Haz cualquier pregunta espiritual, respondida desde las conferencias y las escrituras.",
       library: "Organizadas por tema, libro y autor.",
       transcript: "Sigue el texto mientras escuchas, palabra por palabra.",
       notes: "Guarda los momentos que te inspiran y añade notas.",

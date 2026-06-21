@@ -4,12 +4,8 @@
       <h1 class="ob-value__title">{{ $t("onboarding.value.title") }}</h1>
       <p class="ob-value__subtitle">{{ $t("onboarding.value.subtitle") }}</p>
     </div>
-    <TracksList
-      v-if="rows.length > 0"
-      :rows="rows"
-      data-testid="onboarding-lectures"
-      @select="onSelect"
-    >
+    <!-- Display-only preview: tapping a row opens nothing during onboarding. -->
+    <TracksList v-if="rows.length > 0" :rows="rows" data-testid="onboarding-lectures">
       <template #state="{ state, progressPct }">
         <TrackStateIndicator :state="state" :progress="progressPct" />
       </template>
@@ -25,17 +21,20 @@ import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
-import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import type { Track } from "@lib/domain/track.js"
 import type { LanguageCode, TopicId, TrackId } from "@lib/domain/core.js"
 
-const props = defineProps<{ topicIds: readonly string[]; active?: boolean }>()
+const props = defineProps<{
+  topicIds: readonly string[]
+  /** Topics confirmed (user left the topics screen) — start seeding + prefetch
+   *  now, so the download is already running by the time this screen shows. */
+  seed?: boolean
+}>()
 
 const app = useLectorium()
 const mapper = useTrackUiStateMapper()
 const libraryLanguages = useLibraryLanguages()
-const trackActions = useTrackActionSheet()
 const playlist = usePlaylistStore()
 
 const tracks = ref<readonly Track[]>([])
@@ -110,16 +109,14 @@ async function beginnerTrackIds(
   return []
 }
 
-function onSelect(trackId: string): void {
-  void trackActions.present(trackId as TrackId)
-}
-
-// When the user reaches this screen, seed their playlist with the matched
-// lectures so Home is already populated. Idempotent (add() skips dupes) and
-// runs once; reaching the screen is the explicit "yes, these are my lectures".
+// As soon as topics are confirmed (the user left the topics screen), seed the
+// playlist with the matched lectures — each add() kicks off the audio prefetch,
+// so the download is already running while the user finishes the remaining
+// screens and Home is populated on arrival. Idempotent (add() skips dupes),
+// runs once.
 let seeded = false
 async function seedPlaylist(): Promise<void> {
-  if (seeded || !props.active || tracks.value.length === 0) return
+  if (seeded || !props.seed || tracks.value.length === 0) return
   seeded = true
   for (const t of tracks.value) {
     await playlist.add(t.id as TrackId).catch(() => undefined)
@@ -128,7 +125,7 @@ async function seedPlaylist(): Promise<void> {
 
 onMounted(load)
 watch(() => props.topicIds, load)
-watch([() => props.active, tracks], seedPlaylist)
+watch([() => props.seed, tracks], seedPlaylist)
 </script>
 
 <style scoped>
