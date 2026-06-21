@@ -14,10 +14,8 @@ export default {
   },
   wisdom: {
     title: "Napi bölcsesség",
-    subtitle:
-      "Rövid aforizma az előadásokból, naponta egyszer a csevegésben. Bármikor kikapcsolható.",
-    toggle: "Napi bölcsesség küldése",
-    time: "Kívánt időpont",
+    subtitle: "Rövid aforizma az előadásokból, naponta egyszer. Bármikor kikapcsolható.",
+    off: "Ne küldd",
     morning: "Reggel",
     afternoon: "Délután",
     evening: "Este",

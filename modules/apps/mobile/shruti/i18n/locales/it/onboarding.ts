@@ -14,10 +14,8 @@ export default {
   },
   wisdom: {
     title: "Saggezza quotidiana",
-    subtitle:
-      "Un breve aforisma dalle lezioni, nella tua chat una volta al giorno. Disattivalo quando vuoi.",
-    toggle: "Inviami la saggezza quotidiana",
-    time: "Orario preferito",
+    subtitle: "Un breve aforisma dalle lezioni, una volta al giorno. Disattivalo quando vuoi.",
+    off: "Non inviare",
     morning: "Mattina",
     afternoon: "Pomeriggio",
     evening: "Sera",
