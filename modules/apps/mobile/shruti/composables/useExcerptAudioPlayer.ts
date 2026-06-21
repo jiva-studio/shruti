@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref, type ComputedRef, type Ref } from "vue"
+import { computed, onBeforeUnmount, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useAudioSource } from "@shruti/composables/useAudioOrchestrator.js"
 
 /** How long to wait after `play()` for real playback before giving up and
@@ -37,6 +37,9 @@ export function useExcerptAudioPlayer(opts: {
   resolveUrl: () => Promise<string>
   /** Prefix for the dev-console warnings. */
   logLabel: string
+  /** When this turns false (e.g. the host slide goes off-screen), the player
+   *  pauses + rewinds itself. Omit = always active. */
+  active?: () => boolean
 }): {
   audioEl: Ref<HTMLAudioElement | null>
   isPlaying: Ref<boolean>
@@ -90,6 +93,14 @@ export function useExcerptAudioPlayer(opts: {
   }
 
   const { claim } = useAudioSource("inline", pauseAndResetSelf)
+
+  // Host can deactivate the player (e.g. its carousel slide scrolls off): pause
+  // + rewind so it doesn't keep playing while not visible.
+  if (opts.active) {
+    watch(opts.active, (isActive) => {
+      if (!isActive) pauseAndResetSelf()
+    })
+  }
 
   async function onToggle(): Promise<void> {
     const el = audioEl.value
