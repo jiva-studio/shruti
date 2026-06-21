@@ -87,10 +87,8 @@
     <SettingsDebugGroup
       v-if="debugUnlocked"
       :count="logs.count"
-      :subscription-override="subscriptionOverride"
       @view-logs="logsOpen = true"
       @clear-cache="onClearCache"
-      @set-subscription="setSubscriptionOverride"
     />
 
     <BuildInfo
@@ -143,10 +141,6 @@ import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { useLogsStore } from "@shruti/stores/useLogsStore.js"
 import { useAnonymousSignInFlow } from "@shruti/composables/useAnonymousSignInFlow.js"
 import { useDebugUnlockTrigger } from "@shruti/composables/useDebugUnlockTrigger.js"
-import {
-  devSubscriptionOverride as subscriptionOverride,
-  setDevSubscriptionOverride as setSubscriptionOverride,
-} from "@shruti/services/devSubscription.js"
 import { useToast } from "@kit/composables"
 import { AccountDeleteError } from "@ports/app/auth.js"
 import { useSettingsController } from "./SettingsView.controller.js"
