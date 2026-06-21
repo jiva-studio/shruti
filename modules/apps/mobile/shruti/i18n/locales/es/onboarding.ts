@@ -15,10 +15,8 @@ export default {
   },
   wisdom: {
     title: "Sabiduría diaria",
-    subtitle:
-      "Un breve aforismo de las conferencias, en tu chat una vez al día. Desactívalo cuando quieras.",
-    toggle: "Enviarme sabiduría diaria",
-    time: "Hora preferida",
+    subtitle: "Un breve aforismo de las conferencias, una vez al día. Desactívalo cuando quieras.",
+    off: "No enviar",
     morning: "Mañana",
     afternoon: "Tarde",
     evening: "Noche",

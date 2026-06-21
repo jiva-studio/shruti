@@ -14,9 +14,8 @@ export default {
   },
   wisdom: {
     title: "Dnevna mudrost",
-    subtitle: "Kratak aforizam iz predavanja, jednom dnevno u tvom četu. Isključi kad god želiš.",
-    toggle: "Šalji mi dnevnu mudrost",
-    time: "Željeno vreme",
+    subtitle: "Kratak aforizam iz predavanja, jednom dnevno. Isključi kad god želiš.",
+    off: "Ne šalji",
     morning: "Jutro",
     afternoon: "Popodne",
     evening: "Veče",

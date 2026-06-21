@@ -14,10 +14,8 @@ export default {
   },
   wisdom: {
     title: "Daily wisdom",
-    subtitle:
-      "A short aphorism from the lectures, delivered to your chat once a day. Turn it off anytime.",
-    toggle: "Send me daily wisdom",
-    time: "Preferred time",
+    subtitle: "A short aphorism from the lectures, once a day. Turn it off anytime.",
+    off: "Don't send",
     morning: "Morning",
     afternoon: "Afternoon",
     evening: "Evening",

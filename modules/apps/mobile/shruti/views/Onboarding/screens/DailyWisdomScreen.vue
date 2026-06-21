@@ -5,40 +5,36 @@
       <p class="ob-wisdom__subtitle">{{ $t("onboarding.wisdom.subtitle") }}</p>
     </div>
 
-    <IonList inset>
-      <IonItem>
-        <IonToggle
-          :checked="enabled"
-          data-testid="onboarding-wisdom-toggle"
-          @ionChange="emit('update:enabled', $event.detail.checked)"
-        >
-          {{ $t("onboarding.wisdom.toggle") }}
-        </IonToggle>
-      </IonItem>
-    </IonList>
-
-    <div v-if="enabled" class="ob-wisdom__time">
-      <p class="ob-wisdom__time-label">{{ $t("onboarding.wisdom.time") }}</p>
-      <div class="ob-wisdom__presets">
-        <button
-          v-for="p in presets"
-          :key="p.key"
-          type="button"
-          class="ob-chip"
-          :class="{ 'ob-chip--on': time[0] === p.hour }"
-          @click="emit('update:time', [p.hour, 0])"
-        >
-          {{ $t(p.labelKey) }}
-        </button>
-      </div>
+    <div class="ob-wisdom__presets" role="radiogroup">
+      <button
+        type="button"
+        class="ob-chip"
+        :class="{ 'ob-chip--on': !enabled }"
+        role="radio"
+        :aria-checked="!enabled"
+        data-testid="onboarding-wisdom-off"
+        @click="emit('update:enabled', false)"
+      >
+        {{ $t("onboarding.wisdom.off") }}
+      </button>
+      <button
+        v-for="p in presets"
+        :key="p.key"
+        type="button"
+        class="ob-chip"
+        :class="{ 'ob-chip--on': enabled && time[0] === p.hour }"
+        role="radio"
+        :aria-checked="enabled && time[0] === p.hour"
+        @click="selectTime(p.hour)"
+      >
+        {{ $t(p.labelKey) }}
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonList, IonToggle } from "@ionic/vue"
-
-defineProps<{
+const props = defineProps<{
   enabled: boolean
   time: [number, number]
 }>()
@@ -47,6 +43,11 @@ const emit = defineEmits<{
   (e: "update:enabled", value: boolean): void
   (e: "update:time", value: [number, number]): void
 }>()
+
+function selectTime(hour: number): void {
+  emit("update:time", [hour, 0])
+  if (!props.enabled) emit("update:enabled", true)
+}
 
 const presets = [
   { key: "morning", hour: 9, labelKey: "onboarding.wisdom.morning" as const },
@@ -59,7 +60,7 @@ const presets = [
 .ob-wisdom {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 28px;
   padding: 8px 12px 24px;
   box-sizing: border-box;
 }
@@ -81,21 +82,14 @@ const presets = [
   line-height: 1.4;
   color: var(--ion-color-medium);
 }
-.ob-wisdom__time {
-  text-align: center;
-}
-.ob-wisdom__time-label {
-  margin: 0 0 10px;
-  font-size: 0.85rem;
-  color: var(--ion-color-medium);
-}
 .ob-wisdom__presets {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
 }
 .ob-chip {
-  padding: 10px 16px;
+  padding: 10px 18px;
   border-radius: 999px;
   border: 1.5px solid var(--ion-color-step-200, #e0e0e0);
   background: transparent;

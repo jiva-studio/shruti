@@ -14,10 +14,8 @@ export default {
   },
   wisdom: {
     title: "Codzienna mądrość",
-    subtitle:
-      "Krótki aforyzm z wykładów, raz dziennie na Twoim czacie. Możesz wyłączyć w każdej chwili.",
-    toggle: "Wysyłaj codzienną mądrość",
-    time: "Preferowana godzina",
+    subtitle: "Krótki aforyzm z wykładów, raz dziennie. Możesz wyłączyć w każdej chwili.",
+    off: "Nie wysyłaj",
     morning: "Rano",
     afternoon: "Po południu",
     evening: "Wieczorem",
