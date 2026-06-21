@@ -1,6 +1,7 @@
-import type { TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { Track } from "@lib/domain/track.js"
+import { preferredContentLanguage } from "@lib/domain/services/localizedName.js"
 import { notificationIdFor } from "../hash.js"
 import { toNotificationPreview } from "../notificationPreview.js"
 import { NOTIFICATION_PRIORITY } from "../notificationPlanner.js"
@@ -27,11 +28,17 @@ const COOLDOWN_MS = 3 * DAY_MS
 const MIN_PROGRESS = 0.05
 const MAX_PROGRESS = 0.9
 
-/** Catalog title in the user's locale, falling back to any variant. */
-function localizedTitle(track: Track, locale: string): string {
-  const lang = locale.startsWith("en") ? "en" : "ru"
-  const variant = track.variants.find((v) => v.language === lang) ?? track.variants[0] ?? null
-  return variant?.title ?? ""
+/** Catalog title in the user's library (content) language — same resolution
+ *  the track lists / Track view use — falling back to any variant. Following
+ *  the library language (not the UI locale) keeps the nudge's title identical
+ *  to what the user sees for that lecture everywhere else. */
+function localizedTitle(
+  track: Track,
+  libraryLanguages: readonly LanguageCode[],
+  uiLocale: string
+): string {
+  const lang = preferredContentLanguage(track, libraryLanguages, uiLocale as LanguageCode)
+  return track.variants.find((v) => v.language === lang)?.title ?? track.variants[0]?.title ?? ""
 }
 
 /** Fraction of the track the user has listened to, or null when the
@@ -98,7 +105,7 @@ const handler: ProactiveRuleHandler = {
 
     // A notification with no lecture name ("You haven't finished «»") is
     // worse than none — skip when the catalog title is missing.
-    const title = localizedTitle(target, ctx.locale)
+    const title = localizedTitle(target, ctx.libraryLanguages, ctx.locale)
     if (title === "") return
 
     const trackId = target.id
@@ -189,7 +196,7 @@ const handler: ProactiveRuleHandler = {
   async buildContent(entry, ctx) {
     const track = await ctx.repos.tracks.getById(entry.ruleDate as TrackId)
     if (track === null) return null
-    const title = localizedTitle(track, ctx.locale)
+    const title = localizedTitle(track, ctx.libraryLanguages, ctx.locale)
     const body = ctx.t("chat.proactiveUnfinishedLectureBody", { title })
     const marker = `[action:queue_next_track|id=${ACTION_ID}]`
     return {
