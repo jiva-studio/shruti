@@ -25,6 +25,11 @@
   </SettingsToggleItem>
 
   <DailyNotificationsTimeSettingsItem v-if="notificationsEnabled" v-model="notificationsTime" />
+  <DailyWisdomSettingsItem
+    v-if="notificationsEnabled"
+    :subtitle="dailyWisdomSubtitle"
+    @click="emit('open-daily-wisdom')"
+  />
   <SmartLibrarySettingsItem :subtitle="smartLibrarySubtitle" @click="emit('open-smart-library')" />
 </template>
 
@@ -34,6 +39,7 @@ import { SettingsToggleItem } from "@kit/ui"
 import { BellIcon, FlameIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 import DailyNotificationsTimeSettingsItem from "../DailyNotificationsTimeSettingsItem.vue"
+import DailyWisdomSettingsItem from "../DailyWisdomSettingsItem.vue"
 import SmartLibrarySettingsItem from "../SmartLibrarySettingsItem.vue"
 
 const showActivityTracker = defineModel<boolean>("showActivityTracker", { required: true })
@@ -42,7 +48,7 @@ const notificationsTime = defineModel<[number, number] | undefined>("notificatio
   required: true,
 })
 
-defineProps<{ smartLibrarySubtitle: string }>()
+defineProps<{ smartLibrarySubtitle: string; dailyWisdomSubtitle: string }>()
 
-const emit = defineEmits<{ "open-smart-library": [] }>()
+const emit = defineEmits<{ "open-smart-library": []; "open-daily-wisdom": [] }>()
 </script>

@@ -294,6 +294,14 @@ export default {
     },
   },
 
+  dailyWisdom: {
+    title: "Sabedoria diária",
+    subtitleOn: "Ativado · {count} tópicos",
+    subtitleOff: "Desativado · apenas um lembrete",
+    hint: "Escolha os tópicos sobre os quais deseja uma breve reflexão diária — enviaremos um fragmento reproduzível ao seu chat na hora do lembrete. Sem seleção, você receberá apenas o lembrete.",
+    empty: "Ainda não há tópicos com sabedoria diária.",
+  },
+
   data: {
     export: {
       title: "Exportar dados do usuário",
