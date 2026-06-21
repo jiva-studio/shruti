@@ -87,10 +87,8 @@
     <SettingsDebugGroup
       v-if="debugUnlocked"
       :count="logs.count"
-      :subscription-override="subscriptionOverride"
       @view-logs="logsOpen = true"
       @clear-cache="onClearCache"
-      @set-subscription="setSubscriptionOverride"
     />
 
     <BuildInfo
@@ -143,10 +141,6 @@ import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { useLogsStore } from "@lectorium/stores/useLogsStore.js"
 import { useAnonymousSignInFlow } from "@lectorium/composables/useAnonymousSignInFlow.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
-import {
-  devSubscriptionOverride as subscriptionOverride,
-  setDevSubscriptionOverride as setSubscriptionOverride,
-} from "@lectorium/services/devSubscription.js"
 import { useToast } from "@kit/composables"
 import { AccountDeleteError } from "@ports/app/auth.js"
 import { useSettingsController } from "./SettingsView.controller.js"
