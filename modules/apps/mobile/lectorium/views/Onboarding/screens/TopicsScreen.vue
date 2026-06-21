@@ -5,23 +5,21 @@
       <p class="ob-topics__subtitle">{{ $t("onboarding.topics.subtitle") }}</p>
     </div>
     <div class="ob-topics__chips" data-testid="onboarding-topics">
-      <button
+      <ToggleChip
         v-for="t in topics"
         :key="t.id"
-        type="button"
-        class="ob-chip"
-        :class="{ 'ob-chip--on': selected.has(t.id) }"
-        :aria-pressed="selected.has(t.id)"
-        @click="toggle(t.id)"
+        :selected="selected.has(t.id)"
+        @toggle="toggle(t.id)"
       >
         {{ t.label }}
-      </button>
+      </ToggleChip>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue"
+import { ToggleChip } from "@ui/primitives/index.js"
 import type { OnboardingTopicOption } from "../loadOnboardingTopics.js"
 
 const props = defineProps<{
@@ -73,24 +71,5 @@ function toggle(id: string): void {
   gap: 10px;
   max-width: 520px;
   margin: 0 auto;
-}
-.ob-chip {
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1.5px solid var(--ion-color-step-200, #e0e0e0);
-  background: transparent;
-  color: var(--ion-text-color);
-  font-size: 0.92rem;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-.ob-chip--on {
-  border-color: var(--ion-color-primary);
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast);
 }
 </style>
