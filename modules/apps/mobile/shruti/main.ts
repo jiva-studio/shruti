@@ -62,7 +62,7 @@ import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
 import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
 import { runStartupBootstrap } from "./services/startup.js"
-import { readOnboardingCompleted } from "./stores/useOnboardingStore.js"
+import { readOnboardingCompleted, ONBOARDING_COMPLETED_KEY } from "./stores/useOnboardingStore.js"
 import { installConsoleCapture } from "./services/logger/index.js"
 import { initMonitoring } from "./services/monitoring/index.js"
 import { reportError } from "./services/monitoring/reportError.js"
@@ -217,7 +217,21 @@ async function start(): Promise<void> {
     reportError("startup", new Error(startup.error ?? "content database failed to open"))
   }
 
-  const onboarded = await readOnboardingCompleted(preferences).catch(() => false)
+  // Skip first-launch onboarding for established users: the explicit
+  // `onboarding.completed` flag (set at the end of the flow), OR any prior
+  // listening session — the reliable signal for someone upgrading from a
+  // pre-onboarding build, where the flag was never written. Stamp the flag
+  // once inferred so later launches skip the DB probe.
+  const completedFlag = await readOnboardingCompleted(preferences).catch(() => false)
+  let hasHistory = false
+  if (!completedFlag && startup.ready) {
+    hasHistory = await useShruti()
+      .repositories()
+      .listeningSessions.hasAny()
+      .catch(() => false)
+    if (hasHistory) await preferences.set(ONBOARDING_COMPLETED_KEY, "true").catch(() => undefined)
+  }
+  const onboarded = completedFlag || hasHistory
   const target = onboarded ? "/tabs/home" : "/onboarding"
 
   await router.isReady()
