@@ -50,7 +50,14 @@
             @manage="subscription.onManage"
             @cant-pay="subscription.onCantPay"
           />
-          <IonButton v-else expand="block" :strong="true" class="ob-primary" @click="onPrimary">
+          <IonButton
+            v-else
+            expand="block"
+            :strong="true"
+            class="ob-primary"
+            data-testid="onboarding-primary"
+            @click="onPrimary"
+          >
             {{ primaryLabel }}
           </IonButton>
         </template>
