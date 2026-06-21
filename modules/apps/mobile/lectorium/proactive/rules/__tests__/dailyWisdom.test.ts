@@ -21,12 +21,6 @@ function frag(id: string, language: LanguageCode): DailyWisdom {
 function fakeRepo(corpus: readonly DailyWisdom[]) {
   const inLang = (w: DailyWisdom, lang?: LanguageCode) => lang === undefined || w.language === lang
   return {
-    async topicsWithWisdom() {
-      return []
-    },
-    async byTopic() {
-      return []
-    },
     async list(lang?: LanguageCode) {
       return corpus.filter((w) => inLang(w, lang))
     },

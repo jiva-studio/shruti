@@ -276,7 +276,7 @@ modules/libs/domain/
   chatMessage.ts                  (ChatActionPayload union: share_pdf, enable_daily_reminder,
                                    configure_smart_library, upgrade_to_pro, queue_next_track)
   ports/proactiveStateRepository.ts  (IProactiveStateRepository, ProactiveStateEntry, prep states, rearm)
-  ports/dailyWisdomRepository.ts     (IDailyWisdomRepository: topicsWithWisdom/byTopic/byId)
+  ports/dailyWisdomRepository.ts     (IDailyWisdomRepository: list/byId)
 
 modules/libs/contracts/chat/
   proactiveChat.ts                (IProactiveChatService port, imported as @lib/contracts)
@@ -308,7 +308,7 @@ modules/apps/mobile/lectorium/
       enableNotificationsHint.ts  ← local i18n template
       smartLibraryHint.ts         ← local i18n template
       nextShloka.ts               ← local template + catalog lookup + queue_next_track
-      dailyWisdom.ts              ← samples a daily_wisdom fragment by interest topic, silent cite card
+      dailyWisdom.ts              ← random daily_wisdom fragment in the user's library language, silent cite card
   views/Chat/components/
     ActionCardShell.vue           ← shared card chrome
     ActionCardSharePdf.vue
@@ -322,7 +322,7 @@ modules/apps/mobile/lectorium/
 modules/apps/mobile/infra/
   persistence/migrations/user/008_chat_messages_proactive_state.ts
   repositories/sql/proactiveStateRepository.sql.ts
-  repositories/sql/dailyWisdomRepository.sql.ts  ← daily_wisdom corpus reads (topicsWithWisdom/byTopic/byId)
+  repositories/sql/dailyWisdomRepository.sql.ts  ← daily_wisdom corpus reads (list/byId)
   chat/http/httpProactiveChatService.ts
 
 modules/services/chat/app/src/lectorium_chat/
