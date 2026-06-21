@@ -231,6 +231,40 @@ never two concurrent writers to the same bucket's `config.json`.
 [publish] 3/3 steps, 1.2 MB sent
 ```
 
+## Config registry + authoring tools (`config.*`, `wisdom.*`)
+
+Two app-content surfaces ship inside the catalog DB (`settings` + `daily_wisdom`
+tables, scheme `20260621`) and are authored through MCP tools. Both are
+sync-and-deterministic, and like every catalog edit they only mutate the local
+`current.db` — **clients see the change only after `catalog.publish`**.
+
+**Config registry** — an extensible key→value store. Each key registers a
+descriptor (`{schema, validator, description}`) in
+`internal/application/config/registry`; adding a new config is one
+`registry.Register(...)` call, not a new tool.
+
+| Tool | Does |
+|---|---|
+| `config.describe` | List every registered descriptor (key, description, JSON Schema) — how an agent learns what configs exist and their value shape |
+| `config.get key=…` | Current value from the `settings` table (+ descriptor for context) |
+| `config.set key=… value=…` | Resolve the descriptor → **validate** → write. Unknown key or schema-invalid value returns `{ok:false,error}` |
+
+The first registered key is `onboarding.topics` (JSON array of curated topic
+ids; its validator rejects unknown ids). See [Onboarding](../architecture/onboarding.md#curated-topics-config-registry).
+
+**Wisdom corpus** — the authored `daily_wisdom` fragments the
+[`daily_wisdom` proactive rule](../architecture/proactive-messages.md) samples.
+
+| Tool | Does |
+|---|---|
+| `wisdom.create` | Insert one fragment (`track_id`, `language`, `start_ms`, `end_ms`, `text`, `topic_id`) |
+| `wisdom.import` | Bulk insert from JSON/YAML (same pattern as `library.attribution.import`) |
+| `wisdom.list` | Read fragments (filter by topic/language) |
+| `wisdom.delete` | Remove a fragment by id |
+
+Validation on write: `track_id` exists, `0 <= start_ms < end_ms`, `topic_id`
+exists in `topics`, non-empty `text`, `language` set.
+
 ## Recovery / common failures
 
 ### Daemon crashed mid-pipeline
