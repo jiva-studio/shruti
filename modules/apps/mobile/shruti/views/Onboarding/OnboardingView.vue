@@ -9,7 +9,7 @@
         @primary="onPrimary"
         @skip="finish"
       >
-        <template #slide="{ index }">
+        <template #slide="{ index, active }">
           <WelcomeScreen v-if="index === 0" />
           <TopicsScreen v-else-if="index === 1" :topics="topicOptions" v-model="selectedTopicIds" />
           <DailyWisdomScreen
@@ -19,7 +19,11 @@
             @update:enabled="onWisdomEnabledChange"
             @update:time="wisdomTime = $event"
           />
-          <ValueMomentScreen v-else-if="index === 3" :lectures="lectures" />
+          <ValueMomentScreen
+            v-else-if="index === 3"
+            :topic-ids="selectedTopicIds"
+            :active="active"
+          />
           <PaywallScreen v-else @done="finish" />
         </template>
       </OnboardingCarousel>
@@ -28,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { IonContent, IonPage, useIonRouter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
@@ -44,9 +48,9 @@ import OnboardingCarousel from "@ui/features/onboarding/OnboardingCarousel.vue"
 import WelcomeScreen from "./screens/WelcomeScreen.vue"
 import TopicsScreen from "./screens/TopicsScreen.vue"
 import DailyWisdomScreen from "./screens/DailyWisdomScreen.vue"
-import ValueMomentScreen, { type OnboardingLecture } from "./screens/ValueMomentScreen.vue"
+import ValueMomentScreen from "./screens/ValueMomentScreen.vue"
 import PaywallScreen from "./screens/PaywallScreen.vue"
-import type { LanguageCode, TopicId } from "@lib/domain/core.js"
+import type { LanguageCode } from "@lib/domain/core.js"
 
 const PAGE_COUNT = 5
 
@@ -60,7 +64,6 @@ const onboarding = useOnboardingStore()
 const page = ref(0)
 const topicOptions = ref<OnboardingTopicOption[]>([])
 const selectedTopicIds = ref<string[]>([])
-const lectures = ref<OnboardingLecture[]>([])
 
 // Notification prefs the proactive daily-wisdom rule reads. Two-way bound, so
 // a change persists immediately and the scheduler picks it up.
@@ -85,35 +88,6 @@ onMounted(async () => {
     console.warn("[onboarding] topic load failed", err)
   }
 })
-
-// Load a few matched lectures once topics are known and the user reaches the
-// value screen — keyed off the current selection (or the curated set).
-watch(page, async (p) => {
-  if (p === 3 && lectures.value.length === 0) {
-    lectures.value = await loadValueLectures()
-  }
-})
-
-async function loadValueLectures(): Promise<OnboardingLecture[]> {
-  const seeds = (
-    selectedTopicIds.value.length > 0 ? selectedTopicIds.value : topicOptions.value.map((t) => t.id)
-  ).slice(0, 1) as TopicId[]
-  if (seeds.length === 0) return []
-  const langs = filtersStore.languageCodes as readonly LanguageCode[]
-  const repos = app.repositories()
-  const trackIds = await repos.topics.topTrackIds(seeds[0], langs, 5)
-  if (trackIds.length === 0) return []
-  const byId = await repos.tracks.getByIds(trackIds)
-  const lang = appLanguage.value
-  const out: OnboardingLecture[] = []
-  for (const id of trackIds) {
-    const track = byId.get(id)
-    if (!track) continue
-    const variant = track.variants.find((v) => v.language === lang) ?? track.variants[0]
-    if (variant?.title) out.push({ id, title: variant.title })
-  }
-  return out
-}
 
 async function onWisdomEnabledChange(value: boolean): Promise<void> {
   wisdomEnabled.value = value

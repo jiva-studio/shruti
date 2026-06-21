@@ -1,5 +1,5 @@
 // Package configregistry is the extensible catalog of config keys the MCP
-// `config.*` tools can read and write into the catalog `key_value` store.
+// `config.*` tools can read and write into the catalog `settings` store.
 //
 // Each key registers a Descriptor — value model (JSON Schema) + human/agent
 // description + a validator. The server validates every write against the
