@@ -228,7 +228,7 @@ The authored corpus for the `daily_wisdom` proactive rule (see [Proactive messag
 | `topic_id` | TEXT | NOT NULL | FK to `topics.id` — the interest the rule samples by |
 | `created_at` | INTEGER | NOT NULL DEFAULT now-ms | Unix ms at insert |
 
-Index: `idx_daily_wisdom_topic (topic_id, language)` — backs the rule's "a fragment for a sampled interest topic, in the user's language" lookup.
+Index: `idx_daily_wisdom_topic (topic_id, language)`. The rule now selects a **random** fragment by language only (`WHERE language = ?`) — it no longer filters by topic — so this index is vestigial for the runtime query; `topic_id` is kept on the row for possible future topic-scoped use. (The corpus is small, so the unindexed language scan is cheap.)
 
 ---
 
