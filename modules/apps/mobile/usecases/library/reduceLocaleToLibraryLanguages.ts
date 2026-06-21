@@ -1,27 +1,10 @@
 import type { LanguageCode } from "@lib/domain/core.js"
+// The pure locale→content-language policy lives in the domain layer so infra
+// (e.g. the proactive chat wire locale) can share it without crossing the
+// app-layer boundary. Re-exported here for existing callers.
+import { reduceLocaleToContentLanguage } from "@lib/domain/services/contentLanguage.js"
 
-/**
- * Locale → library-content-language reduction policy.
- *
- * The app UI ships in many languages, but lectures exist in only a few content
- * languages (today: ru, en). A user whose UI locale has no lectures of its own
- * (uk, sr, hi, …) must still get a sensible default library, so we *reduce* the
- * UI locale to one content language we actually have.
- *
- * This is intentionally the ONE place that policy lives — it is expected to
- * change over time (new content languages, finer regional rules). Keep the rule
- * here; everything else reads the result.
- *
- * Current rule: East-Slavic UI (Russian, Ukrainian) → Russian; everyone else →
- * English.
- */
-const RUSSIAN_REDUCED_LOCALES = new Set(["ru", "uk"])
-
-/** The base content language a UI locale reduces to, ignoring availability. */
-export function reduceLocaleToContentLanguage(uiLocale: string): LanguageCode {
-  const base = (uiLocale || "").toLowerCase().split(/[-_]/)[0]
-  return RUSSIAN_REDUCED_LOCALES.has(base) ? "ru" : "en"
-}
+export { reduceLocaleToContentLanguage }
 
 /**
  * Default library content languages for a fresh install: the UI locale reduced
