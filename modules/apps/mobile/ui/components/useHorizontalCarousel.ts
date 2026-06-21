@@ -4,6 +4,9 @@ export interface UseHorizontalCarouselOptions {
   readonly pageCount: number
   readonly initialPage?: number
   readonly viewportEl: () => HTMLElement | null
+  /** When this returns true, swipe gestures are ignored — e.g. the paywall
+   *  page, whose own horizontal screenshot strip would fight the page swipe. */
+  readonly swipeDisabled?: () => boolean
 }
 
 export interface UseHorizontalCarouselReturn {
@@ -48,6 +51,7 @@ export function useHorizontalCarousel(
   })
 
   function onPointerDown(e: PointerEvent): void {
+    if (options.swipeDisabled?.()) return
     pointerId.value = e.pointerId
     gestureOriginX = e.clientX
     gestureOriginY = e.clientY
