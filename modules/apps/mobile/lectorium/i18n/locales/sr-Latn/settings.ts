@@ -292,14 +292,6 @@ export default {
     },
   },
 
-  dailyWisdom: {
-    title: "Dnevna mudrost",
-    subtitleOn: "Uklj. · {count} tema",
-    subtitleOff: "Isklj. · samo podsetnik",
-    hint: "Izaberi teme o kojima želiš kratku dnevnu misao — poslaćemo fragment koji se može pustiti u tvoj chat u vreme podsetnika. Bez izbora, dobićeš samo podsetnik.",
-    empty: "Još nema tema sa dnevnom mudrošću.",
-  },
-
   data: {
     export: {
       title: "Izvezi korisničke podatke",

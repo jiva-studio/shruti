@@ -22,9 +22,8 @@ test(
     })
 
     await step(page, 107, 1, async () => {
-      // At least the Privacy Policy link is present (Terms is iOS-only and absent
-      // on the web build).
-      const links = page.locator(".legal a")
+      // Privacy Policy link is present (Terms is iOS-only, absent on web).
+      const links = page.locator(".subscription-page a.secondary-link[href]")
       await expect(links.first()).toBeVisible({ timeout: 10_000 })
       expect(await links.count()).toBeGreaterThanOrEqual(1)
 

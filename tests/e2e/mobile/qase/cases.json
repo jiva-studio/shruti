@@ -2536,23 +2536,19 @@
     ]
   },
   "144": {
-    "suite_id": 2,
+    "suite_id": 35,
     "automation": 2,
-    "title": "A failed content-DB download shows Retry and recovers",
-    "description": "Offline. The first content-DB download is forced to fail; asserts the Welcome screen surfaces an error state with a working Retry button (not an endless splash). After the failure is cleared, tapping Retry recovers all the way to a populated Home (tab bar + playlist rows visible).",
-    "preconditions": "Brand-new install with no cached catalog; the content-DB request is gated to fail until the test flips the flag. User DB, search filter and dismissed nags pre-seeded for the post-recovery Home.",
+    "title": "A failed content-DB load degrades gracefully (no infinite splash)",
+    "description": "Offline. The content-DB download is forced to fail. Since the Welcome screen was removed and the bootstrap runs headless (DB bundled, failure non-fatal), there is no error/Retry page anymore; the guarantee is that the launch never hangs on a splash — a brand-new user still reaches the onboarding carousel.",
+    "preconditions": "Brand-new install (onboarding.completed unset, clean user DB with no listening history); every content-DB request is aborted.",
     "steps": [
       {
-        "action": "Launch the app while the content-DB download fails.",
-        "expected": "The Welcome screen shows an error state with a visible Retry button, not an endless \"Downloading…\" splash."
-      },
-      {
-        "action": "Allow the download to succeed and tap Retry.",
-        "expected": "The app recovers to the Home tab with the bottom tab bar and at least one Up-Next playlist row visible."
+        "action": "Launch the app while every content-DB request fails.",
+        "expected": "No endless \"Downloading…\" splash: the app still mounts and a fresh user lands on the onboarding carousel (/onboarding, no tab bar, primary button visible)."
       }
     ],
     "tags": [
-      "home",
+      "onboarding",
       "free",
       "e2e"
     ]
@@ -2821,6 +2817,59 @@
       {
         "action": "On a Ukrainian-locale device, open the first topic from the Search landing.",
         "expected": "The topic detail is populated and every lecture title is Russian (Cyrillic)."
+      }
+    ]
+  },
+  "165": {
+    "suite_id": 35,
+    "automation": 2,
+    "tags": [
+      "onboarding",
+      "free",
+      "smoke",
+      "e2e"
+    ],
+    "title": "First launch flows through onboarding to Home and persists",
+    "description": "Offline. A genuinely new user sees the onboarding carousel on first launch, walks it (welcome → topics → daily wisdom → value moment → soft paywall), skips the paywall, lands on Home, and is not shown onboarding again on relaunch.",
+    "preconditions": "Fresh first launch: onboarding.completed unset and a clean user DB with NO listening history. Non-Pro subscription state. Content is served from offline intercepts.",
+    "steps": [
+      {
+        "action": "Launch the app for the first time (no completed onboarding, no prior listening history).",
+        "expected": "The onboarding carousel opens at /onboarding with no tab bar; the Welcome slide shows the 'Get started' primary button."
+      },
+      {
+        "action": "Tap the primary button through Welcome and Topics, then enable daily wisdom by picking a time preset on the Daily wisdom slide.",
+        "expected": "Each tap advances one slide; choosing a preset switches daily wisdom on."
+      },
+      {
+        "action": "Advance through the Value moment to the paywall, then tap Skip ('Later').",
+        "expected": "On the paywall the generic primary is hidden; Skip finishes onboarding and the app navigates to Home with the tab bar visible. The lectures matched during onboarding are in the playlist."
+      },
+      {
+        "action": "Relaunch the app.",
+        "expected": "Onboarding is not replayed — the app opens directly on Home (the completed flag persisted), and the onboarding-seeded playlist is still there."
+      }
+    ]
+  },
+  "166": {
+    "suite_id": 35,
+    "automation": 2,
+    "tags": [
+      "onboarding",
+      "free",
+      "e2e"
+    ],
+    "title": "An established user with listening history skips onboarding",
+    "description": "Offline. A user upgrading into the build that introduced onboarding — with prior listening history but no onboarding.completed flag — is treated as established and is NOT shown onboarding; the flag is stamped so the heuristic runs at most once.",
+    "preconditions": "User DB seeded with the default fixture (listening history present); onboarding.completed unset. Non-Pro.",
+    "steps": [
+      {
+        "action": "Launch the build for the first time with an existing user DB that has prior listening history (onboarding.completed unset).",
+        "expected": "Onboarding is skipped — the app opens directly on Home with the tab bar; the onboarding primary button is never shown."
+      },
+      {
+        "action": "Relaunch the app.",
+        "expected": "The app still opens directly on Home; onboarding is not shown (the completed flag was stamped on the first launch)."
       }
     ]
   }

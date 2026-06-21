@@ -125,8 +125,12 @@ export async function preseedUserDb(
  * re-runs on every reload and would clobber any runtime-written rows (e.g. a
  * completed download), so a "restart" wouldn't represent real persistence.
  */
-export async function preseedUserDbOnce(page: Page, locale: Locale): Promise<void> {
-  const base64 = fs.readFileSync(userDbPath(locale)).toString("base64")
+export async function preseedUserDbOnce(
+  page: Page,
+  locale: Locale,
+  strategy: UserDbStrategy = "preseed"
+): Promise<void> {
+  const base64 = fs.readFileSync(userDbPath(locale, strategy)).toString("base64")
   await page.addInitScript(
     ({ b64 }: { b64: string }) => {
       const open = indexedDB.open("lectorium", 1)

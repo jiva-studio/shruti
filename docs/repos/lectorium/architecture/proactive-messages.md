@@ -1,6 +1,6 @@
 # Proactive Messages
 
-The chat agent ("Sadhu") can initiate conversations on its own — weekly digests, holiday lecture selections, inactivity nudges, unfinished-lecture reminders, and contextual upsells — without a server-side cron or remote push. Scheduling, content preparation, and delivery all happen on the device during foreground and pause transitions; the backend is only called to generate the body of the one LLM-driven rule (`holiday`). There is no daemon, no FCM/APNs, and no synchronized listening-history mirror.
+The chat agent ("Sadhu") can initiate conversations on its own — weekly digests, holiday lecture selections, inactivity nudges, unfinished-lecture reminders, a daily wisdom excerpt, and contextual upsells — without a server-side cron or remote push. Scheduling, content preparation, and delivery all happen on the device during foreground and pause transitions; the backend is only called to generate the body of the one LLM-driven rule (`holiday`). There is no daemon, no FCM/APNs, and no synchronized listening-history mirror.
 
 A mobile-side scheduler (`useProactiveScheduler`) ticks on every foreground session, runs a registry of rules, persists agent-initiated rows into a sidecar table next to `chat_messages`, and feeds a single OS-notification arbiter (`notificationPlanner`) that keeps at most one Capacitor `LocalNotification` per local day across every push source. The holiday calendar and per-rule config overrides ride along in the published `config.json` and are managed through the `catalog.proactive.*` MCP tools.
 
@@ -17,6 +17,7 @@ A mobile-side scheduler (`useProactiveScheduler`) ticks on every foreground sess
 | `enable_notifications_hint` | now (condition first holds) | no | no (local i18n template) | `new_session` |
 | `smart_library_hint` | now | no | no (local i18n template) | `new_session` |
 | `next_shloka` | next track id (after finishing a series track) | no | no (catalog lookup, local template + `queue_next_track` action) | `new_session` |
+| `daily_wisdom` | `wisdom.id` (one row shown at most once) | no (`visibleAt: null`, silent — the daily reminder push provides the nudge) | no — picks a **random** `daily_wisdom` fragment from the whole corpus **in one of the user's library languages** (not topic-scoped), emits a `[cite:track@start-end|text]` marker + pre-seeded `cites` snippet | `new_session`, title = localized `proactiveSessionTitleDailyWisdom` |
 
 Rules are bootstrapped by side-effect imports in `proactive/rules/index.ts`; each module calls `registerRule()` from `proactive/registry.ts` at load time. `useProactiveScheduler` imports `rules/index.js` once so the registry is populated before the first tick.
 
@@ -264,7 +265,7 @@ This keeps a single endpoint, auth, rate-limit, and tool surface. Prompts live i
 The chat backend already receives recent tracks and current playback as part of `/chat` requests. Only one proactive rule reaches the backend:
 
 - `holiday` sends only the holiday id, localized name, date, and days-until (no user data) as `rule_context`.
-- Every other rule (`weekly_digest`, `inactivity`, `unfinished_lecture`, `enable_notifications_hint`, `smart_library_hint`, `next_shloka`) builds its body on-device and does not touch the network — `weekly_digest`'s listening aggregate is computed locally inside `WeeklyDigestCard.vue` and never leaves the device.
+- Every other rule (`weekly_digest`, `inactivity`, `unfinished_lecture`, `enable_notifications_hint`, `smart_library_hint`, `next_shloka`, `daily_wisdom`) builds its body on-device and does not touch the network — `weekly_digest`'s listening aggregate is computed locally inside `WeeklyDigestCard.vue` and never leaves the device, and `daily_wisdom` reads its excerpt straight from the bundled `daily_wisdom` catalog table.
 
 ## Code layout
 
@@ -275,6 +276,7 @@ modules/libs/domain/
   chatMessage.ts                  (ChatActionPayload union: share_pdf, enable_daily_reminder,
                                    configure_smart_library, upgrade_to_pro, queue_next_track)
   ports/proactiveStateRepository.ts  (IProactiveStateRepository, ProactiveStateEntry, prep states, rearm)
+  ports/dailyWisdomRepository.ts     (IDailyWisdomRepository: list/byId)
 
 modules/libs/contracts/chat/
   proactiveChat.ts                (IProactiveChatService port, imported as @lib/contracts)
@@ -306,6 +308,7 @@ modules/apps/mobile/lectorium/
       enableNotificationsHint.ts  ← local i18n template
       smartLibraryHint.ts         ← local i18n template
       nextShloka.ts               ← local template + catalog lookup + queue_next_track
+      dailyWisdom.ts              ← random daily_wisdom fragment in the user's library language, silent cite card
   views/Chat/components/
     ActionCardShell.vue           ← shared card chrome
     ActionCardSharePdf.vue
@@ -319,6 +322,7 @@ modules/apps/mobile/lectorium/
 modules/apps/mobile/infra/
   persistence/migrations/user/008_chat_messages_proactive_state.ts
   repositories/sql/proactiveStateRepository.sql.ts
+  repositories/sql/dailyWisdomRepository.sql.ts  ← daily_wisdom corpus reads (list/byId)
   chat/http/httpProactiveChatService.ts
 
 modules/services/chat/app/src/lectorium_chat/

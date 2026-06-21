@@ -3,6 +3,7 @@ import { test, expect } from "../../support/test.js"
 import {
   interceptContent,
   preseedUserDb,
+  preseedOnboardingDone,
   preseedSearchFilter,
   preseedDismissedNags,
 } from "../../support/bootstrap.js"
@@ -21,6 +22,7 @@ test(
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await interceptContent(page)
+    await preseedOnboardingDone(page)
     await preseedUserDb(page, "en", "single")
     await preseedSearchFilter(page, "en")
     await preseedDismissedNags(page)

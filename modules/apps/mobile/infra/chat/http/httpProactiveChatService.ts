@@ -5,6 +5,7 @@ import type {
 } from "@lib/contracts"
 
 import { streamChat, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
+import { reduceLocaleToContentLanguage } from "@lib/domain/services/contentLanguage.js"
 
 export interface HttpProactiveChatServiceDeps {
   readonly getAccessToken: AccessTokenProvider
@@ -30,12 +31,10 @@ export function createHttpProactiveChatService(
       const placeholderMessages = [{ role: "user" as const, content: "<proactive>" }]
       let bodyMd = ""
       const actions: Record<string, unknown> = {}
-      // Map BCP-47 / arbitrary locale strings down to the two languages
-      // the backend currently has prompts for. Everything that doesn't
-      // start with `en` falls back to `ru` — matches the rest of the
-      // app's English-or-Russian default. When the backend ships a new
-      // prompt locale (e.g. zh, hi), add the case here.
-      const wireLocale: "ru" | "en" = locale.toLowerCase().startsWith("en") ? "en" : "ru"
+      // Reduce the arbitrary UI locale to one content language the backend
+      // has prompts for, via the single locale→content-language policy
+      // (East-Slavic → ru, everyone else → en) instead of an ad-hoc collapse.
+      const wireLocale = reduceLocaleToContentLanguage(locale)
 
       for await (const event of streamChat(placeholderMessages, wireLocale, {
         getAccessToken: deps.getAccessToken,
