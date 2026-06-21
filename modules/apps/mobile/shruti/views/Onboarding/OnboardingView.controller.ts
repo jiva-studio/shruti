@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
+import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { useIonRouter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import {
@@ -44,24 +44,19 @@ export function useOnboardingViewController(): OnboardingViewBinding {
   const topicOptions = ref<OnboardingTopicOption[]>([])
   const selectedTopicIds = ref<string[]>([])
 
-  // Notification prefs the proactive daily-wisdom rule reads. Two-way bound, so
-  // a change persists immediately and the scheduler picks it up.
-  const wisdomEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
-  const wisdomTime = useConfig<[number, number]>("settings.notificationsTime", [9, 0])
+  // Onboarding-local choice. Applied to the real settings only on finish, so
+  // the proactive scheduler (which reads settings.notifications*) doesn't fire a
+  // wisdom message mid-onboarding. The OS permission is still requested live.
+  const wisdomEnabled = ref(false)
+  const wisdomTime = ref<[number, number]>([9, 0])
+  const notificationsEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
+  const notificationsTime = useConfig<[number, number]>("settings.notificationsTime", [9, 0])
 
   const primaryLabel = computed(() => {
     if (page.value === 0) return t("onboarding.welcome.cta")
     if (page.value === PAGE_COUNT - 1) return t("onboarding.finish")
     return t("onboarding.continue")
   })
-
-  // A successful purchase on the paywall completes onboarding.
-  watch(
-    () => subscription.isSubscribed,
-    (now, was) => {
-      if (now && !was) void finish()
-    }
-  )
 
   onMounted(async () => {
     await filtersStore.load().catch(() => undefined)
@@ -105,6 +100,9 @@ export function useOnboardingViewController(): OnboardingViewBinding {
     // Persist picks even on skip from a later page, so a partial run still
     // personalizes Home.
     await persistTopics()
+    // Apply the daily-wisdom choice now — after this, the scheduler may fire.
+    notificationsTime.value = wisdomTime.value
+    notificationsEnabled.value = wisdomEnabled.value
     await onboarding.markCompleted()
     ionRouter.replace("/tabs/home")
   }
