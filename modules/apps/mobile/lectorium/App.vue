@@ -91,6 +91,7 @@ import { useAutoArchiveSweep } from "@lectorium/composables/useAutoArchiveSweep.
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useKeyboardVisibility } from "@lectorium/composables/useKeyboardVisibility.js"
 import { useLocaleSync } from "@lectorium/composables/useLocaleSync.js"
+import { useAppLanguageSeed } from "@lectorium/composables/useAppLanguageSeed.js"
 import { usePlayerProgressFlush } from "@lectorium/composables/usePlayerProgressFlush.js"
 import { usePlayerProgressCadence } from "@lectorium/composables/usePlayerProgressCadence.js"
 import { usePlayerTutorialPulse } from "@lectorium/composables/usePlayerTutorialPulse.js"
@@ -167,6 +168,7 @@ provide(
 const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
+useAppLanguageSeed(appLanguage)
 usePlayerProgressFlush()
 usePlayerProgressCadence()
 useAutoArchiveSweep()
