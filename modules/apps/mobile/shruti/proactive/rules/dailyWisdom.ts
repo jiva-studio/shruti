@@ -6,10 +6,13 @@ import type { ProactiveRuleHandler } from "../types.js"
  * sampled from one of the topics the user picked during onboarding.
  *
  * Flow:
- * 1. From the user's interest topics, keep those that actually have a wisdom
- *    fragment in the corpus.
- * 2. Pick a random such topic, then a random fragment for it.
- * 3. Emit it as a SILENT chat message (`visibleAt: null`, `notify: false`) —
+ * 1. Restrict to the user's library (lecture) languages — a fragment is only
+ *    eligible if it's in a language the user actually reads. Better to skip a
+ *    day than deliver an excerpt the user can't understand.
+ * 2. From the user's interest topics, keep those that have a fragment in one of
+ *    those languages.
+ * 3. Pick a random language, topic, then fragment.
+ * 4. Emit it as a SILENT chat message (`visibleAt: null`, `notify: false`) —
  *    the fragment renders as a playable cite card. The separate daily-reminder
  *    push (notificationPlanner) provides the OS nudge, so the message still
  *    appears in chat even when notification permission was denied.
@@ -19,29 +22,36 @@ import type { ProactiveRuleHandler } from "../types.js"
  * per day. Gated on the user's daily-engagement toggle + a non-empty interest
  * set — both off → the rule stays silent.
  */
-const handler: ProactiveRuleHandler = {
+export const dailyWisdomRule: ProactiveRuleHandler = {
   id: "daily_wisdom",
 
   async detect(ctx) {
     if (!ctx.notificationsEnabled || ctx.interestTopicIds.length === 0) return []
 
-    const topicsWith = await ctx.repos.dailyWisdom.topicsWithWisdom(ctx.interestTopicIds)
-    const topic = pickRandom(topicsWith)
-    if (topic === null) return []
+    // Each library language, in random order, so a multi-language user isn't
+    // biased to the first. `undefined` (no library filter set) = any language.
+    const langs = ctx.libraryLanguages.length > 0 ? shuffle(ctx.libraryLanguages) : [undefined]
 
-    const candidates = await ctx.repos.dailyWisdom.byTopic(topic)
-    const wisdom = pickRandom(candidates)
-    if (wisdom === null) return []
+    for (const lang of langs) {
+      const topicsWith = await ctx.repos.dailyWisdom.topicsWithWisdom(ctx.interestTopicIds, lang)
+      const topic = pickRandom(topicsWith)
+      if (topic === null) continue
 
-    return [
-      {
-        ruleDate: wisdom.id,
-        visibleAt: null,
-        notify: false,
-        sessionTitleOverride: ctx.t("chat.proactiveSessionTitleDailyWisdom"),
-        templateContext: {},
-      },
-    ]
+      const candidates = await ctx.repos.dailyWisdom.byTopic(topic, lang)
+      const wisdom = pickRandom(candidates)
+      if (wisdom === null) continue
+
+      return [
+        {
+          ruleDate: wisdom.id,
+          visibleAt: null,
+          notify: false,
+          sessionTitleOverride: ctx.t("chat.proactiveSessionTitleDailyWisdom"),
+          templateContext: {},
+        },
+      ]
+    }
+    return []
   },
 
   async validate(entry, ctx) {
@@ -78,4 +88,13 @@ function pickRandom<T>(arr: readonly T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-registerRule(handler)
+function shuffle<T>(arr: readonly T[]): T[] {
+  const out = [...arr]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
+registerRule(dailyWisdomRule)
