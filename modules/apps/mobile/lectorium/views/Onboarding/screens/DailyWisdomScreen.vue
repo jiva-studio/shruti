@@ -8,12 +8,13 @@
     <!-- A real example of what arrives: the same playable citation card chat
          uses (player on top, transcript below), for a fragment matched to the
          user's topics in their library language. -->
-    <div v-if="wisdom && active" class="ob-wisdom__card">
+    <div v-if="wisdom" class="ob-wisdom__card">
       <CitationCard
         :track-id="wisdom.trackId"
         :start-ms="wisdom.startMs"
         :end-ms="wisdom.endMs"
         :body="{ text: wisdom.text }"
+        :active="active"
       />
     </div>
 

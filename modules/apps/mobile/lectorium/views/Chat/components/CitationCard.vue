@@ -49,7 +49,7 @@
         <template #player>
           <!-- The player owns its own taps (play / seek); stop the bubble
                so tapping it doesn't also fire the card's activate. -->
-          <NotesInlinePlayer :note="playerRef" @click.stop />
+          <NotesInlinePlayer :note="playerRef" :active="active" @click.stop />
         </template>
       </ExcerptCard>
     </AutoHeight>
@@ -86,6 +86,8 @@ const props = defineProps<{
   /** Transcript snippet from the owning message's `cites` map; absent ⇒
    *  chip fallback. */
   body?: ChatCiteSnippet
+  /** False pauses the inline player (e.g. host carousel slide off-screen). */
+  active?: boolean
 }>()
 
 /** Tapping the card asks the HOST to act (open the citation action sheet).
