@@ -1,9 +1,9 @@
 <template>
   <div class="ob-topics">
-    <div class="ob-topics__head">
-      <h1 class="ob-topics__title">{{ $t("onboarding.topics.title") }}</h1>
-      <p class="ob-topics__subtitle">{{ $t("onboarding.topics.subtitle") }}</p>
-    </div>
+    <OnboardingHeading
+      :title="$t('onboarding.topics.title')"
+      :subtitle="$t('onboarding.topics.subtitle')"
+    />
     <div class="ob-topics__chips" data-testid="onboarding-topics">
       <ToggleChip
         v-for="t in topics"
@@ -20,6 +20,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { ToggleChip } from "@ui/primitives/index.js"
+import OnboardingHeading from "@ui/features/onboarding/OnboardingHeading.vue"
 import type { OnboardingTopicOption } from "../loadOnboardingTopics.js"
 
 const props = defineProps<{
@@ -46,23 +47,6 @@ function toggle(id: string): void {
   gap: 20px;
   padding: 8px 20px 24px;
   box-sizing: border-box;
-}
-.ob-topics__head {
-  text-align: center;
-  max-width: 440px;
-  margin: 0 auto;
-}
-.ob-topics__title {
-  margin: 0 0 8px;
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--ion-text-color);
-}
-.ob-topics__subtitle {
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  color: var(--ion-color-medium);
 }
 .ob-topics__chips {
   display: flex;
