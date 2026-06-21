@@ -1,4 +1,3 @@
-import fs from "fs"
 import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import {
@@ -7,75 +6,35 @@ import {
   preseedSearchFilter,
   preseedDismissedNags,
 } from "../../support/bootstrap.js"
-import { CONTENT_DB_PATH } from "../../support/fixtures.js"
-import { playlistRows } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
- * First-launch resilience: a brand-new user whose content-DB download FAILS on
- * the first attempt must land on the Welcome error screen with a working Retry —
- * not an infinite "Downloading…" splash — and a retry must recover all the way
- * to a populated Home.
+ * First-launch resilience (post-Welcome-removal). The Welcome screen + its
+ * "download failed → Retry" error UI are gone: the content DB ships bundled and
+ * the bootstrap runs HEADLESS behind the native splash, treating a content-DB
+ * open failure as non-fatal (logged, not a blocking error page).
  *
- * This is the user-facing path the startup-hardening fixes feed into:
- *  - the download stall watchdog turns a *hung* transfer (which used to hang
- *    `completion` forever) into exactly this retryable error. A true 60s stall
- *    can't be asserted in a fast test, so we drive the same error path with a
- *    hard failure (`route.abort`), which is deterministic.
- *  - the user-DB migration isolation keeps a later failure from re-bricking the
- *    same screen.
+ * So the guarantee is no longer "Retry button recovers" but "a failed content
+ * DB never bricks the launch on an infinite splash" — a brand-new user still
+ * reaches the onboarding carousel and can proceed.
  *
- * Determinism comes from a gate flag, not timing: every DB request fails while
- * `allowDb` is false, so the app is guaranteed to reach the error state; we then
- * flip the flag and tap Retry, so the next attempt is guaranteed to succeed.
+ * We force the failure deterministically by aborting every content-DB request.
  */
-test(
-  qase(144, caseTitle(144)),
-  { tag: ["@offline", "@welcome"] },
-  async ({ page }) => {
-    // config / audio / transcript routes + a default (always-success) DB route.
-    await interceptContent(page)
+test(qase(144, caseTitle(144)), { tag: ["@offline", "@onboarding"] }, async ({ page }) => {
+  await interceptContent(page)
+  // Abort the content-DB download so it can never open — exercises the headless
+  // bootstrap's non-fatal failure path.
+  await page.route("**/public/db/lectorium.*.db", (route) => void route.abort("failed"))
+  await preseedUserDb(page, "en", "clean") // no listening history → first-launch path
+  await preseedSearchFilter(page, "en")
+  await preseedDismissedNags(page)
 
-    // Override the DB route with a gated one. Playwright matches the
-    // last-registered route first, so this wins over interceptContent's.
-    let allowDb = false
-    const dbBytes = fs.readFileSync(CONTENT_DB_PATH)
-    await page.route("**/public/db/lectorium.*.db", (route) => {
-      if (!allowDb) {
-        void route.abort("failed")
-        return
-      }
-      void route.fulfill({
-        status: 200,
-        contentType: "application/octet-stream",
-        body: dbBytes,
-      })
-    })
-
-    // Seed everything Home needs so the post-recovery assertion is meaningful.
-    await preseedUserDb(page, "en")
-    await preseedSearchFilter(page, "en")
-    await preseedDismissedNags(page)
-
-    const retry = page.getByRole("button", { name: "Retry" })
-
-    await step(page, 144, 0, async () => {
-      await page.goto("/?locale=en")
-
-      // The download fails → Welcome surfaces the error state with a Retry button
-      // (it renders only in the error state), NOT an endless progress bar.
-      await expect(retry).toBeVisible({ timeout: 30_000 })
-    })
-
-    await step(page, 144, 1, async () => {
-      // Let the next attempt succeed, then retry.
-      allowDb = true
-      await retry.click()
-
-      // Recovers all the way to a populated Home.
-      await page.waitForURL("**/tabs/home", { timeout: 60_000 })
-      await expect(page.locator("ion-tab-bar")).toBeVisible()
-      await expect(playlistRows(page).first()).toBeVisible({ timeout: 20_000 })
-    })
-  }
-)
+  await step(page, 144, 0, async () => {
+    await page.goto("/?locale=en")
+    // No infinite "Downloading…" splash and no dead end: a fresh user still
+    // lands on the onboarding carousel (its Welcome slide needs no content DB).
+    await expect(page.getByTestId("onboarding-primary")).toBeVisible({ timeout: 30_000 })
+    await expect(page).toHaveURL(/\/onboarding/)
+    await expect(page.locator("ion-tab-bar")).toHaveCount(0)
+  })
+})
