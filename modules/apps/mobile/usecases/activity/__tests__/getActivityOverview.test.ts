@@ -36,6 +36,7 @@ function makeListeningSessions(
         listenedSeconds,
       })),
     getDailyTotalsByDayOffset: async () => [],
+    hasAny: async () => false,
     getTotalListenedSeconds: async () => 0,
     listRecentTracksWithProgress: async () => [],
     getTracksListenedInRange: async () => [],
