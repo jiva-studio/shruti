@@ -175,5 +175,6 @@ const trackStyle = computed(() => {
 .ob-primary {
   width: 100%;
   max-width: 440px;
+  --box-shadow: none;
 }
 </style>

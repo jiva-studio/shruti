@@ -19,8 +19,8 @@ func newMigratedTestRepo(t *testing.T) (*Repo, func()) {
 	ctx := context.Background()
 	// Idempotency: run each ensure twice.
 	for i := 0; i < 2; i++ {
-		if err := ensureKeyValueTable(ctx, db); err != nil {
-			t.Fatalf("ensureKeyValueTable (pass %d): %v", i, err)
+		if err := ensureSettingsTable(ctx, db); err != nil {
+			t.Fatalf("ensureSettingsTable (pass %d): %v", i, err)
 		}
 		if err := ensureDailyWisdomTable(ctx, db); err != nil {
 			t.Fatalf("ensureDailyWisdomTable (pass %d): %v", i, err)
@@ -29,18 +29,18 @@ func newMigratedTestRepo(t *testing.T) (*Repo, func()) {
 	return &Repo{db: db, path: ":memory:"}, func() { _ = db.Close() }
 }
 
-func TestKeyValueRoundTrip(t *testing.T) {
+func TestSettingsRoundTrip(t *testing.T) {
 	r, done := newMigratedTestRepo(t)
 	defer done()
 	ctx := context.Background()
 
-	if _, ok, err := r.GetKeyValue(ctx, "missing"); err != nil || ok {
+	if _, ok, err := r.GetSetting(ctx, "missing"); err != nil || ok {
 		t.Fatalf("missing key: ok=%v err=%v", ok, err)
 	}
-	if err := r.SetKeyValue(ctx, "onboarding.topics", `["topic_a","topic_b"]`); err != nil {
+	if err := r.SetSetting(ctx, "onboarding.topics", `["topic_a","topic_b"]`); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	v, ok, err := r.GetKeyValue(ctx, "onboarding.topics")
+	v, ok, err := r.GetSetting(ctx, "onboarding.topics")
 	if err != nil || !ok {
 		t.Fatalf("get: ok=%v err=%v", ok, err)
 	}
@@ -48,10 +48,10 @@ func TestKeyValueRoundTrip(t *testing.T) {
 		t.Fatalf("value mismatch: %q", v)
 	}
 	// upsert overwrites
-	if err := r.SetKeyValue(ctx, "onboarding.topics", `["topic_c"]`); err != nil {
+	if err := r.SetSetting(ctx, "onboarding.topics", `["topic_c"]`); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	v, _, _ = r.GetKeyValue(ctx, "onboarding.topics")
+	v, _, _ = r.GetSetting(ctx, "onboarding.topics")
 	if v != `["topic_c"]` {
 		t.Fatalf("upsert mismatch: %q", v)
 	}

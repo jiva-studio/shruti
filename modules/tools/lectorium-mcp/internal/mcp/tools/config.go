@@ -13,18 +13,18 @@ import (
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
-// ConfigKVStore is the slice of the catalog the `config.*` tools read/write:
-// the general-purpose key_value settings store.
-type ConfigKVStore interface {
-	GetKeyValue(ctx context.Context, key string) (string, bool, error)
-	SetKeyValue(ctx context.Context, key, value string) error
-	ListKeyValues(ctx context.Context, prefix string) ([]catalog.KeyValuePair, error)
+// SettingsStore is the slice of the catalog the `config.*` tools read/write:
+// the general-purpose settings store.
+type SettingsStore interface {
+	GetSetting(ctx context.Context, key string) (string, bool, error)
+	SetSetting(ctx context.Context, key, value string) error
+	ListSettings(ctx context.Context, prefix string) ([]catalog.Setting, error)
 }
 
-// ConfigDeps wires the `config.*` tools: the KV store (where values live) and
+// ConfigDeps wires the `config.*` tools: the settings store (where values live) and
 // the registry (which keys exist, their schema, and how to validate them).
 type ConfigDeps struct {
-	KV       ConfigKVStore
+	Settings SettingsStore
 	Registry *configregistry.Registry
 }
 
@@ -71,7 +71,7 @@ func registerConfigGet(s *server.MCPServer, deps ConfigDeps) {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 		key = strings.TrimSpace(key)
-		value, ok, err := deps.KV.GetKeyValue(ctx, key)
+		value, ok, err := deps.Settings.GetSetting(ctx, key)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
@@ -120,7 +120,7 @@ func registerConfigSet(s *server.MCPServer, deps ConfigDeps) {
 		if err := deps.Registry.Validate(ctx, key, []byte(value)); err != nil {
 			return envelope.Err(kind, envelope.CodeValidationFailed, err.Error(), nil), nil
 		}
-		if err := deps.KV.SetKeyValue(ctx, key, value); err != nil {
+		if err := deps.Settings.SetSetting(ctx, key, value); err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
 		return envelope.Result(kind, map[string]any{"key": key, "ok": true, "schema": d.Schema}), nil
