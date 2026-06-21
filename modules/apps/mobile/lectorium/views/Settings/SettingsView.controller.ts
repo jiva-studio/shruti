@@ -1,6 +1,12 @@
-import { computed, watch, type ComputedRef, type Ref } from "vue"
+import { computed, ref, watch, onMounted, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { ONBOARDING_INTERESTS_KEY } from "@lectorium/stores/useOnboardingStore.js"
+import {
+  loadDailyWisdomTopics,
+  type OnboardingTopicOption,
+} from "@lectorium/views/Onboarding/loadOnboardingTopics.js"
+import type { LanguageCode } from "@lib/domain/core.js"
 import {
   AUTO_ARCHIVE_DELAY_KEY,
   type AutoArchiveDelay,
@@ -57,6 +63,10 @@ export interface SettingsControllerReturn {
   openTranscriptAutomatically: Ref<boolean>
   notificationsEnabled: Ref<boolean>
   notificationsTime: Ref<[number, number] | undefined>
+  /** Topics the daily-wisdom rule samples (persisted to the rule's key). */
+  dailyWisdomTopicIds: Ref<string[]>
+  /** Picker options — only topics that have a wisdom fragment. */
+  dailyWisdomTopics: Ref<OnboardingTopicOption[]>
   autoDownloadTargetSeconds: Ref<number>
   smartLibrary: UseSmartLibraryBindingReturn
   /* Library content languages (the global lecture-language filter SSOT) */
@@ -119,6 +129,22 @@ export function useSettingsController(): SettingsControllerReturn {
     [9, 0]
   )
   const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
+  // Daily-wisdom topics — the SAME list the proactive rule samples
+  // (`onboarding.interestTopicIds`). Non-empty ⇒ a wisdom fragment lands in
+  // chat at the reminder time; empty ⇒ only the plain daily reminder fires.
+  const dailyWisdomTopicIds = useConfig<string[]>(ONBOARDING_INTERESTS_KEY, [])
+  // Options for the picker: only topics that actually have wisdom.
+  const dailyWisdomTopics = ref<OnboardingTopicOption[]>([])
+  onMounted(async () => {
+    try {
+      dailyWisdomTopics.value = await loadDailyWisdomTopics(
+        app.repositories(),
+        appLanguage.value as LanguageCode
+      )
+    } catch (err) {
+      console.warn("[settings] daily-wisdom topics load failed", err)
+    }
+  })
   const subscription = useSubscriptionBinding()
   const isSubscribedRef = computed(() => subscription.isSubscribed)
   const smartLibrary = useSmartLibraryBinding(
@@ -187,6 +213,8 @@ export function useSettingsController(): SettingsControllerReturn {
     openTranscriptAutomatically,
     notificationsEnabled,
     notificationsTime,
+    dailyWisdomTopicIds,
+    dailyWisdomTopics,
     autoDownloadTargetSeconds,
     smartLibrary,
     libraryLanguages,

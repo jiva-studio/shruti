@@ -284,7 +284,7 @@ export function useProactiveScheduler(): void {
         (result.actions ?? {}) as Record<string, ChatActionPayload>,
         app.repositories().tracks
       )
-      await repo.updateContent(entry.chatMessageId, scrubbed.bodyMd, scrubbed.actions)
+      await repo.updateContent(entry.chatMessageId, scrubbed.bodyMd, scrubbed.actions, result.cites)
       await repo.updatePrepState(
         entry.chatMessageId,
         scrubbed.degraded ? "degraded" : "ready",

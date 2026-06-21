@@ -295,6 +295,14 @@ export default {
     },
   },
 
+  dailyWisdom: {
+    title: "Saggezza quotidiana",
+    subtitleOn: "Attivo · {count} argomenti",
+    subtitleOff: "Disattivato · solo un promemoria",
+    hint: "Scegli gli argomenti su cui ricevere un breve pensiero quotidiano — invieremo un frammento riproducibile nella tua chat all'ora del promemoria. Senza selezione, riceverai solo il promemoria.",
+    empty: "Ancora nessun argomento con saggezza quotidiana.",
+  },
+
   data: {
     export: {
       title: "Esporta i dati utente",
