@@ -58,6 +58,7 @@ export default {
     startFreeTrial: "Iniciar teste gratuito",
     trialDisclaimer:
       "Cancele quando quiser. Após o teste, a assinatura é renovada automaticamente.",
+    disclaimer: "Cancele quando quiser. A assinatura é renovada automaticamente.",
     subscribed: "Assinatura concluída",
     unavailable: "As compras no aplicativo não estão disponíveis neste dispositivo.",
     manage: "Gerenciar assinatura",

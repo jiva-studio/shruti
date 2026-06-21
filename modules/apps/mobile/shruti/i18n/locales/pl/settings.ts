@@ -58,6 +58,7 @@ export default {
     startFreeTrial: "Rozpocznij bezpłatny okres próbny",
     trialDisclaimer:
       "Możesz anulować w dowolnym momencie. Po okresie próbnym subskrypcja odnowi się automatycznie.",
+    disclaimer: "Możesz anulować w dowolnym momencie. Subskrypcja odnowi się automatycznie.",
     subscribed: "Subskrypcja zakończona",
     unavailable: "Zakupy w aplikacji nie są dostępne na tym urządzeniu.",
     manage: "Zarządzaj subskrypcją",
