@@ -72,7 +72,9 @@ delivers one short, playable lecture excerpt per day into chat:
   `end_ms`, `text`, `topic_id`, `language`), authored via the MCP `wisdom.*`
   tools.
 - **Rule**: gated on the daily-engagement toggle (`settings.notificationsEnabled`)
-  + a non-empty interest set. `detect` samples a random interest topic that has a
+  + a non-empty interest set. `detect` filters to the user's **library languages**
+  (lecture content language — never delivers an excerpt the user can't read;
+  skips the day if none match), samples a random interest topic that has a
   fragment, then a random fragment; `buildContent` emits a
   `[cite:track@start-end|text]` marker that the existing `CitationCard` renders
   as a playable excerpt. Silent (no extra OS push — the daily reminder handles
