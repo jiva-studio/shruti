@@ -13,7 +13,6 @@
         :track-id="wisdom.trackId"
         :start-ms="wisdom.startMs"
         :end-ms="wisdom.endMs"
-        :caption="wisdom.text"
         :body="{ text: wisdom.text }"
       />
     </div>
