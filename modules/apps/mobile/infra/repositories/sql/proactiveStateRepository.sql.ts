@@ -1,6 +1,6 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { ProactiveRuleId } from "@lib/domain/config.js"
-import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
+import type { ChatActionPayload, ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type {
   CreateProactiveMessageInput,
@@ -268,22 +268,24 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
     async updateContent(
       chatMessageId: ChatMessageId,
       content: string,
-      actions?: Record<string, ChatActionPayload>
+      actions?: Record<string, ChatActionPayload>,
+      cites?: Record<string, ChatCiteSnippet>
     ): Promise<void> {
-      if (actions !== undefined) {
-        // Read-modify-write the meta envelope so we keep
-        // outlines / actionStates / followups / error untouched.
+      if (actions !== undefined || cites !== undefined) {
+        // Read-modify-write the meta envelope so we keep the other maps
+        // (outlines / actionStates / followups / error …) untouched. Each
+        // passed map overrides; an omitted one is preserved.
         const rows = await db.query<{ meta: string | null }>(
           "SELECT meta FROM chat_messages WHERE id = ?",
           [chatMessageId]
         )
         const current = rows.length > 0 ? parseMeta(rows[0].meta) : parseMeta(null)
         const next = wrapMeta({
-          actions,
+          actions: actions ?? current.actions,
           outlines: current.outlines,
           media: current.media,
           verses: current.verses,
-          cites: current.cites,
+          cites: cites ?? current.cites,
           chapters: current.chapters,
           commentaries: current.commentaries,
           actionStates: current.actionStates,

@@ -86,6 +86,12 @@ describe("topicsRepository — library-language filtering", () => {
     expect([...(await repo.topicIdsWithTracksIn([]))].sort()).toEqual(["T1", "T2"])
   })
 
+  it("getByIds preserves caller order and drops unknown ids", async () => {
+    const got = await repo.getByIds(["T2", "T1", "nope"] as TopicId[])
+    expect(got.map((t) => t.id)).toEqual(["T2", "T1"])
+    expect(await repo.getByIds([])).toEqual([])
+  })
+
   it("similarTrackIds filters neighbours by language and never inflates the score", async () => {
     // Seed topic T1, exclude tA. en-only → tC (tB is ru-only).
     expect(await repo.similarTrackIds(["T1"] as TopicId[], "tA" as TrackId, en, 10)).toEqual(["tC"])

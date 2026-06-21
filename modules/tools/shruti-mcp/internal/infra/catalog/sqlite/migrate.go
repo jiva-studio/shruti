@@ -32,6 +32,72 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureTopicsTables(ctx, db); err != nil {
 		return fmt.Errorf("ensure topics tables: %w", err)
 	}
+	if err := ensureSettingsTable(ctx, db); err != nil {
+		return fmt.Errorf("ensure settings table: %w", err)
+	}
+	if err := ensureDailyWisdomTable(ctx, db); err != nil {
+		return fmt.Errorf("ensure daily_wisdom table: %w", err)
+	}
+	return nil
+}
+
+// ensureDailyWisdomTable creates the daily-wisdom corpus: one row is a short,
+// playable lecture fragment (track + [start,end] ms + excerpt text) tied to a
+// topic. The mobile "daily wisdom" proactive rule samples a row for one of the
+// user's chosen topics and posts it into chat as a playable cite.
+//
+// This runs after ensureSettingsTable in applyLocalMigrations, so by the time
+// the migrations row below is recorded both onboarding tables (settings +
+// daily_wisdom) exist. The bumped scheme (20260621) advertises their presence;
+// the migrations `name` ('006_…') sorts after '005_add_track_audio', so the
+// mobile SchemeReader (ORDER BY name DESC LIMIT 1) picks it. Idempotent.
+func ensureDailyWisdomTable(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS daily_wisdom (
+			id         TEXT NOT NULL PRIMARY KEY,
+			track_id   TEXT NOT NULL,
+			language   TEXT NOT NULL,
+			start_ms   INTEGER NOT NULL,
+			end_ms     INTEGER NOT NULL,
+			text       TEXT NOT NULL,
+			topic_id   TEXT NOT NULL,
+			created_at INTEGER NOT NULL DEFAULT (CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_daily_wisdom_topic ON daily_wisdom(topic_id, language)`,
+		// Bump the scheme to 20260621 for the onboarding tables (settings +
+		// daily_wisdom). Exact-match gate on the client, so the new app only
+		// loads a DB that carries these tables.
+		`INSERT OR IGNORE INTO migrations (name, scheme, applied_at)
+		 VALUES ('006_add_settings_and_daily_wisdom', 20260621, CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("apply %q: %w", s, err)
+		}
+	}
+	return nil
+}
+
+// ensureSettingsTable creates a general-purpose settings store: one row per
+// config key, value an opaque (usually JSON) string. The onboarding topic
+// picker reads `onboarding.topics` from here; the MCP `config.*` tools write
+// it (validated against a registry).
+//
+// It lives in the DB rather than config.json deliberately: the client bundles
+// and downloads current.db anyway, so the curated list is available offline
+// without a second network fetch. Part of the scheme-20260621 bump (the
+// migrations row is recorded in ensureDailyWisdomTable, which runs after this);
+// the mobile reads are still defensive so an older cached DB degrades to the
+// fallback rather than crashing. Idempotent.
+func ensureSettingsTable(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx,
+		`CREATE TABLE IF NOT EXISTS settings (
+			key        TEXT NOT NULL PRIMARY KEY,
+			value      TEXT NOT NULL,
+			updated_at INTEGER NOT NULL DEFAULT (CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))
+		)`); err != nil {
+		return fmt.Errorf("create settings: %w", err)
+	}
 	return nil
 }
 

@@ -294,6 +294,14 @@ export default {
     },
   },
 
+  dailyWisdom: {
+    title: "Daily wisdom",
+    subtitleOn: "On · {count} topics",
+    subtitleOff: "Off · just a reminder",
+    hint: "Pick the topics you'd like a short daily insight about — we'll send a playable fragment to your chat at the reminder time. With none selected you'll just get the reminder.",
+    empty: "No topics with daily wisdom yet.",
+  },
+
   data: {
     export: {
       title: "Export user data",

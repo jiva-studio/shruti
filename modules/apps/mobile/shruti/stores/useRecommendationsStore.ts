@@ -2,6 +2,7 @@ import { defineStore } from "pinia"
 import { ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { shuffled } from "@shruti/utils/shuffle.js"
 import {
@@ -31,6 +32,7 @@ const RECOMMENDED_SIZE = 3
 export const useRecommendationsStore = defineStore("recommendations", () => {
   const app = useShruti()
   const playlist = usePlaylistStore()
+  const filters = useSearchFiltersStore()
   const libraryLanguages = useLibraryLanguages()
 
   const recommended = ref<readonly Track[]>([])
@@ -55,7 +57,12 @@ export const useRecommendationsStore = defineStore("recommendations", () => {
   async function build(): Promise<void> {
     isLoading.value = true
     try {
-      await playlist.ensureLoaded()
+      // Settle the library-language seed BEFORE reading it: `useLibraryLanguages`
+      // only fires the filter store's lazy load fire-and-forget, so on a cold
+      // open `libraryLanguages` is still `[]` and the recommender would query an
+      // all-languages pool — surfacing off-language (e.g. Russian) lectures to an
+      // English library. Mirrors the guard in useLibraryLandingStore.ensureLoaded.
+      await Promise.all([playlist.ensureLoaded(), filters.load()])
       const result = await buildRecommendations(
         {
           now: Date.now(),

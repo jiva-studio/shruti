@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
-import { useHorizontalCarousel } from "./useHorizontalCarousel.js"
+import { useHorizontalCarousel } from "@ui/components/useHorizontalCarousel.js"
 
 const props = defineProps<{ pageCount: number; initialPage?: number }>()
 const emit = defineEmits<{ "update:index": [index: number] }>()
