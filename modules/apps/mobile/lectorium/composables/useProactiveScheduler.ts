@@ -12,6 +12,8 @@ import type {
 } from "@lib/domain/ports/proactiveStateRepository.js"
 import { getActivityOverview } from "@usecases/activity/getActivityOverview.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
+import { useSearchFiltersStore } from "@lectorium/stores/useSearchFiltersStore.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { ONBOARDING_INTERESTS_KEY } from "@lectorium/stores/useOnboardingStore.js"
@@ -63,6 +65,8 @@ const LEGACY_DAILY_NOTIFICATION_ID = 9001
 export function useProactiveScheduler(): void {
   const app = useLectorium()
   const language = useAppLanguage()
+  const libraryLanguages = useLibraryLanguages()
+  const filtersStore = useSearchFiltersStore()
   const purchases = usePurchasesStore()
   const { t } = useI18n()
   // First time the scheduler runs we stamp "install age" — the device
@@ -168,6 +172,11 @@ export function useProactiveScheduler(): void {
       firstSeenAt.value = nowMs
     }
 
+    // Ensure the library-language facet is hydrated before we snapshot it,
+    // so a cold-start tick doesn't see an empty set (which would drop the
+    // language filter and let the daily-wisdom rule deliver any language).
+    await filtersStore.load().catch(() => undefined)
+
     // The user's onboarding topic interests — fuel for the daily-wisdom rule.
     let interestTopicIds: readonly TopicId[] = []
     try {
@@ -204,6 +213,7 @@ export function useProactiveScheduler(): void {
       repos: app.repositories(),
       proactiveChat: app.proactiveChat,
       interestTopicIds,
+      libraryLanguages: libraryLanguages.value,
     }
   }
 
