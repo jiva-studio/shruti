@@ -1,6 +1,6 @@
 # Content DB — tables
 
-Human-readable walkthrough of the prebuilt SQLite content database. For the visual ER diagram see [`er-diagram.md`](./er-diagram.md); for a dated raw-SQL snapshot of the prior shape see [`scheme.20260420.md`](./scheme.20260420.md). The **current** scheme is `20260614`. All tables described here are **read-only at runtime** — the mobile app only writes to the [user DB](./user-db.md). The publisher owns the schema: the catalog writer in the Go MCP (`modules/tools/shruti-mcp/internal/infra/catalog/sqlite/`) ships the prebuilt DB; the client only opens and validates it.
+Human-readable walkthrough of the prebuilt SQLite content database. For the visual ER diagram see [`er-diagram.md`](./er-diagram.md); for a dated raw-SQL snapshot of the prior shape see [`scheme.20260420.md`](./scheme.20260420.md). The **current** scheme is `20260621`. All tables described here are **read-only at runtime** — the mobile app only writes to the [user DB](./user-db.md). The publisher owns the schema: the catalog writer in the Go MCP (`modules/tools/shruti-mcp/internal/infra/catalog/sqlite/`) ships the prebuilt DB; the client only opens and validates it.
 
 ## Table inventory
 
@@ -39,6 +39,11 @@ graph TD
         TS[tracks_search FTS4]
     end
 
+    subgraph app["App config / content"]
+        ST[settings]
+        DW[daily_wisdom]
+    end
+
     TP[topics]
 
     classDef dict fill:#cba6f7,stroke:#6c7086,color:#1e1e2e;
@@ -47,12 +52,14 @@ graph TD
     classDef col fill:#f5c2e7,stroke:#6c7086,color:#1e1e2e;
     classDef idx fill:#f9e2af,stroke:#6c7086,color:#1e1e2e;
     classDef top fill:#fab387,stroke:#6c7086,color:#1e1e2e;
+    classDef appc fill:#94e2d5,stroke:#6c7086,color:#1e1e2e;
     class AU,LO,SO,TG dict;
     class LA,MIG reg;
     class T,TV,TA,TR,TT,TPC cat;
     class C,CT,CTG,CG,CGI col;
     class TS idx;
     class TP top;
+    class ST,DW appc;
 ```
 
 | Table | Rows | Role |
@@ -73,6 +80,8 @@ graph TD
 | `languages` | per language | Registry of available locales |
 | `migrations` | per applied migration | Holds the `scheme` value (read on startup) |
 | `tracks_search` | virtual (FTS4) | Unified full-text index; one `title` row per variant plus one `combined` row per track |
+| `settings` | per key | General-purpose key→JSON config registry (e.g. `onboarding.topics`) |
+| `daily_wisdom` | per fragment | Authored playable lecture excerpts keyed by topic, for the daily-wisdom proactive rule |
 
 ---
 
@@ -187,6 +196,39 @@ Localised topic-vocabulary dictionary, shaped like `tags` so the generic dict-CR
 | `full_name` | TEXT | NOT NULL | Localised topic name |
 | `short_name` | TEXT | nullable | Short display name for tight surfaces (chips, shelf headers) |
 | `cover` | TEXT | nullable | Generated cover asset key |
+
+---
+
+## App config / content
+
+### `settings`
+
+A general-purpose key→value config registry shipped inside the catalog (rather than `config.json`) so a value is always available offline. Created by `ensureSettingsTable` in `migrate.go`. Authored from the MCP via the config-registry tools (`config.describe` / `config.get` / `config.set`); the first registered key is `onboarding.topics` (a JSON array of curated topic ids). Single-column PK.
+
+| Column | Type | Constraints | Meaning |
+|---|---|---|---|
+| `key` | TEXT | **PK** | Dotted config key, e.g. `onboarding.topics` |
+| `value` | TEXT | NOT NULL | JSON-encoded value; the registry validator gates writes |
+| `updated_at` | INTEGER | NOT NULL DEFAULT now-ms | Unix ms of last write |
+
+> Mobile reads this through `settingsRepository.sql.ts` (`settings` repo) with a guarded `get(key)` — a missing table/key returns `null` and callers fall back.
+
+### `daily_wisdom`
+
+The authored corpus for the `daily_wisdom` proactive rule (see [Proactive messages](../architecture/proactive-messages.md)): one row is a short, self-contained, playable lecture excerpt tagged with the topic it illustrates. Created by `ensureDailyWisdomTable` in `migrate.go`; authored via the MCP `wisdom.*` tools. Single-column PK.
+
+| Column | Type | Constraints | Meaning |
+|---|---|---|---|
+| `id` | TEXT | **PK** | Fragment id (also the proactive dedup key) |
+| `track_id` | TEXT | NOT NULL | Source lecture |
+| `language` | TEXT | NOT NULL | ISO-639 code of the excerpt text/audio |
+| `start_ms` | INTEGER | NOT NULL | Excerpt start within the track (ms) |
+| `end_ms` | INTEGER | NOT NULL | Excerpt end (ms) |
+| `text` | TEXT | NOT NULL | The excerpt transcript, matching the spoken audio |
+| `topic_id` | TEXT | NOT NULL | FK to `topics.id` — the interest the rule samples by |
+| `created_at` | INTEGER | NOT NULL DEFAULT now-ms | Unix ms at insert |
+
+Index: `idx_daily_wisdom_topic (topic_id, language)` — backs the rule's "a fragment for a sampled interest topic, in the user's language" lookup.
 
 ---
 
@@ -331,8 +373,9 @@ The catalog `current.db` is a binary snapshot mutated in place — there is no r
 | `003_add_packs` | 20260520 |
 | `004_rename_packs_to_collections` | 20260613 |
 | `005_add_track_audio` | 20260614 |
+| `006_add_settings_and_daily_wisdom` | 20260621 |
 
-The `004…` (`ensureCollectionTables`) and `005…` (`ensureTrackAudioTable`) rows are inserted idempotently (`INSERT OR IGNORE`) so the scheme-discovery query below returns the bumped scheme. The additive table sets (`topics` / `track_topics`, `collection_tags`, `collection_groups` / `collection_group_items`) and additive columns (`track_variants.outline/description`, `authors.image/description`, `topics.short_name/cover`, `collections.cover/description/meta`) live under the **same** `20260614` scheme and do **not** add their own `migrations` row.
+The `004…` (`ensureCollectionTables`), `005…` (`ensureTrackAudioTable`) and `006…` (`ensureSettingsTable` + `ensureDailyWisdomTable`) rows are inserted idempotently (`INSERT OR IGNORE`) so the scheme-discovery query below returns the bumped scheme. The additive table sets (`topics` / `track_topics`, `collection_tags`, `collection_groups` / `collection_group_items`) and additive columns (`track_variants.outline/description`, `authors.image/description`, `topics.short_name/cover`, `collections.cover/description/meta`) live under the earlier `20260614` scheme and do **not** add their own `migrations` row. The onboarding tables (`settings` + `daily_wisdom`) **do** bump the scheme to `20260621` via the `006…` row, so an older binary won't load a DB that carries them and vice-versa.
 
 The startup flow runs:
 
@@ -340,7 +383,7 @@ The startup flow runs:
 SELECT scheme FROM migrations WHERE scheme IS NOT NULL ORDER BY name DESC LIMIT 1;
 ```
 
-and rejects the DB if the value differs from the build-time scheme constant (current: `20260614`, `SupportedDBScheme` in `modules/tools/shruti-mcp/internal/domain/catalog/scheme.go`, mirrored in `modules/db-scheme.json`) — see [`startup-flow.md`](../architecture/startup-flow.md#5-phase-2--open--validate-the-content-database).
+and rejects the DB if the value differs from the build-time scheme constant (current: `20260621`, `SupportedDBScheme` in `modules/tools/shruti-mcp/internal/domain/catalog/scheme.go`, mirrored in `modules/db-scheme.json`) — see [`startup-flow.md`](../architecture/startup-flow.md#5-phase-2--open--validate-the-content-database).
 
 ---
 
