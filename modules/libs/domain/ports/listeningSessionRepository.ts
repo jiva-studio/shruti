@@ -136,6 +136,12 @@ export interface IListeningSessionRepository {
     toMs: number
   ): Promise<readonly DayOffsetListeningTotal[]>
 
+  /** True if the user has any listening session at all — the "established
+   *  user" signal used to skip first-launch onboarding even when the
+   *  `onboarding.completed` flag is unset (e.g. upgrade from a pre-onboarding
+   *  build). */
+  hasAny(): Promise<boolean>
+
   /** Sum `to_position - from_position` across every session, in seconds. */
   getTotalListenedSeconds(): Promise<number>
 

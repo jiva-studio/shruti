@@ -35,8 +35,8 @@
     role="button"
     tabindex="0"
     :aria-label="trackTitle || $t('chat.citationDetailsTitle')"
-    @click="openActions"
-    @keydown.enter.space.prevent="openActions"
+    @click="emit('activate')"
+    @keydown.enter.space.prevent="emit('activate')"
   >
     <AutoHeight>
       <ExcerptCard
@@ -48,18 +48,11 @@
       >
         <template #player>
           <!-- The player owns its own taps (play / seek); stop the bubble
-               so tapping it doesn't also open the action sheet. -->
+               so tapping it doesn't also fire the card's activate. -->
           <NotesInlinePlayer :note="playerRef" @click.stop />
         </template>
       </ExcerptCard>
     </AutoHeight>
-
-    <IonActionSheet
-      :is-open="actionSheetOpen"
-      :header="trackTitle"
-      :buttons="actionSheetButtons"
-      @did-dismiss="actionSheetOpen = false"
-    />
   </AccentFrame>
 
   <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
@@ -76,7 +69,7 @@ import type { ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import { ExcerptCard } from "@ui/components/excerpt/index.js"
 import NotesInlinePlayer from "@shruti/views/Notes/NotesInlinePlayer.vue"
 import { citationExcerptId } from "../composables/useCitationSnippet.js"
-import { useCitationActions } from "../composables/useCitationActions.js"
+import { useCitationMeta } from "../composables/useCitationMeta.js"
 import { useTranslatable } from "../composables/useTranslatable.js"
 import CitationChip from "./CitationChip.vue"
 import TranslationNotice from "./TranslationNotice.vue"
@@ -95,6 +88,11 @@ const props = defineProps<{
   body?: ChatCiteSnippet
 }>()
 
+/** Tapping the card asks the HOST to act (open the citation action sheet).
+ *  A leaf card never owns that dialog — onboarding reuses this card with no
+ *  listener, so tapping it does nothing. */
+const emit = defineEmits<{ activate: [] }>()
+
 const appLanguage = useAppLanguage()
 const dictionaries = useDictionariesStore()
 
@@ -112,27 +110,14 @@ const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
  *  Consumed by `ExcerptCard` → `HighlightText` via `v-html`. */
 const displayHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 
-// Metadata load + the Save/Studio/Playlist action sheet are shared with the
-// chip fallback. `metaLoaded` gates the skeleton → card reveal (issue #926).
-const {
-  track,
-  metaLoaded,
-  trackTitle,
-  authorName,
-  actionSheetOpen,
-  actionSheetButtons,
-  openActions,
-} = useCitationActions(
-  () => ({
-    trackId: props.trackId,
-    startMs: props.startMs,
-    endMs: props.endMs,
-    caption: props.caption,
-  }),
-  // Card mode only renders with the snippet text known; pass it so a saved
-  // note carries the real fragment, not a re-fetch / the caption.
-  { snippetText: () => snippetText.value }
-)
+// Display metadata only — the action sheet is the host's (see CitationActionSheet).
+// `metaLoaded` gates the skeleton → card reveal (issue #926).
+const { track, metaLoaded, trackTitle, authorName } = useCitationMeta(() => ({
+  trackId: props.trackId,
+  startMs: props.startMs,
+  endMs: props.endMs,
+  caption: props.caption,
+}))
 
 const audioPath = computed<string>(() => {
   if (!track.value) return ""

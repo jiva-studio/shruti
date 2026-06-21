@@ -5,8 +5,39 @@ import { Preferences } from "@capacitor/preferences"
 import { useShruti } from "@shruti/shruti.js"
 import type { CustomerState, PurchasePackage } from "@ports/app/purchases.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
+import { devSubscriptionOverride, isDevBuild } from "@shruti/services/devSubscription.js"
 
 const CACHE_KEY = "purchases.lastState"
+
+/** Sample packages for dev/preview builds where RevenueCat has no offerings
+ *  (web). Uses the standard Rc package ids so the footer resolves localized
+ *  plan names ("Monthly"/"Annual"); annual carries a 2-week free trial. */
+function devMockPackages(): PurchasePackage[] {
+  return [
+    {
+      packageId: "$rc_monthly",
+      productId: "rc_monthly_dev",
+      title: "Monthly",
+      description: "",
+      priceString: "$4.99",
+      billingPeriod: "P1M",
+    },
+    {
+      packageId: "$rc_annual",
+      productId: "rc_annual_dev",
+      title: "Annual",
+      description: "",
+      priceString: "$39.99",
+      billingPeriod: "P1Y",
+      introOffer: {
+        isFree: true,
+        priceString: "$0.00",
+        periodUnit: "WEEK",
+        periodNumberOfUnits: 2,
+      },
+    },
+  ]
+}
 
 interface CachedState {
   activePackageId: string | undefined
@@ -59,37 +90,19 @@ export const usePurchasesStore = defineStore("purchases", () => {
   let loginPromise: Promise<void> | null = null
 
   const available = computed(() => useShruti().purchases.available)
-  // Dev-build override: treat every dev build as Pro so we can test
-  // paywalled surfaces (Smart Library, Notes Studio, etc.) without a
-  // real RevenueCat purchase. `__BUILD_ID__` is "dev" only when the
-  // CI doesn't set `BUILD_ID` env var — production builds always
-  // override it with the version+hash.
-  //
-  // The Cloudflare Pages web deploys (`*.pages.dev` — both the PR
-  // previews `pr-N.shruti-preview.pages.dev` and the main alias) get
-  // the same treatment: that whole project is a build/preview of the
-  // app, never a paid product (RevenueCat isn't even available on web),
-  // so paywalled surfaces must be explorable there without a purchase.
-  // CI bakes a real BUILD_ID into those bundles, so the dev check alone
-  // wouldn't cover them — gate on the host instead.
-  //
-  // Side effect: the `is_subscribed: false` eligibility predicate in
-  // `smart_library_hint` won't hold on dev builds, so the autonomous
-  // tutorial for it won't fire on dev devices. That's the trade-off —
-  // pick "Pro is unlocked" over "non-Pro flows are reproducible".
-  const isPreviewWeb =
-    typeof window !== "undefined" && window.location.hostname.endsWith(".pages.dev")
-  // E2E/dev escape hatch: force the NON-subscribed state so paywalled flows
-  // (paywall entry, Pro-gated toggles, Smart Library PRO badge) are
-  // reproducible on the dev build, which otherwise treats every user as Pro.
-  // Only defeats the dev/preview override above — it can never grant Pro, and a
-  // real purchase (`activePackageId`) still wins. Inert on production builds,
-  // where neither the dev nor preview flag is set.
-  const forceFreeTier =
-    typeof localStorage !== "undefined" &&
-    localStorage.getItem("CapacitorStorage.e2e.forceFreeTier") === "1"
-  const devPro = (__BUILD_ID__ === "dev" || isPreviewWeb) && !forceFreeTier
-  const isSubscribed = computed(() => devPro || activePackageId.value !== undefined)
+  // Dev/preview builds (dev binary or *.pages.dev) unlock Pro by default so
+  // paywalled surfaces are explorable without a real RevenueCat purchase (RC
+  // isn't available on web at all). That's now configurable via the dev
+  // controller — Settings → Debug → Subscription, or the e2e forceFreeTier
+  // escape hatch (see services/devSubscription.ts). A real purchase
+  // (`activePackageId`) always wins; the override never grants Pro on prod.
+  const isSubscribed = computed(() => {
+    if (activePackageId.value !== undefined) return true
+    const ov = devSubscriptionOverride.value
+    if (ov === "free") return false
+    if (ov === "pro") return isDevBuild
+    return isDevBuild // default: dev/preview unlocks Pro so paywalls are explorable
+  })
 
   function applyState(s: CustomerState): void {
     activePackageId.value = s.activePackageId
@@ -215,6 +228,11 @@ export const usePurchasesStore = defineStore("purchases", () => {
   async function doInit(): Promise<void> {
     const purchases = useShruti().purchases
     if (!purchases.available) {
+      // RevenueCat is native-only, so the web/dev preview has no real
+      // offerings. Seed sample packages on dev/preview builds so the paywall
+      // (incl. onboarding) renders real plan cards when the dev controller is
+      // set to "free". Production web (RC unavailable) keeps an empty list.
+      if (isDevBuild) packages.value = devMockPackages()
       ready.value = true
       return
     }

@@ -1,28 +1,12 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
+import { computed, ref, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { useShruti } from "@shruti/shruti.js"
-import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
-import {
-  preferredContentLanguage,
-  resolveLocalizedName,
-  resolveTrackTitle,
-} from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useChatActions } from "@shruti/composables/useChatActions.js"
 import { useOpenInStudio } from "@shruti/composables/useOpenInStudio.js"
 import { useToast } from "@kit/composables"
-import type { AuthorId, TrackId } from "@lib/domain/core.js"
-import type { Author } from "@lib/domain/author.js"
-import type { Track } from "@lib/domain/track.js"
+import { useCitationMeta, type CitationCoords, type UseCitationMeta } from "./useCitationMeta.js"
 
-/** The fragment a citation card/chip points at. */
-export interface CitationCoords {
-  trackId: string
-  startMs: number
-  endMs: number
-  caption?: string
-}
+export type { CitationCoords } from "./useCitationMeta.js"
 
 export interface CitationActionSheetButton {
   readonly text: string
@@ -30,64 +14,38 @@ export interface CitationActionSheetButton {
   readonly handler: () => void
 }
 
-export interface UseCitationActions {
-  /** Track / author for the cited fragment; null until loaded. */
-  track: Ref<Track | null>
-  author: Ref<Author | null>
-  /** True once the track/author lookup has settled (hit, miss or error). */
-  metaLoaded: Ref<boolean>
-  /** Resolved lecture title — also the action-sheet header. */
-  trackTitle: ComputedRef<string>
-  /** Resolved author name. */
-  authorName: ComputedRef<string>
+export interface UseCitationActions extends UseCitationMeta {
   actionSheetOpen: Ref<boolean>
   actionSheetButtons: ComputedRef<readonly CitationActionSheetButton[]>
   openActions: () => void
 }
 
 /**
- * Shared behaviour for the two citation surfaces (CitationCard block +
- * CitationChip inline): loads the track/author metadata and owns the
- * Save-as-note / Open-in-Studio / Add-to-playlist action sheet. Each host
- * keeps only its own rendering.
+ * The interactive half of a citation surface: the Save-as-note /
+ * Open-in-Studio / Add-to-playlist action sheet, plus the display metadata it
+ * composes from {@link useCitationMeta}. This is owned by a HOST that renders
+ * `CitationActionSheet` — never by a leaf card, so a presentational card stays
+ * dialog-free (e.g. the onboarding wisdom preview launches nothing).
  *
  * @param coords  Reactive getter for the cited fragment.
  * @param opts.snippetText  Optional getter for the known transcript text — the
- *   block card passes it so a saved note carries the real fragment; the chip
- *   leaves it undefined and `saveCitation` re-fetches.
+ *   host passes it so a saved note carries the real fragment; without it
+ *   `saveCitation` re-fetches.
  */
 export function useCitationActions(
   coords: () => CitationCoords,
   opts: { snippetText?: () => string | null } = {}
 ): UseCitationActions {
   const { t } = useI18n()
-  const app = useShruti()
-  const appLanguage = useAppLanguage()
-  const libraryLanguages = useLibraryLanguages()
   const toast = useToast()
   const { addToPlaylist } = useAddToPlaylist()
   const { saveCitation } = useChatActions()
   const { openInStudio } = useOpenInStudio()
 
-  const track = ref<Track | null>(null)
-  const author = ref<Author | null>(null)
-  const metaLoaded = ref(false)
+  const meta = useCitationMeta(coords)
   const actionSheetOpen = ref(false)
   /** Reentrancy guard so a double-tap on Save doesn't create two notes. */
   const savingNote = ref(false)
-
-  const trackTitle = computed<string>(() => {
-    if (!track.value) return ""
-    // Title follows the content language (a library language the track has),
-    // not the UI language — which still drives the author name label.
-    const cl =
-      preferredContentLanguage(track.value, libraryLanguages.value, appLanguage.value) ??
-      appLanguage.value
-    return resolveTrackTitle(track.value, cl) ?? ""
-  })
-  const authorName = computed<string>(
-    () => resolveLocalizedName(author.value, appLanguage.value) ?? ""
-  )
 
   function openActions(): void {
     actionSheetOpen.value = true
@@ -139,37 +97,8 @@ export function useCitationActions(
     { text: t("app.cancel"), role: "cancel", handler: () => undefined },
   ])
 
-  async function loadMetadata(): Promise<void> {
-    try {
-      const repos = app.repositories()
-      const t0 = await repos.tracks.getById(coords().trackId as TrackId)
-      track.value = t0 ?? null
-      author.value =
-        t0 && t0.authorId ? ((await repos.authors.getById(t0.authorId as AuthorId)) ?? null) : null
-    } catch (err) {
-      console.warn("[citation] metadata load failed", err)
-    } finally {
-      metaLoaded.value = true
-    }
-  }
-
-  watch(
-    () => coords().trackId,
-    () => {
-      track.value = null
-      author.value = null
-      metaLoaded.value = false
-      void loadMetadata()
-    },
-    { immediate: true }
-  )
-
   return {
-    track,
-    author,
-    metaLoaded,
-    trackTitle,
-    authorName,
+    ...meta,
     actionSheetOpen,
     actionSheetButtons,
     openActions,

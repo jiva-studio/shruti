@@ -3,11 +3,13 @@ import type { RouteRecordRaw } from "vue-router"
 import { isShrutiInitialized, useShruti } from "@shruti/shruti.js"
 
 const routes: RouteRecordRaw[] = [
-  { path: "/", redirect: "/welcome" },
+  // Startup picks the real entry (onboarding vs Home) and replaces this before
+  // mount; Home is the safe default for any stray navigation to "/".
+  { path: "/", redirect: "/tabs/home" },
   {
-    path: "/welcome",
-    name: "welcome",
-    component: () => import("@shruti/views/Welcome/WelcomeView.vue"),
+    path: "/onboarding",
+    name: "onboarding",
+    component: () => import("@shruti/views/Onboarding/OnboardingView.vue"),
   },
   {
     path: "/tabs/",
@@ -120,22 +122,17 @@ router.go = function patchedGo(delta: number): ReturnType<typeof originalGo> {
   return originalGo(delta)
 }
 
-// Deep-linking guard: every non-welcome route depends on both databases
-// being open. If someone lands on /tabs/* before the Welcome view has
-// finished its initialize() cycle, bounce them to /welcome so the app
-// doesn't explode inside `repositories()`.
-//
-// `isShrutiInitialized()` is a second-line defence: the very first
-// navigation fires synchronously from `router.install()`, before
-// `app.mount()`. `main.ts` now calls `initShruti()` before
-// `app.use(router)` so this check is usually a no-op, but keeping it
-// makes the guard robust to future reordering.
+// Deep-linking guard: every tabs route depends on both databases being open.
+// Startup (`main.ts`) opens them headlessly before mount, so this is normally a
+// no-op. As a defence against a stray deep link arriving before startup
+// settles, bounce to "/onboarding" (which itself tolerates the not-yet-open
+// case) rather than the deleted "/welcome".
 router.beforeEach((to, _from, next) => {
-  if (to.path === "/welcome" || to.path === "/") return next()
+  if (to.path === "/" || to.path === "/onboarding") return next()
   if (!isShrutiInitialized()) return next()
   const app = useShruti()
   if (!app.databases.content || !app.databases.user) {
-    return next("/welcome")
+    return next("/onboarding")
   }
   next()
 })

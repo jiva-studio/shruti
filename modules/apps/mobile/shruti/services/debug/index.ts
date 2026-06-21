@@ -14,6 +14,10 @@ import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
 import { currentLocale, setLocale, type SupportedLocale } from "@shruti/i18n/index.js"
 import router from "@shruti/router/index.js"
+import {
+  setDevSubscriptionOverride,
+  type DevSubscriptionOverride,
+} from "@shruti/services/devSubscription.js"
 import type { TrackId, LanguageCode } from "@lib/domain/core.js"
 
 const DEMO_TRACKS: Record<"en", string> & Partial<Record<SupportedLocale, string>> = {
@@ -55,6 +59,10 @@ interface ShrutiDebugApi {
   openTrackSheet(trackId: string): void
   setPlayerState(trackId: string, positionMs: number): Promise<void>
   setLocale(loc: SupportedLocale): void
+  /** Force the subscription state on this dev/preview build so paywalled
+   *  surfaces (incl. the onboarding paywall) are reviewable without a real
+   *  purchase: "free" shows plan cards, "pro" unlocks, "default" restores. */
+  setSubscription(value: DevSubscriptionOverride): void
 }
 
 export function installDebugApi(): void {
@@ -125,6 +133,10 @@ export function installDebugApi(): void {
 
     setLocale(loc: SupportedLocale): void {
       setLocale(loc)
+    },
+
+    setSubscription(value: DevSubscriptionOverride): void {
+      setDevSubscriptionOverride(value)
     },
   }
 
