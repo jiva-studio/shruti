@@ -60,6 +60,7 @@ export default {
     startFreeTrial: "Ingyenes próba indítása",
     trialDisclaimer:
       "Bármikor lemondható. A próbaidőszak után az előfizetés automatikusan megújul.",
+    disclaimer: "Bármikor lemondható. Az előfizetés automatikusan megújul.",
     subscribed: "Az előfizetés megtörtént",
     unavailable: "Az alkalmazáson belüli vásárlások nem érhetők el ezen az eszközön.",
     manage: "Előfizetés kezelése",

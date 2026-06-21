@@ -9,15 +9,13 @@
         lines="none"
         @click="selectedPackageId = pkg.packageId"
       >
-        <div slot="start">⭐️</div>
+        <IconStarFilled slot="start" :size="20" class="plan-icon" />
         <IonLabel>
           <h2>
             <b>{{ planTitle(pkg.packageId) }}</b>
+            <span v-if="freeTrial(pkg)" class="trial-badge">{{ trialBadge(pkg) }}</span>
           </h2>
-          <template v-if="freeTrial(pkg)">
-            <p class="trial">{{ trialBadge(pkg) }}</p>
-            <p class="then">{{ thenPrice(pkg) }}</p>
-          </template>
+          <p v-if="freeTrial(pkg)">{{ thenPrice(pkg) }}</p>
           <p v-else>{{ pkg.priceString }} / {{ periodLabel(pkg.billingPeriod) }}</p>
         </IonLabel>
         <IonIcon v-if="selectedPackageId === pkg.packageId" slot="end" :icon="checkmarkCircle" />
@@ -33,27 +31,18 @@
         {{ ctaLabel }}
       </IonButton>
 
-      <IonNote v-if="selectedHasTrial" class="trial-disclaimer">
-        {{ $t("settings.subscription.trialDisclaimer") }}
+      <IonNote class="trial-disclaimer">
+        {{
+          selectedHasTrial
+            ? $t("settings.subscription.trialDisclaimer")
+            : $t("settings.subscription.disclaimer")
+        }}
       </IonNote>
-
-      <IonButton expand="block" fill="clear" :disabled="restoring" @click="emit('restore')">
-        {{ $t("settings.subscription.restore") }}
-      </IonButton>
     </template>
 
     <template v-else-if="isSubscribed">
       <IonButton expand="block" class="cta" :strong="true" @click="emit('manage')">
         {{ $t("settings.subscription.manage") }}
-      </IonButton>
-
-      <!-- Restore stays reachable while subscribed: when an entitlement is
-           stranded on a stale RC app_user_id (e.g. a prior anonymous/device
-           id), the SDK still reports the device as subscribed, so hiding
-           Restore here traps the user with no way to re-home the receipt
-           onto their signed-in account. -->
-      <IonButton expand="block" fill="clear" :disabled="restoring" @click="emit('restore')">
-        {{ $t("settings.subscription.restore") }}
       </IonButton>
     </template>
 
@@ -81,11 +70,31 @@
       {{ $t("settings.subscription.cantPay") }}
     </IonButton>
 
-    <IonNote class="legal">
-      <a v-for="doc in legalDocuments" :key="doc.title" :href="doc.link" target="_blank">
-        {{ doc.title }}
-      </a>
-    </IonNote>
+    <div class="secondary">
+      <RowDivider class="secondary-divider" />
+      <div class="secondary-links">
+        <a
+          v-if="showRestore"
+          class="secondary-link"
+          role="button"
+          tabindex="0"
+          :class="{ 'is-busy': restoring }"
+          @click="!restoring && emit('restore')"
+          @keydown.enter="!restoring && emit('restore')"
+        >
+          {{ $t("settings.subscription.restore") }}
+        </a>
+        <a
+          v-for="doc in legalDocuments"
+          :key="doc.title"
+          class="secondary-link"
+          :href="doc.link"
+          target="_blank"
+        >
+          {{ doc.title }}
+        </a>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -93,7 +102,9 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonIcon, IonItem, IonLabel, IonNote } from "@ionic/vue"
+import { IconStarFilled } from "@tabler/icons-vue"
 import { checkmarkCircle } from "ionicons/icons"
+import RowDivider from "@ui/components/RowDivider.vue"
 
 export interface IntroOfferView {
   isFree: boolean
@@ -138,6 +149,8 @@ const emit = defineEmits<{
 
 const { t, te } = useI18n()
 const selectedPackageId = ref<string | undefined>(undefined)
+
+const showRestore = computed<boolean>(() => props.isSubscribed || props.packages.length > 0)
 
 watch(
   () => props.packages,
@@ -219,29 +232,55 @@ function onSubscribeClick(): void {
 
 .plan {
   margin: 0 16px 8px;
-  border-radius: 8px;
+  border-radius: 12px;
+  --border-radius: 12px;
+  --min-height: 56px;
+  --padding-top: 6px;
+  --padding-bottom: 6px;
   cursor: pointer;
+}
+
+.plan-icon {
+  margin-inline-end: 12px;
+  color: var(--ion-color-warning);
 }
 
 .cta {
   margin: 12px 16px 4px;
   --box-shadow: none;
+  --border-radius: 12px;
 }
 
-.plan .trial {
+.plan h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.plan p {
+  margin: 2px 0 0;
+  font-size: 0.88rem;
+}
+
+.trial-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
   font-weight: 600;
-}
-
-.plan .then {
-  font-size: 0.85rem;
-  opacity: 0.7;
+  line-height: 1.4;
+  background: var(--ion-color-success, #2dd36f);
+  color: var(--ion-color-success-contrast, #fff);
 }
 
 .trial-disclaimer {
   display: block;
-  margin: 0 16px 4px;
+  max-width: 320px;
+  margin: 14px auto 4px;
   font-size: 0.78rem;
-  line-height: 1.3;
+  line-height: 1.45;
   color: var(--ion-color-medium);
   text-align: center;
 }
@@ -261,17 +300,31 @@ function onSubscribeClick(): void {
   text-align: center;
 }
 
-.legal {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-evenly;
-  gap: 0.5rem 1.25rem;
-  padding: 20px 16px 12px;
+.secondary {
+  margin-top: 28px;
 }
 
-.legal a {
+.secondary-divider {
+  margin: 0 16px 14px;
+}
+
+.secondary-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 16px 12px;
+}
+
+.secondary-link {
   color: var(--ion-color-medium);
   text-decoration: none;
   font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.secondary-link.is-busy {
+  opacity: 0.5;
+  pointer-events: none;
 }
 </style>

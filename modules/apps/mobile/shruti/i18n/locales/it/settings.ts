@@ -58,6 +58,7 @@ export default {
     startFreeTrial: "Inizia la prova gratuita",
     trialDisclaimer:
       "Disdici quando vuoi. Al termine della prova, l'abbonamento si rinnova automaticamente.",
+    disclaimer: "Disdici quando vuoi. L'abbonamento si rinnova automaticamente.",
     subscribed: "Abbonamento completato",
     unavailable: "Gli acquisti in-app non sono disponibili su questo dispositivo.",
     manage: "Gestisci abbonamento",
