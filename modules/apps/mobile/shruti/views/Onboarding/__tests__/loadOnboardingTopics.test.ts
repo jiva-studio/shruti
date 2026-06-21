@@ -26,7 +26,7 @@ const ALL: Record<string, Topic> = {
 
 function fakeRepos(kv: string | null, usable: string[] = []) {
   return {
-    keyValue: { get: async () => kv },
+    settings: { get: async () => kv },
     topics: {
       getByIds: async (ids: readonly TopicId[]) =>
         ids.map((id) => ALL[id]).filter((t): t is Topic => t != null),

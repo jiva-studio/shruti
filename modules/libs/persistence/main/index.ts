@@ -119,7 +119,7 @@ export interface MigrationRow {
 }
 
 /** General-purpose settings store. Value is an opaque (usually JSON) string. */
-export interface KeyValueRow {
+export interface SettingsRow {
   readonly key: string
   readonly value: string
   readonly updated_at: number

@@ -27,7 +27,7 @@ var curatedOnboardingTopics = []string{
 }
 
 // TestSeedAgainstLakeCatalog opens a COPY of the real catalog DB (path in
-// SHRUTI_LAKE_DB), confirms the migration adds key_value, and verifies
+// SHRUTI_LAKE_DB), confirms the migration adds settings, and verifies
 // every curated onboarding topic id exists. Skipped unless the env var is set
 // (so it never runs in CI without the data file). Does NOT publish.
 func TestSeedAgainstLakeCatalog(t *testing.T) {
@@ -52,11 +52,11 @@ func TestSeedAgainstLakeCatalog(t *testing.T) {
 		}
 	}
 
-	if err := repo.SetKeyValue(ctx, "onboarding.topics", `["topic_GwCShbOKUcqG"]`); err != nil {
-		t.Fatalf("set key_value: %v", err)
+	if err := repo.SetSetting(ctx, "onboarding.topics", `["topic_GwCShbOKUcqG"]`); err != nil {
+		t.Fatalf("set settings: %v", err)
 	}
-	v, ok, err := repo.GetKeyValue(ctx, "onboarding.topics")
+	v, ok, err := repo.GetSetting(ctx, "onboarding.topics")
 	if err != nil || !ok || v != `["topic_GwCShbOKUcqG"]` {
-		t.Fatalf("key_value round-trip: v=%q ok=%v err=%v", v, ok, err)
+		t.Fatalf("settings round-trip: v=%q ok=%v err=%v", v, ok, err)
 	}
 }

@@ -590,7 +590,7 @@ func main() {
 		Uploader: assetUploader,
 	}
 
-	// Config registry: the extensible catalog of key_value config keys the
+	// Config registry: the extensible catalog of settings keys the
 	// config.* tools can read/write. Validators check referential integrity
 	// against the catalog (e.g. onboarding.topics ids must exist).
 	configTopicLazy := sqlitecatalog.NewLazy(currentDBPath)
@@ -642,8 +642,8 @@ func main() {
 				return sqlitecatalog.Open(ctx, currentDBPath)
 			},
 		},
-		ConfigKV: tools.ConfigDeps{
-			KV:       sqlitecatalog.NewLazy(currentDBPath),
+		ConfigStore: tools.ConfigDeps{
+			Settings: sqlitecatalog.NewLazy(currentDBPath),
 			Registry: configRegistry,
 		},
 		Wisdom: tools.WisdomDeps{
