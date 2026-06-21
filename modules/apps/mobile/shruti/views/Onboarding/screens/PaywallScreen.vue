@@ -2,6 +2,7 @@
   <div class="ob-paywall">
     <div class="ob-paywall__head">
       <h1 class="ob-paywall__title">{{ $t("onboarding.paywall.title") }}</h1>
+      <p class="ob-paywall__subtitle">{{ $t("onboarding.paywall.subtitle") }}</p>
     </div>
 
     <!-- Real app screenshots show what Pro unlocks: a horizontally scrolling
@@ -113,6 +114,12 @@ const failed = reactive(new Set<string>())
   font-size: 1.4rem;
   font-weight: 800;
   color: var(--ion-text-color);
+}
+.ob-paywall__subtitle {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--ion-color-medium);
 }
 .ob-paywall__shots {
   --ob-card-w: clamp(240px, 74vw, 320px);
