@@ -61,7 +61,8 @@ stored as data in the catalog DB:
   never empty.
 
 Topic picks are saved to the search-filter store (`setTopics`) for immediate
-personalization, and to `onboarding.interestTopicIds` for the daily-wisdom rule.
+personalization. They are **not** used by daily wisdom — that draws a random
+fragment from the whole corpus (see below).
 
 ## Daily wisdom
 
@@ -71,14 +72,15 @@ delivers one short, playable lecture excerpt per day into chat:
 - **Corpus**: a `daily_wisdom` table in `current.db` (`track_id`, `start_ms`,
   `end_ms`, `text`, `topic_id`, `language`), authored via the MCP `wisdom.*`
   tools.
-- **Rule**: gated on the daily-engagement toggle (`settings.notificationsEnabled`)
-  + a non-empty interest set. `detect` filters to the user's **library languages**
-  (lecture content language — never delivers an excerpt the user can't read;
-  skips the day if none match), samples a random interest topic that has a
-  fragment, then a random fragment; `buildContent` emits a
-  `[cite:track@start-end|text]` marker that the existing `CitationCard` renders
-  as a playable excerpt. Silent (no extra OS push — the daily reminder handles
-  the nudge); dedup by fragment id, 24 h cooldown.
+- **Rule**: gated only on the daily-engagement toggle (`settings.notificationsEnabled`).
+  `detect` picks a **random** fragment from the whole corpus, filtered to the
+  user's **library languages** (lecture content language — never delivers an
+  excerpt the user can't read; skips the day if none match). It is deliberately
+  **not** scoped to the user's topics — a few topics would drain the small
+  per-topic pool — so there is no daily-wisdom topic setting. `buildContent`
+  emits a `[cite:track@start-end|text]` marker that the existing `CitationCard`
+  renders as a playable excerpt. Silent (no extra OS push — the daily reminder
+  handles the nudge); dedup by fragment id, 24 h cooldown.
 
 ## Paywall (hybrid)
 

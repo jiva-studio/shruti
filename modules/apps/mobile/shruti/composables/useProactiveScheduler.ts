@@ -5,7 +5,7 @@ import type { PluginListenerHandle } from "@capacitor/core"
 import { createJsonRemoteStorage } from "@kit/infra"
 import type { ProactiveConfig, RemoteAppConfig } from "@lib/domain/config.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
-import type { ChatMessageId, TopicId } from "@lib/domain/core.js"
+import type { ChatMessageId } from "@lib/domain/core.js"
 import type {
   IProactiveStateRepository,
   ProactiveStateEntry,
@@ -16,7 +16,6 @@ import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShruti } from "@shruti/shruti.js"
-import { ONBOARDING_INTERESTS_KEY } from "@shruti/stores/useOnboardingStore.js"
 import { isEligible } from "@shruti/proactive/eligibility.js"
 import { isWithinCooldown } from "@shruti/proactive/cooldown.js"
 import { validateAndScrubActions } from "@shruti/proactive/markerValidator.js"
@@ -177,20 +176,6 @@ export function useProactiveScheduler(): void {
     // language filter and let the daily-wisdom rule deliver any language).
     await filtersStore.load().catch(() => undefined)
 
-    // The user's onboarding topic interests — fuel for the daily-wisdom rule.
-    let interestTopicIds: readonly TopicId[] = []
-    try {
-      const raw = await app.preferences.get(ONBOARDING_INTERESTS_KEY)
-      if (raw) {
-        const parsed: unknown = JSON.parse(raw)
-        if (Array.isArray(parsed)) {
-          interestTopicIds = parsed.filter((x): x is string => typeof x === "string") as TopicId[]
-        }
-      }
-    } catch {
-      // Corrupt / unset — leave empty; the rule simply doesn't fire.
-    }
-
     return {
       nowMs,
       localDate: localDate(now),
@@ -212,7 +197,6 @@ export function useProactiveScheduler(): void {
       // top of tick().
       repos: app.repositories(),
       proactiveChat: app.proactiveChat,
-      interestTopicIds,
       libraryLanguages: libraryLanguages.value,
     }
   }

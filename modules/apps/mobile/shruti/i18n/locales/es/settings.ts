@@ -294,14 +294,6 @@ export default {
     },
   },
 
-  dailyWisdom: {
-    title: "Sabiduría diaria",
-    subtitleOn: "Activado · {count} temas",
-    subtitleOff: "Desactivado · solo un recordatorio",
-    hint: "Elige los temas sobre los que quieres una breve reflexión diaria — enviaremos un fragmento reproducible a tu chat a la hora del recordatorio. Sin selección, solo recibirás el recordatorio.",
-    empty: "Aún no hay temas con sabiduría diaria.",
-  },
-
   data: {
     export: {
       title: "Exportar datos del usuario",

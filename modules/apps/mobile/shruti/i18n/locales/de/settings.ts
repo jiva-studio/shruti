@@ -296,14 +296,6 @@ export default {
     },
   },
 
-  dailyWisdom: {
-    title: "Tägliche Weisheit",
-    subtitleOn: "An · {count} Themen",
-    subtitleOff: "Aus · nur eine Erinnerung",
-    hint: "Wähle Themen, zu denen du täglich einen kurzen Gedanken möchtest — wir senden zur Erinnerungszeit ein abspielbares Fragment in deinen Chat. Ohne Auswahl bekommst du nur die Erinnerung.",
-    empty: "Noch keine Themen mit täglicher Weisheit.",
-  },
-
   data: {
     export: {
       title: "Nutzerdaten exportieren",
