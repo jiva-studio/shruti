@@ -86,7 +86,6 @@ const props = defineProps<{
   /** Transcript snippet from the owning message's `cites` map; absent ⇒
    *  chip fallback. */
   body?: ChatCiteSnippet
-  /** False pauses the inline player (e.g. host carousel slide off-screen). */
   active?: boolean
 }>()
 

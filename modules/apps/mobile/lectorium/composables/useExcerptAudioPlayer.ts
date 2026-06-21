@@ -37,8 +37,6 @@ export function useExcerptAudioPlayer(opts: {
   resolveUrl: () => Promise<string>
   /** Prefix for the dev-console warnings. */
   logLabel: string
-  /** When this turns false (e.g. the host slide goes off-screen), the player
-   *  pauses + rewinds itself. Omit = always active. */
   active?: () => boolean
 }): {
   audioEl: Ref<HTMLAudioElement | null>
@@ -94,8 +92,6 @@ export function useExcerptAudioPlayer(opts: {
 
   const { claim } = useAudioSource("inline", pauseAndResetSelf)
 
-  // Host can deactivate the player (e.g. its carousel slide scrolls off): pause
-  // + rewind so it doesn't keep playing while not visible.
   if (opts.active) {
     watch(opts.active, (isActive) => {
       if (!isActive) pauseAndResetSelf()
