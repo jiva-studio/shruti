@@ -2823,5 +2823,58 @@
         "expected": "The topic detail is populated and every lecture title is Russian (Cyrillic)."
       }
     ]
+  },
+  "165": {
+    "suite_id": 35,
+    "automation": 2,
+    "tags": [
+      "onboarding",
+      "free",
+      "smoke",
+      "e2e"
+    ],
+    "title": "First launch flows through onboarding to Home and persists",
+    "description": "Offline. A genuinely new user sees the onboarding carousel on first launch, walks it (welcome → topics → daily wisdom → value moment → soft paywall), skips the paywall, lands on Home, and is not shown onboarding again on relaunch.",
+    "preconditions": "Fresh first launch: onboarding.completed unset and a clean user DB with NO listening history. Non-Pro subscription state. Content is served from offline intercepts.",
+    "steps": [
+      {
+        "action": "Launch the app for the first time (no completed onboarding, no prior listening history).",
+        "expected": "The onboarding carousel opens at /onboarding with no tab bar; the Welcome slide shows the 'Get started' primary button."
+      },
+      {
+        "action": "Tap the primary button through Welcome and Topics, then enable daily wisdom by picking a time preset on the Daily wisdom slide.",
+        "expected": "Each tap advances one slide; choosing a preset switches daily wisdom on."
+      },
+      {
+        "action": "Advance through the Value moment to the paywall, then tap Skip ('Later').",
+        "expected": "On the paywall the generic primary is hidden; Skip finishes onboarding and the app navigates to Home with the tab bar visible."
+      },
+      {
+        "action": "Relaunch the app.",
+        "expected": "Onboarding is not replayed — the app opens directly on Home (the completed flag persisted)."
+      }
+    ]
+  },
+  "166": {
+    "suite_id": 35,
+    "automation": 2,
+    "tags": [
+      "onboarding",
+      "free",
+      "e2e"
+    ],
+    "title": "An established user with listening history skips onboarding",
+    "description": "Offline. A user upgrading into the build that introduced onboarding — with prior listening history but no onboarding.completed flag — is treated as established and is NOT shown onboarding; the flag is stamped so the heuristic runs at most once.",
+    "preconditions": "User DB seeded with the default fixture (listening history present); onboarding.completed unset. Non-Pro.",
+    "steps": [
+      {
+        "action": "Launch the build for the first time with an existing user DB that has prior listening history (onboarding.completed unset).",
+        "expected": "Onboarding is skipped — the app opens directly on Home with the tab bar; the onboarding primary button is never shown."
+      },
+      {
+        "action": "Relaunch the app.",
+        "expected": "The app still opens directly on Home; onboarding is not shown (the completed flag was stamped on the first launch)."
+      }
+    ]
   }
 }
