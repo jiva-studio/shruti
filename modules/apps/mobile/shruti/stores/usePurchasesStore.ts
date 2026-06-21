@@ -10,12 +10,21 @@ import { devSubscriptionOverride, isDevBuild } from "@shruti/services/devSubscri
 const CACHE_KEY = "purchases.lastState"
 
 /** Sample packages for dev/preview builds where RevenueCat has no offerings
- *  (web). Monthly carries a 2-week free trial so the trial badge renders. */
+ *  (web). Uses the standard Rc package ids so the footer resolves localized
+ *  plan names ("Monthly"/"Annual"); annual carries a 2-week free trial. */
 function devMockPackages(): PurchasePackage[] {
   return [
     {
-      packageId: "dev_annual",
-      productId: "dev_annual",
+      packageId: "$rc_monthly",
+      productId: "rc_monthly_dev",
+      title: "Monthly",
+      description: "",
+      priceString: "$4.99",
+      billingPeriod: "P1M",
+    },
+    {
+      packageId: "$rc_annual",
+      productId: "rc_annual_dev",
       title: "Annual",
       description: "",
       priceString: "$39.99",
@@ -26,14 +35,6 @@ function devMockPackages(): PurchasePackage[] {
         periodUnit: "WEEK",
         periodNumberOfUnits: 2,
       },
-    },
-    {
-      packageId: "dev_monthly",
-      productId: "dev_monthly",
-      title: "Monthly",
-      description: "",
-      priceString: "$4.99",
-      billingPeriod: "P1M",
     },
   ]
 }
