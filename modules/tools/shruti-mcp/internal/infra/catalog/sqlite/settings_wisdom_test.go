@@ -63,6 +63,32 @@ func TestSettingsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestListSettingsPrefixEscapesWildcards(t *testing.T) {
+	r, done := newMigratedTestRepo(t)
+	defer done()
+	ctx := context.Background()
+
+	for _, k := range []string{"a_b.one", "axb.two", "a_b.three"} {
+		if err := r.SetSetting(ctx, k, "{}"); err != nil {
+			t.Fatalf("set %q: %v", k, err)
+		}
+	}
+	// `_` in the prefix must match literally, not as a single-char wildcard,
+	// so `axb.two` is excluded.
+	got, err := r.ListSettings(ctx, "a_b.")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 rows for prefix %q, got %d: %+v", "a_b.", len(got), got)
+	}
+	for _, kv := range got {
+		if kv.Key == "axb.two" {
+			t.Fatalf("`_` leaked as a wildcard: matched %q", kv.Key)
+		}
+	}
+}
+
 func TestDailyWisdomRoundTrip(t *testing.T) {
 	r, done := newMigratedTestRepo(t)
 	defer done()
