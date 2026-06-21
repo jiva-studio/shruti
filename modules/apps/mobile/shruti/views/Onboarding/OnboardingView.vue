@@ -22,7 +22,7 @@
           <ValueMomentScreen
             v-else-if="index === 3"
             :topic-ids="selectedTopicIds"
-            :active="active"
+            :seed="page > TOPICS_PAGE"
           />
           <PaywallScreen
             v-else
@@ -86,6 +86,9 @@ import PaywallScreen from "./screens/PaywallScreen.vue"
 import type { LanguageCode } from "@lib/domain/core.js"
 
 const PAGE_COUNT = 5
+// Topics picker; once the user advances past it the value screen starts
+// seeding + prefetching the matched lectures.
+const TOPICS_PAGE = 1
 
 const app = useShruti()
 const ionRouter = useIonRouter()

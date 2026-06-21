@@ -28,14 +28,14 @@ export default {
   paywall: {
     title: "Több funkció a Pro-val",
     shots: {
-      chat: "Spirituális MI-csevegés",
+      chat: "Kérdezd Sadhut",
       library: "Több ezer előadás",
       transcript: "Együtt olvasható átiratok",
       notes: "Könyvjelzők és jegyzetek",
       home: "Kövesd a haladásod",
     },
     shotDesc: {
-      chat: "Tegyél fel bármilyen lelki kérdést – válasz az előadásokból.",
+      chat: "Tegyél fel bármilyen lelki kérdést – válasz az előadásokból és írásokból.",
       library: "Téma, könyv és szerző szerint rendezve.",
       transcript: "Kövesd a szöveget hallgatás közben, szóról szóra.",
       notes: "Mentsd el a megható pillanatokat és jegyzetelj.",

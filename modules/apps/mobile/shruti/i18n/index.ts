@@ -232,6 +232,7 @@ import hiShare from "./locales/hi/share.js"
 import hiStudio from "./locales/hi/studio.js"
 import hiTranscript from "./locales/hi/transcript.js"
 import hiWelcome from "./locales/hi/welcome.js"
+import hiOnboarding from "./locales/hi/onboarding.js"
 
 import bnActivity from "./locales/bn/activity.js"
 import bnApp from "./locales/bn/app.js"
@@ -249,6 +250,7 @@ import bnShare from "./locales/bn/share.js"
 import bnStudio from "./locales/bn/studio.js"
 import bnTranscript from "./locales/bn/transcript.js"
 import bnWelcome from "./locales/bn/welcome.js"
+import bnOnboarding from "./locales/bn/onboarding.js"
 
 export const SUPPORTED_LOCALES = [
   "en",
@@ -525,6 +527,7 @@ const hi = {
   studio: hiStudio,
   transcript: hiTranscript,
   welcome: hiWelcome,
+  onboarding: hiOnboarding,
 }
 
 const bn = {
@@ -544,6 +547,7 @@ const bn = {
   studio: bnStudio,
   transcript: bnTranscript,
   welcome: bnWelcome,
+  onboarding: bnOnboarding,
 }
 
 /**

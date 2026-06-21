@@ -2,7 +2,7 @@
   <div class="ob-carousel">
     <!-- Top bar: progress dots (centered) + Skip (right). -->
     <div class="ob-topbar">
-      <div class="ob-dots" role="tablist">
+      <div class="ob-dots" :class="{ 'ob-dots--hidden': page === pageCount - 1 }" role="tablist">
         <button
           v-for="i in pageCount"
           :key="i - 1"
@@ -109,6 +109,12 @@ const trackStyle = computed(() => {
 .ob-dots {
   display: flex;
   gap: 8px;
+  transition: opacity 0.3s ease;
+}
+/* The paywall (last page) speaks for itself — fade the progress dots out. */
+.ob-dots--hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .ob-dot {
