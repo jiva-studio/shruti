@@ -128,5 +128,10 @@
     "title": "📱 Platform-specific",
     "parent_id": null,
     "description": "Device-dependent behaviors (run once per device): background audio, lock-screen/notification media controls, audio focus/interruptions, native file:// playback, WorkManager/MIUI downloads, notification permission (Android 13+), IAP store differences + RU no-IAP, share sheet, haptics, keyboard, deep links, system bars."
+  },
+  "35": {
+    "title": "🚀 Onboarding",
+    "parent_id": null,
+    "description": "First-launch onboarding: the value carousel (welcome → interest topics → daily-wisdom toggle → value moment → soft paywall), the skip gate (new user vs. established user with listening history), and persistence of the completed flag."
   }
 }

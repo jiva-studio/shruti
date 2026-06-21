@@ -103,7 +103,7 @@ const trackStyle = computed(() => {
   justify-content: center;
   align-items: center;
   min-height: 48px;
-  padding: 8px 4px 4px;
+  padding: calc(8px + var(--ion-safe-area-top, 0px)) 4px 4px;
 }
 
 .ob-dots {

@@ -295,14 +295,6 @@ export default {
     },
   },
 
-  dailyWisdom: {
-    title: "Codzienna mądrość",
-    subtitleOn: "Wł. · {count} tematów",
-    subtitleOff: "Wył. · tylko przypomnienie",
-    hint: "Wybierz tematy, o których chcesz otrzymywać krótką myśl dnia — wyślemy odtwarzalny fragment na czat o godzinie przypomnienia. Bez wyboru otrzymasz tylko przypomnienie.",
-    empty: "Brak tematów z codzienną mądrością.",
-  },
-
   data: {
     export: {
       title: "Eksportuj dane użytkownika",

@@ -10,6 +10,13 @@ test(
   qase(106, caseTitle(106)),
   { tag: ["@offline", "@subscription"] },
   async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("CapacitorStorage.settings.appLanguage", JSON.stringify("ru"))
+      } catch {
+        /* non-fatal */
+      }
+    })
     await boot(page, "ru", { userDb: "clean" })
     await gotoTab(page, "settings")
 

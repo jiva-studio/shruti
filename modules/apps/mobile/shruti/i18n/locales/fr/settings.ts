@@ -297,14 +297,6 @@ export default {
     },
   },
 
-  dailyWisdom: {
-    title: "Sagesse quotidienne",
-    subtitleOn: "Activé · {count} sujets",
-    subtitleOff: "Désactivé · juste un rappel",
-    hint: "Choisissez les sujets sur lesquels recevoir une courte pensée quotidienne — nous enverrons un fragment écoutable dans votre chat à l'heure du rappel. Sans sélection, vous recevrez seulement le rappel.",
-    empty: "Aucun sujet avec sagesse quotidienne pour l'instant.",
-  },
-
   data: {
     export: {
       title: "Exporter les données utilisateur",
