@@ -17,7 +17,7 @@ A mobile-side scheduler (`useProactiveScheduler`) ticks on every foreground sess
 | `enable_notifications_hint` | now (condition first holds) | no | no (local i18n template) | `new_session` |
 | `smart_library_hint` | now | no | no (local i18n template) | `new_session` |
 | `next_shloka` | next track id (after finishing a series track) | no | no (catalog lookup, local template + `queue_next_track` action) | `new_session` |
-| `daily_wisdom` | `wisdom.id` (one row shown at most once) | no (`visibleAt: null`, silent — the daily reminder push provides the nudge) | no — samples a `daily_wisdom` fragment for a random onboarding interest topic **in one of the user's library languages**, emits a `[cite:track@start-end|text]` marker + pre-seeded `cites` snippet | `new_session`, title = localized `proactiveSessionTitleDailyWisdom` |
+| `daily_wisdom` | `wisdom.id` (one row shown at most once) | no (`visibleAt: null`, silent — the daily reminder push provides the nudge) | no — picks a **random** `daily_wisdom` fragment from the whole corpus **in one of the user's library languages** (not topic-scoped), emits a `[cite:track@start-end|text]` marker + pre-seeded `cites` snippet | `new_session`, title = localized `proactiveSessionTitleDailyWisdom` |
 
 Rules are bootstrapped by side-effect imports in `proactive/rules/index.ts`; each module calls `registerRule()` from `proactive/registry.ts` at load time. `useProactiveScheduler` imports `rules/index.js` once so the registry is populated before the first tick.
 

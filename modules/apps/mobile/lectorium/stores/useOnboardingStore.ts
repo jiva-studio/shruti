@@ -6,11 +6,6 @@ import { useLectorium } from "@lectorium/lectorium.js"
  *  first-launch behaviour. Read once at startup to choose the initial route. */
 export const ONBOARDING_COMPLETED_KEY = "onboarding.completed"
 
-/** Topic ids the user picked during onboarding. Stored separately from the
- *  search-filter selection so the daily-wisdom rule samples from the user's
- *  declared interests even if they later change their library filters. */
-export const ONBOARDING_INTERESTS_KEY = "onboarding.interestTopicIds"
-
 /**
  * Tracks whether the first-launch onboarding has been completed (or skipped).
  * The flag is only set at the very end of the flow, so an interrupted

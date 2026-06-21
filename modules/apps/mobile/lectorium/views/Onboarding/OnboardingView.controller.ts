@@ -9,10 +9,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useSearchFiltersStore } from "@lectorium/stores/useSearchFiltersStore.js"
-import {
-  useOnboardingStore,
-  ONBOARDING_INTERESTS_KEY,
-} from "@lectorium/stores/useOnboardingStore.js"
+import { useOnboardingStore } from "@lectorium/stores/useOnboardingStore.js"
 import { loadOnboardingTopics, type OnboardingTopicOption } from "./loadOnboardingTopics.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 
@@ -98,9 +95,10 @@ export function useOnboardingViewController(): OnboardingViewBinding {
   }
 
   async function persistTopics(): Promise<void> {
-    const ids = selectedTopicIds.value
-    await filtersStore.setTopics(ids).catch(() => undefined)
-    await app.preferences.set(ONBOARDING_INTERESTS_KEY, JSON.stringify(ids)).catch(() => undefined)
+    // The picked topics personalize the library (search filters). They are NOT
+    // saved as daily-wisdom interests: daily wisdom draws a random fragment
+    // from the whole corpus, not the user's topics.
+    await filtersStore.setTopics(selectedTopicIds.value).catch(() => undefined)
   }
 
   async function finish(): Promise<void> {

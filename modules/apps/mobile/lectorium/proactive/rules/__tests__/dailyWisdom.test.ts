@@ -16,21 +16,16 @@ function frag(id: string, language: LanguageCode): DailyWisdom {
   }
 }
 
-/** A fake daily_wisdom repo over a fixed corpus that honours the `language`
- *  filter exactly the way the SQL repo does. */
+/** A fake daily_wisdom repo that honours the `language` filter the way the SQL
+ *  repo does. Only `list`/`byId` are exercised by the rule now. */
 function fakeRepo(corpus: readonly DailyWisdom[]) {
   const inLang = (w: DailyWisdom, lang?: LanguageCode) => lang === undefined || w.language === lang
   return {
-    async topicsWithWisdom(topicIds: readonly TopicId[], lang?: LanguageCode) {
-      const set = new Set(topicIds)
-      return [
-        ...new Set(
-          corpus.filter((w) => set.has(w.topicId) && inLang(w, lang)).map((w) => w.topicId)
-        ),
-      ]
+    async topicsWithWisdom() {
+      return []
     },
-    async byTopic(topicId: TopicId, lang?: LanguageCode) {
-      return corpus.filter((w) => w.topicId === topicId && inLang(w, lang))
+    async byTopic() {
+      return []
     },
     async list(lang?: LanguageCode) {
       return corpus.filter((w) => inLang(w, lang))
@@ -44,28 +39,40 @@ function fakeRepo(corpus: readonly DailyWisdom[]) {
 function ctx(over: {
   corpus: readonly DailyWisdom[]
   libraryLanguages: readonly LanguageCode[]
-  interestTopicIds?: readonly TopicId[]
   notificationsEnabled?: boolean
 }): ProactiveContext {
   return {
     notificationsEnabled: over.notificationsEnabled ?? true,
-    interestTopicIds: over.interestTopicIds ?? (["topic_a"] as TopicId[]),
     libraryLanguages: over.libraryLanguages,
     repos: { dailyWisdom: fakeRepo(over.corpus) },
     t: (k: string) => k,
   } as unknown as ProactiveContext
 }
 
-describe("daily_wisdom language filter", () => {
-  it("only delivers a fragment in the user's library language", async () => {
+describe("daily_wisdom rule", () => {
+  it("delivers a random fragment in the user's library language", async () => {
     const corpus = [frag("ru1", "ru"), frag("en1", "en")]
     const out = await dailyWisdomRule.detect(ctx({ corpus, libraryLanguages: ["en"] }), {} as never)
     expect(out).toHaveLength(1)
     expect(out[0].ruleDate).toBe("en1")
   })
 
+  it("ignores the user's topics — draws from the whole corpus, not interest-scoped", async () => {
+    // Many fragments across several topics; with no topic filter any of them
+    // can be picked, and every pick is a valid en fragment.
+    const corpus = [frag("en1", "en"), frag("en2", "en"), frag("en3", "en")]
+    const ids = new Set(corpus.map((f) => f.id))
+    for (let i = 0; i < 20; i++) {
+      const out = await dailyWisdomRule.detect(
+        ctx({ corpus, libraryLanguages: ["en"] }),
+        {} as never
+      )
+      expect(out).toHaveLength(1)
+      expect(ids.has(out[0].ruleDate)).toBe(true)
+    }
+  })
+
   it("skips the day rather than delivering a wrong-language fragment", async () => {
-    // Library is English but the only fragment for the topic is Russian.
     const corpus = [frag("ru1", "ru")]
     const out = await dailyWisdomRule.detect(ctx({ corpus, libraryLanguages: ["en"] }), {} as never)
     expect(out).toEqual([])
@@ -78,19 +85,12 @@ describe("daily_wisdom language filter", () => {
     expect(out[0].ruleDate).toBe("ru1")
   })
 
-  it("stays silent when daily engagement is off or no interests picked", async () => {
+  it("stays silent when daily engagement is off", async () => {
     const corpus = [frag("en1", "en")]
-    expect(
-      await dailyWisdomRule.detect(
-        ctx({ corpus, libraryLanguages: ["en"], notificationsEnabled: false }),
-        {} as never
-      )
-    ).toEqual([])
-    expect(
-      await dailyWisdomRule.detect(
-        ctx({ corpus, libraryLanguages: ["en"], interestTopicIds: [] }),
-        {} as never
-      )
-    ).toEqual([])
+    const out = await dailyWisdomRule.detect(
+      ctx({ corpus, libraryLanguages: ["en"], notificationsEnabled: false }),
+      {} as never
+    )
+    expect(out).toEqual([])
   })
 })
