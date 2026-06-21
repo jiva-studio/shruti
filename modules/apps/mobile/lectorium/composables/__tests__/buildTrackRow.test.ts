@@ -7,8 +7,7 @@ import type { Location } from "@lib/domain/location.js"
 import type { Tag } from "@lib/domain/tag.js"
 import { buildTrackRow } from "../buildTrackRow.js"
 
-const names = (m: Record<string, string>) =>
-  new Map(Object.entries(m) as [LanguageCode, string][])
+const names = (m: Record<string, string>) => new Map(Object.entries(m) as [LanguageCode, string][])
 
 const variant = (language: LanguageCode, title: string): TrackVariant => ({
   trackId: "t-1" as TrackId,
@@ -35,7 +34,10 @@ const track = (variants: TrackVariant[]): Track => ({
 
 const author: Author = {
   id: "a-1" as AuthorId,
-  names: names({ en: "A. C. Bhaktivedanta Swami Prabhupada", ru: "А.Ч. Бхактиведанта Свами Прабхупада" }),
+  names: names({
+    en: "A. C. Bhaktivedanta Swami Prabhupada",
+    ru: "А.Ч. Бхактиведанта Свами Прабхупада",
+  }),
 }
 const location: Location = {
   id: "l-1" as LocationId,
