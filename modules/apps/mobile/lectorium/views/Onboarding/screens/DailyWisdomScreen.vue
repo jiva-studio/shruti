@@ -1,5 +1,5 @@
 <template>
-  <div class="ob-wisdom">
+  <div ref="rootEl" class="ob-wisdom">
     <OnboardingHeading
       :title="$t('onboarding.wisdom.title')"
       :subtitle="$t('onboarding.wisdom.subtitle')"
@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { ref, useTemplateRef, watch } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { ToggleChip } from "@ui/primitives/index.js"
@@ -64,6 +64,7 @@ const emit = defineEmits<{
 const app = useLectorium()
 const libraryLanguages = useLibraryLanguages()
 const wisdom = ref<DailyWisdom | null>(null)
+const rootEl = useTemplateRef<HTMLElement>("rootEl")
 
 function selectTime(hour: number): void {
   emit("update:time", [hour, 0])
@@ -91,7 +92,13 @@ async function loadPreview(): Promise<void> {
 watch(
   () => props.active,
   (a) => {
-    if (a) void loadPreview().catch(() => undefined)
+    if (a) {
+      void loadPreview().catch(() => undefined)
+    } else {
+      // Leaving the slide stops the citation preview (the carousel keeps every
+      // slide mounted, so the inline player would otherwise keep playing).
+      rootEl.value?.querySelectorAll("audio").forEach((el) => el.pause())
+    }
   },
   { immediate: true }
 )

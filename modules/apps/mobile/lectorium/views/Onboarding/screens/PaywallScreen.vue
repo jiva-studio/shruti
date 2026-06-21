@@ -156,6 +156,7 @@ const failed = reactive(new Set<string>())
   object-position: top center;
   border-radius: 12px;
   border: 1px solid var(--ion-color-step-150, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 .ob-paywall__cap {
   display: flex;
