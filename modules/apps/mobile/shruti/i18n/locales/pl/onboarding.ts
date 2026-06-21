@@ -28,14 +28,14 @@ export default {
   paywall: {
     title: "Więcej funkcji z Pro",
     shots: {
-      chat: "Duchowy czat AI",
+      chat: "Zapytaj Sadhu",
       library: "Tysiące wykładów",
       transcript: "Transkrypcje do czytania",
       notes: "Zakładki i notatki",
       home: "Śledź swoje postępy",
     },
     shotDesc: {
-      chat: "Zadaj dowolne duchowe pytanie – odpowiedź z wykładów.",
+      chat: "Zadaj dowolne duchowe pytanie – odpowiedź z wykładów i pism.",
       library: "Uporządkowane według tematu, książki i autora.",
       transcript: "Śledź tekst podczas słuchania, słowo po słowie.",
       notes: "Zapisuj poruszające momenty i dodawaj notatki.",

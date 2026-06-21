@@ -16,6 +16,7 @@
       :end-ms="token.endMs"
       :caption="token.caption"
       :body="message.cites?.[`${token.trackId}|${token.startMs}-${token.endMs}`]"
+      @activate="onActivateCite(token)"
     />
     <TrackList v-else-if="token.kind === 'cards'" :track-ids="token.trackIds" />
     <OutlineCard
@@ -99,16 +100,27 @@
       </div>
     </AccentFrame>
   </template>
+
+  <!-- Host-owned action sheet for the citation cards above: a card emits
+       `activate`, the host opens this. The sheet lives here (not in the card)
+       so the card stays a pure presentational leaf. -->
+  <CitationActionSheet
+    v-model:open="citeSheetOpen"
+    :coords="activeCite"
+    :snippet-text="activeCiteSnippet"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import router from "@shruti/router/index.js"
 import { parseChatMarkers } from "@shruti/composables/chatMarkers.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
+import type { CitationCoords } from "../composables/useCitationMeta.js"
 import AccentFrame from "./AccentFrame.vue"
 import CitationCard from "./CitationCard.vue"
+import CitationActionSheet from "./CitationActionSheet.vue"
 import TrackList from "./TrackList.vue"
 import OutlineCard from "./OutlineCard.vue"
 import VerseCard from "./VerseCard.vue"
@@ -139,6 +151,29 @@ const tokens = computed(() => {
   if (props.message.role !== "assistant") return []
   return parseChatMarkers(props.message.content)
 })
+
+// One action sheet for every citation card in the message; a card emits
+// `activate`, we point the sheet at that fragment and open it.
+const citeSheetOpen = ref(false)
+const activeCite = ref<CitationCoords | null>(null)
+const activeCiteSnippet = ref<string | null>(null)
+
+function onActivateCite(token: {
+  trackId: string
+  startMs: number
+  endMs: number
+  caption?: string
+}): void {
+  activeCite.value = {
+    trackId: token.trackId,
+    startMs: token.startMs,
+    endMs: token.endMs,
+    caption: token.caption,
+  }
+  activeCiteSnippet.value =
+    props.message.cites?.[`${token.trackId}|${token.startMs}-${token.endMs}`]?.text ?? null
+  citeSheetOpen.value = true
+}
 
 function actionState(actionId: string): ActionState {
   const raw = props.message.actionStates?.[actionId]

@@ -28,14 +28,14 @@ export default {
   paywall: {
     title: "More features with Pro",
     shots: {
-      chat: "Spiritual AI chat",
+      chat: "Ask Sadhu",
       library: "Thousands of lectures",
       transcript: "Read-along transcripts",
       notes: "Bookmarks & notes",
       home: "Track your progress",
     },
     shotDesc: {
-      chat: "Ask any spiritual question, answered from the lectures.",
+      chat: "Ask any spiritual question, answered from the lectures and scriptures.",
       library: "Organized by topic, book and author.",
       transcript: "Follow the text as you listen, word by word.",
       notes: "Save the moments that move you and add notes.",

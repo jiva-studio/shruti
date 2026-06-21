@@ -29,14 +29,14 @@ export default {
   paywall: {
     title: "Mehr Funktionen mit Pro",
     shots: {
-      chat: "Spiritueller KI-Chat",
+      chat: "Frag Sadhu",
       library: "Tausende Vorträge",
       transcript: "Mitlesen im Transkript",
       notes: "Lesezeichen & Notizen",
       home: "Fortschritt verfolgen",
     },
     shotDesc: {
-      chat: "Stelle jede spirituelle Frage – Antwort aus den Vorträgen.",
+      chat: "Stelle jede spirituelle Frage – Antwort aus Vorträgen und Schriften.",
       library: "Nach Thema, Buch und Autor geordnet.",
       transcript: "Folge dem Text beim Zuhören, Wort für Wort.",
       notes: "Speichere bewegende Momente und mach Notizen.",
