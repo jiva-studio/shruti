@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="ob-wisdom">
+  <div class="ob-wisdom">
     <OnboardingHeading
       :title="$t('onboarding.wisdom.title')"
       :subtitle="$t('onboarding.wisdom.subtitle')"
@@ -8,7 +8,7 @@
     <!-- A real example of what arrives: the same playable citation card chat
          uses (player on top, transcript below), for a fragment matched to the
          user's topics in their library language. -->
-    <div v-if="wisdom" class="ob-wisdom__card">
+    <div v-if="wisdom && active" class="ob-wisdom__card">
       <CitationCard
         :track-id="wisdom.trackId"
         :start-ms="wisdom.startMs"
@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, useTemplateRef, watch } from "vue"
+import { ref, watch } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { ToggleChip } from "@ui/primitives/index.js"
@@ -64,7 +64,6 @@ const emit = defineEmits<{
 const app = useShruti()
 const libraryLanguages = useLibraryLanguages()
 const wisdom = ref<DailyWisdom | null>(null)
-const rootEl = useTemplateRef<HTMLElement>("rootEl")
 
 function selectTime(hour: number): void {
   emit("update:time", [hour, 0])
@@ -92,13 +91,7 @@ async function loadPreview(): Promise<void> {
 watch(
   () => props.active,
   (a) => {
-    if (a) {
-      void loadPreview().catch(() => undefined)
-    } else {
-      // Leaving the slide stops the citation preview (the carousel keeps every
-      // slide mounted, so the inline player would otherwise keep playing).
-      rootEl.value?.querySelectorAll("audio").forEach((el) => el.pause())
-    }
+    if (a) void loadPreview().catch(() => undefined)
   },
   { immediate: true }
 )
