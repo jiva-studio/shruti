@@ -13,17 +13,9 @@
       <p class="hint">{{ $t("settings.dailyWisdom.hint") }}</p>
 
       <div v-if="topics.length > 0" class="chips">
-        <button
-          v-for="t in topics"
-          :key="t.id"
-          type="button"
-          class="chip"
-          :class="{ 'chip--on': isOn(t.id) }"
-          :aria-pressed="isOn(t.id)"
-          @click="toggle(t.id)"
-        >
+        <ToggleChip v-for="t in topics" :key="t.id" :selected="isOn(t.id)" @toggle="toggle(t.id)">
           {{ t.label }}
-        </button>
+        </ToggleChip>
       </div>
       <p v-else class="hint empty">{{ $t("settings.dailyWisdom.empty") }}</p>
     </IonContent>
@@ -32,7 +24,7 @@
 
 <script setup lang="ts">
 import { IonModal, IonToolbar, IonTitle, IonButtons, IonButton, IonContent } from "@ionic/vue"
-import { Header } from "@ui/primitives/index.js"
+import { Header, ToggleChip } from "@ui/primitives/index.js"
 
 defineProps<{
   open: boolean
@@ -74,24 +66,5 @@ function onClose(): void {
   flex-wrap: wrap;
   gap: 10px;
   padding: 0 16px 24px;
-}
-.chip {
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1.5px solid var(--ion-color-step-200, #e0e0e0);
-  background: transparent;
-  color: var(--ion-text-color);
-  font-size: 0.92rem;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-.chip--on {
-  border-color: var(--ion-color-primary);
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast);
 }
 </style>

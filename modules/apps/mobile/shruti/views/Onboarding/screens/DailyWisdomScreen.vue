@@ -19,29 +19,23 @@
     </div>
 
     <div class="ob-wisdom__presets" role="radiogroup">
-      <button
-        type="button"
-        class="ob-chip"
-        :class="{ 'ob-chip--on': !enabled }"
+      <ToggleChip
         role="radio"
-        :aria-checked="!enabled"
+        :selected="!enabled"
         data-testid="onboarding-wisdom-off"
-        @click="emit('update:enabled', false)"
+        @toggle="emit('update:enabled', false)"
       >
         {{ $t("onboarding.wisdom.off") }}
-      </button>
-      <button
+      </ToggleChip>
+      <ToggleChip
         v-for="p in presets"
         :key="p.key"
-        type="button"
-        class="ob-chip"
-        :class="{ 'ob-chip--on': enabled && time[0] === p.hour }"
         role="radio"
-        :aria-checked="enabled && time[0] === p.hour"
-        @click="selectTime(p.hour)"
+        :selected="enabled && time[0] === p.hour"
+        @toggle="selectTime(p.hour)"
       >
         {{ $t(p.labelKey) }}
-      </button>
+      </ToggleChip>
     </div>
   </div>
 </template>
@@ -50,6 +44,7 @@
 import { ref, watch } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
+import { ToggleChip } from "@ui/primitives/index.js"
 import CitationCard from "@shruti/views/Chat/components/CitationCard.vue"
 import type { DailyWisdom } from "@lib/domain/dailyWisdom.js"
 import type { LanguageCode, TopicId } from "@lib/domain/core.js"
@@ -153,19 +148,5 @@ const presets = [
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-}
-.ob-chip {
-  padding: 10px 18px;
-  border-radius: 999px;
-  border: 1.5px solid var(--ion-color-step-200, #e0e0e0);
-  background: transparent;
-  color: var(--ion-text-color);
-  font-size: 0.92rem;
-  cursor: pointer;
-}
-.ob-chip--on {
-  border-color: var(--ion-color-primary);
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast);
 }
 </style>
