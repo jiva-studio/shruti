@@ -1,9 +1,9 @@
 <template>
   <div class="ob-value">
-    <div class="ob-value__head">
-      <h1 class="ob-value__title">{{ $t("onboarding.value.title") }}</h1>
-      <p class="ob-value__subtitle">{{ $t("onboarding.value.subtitle") }}</p>
-    </div>
+    <OnboardingHeading
+      :title="$t('onboarding.value.title')"
+      :subtitle="$t('onboarding.value.subtitle')"
+    />
     <!-- Display-only preview: tapping a row opens nothing during onboarding. -->
     <TracksList v-if="rows.length > 0" :rows="rows" data-testid="onboarding-lectures">
       <template #state="{ state, progressPct }">
@@ -18,6 +18,7 @@
 import { onMounted, ref, watch } from "vue"
 import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
+import OnboardingHeading from "@ui/features/onboarding/OnboardingHeading.vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
@@ -135,24 +136,6 @@ watch([() => props.seed, tracks], seedPlaylist)
   gap: 12px;
   padding: 8px 8px 24px;
   box-sizing: border-box;
-}
-.ob-value__head {
-  text-align: center;
-  max-width: 440px;
-  margin: 0 auto;
-  padding: 0 12px;
-}
-.ob-value__title {
-  margin: 0 0 8px;
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--ion-text-color);
-}
-.ob-value__subtitle {
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  color: var(--ion-color-medium);
 }
 .ob-value__empty {
   text-align: center;

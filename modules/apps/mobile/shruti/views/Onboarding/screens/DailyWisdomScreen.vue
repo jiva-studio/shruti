@@ -1,9 +1,9 @@
 <template>
   <div class="ob-wisdom">
-    <div class="ob-wisdom__head">
-      <h1 class="ob-wisdom__title">{{ $t("onboarding.wisdom.title") }}</h1>
-      <p class="ob-wisdom__subtitle">{{ $t("onboarding.wisdom.subtitle") }}</p>
-    </div>
+    <OnboardingHeading
+      :title="$t('onboarding.wisdom.title')"
+      :subtitle="$t('onboarding.wisdom.subtitle')"
+    />
 
     <!-- A real example of what arrives: the same playable citation card chat
          uses (player on top, transcript below), for a fragment matched to the
@@ -45,6 +45,7 @@ import { ref, watch } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { ToggleChip } from "@ui/primitives/index.js"
+import OnboardingHeading from "@ui/features/onboarding/OnboardingHeading.vue"
 import CitationCard from "@shruti/views/Chat/components/CitationCard.vue"
 import type { DailyWisdom } from "@lib/domain/dailyWisdom.js"
 import type { LanguageCode, TopicId } from "@lib/domain/core.js"
@@ -119,24 +120,6 @@ const presets = [
   gap: 24px;
   padding: 8px 16px 24px;
   box-sizing: border-box;
-}
-.ob-wisdom__head {
-  text-align: center;
-  max-width: 440px;
-  margin: 0 auto;
-  padding: 0 8px;
-}
-.ob-wisdom__title {
-  margin: 0 0 8px;
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--ion-text-color);
-}
-.ob-wisdom__subtitle {
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  color: var(--ion-color-medium);
 }
 .ob-wisdom__card {
   width: 100%;
