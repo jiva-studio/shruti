@@ -67,6 +67,7 @@ export default {
     trialThenPrice: "zatim {price} / {period}",
     startFreeTrial: "Započni besplatnu probu",
     trialDisclaimer: "Otkažite bilo kad. Posle probnog perioda pretplata se automatski obnavlja.",
+    disclaimer: "Otkažite bilo kad. Pretplata se automatski obnavlja.",
     subscribed: "Pretplata je obavljena",
     unavailable: "Kupovine unutar aplikacije nisu dostupne na ovom uređaju.",
     manage: "Upravljanje pretplatom",

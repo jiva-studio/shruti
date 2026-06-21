@@ -60,6 +60,7 @@ export default {
     startFreeTrial: "Essai gratuit",
     trialDisclaimer:
       "Annulable à tout moment. À la fin de l'essai, l'abonnement se renouvelle automatiquement.",
+    disclaimer: "Annulable à tout moment. L'abonnement se renouvelle automatiquement.",
     subscribed: "Abonnement effectué",
     unavailable: "Les achats intégrés ne sont pas disponibles sur cet appareil.",
     manage: "Gérer l'abonnement",

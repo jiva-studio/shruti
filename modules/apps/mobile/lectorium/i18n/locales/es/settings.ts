@@ -58,6 +58,7 @@ export default {
     startFreeTrial: "Empezar prueba gratis",
     trialDisclaimer:
       "Cancela cuando quieras. Tras la prueba, la suscripción se renueva automáticamente.",
+    disclaimer: "Cancela cuando quieras. La suscripción se renueva automáticamente.",
     subscribed: "Suscripción completada",
     unavailable: "Las compras dentro de la aplicación no están disponibles en este dispositivo.",
     manage: "Gestionar suscripción",

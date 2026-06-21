@@ -227,6 +227,7 @@ function onShare(): void {
   // Pro feature — non-subscribers get the paywall; subscribers get the
   // per-format share menu (PDF / text / audio).
   if (!purchases.isSubscribed) {
+    sheet.close()
     paywall.requestOpen("shareTranscript")
     return
   }

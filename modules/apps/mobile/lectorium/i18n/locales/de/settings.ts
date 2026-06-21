@@ -59,6 +59,7 @@ export default {
     startFreeTrial: "Kostenlos testen",
     trialDisclaimer:
       "Jederzeit kündbar. Nach dem Testzeitraum verlängert sich das Abo automatisch.",
+    disclaimer: "Jederzeit kündbar. Das Abo verlängert sich automatisch.",
     subscribed: "Abonnement abgeschlossen",
     unavailable: "In-App-Käufe sind auf diesem Gerät nicht verfügbar.",
     manage: "Abonnement verwalten",

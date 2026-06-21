@@ -9,7 +9,7 @@
       </IonToolbar>
     </IonHeader>
 
-    <IonContent>
+    <IonContent :fullscreen="true">
       <div class="layout">
         <div class="carousel-host">
           <FeatureCarousel
@@ -74,6 +74,7 @@ const defaultBackHref = "/tabs/settings"
      bottom) but allow the column to overflow and IonContent to scroll on
      short ones, instead of squeezing everything into a single screen. */
   min-height: 100%;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
 }
 
 .carousel-host {
