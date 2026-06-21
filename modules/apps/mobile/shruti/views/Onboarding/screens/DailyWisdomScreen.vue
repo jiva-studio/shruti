@@ -31,6 +31,7 @@
         :key="p.key"
         role="radio"
         :selected="enabled && time[0] === p.hour"
+        :data-testid="`onboarding-wisdom-${p.key}`"
         @toggle="selectTime(p.hour)"
       >
         {{ $t(p.labelKey) }}

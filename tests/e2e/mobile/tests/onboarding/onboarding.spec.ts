@@ -13,7 +13,11 @@ test(
   { tag: ["@offline", "@onboarding"] },
   async ({ page }) => {
     await interceptContent(page)
-    await preseedUserDb(page, "en")
+    // Clean user DB: NO listening history, so the first-launch gate (unset
+    // onboarding.completed AND no prior sessions) shows onboarding. The default
+    // `preseed` fixture carries listening history, which the gate reads as an
+    // established user and skips onboarding.
+    await preseedUserDb(page, "en", "clean")
     await preseedNonPro(page)
 
     await page.goto("/")
@@ -30,8 +34,9 @@ test(
     await primary.click()
     // Topics → Daily wisdom
     await primary.click()
-    // Now on the daily-wisdom slide: toggle it on (clickable once in view).
-    await page.getByTestId("onboarding-wisdom-toggle").click()
+    // Now on the daily-wisdom slide: enable it by picking the morning preset
+    // (the screen is a radio group of off / morning / afternoon / evening).
+    await page.getByTestId("onboarding-wisdom-morning").click()
     // Daily wisdom → Value moment
     await primary.click()
     // Value moment → Paywall
