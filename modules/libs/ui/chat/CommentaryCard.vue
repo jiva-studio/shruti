@@ -9,7 +9,11 @@
   -->
   <AccentFrame v-if="body" class="commentary-card">
     <AutoHeight>
-      <ExcerptCard :text="displayHtml" :author-name="body.authorName" :reference="body.addrLabel" />
+      <ExcerptCard
+        :text="bodyHtml ?? ''"
+        :author-name="body.authorName"
+        :reference="body.addrLabel"
+      />
     </AutoHeight>
   </AccentFrame>
 
@@ -25,57 +29,48 @@
     v-if="body && isMt"
     name="translation-notice"
     :show-original="showOriginal"
-    :toggle="toggleShowOriginal"
-    :set-show-original="setShowOriginal"
+    :toggle="() => emit('update:show-original', !showOriginal)"
+    :set-show-original="(v: boolean) => emit('update:show-original', v)"
   >
-    <TranslationNotice :show-original="showOriginal" @update:show-original="setShowOriginal" />
+    <TranslationNotice
+      :show-original="showOriginal"
+      @update:show-original="emit('update:show-original', $event)"
+    />
   </slot>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue"
 import type { ChatCommentaryBody } from "@lib/domain/chatMessage.js"
-import { renderExcerptHtml } from "@shruti/composables/chatMarkers.js"
-import { ExcerptCard } from "@ui/components/excerpt/index.js"
+import { ExcerptCard } from "@lib/ui/excerpt/index.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 import AccentFrame from "./AccentFrame.vue"
-import { useTranslatable } from "../composables/useTranslatable.js"
 
-const props = defineProps<{
-  /** Commentary quote from the owning message's `commentaries` map (keyed
-   *  by the `[commentary:N]` ref). Absent ⇒ the marker renders nothing. */
-  body?: ChatCommentaryBody
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** Commentary quote from the owning message's `commentaries` map (keyed
+     *  by the `[commentary:N]` ref). Absent ⇒ the marker renders nothing. */
+    body?: ChatCommentaryBody
+    /** Comment text pre-rendered to HTML by the host (renderExcerptHtml over
+     *  the active translation). Consumed by `ExcerptCard` → `HighlightText`. */
+    bodyHtml?: string
+    /** True when the comment is a machine translation with an original to flip
+     *  to — gates the TranslationNotice. Computed by the host. */
+    isMt?: boolean
+    /** Machine-translation toggle state, owned by the host. */
+    showOriginal?: boolean
+  }>(),
+  { isMt: false, showOriginal: false }
+)
 
 const emit = defineEmits<{
-  /** Fired when the user flips the machine-translation toggle. The card keeps
-   *  its own toggle state internally; this is a notification for parents that
-   *  want to react (e.g. persist the preference). */
-  (e: "update:showOriginal", value: boolean): void
+  /** Fired when the user flips the machine-translation toggle. The host owns
+   *  the toggle state and feeds it back via `showOriginal`. */
+  (e: "update:show-original", value: boolean): void
 }>()
 
 const body = computed(() => props.body ?? null)
-
-// Translation toggle (show original ↔ machine translation), shared with
-// CitationCard. `useTranslatable` is a pure vue-ref view-behavior hook (no
-// store / i18n / io), so it stays inside the view.
-const { isMt, showOriginal, displayText } = useTranslatable(() => body.value)
-
-function setShowOriginal(value: boolean): void {
-  showOriginal.value = value
-  emit("update:showOriginal", value)
-}
-function toggleShowOriginal(): void {
-  setShowOriginal(!showOriginal.value)
-}
-
-/** Comment text rendered through the same markdown pipeline the chat bubble
- *  uses, so bold / italic / code and `>` block quotes (a śloka quoted inside
- *  a purport) render instead of printing literally. `marked` escapes raw text
- *  by default; the result is consumed by `ExcerptCard` → `HighlightText` via
- *  `v-html`. */
-const displayHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 </script>
 
 <style scoped>

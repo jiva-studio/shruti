@@ -46,7 +46,7 @@
   >
     <AutoHeight>
       <ExcerptCard
-        :text="displayHtml"
+        :text="bodyHtml ?? ''"
         :language="language"
         :author-name="authorName"
         :track-title="trackTitle"
@@ -63,15 +63,17 @@
     </AutoHeight>
   </AccentFrame>
 
-  <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
+  <TranslationNotice
+    v-if="isMt"
+    :show-original="showOriginal"
+    @update:show-original="emit('update:show-original', $event)"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue"
-import { renderExcerptHtml } from "@shruti/composables/chatMarkers.js"
 import type { ChatCiteSnippet } from "@lib/domain/chatMessage.js"
-import { ExcerptCard } from "@ui/components/excerpt/index.js"
-import { useTranslatable } from "../composables/useTranslatable.js"
+import { ExcerptCard } from "@lib/ui/excerpt/index.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 import AccentFrame from "./AccentFrame.vue"
@@ -105,28 +107,29 @@ const props = withDefaults(
     /** Fallback label for the no-body chip when the marker omitted a
      *  caption. Localized by the parent. */
     chipFallbackLabel?: string
+    /** Transcript snippet pre-rendered to HTML by the host (renderExcerptHtml
+     *  over the active translation). Consumed by `ExcerptCard` → `HighlightText`
+     *  via `v-html`. */
+    bodyHtml?: string
+    /** True when the snippet is a machine translation with an original to flip
+     *  to — gates the TranslationNotice. Computed by the host. */
+    isMt?: boolean
+    /** Machine-translation toggle state, owned by the host. */
+    showOriginal?: boolean
   }>(),
-  { metaReady: true }
+  { metaReady: true, isMt: false, showOriginal: false }
 )
 
 /** Tapping the card asks the HOST to act (open the citation action sheet).
  *  A leaf card never owns that dialog — onboarding reuses this card with no
- *  listener, so tapping it does nothing. */
-const emit = defineEmits<{ activate: [] }>()
+ *  listener, so tapping it does nothing. `update:show-original` notifies the
+ *  host when the user flips the translation toggle. */
+const emit = defineEmits<{ activate: []; "update:show-original": [value: boolean] }>()
 
 /** Transcript snippet pushed by the server ahead of the marker. Null
  *  until it lands (or forever for pre-feature history) → chip fallback. */
 const snippet = computed(() => props.body ?? null)
 const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
-// Translation toggle (show original ↔ machine translation), shared with
-// CommentaryCard. Pure Vue — no store / io.
-const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
-
-/** Transcript snippet rendered through the shared excerpt-markdown pipeline
- *  (inline emphasis/bold + `>` block quotes), same as CommentaryCard, so a
- *  quoted śloka or stray markdown renders instead of printing literally.
- *  Consumed by `ExcerptCard` → `HighlightText` via `v-html`. */
-const displayHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 </script>
 
 <style scoped>

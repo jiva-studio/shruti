@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 // REAL reused app code (single source of truth):
-import { parseChatMarkers, type ChatToken } from '@shruti/composables/chatMarkers/parse.js'
-import VerseCard from '@shruti/views/Chat/components/VerseCard.vue'
-import ChapterCard from '@shruti/views/Chat/components/ChapterCard.vue'
-import CitationCard from '@shruti/views/Chat/components/CitationCard.vue'
-import CommentaryCard from '@shruti/views/Chat/components/CommentaryCard.vue'
-import MediaCard from '@shruti/views/Chat/components/MediaCard.vue'
-import NotesInlinePlayer from '@shruti/views/Notes/NotesInlinePlayer.vue'
-import OutlineCard from '@shruti/views/Chat/components/OutlineCard.vue'
+import { parseChatMarkers, type ChatToken } from '@lib/chat/chatMarkers/parse.js'
+import ChapterCard from '@lib/ui/chat/ChapterCard.vue'
+import OutlineCard from '@lib/ui/chat/OutlineCard.vue'
+import WebVerseCard from './WebVerseCard.vue'
+import WebCitationCard from './WebCitationCard.vue'
+import WebCommentaryCard from './WebCommentaryCard.vue'
+import WebMediaCard from './WebMediaCard.vue'
 import { STORE } from '../../i18n/ui'
 
 const props = defineProps<{
@@ -71,29 +70,6 @@ const pdfLabel = computed(() => (props.lang === 'ru' ? 'Скачать PDF' : 'D
 const getAppLabel = computed(() =>
   props.lang === 'ru' ? 'Открыть в приложении' : 'Open in the app'
 )
-
-const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
-
-async function webCut(args: {
-  sourceKey: string
-  startMs: number
-  endMs: number
-  excerptId: string
-}): Promise<{ url: string; ready: boolean }> {
-  const r = await fetch(`${CHAT}/share/audio/excerpts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      source_key: args.sourceKey,
-      start_ms: args.startMs,
-      end_ms: args.endMs,
-      excerpt_id: args.excerptId,
-    }),
-  })
-  if (!r.ok && r.status !== 202) throw new Error('cut_failed')
-  const j = await r.json()
-  return { url: j.url, ready: j.ready }
-}
 </script>
 
 <template>
@@ -109,16 +85,14 @@ async function webCut(args: {
       </blockquote>
 
       <!-- VERSE: real VerseCard when the payload streamed, else a chip -->
-      <VerseCard
+      <WebVerseCard
         v-else-if="tk.kind === 'verse'"
         :source-id="tk.sourceId"
         :tokens="tk.tokens"
         :caption="tk.caption"
         :body="verseBody(tk)"
         :locale="lang"
-      >
-        <template #spinner><span class="dots-spinner" /></template>
-      </VerseCard>
+      />
 
       <!-- CHAPTER: real ChapterCard when the payload streamed, else a chip -->
       <ChapterCard
@@ -130,54 +104,28 @@ async function webCut(args: {
       />
 
       <!-- CITE: real CitationCard with the transcript snippet, else a chip.
-           #player reuses the REAL NotesInlinePlayer with web cut/predict
-           adapters. -->
-      <CitationCard
+           #player is the WebExcerptPlayer with web cut/predict adapters. -->
+      <WebCitationCard
         v-else-if="tk.kind === 'cite'"
+        :track-id="tk.trackId"
+        :start-ms="tk.startMs"
+        :end-ms="tk.endMs"
         :body="citeBody(tk)"
         :caption="tk.caption"
         :language="lang"
-      >
-        <template v-if="citeBody(tk)" #player>
-          <NotesInlinePlayer
-            :note="{
-              noteId: 'chat-cite-' + tk.trackId + '-' + tk.startMs + '-' + tk.endMs,
-              sourceKey: 'public/tracks/' + tk.trackId + '/audio/original.mp3',
-              timeStart: tk.startMs,
-              timeEnd: tk.endMs,
-            }"
-            :cut="webCut"
-            :predict-url="(id) => 'https://cdn-s3.shruti.local/public/shares/audio/' + id + '.mp3'"
-          >
-            <template #spinner><span class="dots-spinner" /></template>
-          </NotesInlinePlayer>
-        </template>
-      </CitationCard>
+      />
 
-      <!-- COMMENTARY: real CommentaryCard; default translation-notice slot
-           works on web via the global $t. Absent body → nothing. -->
-      <CommentaryCard
+      <!-- COMMENTARY: real CommentaryCard. Absent body → nothing. -->
+      <WebCommentaryCard
         v-else-if="tk.kind === 'commentary'"
         :body="commentaryBody(tk)"
       />
 
-      <!-- MEDIA: real MediaCard; payload.url is already absolute on web, so
-           resolve-url is identity. Icon slots filled with inline SVGs. -->
-      <MediaCard
+      <!-- MEDIA: real MediaCard; payload.url is already absolute on web. -->
+      <WebMediaCard
         v-else-if="tk.kind === 'media'"
         :payload="mediaBody(tk)"
-        :resolve-url="(u) => u"
-      >
-        <template #play-icon="{ size }">
-          <svg viewBox="0 0 24 24" :width="size" :height="size" fill="currentColor" aria-hidden="true"><path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" /></svg>
-        </template>
-        <template #pause-icon="{ size }">
-          <svg viewBox="0 0 24 24" :width="size" :height="size" fill="currentColor" aria-hidden="true"><path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" /><path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" /></svg>
-        </template>
-        <template #expand-icon="{ size }">
-          <svg viewBox="0 0 24 24" :width="size" :height="size" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6l6 -6" /></svg>
-        </template>
-      </MediaCard>
+      />
 
       <!-- OUTLINE: real OutlineCard when the payload streamed, else a chip. -->
       <template v-else-if="tk.kind === 'outline'">

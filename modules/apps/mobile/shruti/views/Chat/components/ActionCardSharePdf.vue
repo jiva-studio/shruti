@@ -40,7 +40,7 @@ import type {
   ChatSharePdfItemPayload as SharePdfItemPayload,
   ChatSharePdfRefPayload as SharePdfRefPayload,
 } from "@lib/domain/chatMessage.js"
-import ScriptureChip from "./ScriptureChip.vue"
+import ScriptureChip from "@lib/ui/chat/ScriptureChip.vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useToast } from "@kit/composables"
 import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"

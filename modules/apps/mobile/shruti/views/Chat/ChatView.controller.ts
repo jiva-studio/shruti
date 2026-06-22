@@ -7,7 +7,7 @@ import { useChatStore, type ChatMessage, type ChatSession } from "@shruti/stores
 import { useToast } from "@kit/composables"
 import { useTrackUserState } from "@shruti/composables/useTrackUserState.js"
 import { formatTimestamp } from "@shruti/composables/formatTimestamp.js"
-import { pauseGroup } from "@shruti/composables/useAudioOrchestrator.js"
+import { pauseGroup } from "@lib/chat/audio/useAudioOrchestrator.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { reportError } from "@shruti/services/monitoring/reportError.js"
 

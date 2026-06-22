@@ -21,7 +21,7 @@ import {
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
-import { extractFollowups } from "@shruti/composables/chatMarkers.js"
+import { extractFollowups } from "@lib/chat/chatMarkers.js"
 import {
   recordInlineHintCooldown as recordInlineHintCooldownUC,
   replayChatTurn,

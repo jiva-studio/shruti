@@ -8,6 +8,9 @@
   <CitationCard
     :caption="caption"
     :body="body"
+    :body-html="bodyHtml"
+    :is-mt="isMt"
+    :show-original="showOriginal"
     :track-title="trackTitle"
     :author-name="authorName"
     :track-date="trackDate"
@@ -17,6 +20,7 @@
     :card-label="t('chat.citationDetailsTitle')"
     :chip-fallback-label="t('chat.citationDetailsTitle')"
     @activate="emit('activate')"
+    @update:show-original="showOriginal = $event"
   >
     <!-- Audio is a HOST concern: provide the reused inline player. The player
          owns its own taps (play / seek); stop the bubble so tapping it
@@ -54,11 +58,13 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
+import { useTranslatable } from "@lib/chat/useTranslatable.js"
+import { renderExcerptHtml } from "@lib/chat/chatMarkers.js"
 import type { ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import NotesInlinePlayer from "@shruti/views/Notes/NotesInlinePlayer.vue"
 import { citationExcerptId } from "../composables/useCitationSnippet.js"
 import { useCitationMeta } from "../composables/useCitationMeta.js"
-import CitationCard from "./CitationCard.vue"
+import CitationCard from "@lib/ui/chat/CitationCard.vue"
 import CitationChip from "./CitationChip.vue"
 
 const props = defineProps<{
@@ -81,6 +87,13 @@ const { t } = useI18n()
 const { shareAudioService, activeServer } = useShruti()
 const appLanguage = useAppLanguage()
 const dictionaries = useDictionariesStore()
+
+// Translation toggle + rendered snippet HTML, lifted out of the now-pure
+// CitationCard. `useTranslatable` is a pure vue-ref view hook; renderExcerptHtml
+// runs the shared excerpt-markdown pipeline.
+const snippet = computed(() => props.body ?? null)
+const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
+const bodyHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 
 // Display metadata only — the action sheet is the host's (see
 // CitationActionSheet). `metaLoaded` gates the skeleton → card reveal (#926).
