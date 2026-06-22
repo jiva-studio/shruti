@@ -1,0 +1,20 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import ChatApp from '../components/vue/ChatApp.vue'
+import { useT } from '../i18n/ui'
+const t = useT('ru')
+---
+<BaseLayout
+  lang="ru"
+  path="/chat"
+  title={`${t('nav.chat')} — ${t('hero.title')}`}
+  description={t('chat.band.lead')}
+>
+  <section class="mx-auto max-w-3xl px-5 py-8">
+    <h1 class="mb-1 font-serif text-3xl font-bold text-ink">{t('nav.chat')}</h1>
+    <p class="mb-6 text-medium">{t('chat.band.lead')}</p>
+    <div class="h-[72vh] min-h-[480px]">
+      <ChatApp client:load lang="ru" />
+    </div>
+  </section>
+</BaseLayout>

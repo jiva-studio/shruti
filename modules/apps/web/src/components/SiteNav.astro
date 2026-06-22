@@ -1,0 +1,42 @@
+---
+import { useT, type Lang } from '../i18n/ui'
+interface Props { lang: Lang; path?: string }
+const { lang, path = '/' } = Astro.props
+const t = useT(lang)
+const base = lang === 'en' ? '/en' : ''
+const home = lang === 'en' ? '/en/' : '/'
+const links = [
+  ['#about', t('nav.about')],
+  ['#features', t('nav.features')],
+  ['#chat', t('nav.chat')],
+  ['#faq', t('nav.faq')],
+  ['#download', t('nav.download')],
+]
+// language switch target: same page in the other locale
+const enPath = path === '/' ? '/en/' : `/en${path}`
+const ruPath = path === '/' ? '/' : path
+---
+<header class="sticky top-0 z-40 border-b border-line/70 bg-cream/85 backdrop-blur">
+  <nav class="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
+    <a href={home} class="flex items-center gap-2 font-serif text-lg font-bold text-ink">
+      <span class="grid h-8 w-8 place-items-center rounded-lg bg-saffron text-cream">स</span>
+      <span>{lang === 'en' ? 'Shruti' : 'Слушай Садху'}</span>
+    </a>
+
+    <ul class="ml-auto hidden items-center gap-6 text-sm text-ink-soft md:flex">
+      {links.map(([href, label]) => (
+        <li><a href={`${base}${path === '/' ? '' : path}${href}`} class="transition hover:text-saffron">{label}</a></li>
+      ))}
+    </ul>
+
+    <div class="ml-auto flex items-center gap-3 md:ml-4">
+      <div class="flex overflow-hidden rounded-lg border border-line text-xs font-semibold">
+        <a href={ruPath} class:list={["px-2.5 py-1", lang === 'ru' ? 'bg-saffron text-cream' : 'text-medium']}>RU</a>
+        <a href={enPath} class:list={["px-2.5 py-1", lang === 'en' ? 'bg-saffron text-cream' : 'text-medium']}>EN</a>
+      </div>
+      <a href={`${base}${path === '/' ? '' : path}#download`} class="hidden rounded-lg bg-saffron px-4 py-2 text-sm font-semibold text-cream transition hover:bg-saffron-shade sm:inline-block">
+        {useT(lang)('nav.download')}
+      </a>
+    </div>
+  </nav>
+</header>
