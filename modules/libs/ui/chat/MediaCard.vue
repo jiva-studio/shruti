@@ -3,27 +3,15 @@
     Media result — YouTube-style: a centered semi-transparent Play overlay on
     the video, a thin progress bar with a scrubber dot along the bottom edge,
     and below it just the title + a chevron that expands the transcript.
-    No border. Playback registers with the audio orchestrator (one at a time).
+    No border. The media element + playback (orchestrator, seek, progress)
+    are HOST concerns: the container provides the element via `#media` and
+    feeds `isPlaying` / `progressFraction` / `bufferedFraction`.
   -->
   <article v-if="payload" class="media-card">
     <div v-if="payload.type === 'video'" class="media-card-stage">
-      <video
-        ref="mediaEl"
-        class="media-card-media"
-        playsinline
-        preload="metadata"
-        :poster="posterUrl"
-        :src="fileUrl"
-        @click="toggle"
-        @play="playing = true"
-        @pause="playing = false"
-        @ended="playing = false"
-        @timeupdate="onTimeUpdate"
-        @progress="onProgress"
-        @loadedmetadata="onProgress"
-      />
+      <slot name="media" />
 
-      <button v-if="!playing" class="play-overlay" aria-label="Play" @click.stop="toggle">
+      <button v-if="!isPlaying" class="play-overlay" aria-label="Play" @click.stop="emit('toggle')">
         <slot name="play-icon" :size="30" />
       </button>
 
@@ -40,10 +28,10 @@
     <div v-else class="media-card-audiorow">
       <button
         class="play-overlay play-overlay--inline"
-        :aria-label="playing ? 'Pause' : 'Play'"
-        @click="toggle"
+        :aria-label="isPlaying ? 'Pause' : 'Play'"
+        @click="emit('toggle')"
       >
-        <slot v-if="playing" name="pause-icon" :size="18" />
+        <slot v-if="isPlaying" name="pause-icon" :size="18" />
         <slot v-else name="play-icon" :size="18" />
       </button>
       <div class="progress progress--inline" @click="onSeek">
@@ -53,17 +41,7 @@
           <div class="progress-dot" :style="{ left: pct }" />
         </div>
       </div>
-      <audio
-        ref="mediaEl"
-        preload="metadata"
-        :src="fileUrl"
-        @play="playing = true"
-        @pause="playing = false"
-        @ended="playing = false"
-        @timeupdate="onTimeUpdate"
-        @progress="onProgress"
-        @loadedmetadata="onProgress"
-      />
+      <slot name="media" />
     </div>
 
     <div class="media-card-body">
@@ -88,108 +66,66 @@
     </div>
   </article>
 
-  <TranslationNotice v-if="expanded && isMt" v-model:show-original="showOriginal" />
+  <TranslationNotice
+    v-if="expanded && isMt"
+    :show-original="showOriginal"
+    @update:show-original="emit('update:show-original', $event)"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { useAudioSource } from "@lectorium/composables/useAudioOrchestrator.js"
 import type { MediaPayload } from "@lib/domain/chatMessage.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 
-const props = defineProps<{
-  /** Server-streamed media payload, read off `message.media[token.mediaId]`.
-   *  Optional so a not-yet-resolved id renders nothing instead of throwing. */
-  payload?: MediaPayload
-  /** Turns a RELATIVE storage path (`payload.url`) into an absolute URL.
-   *  Defaults to identity so the path is used verbatim when the caller
-   *  already supplies absolute URLs (e.g. on the web). The mobile app passes
-   *  `storagePublicUrl.get` to resolve against the active server's CDN. */
-  resolveUrl?: (path: string) => string
+const props = withDefaults(
+  defineProps<{
+    /** Server-streamed media payload, read off `message.media[token.mediaId]`.
+     *  Optional so a not-yet-resolved id renders nothing instead of throwing. */
+    payload?: MediaPayload
+    /** Playback state — drives the play overlay. Owned by the host. */
+    isPlaying?: boolean
+    /** Playhead position as a fraction of duration (0–1). Owned by the host. */
+    progressFraction?: number
+    /** Buffered range covering the playhead as a fraction of duration (0–1). */
+    bufferedFraction?: number
+    /** Transcript in the active translation (host folds in `showOriginal`). */
+    transcriptText?: string
+    /** True when the transcript is a machine translation with an original to
+     *  flip to — gates the TranslationNotice. Computed by the host. */
+    isMt?: boolean
+    /** Machine-translation toggle state, owned by the host. */
+    showOriginal?: boolean
+  }>(),
+  {
+    payload: undefined,
+    isPlaying: false,
+    progressFraction: 0,
+    bufferedFraction: 0,
+    transcriptText: "",
+    isMt: false,
+    showOriginal: false,
+  }
+)
+
+const emit = defineEmits<{
+  toggle: []
+  /** Seek request as a fraction of duration (0–1). The host applies it to
+   *  its media element. */
+  seek: [fraction: number]
+  "update:show-original": [value: boolean]
 }>()
 
-const mediaEl = ref<HTMLVideoElement | HTMLAudioElement | null>(null)
-const playing = ref(false)
 const expanded = ref(false)
-const progress = ref(0)
-const buffered = ref(0)
-// Toggle the transcript between the shown text and the original when the
-// transcript is a machine translation.
-const showOriginal = ref(false)
 
-// True when the transcript is a machine translation with an original to
-// flip to.
-const isMt = computed<boolean>(() => !!props.payload?.mt && !!props.payload?.textOriginal)
-const transcriptText = computed<string>(() => {
-  const p = props.payload
-  if (!p) return ""
-  return showOriginal.value && p.textOriginal ? p.textOriginal : p.text
-})
-
-// `payload.url` is a RELATIVE storage path (e.g. `public/media/<id>.mp4`);
-// the caller-supplied `resolveUrl` turns it absolute. Poster = same path,
-// `.jpg`.
-const resolve = (path: string): string => (props.resolveUrl ? props.resolveUrl(path) : path)
-const fileUrl = computed(() => (props.payload ? resolve(props.payload.url) : ""))
-const posterUrl = computed(() => {
-  if (!props.payload) return ""
-  return resolve(props.payload.url.replace(/\.[^./]+$/, ".jpg"))
-})
-
-const pct = computed(() => `${Math.min(100, Math.max(0, progress.value * 100))}%`)
-const bufferedPct = computed(() => `${Math.min(100, Math.max(0, buffered.value * 100))}%`)
-
-function onTimeUpdate(): void {
-  const el = mediaEl.value
-  progress.value = el && el.duration > 0 ? el.currentTime / el.duration : 0
-  onProgress()
-}
-
-// Buffered/cached layer — end of the buffered range covering the playhead
-// (falls back to the furthest buffered end), as a fraction of duration.
-function onProgress(): void {
-  const el = mediaEl.value
-  if (!el || el.duration <= 0 || el.buffered.length === 0) {
-    buffered.value = 0
-    return
-  }
-  let end = 0
-  for (let i = 0; i < el.buffered.length; i++) {
-    if (el.buffered.start(i) <= el.currentTime && el.currentTime <= el.buffered.end(i)) {
-      end = el.buffered.end(i)
-      break
-    }
-    end = Math.max(end, el.buffered.end(i))
-  }
-  buffered.value = end / el.duration
-}
+const pct = computed(() => `${Math.min(100, Math.max(0, props.progressFraction * 100))}%`)
+const bufferedPct = computed(() => `${Math.min(100, Math.max(0, props.bufferedFraction * 100))}%`)
 
 function onSeek(event: MouseEvent): void {
-  const el = mediaEl.value
-  if (!el || !el.duration) return
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-  el.currentTime = el.duration * ratio
-}
-
-// One sound at a time: when anything else claims audio, pause ourselves;
-// when WE start, claim() pauses the lecture + every other snippet.
-const { claim } = useAudioSource("inline", () => mediaEl.value?.pause())
-
-async function toggle(): Promise<void> {
-  const el = mediaEl.value
-  if (!el) return
-  if (!el.paused) {
-    el.pause()
-    return
-  }
-  claim()
-  try {
-    await el.play()
-  } catch {
-    // autoplay/buffer hiccup — user can tap again
-  }
+  emit("seek", ratio)
 }
 </script>
 
@@ -206,7 +142,7 @@ async function toggle(): Promise<void> {
   position: relative;
   line-height: 0;
 }
-.media-card-media {
+.media-card-stage :deep(.media-card-media) {
   display: block;
   width: 100%;
   max-height: 60vh;

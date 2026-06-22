@@ -21,7 +21,7 @@ import {
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
-import { extractFollowups } from "@lectorium/composables/chatMarkers.js"
+import { extractFollowups } from "@lib/chat/chatMarkers.js"
 import {
   recordInlineHintCooldown as recordInlineHintCooldownUC,
   replayChatTurn,

@@ -9,7 +9,7 @@
          uses (player on top, transcript below), for a fragment matched to the
          user's topics in their library language. -->
     <div v-if="wisdom" class="ob-wisdom__card">
-      <CitationCard
+      <CitationCardContainer
         :track-id="wisdom.trackId"
         :start-ms="wisdom.startMs"
         :end-ms="wisdom.endMs"
@@ -47,7 +47,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { ToggleChip } from "@ui/primitives/index.js"
 import OnboardingHeading from "@ui/features/onboarding/OnboardingHeading.vue"
-import CitationCard from "@lectorium/views/Chat/components/CitationCard.vue"
+import CitationCardContainer from "@lectorium/views/Chat/components/CitationCardContainer.vue"
 import type { DailyWisdom } from "@lib/domain/dailyWisdom.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 

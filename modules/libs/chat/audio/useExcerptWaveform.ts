@@ -1,11 +1,11 @@
 import { computed, onBeforeUnmount, onMounted, ref, type ComputedRef, type Ref } from "vue"
-import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@lectorium/services/pollUntilReady.js"
+import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "../utils/pollUntilReady.js"
 import {
   WAVEFORM_RAW_PEAKS,
   buildPlaceholderPeaks,
   resamplePeaks,
   useResponsiveBarCount,
-} from "@lectorium/composables/useWaveform.js"
+} from "./useWaveform.js"
 
 /* -------------------------------------------------------------------------- */
 /*           Module-level shared cache (intentional cross-instance)            */

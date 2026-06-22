@@ -1,7 +1,7 @@
 import type { RenderTranscriptRequest } from "@ports/app/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { resolveShareArtifact } from "@lectorium/services/resolveShareArtifact.js"
-import { SHORT_POLL_TIMEOUT_MS } from "@lectorium/services/pollUntilReady.js"
+import { SHORT_POLL_TIMEOUT_MS } from "@lib/chat/utils/pollUntilReady.js"
 
 export interface UseShareTranscriptReturn {
   /**

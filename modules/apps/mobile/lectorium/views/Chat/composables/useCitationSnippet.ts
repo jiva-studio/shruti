@@ -1,5 +1,5 @@
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
-import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@lectorium/services/pollUntilReady.js"
+import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@lib/chat/utils/pollUntilReady.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"

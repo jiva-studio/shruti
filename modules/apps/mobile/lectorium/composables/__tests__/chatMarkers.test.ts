@@ -5,7 +5,7 @@ import {
   parseChatMarkers,
   type CiteBodyLike,
   type VerseBodyLike,
-} from "../chatMarkers.js"
+} from "@lib/chat/chatMarkers.js"
 
 /**
  * Marker grammar coverage. The parser is the bridge between LLM-emitted

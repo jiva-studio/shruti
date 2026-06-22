@@ -8,7 +8,7 @@
     library.db hadn't indexed this verse at server-cite time.
   -->
   <ScriptureBlock v-if="body">
-    <button v-if="audioUrl" type="button" class="verse-play" @click="onToggle">
+    <button v-if="hasAudio" type="button" class="verse-play" @click="$emit('toggle-audio')">
       <slot v-if="isPreparing" name="spinner" />
       <svg v-else-if="isPlaying" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
@@ -24,21 +24,6 @@
       <p v-if="transliteration" class="verse-card-iast">{{ transliteration }}</p>
       <p v-if="translation" class="verse-card-translation">{{ translation }}</p>
     </AutoHeight>
-    <audio
-      v-if="audioUrl"
-      ref="audioEl"
-      preload="none"
-      @ended="onEnded"
-      @pause="onPause"
-      @play="onPlay"
-      @playing="onPlaying"
-      @canplay="onCanPlay"
-      @waiting="onWaiting"
-      @stalled="onWaiting"
-      @error="onError"
-      @timeupdate="onTimeUpdate"
-      @loadedmetadata="onMetadata"
-    />
   </ScriptureBlock>
   <ScriptureChip v-else :caption="displayCaption" :aria-label="ariaLabel" @tap="onTap" />
 
@@ -61,7 +46,6 @@ import { computed, ref } from "vue"
 // `showOriginal` toggles the verse translation between the active-locale
 // machine translation and the original English.
 import type { ChatVerseBody } from "@lib/domain/chatMessage.js"
-import { useExcerptAudioPlayer } from "@lectorium/composables/useExcerptAudioPlayer.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 import ScriptureChip from "./ScriptureChip.vue"
@@ -76,17 +60,29 @@ const props = withDefaults(
     body?: ChatVerseBody
     /** Active UI locale; picks the translation/transliteration language. */
     locale: string
-    /** Maps a raw audio URL to a playable one (cache/io); identity by default. */
-    resolveAudioUrl?: (rawUrl: string) => Promise<string>
+    /** Recitation playing — drives the play/pause glyph. Owned by the host. */
+    isPlaying?: boolean
+    /** Recitation buffering — shows the `#spinner` slot. Owned by the host. */
+    isPreparing?: boolean
+    /** Whether a recitation exists; defaults to `body.audioUrl` presence. */
+    hasAudio?: boolean
   }>(),
   {
     caption: undefined,
     body: undefined,
-    resolveAudioUrl: (u: string) => Promise.resolve(u),
+    isPlaying: false,
+    isPreparing: false,
+    hasAudio: undefined,
   }
 )
 
+defineEmits<{ "toggle-audio": [] }>()
+
 const body = computed(() => props.body ?? null)
+
+const hasAudio = computed<boolean>(() =>
+  props.hasAudio !== undefined ? props.hasAudio : !!body.value?.audioUrl
+)
 
 const displayCaption = computed(() => props.caption?.trim() || props.tokens)
 const displayAddr = computed(() => body.value?.addrLabel || props.caption?.trim() || props.tokens)
@@ -134,43 +130,6 @@ const translation = computed(() => {
 const ariaLabel = computed(
   () => `Verse ${displayCaption.value} (${props.sourceId} ${props.tokens})`
 )
-
-// Sanskrit recitation, present only when the library has audio for this
-// verse — a whole-file public URL (no excerpt cut). Routed through the
-// excerpt cache (same as the citation chip): the first tap downloads the
-// mp3, later taps + offline play the local copy.
-const audioUrl = computed(() => body.value?.audioUrl || "")
-
-// Local URL of the cached recitation; null until the first tap resolves it
-// so the player takes its prepare-then-play (spinner) branch on first play.
-const localUri = ref<string | null>(null)
-
-async function resolveVerseAudio(): Promise<string> {
-  const url = await props.resolveAudioUrl(audioUrl.value)
-  localUri.value = url
-  return url
-}
-
-const {
-  audioEl,
-  isPlaying,
-  isPreparing,
-  onToggle,
-  onPlay,
-  onPause,
-  onEnded,
-  onTimeUpdate,
-  onMetadata,
-  onWaiting,
-  onPlaying,
-  onCanPlay,
-  onError,
-} = useExcerptAudioPlayer({
-  hasSource: () => !!audioUrl.value,
-  cachedUrl: () => localUri.value,
-  resolveUrl: resolveVerseAudio,
-  logLabel: "verse-audio",
-})
 
 function onTap() {
   // Intentional no-op: the expanded card already shows the verse in full, so

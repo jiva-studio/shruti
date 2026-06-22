@@ -3,7 +3,7 @@ import { ref, nextTick, computed } from 'vue'
 import { STORE } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
 // REAL reused component (decoupled: status label via prop, spinner via slot).
-import StatusPill from '@lectorium/views/Chat/components/StatusPill.vue'
+import StatusPill from '@lib/ui/chat/StatusPill.vue'
 import { webLocale } from '../../lib/i18n'
 
 type Lang = 'ru' | 'en'

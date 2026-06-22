@@ -1,5 +1,5 @@
 import { marked } from "marked"
-import { escapeHtml } from "@lectorium/utils/escapeHtml.js"
+import { escapeHtml } from "../utils/escapeHtml.js"
 import type { ChatToken } from "./parse.js"
 
 /* -------------------------------------------------------------------------- */

@@ -23,7 +23,7 @@
 
 <script lang="ts" setup>
 import { IonItem } from "@ionic/vue"
-import { ExcerptCard } from "@ui/components/excerpt/index.js"
+import { ExcerptCard } from "@lib/ui/excerpt/index.js"
 
 defineProps<{
   noteId: string

@@ -58,7 +58,7 @@ vi.mock("@lectorium/composables/useTrackUserState.js", () => ({
 vi.mock("@lectorium/composables/useDailyReminder.js", () => ({
   applyDailyReminder: vi.fn(),
 }))
-vi.mock("@lectorium/composables/chatMarkers.js", () => ({
+vi.mock("@lib/chat/chatMarkers.js", () => ({
   extractFollowups: () => [],
   parseChatMarkers: () => [],
 }))

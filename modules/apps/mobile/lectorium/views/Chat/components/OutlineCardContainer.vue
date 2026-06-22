@@ -23,7 +23,7 @@ import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import type { TrackId } from "@lib/domain/core.js"
-import OutlineCard from "./OutlineCard.vue"
+import OutlineCard from "@lib/ui/chat/OutlineCard.vue"
 
 interface OutlineItem {
   readonly startMs: number

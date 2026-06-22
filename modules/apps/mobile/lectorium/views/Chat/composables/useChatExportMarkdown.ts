@@ -1,5 +1,5 @@
 import { computed, type ComputedRef } from "vue"
-import { messageToMarkdown, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
+import { messageToMarkdown, parseChatMarkers } from "@lib/chat/chatMarkers.js"
 import type { ChatMessage } from "@lectorium/stores/useChatStore.js"
 import { useCitationMetadata } from "../composables/useCitationMetadata.js"
 

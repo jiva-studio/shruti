@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { IExcerptCache } from "@ports/app/index.js"
 import { resolveShareArtifact } from "../resolveShareArtifact.js"
-import * as pollModule from "../pollUntilReady.js"
+import * as pollModule from "@lib/chat/utils/pollUntilReady.js"
 
 function makeCache(overrides: Partial<IExcerptCache> = {}): IExcerptCache {
   return {
