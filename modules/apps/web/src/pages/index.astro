@@ -1,0 +1,14 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Landing from '../components/Landing.astro'
+import { useT } from '../i18n/ui'
+const t = useT('ru')
+---
+<BaseLayout
+  lang="ru"
+  path="/"
+  title={`${t('hero.title')} — ${t('hero.subtitle')}`}
+  description={t('hero.lead')}
+>
+  <Landing lang="ru" />
+</BaseLayout>

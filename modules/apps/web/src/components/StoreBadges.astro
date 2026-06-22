@@ -1,0 +1,41 @@
+---
+import { STORE } from '../i18n/ui'
+interface Props { class?: string }
+const { class: cls = '' } = Astro.props
+---
+<div class:list={["flex flex-wrap items-center gap-3", cls]}>
+  <a
+    href={STORE.appStore}
+    target="_blank"
+    rel="noopener"
+    class="group inline-flex items-center gap-3 rounded-xl bg-ink px-5 py-3 text-cream transition hover:bg-coffee"
+    aria-label="Download on the App Store"
+  >
+    <svg viewBox="0 0 24 24" class="h-7 w-7" fill="currentColor" aria-hidden="true">
+      <path d="M16.365 1.43c0 1.14-.42 2.21-1.13 3.02-.84.99-2.22 1.76-3.4 1.66-.13-1.1.42-2.27 1.1-3.02.82-.92 2.27-1.62 3.43-1.66zM20.5 17.05c-.6 1.4-.88 2.02-1.65 3.26-1.08 1.73-2.6 3.88-4.48 3.9-1.67.02-2.1-1.09-4.37-1.08-2.27.01-2.74 1.1-4.42 1.08-1.88-.02-3.32-1.96-4.4-3.69C-1.3 15.96-1.6 9.46 1.45 6.16 2.65 4.84 4.4 4 6.08 4c1.7 0 2.77 1.1 4.18 1.1 1.37 0 2.2-1.1 4.18-1.1 1.5 0 3.08.82 4.21 2.23-3.7 2.03-3.1 7.3.85 8.82z"/>
+    </svg>
+    <span class="text-left leading-tight">
+      <span class="block text-[0.65rem] uppercase tracking-wide opacity-80">Download on the</span>
+      <span class="block text-base font-semibold">App Store</span>
+    </span>
+  </a>
+
+  <a
+    href={STORE.googlePlay}
+    target="_blank"
+    rel="noopener"
+    class="group inline-flex items-center gap-3 rounded-xl bg-ink px-5 py-3 text-cream transition hover:bg-coffee"
+    aria-label="Get it on Google Play"
+  >
+    <svg viewBox="0 0 512 512" class="h-7 w-7" aria-hidden="true">
+      <path fill="#00d3ff" d="M48 59.49c0-9.7 5.78-18.06 14.1-21.79L289.94 256 62.1 474.3C53.78 470.56 48 462.2 48 452.5z"/>
+      <path fill="#00f076" d="M62.1 37.7A23.9 23.9 0 0 1 84.6 38l266.3 149.1-60.96 68.9z"/>
+      <path fill="#ffce00" d="M412.9 218.1c15.4 8.6 15.4 30.8 0 39.4l-62 34.7-60.96-36.2 60.96-68.9z"/>
+      <path fill="#ff3d44" d="M84.6 474a23.9 23.9 0 0 1-22.5.3L289.94 256l60.96 36.2z"/>
+    </svg>
+    <span class="text-left leading-tight">
+      <span class="block text-[0.65rem] uppercase tracking-wide opacity-80">Get it on</span>
+      <span class="block text-base font-semibold">Google Play</span>
+    </span>
+  </a>
+</div>

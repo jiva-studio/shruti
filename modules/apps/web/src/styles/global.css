@@ -1,0 +1,69 @@
+@import "@fontsource/literata/400.css";
+@import "@fontsource/literata/600.css";
+@import "@fontsource/literata/700.css";
+@import "@fontsource/manrope/400.css";
+@import "@fontsource/manrope/500.css";
+@import "@fontsource/manrope/600.css";
+@import "@fontsource/manrope/700.css";
+
+@import "tailwindcss";
+@import "./tokens.css";
+
+@theme {
+  --color-cream: var(--ion-background-color);
+  --color-cream-deep: var(--ion-color-step-50);
+  --color-surface: var(--ion-color-light);
+  --color-ink: var(--ion-text-color);
+  --color-ink-soft: var(--ion-color-medium);
+  --color-medium: var(--ion-color-medium);
+  --color-line: var(--ion-border-color);
+
+  --color-saffron: var(--ion-color-primary);
+  --color-saffron-shade: var(--ion-color-primary-shade);
+  --color-saffron-tint: var(--ion-color-primary-tint);
+  --color-moss: var(--ion-color-secondary);
+  --color-coffee: var(--ion-color-tertiary);
+  --color-honey: var(--ion-color-warning);
+  --color-leaf: var(--ion-color-success);
+  --color-crimson: var(--ion-color-danger);
+
+  --font-serif: "Literata", Georgia, "Times New Roman", serif;
+  --font-sans: "Manrope", system-ui, -apple-system, sans-serif;
+
+  --radius-card: 16px;
+}
+
+html {
+  color-scheme: light dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-serif);
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-saffron) 28%, transparent);
+}
+
+.dots-spinner {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: lts-spin 0.75s linear infinite;
+}
+@keyframes lts-spin {
+  to { transform: rotate(360deg); }
+}
