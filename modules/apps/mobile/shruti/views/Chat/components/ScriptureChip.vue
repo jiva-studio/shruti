@@ -7,7 +7,11 @@
     @click="$emit('tap')"
     @keydown.enter.space.prevent="$emit('tap')"
   >
-    <IconBook2 :size="14" stroke="1.75" class="scripture-chip-icon" />
+    <span class="scripture-chip-icon">
+      <slot name="icon">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 4v16h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12" /><path d="M19 16h-12a2 2 0 0 0 -2 2" /><path d="M9 8h6" /></svg>
+      </slot>
+    </span>
     <span class="scripture-chip-caption" :style="{ maxWidth: captionMaxWidth }">{{ caption }}</span>
   </span>
 </template>
@@ -15,9 +19,10 @@
 <script setup lang="ts">
 // Inline pill shown when a verse / chapter citation has no block body yet
 // (pre-feature history, or the payload hasn't streamed). Shared by VerseCard
-// and ChapterCard — they only differ in the caption's max width.
-import { IconBook2 } from "@tabler/icons-vue"
-
+// and ChapterCard — they only differ in the caption's max width. The icon
+// defaults to an inline SVG (no icon-library dependency, so the component is
+// reusable outside the Ionic/@tabler app); a parent may override via the
+// `icon` slot.
 withDefaults(
   defineProps<{
     caption: string
