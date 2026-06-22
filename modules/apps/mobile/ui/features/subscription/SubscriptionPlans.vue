@@ -177,20 +177,20 @@ function onSubscribeClick(): void {
   background: var(--ion-background-color);
 }
 .plan {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   border-radius: 12px;
   --border-radius: 12px;
-  --min-height: 56px;
-  --padding-top: 6px;
-  --padding-bottom: 6px;
+  --min-height: 42px;
+  --padding-top: 2px;
+  --padding-bottom: 2px;
   cursor: pointer;
 }
 .plan-icon {
-  margin-inline-end: 12px;
+  margin-inline-end: 10px;
   color: var(--ion-color-warning);
 }
 .cta {
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   --box-shadow: none;
   --border-radius: 12px;
 }
@@ -199,11 +199,11 @@ function onSubscribeClick(): void {
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 .plan p {
-  margin: 2px 0 0;
-  font-size: 0.88rem;
+  margin: 1px 0 0;
+  font-size: 0.8rem;
 }
 .trial-badge {
   flex: 0 0 auto;

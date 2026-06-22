@@ -48,7 +48,7 @@ interface NoteAudioRef extends ExcerptRef {
   readonly trackId: string
 }
 
-const props = defineProps<{ note: NoteAudioRef }>()
+const props = defineProps<{ note: NoteAudioRef; active?: boolean }>()
 
 const rootEl = useTemplateRef<HTMLDivElement>("rootEl")
 const waveformEl = useTemplateRef<HTMLDivElement>("waveformEl")
@@ -84,6 +84,7 @@ const {
   cachedUrl,
   resolveUrl: resolveExcerptUrl,
   logLabel: "notes-inline-player",
+  active: () => props.active ?? true,
 })
 </script>
 
