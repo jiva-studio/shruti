@@ -1,6 +1,4 @@
 import { computed, onBeforeUnmount, onMounted, ref, type ComputedRef, type Ref } from "vue"
-import { buildServerUrl } from "@lib/domain/servers.js"
-import { useLectorium } from "@lectorium/lectorium.js"
 import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@lectorium/services/pollUntilReady.js"
 import {
   WAVEFORM_RAW_PEAKS,
@@ -89,6 +87,18 @@ export interface UseExcerptWaveformOptions {
   /** Template ref to the bars container — measured so the visible bar
    *  count tracks the available width instead of being fixed. */
   readonly waveformEl: Ref<HTMLElement | undefined | null>
+  /** Produce (or resolve the cached) excerpt URL for the given window.
+   *  The mobile app wires this to `shareAudioService.cut`; the web supplies
+   *  its own POST adapter. `ready:false` means the excerpt is still being
+   *  generated and the caller must HEAD-poll the URL before playing. */
+  readonly cut: (args: {
+    sourceKey: string
+    startMs: number
+    endMs: number
+    excerptId: string
+  }) => Promise<{ url: string; ready: boolean }>
+  /** Predict the public CDN URL for an excerpt id without invoking `cut`. */
+  readonly predictUrl: (noteId: string) => string
 }
 
 export interface UseExcerptWaveformReturn {
@@ -123,7 +133,6 @@ export interface UseExcerptWaveformReturn {
  * HTMLAudioElement, only the data that paints the waveform under it.
  */
 export function useExcerptWaveform(opts: UseExcerptWaveformOptions): UseExcerptWaveformReturn {
-  const app = useLectorium()
   const { rootEl } = opts
   // Read the ref FRESH on every access — never snapshot it. The consumer
   // may rebuild it each render with an async-filled `sourceKey`; a captured
@@ -149,13 +158,13 @@ export function useExcerptWaveform(opts: UseExcerptWaveformOptions): UseExcerptW
   let observer: IntersectionObserver | null = null
 
   function predictedExcerptUrl(): string {
-    return buildServerUrl(app.activeServer.value, `public/shares/audio/${getRef().noteId}.mp3`)
+    return opts.predictUrl(getRef().noteId)
   }
 
   async function resolveExcerptUrl(): Promise<string> {
     if (cachedUrl) return cachedUrl
     const r = getRef()
-    const result = await app.shareAudioService.cut({
+    const result = await opts.cut({
       sourceKey: r.sourceKey,
       startMs: r.timeStart,
       endMs: r.timeEnd,

@@ -3,13 +3,15 @@
        CitationCard directly, with the same fire-and-send chips used for
        answer follow-ups below it. -->
   <div v-if="message.focus" class="focus-row" :data-message-id="message.id">
-    <CitationCard
+    <CitationCardContainer
       :track-id="message.focus.trackId"
       :start-ms="message.focus.startMs"
       :end-ms="message.focus.endMs"
       :body="{ text: message.focus.text }"
     />
-    <StatusPill v-if="focusLoading" status-key="picking_questions" />
+    <StatusPill v-if="focusLoading" :status-label="t('chat.status.picking_questions')">
+      <template #spinner><IonSpinner name="dots" aria-hidden="true" /></template>
+    </StatusPill>
     <ChatChips v-else :items="focusChips" align="end" @pick="$emit('send-suggestion', $event)" />
   </div>
   <div v-else :class="['bubble-row', message.role]" :data-message-id="message.id">
@@ -41,11 +43,12 @@
         <StatusPill
           v-if="message.streaming"
           :class="{ 'pill-after-content': message.content.length > 0 }"
-          :status-key="message.statusKey"
-          :params="message.statusParams"
+          :status-label="streamingStatusLabel"
           :research-questions="message.researchQuestions"
           :research-sources="message.researchSources"
-        />
+        >
+          <template #spinner><IonSpinner name="dots" aria-hidden="true" /></template>
+        </StatusPill>
         <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
           errorSuffix
         }}</span>
@@ -66,13 +69,14 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
+import { IonSpinner } from "@ionic/vue"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import type { ChatMessage } from "@lectorium/stores/useChatStore.js"
 import ChatMessageActions from "./ChatMessageActions.vue"
 import ChatTokenRenderer from "./ChatTokenRenderer.vue"
 import StatusPill from "./StatusPill.vue"
 import InlineNotice from "@ui/shared/InlineNotice.vue"
-import CitationCard from "./CitationCard.vue"
+import CitationCardContainer from "./CitationCardContainer.vue"
 import ChatChips from "./ChatChips.vue"
 import { useChatExportMarkdown } from "../composables/useChatExportMarkdown.js"
 import { useChatMessageStatus } from "../composables/useChatMessageStatus.js"
@@ -109,8 +113,16 @@ const emit = defineEmits<{
   "send-suggestion": [text: string]
 }>()
 
-const { tm } = useI18n()
+const { t, te, tm } = useI18n()
 const appLanguage = useAppLanguage()
+
+// The status label is resolved here (the container) so StatusPill stays a
+// pure view that only renders the string it's given.
+const streamingStatusLabel = computed(() => {
+  const k = props.message.statusKey
+  const path = k ? `chat.status.${k}` : null
+  return path && te(path) ? t(path, props.message.statusParams ?? {}) : t("chat.status.thinking")
+})
 
 // Focus-message discussion chips: server-generated when available, else the
 // static i18n fallback. Empty array hides the row (loading pill shows first).

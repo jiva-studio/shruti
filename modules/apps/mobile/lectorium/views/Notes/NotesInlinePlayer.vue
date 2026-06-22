@@ -7,9 +7,14 @@
       :disabled="isPreparing"
       @click="onToggle"
     >
-      <IonSpinner v-if="isPreparing" name="crescent" class="play-btn-spinner" />
-      <IconPlayerPauseFilled v-else-if="isPlaying" :size="16" />
-      <IconPlayerPlayFilled v-else :size="16" />
+      <span v-if="isPreparing" class="play-btn-spinner"><slot name="spinner" /></span>
+      <svg v-else-if="isPlaying" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+        <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+      </svg>
+      <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" />
+      </svg>
     </button>
     <div ref="waveformEl" class="waveform" aria-hidden="true" @click="onWaveformClick">
       <span
@@ -39,8 +44,6 @@
 
 <script setup lang="ts">
 import { useTemplateRef } from "vue"
-import { IonSpinner } from "@ionic/vue"
-import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useExcerptAudioPlayer } from "@lectorium/composables/useExcerptAudioPlayer.js"
 import { useExcerptWaveform, type ExcerptRef } from "./useExcerptWaveform.js"
 
@@ -48,7 +51,17 @@ interface NoteAudioRef extends ExcerptRef {
   readonly trackId: string
 }
 
-const props = defineProps<{ note: NoteAudioRef; active?: boolean }>()
+const props = defineProps<{
+  note: NoteAudioRef
+  active?: boolean
+  cut: (args: {
+    sourceKey: string
+    startMs: number
+    endMs: number
+    excerptId: string
+  }) => Promise<{ url: string; ready: boolean }>
+  predictUrl: (noteId: string) => string
+}>()
 
 const rootEl = useTemplateRef<HTMLDivElement>("rootEl")
 const waveformEl = useTemplateRef<HTMLDivElement>("waveformEl")
@@ -61,6 +74,8 @@ const { peaks, cachedUrl, resolveExcerptUrl } = useExcerptWaveform({
   ref: () => props.note,
   rootEl,
   waveformEl,
+  cut: props.cut,
+  predictUrl: props.predictUrl,
 })
 
 const {

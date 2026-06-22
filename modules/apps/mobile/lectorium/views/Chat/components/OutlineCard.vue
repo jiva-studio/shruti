@@ -12,20 +12,13 @@
       </li>
     </ul>
     <button v-if="hidden > 0" type="button" class="expand" @click="expanded = true">
-      {{ $t("chat.outlineMore", { n: hidden }) }}
+      <slot name="more" :n="hidden">+{{ hidden }}</slot>
     </button>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue"
-import router from "@lectorium/router/index.js"
-import { useLectorium } from "@lectorium/lectorium.js"
-import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
-import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
-import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
-import type { TrackId } from "@lib/domain/core.js"
+import { computed, ref } from "vue"
 
 interface OutlineItem {
   readonly startMs: number
@@ -35,6 +28,9 @@ interface OutlineItem {
 const props = defineProps<{
   trackId: string
   items: readonly OutlineItem[]
+  /** Resolved lecture title. Supplied by the parent (it owns the track-title
+   *  load + content-language resolution). Empty/omitted hides the header. */
+  trackTitle?: string
 }>()
 
 /** Tap on a chapter. Carries the item itself + the next item (for end-of-
@@ -49,16 +45,12 @@ const emit = defineEmits<{
       nextItem: OutlineItem | null
     },
   ]
+  /** Tap on the header → open the lecture. The parent navigates. */
+  "open-lecture": [args: { trackId: string; startMs: number }]
 }>()
-
-// Singleton import — see NotesView.controller for the why.
-const app = useLectorium()
-const appLanguage = useAppLanguage()
-const libraryLanguages = useLibraryLanguages()
 
 const COLLAPSED_LIMIT = 7
 const expanded = ref(false)
-const trackTitle = ref<string>("")
 
 const hidden = computed(() =>
   expanded.value ? 0 : Math.max(0, props.items.length - COLLAPSED_LIMIT)
@@ -67,25 +59,20 @@ const visibleItems = computed(() =>
   expanded.value ? props.items : props.items.slice(0, COLLAPSED_LIMIT)
 )
 
-async function loadTitle(): Promise<void> {
-  try {
-    const t = await app.repositories().tracks.getById(props.trackId as TrackId)
-    if (t) {
-      const contentLang = preferredContentLanguage(t, libraryLanguages.value, appLanguage.value)
-      trackTitle.value = resolveTrackTitle(t, contentLang ?? appLanguage.value) ?? ""
-    }
-  } catch {
-    /* keep empty — header still renders the "Оглавление" label */
-  }
+// Local mm:ss / h:mm:ss formatter (no @lectorium dependency). Zero-pads M
+// and S for tabular alignment; H stays unpadded.
+function formatTimestamp(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "00:00"
+  const s = Math.floor(ms / 1000)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
 }
 
 function openLecture(startMs: number): void {
-  // TrackView already handles `resumeFromMs` query — used by CitationChip.
-  void router.push({
-    name: "track",
-    params: { trackId: props.trackId },
-    query: startMs > 0 ? { resumeFromMs: String(startMs) } : undefined,
-  })
+  emit("open-lecture", { trackId: props.trackId, startMs })
 }
 
 /** User tapped chapter `i` → notify the controller. The controller owns
@@ -96,9 +83,6 @@ function onPickChapter(i: number): void {
   const next = props.items[i + 1] ?? null
   emit("pick-chapter", { trackId: props.trackId, item: it, nextItem: next })
 }
-
-onMounted(loadTitle)
-watch(() => props.trackId, loadTitle)
 </script>
 
 <style scoped>

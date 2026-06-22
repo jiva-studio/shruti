@@ -9,7 +9,7 @@
       markdown through this path, swap in a DOMPurify pass first.
     -->
     <span v-if="token.kind === 'text'" v-html="token.html" />
-    <CitationCard
+    <CitationCardContainer
       v-else-if="token.kind === 'cite'"
       :track-id="token.trackId"
       :start-ms="token.startMs"
@@ -19,7 +19,7 @@
       @activate="onActivateCite(token)"
     />
     <TrackList v-else-if="token.kind === 'cards'" :track-ids="token.trackIds" />
-    <OutlineCard
+    <OutlineCardContainer
       v-else-if="token.kind === 'outline'"
       :track-id="token.trackId"
       :items="message.outlines?.[token.trackId]?.items ?? []"
@@ -66,7 +66,11 @@
       :tokens="token.tokens"
       :caption="token.caption"
       :body="message.verses?.[`${token.sourceId}|${token.tokens}`]"
-    />
+      :locale="locale"
+      :resolve-audio-url="resolveAudioUrl"
+    >
+      <template #spinner><IonSpinner name="crescent" class="verse-play-spin" /></template>
+    </VerseCard>
     <ChapterCard
       v-else-if="token.kind === 'chapter'"
       :source-id="token.sourceId"
@@ -74,7 +78,15 @@
       :caption="token.caption"
       :body="message.chapters?.[`${token.sourceId}|${token.regionToken}`]"
     />
-    <MediaCard v-else-if="token.kind === 'media'" :payload="message.media?.[token.mediaId]" />
+    <MediaCard
+      v-else-if="token.kind === 'media'"
+      :payload="message.media?.[token.mediaId]"
+      :resolve-url="storagePublicUrlGet"
+    >
+      <template #play-icon="{ size }"><IconPlayerPlayFilled :size="size" /></template>
+      <template #pause-icon="{ size }"><IconPlayerPauseFilled :size="size" /></template>
+      <template #expand-icon="{ size }"><IconChevronDown :size="size" /></template>
+    </MediaCard>
     <CommentaryCard
       v-else-if="token.kind === 'commentary'"
       :body="message.commentaries?.[String(token.ref)]"
@@ -113,16 +125,21 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { useI18n } from "vue-i18n"
+import { IonSpinner } from "@ionic/vue"
+import { IconChevronDown, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import router from "@lectorium/router/index.js"
 import { parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
+import { useCachedExcerptUrl } from "@lectorium/composables/useCachedExcerptUrl.js"
+import { useLectorium } from "@lectorium/lectorium.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@lectorium/stores/useChatStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { CitationCoords } from "../composables/useCitationMeta.js"
 import AccentFrame from "./AccentFrame.vue"
-import CitationCard from "./CitationCard.vue"
+import CitationCardContainer from "./CitationCardContainer.vue"
 import CitationActionSheet from "./CitationActionSheet.vue"
 import TrackList from "./TrackList.vue"
-import OutlineCard from "./OutlineCard.vue"
+import OutlineCardContainer from "./OutlineCardContainer.vue"
 import VerseCard from "./VerseCard.vue"
 import ChapterCard from "./ChapterCard.vue"
 import MediaCard from "./MediaCard.vue"
@@ -146,6 +163,16 @@ defineEmits<{
 }>()
 
 const chat = useChatStore()
+const app = useLectorium()
+const { locale } = useI18n()
+
+// Verse recitation: download-once / play-from-disk excerpt cache. The card
+// hands over the raw URL; we resolve it to a local file URI.
+const { resolve: resolveCachedUrl } = useCachedExcerptUrl()
+const resolveAudioUrl = (u: string): Promise<string> => resolveCachedUrl(() => u)
+
+// MediaCard turns a relative storage path into the active server's CDN URL.
+const storagePublicUrlGet = (path: string): string => app.storagePublicUrl.get(path)
 
 const tokens = computed(() => {
   if (props.message.role !== "assistant") return []
@@ -232,6 +259,15 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 </script>
 
 <style scoped>
+/* Verse recitation spinner, passed into VerseCard's #spinner slot. The
+ * slotted node renders in this (the parent's) scope, so the size styling
+ * lives here. */
+.verse-play-spin {
+  width: 12px;
+  height: 12px;
+  --color: var(--ion-color-primary);
+}
+
 /* Library document citation — styled blockquote rendered between text
  * tokens. */
 .chat-quote {

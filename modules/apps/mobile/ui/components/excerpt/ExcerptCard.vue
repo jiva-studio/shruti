@@ -26,7 +26,7 @@
 
 <script lang="ts" setup>
 import { computed } from "vue"
-import { HighlightText } from "@ui/primitives/index.js"
+import HighlightText from "@ui/primitives/HighlightText.vue"
 
 /**
  * Presentational excerpt body shared by the Notes list and the chat

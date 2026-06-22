@@ -5,7 +5,7 @@
     aria-live="polite"
     :style="tickerWidth !== null ? { '--ticker-width': tickerWidth + 'px' } : undefined"
   >
-    <IonSpinner class="spinner" name="dots" aria-hidden="true" />
+    <span class="spinner" aria-hidden="true"><slot name="spinner" /></span>
     <div class="ticker">
       <Transition name="ticker-slide">
         <span :key="currentItem" class="label visible">{{ currentItem }}</span>
@@ -25,8 +25,6 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue"
-import { useI18n } from "vue-i18n"
-import { IonSpinner } from "@ionic/vue"
 import type { ChatResearchSource } from "@lectorium/stores/useChatStore"
 
 /* -------------------------------------------------------------------------- */
@@ -34,11 +32,9 @@ import type { ChatResearchSource } from "@lectorium/stores/useChatStore"
 /* -------------------------------------------------------------------------- */
 
 const props = defineProps<{
-  /** i18n key under `chat.status.<key>`. Server emits via `status` SSE
-   *  (`searching_corpus`, `composing_answer`, …). Unknown keys fall
-   *  back to "thinking" — keeps the pill alive on a server feature-drop. */
-  statusKey?: string
-  params?: Readonly<Record<string, string | number>>
+  /** Already-localised status label — the parent (container) owns the i18n
+   *  lookup of `chat.status.<key>`, so this component stays a pure view. */
+  statusLabel?: string
   /** Live `research_question` events accumulated on the streaming bubble.
    *  Folded into the ticker pool so the user sees what's being explored. */
   researchQuestions?: readonly string[]
@@ -50,8 +46,6 @@ const props = defineProps<{
 /*  Ticker pool                                                               */
 /* -------------------------------------------------------------------------- */
 
-const { t, te } = useI18n()
-
 const MAX_ITEM_CHARS = 56
 const ROTATE_INTERVAL_MS = 1800
 
@@ -61,16 +55,7 @@ function trim(s: string): string {
   return v.slice(0, MAX_ITEM_CHARS - 1).trimEnd() + "…"
 }
 
-// Always falls back to "thinking" — empty pill (just dots, no label)
-// looked broken in the brief gap between assistant-placeholder and the
-// first `status` event arriving. Better to show a baseline label the
-// whole time the pill is mounted.
-const statusLabel = computed(() => {
-  const key = props.statusKey
-  const path = key ? `chat.status.${key}` : null
-  if (path && te(path)) return t(path, (props.params ?? {}) as Record<string, unknown>)
-  return t("chat.status.thinking")
-})
+const statusLabel = computed(() => props.statusLabel ?? "")
 
 // Combined pool: status label first (the "default" item), then research
 // questions, then source labels. Source labels are already short-ish but

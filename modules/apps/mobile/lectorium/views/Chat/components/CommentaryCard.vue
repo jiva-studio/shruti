@@ -13,7 +13,23 @@
     </AutoHeight>
   </AccentFrame>
 
-  <TranslationNotice v-if="body && isMt" v-model:show-original="showOriginal" />
+  <!--
+    Machine-translation toggle. The notice chrome (badge + "view original /
+    translated" labels) is i18n-bearing, so it is rendered through a slot the
+    parent owns: the app passes `TranslationNotice` (its default below, which
+    reads global `$t`); a runtime without vue-i18n (web) can supply its own
+    label-bearing chrome. Either way CommentaryCard only owns the toggle STATE
+    and the `update:showOriginal` event.
+  -->
+  <slot
+    v-if="body && isMt"
+    name="translation-notice"
+    :show-original="showOriginal"
+    :toggle="toggleShowOriginal"
+    :set-show-original="setShowOriginal"
+  >
+    <TranslationNotice :show-original="showOriginal" @update:show-original="setShowOriginal" />
+  </slot>
 </template>
 
 <script setup lang="ts">
@@ -32,11 +48,27 @@ const props = defineProps<{
   body?: ChatCommentaryBody
 }>()
 
+const emit = defineEmits<{
+  /** Fired when the user flips the machine-translation toggle. The card keeps
+   *  its own toggle state internally; this is a notification for parents that
+   *  want to react (e.g. persist the preference). */
+  (e: "update:showOriginal", value: boolean): void
+}>()
+
 const body = computed(() => props.body ?? null)
 
 // Translation toggle (show original ↔ machine translation), shared with
-// CitationCard.
+// CitationCard. `useTranslatable` is a pure vue-ref view-behavior hook (no
+// store / i18n / io), so it stays inside the view.
 const { isMt, showOriginal, displayText } = useTranslatable(() => body.value)
+
+function setShowOriginal(value: boolean): void {
+  showOriginal.value = value
+  emit("update:showOriginal", value)
+}
+function toggleShowOriginal(): void {
+  setShowOriginal(!showOriginal.value)
+}
 
 /** Comment text rendered through the same markdown pipeline the chat bubble
  *  uses, so bold / italic / code and `>` block quotes (a śloka quoted inside
