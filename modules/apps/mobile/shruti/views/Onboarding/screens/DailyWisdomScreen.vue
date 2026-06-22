@@ -14,6 +14,7 @@
         :start-ms="wisdom.startMs"
         :end-ms="wisdom.endMs"
         :body="{ text: wisdom.text }"
+        :active="active"
       />
     </div>
 
