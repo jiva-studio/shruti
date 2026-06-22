@@ -27,20 +27,6 @@ export default {
   },
   paywall: {
     title: "Mais recursos com Pro",
-    shots: {
-      chat: "Pergunte ao Sadhu",
-      library: "Milhares de palestras",
-      transcript: "Transcrições para acompanhar",
-      notes: "Marcadores e notas",
-      home: "Acompanhe seu progresso",
-    },
-    shotDesc: {
-      chat: "Faça qualquer pergunta espiritual, respondida pelas palestras e escrituras.",
-      library: "Organizadas por tema, livro e autor.",
-      transcript: "Acompanhe o texto enquanto ouve, palavra por palavra.",
-      notes: "Salve os momentos marcantes e faça anotações.",
-      home: "Mantenha sua sequência e continue de onde parou.",
-    },
     later: "Mais tarde",
   },
   finish: "Começar a ouvir",

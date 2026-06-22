@@ -3,7 +3,13 @@ import { contentLanguageFor, type CaptureLocale } from "./config.js"
 
 export interface Scenario {
   name: string
-  route: "/tabs/home" | "/tabs/search" | "/tabs/search/tracks" | "/tabs/notes" | "/tabs/chat"
+  route:
+    | "/tabs/home"
+    | "/tabs/search"
+    | "/tabs/search/tracks"
+    | "/tabs/notes"
+    | "/tabs/chat"
+    | "/tabs/settings"
   waitFor: string
   settle?: number
   beforeCapture?: (page: Page, code: CaptureLocale) => Promise<void>
@@ -31,6 +37,7 @@ declare global {
         openTrackSheet: (trackId: string) => void
         setPlayerState: (trackId: string, positionMs: number) => Promise<void>
         setLocale: (loc: "en" | "ru") => void
+        setSubscription: (value: "free" | "pro" | "default") => void
       }
     }
   }
@@ -188,6 +195,29 @@ async function openTrackSheet(page: Page, code: CaptureLocale): Promise<void> {
     .waitFor({ state: "visible", timeout: 10_000 })
 }
 
+async function openSmartLibrary(page: Page): Promise<void> {
+  // The Smart Library entry is Pro-gated (tapping it opens the paywall when
+  // not subscribed). Force a subscribed state via the debug bridge so the tap
+  // opens the dialog, then tap the row. The dialog is an IonModal.
+  await page.evaluate(() => window.__shruti!.debug!.setSubscription("pro"))
+  await page.locator("[data-testid=settings-smart-library]").click()
+  await page
+    .locator("ion-modal.smart-library-dialog")
+    .waitFor({ state: "visible", timeout: 10_000 })
+}
+
+async function scrollToPlaybackSettings(page: Page): Promise<void> {
+  // The "and much more" slide bundles continuous playback (Autoplay), auto
+  // scroll and the track-info layout — the three Pro rows at the bottom of the
+  // appearance section. Pin the first of them (Autoplay) to the top of the
+  // viewport so the top-cropped slide shows all three with their PRO badges,
+  // not the account rows.
+  await page.locator("[data-testid=settings-track-info]").scrollIntoViewIfNeeded()
+  await page
+    .locator("[data-testid=settings-autoplay]")
+    .evaluate((el) => el.scrollIntoView({ block: "start" }))
+}
+
 // The `NN_` filename prefix sets the order screenshots appear in the stores
 // (App Store / Play sort by filename), independent of this array's order.
 // Display order: home → search → chat → transcript → track → notes → library → filters.
@@ -276,5 +306,23 @@ export const scenarios: Scenario[] = [
     waitFor: "ion-modal.track-sheet .sheet-actions",
     settle: 700,
     beforeCapture: openTrackSheet,
+  },
+  // These two don't ship to the stores — they feed the in-app subscription /
+  // onboarding paywall screenshot strip (public/onboarding/<lang>/<name>.webp,
+  // downscaled from the raw capture). They have no frame/titles.json headline,
+  // so frame.spec skips them and fastlane never uploads them.
+  {
+    name: "smartLibrary",
+    route: "/tabs/settings",
+    waitFor: "ion-modal.smart-library-dialog",
+    settle: 500,
+    beforeCapture: openSmartLibrary,
+  },
+  {
+    name: "more",
+    route: "/tabs/settings",
+    waitFor: "[data-testid=settings-autoplay]",
+    settle: 400,
+    beforeCapture: scrollToPlaybackSettings,
   },
 ]

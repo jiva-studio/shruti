@@ -74,21 +74,27 @@ export default {
     thanks:
       "Danke für dein Abonnement und deine Unterstützung 🙏 Möge dein Herz von Glück erfüllt sein und dich jeder Tag der Wahrheit näherbringen. Wir freuen uns, dass du auf diesem Weg bei uns bist.",
     benefits: {
+      progress: {
+        title: "Verfolge deinen Fortschritt",
+        description: "Verfolge deine Hör-Serie und mach dort weiter, wo du aufgehört hast.",
+      },
+      andMore: {
+        title: "Und vieles mehr",
+        description: "Fortlaufende Wiedergabe, Teilen, das Notizen-Studio und vieles mehr.",
+      },
       intro:
         "Wir entwickeln neue Funktionen und Verbesserungen. Deine Unterstützung hilft uns, die Entwicklung fortzusetzen und das Produkt besser zu machen.",
       benefit0: {
         title: "Neue Vorträge",
-        description: "Dein Abonnement hilft uns, weiterhin neue Vorträge hinzuzufügen.",
+        description: "Dein Abonnement hilft uns, neue Vorträge hinzuzufügen.",
       },
       benefit1: {
         title: "Lesezeichen",
-        description:
-          "Speichere wichtige Momente aus Text und Audio von Vorträgen, um später darauf zurückzukommen oder sie mit Freunden zu teilen.",
+        description: "Speichere wichtige Momente eines Vortrags zum Wiederfinden oder Teilen.",
       },
       benefit2: {
         title: "Intelligente Bibliothek",
-        description:
-          "Die App hält frische Vorträge auf deinem Gerät bereit und entfernt automatisch die zu Ende gehörten.",
+        description: "Hält frische Vorträge auf dem Gerät und entfernt gehörte automatisch.",
       },
       benefit3: {
         title: "Seminare und Kurse",
@@ -102,13 +108,11 @@ export default {
       },
       sakha: {
         title: "Frag Sadhu",
-        description:
-          "Durchsucht Vorträge, Audio und Bücher, findet Ślokas, erstellt PDFs und hilft dir, die Lehren zu verstehen. Mit einem Abonnement gibt es ein größeres tägliches Kontingent.",
+        description: "Durchsucht Vorträge, Audio und Bücher und erklärt die Lehren.",
       },
       autoScroll: {
         title: "Automatisches Scrollen",
-        description:
-          "Das Transkript folgt der Audiowiedergabe, sodass der aktuelle Absatz immer im Blick ist.",
+        description: "Das Transkript folgt dem Audio, der aktuelle Absatz bleibt im Blick.",
       },
       continuousPlayback: {
         title: "Durchgehende Wiedergabe",

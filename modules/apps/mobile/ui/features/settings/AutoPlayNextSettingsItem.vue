@@ -1,5 +1,5 @@
 <template>
-  <IonItem lines="none">
+  <IonItem lines="none" data-testid="settings-autoplay">
     <IconChip slot="start">
       <IconPlayerTrackNextFilled :size="22" />
     </IconChip>
