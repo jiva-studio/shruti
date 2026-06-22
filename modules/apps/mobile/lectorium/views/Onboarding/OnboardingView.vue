@@ -45,10 +45,8 @@
             :is-subscribed="subscription.isSubscribed"
             :ready="subscription.ready"
             :purchasing="subscription.purchasing"
-            :show-cant-pay="subscription.showCantPay"
             @subscribe="subscription.onSubscribe"
             @manage="subscription.onManage"
-            @cant-pay="subscription.onCantPay"
           />
           <IonButton
             v-else

@@ -52,12 +52,12 @@ async function load(): Promise<void> {
     const repos = app.repositories()
     const langs = libraryLanguages.value as LanguageCode[]
     const seeds = props.topicIds.slice(0, 4) as TopicId[]
-    // Picked topics → lectures from those topics. Nothing picked → seed from the
-    // featured "for beginners" collection so the user still gets a real start.
-    const ids =
-      seeds.length > 0
-        ? await trackIdsForTopics(repos, seeds, langs)
-        : await beginnerTrackIds(repos, langs)
+    // Picked topics → lectures from those topics. Fall back to the featured
+    // "for beginners" collection when nothing was picked OR the picked topics
+    // have no lectures in the user's library language, so the screen is never
+    // empty.
+    let ids = seeds.length > 0 ? await trackIdsForTopics(repos, seeds, langs) : []
+    if (ids.length === 0) ids = await beginnerTrackIds(repos, langs)
     const byId = await repos.tracks.getByIds(ids)
     const out: Track[] = []
     for (const id of ids) {
@@ -125,7 +125,10 @@ async function seedPlaylist(): Promise<void> {
 }
 
 onMounted(load)
-watch(() => props.topicIds, load)
+// Reload on topic change, and again when the user reaches the value flow
+// (`seed`) — by then the content DB is open and the picks have propagated, so a
+// load that no-op'd on the very first paint gets a real result.
+watch([() => props.topicIds, () => props.seed], load)
 watch([() => props.seed, tracks], seedPlaylist)
 </script>
 

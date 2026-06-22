@@ -1,3 +1,4 @@
+import "./polyfills.js"
 import { createApp } from "vue"
 import { createPinia } from "pinia"
 import { Capacitor } from "@capacitor/core"

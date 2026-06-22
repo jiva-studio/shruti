@@ -2,6 +2,7 @@
   <div class="ob-paywall">
     <div class="ob-paywall__head">
       <h1 class="ob-paywall__title">{{ $t("onboarding.paywall.title") }}</h1>
+      <p class="ob-paywall__subtitle">{{ $t("onboarding.paywall.subtitle") }}</p>
     </div>
 
     <!-- Real app screenshots show what Pro unlocks: a horizontally scrolling
@@ -94,7 +95,7 @@ const failed = reactive(new Set<string>())
 .ob-paywall {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   /* Fill the slide so the legal links can sit at the bottom, near the footer
      buttons, instead of floating mid-screen. */
   min-height: 100%;
@@ -113,6 +114,12 @@ const failed = reactive(new Set<string>())
   font-size: 1.4rem;
   font-weight: 800;
   color: var(--ion-text-color);
+}
+.ob-paywall__subtitle {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--ion-color-medium);
 }
 .ob-paywall__shots {
   --ob-card-w: clamp(240px, 74vw, 320px);
@@ -151,11 +158,12 @@ const failed = reactive(new Set<string>())
 .ob-paywall__img {
   width: 100%;
   /* Top-crop: show the head of each screen, the rest cut off. */
-  height: clamp(260px, 42vh, 380px);
+  height: clamp(200px, 32vh, 300px);
   object-fit: cover;
   object-position: top center;
   border-radius: 12px;
   border: 1px solid var(--ion-color-step-150, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 .ob-paywall__cap {
   display: flex;
