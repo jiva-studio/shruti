@@ -97,6 +97,16 @@ class Settings(BaseSettings):
     # persistent-cache key, so swapping it via env (e.g. to Claude for
     # Serbian) mints fresh rows without touching old ones. NOT deepseek.
     llm_translate: str = "openrouter/google/gemini-2.5-flash"
+    # Out-of-corpus fallback ("memory-pass"). When the corpus has no relevant
+    # material, answer from the model's general knowledge (clearly disclaimed),
+    # then re-search the corpus on sub-questions derived from that answer and
+    # weave in any genuine hits. A capable Claude is the default — the answer is
+    # user-facing prose on niche doctrine, where the cheap planner models drift.
+    llm_fallback_knowledge: str = "openrouter/anthropic/claude-sonnet-4.6"
+    # Master switch for the memory-pass fallback. Off ⇒ a corpus-insufficient
+    # turn keeps the canned «не нашёл в корпусе» refusal. Per-turn override via
+    # POST /chat body.config.enable_corpus_fallback (like enable_planner).
+    enable_corpus_fallback: bool = True
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.

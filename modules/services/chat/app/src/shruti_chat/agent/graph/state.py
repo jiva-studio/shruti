@@ -24,7 +24,7 @@ from __future__ import annotations
 import operator
 from typing import Annotated, Any, TypedDict
 
-from shruti_chat.research.models import Outline
+from shruti_chat.research.models import Outline, ResearchNote
 
 
 class ChatState(TypedDict, total=False):
@@ -91,3 +91,34 @@ class ChatState(TypedDict, total=False):
     # cited). None when no memory matched. The memory's refs are already folded
     # into `tool_results` as ordinary citable notes.
     memory_note: str | None
+
+    # ── Out-of-corpus fallback (memory-pass) ──────────────────────────
+    # `corpus_insufficient` is set by `synthesis_planner_node` ONLY when the
+    # corpus genuinely had nothing relevant (empty tool_results, or the planner
+    # rejected every note → Outline(theses=[])) — never on planner degradation
+    # (disabled / no-LLM / build failure). `route_after_planner` reads it to
+    # branch into `corpus_fallback`.
+    corpus_insufficient: bool
+    # Set by `corpus_fallback_node` once the memory-pass succeeds. The
+    # synthesizer reads `fallback_mode` to swap the `grounding` section for
+    # `fallback` (disclaimer + faithful draft + opportunistic citations, never
+    # refuse) and renders `fallback_answer` as the answer substance.
+    fallback_mode: bool
+    # "memory" → answered from general knowledge (disclaimer + draft).
+    # "out_of_scope" → question is unrelated to the assistant's domain
+    # (cooking, sports…); the synthesizer politely declines instead.
+    fallback_kind: str
+    # Memory-pass self-assessed certainty ("high"/"medium"/"low") — used only
+    # to calibrate how much the reply hedges, never as a truth gate.
+    fallback_confidence: str | None
+    fallback_answer: str | None
+    # Localized «не нашёл в корпусе, отвечаю по памяти» line. Painted verbatim by
+    # the synthesizer BEFORE the prose (the model can't be trusted to always
+    # reproduce a mandatory disclaimer), so it's guaranteed present + in-language.
+    fallback_disclaimer: str | None
+    # Notes from the fallback re-search (corpus probes derived from the draft
+    # answer, score-floored). Kept SEPARATE from `tool_results` — that field's
+    # append-reducer still holds the rejected junk pool from research_worker,
+    # which the fallback synthesizer must NOT cite. The synthesizer reads these
+    # in place of `tool_results` when `fallback_mode` is set.
+    fallback_notes: list[ResearchNote]

@@ -55,14 +55,29 @@ class _LLM:
 
 @pytest.mark.asyncio
 async def test_empty_tool_results_returns_outline_none_skips_llm():
-    """No notes → planner skips entirely → outline=None → synthesizer
-    falls back to its existing empty-results handling."""
+    """No notes → planner skips entirely → outline=None, and (with the
+    fallback enabled by default) `corpus_insufficient` is flagged so the
+    graph routes into the out-of-corpus memory-pass."""
     llm = _LLM(Outline(theses=[]))
     rt = _Runtime(context=_Ctx(llm=llm))
     state = {"user_query": "q", "lang": "ru", "tool_results": []}
     out = await synthesis_planner_node(state, rt)
-    assert out == {"outline": None}
+    assert out == {"outline": None, "corpus_insufficient": True}
     assert llm.calls == []  # LLM never invoked
+
+
+@pytest.mark.asyncio
+async def test_empty_tool_results_no_flag_when_fallback_disabled():
+    """Per-turn `enable_corpus_fallback: false` → no flag → today's refusal."""
+    llm = _LLM(Outline(theses=[]))
+    rt = _Runtime(context=_Ctx(llm=llm))
+    state = {
+        "user_query": "q", "lang": "ru", "tool_results": [],
+        "config": {"enable_corpus_fallback": False},
+    }
+    out = await synthesis_planner_node(state, rt)
+    assert out == {"outline": None, "corpus_insufficient": False}
+    assert llm.calls == []
 
 
 @pytest.mark.asyncio
@@ -117,3 +132,17 @@ async def test_writes_outline_with_empty_theses_for_refusal():
     assert out["outline"] is not None
     assert out["outline"].theses == []
     assert out["outline"].skipped_reason == "off-topic"
+    # Rejected-all-notes is a relevance miss → flag the memory-pass fallback.
+    assert out["corpus_insufficient"] is True
+
+
+@pytest.mark.asyncio
+async def test_nonempty_theses_clears_corpus_insufficient_flag():
+    """A real plan must NOT trip the fallback flag."""
+    outline = Outline(theses=[Thesis(thesis="t1", supporting_notes=[1])])
+    llm = _LLM(outline)
+    rt = _Runtime(context=_Ctx(llm=llm))
+    state = {"user_query": "q", "lang": "ru",
+             "tool_results": [{"type": "lecture", "text": "x", "score": 0.7, "meta": {}}]}
+    out = await synthesis_planner_node(state, rt)
+    assert "corpus_insufficient" not in out

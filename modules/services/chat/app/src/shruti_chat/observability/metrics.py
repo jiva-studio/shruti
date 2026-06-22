@@ -54,3 +54,26 @@ rate_limit_hits_counter = Counter(
     "Application-layer 429 rate-limit responses, by scope/key/tier",
     labelnames=["scope", "key_type", "tier"],
 )
+
+
+# Increments every time the out-of-corpus memory-pass fallback fires (the
+# corpus had nothing relevant). This IS the corpus-gap signal: each increment
+# is a question the lecture/book corpus couldn't answer, so a rising
+# `kind=memory` rate points curation (pinned/boost/memory attributions) at the
+# topics users actually ask about.
+#
+# Labels:
+#   kind            — `memory` (answered from general knowledge) /
+#                     `out_of_scope` (declined: unrelated to the corpus
+#                     domain) / `degraded` (no LLM / call failed → normal refusal).
+#   confidence      — model's self-assessed certainty `high`/`medium`/`low`
+#                     (`na` for out_of_scope / degraded).
+#   had_corpus_hits — `yes` if the answer-derived re-search surfaced any
+#                     score-floored notes, else `no`.
+#
+# Cardinality bound: 3 kinds × 4 confidences × 2 = 24 series. No user text.
+corpus_fallback_counter = Counter(
+    "shruti_chat_corpus_fallback_total",
+    "Out-of-corpus memory-pass fallbacks, by kind/confidence/corpus-hit",
+    labelnames=["kind", "confidence", "had_corpus_hits"],
+)

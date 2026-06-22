@@ -218,8 +218,17 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         except Exception:  # noqa: BLE001 — language hint must never fail the turn
             lang_name = None
 
+    fallback_mode = bool(state.get("fallback_mode"))
+    fallback_kind = state.get("fallback_kind", "memory")
     sections = _SYNTH_PROMPT_SECTIONS
-    if state.get("intent") == "show_verse":
+    if fallback_mode:
+        # Out-of-corpus turn: swap the strict empty-result refusal (`grounding`)
+        # for the right memory-pass section.
+        #   memory       → `fallback`     (disclaimer + faithful draft + opportunistic cites)
+        #   out_of_scope → `out_of_scope` (politely decline; off-topic for this assistant)
+        repl = "out_of_scope" if fallback_kind == "out_of_scope" else "fallback"
+        sections = tuple(repl if s == "grounding" else s for s in sections)
+    elif state.get("intent") == "show_verse":
         sections = _SYNTH_PROMPT_SECTIONS + ("show_verse",)
     system_prompt = build_prompt(sections, lang=state["lang"], lang_name=lang_name)
     if state.get("intent") == "show_verse":
@@ -232,6 +241,16 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
     writer = get_stream_writer()
     writer({"type": "status", "data": {"key": "composing_answer"}})
 
+    # Paint the localized memory-pass disclaimer deterministically, before the
+    # prose. The model writes it (in the user's language) as `fallback_disclaimer`
+    # — but a prompt-mandated line is dropped intermittently (eval caught the EN
+    # case), so we emit it ourselves to guarantee presence + language. `fallback.md`
+    # tells the model it's already shown, so it won't repeat it.
+    if fallback_mode and fallback_kind == "memory":
+        disclaimer = (state.get("fallback_disclaimer") or "").strip()
+        if disclaimer:
+            writer({"type": "delta", "data": {"text": disclaimer + "\n\n"}})
+
     cb = (
         langfuse_node_callback(ctx.langfuse_trace_id, "synthesizer")
         if ctx.langfuse_trace_id
@@ -243,15 +262,31 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
     # translation no longer stalls the stream). The transport layer
     # (api/chat.py) consumes these via `graph.astream(stream_mode=…)`. The
     # `done` event is left for the chat_turn wrapper (terminal SSE + audit).
+    # In fallback mode the citable pool is the re-searched, score-floored
+    # `fallback_notes` — NOT `tool_results`, which still holds the junk pool
+    # research_worker retrieved and the planner rejected.
+    tool_results = (
+        state.get("fallback_notes", []) if fallback_mode
+        else state.get("tool_results", [])
+    )
+    # Only the `memory` fallback carries a draft; `out_of_scope` declines with
+    # no draft and no notes (its prompt section is self-contained).
+    fallback_answer = (
+        state.get("fallback_answer")
+        if fallback_mode and fallback_kind == "memory"
+        else None
+    )
     events = run_synthesizer_turn(
         state["user_query"],
-        tool_results=state.get("tool_results", []),
+        tool_results=tool_results,
         llm=ctx.llm,
         expander=ctx.expander,
         system_prompt=system_prompt,
         history=state.get("history") or None,
         outline=state.get("outline"),
         memory_note=state.get("memory_note"),
+        fallback_answer=fallback_answer,
+        fallback_confidence=state.get("fallback_confidence") if fallback_mode else None,
         request_id=ctx.request_id,
         callbacks=[cb] if cb is not None else None,
     )
