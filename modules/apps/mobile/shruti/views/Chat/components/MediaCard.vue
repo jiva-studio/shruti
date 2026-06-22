@@ -24,7 +24,7 @@
       />
 
       <button v-if="!playing" class="play-overlay" aria-label="Play" @click.stop="toggle">
-        <IconPlayerPlayFilled :size="30" />
+        <slot name="play-icon" :size="30" />
       </button>
 
       <div class="progress" @click.stop="onSeek">
@@ -43,8 +43,8 @@
         :aria-label="playing ? 'Pause' : 'Play'"
         @click="toggle"
       >
-        <IconPlayerPauseFilled v-if="playing" :size="18" />
-        <IconPlayerPlayFilled v-else :size="18" />
+        <slot v-if="playing" name="pause-icon" :size="18" />
+        <slot v-else name="play-icon" :size="18" />
       </button>
       <div class="progress progress--inline" @click="onSeek">
         <div class="progress-track">
@@ -76,7 +76,7 @@
           :aria-label="expanded ? 'Hide transcript' : 'Show transcript'"
           @click="expanded = !expanded"
         >
-          <IconChevronDown :size="20" />
+          <slot name="expand-icon" :size="20" />
         </button>
       </div>
 
@@ -93,8 +93,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconChevronDown } from "@tabler/icons-vue"
-import { useShruti } from "@shruti/shruti.js"
 import { useAudioSource } from "@shruti/composables/useAudioOrchestrator.js"
 import type { MediaPayload } from "@lib/domain/chatMessage.js"
 import TranslationNotice from "./TranslationNotice.vue"
@@ -104,9 +102,13 @@ const props = defineProps<{
   /** Server-streamed media payload, read off `message.media[token.mediaId]`.
    *  Optional so a not-yet-resolved id renders nothing instead of throwing. */
   payload?: MediaPayload
+  /** Turns a RELATIVE storage path (`payload.url`) into an absolute URL.
+   *  Defaults to identity so the path is used verbatim when the caller
+   *  already supplies absolute URLs (e.g. on the web). The mobile app passes
+   *  `storagePublicUrl.get` to resolve against the active server's CDN. */
+  resolveUrl?: (path: string) => string
 }>()
 
-const app = useShruti()
 const mediaEl = ref<HTMLVideoElement | HTMLAudioElement | null>(null)
 const playing = ref(false)
 const expanded = ref(false)
@@ -126,11 +128,13 @@ const transcriptText = computed<string>(() => {
 })
 
 // `payload.url` is a RELATIVE storage path (e.g. `public/media/<id>.mp4`);
-// resolve to the active server's CDN URL. Poster = same path, `.jpg`.
-const fileUrl = computed(() => (props.payload ? app.storagePublicUrl.get(props.payload.url) : ""))
+// the caller-supplied `resolveUrl` turns it absolute. Poster = same path,
+// `.jpg`.
+const resolve = (path: string): string => (props.resolveUrl ? props.resolveUrl(path) : path)
+const fileUrl = computed(() => (props.payload ? resolve(props.payload.url) : ""))
 const posterUrl = computed(() => {
   if (!props.payload) return ""
-  return app.storagePublicUrl.get(props.payload.url.replace(/\.[^./]+$/, ".jpg"))
+  return resolve(props.payload.url.replace(/\.[^./]+$/, ".jpg"))
 })
 
 const pct = computed(() => `${Math.min(100, Math.max(0, progress.value * 100))}%`)

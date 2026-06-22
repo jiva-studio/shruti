@@ -9,9 +9,14 @@
   -->
   <ScriptureBlock v-if="body">
     <button v-if="audioUrl" type="button" class="verse-play" @click="onToggle">
-      <IonSpinner v-if="isPreparing" name="crescent" class="verse-play-spin" />
-      <IconPlayerPauseFilled v-else-if="isPlaying" :size="13" />
-      <IconPlayerPlayFilled v-else :size="13" />
+      <slot v-if="isPreparing" name="spinner" />
+      <svg v-else-if="isPlaying" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+        <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+        <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+      </svg>
+      <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+        <path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" />
+      </svg>
     </button>
     <header class="verse-card-addr">{{ displayAddr }}</header>
     <p v-if="sanskrit" class="verse-card-sanskrit">{{ sanskrit }}</p>
@@ -55,26 +60,31 @@
 import { computed, ref } from "vue"
 // `showOriginal` toggles the verse translation between the active-locale
 // machine translation and the original English.
-import { IonSpinner } from "@ionic/vue"
-import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
-import { useI18n } from "vue-i18n"
 import type { ChatVerseBody } from "@lib/domain/chatMessage.js"
 import { useExcerptAudioPlayer } from "@shruti/composables/useExcerptAudioPlayer.js"
-import { useCachedExcerptUrl } from "@shruti/composables/useCachedExcerptUrl.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 import ScriptureChip from "./ScriptureChip.vue"
 import ScriptureBlock from "./ScriptureBlock.vue"
 
-const props = defineProps<{
-  sourceId: string
-  tokens: string
-  caption?: string
-  /** Verse body from the message's `verses` map; absent ⇒ chip fallback. */
-  body?: ChatVerseBody
-}>()
-
-const { locale } = useI18n()
+const props = withDefaults(
+  defineProps<{
+    sourceId: string
+    tokens: string
+    caption?: string
+    /** Verse body from the message's `verses` map; absent ⇒ chip fallback. */
+    body?: ChatVerseBody
+    /** Active UI locale; picks the translation/transliteration language. */
+    locale: string
+    /** Maps a raw audio URL to a playable one (cache/io); identity by default. */
+    resolveAudioUrl?: (rawUrl: string) => Promise<string>
+  }>(),
+  {
+    caption: undefined,
+    body: undefined,
+    resolveAudioUrl: (u: string) => Promise.resolve(u),
+  }
+)
 
 const body = computed(() => props.body ?? null)
 
@@ -103,7 +113,7 @@ const transliteration = computed(() => {
 // original English entry exists to flip to.
 const isMt = computed<boolean>(() => {
   const map = body.value?.translation
-  return !!body.value?.mt && !!map && !!map.en && map[locale.value] !== map.en
+  return !!body.value?.mt && !!map && !!map.en && map[props.locale] !== map.en
 })
 // Toggle between the (shown) machine translation and the original English.
 const showOriginal = ref(false)
@@ -114,7 +124,7 @@ const translation = computed(() => {
   // When toggled to the original on a machine-translated verse, render the
   // English entry verbatim.
   if (isMt.value && showOriginal.value && map.en) return map.en
-  const wanted = locale.value
+  const wanted = props.locale
   if (map[wanted]) return map[wanted]
   // Fallback chain: any English text, then the first available.
   if (map.en) return map.en
@@ -134,10 +144,9 @@ const audioUrl = computed(() => body.value?.audioUrl || "")
 // Local URL of the cached recitation; null until the first tap resolves it
 // so the player takes its prepare-then-play (spinner) branch on first play.
 const localUri = ref<string | null>(null)
-const { resolve: resolveCachedUrl } = useCachedExcerptUrl()
 
 async function resolveVerseAudio(): Promise<string> {
-  const url = await resolveCachedUrl(() => audioUrl.value)
+  const url = await props.resolveAudioUrl(audioUrl.value)
   localUri.value = url
   return url
 }

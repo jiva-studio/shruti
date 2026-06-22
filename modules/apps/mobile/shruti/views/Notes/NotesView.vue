@@ -20,8 +20,12 @@
             timeStart: note.timeStart,
             timeEnd: note.timeEnd,
           }"
+          :cut="(a) => shareAudioService.cut(a)"
+          :predict-url="(id) => buildServerUrl(activeServer, 'public/shares/audio/' + id + '.mp3')"
           @click.stop
-        />
+        >
+          <template #spinner><IonSpinner name="crescent" class="play-btn-spinner" /></template>
+        </NotesInlinePlayer>
       </template>
     </NotesList>
 
@@ -45,15 +49,18 @@
 </template>
 
 <script setup lang="ts">
-import { IonActionSheet } from "@ionic/vue"
+import { IonActionSheet, IonSpinner } from "@ionic/vue"
 import { AppPage, PageSticker } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { NotesList } from "@ui/features/notes/index.js"
+import { useShruti } from "@shruti/shruti.js"
+import { buildServerUrl } from "@lib/domain/servers.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useNotesController } from "./NotesView.controller.js"
 import NotesInlinePlayer from "./NotesInlinePlayer.vue"
 
+const { shareAudioService, activeServer } = useShruti()
 const player = usePlayerStore()
 const { rows, isEmpty, query, isActionSheetOpen, actionSheetButtons, onQuery, onNoteClicked } =
   useNotesController()

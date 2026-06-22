@@ -2,23 +2,29 @@
   <!--
     Two render modes, like VerseCard:
       • transcript text known  → full quote card (player + text + attrs)
-      • text absent / not yet  → the small CitationChip, reused as-is.
-    The store read is reactive, so a chip upgrades to the card the moment
-    the `cite_transcript` payload lands (it may arrive after the marker).
+      • text absent / not yet  → a small inline chip fallback.
+    The body is reactive, so a chip upgrades to the card the moment the
+    `cite_transcript` payload lands (it may arrive after the marker).
   -->
   <!-- Block wrapper so the chip sits on its own line (own line + a line
        after it), matching the card / quote — a citation never flows
        inline mid-sentence. -->
   <div v-if="!snippetText" class="citation-chip-line">
-    <CitationChip :track-id="trackId" :start-ms="startMs" :end-ms="endMs" :caption="caption" />
+    <!-- No-body fallback. The Ionic/audio-coupled CitationChip is a HOST
+         concern; a pure card renders a plain caption pill here (or the
+         caller fills the `#chip` slot with its own interactive chip). -->
+    <slot name="chip">
+      <span class="citation-chip-fallback">{{ caption || chipFallbackLabel }}</span>
+    </slot>
   </div>
   <!-- Fixed-height skeleton held until BOTH the snippet text and the
-       async track/author metadata are ready, so the card reveals at its
-       final size in one step instead of growing as the meta-block lands
-       (issue #926). The skeleton's height matches the real card so there
-       is no reflow on reveal. -->
+       async track/author metadata are ready (`metaReady`), so the card
+       reveals at its final size in one step instead of growing as the
+       meta-block lands (issue #926). The skeleton's height matches the
+       real card so there is no reflow on reveal. The parent owns metadata
+       loading and tells the card when it is ready. -->
   <AccentFrame
-    v-else-if="!metaLoaded"
+    v-else-if="!metaReady"
     class="citation-card citation-card--loading"
     aria-hidden="true"
   >
@@ -34,22 +40,24 @@
     class="citation-card"
     role="button"
     tabindex="0"
-    :aria-label="trackTitle || $t('chat.citationDetailsTitle')"
+    :aria-label="trackTitle || cardLabel"
     @click="emit('activate')"
     @keydown.enter.space.prevent="emit('activate')"
   >
     <AutoHeight>
       <ExcerptCard
         :text="displayHtml"
+        :language="language"
         :author-name="authorName"
         :track-title="trackTitle"
-        :reference="referenceLabel"
+        :reference="reference"
         :track-date="trackDate"
       >
+        <!-- Audio is a HOST concern: the parent provides the player (URL
+             resolution + excerpt cut + playback) through this pass-through
+             slot. The card never resolves URLs or cuts excerpts itself. -->
         <template #player>
-          <!-- The player owns its own taps (play / seek); stop the bubble
-               so tapping it doesn't also fire the card's activate. -->
-          <NotesInlinePlayer :note="playerRef" :active="active" @click.stop />
+          <slot name="player" />
         </template>
       </ExcerptCard>
     </AutoHeight>
@@ -59,50 +67,59 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from "vue"
-import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { computed } from "vue"
 import { renderExcerptHtml } from "@shruti/composables/chatMarkers.js"
-import { formatReference } from "@lib/domain/services/references.js"
-import { pickPlayableVariant } from "@lib/domain/track.js"
-import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import type { ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import { ExcerptCard } from "@ui/components/excerpt/index.js"
-import NotesInlinePlayer from "@shruti/views/Notes/NotesInlinePlayer.vue"
-import { citationExcerptId } from "../composables/useCitationSnippet.js"
-import { useCitationMeta } from "../composables/useCitationMeta.js"
 import { useTranslatable } from "../composables/useTranslatable.js"
-import CitationChip from "./CitationChip.vue"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 import AccentFrame from "./AccentFrame.vue"
 
-const props = defineProps<{
-  trackId: string
-  startMs: number
-  endMs: number
-  /** LLM-generated snippet caption from the marker. Used by the chip
-   *  fallback; the full card shows the transcript text instead. */
-  caption?: string
-  /** Transcript snippet from the owning message's `cites` map; absent ⇒
-   *  chip fallback. */
-  body?: ChatCiteSnippet
-  active?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** LLM-generated snippet caption from the marker. Used by the chip
+     *  fallback; the full card shows the transcript text instead. */
+    caption?: string
+    /** Transcript snippet from the owning message's `cites` map; absent ⇒
+     *  chip fallback. */
+    body?: ChatCiteSnippet
+    /** Resolved lecture title (content language). Loaded by the parent. */
+    trackTitle?: string
+    /** Resolved author name (UI language). Loaded by the parent. */
+    authorName?: string
+    /** Lecture date, e.g. "1972-08-14". Loaded by the parent. */
+    trackDate?: string
+    /** Pre-formatted shloka reference label (e.g. "ŚB 1.2.3"). The parent
+     *  formats it — the card never touches the sources dictionary. */
+    reference?: string
+    /** Content language for the rendered excerpt text (HighlightText). */
+    language?: string
+    /** Gates the skeleton → card reveal. The parent flips this true once
+     *  its metadata lookup settles (#926). Defaults true so a host that
+     *  has no async meta (e.g. the focus bubble) reveals immediately. */
+    metaReady?: boolean
+    /** Fallback aria-label for the card when no title is known. The parent
+     *  supplies the localized string (was `$t("chat.citationDetailsTitle")`). */
+    cardLabel?: string
+    /** Fallback label for the no-body chip when the marker omitted a
+     *  caption. Localized by the parent. */
+    chipFallbackLabel?: string
+  }>(),
+  { metaReady: true }
+)
 
 /** Tapping the card asks the HOST to act (open the citation action sheet).
  *  A leaf card never owns that dialog — onboarding reuses this card with no
  *  listener, so tapping it does nothing. */
 const emit = defineEmits<{ activate: [] }>()
 
-const appLanguage = useAppLanguage()
-const dictionaries = useDictionariesStore()
-
 /** Transcript snippet pushed by the server ahead of the marker. Null
  *  until it lands (or forever for pre-feature history) → chip fallback. */
 const snippet = computed(() => props.body ?? null)
 const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
 // Translation toggle (show original ↔ machine translation), shared with
-// CommentaryCard.
+// CommentaryCard. Pure Vue — no store / io.
 const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
 
 /** Transcript snippet rendered through the shared excerpt-markdown pipeline
@@ -110,51 +127,6 @@ const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
  *  quoted śloka or stray markdown renders instead of printing literally.
  *  Consumed by `ExcerptCard` → `HighlightText` via `v-html`. */
 const displayHtml = computed<string>(() => renderExcerptHtml(displayText.value))
-
-// Display metadata only — the action sheet is the host's (see CitationActionSheet).
-// `metaLoaded` gates the skeleton → card reveal (issue #926).
-const { track, metaLoaded, trackTitle, authorName } = useCitationMeta(() => ({
-  trackId: props.trackId,
-  startMs: props.startMs,
-  endMs: props.endMs,
-  caption: props.caption,
-}))
-
-const audioPath = computed<string>(() => {
-  if (!track.value) return ""
-  const variant = pickPlayableVariant(track.value)
-  return variant?.audio?.path ?? ""
-})
-
-/**
- * Player ref for the reused NotesInlinePlayer. `noteId` doubles as the
- * excerpt cache id — set to the chat-citation id so the cut excerpt and
- * predicted CDN URL match what the chip's `useCitationSnippet` produces
- * (same public/shares/audio/chat-cite-*.mp3 object — no double cut).
- * Passed as a computed so the player reads `sourceKey` fresh once the
- * track (hence `audioPath`) resolves — see the useExcerptWaveform getter.
- */
-const playerRef = computed(() => ({
-  noteId: citationExcerptId({ trackId: props.trackId, startMs: props.startMs, endMs: props.endMs }),
-  trackId: props.trackId,
-  sourceKey: audioPath.value,
-  timeStart: props.startMs,
-  timeEnd: props.endMs,
-}))
-
-const referenceLabel = computed<string>(() => {
-  const first = track.value?.references?.[0]
-  if (!first) return ""
-  return formatReference(first, dictionaries.sourcesById, appLanguage.value)
-})
-
-const trackDate = computed<string>(() => track.value?.date || "")
-
-onMounted(() => {
-  // Sources are needed to format the shloka reference, like the Notes
-  // list does; one-shot full load, cached across the session.
-  void dictionaries.ensureLoaded()
-})
 </script>
 
 <style scoped>
@@ -163,6 +135,26 @@ onMounted(() => {
 .citation-chip-line {
   display: block;
   margin: 6px 0;
+}
+
+/* No-body fallback pill: a quiet, non-interactive caption. The interactive
+ * play/long-press chip is the host's job (it owns audio + Ionic). */
+.citation-chip-fallback {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  margin: 3px 2px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--ion-color-medium);
+  color: var(--ion-color-medium);
+  font-size: 12px;
+  line-height: 1;
+  max-width: 18em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: middle;
 }
 
 .citation-card {
