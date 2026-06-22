@@ -79,6 +79,46 @@ async def test_plain_text_passes_through() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fallback_answer_injected_into_system_prompt() -> None:
+    """Out-of-corpus mode: the draft answer is injected as a DRAFT ANSWER
+    block in the system message so the synthesizer presents it faithfully —
+    distinct from the curator `memory_note` block."""
+    aliases = TurnAliasMap()
+    expander = MarkerExpander(aliases)
+    llm = StreamingLLM(chunks=["ответ"])
+    draft = "Манджари — юные гопи-служанки во Вриндаване."
+
+    await _drain(
+        run_synthesizer_turn(
+            "Сколько лет манжари?",
+            tool_results=[],
+            llm=llm,
+            expander=expander,
+            system_prompt="sys",
+            fallback_answer=draft,
+        )
+    )
+    system_msg = llm.seen_messages[0][0]
+    assert system_msg["role"] == "system"
+    assert "DRAFT ANSWER" in system_msg["content"]
+    assert draft in system_msg["content"]
+
+
+@pytest.mark.asyncio
+async def test_no_fallback_block_when_answer_absent() -> None:
+    """Normal turns carry no DRAFT ANSWER block."""
+    aliases = TurnAliasMap()
+    expander = MarkerExpander(aliases)
+    llm = StreamingLLM(chunks=["ok"])
+    await _drain(
+        run_synthesizer_turn(
+            "q", tool_results=[], llm=llm, expander=expander, system_prompt="sys",
+        )
+    )
+    assert "DRAFT ANSWER" not in llm.seen_messages[0][0]["content"]
+
+
+@pytest.mark.asyncio
 async def test_empty_stream_emits_error_not_blank_done() -> None:
     """A completion stream that yields ZERO text must NOT finalize as a
     successful (blank) `done` — that would charge the user for an empty

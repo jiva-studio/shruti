@@ -3,9 +3,43 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel, Field
+
+
+# ---- Research note envelope -----------------------------------------------
+
+
+class ResearchNote(TypedDict, total=False):
+    """One retrieved corpus note ("envelope") as the synthesizer consumes it.
+
+    This is the dict shape minted by `agent.tools._envelope.lecture_to_envelope`
+    / `library_to_envelope` and carried through `tool_results`, the fanout
+    `chunks`, and the planner outputs. `total=False` because the lane that
+    produced a note decides which optional keys it carries (lecture notes carry
+    `meta.start_ms/end_ms`; verse/commentary notes carry an address label and
+    author metadata; only reranked notes carry `rerank_score`).
+
+    Keys:
+      type   — note family: "lecture" | "verse" | "media" | "commentary" | …
+      ref    — integer alias number; the target the `[^N]` marker resolves to.
+      label  — human address label (e.g. "ШБ 4.1.39"), "" for lecture chunks.
+      text   — the note's verbatim corpus text (what the synthesizer cites).
+      lang   — corpus language of `text`.
+      score  — retrieval (cosine) score in [0, 1].
+      meta   — lane-specific metadata (timecodes / address / author / kind …).
+    """
+
+    type: str
+    ref: int
+    label: str
+    text: str
+    lang: str
+    score: float
+    meta: dict[str, Any]
+    rerank_score: float
+    sub_query_id: int
 
 
 # ---- LLM-emitted structured outputs ---------------------------------------

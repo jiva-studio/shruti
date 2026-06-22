@@ -30,6 +30,7 @@ from lectorium_chat.agent.graph.nodes._worker_common import (
 )
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.graph.turn_context import TurnContext
+from lectorium_chat.config import get_settings
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback, langfuse_span
 from lectorium_chat.observability.logging import bind_node_role, get_logger
 from lectorium_chat.research.commentary_expansion import (
@@ -45,6 +46,16 @@ from lectorium_chat.research.thesis_augmentation import augment_thin_theses
 
 
 log = get_logger(__name__)
+
+
+def _fallback_enabled(state: ChatState) -> bool:
+    """Whether the out-of-corpus memory-pass fallback is active this turn.
+    Per-turn `body.config.enable_corpus_fallback` overrides the global
+    `Settings.enable_corpus_fallback` (same pattern as `enable_planner`)."""
+    cfg = state.get("config", {}) or {}
+    if "enable_corpus_fallback" in cfg:
+        return bool(cfg["enable_corpus_fallback"])
+    return get_settings().enable_corpus_fallback
 
 
 async def synthesis_planner_node(
@@ -80,7 +91,10 @@ async def synthesis_planner_node(
             "synthesis_planner_skip_no_notes",
             request_id=ctx.request_id,
         )
-        return {"outline": None}
+        # Truly nothing retrieved — a genuine corpus miss. Flag it so
+        # `route_after_planner` can hand the turn to the memory-pass
+        # fallback instead of a flat refusal.
+        return {"outline": None, "corpus_insufficient": _fallback_enabled(state)}
 
     if ctx.llm is None:
         log.warning(
@@ -311,6 +325,11 @@ async def synthesis_planner_node(
     final_outline = augmented.model_copy(update={"intro": final_intro})
 
     update: dict = {"outline": final_outline}
+    # Retrieved notes existed but the planner rejected every one
+    # (Outline(theses=[])) — a relevance miss, not a degradation. Flag it
+    # for the memory-pass fallback. A non-empty plan clears the flag.
+    if not final_outline.theses:
+        update["corpus_insufficient"] = _fallback_enabled(state)
     combined_appends = list(new_commentaries) + list(fresh_chunks)
     if combined_appends:
         # `tool_results` state field uses an append-reducer so returning

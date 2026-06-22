@@ -51,22 +51,27 @@ graph TD
   LW --> SY
   RCW --> SY
   SV --> SY
-  SP --> SY
+  SP -->|grounded outline| SY
+  SP -->|corpus insufficient| CF[corpus_fallback]
+  CF --> SY
   SY --> ENDN([SSE stream to client])
   AR --> ENDN
 
   classDef grnd fill:#89b4fa,stroke:#6c7086,color:#1e1e2e;
-  class RW,SP grnd;
+  class RW,SP,CF grnd;
 ```
 
-Nodes shaded blue (`research_worker`, `synthesis_planner`) are where retrieval and grounding
-happen. `research_worker` runs the code-driven research pipeline (`run_research`);
-`synthesis_planner` builds the outline and re-grounds each thesis. `synthesis_planner` sits
-**only** on the `research_worker → synthesizer` arm — it's the only path that produces
-prose-grounding notes; catalog / action / help / locate / recommend / show_verse workers emit
-list tiles, location pointers or action cards and go straight to the synthesizer.
-`unknown` (and any unrecognised intent) falls through a light `research_worker` pass rather
-than answering tool-less, so a single misclassification never yields a confident "not found".
+Nodes shaded blue (`research_worker`, `synthesis_planner`, `corpus_fallback`) are where
+retrieval and grounding happen. `research_worker` runs the code-driven research pipeline
+(`run_research`); `synthesis_planner` builds the outline and re-grounds each thesis.
+`synthesis_planner` sits **only** on the `research_worker → synthesizer` arm — it's the only
+path that produces prose-grounding notes; catalog / action / help / locate / recommend /
+show_verse workers emit list tiles, location pointers or action cards and go straight to the
+synthesizer. `unknown` (and any unrecognised intent) falls through a light `research_worker`
+pass rather than answering tool-less, so a single misclassification never yields a confident
+"not found". When the planner finds the corpus **insufficient** (empty retrieval or every
+note rejected), the turn detours through `corpus_fallback` — the out-of-corpus memory-pass
+(§4) — instead of refusing.
 
 ## 2. Research pipeline (`research_worker` → `run_research`)
 
@@ -244,7 +249,74 @@ graph TD
   Each thin thesis gets one focused ANN fetch (`AUGMENT_FRESH_TOP_K = 10`, router-filtered),
   then a re-rank. Conservative by design: fires per-thesis only when needed, never chains.
 
-## 4. Scoring model — cosine gates, cross-encoder ordering
+## 4. Out-of-corpus fallback (memory-pass)
+
+When the corpus genuinely has nothing relevant, the chat used to emit a flat
+«не нашёл в корпусе» refusal. The **memory-pass fallback** instead answers from a large
+model's general knowledge — clearly disclaimed — then re-searches the corpus on probes
+derived from that answer and weaves in any genuine hits.
+
+**Trigger.** `synthesis_planner` sets `corpus_insufficient` on state in **exactly** two
+genuine-miss cases: empty `tool_results` (nothing retrieved), or `Outline(theses=[])` (notes
+retrieved but the planner rejected every one). It is **not** set on planner degradation
+(disabled by config, no LLM, build failure) — those keep the canned refusal. `route_after_planner`
+then branches a flagged turn into `corpus_fallback` instead of straight to the synthesizer.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant SP as synthesis_planner
+  participant CF as corpus_fallback
+  participant LLM as memory model (Claude)
+  participant FO as fanout (re-search)
+  participant SY as synthesizer
+
+  SP->>SP: corpus_insufficient? (empty notes / theses=[])
+  SP->>CF: route_after_planner → corpus_fallback
+  CF->>LLM: structured_output(MemoryAnswer)
+  LLM-->>CF: answer (general knowledge) + search_queries
+  alt has probes and a chunk_repo
+    CF->>FO: fanout_search_with_boost(probes)
+    FO-->>CF: chunks, keep score ≥ 0.5 only
+  end
+  CF->>SY: fallback_mode + fallback_answer + fallback_notes
+  SY->>SY: grounding → fallback.md (disclaimer + faithful draft)
+  SY-->>SY: cite fallback_notes opportunistically, never refuse
+```
+
+**`corpus_fallback` node** (`agent/graph/nodes/corpus_fallback.py`):
+
+1. One structured call to `llm_fallback_knowledge` (a capable Claude) returns
+   `MemoryAnswer{answer, search_queries}` — the from-knowledge answer in the user's language
+   plus 1–5 corpus probes derived from it. The prompt forbids fabricated verse numbers /
+   quotes / dates.
+2. **Re-search** the probes via `fanout_search_with_boost`, keeping only chunks with
+   cosine `≥ 0.5`. The original query already retrieved (and the planner rejected) the junk
+   pool, so a lower floor would just re-import the same junk under the disclaimer. Card
+   payloads for any survivors are flushed before the synthesizer streams their markers.
+3. Returns `fallback_mode=True`, `fallback_answer`, `fallback_notes`, `outline=None`.
+
+**Graceful degrade.** No LLM, a failed structured call, or an empty answer → the node returns
+`{}` (no `fallback_mode`) and the synthesizer runs the **normal refusal** — so today's
+behaviour is reachable in every failure mode. A re-search blow-up leaves the answer
+memory-only (uncited), never failing the turn.
+
+**Synthesizer in fallback mode.** It swaps the strict `grounding` section for `fallback.md`
+(open with the mandatory "not found in corpus, answering from memory" disclaimer in the
+user's language; present the draft faithfully; cite the re-searched notes with `[^N]` only
+where they directly support a point; **never refuse**). The citable pool is `fallback_notes`,
+**not** `tool_results` — that field's append-reducer still holds the rejected junk pool, which
+the fallback answer must not cite.
+
+> The disclaimer is mandated by the prompt (like the existing refusal), so it localizes to
+> every UI language. There is deliberately **no** runtime truthfulness gate — answer quality
+> is verified offline (control questions) rather than by a per-turn judge. `fallback.md` is a
+> Langfuse-hosted section (`chat-section-fallback`) with the bundled `.md` as fallback.
+>
+> Gotcha: Anthropic's structured-output endpoint rejects `maxItems`, so the `MemoryAnswer`
+> schema carries no pydantic `max_length` on `search_queries`; the cap is applied in code.
+
+## 5. Scoring model — cosine gates, cross-encoder ordering
 
 Two scores coexist on every chunk. The bi-encoder **cosine** `[0, 1]` is the *gate* scale:
 every coverage gate, attribution accept/reject, reserve floor and thin-thesis check reads it,
@@ -296,7 +368,7 @@ Attribution accept thresholds are asymmetric by kind and by native-vs-cross-ling
 | `pinned` (question) | `0.85` | `0.80` | `0.70`–accept → cross-encoder gate (`PINNED_RERANK_ACCEPT = 0.50`); becomes authoritative |
 | `boost` (topic) | `0.70` | `0.65` | fetched at cosine `0.75`, reranker-gated; weaker signal |
 
-## 5. Config reference
+## 6. Config reference
 
 Embedder wiring (`config.py`):
 
@@ -351,6 +423,20 @@ STAGE1_ATTACH_FLOOR=0.30
   grounding, read in `synthesis_planner`); when `false` the whole pipeline runs the
   bi-encoder cosine path.
 - `enable_early_intro` (default `true`) — controls the early intro paint in the planner.
+- `enable_corpus_fallback` (default `true`) — the out-of-corpus memory-pass (§4); when
+  `false`, a corpus-insufficient turn keeps the canned «не нашёл в корпусе» refusal. Overrides
+  the global `Settings.enable_corpus_fallback`.
+
+Out-of-corpus fallback model (`config.py`):
+
+```text
+LLM_FALLBACK_KNOWLEDGE=openrouter/anthropic/claude-sonnet-4.6   # memory-pass model (capable Claude)
+ENABLE_CORPUS_FALLBACK=true                                     # global master switch
+```
+
+> `anthropic/claude-3.5-sonnet` is retired on OpenRouter (404 "no endpoints") — the 4.x
+> family is current. The cheap planner/fallback models (haiku) can't reliably emit the
+> structured `MemoryAnswer` JSON, so the memory-pass uses a dedicated capable model.
 
 Retrieval itself (research_worker fanout) reads the reranker from `TurnContext`, wired from
 the `RERANK_*` config above — but honours the per-turn `enable_reranker` toggle, passing

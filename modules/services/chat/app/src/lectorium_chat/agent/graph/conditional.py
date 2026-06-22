@@ -206,6 +206,18 @@ def route_after_research(state: ChatState) -> str:
     return "synthesizer"
 
 
+def route_after_planner(state: ChatState) -> str:
+    """After synthesis_planner: branch into the out-of-corpus memory-pass
+    fallback when the planner flagged `corpus_insufficient` (the corpus had
+    nothing relevant — empty retrieval or every note rejected). Otherwise go
+    straight to the synthesizer, which writes plan-driven prose, or — when the
+    flag is unset because the fallback is disabled — the canned refusal.
+    """
+    if state.get("corpus_insufficient"):
+        return "corpus_fallback"
+    return "synthesizer"
+
+
 def route_after_catalog(state: ChatState) -> str:
     """After catalog_worker: branch to action_worker on
     `create_action`, otherwise straight to synthesizer.
