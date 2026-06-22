@@ -28,20 +28,6 @@ export default {
   },
   paywall: {
     title: "Plus de fonctionnalités avec Pro",
-    shots: {
-      chat: "Demandez à Sadhu",
-      library: "Des milliers de conférences",
-      transcript: "Transcriptions à suivre",
-      notes: "Signets et notes",
-      home: "Suivez votre progression",
-    },
-    shotDesc: {
-      chat: "Posez toute question spirituelle, répondue depuis les conférences et les écritures.",
-      library: "Classées par thème, livre et auteur.",
-      transcript: "Suivez le texte pendant l'écoute, mot à mot.",
-      notes: "Enregistrez les moments marquants et prenez des notes.",
-      home: "Gardez votre série et reprenez où vous en étiez.",
-    },
     later: "Plus tard",
   },
   finish: "Commencer à écouter",

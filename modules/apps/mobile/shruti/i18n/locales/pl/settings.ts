@@ -73,21 +73,27 @@ export default {
     thanks:
       "Dziękujemy za subskrypcję i wsparcie 🙏 Niech Twoje serce wypełni się szczęściem, a każdy dzień przybliża Cię do Prawdy. Cieszymy się, że jesteś z nami na tej drodze.",
     benefits: {
+      progress: {
+        title: "Śledź swoje postępy",
+        description: "Śledź swoją passę słuchania i wróć tam, gdzie skończyłeś.",
+      },
+      andMore: {
+        title: "I wiele więcej",
+        description: "Ciągłe odtwarzanie, udostępnianie, studio notatek i wiele więcej.",
+      },
       intro:
         "Wprowadzamy nowe funkcje i ulepszenia. Twoje wsparcie pomaga nam kontynuować rozwój i ulepszać produkt.",
       benefit0: {
         title: "Nowe wykłady",
-        description: "Twoja subskrypcja pomaga nam dalej dodawać nowe wykłady.",
+        description: "Twoja subskrypcja pomaga nam dodawać nowe wykłady.",
       },
       benefit1: {
         title: "Zakładki",
-        description:
-          "Zapisuj ważne momenty z tekstu i audio wykładów, aby wrócić do nich później lub podzielić się z przyjaciółmi.",
+        description: "Zapisuj kluczowe momenty wykładu, aby do nich wrócić lub udostępnić.",
       },
       benefit2: {
         title: "Inteligentna biblioteka",
-        description:
-          "Aplikacja sama utrzymuje świeże wykłady na urządzeniu i automatycznie usuwa wysłuchane.",
+        description: "Trzyma świeże wykłady na urządzeniu i usuwa wysłuchane.",
       },
       benefit3: {
         title: "Seminaria i kursy",
@@ -101,13 +107,11 @@ export default {
       },
       sakha: {
         title: "Zapytaj Sadhu",
-        description:
-          "Przeszukuje wykłady, audio i książki, znajduje śloki, generuje pliki PDF i pomaga zrozumieć nauki. Subskrypcja zwiększa dzienny limit.",
+        description: "Przeszukuje wykłady, audio i książki i objaśnia nauki.",
       },
       autoScroll: {
         title: "Automatyczne przewijanie",
-        description:
-          "Transkrypcja podąża za odtwarzanym audio, więc bieżący akapit jest zawsze widoczny.",
+        description: "Transkrypcja podąża za audio, bieżący akapit jest zawsze widoczny.",
       },
       continuousPlayback: {
         title: "Ciągłe odtwarzanie",

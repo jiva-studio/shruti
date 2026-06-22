@@ -73,21 +73,27 @@ export default {
     thanks:
       "Gracias por tu suscripción y tu apoyo 🙏 Que tu corazón se llene de felicidad y que cada día te acerque más a la Verdad. Nos alegra que estés con nosotros en este camino.",
     benefits: {
+      progress: {
+        title: "Sigue tu progreso",
+        description: "Sigue tu racha de escucha y retoma justo donde lo dejaste.",
+      },
+      andMore: {
+        title: "Y mucho más",
+        description: "Reproducción continua, compartir, el estudio de notas y mucho más.",
+      },
       intro:
         "Estamos implementando nuevas funciones y mejoras. Tu apoyo nos ayuda a seguir desarrollando y a mejorar el producto.",
       benefit0: {
         title: "Nuevas clases",
-        description: "Tu suscripción nos ayuda a seguir añadiendo nuevas clases.",
+        description: "Tu suscripción nos ayuda a añadir nuevas clases.",
       },
       benefit1: {
         title: "Marcadores",
-        description:
-          "Guarda los momentos importantes del texto y el audio de las clases para volver a ellos más tarde o compartirlos con tus amigos.",
+        description: "Guarda momentos clave de una clase para volver a ellos o compartir.",
       },
       benefit2: {
         title: "Biblioteca inteligente",
-        description:
-          "La app mantiene clases nuevas en tu dispositivo y elimina automáticamente las que ya terminaste.",
+        description: "Mantiene clases nuevas en tu dispositivo y elimina las terminadas.",
       },
       benefit3: {
         title: "Seminarios y cursos",
@@ -100,13 +106,11 @@ export default {
       },
       sakha: {
         title: "Pregúntale a Sadhu",
-        description:
-          "Busca en clases, audios y libros, encuentra ślokas, genera PDF y te ayuda a comprender las enseñanzas. Con la suscripción obtienes un límite diario mayor.",
+        description: "Busca en clases, audios y libros y explica las enseñanzas.",
       },
       autoScroll: {
         title: "Desplazamiento automático",
-        description:
-          "La transcripción avanza a la par del audio, así el párrafo actual siempre está a la vista.",
+        description: "La transcripción sigue el audio y el párrafo actual queda a la vista.",
       },
       continuousPlayback: {
         title: "Reproducción continua",

@@ -29,20 +29,6 @@ export default {
     title: "More features with Pro",
     subtitle:
       "All lectures are free. A subscription helps us keep developing the app — adding new features and lectures.",
-    shots: {
-      chat: "Ask Sadhu",
-      library: "Thousands of lectures",
-      transcript: "Read-along transcripts",
-      notes: "Bookmarks & notes",
-      home: "Track your progress",
-    },
-    shotDesc: {
-      chat: "Ask any spiritual question, answered from the lectures and scriptures.",
-      library: "Organized by topic, book and author.",
-      transcript: "Follow the text as you listen, word by word.",
-      notes: "Save the moments that move you and add notes.",
-      home: "Keep your streak and pick up where you left off.",
-    },
     later: "Later",
   },
   finish: "Start listening",

@@ -1,6 +1,9 @@
 <template>
   <div class="plans">
-    <template v-if="!isSubscribed && packages.length > 0">
+    <!-- The purchase block: plan cards + the Subscribe CTA. Whoever can't buy
+         (an existing subscriber) is handled by the host, which shows a Manage
+         button instead of mounting this. -->
+    <template v-if="packages.length > 0">
       <IonItem
         v-for="pkg in packages"
         :key="pkg.packageId"
@@ -29,12 +32,6 @@
         @click="onSubscribeClick"
       >
         {{ ctaLabel }}
-      </IonButton>
-    </template>
-
-    <template v-else-if="isSubscribed">
-      <IonButton expand="block" class="cta" :strong="true" @click="emit('manage')">
-        {{ $t("settings.subscription.manage") }}
       </IonButton>
     </template>
 
@@ -72,11 +69,10 @@ import type { IntroOfferView, PackageView } from "./types.js"
 
 const props = defineProps<{
   packages: PackageView[]
-  isSubscribed: boolean
   /**
    * `true` once the purchases store finished its first round-trip (or
    * determined the build has no IAP). Gates the loading vs. "unavailable
-   * here" fallback shown when there are no packages and no subscription.
+   * here" fallback shown when there are no packages.
    */
   ready: boolean
   purchasing: boolean
@@ -85,7 +81,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   subscribe: [packageId: string]
-  manage: []
   cantPay: []
   /** Whether the currently-selected plan carries a free trial — the host
    *  feeds this to a SubscriptionDisclaimer when it composes one. */

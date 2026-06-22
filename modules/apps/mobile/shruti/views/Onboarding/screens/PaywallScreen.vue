@@ -5,19 +5,7 @@
       <p class="ob-paywall__subtitle">{{ $t("onboarding.paywall.subtitle") }}</p>
     </div>
 
-    <!-- Real app screenshots show what Pro unlocks: a horizontally scrolling
-         strip of phone tops (rounded, top-cropped) so the description and the
-         top of each screen are both visible. Each hides itself if its asset
-         isn't shipped, so the strip degrades gracefully. -->
-    <div class="ob-paywall__shots">
-      <figure v-for="s in shots" v-show="!failed.has(s.key)" :key="s.key" class="ob-paywall__shot">
-        <img :src="src(s.key)" class="ob-paywall__img" alt="" @error="failed.add(s.key)" />
-        <figcaption class="ob-paywall__cap">
-          <span class="ob-paywall__caption">{{ $t(s.labelKey) }}</span>
-          <span class="ob-paywall__desc">{{ $t(s.descKey) }}</span>
-        </figcaption>
-      </figure>
-    </div>
+    <SubscriptionShots class="ob-paywall__shots" :shots="shots" />
 
     <!-- Restore + legal links, moved up here out of the footer actions. -->
     <div class="ob-paywall__links">
@@ -45,9 +33,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from "vue"
-import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { SubscriptionShots } from "@ui/features/subscription/index.js"
 import type { LegalDocumentView } from "@ui/features/subscription/index.js"
+import { usePaywallShots } from "@shruti/composables/usePaywallShots.js"
 
 defineProps<{
   legalDocuments: LegalDocumentView[]
@@ -55,40 +43,7 @@ defineProps<{
 }>()
 const emit = defineEmits<{ restore: [] }>()
 
-const appLanguage = useAppLanguage()
-// Screenshots exist in en + ru; everything else falls back to en.
-const shotLang = computed(() => (appLanguage.value === "ru" ? "ru" : "en"))
-
-const shots = [
-  {
-    key: "chat",
-    labelKey: "onboarding.paywall.shots.chat",
-    descKey: "onboarding.paywall.shotDesc.chat",
-  },
-  {
-    key: "library",
-    labelKey: "onboarding.paywall.shots.library",
-    descKey: "onboarding.paywall.shotDesc.library",
-  },
-  {
-    key: "transcript",
-    labelKey: "onboarding.paywall.shots.transcript",
-    descKey: "onboarding.paywall.shotDesc.transcript",
-  },
-  {
-    key: "notes",
-    labelKey: "onboarding.paywall.shots.notes",
-    descKey: "onboarding.paywall.shotDesc.notes",
-  },
-  {
-    key: "home",
-    labelKey: "onboarding.paywall.shots.home",
-    descKey: "onboarding.paywall.shotDesc.home",
-  },
-] as const
-
-const src = (key: string): string => `/onboarding/${shotLang.value}/${key}.webp`
-const failed = reactive(new Set<string>())
+const shots = usePaywallShots()
 </script>
 
 <style scoped>
@@ -122,65 +77,9 @@ const failed = reactive(new Set<string>())
   color: var(--ion-color-medium);
 }
 .ob-paywall__shots {
-  --ob-card-w: clamp(240px, 74vw, 320px);
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  /* Full-bleed: cancel the paywall's side padding so cards scroll to (and off)
-     the screen edges instead of being clipped 16px in. */
-  margin-inline: -16px;
   /* Bottom auto pairs with the head's top auto to vertically centre the
      title+shots group above the links. */
   margin-bottom: auto;
-  /* Side inset = half the leftover width, so the FIRST (and last) card can sit
-     dead-centre at the scroll extremes — without it, mandatory snap can't
-     centre the first card and jumps to a middle one. */
-  padding-block: 4px 2px;
-  padding-inline: max(16px, calc((100% - var(--ob-card-w)) / 2));
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.ob-paywall__shots::-webkit-scrollbar {
-  display: none;
-}
-.ob-paywall__shot {
-  flex: 0 0 auto;
-  width: var(--ob-card-w);
-  margin: 0;
-  scroll-snap-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-.ob-paywall__img {
-  width: 100%;
-  /* Top-crop: show the head of each screen, the rest cut off. */
-  height: clamp(200px, 32vh, 300px);
-  object-fit: cover;
-  object-position: top center;
-  border-radius: 12px;
-  border: 1px solid var(--ion-color-step-150, rgba(0, 0, 0, 0.08));
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-}
-.ob-paywall__cap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  text-align: center;
-}
-.ob-paywall__caption {
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: var(--ion-text-color);
-}
-.ob-paywall__desc {
-  font-size: 0.78rem;
-  line-height: 1.35;
-  color: var(--ion-color-medium);
 }
 .ob-paywall__links {
   display: flex;

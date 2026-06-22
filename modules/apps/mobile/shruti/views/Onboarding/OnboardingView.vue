@@ -27,7 +27,7 @@
             v-else
             :legal-documents="subscription.legalDocuments"
             :restoring="subscription.restoring"
-            @restore="subscription.onRestore"
+            @restore="onRestore"
           />
         </template>
 
@@ -42,11 +42,9 @@
             v-if="page === PAGE_COUNT - 1"
             class="ob-paywall-footer"
             :packages="subscription.packages"
-            :is-subscribed="subscription.isSubscribed"
             :ready="subscription.ready"
             :purchasing="subscription.purchasing"
-            @subscribe="subscription.onSubscribe"
-            @manage="subscription.onManage"
+            @subscribe="onSubscribe"
           />
           <IonButton
             v-else
@@ -89,6 +87,8 @@ const {
   primaryLabel,
   onWisdomEnabledChange,
   onPrimary,
+  onSubscribe,
+  onRestore,
   finish,
 } = useOnboardingViewController()
 </script>
