@@ -23,6 +23,8 @@
       "@lib/contracts/*":      ["./submodules/contracts/*"],
       "@lib/domain":           ["./submodules/domain/index.ts"],
       "@lib/domain/*":         ["./submodules/domain/*"],
+      "@lib/ui/*":             ["./submodules/ui/*"],
+      "@lib/chat/*":           ["./submodules/chat/*"],
       "@usecases":             ["./usecases/index.ts"],
       "@usecases/*":           ["./usecases/*"],
       "@lib/persistence/main": ["./submodules/persistence-main/index.ts"],

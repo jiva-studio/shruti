@@ -58,7 +58,7 @@ vi.mock("@shruti/composables/useTrackUserState.js", () => ({
 vi.mock("@shruti/composables/useDailyReminder.js", () => ({
   applyDailyReminder: vi.fn(),
 }))
-vi.mock("@shruti/composables/chatMarkers.js", () => ({
+vi.mock("@lib/chat/chatMarkers.js", () => ({
   extractFollowups: () => [],
   parseChatMarkers: () => [],
 }))

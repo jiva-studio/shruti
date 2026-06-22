@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useAudioSource } from "@shruti/composables/useAudioOrchestrator.js"
+import { useAudioSource } from "./useAudioOrchestrator.js"
 
 /** How long to wait after `play()` for real playback before giving up and
  * resetting state so a retry tap starts clean (covers a wedged buffer /

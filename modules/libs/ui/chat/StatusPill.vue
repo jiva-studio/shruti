@@ -25,7 +25,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue"
-import type { ChatResearchSource } from "@shruti/stores/useChatStore"
+
+/** Minimal shape this pill reads off a `research_source` event — just the
+ *  display label. The full store type carries more (sourceKind etc.) the
+ *  pure view never touches. */
+interface ResearchSourceLabel {
+  readonly label: string
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Props                                                                     */
@@ -39,7 +45,7 @@ const props = defineProps<{
    *  Folded into the ticker pool so the user sees what's being explored. */
   researchQuestions?: readonly string[]
   /** Live `research_source` events keyed by id. Labels enter the pool. */
-  researchSources?: ReadonlyMap<string, ChatResearchSource>
+  researchSources?: ReadonlyMap<string, ResearchSourceLabel>
 }>()
 
 /* -------------------------------------------------------------------------- */

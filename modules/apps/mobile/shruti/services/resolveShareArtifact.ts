@@ -1,5 +1,5 @@
 import type { IExcerptCache } from "@ports/app/index.js"
-import { pollUntilReady } from "./pollUntilReady.js"
+import { pollUntilReady } from "@lib/chat/utils/pollUntilReady.js"
 
 export interface ResolveShareArtifactArgs {
   readonly cache: IExcerptCache

@@ -18,7 +18,7 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { escapeHtml } from "@shruti/utils/escapeHtml.js"
+import { escapeHtml } from "@lib/chat/utils/escapeHtml.js"
 import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
