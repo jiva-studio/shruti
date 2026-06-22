@@ -27,20 +27,6 @@ export default {
   },
   paywall: {
     title: "Više funkcija uz Pro",
-    shots: {
-      chat: "Pitaj Sadhua",
-      library: "Hiljade predavanja",
-      transcript: "Transkripti za praćenje",
-      notes: "Obeleživači i beleške",
-      home: "Pratite napredak",
-    },
-    shotDesc: {
-      chat: "Postavi bilo koje duhovno pitanje — odgovor iz predavanja i spisa.",
-      library: "Razvrstane po temi, knjizi i autoru.",
-      transcript: "Prati tekst dok slušaš, reč po reč.",
-      notes: "Sačuvaj dirljive trenutke i dodaj beleške.",
-      home: "Održavaj niz i nastavi gde si stao.",
-    },
     later: "Kasnije",
   },
   finish: "Počni da slušaš",

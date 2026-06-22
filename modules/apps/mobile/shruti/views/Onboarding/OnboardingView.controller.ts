@@ -28,6 +28,8 @@ export interface OnboardingViewBinding {
   readonly primaryLabel: ComputedRef<string>
   onWisdomEnabledChange: (value: boolean) => Promise<void>
   onPrimary: () => Promise<void>
+  onSubscribe: (packageId: string) => Promise<void>
+  onRestore: () => Promise<void>
   finish: () => Promise<void>
 }
 
@@ -96,6 +98,19 @@ export function useOnboardingViewController(): OnboardingViewBinding {
     await filtersStore.setTopics(selectedTopicIds.value).catch(() => undefined)
   }
 
+  // The onboarding paywall always offers to buy (never Manage). A successful
+  // purchase or restore ends onboarding the same way Skip does; a cancel /
+  // "nothing to restore" leaves the user on the paywall to decide.
+  async function onSubscribe(packageId: string): Promise<void> {
+    await subscription.onSubscribe(packageId)
+    if (subscription.isSubscribed) await finish()
+  }
+
+  async function onRestore(): Promise<void> {
+    await subscription.onRestore()
+    if (subscription.isSubscribed) await finish()
+  }
+
   async function finish(): Promise<void> {
     // Persist picks even on skip from a later page, so a partial run still
     // personalizes Home.
@@ -117,6 +132,8 @@ export function useOnboardingViewController(): OnboardingViewBinding {
     primaryLabel,
     onWisdomEnabledChange,
     onPrimary,
+    onSubscribe,
+    onRestore,
     finish,
   }
 }

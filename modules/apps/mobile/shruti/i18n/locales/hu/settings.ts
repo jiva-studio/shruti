@@ -75,21 +75,27 @@ export default {
     thanks:
       "Köszönjük az előfizetésedet és a támogatásodat 🙏 Töltse el szívedet boldogság, és minden nap közelebb vigyen az Igazsághoz. Örülünk, hogy velünk tartasz ezen az úton.",
     benefits: {
+      progress: {
+        title: "Kövesd a haladásod",
+        description: "Kövesd a hallgatási sorozatod, és folytasd, ahol abbahagytad.",
+      },
+      andMore: {
+        title: "És még sok más",
+        description: "Folyamatos lejátszás, megosztás, a jegyzetstúdió és még sok más.",
+      },
       intro:
         "Új funkciókat és fejlesztéseket vezetünk be. A te támogatásod segít, hogy folytathassuk a fejlesztést, és jobbá tegyük a terméket.",
       benefit0: {
         title: "Új előadások",
-        description: "Az előfizetésed segít, hogy folytathassuk az új előadások hozzáadását.",
+        description: "Az előfizetésed segít új előadásokat hozzáadni.",
       },
       benefit1: {
         title: "Könyvjelzők",
-        description:
-          "Mentsd el a fontos pillanatokat az előadások szövegéből és hangjából, hogy később visszatérhess hozzájuk, vagy megoszthasd barátaiddal.",
+        description: "Mentsd el az előadás fontos pillanatait, hogy visszatérj vagy megoszd.",
       },
       benefit2: {
         title: "Okos könyvtár",
-        description:
-          "Az alkalmazás friss előadásokat tart az eszközödön, és automatikusan eltávolítja a befejezetteket.",
+        description: "Friss előadásokat tart az eszközön, a befejezetteket eltávolítja.",
       },
       benefit3: {
         title: "Szemináriumok és kurzusok",
@@ -103,13 +109,11 @@ export default {
       },
       sakha: {
         title: "Kérdezd Sadhut",
-        description:
-          "Előadásokban, hangokban és könyvekben keres, shlókákat talál, PDF-eket készít, és segít megérteni a tanításokat. Az előfizetéssel nagyobb napi keret jár.",
+        description: "Előadásokban, hangban és könyvekben keres, és elmagyarázza a tanításokat.",
       },
       autoScroll: {
         title: "Automatikus görgetés",
-        description:
-          "Az átirat együtt halad a lejátszott hanggal, így az aktuális bekezdés mindig látszik.",
+        description: "Az átirat követi a hangot, az aktuális bekezdés mindig látszik.",
       },
       continuousPlayback: {
         title: "Folyamatos lejátszás",

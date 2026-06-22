@@ -1,30 +1,16 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useI18n } from "vue-i18n"
+import { ref, watch, type ComputedRef, type Ref } from "vue"
 import router from "@shruti/router/index.js"
-import {
-  FEATURE_SLIDES,
-  slideIndexForFeature,
-  type FeatureSlideDef,
-} from "@ui/features/subscription/index.js"
+import { usePaywallShots, slideKeyForFeature } from "@shruti/composables/usePaywallShots.js"
+import type { ShotView } from "@ui/features/subscription/index.js"
 import {
   useSubscriptionBinding,
   type SubscriptionBinding,
 } from "@shruti/views/Settings/composables/useSubscriptionBinding.js"
 
-export interface SlideView {
-  readonly key: string
-  readonly icon: string
-  readonly title: string
-  readonly description: string
-  readonly soon: boolean
-}
-
 export interface SubscriptionViewBinding {
   readonly subscription: SubscriptionBinding
-  readonly slides: ComputedRef<SlideView[]>
-  readonly initialIndex: number
-  readonly index: Ref<number>
-  setIndex: (i: number) => void
+  readonly shots: ComputedRef<ShotView[]>
+  readonly initialKey: Ref<string | undefined>
 }
 
 export function useSubscriptionViewController(): SubscriptionViewBinding {
@@ -35,42 +21,23 @@ export function useSubscriptionViewController(): SubscriptionViewBinding {
   // chain is wired in this component's context — so `useRoute()` returns
   // `undefined` and accessing `.query` throws. Same workaround as App.vue.
   const currentRoute = router.currentRoute
-  const { t } = useI18n()
   const subscription = useSubscriptionBinding()
+  const shots = usePaywallShots()
 
   const featureFromRoute = (): string | undefined => {
     const f = currentRoute.value?.query?.feature
     return typeof f === "string" ? f : undefined
   }
 
-  const initialIndex = slideIndexForFeature(featureFromRoute())
-  const index = ref<number>(initialIndex)
+  const initialKey = ref<string | undefined>(slideKeyForFeature(featureFromRoute()))
 
   watch(
     () => currentRoute.value?.query?.feature,
     (next) => {
       if (typeof next !== "string") return
-      index.value = slideIndexForFeature(next)
+      initialKey.value = slideKeyForFeature(next)
     }
   )
 
-  const slides = computed<SlideView[]>(() =>
-    FEATURE_SLIDES.map((s: FeatureSlideDef) => ({
-      key: s.key,
-      icon: s.icon,
-      title: t(`settings.subscription.benefits.${s.i18nKey}.title`),
-      description: t(`settings.subscription.benefits.${s.i18nKey}.description`),
-      soon: s.soon,
-    }))
-  )
-
-  return {
-    subscription,
-    slides,
-    initialIndex,
-    index,
-    setIndex: (i: number) => {
-      index.value = i
-    },
-  }
+  return { subscription, shots, initialKey }
 }
