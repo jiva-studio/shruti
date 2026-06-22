@@ -1,5 +1,5 @@
 <template>
-  <IonItem button detail lines="none" @click="emit('click')">
+  <IonItem button detail lines="none" data-testid="settings-smart-library" @click="emit('click')">
     <IconChip slot="start">
       <IconDownload :size="22" />
     </IconChip>

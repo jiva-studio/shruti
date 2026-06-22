@@ -1,18 +1,20 @@
 <template>
   <div class="footer">
-    <SubscriptionPlans
-      :packages="packages"
-      :is-subscribed="isSubscribed"
-      :ready="ready"
-      :purchasing="purchasing"
-      :show-cant-pay="showCantPay"
-      @subscribe="emit('subscribe', $event)"
-      @manage="emit('manage')"
-      @cant-pay="emit('cantPay')"
-      @update:has-trial="hasTrial = $event"
-    />
+    <!-- Once subscribed there's nothing to buy: show Manage, not the plans. -->
+    <SubscriptionManageButton v-if="isSubscribed" @manage="emit('manage')" />
 
-    <SubscriptionDisclaimer v-if="!isSubscribed && packages.length > 0" :has-trial="hasTrial" />
+    <template v-else>
+      <SubscriptionPlans
+        :packages="packages"
+        :ready="ready"
+        :purchasing="purchasing"
+        :show-cant-pay="showCantPay"
+        @subscribe="emit('subscribe', $event)"
+        @cant-pay="emit('cantPay')"
+        @update:has-trial="hasTrial = $event"
+      />
+      <SubscriptionDisclaimer v-if="packages.length > 0" :has-trial="hasTrial" />
+    </template>
 
     <SubscriptionLinks
       :legal-documents="legalDocuments"
@@ -26,6 +28,7 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import SubscriptionPlans from "./SubscriptionPlans.vue"
+import SubscriptionManageButton from "./SubscriptionManageButton.vue"
 import SubscriptionDisclaimer from "./SubscriptionDisclaimer.vue"
 import SubscriptionLinks from "./SubscriptionLinks.vue"
 import type { PackageView, LegalDocumentView } from "./types.js"

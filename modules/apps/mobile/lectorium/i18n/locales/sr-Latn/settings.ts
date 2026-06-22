@@ -82,21 +82,27 @@ export default {
     thanks:
       "Hvala vam na pretplati i podršci 🙏 Neka vam srce bude ispunjeno srećom, a svaki dan vas približi Istini. Drago nam je što ste sa nama na ovom putu.",
     benefits: {
+      progress: {
+        title: "Pratite svoj napredak",
+        description: "Pratite svoj niz slušanja i nastavite gde ste stali.",
+      },
+      andMore: {
+        title: "I još mnogo toga",
+        description: "Neprekidna reprodukcija, deljenje, studio beleški i još mnogo toga.",
+      },
       intro:
         "Uvodimo nove funkcije i poboljšanja. Vaša podrška nam pomaže da nastavimo razvoj i učinimo proizvod boljim.",
       benefit0: {
         title: "Nova predavanja",
-        description: "Vaša pretplata nam pomaže da nastavimo dodavanje novih predavanja.",
+        description: "Vaša pretplata nam pomaže da dodajemo nova predavanja.",
       },
       benefit1: {
         title: "Obeleživači",
-        description:
-          "Sačuvajte važne trenutke iz teksta i audija predavanja da im se kasnije vratite ili ih podelite sa prijateljima.",
+        description: "Sačuvajte ključne trenutke predavanja da im se vratite ili ih podelite.",
       },
       benefit2: {
         title: "Pametna biblioteka",
-        description:
-          "Aplikacija sama drži sveža predavanja na uređaju i automatski uklanja odslušana.",
+        description: "Drži sveža predavanja na uređaju i automatski uklanja odslušana.",
       },
       benefit3: {
         title: "Seminari i kursevi",
@@ -109,12 +115,11 @@ export default {
       },
       sakha: {
         title: "Pitaj Sadhua",
-        description:
-          "Pretražuje predavanja, audio i knjige, pronalazi šloke, generiše PDF-ove i pomaže vam da razumete učenja. Veći dnevni limit dolazi uz pretplatu.",
+        description: "Pretražuje predavanja, audio i knjige i objašnjava učenja.",
       },
       autoScroll: {
         title: "Automatsko skrolovanje",
-        description: "Transkript prati reprodukciju audija, pa je trenutni pasus uvek pred očima.",
+        description: "Transkript prati audio, pa je trenutni pasus uvek pred očima.",
       },
       continuousPlayback: {
         title: "Neprekidna reprodukcija",

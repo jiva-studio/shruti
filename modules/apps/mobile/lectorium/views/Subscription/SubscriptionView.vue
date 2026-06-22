@@ -11,22 +11,13 @@
 
     <IonContent :fullscreen="true">
       <div class="layout">
-        <div class="carousel-host">
-          <FeatureCarousel
-            :page-count="slides.length"
-            :initial-page="initialIndex"
-            @update:index="setIndex"
-          >
-            <template #default="{ index: i }">
-              <FeatureSlide
-                :icon="slides[i].icon"
-                :title="slides[i].title"
-                :description="slides[i].description"
-                :soon="slides[i].soon"
-              />
-            </template>
-          </FeatureCarousel>
+        <div class="head">
+          <h1 class="head__title">{{ $t("onboarding.paywall.title") }}</h1>
+          <p class="head__subtitle">{{ $t("onboarding.paywall.subtitle") }}</p>
         </div>
+
+        <SubscriptionShots class="shots" :shots="shots" :initial-key="initialKey" />
+
         <SubscriptionFooter
           class="settings-footer"
           :packages="subscription.packages"
@@ -56,48 +47,51 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/vue"
-import {
-  FeatureCarousel,
-  FeatureSlide,
-  SubscriptionFooter,
-} from "@ui/features/subscription/index.js"
+import { SubscriptionFooter, SubscriptionShots } from "@ui/features/subscription/index.js"
 import { useSubscriptionViewController } from "./SubscriptionView.controller.js"
 
-const { subscription, slides, initialIndex, setIndex } = useSubscriptionViewController()
+const { subscription, shots, initialKey } = useSubscriptionViewController()
 const defaultBackHref = "/tabs/settings"
 </script>
 
 <style scoped>
-.settings-footer {
-  padding-inline: 16px;
-}
-
 .layout {
   display: flex;
   flex-direction: column;
-  /* Fill the viewport on tall screens (carousel grows, footer sits at the
+  /* Fill the viewport on tall screens (shots + head grow, footer sits at the
      bottom) but allow the column to overflow and IonContent to scroll on
      short ones, instead of squeezing everything into a single screen. */
   min-height: 100%;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+  padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  box-sizing: border-box;
 }
 
-.carousel-host {
-  flex: 1 1 auto;
-  /* Floor the hero height so the illustration always has room and the slide
-     can centre comfortably. */
-  min-height: clamp(340px, 52vh, 480px);
-  position: relative;
+.head {
+  text-align: center;
+  max-width: 440px;
+  /* auto bottom on .shots centres the head + strip group in the space above
+     the footer. */
+  margin: 0 auto;
+}
+.head__title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--ion-text-color);
+}
+.head__subtitle {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--ion-color-medium);
 }
 
-/* Fill the host with the carousel via absolute positioning. This gives the
-   carousel a definite pixel height (so the slide's own vertical centring works
-   reliably, unlike a percentage-height chain), the slide art + text land in the
-   middle of the hero, and the dots — pinned to the carousel's bottom — drop to
-   just above the footer button instead of floating mid-screen. */
-.layout .carousel-host > * {
-  position: absolute;
-  inset: 0;
+.shots {
+  margin: 16px 0 auto;
+}
+
+.settings-footer {
+  margin-top: 16px;
 }
 </style>
 
