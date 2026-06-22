@@ -16,12 +16,30 @@ from __future__ import annotations
 
 from shruti_chat.agent.graph.conditional import (
     route_after_action,
+    route_after_planner,
     route_after_router,
 )
 
 
 def test_direct_chat_goes_to_synthesizer() -> None:
     assert route_after_router({"intent": "direct_chat"}) == "synthesizer"
+
+
+# ── route_after_planner: corpus-insufficient → memory-pass fallback ──
+
+
+def test_planner_insufficient_routes_to_corpus_fallback() -> None:
+    assert route_after_planner({"corpus_insufficient": True}) == "corpus_fallback"
+
+
+def test_planner_sufficient_routes_to_synthesizer() -> None:
+    assert route_after_planner({"corpus_insufficient": False}) == "synthesizer"
+
+
+def test_planner_unset_flag_routes_to_synthesizer() -> None:
+    # Disabled fallback / a normal plan never sets the flag → straight to synth
+    # (which then writes plan-driven prose or the canned refusal).
+    assert route_after_planner({}) == "synthesizer"
 
 
 # ── route_after_action: card → deterministic responder, else synth ──

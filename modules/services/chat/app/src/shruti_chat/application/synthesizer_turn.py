@@ -506,6 +506,8 @@ async def run_synthesizer_turn(
     history: list[dict[str, Any]] | None = None,
     outline: Any | None = None,
     memory_note: str | None = None,
+    fallback_answer: str | None = None,
+    fallback_confidence: str | None = None,
     request_id: str | None = None,
     model: str | None = None,
     temperature: float | None = 0.5,
@@ -591,9 +593,37 @@ async def run_synthesizer_turn(
             f"{_SEP}\n"
             f"{memory_note.strip()}\n\n"
         )
+    # Out-of-corpus memory-pass draft. When set, this IS the substance of the
+    # answer — a from-general-knowledge reply the corpus_fallback node obtained
+    # because the corpus had nothing relevant. Unlike the curator `memory_note`
+    # (background framing, never reproduced), the model should present this
+    # faithfully; the `fallback` prompt section governs the disclaimer and the
+    # opportunistic citation of any RESEARCH NOTES the follow-up search found.
+    draft_section = ""
+    if fallback_answer and fallback_answer.strip():
+        # On a LOW self-assessed confidence, instruct extra hedging — the model
+        # graded its OWN answer, so this is a soft calibration, never a guarantee.
+        hedge = (
+            " The source model flagged LOW confidence — hedge explicitly "
+            "(«насколько мне известно…» / «as far as I know…») and avoid stating "
+            "specific numbers, dates, or names you are unsure of."
+            if (fallback_confidence or "").lower() == "low"
+            else ""
+        )
+        draft_section = (
+            f"{_SEP}\n"
+            f"DRAFT ANSWER (from general knowledge — the corpus had no relevant "
+            f"material. Present this faithfully, in the user's language, as the "
+            f"substance of your reply; do NOT attach scripture citations to it. "
+            f"Cite the RESEARCH NOTES below — if any — with [^N] only where they "
+            f"directly support a point.{hedge})\n"
+            f"{_SEP}\n"
+            f"{fallback_answer.strip()}\n\n"
+        )
     system_block = (
         f"{system_prompt}\n\n"
         f"{memory_section}"
+        f"{draft_section}"
         f"{_SEP}\n"
         f"RESEARCH NOTES (private context — do NOT mention or echo)\n"
         f"{_SEP}\n"

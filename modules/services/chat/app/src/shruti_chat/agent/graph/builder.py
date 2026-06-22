@@ -34,6 +34,13 @@ see `conditional.route_after_router`.
 `synthesis_planner` only sits in the research_worker → synthesizer
 arm because that's the only path that produces prose-grounding notes;
 catalog/action/help workers go straight to the synthesizer.
+
+When the planner finds the corpus insufficient (empty retrieval or every
+note rejected) it flags `corpus_insufficient`, and the planner→synthesizer
+edge instead routes through `corpus_fallback` — the out-of-corpus
+"memory-pass": answer from a large model's general knowledge, re-search the
+corpus on probes derived from that answer, then let the synthesizer compose
+a disclaimed, opportunistically-cited reply. `corpus_fallback` → synthesizer.
 """
 
 from __future__ import annotations
@@ -44,12 +51,14 @@ from langgraph.pregel import Pregel
 from shruti_chat.agent.graph.conditional import (
     route_after_action,
     route_after_catalog,
+    route_after_planner,
     route_after_research,
     route_after_router,
 )
 from shruti_chat.agent.graph.nodes import (
     action_worker_node,
     catalog_worker_node,
+    corpus_fallback_node,
     help_worker_node,
     locate_worker_node,
     recommend_worker_node,
@@ -85,6 +94,7 @@ def build_chat_graph() -> Pregel:
     builder.add_node("help_worker", help_worker_node)
     builder.add_node("show_verse_worker", show_verse_worker_node)
     builder.add_node("synthesis_planner", synthesis_planner_node)
+    builder.add_node("corpus_fallback", corpus_fallback_node)
     builder.add_node("synthesizer", synthesizer_node)
     builder.add_node("action_responder", action_responder_node)
 
@@ -155,7 +165,20 @@ def build_chat_graph() -> Pregel:
     # show_verse_worker emits one verse note + card payload — straight to the
     # synthesizer for a short lead-in + follow-up chips; no planning needed.
     builder.add_edge("show_verse_worker", "synthesizer")
-    builder.add_edge("synthesis_planner", "synthesizer")
+    # synthesis_planner forks: a corpus-insufficient turn (empty retrieval or
+    # every note rejected) goes through corpus_fallback for the out-of-corpus
+    # memory-pass; otherwise straight to the synthesizer. The fallback node
+    # degrades to {} (no fallback_mode) on missing LLM / failure, so the
+    # synthesizer still reaches its normal refusal in every failure mode.
+    builder.add_conditional_edges(
+        "synthesis_planner",
+        route_after_planner,
+        {
+            "corpus_fallback": "corpus_fallback",
+            "synthesizer": "synthesizer",
+        },
+    )
+    builder.add_edge("corpus_fallback", "synthesizer")
     builder.add_edge("synthesizer", END)
 
     return builder.compile()
