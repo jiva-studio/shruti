@@ -1,5 +1,5 @@
 <template>
-  <IonItem button detail lines="none" @click="onClick">
+  <IonItem button detail lines="none" data-testid="settings-track-info" @click="onClick">
     <IconChip slot="start">
       <BookIcon />
     </IconChip>

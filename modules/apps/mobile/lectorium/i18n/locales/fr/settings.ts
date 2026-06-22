@@ -75,21 +75,27 @@ export default {
     thanks:
       "Merci pour votre abonnement et votre soutien 🙏 Que votre cœur se remplisse de bonheur et que chaque jour vous rapproche de la Vérité. Nous sommes heureux de vous compter parmi nous sur ce chemin.",
     benefits: {
+      progress: {
+        title: "Suivez votre progression",
+        description: "Suivez votre série d'écoute et reprenez là où vous vous êtes arrêté.",
+      },
+      andMore: {
+        title: "Et bien plus encore",
+        description: "Lecture continue, partage, le studio de notes et bien plus encore.",
+      },
       intro:
         "Nous mettons en place de nouvelles fonctionnalités et améliorations. Votre soutien nous aide à poursuivre le développement et à améliorer le produit.",
       benefit0: {
         title: "Nouvelles conférences",
-        description: "Votre abonnement nous aide à continuer d'ajouter de nouvelles conférences.",
+        description: "Votre abonnement nous aide à ajouter de nouvelles conférences.",
       },
       benefit1: {
         title: "Signets",
-        description:
-          "Enregistrez les moments importants du texte et de l'audio des conférences pour y revenir plus tard ou les partager avec vos amis.",
+        description: "Gardez les moments clés d'une conférence pour y revenir ou partager.",
       },
       benefit2: {
         title: "Bibliothèque intelligente",
-        description:
-          "L'application garde de nouvelles conférences sur votre appareil et efface automatiquement celles que vous avez terminées.",
+        description: "Garde de nouvelles conférences sur l'appareil et efface celles finies.",
       },
       benefit3: {
         title: "Séminaires et cours",
@@ -103,13 +109,11 @@ export default {
       },
       sakha: {
         title: "Demandez à Sadhu",
-        description:
-          "Cherche dans les conférences, l'audio et les livres, trouve des shlokas, génère des PDF et vous aide à comprendre l'enseignement. Un quota quotidien plus large vient avec l'abonnement.",
+        description: "Cherche dans conférences, audio et livres et explique l'enseignement.",
       },
       autoScroll: {
         title: "Défilement automatique",
-        description:
-          "La transcription suit l'audio à mesure qu'il joue, pour que le paragraphe en cours soit toujours visible.",
+        description: "La transcription suit l'audio, le paragraphe en cours reste visible.",
       },
       continuousPlayback: {
         title: "Lecture continue",

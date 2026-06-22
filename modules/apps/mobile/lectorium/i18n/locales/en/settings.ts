@@ -73,21 +73,27 @@ export default {
     thanks:
       "Thank you for your subscription and support 🙏 May your heart be filled with happiness, and each day bring you closer to Truth. We are glad that you are with us on this path.",
     benefits: {
+      progress: {
+        title: "Track Your Progress",
+        description: "Track your listening streak and pick up where you left off.",
+      },
+      andMore: {
+        title: "And much more",
+        description: "Continuous playback, sharing, the notes studio, and much more.",
+      },
       intro:
         "We are implementing new features and improvements. Your support helps us continue development and make the product better.",
       benefit0: {
         title: "New Lectures",
-        description: "Your subscription helps us continue adding new lectures.",
+        description: "Your subscription helps us keep adding new lectures.",
       },
       benefit1: {
         title: "Bookmarks",
-        description:
-          "Save important moments from the text and audio of lectures to revisit later or share with friends.",
+        description: "Save key moments from a lecture to revisit or share.",
       },
       benefit2: {
         title: "Smart Library",
-        description:
-          "The app keeps fresh lectures on your device and automatically clears finished ones.",
+        description: "Keeps fresh lectures on your device and clears finished ones.",
       },
       benefit3: {
         title: "Seminars and Courses",
@@ -101,13 +107,11 @@ export default {
       },
       sakha: {
         title: "Ask Sadhu",
-        description:
-          "Searches lectures, audio and books, finds shlokas, generates PDFs, and helps you make sense of the teachings. A bigger daily allowance comes with a subscription.",
+        description: "Searches lectures, audio and books and explains the teachings.",
       },
       autoScroll: {
         title: "Automatic Scroll",
-        description:
-          "The transcript follows along as audio plays, so the current paragraph is always in view.",
+        description: "The transcript follows the audio, keeping your place in view.",
       },
       continuousPlayback: {
         title: "Continuous Playback",

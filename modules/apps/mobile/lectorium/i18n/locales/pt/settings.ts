@@ -73,21 +73,27 @@ export default {
     thanks:
       "Obrigado pela sua assinatura e apoio 🙏 Que o seu coração se encha de felicidade e que cada dia o aproxime mais da Verdade. Ficamos felizes por você estar conosco neste caminho.",
     benefits: {
+      progress: {
+        title: "Acompanhe seu progresso",
+        description: "Acompanhe sua sequência de escuta e continue de onde parou.",
+      },
+      andMore: {
+        title: "E muito mais",
+        description: "Reprodução contínua, compartilhamento, o estúdio de notas e muito mais.",
+      },
       intro:
         "Estamos desenvolvendo novos recursos e melhorias. O seu apoio nos ajuda a continuar o desenvolvimento e a tornar o produto melhor.",
       benefit0: {
         title: "Novas aulas",
-        description: "Sua assinatura nos ajuda a continuar adicionando novas aulas.",
+        description: "Sua assinatura nos ajuda a adicionar novas aulas.",
       },
       benefit1: {
         title: "Marcadores",
-        description:
-          "Salve momentos importantes do texto e do áudio das aulas para revisitar mais tarde ou compartilhar com amigos.",
+        description: "Salve momentos-chave de uma aula para revisitar ou compartilhar.",
       },
       benefit2: {
         title: "Biblioteca Inteligente",
-        description:
-          "O app mantém aulas novas no seu aparelho e remove automaticamente as concluídas.",
+        description: "Mantém aulas novas no aparelho e remove as concluídas.",
       },
       benefit3: {
         title: "Seminários e cursos",
@@ -101,13 +107,11 @@ export default {
       },
       sakha: {
         title: "Pergunte ao Sadhu",
-        description:
-          "Busca em aulas, áudios e livros, encontra shlokas, gera PDFs e ajuda você a compreender os ensinamentos. Com a assinatura, você recebe um limite diário maior.",
+        description: "Busca em aulas, áudios e livros e explica os ensinamentos.",
       },
       autoScroll: {
         title: "Rolagem automática",
-        description:
-          "A transcrição acompanha a reprodução do áudio, mantendo o parágrafo atual sempre à vista.",
+        description: "A transcrição acompanha o áudio, mantendo o trecho atual à vista.",
       },
       continuousPlayback: {
         title: "Reprodução contínua",

@@ -73,21 +73,27 @@ export default {
     thanks:
       "Grazie per il tuo abbonamento e il tuo sostegno 🙏 Che il tuo cuore si riempia di felicità e che ogni giorno ti avvicini alla Verità. Siamo felici che tu sia con noi su questo cammino.",
     benefits: {
+      progress: {
+        title: "Monitora i tuoi progressi",
+        description: "Segui la tua serie di ascolti e riprendi da dove avevi lasciato.",
+      },
+      andMore: {
+        title: "E molto altro",
+        description: "Riproduzione continua, condivisione, lo studio note e molto altro.",
+      },
       intro:
         "Stiamo realizzando nuove funzioni e miglioramenti. Il tuo sostegno ci aiuta a continuare lo sviluppo e a rendere il prodotto migliore.",
       benefit0: {
         title: "Nuove lezioni",
-        description: "Il tuo abbonamento ci aiuta a continuare ad aggiungere nuove lezioni.",
+        description: "Il tuo abbonamento ci aiuta ad aggiungere nuove lezioni.",
       },
       benefit1: {
         title: "Segnalibri",
-        description:
-          "Salva i momenti importanti dal testo e dall'audio delle lezioni per rivederli più tardi o condividerli con gli amici.",
+        description: "Salva i momenti chiave di una lezione per rivederli o condividerli.",
       },
       benefit2: {
         title: "Biblioteca intelligente",
-        description:
-          "L'app tiene nuove lezioni sul tuo dispositivo e rimuove automaticamente quelle terminate.",
+        description: "Tiene nuove lezioni sul dispositivo e rimuove quelle terminate.",
       },
       benefit3: {
         title: "Seminari e corsi",
@@ -101,13 +107,11 @@ export default {
       },
       sakha: {
         title: "Chiedi a Sadhu",
-        description:
-          "Cerca nelle lezioni, nell'audio e nei libri, trova le shloka, genera PDF e ti aiuta a comprendere gli insegnamenti. Con l'abbonamento il limite giornaliero è più alto.",
+        description: "Cerca tra lezioni, audio e libri e spiega gli insegnamenti.",
       },
       autoScroll: {
         title: "Scorrimento automatico",
-        description:
-          "La trascrizione segue l'audio in riproduzione, così il paragrafo corrente è sempre in vista.",
+        description: "La trascrizione segue l'audio, il paragrafo corrente resta in vista.",
       },
       continuousPlayback: {
         title: "Riproduzione continua",
