@@ -80,7 +80,7 @@ function statusLabelFor(m: Msg): string {
 <template>
   <div
     class="flex h-full flex-col overflow-hidden"
-    :class="bare ? '' : 'rounded-3xl border border-line bg-cream-deep/40'"
+    :class="bare ? '' : 'rounded-2xl border border-line bg-cream-deep/40'"
   >
     <header v-if="!bare" class="border-b border-line bg-cream/70 px-5 py-4">
       <h2 class="font-serif text-lg font-bold text-ink">{{ L.title }}</h2>
