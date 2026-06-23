@@ -20,10 +20,14 @@ export const ui = {
     'nav.download': 'Скачать',
 
     'hero.title': 'Слушай Садху',
-    'hero.subtitle': 'Вся ведическая мудрость в одном приложении. Лекции Шрилы Прабхупады.',
+    'hero.subtitle': 'Вся ведическая мудрость в одном приложении. Лекции А. Ч. Бхактиведанты Свами Прабхупады.',
     'hero.lead':
       'Сложное — простыми словами: о душе, сознании, карме и смысле жизни. Слушайте по дороге, на прогулке или дома и возвращайтесь к самому важному, когда захотите.',
     'hero.qr': 'Наведите камеру, чтобы установить',
+
+    'seo.title': 'Слушай Садху — А. Ч. Бхактиведанта Свами Прабхупада',
+    'seo.description':
+      'Ведическая мудрость в одном приложении: лекции о душе, карме и смысле жизни. Слушайте онлайн и офлайн.',
 
     'features.title': 'Возможности',
     'features.lead': 'Всё, чтобы изучать писания каждый день — слушать, читать и возвращаться к самому важному.',
@@ -105,7 +109,7 @@ export const ui = {
     'app.searchAllLead': 'Полный поиск с фильтрами по автору, месту, языку и году.',
 
     'library.lead':
-      'Тематические подборки лекций Шрилы Прабхупады — от основ до подробного изучения писаний стих за стихом.',
+      'Тематические подборки лекций А. Ч. Бхактиведанты Свами Прабхупады — от основ до подробного изучения писаний стих за стихом.',
     'library.topicsTitle': 'Темы',
     'library.topicsLead': 'Просматривайте лекции по конкретным темам — о душе, карме, преданном служении и не только.',
     'library.allTopics': 'Все темы',
@@ -134,10 +138,14 @@ export const ui = {
     'nav.download': 'Download',
 
     'hero.title': 'Shruti',
-    'hero.subtitle': 'All Vedic wisdom in one app. Lectures of Srila Prabhupada.',
+    'hero.subtitle': 'All Vedic wisdom in one app. Lectures of A. C. Bhaktivedanta Swami Prabhupada.',
     'hero.lead':
       'Deep ideas in plain words — the soul, consciousness, karma and the meaning of life. Listen on your commute, on a walk or at home, and come back to what matters whenever you like.',
     'hero.qr': 'Point your camera to install',
+
+    'seo.title': 'Shruti — A. C. Bhaktivedanta Swami Prabhupada',
+    'seo.description':
+      'Vedic wisdom in one app: lectures on the soul, karma and the meaning of life. Listen online or offline.',
 
     'features.title': 'Features',
     'features.lead': 'Everything you need to study the scriptures every day — listen, read, and return to what matters.',
@@ -219,7 +227,7 @@ export const ui = {
     'app.searchAllLead': 'Full search with filters by author, place, language and year.',
 
     'library.lead':
-      'Curated collections of Srila Prabhupada’s lectures by theme — from the essentials to verse-by-verse study of the scriptures.',
+      'Curated collections of A. C. Bhaktivedanta Swami Prabhupada’s lectures by theme — from the essentials to verse-by-verse study of the scriptures.',
     'library.topicsTitle': 'Topics',
     'library.topicsLead': 'Browse lectures by a specific topic — the soul, karma, devotional service and more.',
     'library.allTopics': 'All topics',
