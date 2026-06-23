@@ -253,16 +253,30 @@ import role-proxy.conf
 # serve the site (RU proxy, or before the var is set) it defaults to
 # ":8088" — an internal HTTP-only port nobody maps — so the block parses
 # and binds harmlessly without attempting ACME for a real name.
-{$LECTORIUM_WEB_DOMAIN} {
+{$LECTORIUM_WEB_DOMAIN::8088} {
     encode gzip zstd
-    root * /srv/web
-    # Astro emits pretty URLs as <path>/index.html; serve them without a
-    # trailing-slash redirect.
-    try_files {path} {path}/index.html {path}.html
-    file_server
     header {
         -Server
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
+    }
+    # Language negotiation on the bare entry path only. /en/ and /ru/ stay
+    # the canonical, indexable URLs; this just picks one for a "/" visit,
+    # by the browser's Accept-Language primary tag (ru* → /ru/, else /en/).
+    # Vary so any cache keys the redirect per language. Deep links
+    # (/en/..., /ru/...) are served directly below, untouched.
+    @root path /
+    handle @root {
+        header Vary Accept-Language
+        @ru header Accept-Language ru*
+        redir @ru /ru/ 302
+        redir * /en/ 302
+    }
+    handle {
+        root * /srv/web
+        # Astro emits pretty URLs as <path>/index.html; serve them without
+        # a trailing-slash redirect.
+        try_files {path} {path}/index.html {path}.html
+        file_server
     }
 }
