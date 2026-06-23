@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, nextTick, computed } from 'vue'
+import { ref, nextTick } from 'vue'
 import { STORE } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
 // REAL reused component (decoupled: status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
 import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
 import { webLocale } from '../../lib/i18n'
+import { useChatStream, type Msg } from '../../composables/useChatStream'
 
 type Lang = 'ru' | 'en'
 const props = defineProps<{ lang: Lang; trackId?: string; bare?: boolean }>()
@@ -48,284 +49,31 @@ const STATUS: Record<string, string> = props.lang === 'ru'
   ? { thinking: 'Думаю…', router_decision: 'Понимаю вопрос…', searching_corpus: 'Ищу в лекциях…', browsing_catalog: 'Просматриваю каталог…', locating: 'Ищу место…', preparing_action: 'Готовлю ответ…', composing_answer: 'Составляю ответ…', synthesizing_answer: 'Составляю ответ…' }
   : { thinking: 'Thinking…', router_decision: 'Understanding…', searching_corpus: 'Searching the lectures…', browsing_catalog: 'Browsing the catalog…', locating: 'Locating…', preparing_action: 'Preparing…', composing_answer: 'Composing the answer…', synthesizing_answer: 'Composing the answer…' }
 
-interface ResearchSource { kind?: string; id: string; label: string }
-interface Msg {
-  role: 'user' | 'assistant'
-  text: string
-  streaming?: boolean
-  statusKey?: string
-  researchQuestions?: string[]
-  researchSources?: Map<string, ResearchSource>
-  // payload maps keyed like the app's reducer, feeding the reused cards
-  verses?: Map<string, any>
-  chapters?: Map<string, any>
-  cites?: Map<string, any>
-  commentaries?: Map<string, any>
-  media?: Map<string, any>
-  outlines?: Map<string, any>
-  pdfActions?: Map<string, any>
-  aliases?: Record<string, any>
-}
-
-function captureAction(a: Msg, kind: string, p: any, actionId?: string) {
-  if (kind === 'verse' && p.source_id != null) {
-    a.verses!.set(`${p.source_id}|${p.tokens}`, {
-      addrLabel: p.addr_label, sanskrit: p.sanskrit, transliteration: p.transliteration,
-      transliterationOriginal: p.transliteration_original, translation: p.translation,
-      audioUrl: p.audio_url, mt: p.mt,
-    })
-  } else if (kind === 'chapter' && p.source_id != null) {
-    a.chapters!.set(`${p.source_id}|${p.region_token}`, {
-      regionLabel: p.region_label,
-      chapters: (p.chapters ?? []).map((c: any) => ({ tokens: c.tokens, title: c.title, titleOriginal: c.title_original })),
-      mt: p.mt,
-    })
-  } else if (kind === 'cite_transcript' && p.track_id != null) {
-    a.cites!.set(`${p.track_id}|${p.start_ms}-${p.end_ms}`, { text: p.text, mt: p.mt, textOriginal: p.text_original })
-  } else if (kind === 'commentary') {
-    // `[commentary:N]` → token.ref (a number). The payload carries `ref`
-    // directly; fall back to the trailing number in `id` (`commentary_<N>`).
-    const ref = p.ref != null ? p.ref : Number(String(p.id ?? '').match(/(\d+)$/)?.[1])
-    if (Number.isFinite(ref)) {
-      a.commentaries!.set(String(ref), {
-        text: p.text, authorName: p.author_name, addrLabel: p.addr_label,
-        commentaryKind: p.commentary_kind ?? p.kind, mt: p.mt, textOriginal: p.text_original,
-      })
-    }
-  } else if (kind === 'media' && p.id != null) {
-    a.media!.set(p.id, {
-      id: p.id, url: p.url, type: p.type, title: p.title, speaker: p.speaker,
-      text: p.text, mt: p.mt, textOriginal: p.text_original,
-    })
-  } else if (kind === 'outline' && p.track_id != null) {
-    a.outlines!.set(p.track_id, {
-      trackId: p.track_id,
-      items: (p.items ?? []).map((it: any) => ({ startMs: it.start_ms, title: it.title })),
-    })
-  } else if (kind === 'share_pdf' && actionId != null) {
-    a.pdfActions!.set(actionId, p)
-  }
-}
-const messages = ref<Msg[]>([])
-const input = ref('')
-const busy = ref(false)
-const turns = ref(0)
-const srvLimit = ref<number | null>(null)
-const srvCurrent = ref(0)
-const capped = computed(() =>
-  srvLimit.value !== null ? srvCurrent.value >= srvLimit.value : turns.value >= FREE_TURNS,
-)
-const left = computed(() =>
-  srvLimit.value !== null
-    ? Math.max(0, srvLimit.value - srvCurrent.value)
-    : Math.max(0, FREE_TURNS - turns.value),
-)
-const failed = ref(false)
 const scroller = ref<HTMLElement>()
-
-let activeController: AbortController | null = null
-let activeTraceId: string | null = null
-let stopped = false
-
-function stop() {
-  stopped = true
-  if (activeTraceId && token) {
-    fetch(`${CHAT}/chat/turn/${activeTraceId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {})
-  }
-  activeController?.abort()
-}
-
-function statusLabelFor(m: Msg): string {
-  return STATUS[m.statusKey ?? ''] ?? STATUS.thinking
-}
-
-let token: string | null = null
-
-function deviceId(): string {
-  const k = 'lts_device_id'
-  let v = localStorage.getItem(k)
-  if (!v) { v = crypto.randomUUID(); localStorage.setItem(k, v) }
-  return v
-}
-
-async function ensureToken(): Promise<string> {
-  if (token) return token
-  const cached = sessionStorage.getItem('lts_chat_token')
-  if (cached) { token = cached; return token }
-  if (!AUTH) throw new Error('auth_unconfigured')
-  const r = await fetch(`${AUTH}/auth/anonymous`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceId: deviceId(), platform: 'web' }),
-  })
-  if (!r.ok) throw new Error('auth_failed')
-  const j = await r.json()
-  token = j.accessToken
-  sessionStorage.setItem('lts_chat_token', token!)
-  return token!
-}
+const input = ref('')
 
 async function scrollDown() {
   await nextTick()
   scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' })
 }
 
-async function send(text?: string) {
-  const q = (text ?? input.value).trim()
-  if (!q || busy.value || capped.value) return
+const { messages, busy, turns, srvLimit, failed, capped, left, send: sendStream, stop } = useChatStream({
+  authBase: AUTH,
+  chatBase: CHAT,
+  lang: props.lang,
+  trackId: props.trackId,
+  freeTurns: FREE_TURNS,
+  onScroll: scrollDown,
+})
+
+function send(text?: string) {
+  const q = text ?? input.value
   input.value = ''
-  failed.value = false
-  messages.value.push({ role: 'user', text: q })
-  messages.value.push({
-    role: 'assistant',
-    text: '',
-    streaming: true,
-    researchQuestions: [],
-    researchSources: new Map(),
-    verses: new Map(),
-    chapters: new Map(),
-    cites: new Map(),
-    commentaries: new Map(),
-    media: new Map(),
-    outlines: new Map(),
-    pdfActions: new Map(),
-  })
-  // Reactive proxy of the assistant message so nested mutations re-render.
-  const a = messages.value[messages.value.length - 1]
-  busy.value = true
-  stopped = false
-  scrollDown()
+  sendStream(q)
+}
 
-  const traceId = crypto.randomUUID().replace(/-/g, '')
-  const idem = crypto.randomUUID()
-  activeTraceId = traceId
-  const controller = new AbortController()
-  activeController = controller
-  let gotDone = false
-
-  const handleEvent = (evt: string, payload: any) => {
-    if (evt === 'delta' || payload?.text) { a.text += payload.text ?? ''; scrollDown() }
-    else if (evt === 'status') { a.statusKey = payload?.key }
-    else if (evt === 'research_question') { if (payload?.question) a.researchQuestions!.push(payload.question) }
-    else if (evt === 'research_source') { if (payload?.id) a.researchSources!.set(payload.id, { kind: payload.kind, id: payload.id, label: payload.label ?? '' }) }
-    else if (evt === 'action') { if (payload?.kind) captureAction(a, payload.kind, payload.payload ?? {}, payload.id) }
-    else if (evt === 'usage') {
-      let u: any = payload
-      if (typeof u === 'string') { try { u = JSON.parse(u) } catch { u = null } }
-      if (u && typeof u.limit === 'number') { srvLimit.value = u.limit; srvCurrent.value = u.current ?? srvCurrent.value }
-    }
-    else if (evt === 'done') { gotDone = true; if (payload?.aliases) a.aliases = payload.aliases }
-    else if (evt === 'error') { throw new Error(payload?.code ?? 'error') }
-  }
-
-  const resume = async (jwt: string): Promise<boolean> => {
-    for (let i = 0; i < 4; i++) {
-      await new Promise((r) => setTimeout(r, 1000))
-      let j: any
-      try {
-        const rr = await fetch(`${CHAT}/chat/turn/${traceId}`, { headers: { Authorization: `Bearer ${jwt}` } })
-        if (!rr.ok) continue
-        j = await rr.json()
-      } catch { continue }
-      for (const e of j?.events ?? []) {
-        let p: any = e.data
-        if (typeof p === 'string') { try { p = JSON.parse(p) } catch { p = {} } }
-        handleEvent(e.event, p ?? {})
-      }
-      if (j?.state === 'done' || j?.state === 'error') return true
-    }
-    return gotDone
-  }
-
-  try {
-    if (!CHAT) throw new Error('chat_unconfigured')
-    const history = messages.value
-      .filter((m) => m.text)
-      .map((m) => (m.role === 'assistant' && m.aliases
-        ? { role: m.role, content: m.text, aliases: m.aliases }
-        : { role: m.role, content: m.text }))
-    const body: Record<string, unknown> = {
-      messages: history.length ? history : [{ role: 'user', content: q }],
-      lang: props.lang,
-      capabilities: { commentary_card: true },
-    }
-    if (props.trackId) body.user_context = { current_track_id: props.trackId }
-
-    const post = (jwt: string) =>
-      fetch(`${CHAT}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${jwt}`,
-          'X-Chat-Protocol-Version': '1',
-          'X-Trace-Id': traceId,
-          'Idempotency-Key': idem,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-
-    let jwt = await ensureToken()
-    let res = await post(jwt)
-    // Anonymous access tokens expire (~15 min). On 401 mint a fresh one (same
-    // deviceId → same quota bucket) and retry once.
-    if (res.status === 401) {
-      token = null
-      sessionStorage.removeItem('lts_chat_token')
-      jwt = await ensureToken()
-      res = await post(jwt)
-    }
-    if (res.status === 429) { turns.value = FREE_TURNS; throw new Error('rate_limited') }
-    if (!res.ok || !res.body) throw new Error('chat_failed')
-
-    try {
-      const reader = res.body.getReader()
-      const dec = new TextDecoder()
-      let buf = ''
-      let evt = ''
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += dec.decode(value, { stream: true })
-        const lines = buf.split('\n')
-        buf = lines.pop() ?? ''
-        for (const line of lines) {
-          if (line.startsWith('event:')) { evt = line.slice(6).trim(); continue }
-          if (!line.startsWith('data:')) continue
-          const data = line.slice(5).trim()
-          if (!data) continue
-          let payload: any
-          try { payload = JSON.parse(data) } catch { continue }
-          handleEvent(evt, payload)
-        }
-      }
-    } catch (e) {
-      if (stopped) throw e
-      if (!gotDone) { if (!(await resume(jwt))) throw e }
-    }
-
-    if (!gotDone && !stopped) {
-      if (!(await resume(jwt))) throw new Error('disconnected')
-    }
-    a.streaming = false
-    turns.value++
-  } catch {
-    a.streaming = false
-    if (stopped) {
-      if (a.text === '') messages.value.pop()
-    } else {
-      if (a.text === '') messages.value.pop()
-      failed.value = true
-    }
-  } finally {
-    busy.value = false
-    activeController = null
-    activeTraceId = null
-    scrollDown()
-  }
+function statusLabelFor(m: Msg): string {
+  return STATUS[m.statusKey ?? ''] ?? STATUS.thinking
 }
 </script>
 

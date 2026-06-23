@@ -1,0 +1,40 @@
+---
+import ScreenshotGallery from './ScreenshotGallery.astro'
+import SHOT_BG from '../data/screenshots.json'
+import type { Lang } from '../i18n/ui'
+interface Props { lang: Lang }
+const { lang } = Astro.props
+
+const shots = lang === 'ru'
+  ? [
+      ['01_home', 'Отслеживание прогресса', 'Серия дней и продолжение с того места, где остановились.'],
+      ['07_library', 'Тысячи лекций', 'По «Гите», «Бхагаватам» и другим писаниям — всегда под рукой.'],
+      ['04_transcript', 'Текст рядом с аудио', 'Читайте и слушайте одновременно — текущий абзац перед глазами.'],
+      ['05_chat', 'Спроси Садху', 'Понятный ответ со ссылками на конкретные лекции.'],
+      ['07_search', 'Поиск и фильтры', 'Находите лекции по теме, автору и дате.'],
+      ['08_track', 'Слушайте где угодно', 'Загружайте лекции и слушайте без интернета.'],
+    ]
+  : [
+      ['01_home', 'Track your progress', 'A day streak and picking up right where you left off.'],
+      ['07_library', 'Thousands of lectures', 'On the Gita, the Bhagavatam and other scriptures — always at hand.'],
+      ['04_transcript', 'Text beside the audio', 'Read and listen at once — the current passage in view.'],
+      ['05_chat', 'Ask Sadhu', 'A clear answer with links to the specific lectures.'],
+      ['07_search', 'Search & filters', 'Find lectures by topic, author and date.'],
+      ['08_track', 'Listen anywhere', 'Download lectures and listen offline.'],
+    ]
+
+const bg = SHOT_BG as Record<string, { top: string; bottom: string }>
+const slides = shots.map(([file, title, desc]) => ({
+  src: `/screens/${lang}/${file}.png?v=3`,
+  title,
+  desc,
+  top: bg[file]?.top ?? '#faf5ea',
+  bottom: bg[file]?.bottom ?? '#d4a986',
+}))
+---
+<section class="bg-cream-deep/50 py-16">
+  <div class="mx-auto mb-10 max-w-2xl px-5 text-center">
+    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{lang === 'en' ? 'A look inside' : 'Как выглядит приложение'}</h2>
+  </div>
+  <ScreenshotGallery slides={slides} />
+</section>

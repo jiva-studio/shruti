@@ -1,0 +1,30 @@
+import type {
+  ChatVerseBody,
+  ChatChapterBody,
+  ChatCiteSnippet,
+  ChatCommentaryBody,
+  ChatOutlinePayload,
+} from '@lib/domain/chatMessage.js'
+
+export type VersePayload = ChatVerseBody
+export type ChapterPayload = ChatChapterBody
+export type CitationPayload = ChatCiteSnippet
+export type CommentaryPayload = ChatCommentaryBody
+export type OutlinePayload = ChatOutlinePayload
+
+export interface PdfItemPayload {
+  track_id?: string
+  trackId?: string
+  title?: string
+  lang?: string
+}
+
+export interface PdfActionPayload {
+  items?: PdfItemPayload[]
+}
+
+export interface ResearchSource {
+  kind?: string
+  id: string
+  label: string
+}

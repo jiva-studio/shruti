@@ -55,16 +55,16 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useAudioSource } from '@lib/chat/audio/useAudioOrchestrator.js'
 import MediaCard from '@lib/ui/chat/MediaCard.vue'
+import { useMediaControls } from '../../composables/useMediaControls'
+import type { MediaPayload } from './types/media'
 
-const props = defineProps<{ payload?: any }>()
+const props = defineProps<{ payload?: MediaPayload }>()
 
-const mediaEl = ref<HTMLVideoElement | HTMLAudioElement | null>(null)
-const playing = ref(false)
-const progress = ref(0)
-const buffered = ref(0)
 const showOriginal = ref(false)
+
+const { mediaEl, playing, progress, buffered, onTimeUpdate, onProgress, onSeek, toggle } =
+  useMediaControls()
 
 const isMt = computed<boolean>(() => !!props.payload?.mt && !!props.payload?.textOriginal)
 const transcriptText = computed<string>(() => {
@@ -77,50 +77,4 @@ const fileUrl = computed<string>(() => props.payload?.url ?? '')
 const posterUrl = computed<string>(() =>
   props.payload ? String(props.payload.url).replace(/\.[^./]+$/, '.jpg') : ''
 )
-
-function onTimeUpdate(): void {
-  const el = mediaEl.value
-  progress.value = el && el.duration > 0 ? el.currentTime / el.duration : 0
-  onProgress()
-}
-
-function onProgress(): void {
-  const el = mediaEl.value
-  if (!el || el.duration <= 0 || el.buffered.length === 0) {
-    buffered.value = 0
-    return
-  }
-  let end = 0
-  for (let i = 0; i < el.buffered.length; i++) {
-    if (el.buffered.start(i) <= el.currentTime && el.currentTime <= el.buffered.end(i)) {
-      end = el.buffered.end(i)
-      break
-    }
-    end = Math.max(end, el.buffered.end(i))
-  }
-  buffered.value = end / el.duration
-}
-
-function onSeek(ratio: number): void {
-  const el = mediaEl.value
-  if (!el || !el.duration) return
-  el.currentTime = el.duration * Math.min(1, Math.max(0, ratio))
-}
-
-const { claim } = useAudioSource('inline', () => mediaEl.value?.pause())
-
-async function toggle(): Promise<void> {
-  const el = mediaEl.value
-  if (!el) return
-  if (!el.paused) {
-    el.pause()
-    return
-  }
-  claim()
-  try {
-    await el.play()
-  } catch {
-    // autoplay/buffer hiccup — user can tap again
-  }
-}
 </script>
