@@ -114,8 +114,12 @@ export const ui = {
     'topics.lead':
       'Выберите тему, чтобы найти лекции о душе, карме, преданном служении, святом имени и многом другом.',
     'topic.kicker': 'Тема',
+    'topic.descPrefix': 'Лекции по теме «',
+    'topic.descSuffix': '» — слушайте онлайн или в приложении.',
 
     'collection.kicker': 'Подборка',
+
+    'site.name': 'Слушай Садху',
 
     'common.lecturesN': 'лекций',
     'common.backToLibrary': 'Все категории',
@@ -224,8 +228,12 @@ export const ui = {
     'topics.lead':
       'Pick a topic to find lectures on the soul, karma, devotional service, the holy name and much more.',
     'topic.kicker': 'Topic',
+    'topic.descPrefix': 'Lectures on ',
+    'topic.descSuffix': ' — listen online or in the app.',
 
     'collection.kicker': 'Collection',
+
+    'site.name': 'Shruti',
 
     'common.lecturesN': 'lectures',
     'common.backToLibrary': 'All categories',

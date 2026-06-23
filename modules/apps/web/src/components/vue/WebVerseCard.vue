@@ -33,12 +33,13 @@
 import { computed } from 'vue'
 import { useExcerptAudioPlayer } from '@lib/chat/audio/useExcerptAudioPlayer.js'
 import VerseCard from '@lib/ui/chat/VerseCard.vue'
+import type { VersePayload } from './types/chat'
 
 const props = defineProps<{
   sourceId: string
   tokens: string
   caption?: string
-  body?: any
+  body?: VersePayload
   locale: string
 }>()
 

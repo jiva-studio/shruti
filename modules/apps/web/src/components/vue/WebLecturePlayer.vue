@@ -77,13 +77,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue'
+import { computed, ref, useTemplateRef, watch } from 'vue'
 import type { LectureRecord, LectureVariant, OutlineChapter } from '@lib/catalog/types.js'
 import { buildTranscriptGroups } from '@lib/catalog/transcript.js'
 import AudioPlayerBar from '@lib/ui/player/AudioPlayerBar.vue'
 import TranscriptView from '@lib/ui/transcript/TranscriptView.vue'
 import Waveform from '@lib/ui/player/Waveform.vue'
 import { buildPlaceholderPeaks, resamplePeaks, useResponsiveBarCount } from '@lib/chat/audio/useWaveform.js'
+import { useLectureAudioPlayer } from '../../composables/useLectureAudioPlayer'
 import { useT } from '../../i18n/ui'
 
 const props = withDefaults(
@@ -114,16 +115,30 @@ const groups = computed(() => {
   return buildTranscriptGroups(v.transcript.blocks, v.outline ?? [])
 })
 
-const audioEl = useTemplateRef<HTMLAudioElement>('audioEl')
 const transcriptEl = useTemplateRef<{ $el: HTMLElement }>('transcriptEl')
 const waveformRef = useTemplateRef<{ waveformEl: HTMLElement | null }>('waveformRef')
 const waveformEl = computed<HTMLElement | null>(() => waveformRef.value?.waveformEl ?? null)
 
-const playing = ref(false)
-const busy = ref(false)
-const positionMs = ref(0)
-const durationMs = ref(variant.value?.audio?.durationMs ?? 0)
-const speed = ref(1)
+const {
+  audioEl,
+  playing,
+  busy,
+  positionMs,
+  durationMs,
+  speed,
+  onTimeUpdate,
+  onLoadedMetadata,
+  onPlay,
+  onPause,
+  onEnded,
+  onWaiting,
+  onPlaying,
+  toggle,
+  skipBack,
+  skipForward,
+  seek,
+  setSpeed,
+} = useLectureAudioPlayer({ initialDurationMs: variant.value?.audio?.durationMs ?? 0 })
 
 const barCount = useResponsiveBarCount(waveformEl)
 const rawPeaks = computed(() => buildPlaceholderPeaks(props.lecture.id, 400))
@@ -160,69 +175,6 @@ const activeChapterTitle = computed<string | null>(() => {
 
 const captionTitle = computed(() => hoverTitle.value ?? activeChapterTitle.value)
 
-function onTimeUpdate() {
-  if (audioEl.value) positionMs.value = audioEl.value.currentTime * 1000
-}
-function onLoadedMetadata() {
-  if (audioEl.value && Number.isFinite(audioEl.value.duration)) {
-    durationMs.value = audioEl.value.duration * 1000
-  }
-}
-function onPlay() {
-  playing.value = true
-}
-function onPause() {
-  playing.value = false
-}
-function onEnded() {
-  playing.value = false
-}
-function onWaiting() {
-  busy.value = true
-}
-function onPlaying() {
-  busy.value = false
-}
-
-function ensurePlaying() {
-  const el = audioEl.value
-  if (!el) return
-  if (el.paused) void el.play().catch(() => {})
-}
-
-function toggle() {
-  const el = audioEl.value
-  if (!el) return
-  if (el.paused) void el.play().catch(() => {})
-  else el.pause()
-}
-
-function skipBack() {
-  const el = audioEl.value
-  if (!el) return
-  el.currentTime = Math.max(0, el.currentTime - 15)
-}
-
-function skipForward() {
-  const el = audioEl.value
-  if (!el) return
-  const max = Number.isFinite(el.duration) ? el.duration : el.currentTime + 15
-  el.currentTime = Math.min(max, el.currentTime + 15)
-}
-
-function seek(ms: number) {
-  const el = audioEl.value
-  if (!el) return
-  el.currentTime = ms / 1000
-  positionMs.value = ms
-  ensurePlaying()
-}
-
-function setSpeed(value: number) {
-  speed.value = value
-  if (audioEl.value) audioEl.value.playbackRate = value
-}
-
 function formatTime(ms: number): string {
   const total = Math.max(0, Math.floor((ms || 0) / 1000))
   const h = Math.floor(total / 3600)
@@ -246,10 +198,6 @@ watch(positionMs, (pos) => {
   if (!root) return
   const para = root.querySelectorAll('.tx-group')[idx] as HTMLElement | undefined
   if (para && playing.value) para.scrollIntoView({ behavior: 'smooth', block: 'center' })
-})
-
-onBeforeUnmount(() => {
-  if (audioEl.value && !audioEl.value.paused) audioEl.value.pause()
 })
 </script>
 

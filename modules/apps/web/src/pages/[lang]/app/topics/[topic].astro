@@ -3,14 +3,17 @@ import BaseLayout from '../../../../layouts/BaseLayout.astro'
 import WebApp from '../../../../components/vue/WebApp.vue'
 import TopicDetail from '../../../../components/TopicDetail.astro'
 import { topics, pickName } from '../../../../lib/catalog'
+import { useT, type Lang } from '../../../../i18n/ui'
 import type { TopicIndexEntry } from '@lib/catalog/types.js'
 
-const lang = 'en'
-
 export function getStaticPaths() {
-  return topics.map((tp) => ({ params: { topic: tp.slug }, props: { topic: tp } }))
+  return (['en', 'ru'] as const).flatMap((lang) =>
+    topics.map((tp) => ({ params: { lang, topic: tp.slug }, props: { topic: tp } })),
+  )
 }
 
+const lang = Astro.params.lang as Lang
+const t = useT(lang)
 const { topic } = Astro.props as { topic: TopicIndexEntry }
 const name = pickName(topic.names, lang)
 ---
@@ -18,8 +21,8 @@ const name = pickName(topic.names, lang)
   lang={lang}
   path={`/app/topics/${topic.slug}`}
   fullscreen
-  title={`${name} — ${lang === 'en' ? 'Shruti' : 'Слушай Садху'}`}
-  description={`Lectures on ${name} — listen online or in the app.`}
+  title={`${name} — ${t('site.name')}`}
+  description={t('topic.descPrefix') + name + t('topic.descSuffix')}
   image={topic.cover ?? undefined}
 >
   <WebApp client:load lang={lang}>

@@ -3,14 +3,17 @@ import BaseLayout from '../../../../layouts/BaseLayout.astro'
 import WebApp from '../../../../components/vue/WebApp.vue'
 import CollectionDetail from '../../../../components/CollectionDetail.astro'
 import { collections, pickName } from '../../../../lib/catalog'
+import { useT, type Lang } from '../../../../i18n/ui'
 import type { CollectionIndexEntry } from '@lib/catalog/types.js'
 
-const lang = 'en'
-
 export function getStaticPaths() {
-  return collections.map((c) => ({ params: { collection: c.slug }, props: { collection: c } }))
+  return (['en', 'ru'] as const).flatMap((lang) =>
+    collections.map((c) => ({ params: { lang, collection: c.slug }, props: { collection: c } })),
+  )
 }
 
+const lang = Astro.params.lang as Lang
+const t = useT(lang)
 const { collection } = Astro.props as { collection: CollectionIndexEntry }
 const name = pickName(collection.names, lang)
 const desc = pickName(collection.descriptions, lang)
@@ -19,7 +22,7 @@ const desc = pickName(collection.descriptions, lang)
   lang={lang}
   path={`/app/library/${collection.slug}`}
   fullscreen
-  title={`${name} — ${lang === 'en' ? 'Shruti' : 'Слушай Садху'}`}
+  title={`${name} — ${t('site.name')}`}
   description={desc || name}
   image={collection.cover ?? undefined}
 >

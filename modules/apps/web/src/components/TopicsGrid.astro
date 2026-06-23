@@ -1,6 +1,6 @@
 ---
 import { useT, type Lang } from '../i18n/ui'
-import { topics } from '../lib/catalog'
+import { topics, lectureCountForLang } from '../lib/catalog'
 import TopicCard from './TopicCard.astro'
 
 interface Props {
@@ -8,6 +8,9 @@ interface Props {
 }
 const { lang } = Astro.props
 const t = useT(lang)
+const items = topics
+  .map((topic) => ({ topic, count: lectureCountForLang(topic.trackIds, lang) }))
+  .filter(({ count }) => count > 0)
 ---
 <div class="mx-auto max-w-6xl px-5 py-12">
   <header class="max-w-2xl">
@@ -16,6 +19,6 @@ const t = useT(lang)
   </header>
 
   <div class="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-    {topics.map((topic) => <TopicCard topic={topic} lang={lang} />)}
+    {items.map(({ topic, count }) => <TopicCard topic={topic} lang={lang} count={count} />)}
   </div>
 </div>

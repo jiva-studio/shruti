@@ -1,6 +1,6 @@
 ---
 import { useT, type Lang } from '../i18n/ui'
-import { topics } from '../lib/catalog'
+import { topics, lectureCountForLang } from '../lib/catalog'
 import TopicCard from './TopicCard.astro'
 
 interface Props {
@@ -8,7 +8,10 @@ interface Props {
 }
 const { lang } = Astro.props
 const t = useT(lang)
-const topicTeaser = topics.slice(0, 12)
+const topicTeaser = topics
+  .map((topic) => ({ topic, count: lectureCountForLang(topic.trackIds, lang) }))
+  .filter(({ count }) => count > 0)
+  .slice(0, 12)
 ---
 <section class="mt-16">
   <div class="flex items-end justify-between gap-4">
@@ -21,6 +24,6 @@ const topicTeaser = topics.slice(0, 12)
     </a>
   </div>
   <div class="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-    {topicTeaser.map((topic) => <TopicCard topic={topic} lang={lang} />)}
+    {topicTeaser.map(({ topic, count }) => <TopicCard topic={topic} lang={lang} count={count} />)}
   </div>
 </section>

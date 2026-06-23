@@ -2,19 +2,21 @@
 import BaseLayout from '../../../layouts/BaseLayout.astro'
 import WebApp from '../../../components/vue/WebApp.vue'
 import type { LectureRecord, LectureVariant } from '@lib/catalog/types.js'
-import { useT } from '../../../i18n/ui'
+import { type Lang } from '../../../i18n/ui'
 import { topicForId, pickName as pickLang } from '../../../lib/catalog'
 
 export async function getStaticPaths() {
   const records = import.meta.glob('../../../../public/data/lectures/*.json', { eager: true, import: 'default' })
-  return Object.values(records).map((rec) => {
-    const r = rec as LectureRecord
-    return { params: { slug: r.slug.replace(/^track_/, '') }, props: { lecture: r } }
-  })
+  const lectures = Object.values(records).map((rec) => rec as LectureRecord)
+  return (['en', 'ru'] as const).flatMap((lang) =>
+    lectures.map((r) => ({
+      params: { lang, slug: r.slug.replace(/^track_/, '') },
+      props: { lecture: r },
+    })),
+  )
 }
 
-const lang = 'en'
-const t = useT(lang)
+const lang = Astro.params.lang as Lang
 const { lecture } = Astro.props as { lecture: LectureRecord }
 const { slug } = Astro.params
 

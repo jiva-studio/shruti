@@ -1,0 +1,57 @@
+---
+import { useT, type Lang } from '../i18n/ui'
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = useT(lang)
+
+const features = [
+  'feature.library',
+  'feature.transcript',
+  'feature.bookmarks',
+  'feature.search',
+  'feature.offline',
+  'feature.chat',
+  'feature.share',
+  'feature.streak',
+] as const
+---
+<section id="features" class="mx-auto max-w-6xl px-5 py-16">
+  <div class="max-w-2xl">
+    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('features.title')}</h2>
+    <p class="mt-3 text-medium">{t('features.lead')}</p>
+  </div>
+  <div class="mt-12 grid gap-x-14 gap-y-10 sm:grid-cols-2">
+    {features.map((key, i) => (
+      <div class="feat-item flex gap-5 pt-7">
+        <span class="shrink-0 font-serif text-2xl font-bold tabular-nums text-saffron/55">
+          {String(i + 1).padStart(2, '0')}
+        </span>
+        <div>
+          <h3 class="font-serif text-xl font-semibold leading-snug text-ink">{t(`${key}.t` as any)}</h3>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-medium">{t(`${key}.d` as any)}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+<style>
+  .feat-item {
+    position: relative;
+  }
+  .feat-item::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--shruti-divider, rgba(61, 43, 31, 0.12)), transparent);
+  }
+  .feat-item:first-child::before {
+    display: none;
+  }
+  @media (min-width: 640px) {
+    .feat-item:nth-child(2)::before {
+      display: none;
+    }
+  }
+</style>
