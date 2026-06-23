@@ -9,11 +9,11 @@ const t = useT(lang)
   <div class="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-saffron/10 blur-3xl"></div>
   <div class="pointer-events-none absolute -left-24 top-40 h-72 w-72 rounded-full bg-moss/10 blur-3xl"></div>
   <div class="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-2 md:py-24">
-    <div>
+    <div class="text-center md:text-left">
       <h1 class="text-4xl font-bold leading-[1.05] text-ink sm:text-5xl md:text-6xl">{t('hero.title')}</h1>
       <p class="mt-5 text-xl text-coffee sm:text-2xl">{t('hero.subtitle')}</p>
-      <p class="mt-5 max-w-md text-base leading-relaxed text-medium">{t('hero.lead')}</p>
-      <div class="mt-8 max-w-md"><StoreBadges full /></div>
+      <p class="mt-5 max-w-md text-base leading-relaxed text-medium mx-auto md:mx-0">{t('hero.lead')}</p>
+      <div class="mt-8 max-w-md mx-auto md:mx-0"><StoreBadges full /></div>
     </div>
 
     <div class="relative mx-auto w-full max-w-sm">
