@@ -11,9 +11,7 @@ interface Props {
 const { topic, lang } = Astro.props
 const t = useT(lang)
 const name = pickName(topic.names, lang)
-const all = lecturesByIds(topic.trackIds)
-const lectures = all.slice(0, 90)
-const footerNote = all.length > lectures.length ? t('topic.moreInApp') : undefined
+const lectures = lecturesByIds(topic.trackIds).slice(0, 90)
 ---
 <LectureListPage
   lang={lang}
@@ -25,5 +23,4 @@ const footerNote = all.length > lectures.length ? t('topic.moreInApp') : undefin
   backLabel={t('common.backToTopics')}
   cover={topic.cover ?? undefined}
   coverClass="max-w-[14rem]"
-  footerNote={footerNote}
 />

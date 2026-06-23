@@ -48,7 +48,7 @@ const SHOT_BG: Record<string, { top: string; bottom: string }> = {
   '08_track': { top: '#a9a69f', bottom: '#faf5ea' },
 }
 const slides = shots.map(([file, title, desc]) => ({
-  src: `/screens/${lang}/${file}.png?v=2`,
+  src: `/screens/${lang}/${file}.png?v=3`,
   title,
   desc,
   top: SHOT_BG[file]?.top ?? '#faf5ea',
@@ -70,7 +70,7 @@ const slides = shots.map(([file, title, desc]) => ({
     <div class="relative mx-auto w-full max-w-sm">
       <div class="absolute inset-0 -rotate-3 rounded-[2.2rem] bg-gradient-to-br from-saffron/25 to-coffee/15"></div>
       <div class="relative overflow-hidden rounded-[2rem] border-4 border-ink bg-cream py-[4.5%] shadow-2xl">
-        <img src={`/screens/${lang}/01_home.png?v=2`} alt={t('hero.title')} class="block w-full" />
+        <img src={`/screens/${lang}/01_home.png?v=3`} alt={t('hero.title')} class="block w-full" />
       </div>
     </div>
   </div>

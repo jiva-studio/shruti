@@ -114,12 +114,10 @@ export const ui = {
     'topics.lead':
       'Выберите тему, чтобы найти лекции о душе, карме, преданном служении, святом имени и многом другом.',
     'topic.kicker': 'Тема',
-    'topic.moreInApp': 'Ещё больше лекций по этой теме — в приложении.',
 
     'collection.kicker': 'Подборка',
 
     'common.lecturesN': 'лекций',
-    'common.listenInApp': 'Слушать в приложении',
     'common.backToLibrary': 'Все категории',
     'common.backToTopics': 'Все темы',
   },
@@ -226,12 +224,10 @@ export const ui = {
     'topics.lead':
       'Pick a topic to find lectures on the soul, karma, devotional service, the holy name and much more.',
     'topic.kicker': 'Topic',
-    'topic.moreInApp': 'More lectures on this topic are available in the app.',
 
     'collection.kicker': 'Collection',
 
     'common.lecturesN': 'lectures',
-    'common.listenInApp': 'Listen in the app',
     'common.backToLibrary': 'All categories',
     'common.backToTopics': 'All topics',
   },
