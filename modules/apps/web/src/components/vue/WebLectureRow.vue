@@ -25,6 +25,7 @@
 import { computed } from 'vue'
 import type { LectureIndexEntry } from '@lib/catalog/types.js'
 import type { Lang } from '../../i18n/ui'
+import { lectureTitle, lectureMeta, lectureRefs } from '../../lib/lectureDisplay'
 
 const props = defineProps<{
   entry: LectureIndexEntry
@@ -35,28 +36,9 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ (e: 'select'): void }>()
 
-function pick(map: Record<string, string>): string {
-  return map[props.lang] || Object.values(map)[0] || ''
-}
-
-const title = computed(() => pick(props.entry.titles) || props.entry.id)
-
-const meta = computed(() => {
-  const e = props.entry
-  const author = pick(e.authorNames)
-  const location = pick(e.locationNames)
-  const year = e.date ? e.date.slice(0, 4) : ''
-  return [author, location, year].filter(Boolean).join(' · ')
-})
-
-const refs = computed(() =>
-  props.entry.refs
-    .map((r) => {
-      const short = r.shortNames[props.lang] ?? Object.values(r.shortNames)[0] ?? ''
-      return short ? `${short} ${r.tokens}`.trim() : r.tokens
-    })
-    .filter(Boolean)
-)
+const title = computed(() => lectureTitle(props.entry, props.lang))
+const meta = computed(() => lectureMeta(props.entry, props.lang))
+const refs = computed(() => lectureRefs(props.entry, props.lang))
 
 function onClick() {
   if (!props.href) emit('select')

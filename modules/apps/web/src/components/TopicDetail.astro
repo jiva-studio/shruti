@@ -1,9 +1,8 @@
 ---
 import type { TopicIndexEntry } from '@lib/catalog/types.js'
 import { useT, type Lang } from '../i18n/ui'
-import { lecturesByIds, pickName, shortSlug } from '../lib/catalog'
-import WebLectureRow from './vue/WebLectureRow.vue'
-import StoreBadges from './StoreBadges.astro'
+import { lecturesByIds, pickName } from '../lib/catalog'
+import LectureListPage from './LectureListPage.astro'
 
 interface Props {
   topic: TopicIndexEntry
@@ -12,42 +11,19 @@ interface Props {
 const { topic, lang } = Astro.props
 const t = useT(lang)
 const name = pickName(topic.names, lang)
-const MAX = 90
 const all = lecturesByIds(topic.trackIds)
-const items = all.slice(0, MAX)
-const hasMore = all.length > items.length
+const lectures = all.slice(0, 90)
+const footerNote = all.length > lectures.length ? t('topic.moreInApp') : undefined
 ---
-<div class="mx-auto max-w-5xl px-5 py-12">
-  <nav class="mb-6 text-sm text-medium">
-    <a href={`/${lang}/app/topics`} class="transition hover:text-saffron">{t('common.backToTopics')}</a>
-  </nav>
-
-  <header class="flex flex-col gap-6 sm:flex-row sm:items-center">
-    {topic.cover && (
-      <img
-        src={topic.cover}
-        alt=""
-        width="240"
-        height="160"
-        class="aspect-[3/2] w-full max-w-[14rem] rounded-2xl border border-line object-cover"
-      />
-    )}
-    <div>
-      <p class="text-xs font-semibold uppercase tracking-wide text-saffron-shade">{t('topic.kicker')}</p>
-      <h1 class="mt-1 font-serif text-3xl font-bold text-ink sm:text-4xl">{name}</h1>
-      <p class="mt-1 text-sm text-medium">{topic.count} {t('common.lecturesN')}</p>
-    </div>
-  </header>
-
-  <div class="mt-8 flex flex-col divide-y divide-line/60">
-    {items.map((entry) => (
-      <WebLectureRow entry={entry} lang={lang} href={`/${lang}/app/${shortSlug(entry.slug)}`} />
-    ))}
-  </div>
-
-  <div class="mt-14 rounded-2xl border border-line bg-cream-deep px-6 py-8 text-center">
-    {hasMore && <p class="mb-5 text-medium">{t('topic.moreInApp')}</p>}
-    <p class="font-serif text-xl font-semibold text-ink">{t('common.listenInApp')}</p>
-    <div class="mt-5 flex justify-center"><StoreBadges /></div>
-  </div>
-</div>
+<LectureListPage
+  lang={lang}
+  kicker={t('topic.kicker')}
+  title={name}
+  count={topic.count}
+  lectures={lectures}
+  backHref={`/${lang}/app/topics`}
+  backLabel={t('common.backToTopics')}
+  cover={topic.cover ?? undefined}
+  coverClass="max-w-[14rem]"
+  footerNote={footerNote}
+/>

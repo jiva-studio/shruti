@@ -427,23 +427,23 @@ onMounted(() => document.addEventListener('pointerdown', closeOnOutside))
 onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside))
 
 const popoverClass =
-  'absolute z-10 mt-2 max-h-72 w-72 overflow-y-auto rounded-2xl border border-line bg-cream-deep p-2 shadow-md'
-const checkRowClass = 'flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-surface'
+  'absolute z-10 mt-2 max-h-72 w-72 overflow-y-auto rounded-2xl border border-line bg-cream-deep p-2'
+const checkRowClass = 'flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-ink'
 
 function optionRowClass(active: boolean): string {
   const base = 'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition'
-  return active ? `${base} bg-saffron/10 text-saffron-shade` : `${base} text-ink hover:bg-surface`
+  return active ? `${base} bg-saffron/10 text-saffron-shade` : `${base} text-ink`
 }
 
 const resetClass =
-  'rounded-full border border-line bg-cream-deep px-4 py-1.5 text-sm font-medium text-coffee transition hover:border-saffron/50'
+  'rounded-full border border-line bg-cream-deep px-4 py-1.5 text-sm font-medium text-coffee transition'
 
 const pagerBtn =
-  'grid h-9 min-w-9 place-items-center rounded-lg border border-line px-2.5 text-sm font-medium text-coffee transition hover:border-saffron/50 disabled:opacity-40 disabled:hover:border-line'
+  'grid h-9 min-w-9 place-items-center rounded-lg border border-line px-2.5 text-sm font-medium text-coffee transition disabled:opacity-40'
 
 function facetSummaryClass(count: number): string {
   const base =
-    'cursor-pointer list-none rounded-full border px-4 py-1.5 text-sm font-medium transition hover:border-saffron/50'
+    'cursor-pointer list-none rounded-full border px-4 py-1.5 text-sm font-medium transition'
   return count
     ? `${base} border-saffron/60 bg-saffron/10 text-saffron-shade`
     : `${base} border-line bg-cream-deep text-ink`
@@ -464,9 +464,6 @@ function facetSummaryClass(count: number): string {
   transition:
     background-color 0.15s,
     border-color 0.15s;
-}
-.facet-check:hover {
-  border-color: color-mix(in srgb, var(--color-saffron) 50%, transparent);
 }
 .facet-check:checked {
   border-color: var(--color-saffron);

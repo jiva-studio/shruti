@@ -1,0 +1,70 @@
+---
+import type { LectureIndexEntry } from '@lib/catalog/types.js'
+import { useT, type Lang } from '../i18n/ui'
+import { shortSlug } from '../lib/catalog'
+import WebLectureRow from './vue/WebLectureRow.vue'
+import StoreBadges from './StoreBadges.astro'
+
+interface Props {
+  lang: Lang
+  kicker: string
+  title: string
+  count: number
+  lectures: LectureIndexEntry[]
+  backHref: string
+  backLabel: string
+  cover?: string
+  coverClass?: string
+  description?: string
+  footerNote?: string
+}
+const {
+  lang,
+  kicker,
+  title,
+  count,
+  lectures,
+  backHref,
+  backLabel,
+  cover,
+  coverClass = 'max-w-xs',
+  description,
+  footerNote,
+} = Astro.props
+const t = useT(lang)
+---
+<div class="mx-auto max-w-5xl px-5 py-12">
+  <nav class="mb-6 text-sm">
+    <a href={backHref} class="text-medium">{backLabel}</a>
+  </nav>
+
+  <header class="flex flex-col gap-6 sm:flex-row sm:items-start">
+    {cover && (
+      <img
+        src={cover}
+        alt=""
+        width="320"
+        height="213"
+        class:list={['aspect-[3/2] w-full rounded-2xl border border-line object-cover', coverClass]}
+      />
+    )}
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wide text-saffron-shade">{kicker}</p>
+      <h1 class="mt-1 font-serif text-3xl font-bold text-ink sm:text-4xl">{title}</h1>
+      <p class="mt-1 text-sm text-medium">{count} {t('common.lecturesN')}</p>
+      {description && <p class="mt-4 max-w-2xl text-medium">{description}</p>}
+    </div>
+  </header>
+
+  <div class="mt-8 flex flex-col divide-y divide-line/60">
+    {lectures.map((entry) => (
+      <WebLectureRow entry={entry} lang={lang} href={`/${lang}/app/${shortSlug(entry.slug)}`} />
+    ))}
+  </div>
+
+  <div class="mt-14 rounded-2xl border border-line bg-cream-deep px-6 py-8 text-center">
+    {footerNote && <p class="mb-5 text-medium">{footerNote}</p>}
+    <p class="font-serif text-xl font-semibold text-ink">{t('common.listenInApp')}</p>
+    <div class="mt-5 flex justify-center"><StoreBadges /></div>
+  </div>
+</div>
