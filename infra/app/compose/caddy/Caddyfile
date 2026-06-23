@@ -241,3 +241,28 @@ import role-proxy.conf
         format json
     }
 }
+
+# ── Website (static) ──────────────────────────────────────────────
+# Serves the prebuilt Astro site — rsync'd to /opt/lectorium/web on the
+# host, bind-mounted to /srv/web. Pure file_server: no app, no SSR, no
+# per-request render. All pages are prebuilt by `astro build`.
+#
+# Origin-only. LECTORIUM_WEB_DOMAIN is the public hostname there (an
+# <ip-dashed>.sslip.io for first tests, the real domain later); Caddy
+# auto-issues Let's Encrypt for it via HTTP-01. On hosts that don't
+# serve the site (RU proxy, or before the var is set) it defaults to
+# ":8088" — an internal HTTP-only port nobody maps — so the block parses
+# and binds harmlessly without attempting ACME for a real name.
+{$LECTORIUM_WEB_DOMAIN} {
+    encode gzip zstd
+    root * /srv/web
+    # Astro emits pretty URLs as <path>/index.html; serve them without a
+    # trailing-slash redirect.
+    try_files {path} {path}/index.html {path}.html
+    file_server
+    header {
+        -Server
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
