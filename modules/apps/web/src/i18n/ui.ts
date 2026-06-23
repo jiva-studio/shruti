@@ -1,0 +1,271 @@
+export const languages = { ru: 'Русский', en: 'English' } as const
+export type Lang = keyof typeof languages
+export const defaultLang: Lang = 'ru'
+
+export const STORE = {
+  appStore: 'https://apps.apple.com/app/id6745510353',
+  googlePlay: 'https://play.google.com/store/apps/details?id=studio.jiva.shruti',
+  vk: 'https://vk.com/shruti',
+  telegram: 'https://t.me/shrutiapp',
+  email: 'support@akdasa.studio',
+}
+
+export const ui = {
+  ru: {
+    'nav.about': 'О приложении',
+    'nav.features': 'Возможности',
+    'nav.lectures': 'Лекции',
+    'nav.chat': 'Спросить Садху',
+    'nav.faq': 'Вопросы',
+    'nav.download': 'Скачать',
+
+    'hero.title': 'Слушай Садху',
+    'hero.subtitle': 'Вся ведическая мудрость в одном приложении. Лекции Шрилы Прабхупады.',
+    'hero.lead':
+      'Сложное — простыми словами: о душе, сознании, карме и смысле жизни. Слушайте по дороге, на прогулке или дома и возвращайтесь к самому важному, когда захотите.',
+    'hero.qr': 'Наведите камеру, чтобы установить',
+
+    'features.title': 'Возможности',
+    'features.lead': 'Всё, чтобы изучать писания каждый день — слушать, читать и возвращаться к самому важному.',
+    'feature.library.t': 'Большая библиотека лекций',
+    'feature.library.d': 'Тысячи лекций по «Бхагавад-гите», «Шримад-Бхагаватам» и другим ведическим писаниям. Полнотекстовый каталог с фильтрами по автору, месту, источнику, тегу и языку — всё под рукой, слушайте по дороге, на прогулке или дома.',
+    'feature.transcript.t': 'Текст рядом с аудио',
+    'feature.transcript.d': 'Транскрипт идёт вместе со звуком и подсвечивает текущее предложение по ходу лекции. Нажмите на строку, чтобы перейти к этому моменту, или выделите текст, чтобы скопировать и поделиться.',
+    'feature.bookmarks.t': 'Закладки на важные мысли',
+    'feature.bookmarks.d': 'Выделите фрагмент прямо в транскрипте и сохраните закладку. Заметки можно искать и отправлять, а по нажатию приложение вернёт вас к той самой секунде записи.',
+    'feature.search.t': 'Поиск по теме',
+    'feature.search.d': 'Находите лекции по названию, источнику, автору или дате. Полнотекстовый поиск и точные фильтры помогают быстро дойти до нужной темы или отрывка писания.',
+    'feature.offline.t': 'Слушайте без интернета',
+    'feature.offline.d': 'Загружайте лекции вместе с транскриптом и слушайте офлайн — в дороге, в полёте или там, где нет связи. Каталог и тексты тоже работают без сети.',
+    'feature.chat.t': 'Спросите Садху',
+    'feature.chat.d': 'Задайте вопрос о душе, карме или смысле жизни. Ассистент отвечает, опираясь на корпус лекций, и приводит точные цитаты — стихи, комментарии и тайм-коды, — чтобы сразу послушать первоисточник.',
+    'feature.share.t': 'Поделитесь моментом',
+    'feature.share.d': 'Превратите любой фрагмент в аудиоклип, короткое видео или цитату из транскрипта и отправьте друзьям — со ссылкой на саму лекцию.',
+    'feature.streak.t': 'Привычка слушать',
+    'feature.streak.d': 'Очередь «дальше» всегда готова к следующей лекции, а тепловая карта активности и счётчик дней подряд показывают, как растёт ваша практика.',
+
+    'chat.band.title': 'Начните слушать онлайн',
+    'chat.band.lead': 'Большая коллекция лекций — можно начать слушать прямо сейчас, в браузере.',
+    'chat.band.cta': 'Слушать лекции',
+
+    'download.title': 'Установите приложение',
+    'download.lead': 'Бесплатно. iPhone, iPad и Android.',
+
+    'faq.title': 'Вопросы и ответы',
+
+    'footer.tagline': 'Лекции по ведическим писаниям — слушайте и изучайте каждый день.',
+    'footer.links': 'Разделы',
+    'footer.follow': 'Мы в соцсетях',
+    'footer.support': 'Поддержка',
+    'footer.rights': 'Все права защищены.',
+
+    'lecture.play': 'Слушать',
+    'lecture.pause': 'Пауза',
+    'lecture.skipBack': '−15 с',
+    'lecture.skipForward': '+15 с',
+    'lecture.speed': 'Скорость',
+    'lecture.transcript': 'Текст лекции',
+    'lecture.chapters': 'Главы',
+    'lecture.noTranscript': 'Для этой лекции пока нет текста.',
+    'lecture.listenInApp': 'Слушать в приложении',
+    'lecture.openInApp': 'Открыть в приложении',
+    'lecture.by': 'Автор',
+    'lecture.at': 'Место',
+    'lecture.date': 'Дата',
+
+    'search.title': 'Лекции',
+    'search.searchPlaceholder': 'Поиск по названию, автору, писанию…',
+    'search.filters': 'Фильтры',
+    'search.author': 'Автор',
+    'search.location': 'Место',
+    'search.language': 'Язык',
+    'search.year': 'Год',
+    'search.yearFrom': 'От',
+    'search.yearTo': 'До',
+    'search.duration': 'Длительность',
+    'search.sort': 'Сортировка',
+    'search.durationShort': 'До 20 минут',
+    'search.durationMedium': '20–60 минут',
+    'search.durationLong': 'Больше часа',
+    'search.sortNewest': 'Сначала новые',
+    'search.sortOldest': 'Сначала старые',
+    'search.sortReference': 'По писанию',
+    'search.resultsCount': 'Найдено лекций',
+    'search.noResults': 'Ничего не найдено. Попробуйте изменить запрос.',
+    'search.reset': 'Сбросить',
+
+    'app.backToList': 'К списку',
+    'app.loading': 'Загрузка…',
+    'app.notAvailable': 'Эту лекцию пока нельзя открыть здесь.',
+
+    'nav.library': 'Библиотека',
+
+    'app.browseTitle': 'Библиотека лекций',
+    'app.searchAll': 'Поиск по всем лекциям',
+    'app.searchAllLead': 'Полный поиск с фильтрами по автору, месту, языку и году.',
+
+    'library.lead':
+      'Тематические подборки лекций Шрилы Прабхупады — от основ до подробного изучения писаний стих за стихом.',
+    'library.topicsTitle': 'Темы',
+    'library.topicsLead': 'Просматривайте лекции по конкретным темам — о душе, карме, преданном служении и не только.',
+    'library.allTopics': 'Все темы',
+
+    'topics.title': 'Темы лекций',
+    'topics.lead':
+      'Выберите тему, чтобы найти лекции о душе, карме, преданном служении, святом имени и многом другом.',
+    'topic.kicker': 'Тема',
+    'topic.descPrefix': 'Лекции по теме «',
+    'topic.descSuffix': '» — слушайте онлайн или в приложении.',
+
+    'collection.kicker': 'Подборка',
+
+    'site.name': 'Слушай Садху',
+
+    'common.lecturesN': 'лекций',
+    'common.backToLibrary': 'Все категории',
+    'common.backToTopics': 'Все темы',
+  },
+  en: {
+    'nav.about': 'About',
+    'nav.features': 'Features',
+    'nav.lectures': 'Lectures',
+    'nav.chat': 'Ask Sadhu',
+    'nav.faq': 'FAQ',
+    'nav.download': 'Download',
+
+    'hero.title': 'Shruti',
+    'hero.subtitle': 'All Vedic wisdom in one app. Lectures of Srila Prabhupada.',
+    'hero.lead':
+      'Deep ideas in plain words — the soul, consciousness, karma and the meaning of life. Listen on your commute, on a walk or at home, and come back to what matters whenever you like.',
+    'hero.qr': 'Point your camera to install',
+
+    'features.title': 'Features',
+    'features.lead': 'Everything you need to study the scriptures every day — listen, read, and return to what matters.',
+    'feature.library.t': 'A large library of lectures',
+    'feature.library.d': 'Thousands of lectures on the Bhagavad-gita, Srimad-Bhagavatam and other Vedic scriptures. A full-text catalog with filters by author, place, source, tag and language — always at hand.',
+    'feature.transcript.t': 'Text alongside the audio',
+    'feature.transcript.d': 'The transcript runs with the audio and highlights the current sentence as the lecture plays. Tap a line to jump there, or select text to copy and share.',
+    'feature.bookmarks.t': 'Bookmark what matters',
+    'feature.bookmarks.d': 'Select a passage right in the transcript and save a bookmark. Notes are searchable and shareable, and tapping one takes you back to the exact second of the recording.',
+    'feature.search.t': 'Search by topic',
+    'feature.search.d': 'Find lectures by title, source, author or date. Full-text search and precise filters get you to the topic or passage of scripture in seconds.',
+    'feature.offline.t': 'Listen offline',
+    'feature.offline.d': 'Download lectures together with their transcript and listen offline — on the road, in flight, or wherever there is no signal. The catalog and texts work without a connection too.',
+    'feature.chat.t': 'Ask Sadhu',
+    'feature.chat.d': 'Ask about the soul, karma or the meaning of life. The assistant answers from the lecture corpus and cites exact passages — verses, purports and timestamps — so you can hear the source right away.',
+    'feature.share.t': 'Share a moment',
+    'feature.share.d': 'Turn any passage into an audio clip, a short video or a transcript quote and send it to friends — with a link back to the lecture itself.',
+    'feature.streak.t': 'Build a listening habit',
+    'feature.streak.d': 'An “up next” queue is always ready for the next lecture, while an activity heatmap and a day-streak counter show your practice growing.',
+
+    'chat.band.title': 'Start listening online',
+    'chat.band.lead': 'A large collection of lectures — start listening right now, in your browser.',
+    'chat.band.cta': 'Listen to lectures',
+
+    'download.title': 'Get the app',
+    'download.lead': 'Free. iPhone, iPad and Android.',
+
+    'faq.title': 'Questions & answers',
+
+    'footer.tagline': 'Lectures on the Vedic scriptures — listen and study every day.',
+    'footer.links': 'Sections',
+    'footer.follow': 'Follow us',
+    'footer.support': 'Support',
+    'footer.rights': 'All rights reserved.',
+
+    'lecture.play': 'Play',
+    'lecture.pause': 'Pause',
+    'lecture.skipBack': '−15s',
+    'lecture.skipForward': '+15s',
+    'lecture.speed': 'Speed',
+    'lecture.transcript': 'Transcript',
+    'lecture.chapters': 'Chapters',
+    'lecture.noTranscript': 'No transcript is available for this lecture yet.',
+    'lecture.listenInApp': 'Listen in the app',
+    'lecture.openInApp': 'Open in the app',
+    'lecture.by': 'By',
+    'lecture.at': 'At',
+    'lecture.date': 'Date',
+
+    'search.title': 'Lectures',
+    'search.searchPlaceholder': 'Search by title, author, scripture…',
+    'search.filters': 'Filters',
+    'search.author': 'Author',
+    'search.location': 'Location',
+    'search.language': 'Language',
+    'search.year': 'Year',
+    'search.yearFrom': 'From',
+    'search.yearTo': 'To',
+    'search.duration': 'Duration',
+    'search.sort': 'Sort',
+    'search.durationShort': 'Under 20 min',
+    'search.durationMedium': '20–60 min',
+    'search.durationLong': 'Over an hour',
+    'search.sortNewest': 'Newest first',
+    'search.sortOldest': 'Oldest first',
+    'search.sortReference': 'By scripture',
+    'search.resultsCount': 'Lectures found',
+    'search.noResults': 'Nothing found. Try a different query.',
+    'search.reset': 'Reset',
+
+    'app.backToList': 'Back to list',
+    'app.loading': 'Loading…',
+    'app.notAvailable': 'This lecture can’t be opened here yet.',
+
+    'nav.library': 'Library',
+
+    'app.browseTitle': 'Lecture library',
+    'app.searchAll': 'Search all lectures',
+    'app.searchAllLead': 'Full search with filters by author, place, language and year.',
+
+    'library.lead':
+      'Curated collections of Srila Prabhupada’s lectures by theme — from the essentials to verse-by-verse study of the scriptures.',
+    'library.topicsTitle': 'Topics',
+    'library.topicsLead': 'Browse lectures by a specific topic — the soul, karma, devotional service and more.',
+    'library.allTopics': 'All topics',
+
+    'topics.title': 'Lecture topics',
+    'topics.lead':
+      'Pick a topic to find lectures on the soul, karma, devotional service, the holy name and much more.',
+    'topic.kicker': 'Topic',
+    'topic.descPrefix': 'Lectures on ',
+    'topic.descSuffix': ' — listen online or in the app.',
+
+    'collection.kicker': 'Collection',
+
+    'site.name': 'Shruti',
+
+    'common.lecturesN': 'lectures',
+    'common.backToLibrary': 'All categories',
+    'common.backToTopics': 'All topics',
+  },
+} as const
+
+export type UiKey = keyof (typeof ui)['ru']
+
+export function useT(lang: Lang) {
+  return (key: UiKey): string => (ui[lang] as Record<string, string>)[key] ?? ui.ru[key] ?? key
+}
+
+export const FAQ = {
+  ru: [
+    ['Сколько стоит приложение?', 'Базовые возможности бесплатны: слушайте лекции, читайте транскрипты, делайте закладки. Подписка PRO добавляет умную библиотеку и расширенные функции.'],
+    ['Есть ли бесплатный период?', 'Да — подписку PRO можно попробовать бесплатно 14 дней. Отменить можно в любой момент до конца пробного периода.'],
+    ['Что входит в подписку PRO?', 'Умную библиотеку с персональными подборками и расширенные возможности «Спросить Садху». Прослушивание лекций, транскрипты и закладки остаются бесплатными.'],
+    ['Как отменить подписку?', 'В настройках App Store или Google Play. Доступ к PRO сохраняется до конца оплаченного периода.'],
+    ['Нужен ли интернет?', 'Нет. Загрузите лекции заранее и слушайте офлайн — в дороге, на прогулке, где угодно.'],
+    ['На каких устройствах работает?', 'iPhone, iPad и Android. Скачайте в App Store или Google Play.'],
+    ['На каких языках лекции?', 'В библиотеке есть лекции на английском и русском. Интерфейс приложения переведён на многие языки.'],
+    ['Что такое «Спросить Садху»?', 'Это помощник, который ищет ответ по корпусу лекций и даёт понятный ответ со ссылками на конкретные записи.'],
+  ],
+  en: [
+    ['How much does the app cost?', 'The basics are free: listen to lectures, read transcripts, bookmark passages. A PRO subscription adds the smart library and advanced features.'],
+    ['Is there a free trial?', 'Yes — you can try PRO free for 14 days. Cancel any time before the trial ends.'],
+    ['What does a PRO subscription include?', 'A smart library with personal recommendations and the full power of Ask Sadhu. Listening, transcripts and bookmarks stay free.'],
+    ['How do I cancel my subscription?', 'In your App Store or Google Play settings. PRO stays active until the end of the paid period.'],
+    ['Do I need an internet connection?', 'No. Download lectures in advance and listen offline — on your commute, on a walk, anywhere.'],
+    ['Which devices are supported?', 'iPhone, iPad and Android. Get it on the App Store or Google Play.'],
+    ['What languages are the lectures in?', 'The library has lectures in English and Russian. The app interface is translated into many languages.'],
+    ['What is "Ask Sadhu"?', 'An assistant that searches the lecture corpus and gives a clear answer with links to the specific recordings.'],
+  ],
+} as const

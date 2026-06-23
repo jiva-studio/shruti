@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { pollUntilReady } from "../pollUntilReady.js"
+import { pollUntilReady } from "@lib/chat/utils/pollUntilReady.js"
 
 describe("pollUntilReady", () => {
   const fetchMock = vi.fn()

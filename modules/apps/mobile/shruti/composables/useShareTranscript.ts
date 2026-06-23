@@ -1,7 +1,7 @@
 import type { RenderTranscriptRequest } from "@ports/app/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
-import { SHORT_POLL_TIMEOUT_MS } from "@shruti/services/pollUntilReady.js"
+import { SHORT_POLL_TIMEOUT_MS } from "@lib/chat/utils/pollUntilReady.js"
 
 export interface UseShareTranscriptReturn {
   /**

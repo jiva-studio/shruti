@@ -1,0 +1,36 @@
+---
+import type { TopicIndexEntry } from '@lib/catalog/types.js'
+import { pickName } from '../lib/catalog'
+import { useT, type Lang } from '../i18n/ui'
+
+interface Props {
+  topic: TopicIndexEntry
+  lang: Lang
+  count?: number
+}
+const { topic, lang, count } = Astro.props
+const t = useT(lang)
+const name = pickName(topic.names, lang)
+const href = `/${lang}/app/topics/${topic.slug}`
+const lectureCount = count ?? topic.count
+---
+<a
+  href={href}
+  class="relative flex aspect-[3/2] flex-col justify-end overflow-hidden rounded-2xl border border-line bg-cream-deep transition hover:border-saffron/40 hover:shadow-md"
+>
+  {topic.cover && (
+    <img
+      src={topic.cover}
+      alt=""
+      loading="lazy"
+      width="400"
+      height="267"
+      class="absolute inset-0 h-full w-full object-cover"
+    />
+  )}
+  <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent"></div>
+  <div class="relative p-4">
+    <h3 class="font-serif text-base font-semibold leading-snug text-white drop-shadow-sm">{name}</h3>
+    <p class="mt-0.5 text-xs text-white/80">{lectureCount} {t('common.lecturesN')}</p>
+  </div>
+</a>

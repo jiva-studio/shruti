@@ -1,0 +1,37 @@
+---
+interface Slide { src: string; title: string; desc: string; top: string; bottom: string }
+interface Props { slides: Slide[] }
+const { slides } = Astro.props
+---
+<!-- full-bleed horizontal strip showing ALL screenshots at once -->
+<div class="screens-scroll overflow-x-auto pb-2">
+  <div class="mx-auto flex w-max gap-7 px-5 md:px-8">
+    {slides.map((s) => (
+      <figure class="w-[210px] shrink-0 snap-center sm:w-[230px]">
+        <div class="overflow-hidden rounded-[1.7rem] border-[3px] border-ink shadow-xl">
+          <div class="zone" style={`background:${s.top}`}></div>
+          <img src={s.src} alt={s.title} loading="lazy" class="block w-full" />
+          <div class="zone" style={`background:${s.bottom}`}></div>
+        </div>
+        <figcaption class="mt-4 px-1 text-center">
+          <p class="font-serif text-base font-semibold text-ink">{s.title}</p>
+          <p class="mt-1 text-sm leading-snug text-medium">{s.desc}</p>
+        </figcaption>
+      </figure>
+    ))}
+  </div>
+</div>
+
+<style>
+  .screens-scroll {
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .screens-scroll::-webkit-scrollbar { display: none; }
+  /* Safe-zone bands: height = 4.5% of the frame width (padding-% is
+     width-relative), colour set per-screenshot from the config below. */
+  .zone {
+    height: 0;
+    padding-bottom: 4.5%;
+  }
+</style>

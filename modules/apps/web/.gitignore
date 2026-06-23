@@ -1,0 +1,12 @@
+node_modules/
+.cache/
+dist/
+.astro/
+.vercel/
+.wrangler/
+.env
+
+# Catalog data — synced from the published SQLite at build time
+# (npm run sync:all). Large (~280MB) + regenerable; never commit.
+src/data/
+public/data/
