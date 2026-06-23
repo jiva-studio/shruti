@@ -144,28 +144,13 @@
 
     <div v-if="filtered.length" class="mt-3 flex flex-col">
       <template v-for="(entry, i) in visible" :key="entry.id">
-        <component
-          :is="selectable ? 'button' : 'a'"
-          :type="selectable ? 'button' : undefined"
+        <WebLectureRow
+          :entry="entry"
+          :lang="lang"
           :href="selectable ? undefined : hrefFor(entry)"
-          class="group block w-full rounded-xl px-4 py-3.5 text-left transition hover:bg-cream-deep"
-          :class="entry.id === selectedId ? 'bg-cream-deep' : ''"
-          @click="selectable ? emit('select', entry) : undefined"
-        >
-          <h3 class="text-lg font-semibold leading-snug text-ink transition group-hover:text-saffron-shade">
-            {{ titleFor(entry) }}
-          </h3>
-          <p v-if="metaFor(entry)" class="mt-1.5 text-sm text-medium">{{ metaFor(entry) }}</p>
-          <div v-if="refsFor(entry).length" class="mt-3 flex flex-wrap gap-1.5">
-            <span
-              v-for="(ref, j) in refsFor(entry)"
-              :key="j"
-              class="rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-coffee"
-            >
-              {{ ref }}
-            </span>
-          </div>
-        </component>
+          :selected="entry.id === selectedId"
+          @select="emit('select', entry)"
+        />
         <div v-if="i < visible.length - 1" class="row-divider" aria-hidden="true" />
       </template>
     </div>
@@ -195,6 +180,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { LectureIndexEntry } from '@lib/catalog/types.js'
 import { useT, type Lang } from '../../i18n/ui'
 import indexRaw from '../../data/lectures-index.json'
+import WebLectureRow from './WebLectureRow.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -394,34 +380,8 @@ watch([debounced, selectedAuthors, selectedLocations, selectedLanguages, yearFro
   page.value = 1
 })
 
-function titleFor(e: LectureIndexEntry): string {
-  return pick(e.titles) || e.id
-}
-
-function metaFor(e: LectureIndexEntry): string {
-  const author = pick(e.authorNames)
-  const location = pick(e.locationNames)
-  const year = e.date ? e.date.slice(0, 4) : ''
-  const r = e.refs[0]
-  let ref = ''
-  if (r) {
-    const short = r.shortNames[props.lang] ?? Object.values(r.shortNames)[0] ?? ''
-    ref = short ? `${short} ${r.tokens}`.trim() : r.tokens
-  }
-  return [author, location, year, ref].filter(Boolean).join(' · ')
-}
-
-function refsFor(e: LectureIndexEntry): string[] {
-  return e.refs
-    .map((r) => {
-      const short = r.shortNames[props.lang] ?? Object.values(r.shortNames)[0] ?? ''
-      return short ? `${short} ${r.tokens}`.trim() : r.tokens
-    })
-    .filter(Boolean)
-}
-
 function hrefFor(e: LectureIndexEntry): string {
-  return props.lang === 'en' ? `/en/lectures/${e.slug}` : `/lectures/${e.slug}`
+  return `/${props.lang}/app/${e.slug.replace(/^track_/, '')}`
 }
 
 function reset() {

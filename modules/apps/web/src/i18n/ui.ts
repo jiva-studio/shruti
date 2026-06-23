@@ -100,6 +100,42 @@ export const ui = {
     'app.loading': 'Загрузка…',
     'app.notAvailable': 'Эту лекцию пока нельзя открыть здесь.',
     'app.selectHint': 'Выберите лекцию слева, чтобы слушать и читать.',
+
+    'nav.library': 'Библиотека',
+    'nav.topics': 'Темы',
+    'nav.search': 'Поиск',
+
+    'app.browseTitle': 'Библиотека лекций',
+    'app.searchAll': 'Поиск по всем лекциям',
+    'app.searchAllLead': 'Полный поиск с фильтрами по автору, месту, языку и году.',
+
+    'library.title': 'Категории лекций',
+    'library.lead':
+      'Тематические подборки лекций Шрилы Прабхупады — от основ до подробного изучения писаний стих за стихом.',
+    'library.topicsTitle': 'Темы',
+    'library.topicsLead': 'Просматривайте лекции по конкретным темам — о душе, карме, преданном служении и не только.',
+    'library.allTopics': 'Все темы',
+
+    'topics.title': 'Темы лекций',
+    'topics.lead':
+      'Выберите тему, чтобы найти лекции о душе, карме, преданном служении, святом имени и многом другом.',
+    'topic.kicker': 'Тема',
+    'topic.moreInApp': 'Ещё больше лекций по этой теме — в приложении.',
+
+    'collection.kicker': 'Подборка',
+
+    'lectures.title': 'Все лекции',
+    'lectures.lead': 'Полный каталог лекций Шрилы Прабхупады — слушайте онлайн или в приложении.',
+
+    'common.lecturesN': 'лекций',
+    'common.listenInApp': 'Слушать в приложении',
+    'common.backToLibrary': 'Все категории',
+    'common.backToTopics': 'Все темы',
+
+    'pager.prev': 'Назад',
+    'pager.next': 'Дальше',
+    'pager.page': 'Страница',
+    'pager.of': 'из',
   },
   en: {
     'nav.about': 'About',
@@ -190,6 +226,42 @@ export const ui = {
     'app.loading': 'Loading…',
     'app.notAvailable': 'This lecture can’t be opened here yet.',
     'app.selectHint': 'Pick a lecture on the left to listen and read.',
+
+    'nav.library': 'Library',
+    'nav.topics': 'Topics',
+    'nav.search': 'Search',
+
+    'app.browseTitle': 'Lecture library',
+    'app.searchAll': 'Search all lectures',
+    'app.searchAllLead': 'Full search with filters by author, place, language and year.',
+
+    'library.title': 'Lecture categories',
+    'library.lead':
+      'Curated collections of Srila Prabhupada’s lectures by theme — from the essentials to verse-by-verse study of the scriptures.',
+    'library.topicsTitle': 'Topics',
+    'library.topicsLead': 'Browse lectures by a specific topic — the soul, karma, devotional service and more.',
+    'library.allTopics': 'All topics',
+
+    'topics.title': 'Lecture topics',
+    'topics.lead':
+      'Pick a topic to find lectures on the soul, karma, devotional service, the holy name and much more.',
+    'topic.kicker': 'Topic',
+    'topic.moreInApp': 'More lectures on this topic are available in the app.',
+
+    'collection.kicker': 'Collection',
+
+    'lectures.title': 'All lectures',
+    'lectures.lead': 'The full catalog of Srila Prabhupada’s lectures — listen online or in the app.',
+
+    'common.lecturesN': 'lectures',
+    'common.listenInApp': 'Listen in the app',
+    'common.backToLibrary': 'All categories',
+    'common.backToTopics': 'All topics',
+
+    'pager.prev': 'Back',
+    'pager.next': 'Next',
+    'pager.page': 'Page',
+    'pager.of': 'of',
   },
 } as const
 

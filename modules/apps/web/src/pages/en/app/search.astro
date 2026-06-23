@@ -1,0 +1,16 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro'
+import WebApp from '../../../components/vue/WebApp.vue'
+import { useT } from '../../../i18n/ui'
+const lang = 'en'
+const t = useT(lang)
+---
+<BaseLayout
+  lang={lang}
+  path="/app/search"
+  fullscreen
+  title={`${t('search.title')} — ${t('hero.title')}`}
+  description={t('app.searchAllLead')}
+>
+  <WebApp client:load lang={lang} />
+</BaseLayout>

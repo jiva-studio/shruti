@@ -18,8 +18,41 @@ export interface LectureIndexEntry {
   locationNames: LangMap
   titles: LangMap
   refs: LectureRef[]
+  topicIds: string[]
   hasTranscript: boolean
   hasOutline: boolean
+}
+
+export interface TopicIndexEntry {
+  id: string
+  slug: string
+  names: LangMap
+  shortNames: LangMap
+  cover: string | null
+  count: number
+  trackIds: string[]
+}
+
+export interface CollectionIndexEntry {
+  id: string
+  slug: string
+  names: LangMap
+  descriptions: LangMap
+  cover: string | null
+  count: number
+  trackIds: string[]
+}
+
+export interface CollectionGroupIndexEntry {
+  id: string
+  names: LangMap
+  descriptions: LangMap
+  collectionIds: string[]
+}
+
+export interface CollectionsIndex {
+  groups: CollectionGroupIndexEntry[]
+  collections: Record<string, CollectionIndexEntry>
 }
 
 export interface OutlineChapter {
@@ -92,6 +125,7 @@ export interface LectureRecord {
   locationNames: LangMap
   variants: Record<string, LectureVariant>
   refs: LectureRef[]
+  topicIds: string[]
 }
 
 export interface TranscriptGroup {

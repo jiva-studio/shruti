@@ -1,15 +1,19 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro'
 import WebApp from '../../components/vue/WebApp.vue'
+import LibraryHub from '../../components/LibraryHub.astro'
 import { useT } from '../../i18n/ui'
-const t = useT('en')
+const lang = 'en'
+const t = useT(lang)
 ---
 <BaseLayout
-  lang="en"
+  lang={lang}
   path="/app"
   fullscreen
-  title={`${t('nav.lectures')} — ${t('hero.title')}`}
-  description={t('chat.band.lead')}
+  title={`${t('app.browseTitle')} — ${t('hero.title')}`}
+  description={t('library.lead')}
 >
-  <WebApp client:load lang="en" />
+  <WebApp client:load lang={lang}>
+    <LibraryHub slot="left" lang={lang} />
+  </WebApp>
 </BaseLayout>

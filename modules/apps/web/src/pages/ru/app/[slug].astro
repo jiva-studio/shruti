@@ -3,6 +3,7 @@ import BaseLayout from '../../../layouts/BaseLayout.astro'
 import WebApp from '../../../components/vue/WebApp.vue'
 import type { LectureRecord, LectureVariant } from '@lib/catalog/types.js'
 import { useT } from '../../../i18n/ui'
+import { topicForId, pickName as pickLang } from '../../../lib/catalog'
 
 export async function getStaticPaths() {
   const records = import.meta.glob('../../../../public/data/lectures/*.json', { eager: true, import: 'default' })
@@ -30,15 +31,23 @@ const location = pickName(lecture.locationNames)
 const year = lecture.date ? lecture.date.slice(0, 4) : ''
 const meta = [author, location, year].filter(Boolean).join(' · ')
 
+const topics = (lecture.topicIds ?? []).map((id) => topicForId(id)).filter(Boolean)
+const topicNames = topics.map((tp) => pickLang(tp!.names, lang)).filter(Boolean)
+const ogImage = topics.find((tp) => tp!.cover)?.cover ?? undefined
+
 const audioUrl = variant?.audio?.url ?? ''
 const jsonLd: Record<string, unknown> = {
   '@context': 'https://schema.org',
   '@type': 'AudioObject',
   name: title,
+  inLanguage: lang,
   ...(description ? { description } : {}),
+  ...(author ? { author: { '@type': 'Person', name: author } } : {}),
   ...(audioUrl ? { contentUrl: audioUrl } : {}),
   ...(lecture.date ? { datePublished: lecture.date } : {}),
   ...(variant?.audio?.durationMs ? { duration: `PT${Math.round(variant.audio.durationMs / 1000)}S` } : {}),
+  ...(topicNames.length ? { keywords: topicNames.join(', ') } : {}),
+  ...(topicNames.length ? { about: topicNames.map((name) => ({ '@type': 'Thing', name })) } : {}),
 }
 ---
 <BaseLayout
@@ -47,6 +56,7 @@ const jsonLd: Record<string, unknown> = {
   fullscreen
   title={`${title}${meta ? ` — ${meta}` : ''}`}
   description={description || title}
+  image={ogImage}
 >
   <WebApp client:load lang={lang} slug={slug} lecture={lecture} />
   <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />

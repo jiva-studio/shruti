@@ -2,8 +2,10 @@
   <div class="flex h-[calc(100dvh-4rem)] flex-col bg-cream">
     <div class="flex min-h-0 flex-1">
       <section class="app-scroll min-h-0 flex-1 overflow-y-auto">
+        <slot v-if="$slots.left" name="left" />
+
         <WebLectureSearch
-          v-if="!selectedId"
+          v-else-if="!selectedId"
           :lang="lang"
           embedded
           selectable
@@ -24,21 +26,27 @@
           </button>
         </div>
 
-        <div v-else-if="lecture" class="mx-auto max-w-3xl px-5 py-6">
+        <div v-else-if="lecture" class="relative py-6">
           <button
             type="button"
-            class="mb-4 inline-flex items-center gap-1 text-sm font-medium text-coffee transition hover:text-saffron"
+            class="absolute left-4 top-6 z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-cream-deep text-coffee transition hover:border-saffron/50 hover:text-saffron"
+            :aria-label="t('app.backToList')"
+            :title="t('app.backToList')"
             @click="backToList"
           >
-            ← {{ t('app.backToList') }}
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
           </button>
-          <h1 class="mb-3 font-serif text-2xl font-bold text-ink">{{ selectedTitle }}</h1>
-          <p v-if="selectedMeta" class="mb-5 text-sm text-medium">{{ selectedMeta }}</p>
-          <WebLecturePlayer :lecture="lecture" :lang="lang" sticky-top="0px" />
+          <div class="mx-auto max-w-3xl px-5">
+            <h1 class="font-serif text-2xl font-bold text-ink">{{ selectedTitle }}</h1>
+            <p v-if="selectedMeta" class="mt-2 text-sm text-medium">{{ selectedMeta }}</p>
+            <WebLecturePlayer :lecture="lecture" :lang="lang" sticky-top="0px" class="mt-5" />
+          </div>
         </div>
       </section>
 
-      <div class="relative w-px shrink-0 bg-line">
+      <div class="relative w-px shrink-0 bg-line/70">
         <div
           class="absolute inset-y-0 -left-2 -right-2 z-10 cursor-col-resize"
           @pointerdown="startResize"

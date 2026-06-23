@@ -78,7 +78,15 @@ export default defineConfig({
     routing: { prefixDefaultLocale: true },
   },
   redirects: { '/': '/en/' },
-  integrations: [vue({ appEntrypoint: '/src/vue-app' }), sitemap()],
+  integrations: [
+    vue({ appEntrypoint: '/src/vue-app' }),
+    sitemap({
+      i18n: {
+        defaultLocale: 'en',
+        locales: { en: 'en', ru: 'ru' },
+      },
+    }),
+  ],
   vite: {
     plugins: [monorepoSourceAlias(), tailwindcss()],
     resolve: { dedupe: ['vue'] },
