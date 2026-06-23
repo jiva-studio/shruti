@@ -70,7 +70,6 @@ function monorepoSourceAlias() {
 
 // https://astro.build/config
 export default defineConfig({
-  // TODO: set the real domain before deploy (drives canonical + sitemap URLs)
   site: 'https://shruti.app',
   i18n: {
     defaultLocale: 'en',

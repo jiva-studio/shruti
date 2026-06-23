@@ -1,7 +1,8 @@
 ---
 import type { CollectionIndexEntry } from '@lib/catalog/types.js'
 import { useT, type Lang } from '../i18n/ui'
-import { lecturesByIdsForLang, pickName } from '../lib/catalog'
+import { lecturesByIdsForLang, pickName, shortSlug } from '../lib/catalog'
+import { lectureTitle } from '../lib/lectureDisplay'
 import LectureListPage from './LectureListPage.astro'
 
 interface Props {
@@ -13,7 +14,27 @@ const t = useT(lang)
 const name = pickName(collection.names, lang)
 const desc = pickName(collection.descriptions, lang)
 const lectures = lecturesByIdsForLang(collection.trackIds, lang)
+const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
+const collectionLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name,
+  ...(desc ? { description: desc } : {}),
+  inLanguage: lang,
+  url: `${site}/${lang}/app/library/${collection.slug}`,
+  mainEntity: {
+    '@type': 'ItemList',
+    numberOfItems: lectures.length,
+    itemListElement: lectures.map((l, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: `${site}/${lang}/app/${shortSlug(l.slug)}`,
+      name: lectureTitle(l, lang),
+    })),
+  },
+}
 ---
+<script type="application/ld+json" set:html={JSON.stringify(collectionLd)} is:inline />
 <LectureListPage
   lang={lang}
   kicker={t('collection.kicker')}

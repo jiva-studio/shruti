@@ -14,8 +14,10 @@ interface Props {
   fullscreen?: boolean
   /** Social-card image: absolute URL or root-relative path. */
   image?: string
+  /** Keep the page out of the index (interactive/thin app surfaces). */
+  noindex?: boolean
 }
-const { title, description, lang = defaultLang, path = '/', fullscreen = false, image } = Astro.props
+const { title, description, lang = defaultLang, path = '/', fullscreen = false, image, noindex = false } = Astro.props
 
 const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
 const enPath = path === '/' ? '/en/' : `/en${path}`
@@ -35,6 +37,7 @@ const altLocale = lang === 'en' ? 'ru_RU' : 'en_US'
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex, follow" />}
     <link rel="canonical" href={canonical} />
     <link rel="alternate" hreflang="ru" href={site + ruPath} />
     <link rel="alternate" hreflang="en" href={site + enPath} />
@@ -48,6 +51,12 @@ const altLocale = lang === 'en' ? 'ru_RU' : 'en_US'
     <meta property="og:locale" content={ogLocale} />
     <meta property="og:locale:alternate" content={altLocale} />
     <meta property="og:image" content={ogImage} />
+    {!image && (
+      <>
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+      </>
+    )}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
