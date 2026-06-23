@@ -24,7 +24,7 @@ const enPath = path === '/' ? '/en/' : `/en${path}`
 const ruPath = path === '/' ? '/ru/' : `/ru${path}`
 const canonical = site + (lang === 'en' ? enPath : ruPath)
 
-const rawImage = image ?? '/og-default.jpg'
+const rawImage = image ?? `/og-default.${lang}.jpg`
 const ogImage = rawImage.startsWith('http') ? rawImage : site + rawImage
 const siteName = lang === 'en' ? 'Shruti' : 'Слушай Садху'
 const ogLocale = lang === 'en' ? 'en_US' : 'ru_RU'

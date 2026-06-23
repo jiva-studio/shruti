@@ -397,7 +397,7 @@ async function main() {
   const build = fullCandidates.slice(0, SYNC_LIMIT)
   let fullCount = 0
 
-  for (const c of build) {
+  async function processTrack(c) {
     const { track, variants, audios, refs } = c
     const audioByLang = new Map()
     for (const a of audios) {
@@ -439,6 +439,17 @@ async function main() {
     writeFileSync(join(lecturesDir, `${track.id}.json`), JSON.stringify(record))
     fullCount++
   }
+
+  const CONCURRENCY = Number(process.env.SYNC_CONCURRENCY ?? 24)
+  let cursor = 0
+  async function worker() {
+    while (cursor < build.length) {
+      const c = build[cursor++]
+      await processTrack(c)
+      if (fullCount % 250 === 0) console.log(`  …${fullCount}/${build.length}`)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, build.length) }, worker))
 
   db.close()
 

@@ -12,10 +12,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PUBLIC = os.path.join(HERE, "..", "public")
 
 W, H = 1200, 630
-DARK = (22, 18, 15)
-CREAM = (245, 239, 227)
-MEDIUM = (190, 165, 140)
-HAIRLINE = (60, 50, 42)
+CREAM = (250, 245, 234)
+INK = (61, 43, 31)
+MEDIUM = (128, 103, 82)
 SAFFRON = (204, 122, 61)
 
 SERIF = "/nix/store/wlkw8grs68czgilvbrjjp88ggcspdfgl-noto-fonts-2026.05.01/share/fonts/noto/NotoSerif.ttf"
@@ -31,28 +30,30 @@ def font(path, size, variation):
     return f
 
 
-def rounded(im, radius):
-    mask = Image.new("L", im.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, im.size[0], im.size[1]], radius=radius, fill=255)
-    im.putalpha(mask)
-    return im
+CARDS = {
+    "en": ("Shruti", "Lectures of A. C. Bhaktivedanta Swami Prabhupada"),
+    "ru": ("Слушай Садху", "Лекции А. Ч. Бхактиведанты Свами Прабхупады"),
+}
 
 
-def main():
-    img = Image.new("RGB", (W, H), DARK)
+def render(lang, title, subtitle):
+    img = Image.new("RGB", (W, H), CREAM)
     draw = ImageDraw.Draw(img)
 
-    icon = Image.open(os.path.join(PUBLIC, "app-icon.png")).convert("RGBA").resize((320, 320))
-    icon = rounded(icon, 72)
-    iy = (H - 320) // 2
+    icon = Image.open(os.path.join(PUBLIC, "app-icon.png")).convert("RGBA").resize((360, 360))
+    iy = (H - 360) // 2
     img.paste(icon, (96, iy), icon)
-    draw.rounded_rectangle([96, iy, 96 + 320, iy + 320], radius=72, outline=HAIRLINE, width=2)
 
     tx = 96 + 320 + 64
     avail = W - tx - 64
-    title_f = font(SERIF, 82, "ExtraBold")
 
-    subtitle = "Lectures of A. C. Bhaktivedanta Swami Prabhupada"
+    title_size = 82
+    while title_size > 48:
+        title_f = font(SERIF, title_size, "ExtraBold")
+        if draw.textlength(title, font=title_f) <= avail:
+            break
+        title_size -= 1
+
     sub_size = 36
     while sub_size > 22:
         sub_f = font(SANS, sub_size, "Medium")
@@ -60,13 +61,18 @@ def main():
             break
         sub_size -= 1
 
-    draw.text((tx, 232), "Shruti", font=title_f, fill=CREAM)
+    draw.text((tx, 232), title, font=title_f, fill=INK)
     draw.rectangle([tx + 2, 340, tx + 122, 348], fill=SAFFRON)
     draw.text((tx, 372), subtitle, font=sub_f, fill=MEDIUM)
 
-    out = os.path.join(PUBLIC, "og-default.jpg")
+    out = os.path.join(PUBLIC, f"og-default.{lang}.jpg")
     img.save(out, "JPEG", quality=88)
     print("wrote", out, img.size)
+
+
+def main():
+    for lang, (title, subtitle) in CARDS.items():
+        render(lang, title, subtitle)
 
 
 if __name__ == "__main__":
