@@ -25,13 +25,14 @@ import { useTranslatable } from '@lib/chat/useTranslatable.js'
 import { renderExcerptHtml } from '@lib/chat/chatMarkers.js'
 import CitationCard from '@lib/ui/chat/CitationCard.vue'
 import WebExcerptPlayer from './WebExcerptPlayer.vue'
+import type { CitationPayload } from './types/chat'
 
 const props = defineProps<{
   trackId: string
   startMs: number
   endMs: number
   caption?: string
-  body?: any
+  body?: CitationPayload
   language?: string
 }>()
 

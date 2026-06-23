@@ -1,7 +1,7 @@
 ---
 import type { CollectionIndexEntry } from '@lib/catalog/types.js'
 import { useT, type Lang } from '../i18n/ui'
-import { lecturesByIds, pickName } from '../lib/catalog'
+import { lecturesByIdsForLang, pickName } from '../lib/catalog'
 import LectureListPage from './LectureListPage.astro'
 
 interface Props {
@@ -12,7 +12,7 @@ const { collection, lang } = Astro.props
 const t = useT(lang)
 const name = pickName(collection.names, lang)
 const desc = pickName(collection.descriptions, lang)
-const lectures = lecturesByIds(collection.trackIds)
+const lectures = lecturesByIdsForLang(collection.trackIds, lang)
 ---
 <LectureListPage
   lang={lang}

@@ -29,6 +29,14 @@ export function lecturesByIds(ids: string[]): LectureIndexEntry[] {
   return out
 }
 
+export function lecturesByIdsForLang(ids: string[], lang: string): LectureIndexEntry[] {
+  return lecturesByIds(ids).filter((l) => l.contentLanguages.includes(lang))
+}
+
+export function lectureCountForLang(ids: string[], lang: string): number {
+  return lecturesByIdsForLang(ids, lang).length
+}
+
 const topicById = new Map(topics.map((t) => [t.id, t]))
 export function topicForId(id: string): TopicIndexEntry | undefined {
   return topicById.get(id)

@@ -9,58 +9,76 @@ import WebCitationCard from './WebCitationCard.vue'
 import WebCommentaryCard from './WebCommentaryCard.vue'
 import WebMediaCard from './WebMediaCard.vue'
 import { STORE } from '../../i18n/ui'
+import type {
+  ChapterPayload,
+  CitationPayload,
+  CommentaryPayload,
+  OutlinePayload,
+  PdfActionPayload,
+  PdfItemPayload,
+  VersePayload,
+} from './types/chat'
+import type { MediaPayload } from './types/media'
 
 const props = defineProps<{
   text: string
   lang: 'ru' | 'en'
-  verses?: Map<string, any>
-  chapters?: Map<string, any>
-  cites?: Map<string, any>
-  commentaries?: Map<string, any>
-  media?: Map<string, any>
-  outlines?: Map<string, any>
-  pdfActions?: Map<string, any>
+  verses?: Map<string, VersePayload>
+  chapters?: Map<string, ChapterPayload>
+  cites?: Map<string, CitationPayload>
+  commentaries?: Map<string, CommentaryPayload>
+  media?: Map<string, MediaPayload>
+  outlines?: Map<string, OutlinePayload>
+  pdfActions?: Map<string, PdfActionPayload>
 }>()
 
 const tokens = computed<ChatToken[]>(() => parseChatMarkers(props.text))
 
 const outlineLabel = computed(() => (props.lang === 'ru' ? 'Оглавление' : 'Outline'))
 
-function verseBody(t: any) {
+type VerseToken = Extract<ChatToken, { kind: 'verse' }>
+type ChapterToken = Extract<ChatToken, { kind: 'chapter' }>
+type CiteToken = Extract<ChatToken, { kind: 'cite' }>
+type CommentaryToken = Extract<ChatToken, { kind: 'commentary' }>
+type MediaToken = Extract<ChatToken, { kind: 'media' }>
+type OutlineToken = Extract<ChatToken, { kind: 'outline' }>
+type ActionToken = Extract<ChatToken, { kind: 'action' }>
+
+function verseBody(t: VerseToken) {
   return props.verses?.get(`${t.sourceId}|${t.tokens}`)
 }
-function chapterBody(t: any) {
+function chapterBody(t: ChapterToken) {
   return props.chapters?.get(`${t.sourceId}|${t.regionToken}`)
 }
-function citeBody(t: any) {
+function citeBody(t: CiteToken) {
   return props.cites?.get(`${t.trackId}|${t.startMs}-${t.endMs}`)
 }
-function commentaryBody(t: any) {
+function commentaryBody(t: CommentaryToken) {
   return props.commentaries?.get(String(t.ref))
 }
-function mediaBody(t: any) {
+function mediaBody(t: MediaToken) {
   return props.media?.get(t.mediaId)
 }
-function outlineBody(t: any) {
+function outlineBody(t: OutlineToken) {
   return props.outlines?.get(t.trackId)
 }
-function pdfBody(t: any) {
+function pdfBody(t: ActionToken) {
   return props.pdfActions?.get(t.actionId)
 }
 
 const S3_BASE = 'https://cdn-s3.shruti.local'
 
-function pdfItems(t: any): any[] {
+function pdfItems(t: ActionToken): PdfItemPayload[] {
   const body = pdfBody(t)
   return Array.isArray(body?.items) ? body.items : []
 }
-function pdfTrackId(it: any): string {
+function pdfTrackId(it: PdfItemPayload): string {
   return it.track_id ?? it.trackId ?? ''
 }
-function pdfTitle(it: any): string {
+function pdfTitle(it: PdfItemPayload): string {
   return it.title || pdfTrackId(it)
 }
-function pdfUrl(it: any): string {
+function pdfUrl(it: PdfItemPayload): string {
   const trackId = pdfTrackId(it)
   const lang = it.lang || props.lang || 'ru'
   return `${S3_BASE}/public/tracks/${trackId}/exports/${lang}.pdf`

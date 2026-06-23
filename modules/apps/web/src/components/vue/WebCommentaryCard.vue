@@ -13,8 +13,9 @@ import { computed } from 'vue'
 import { useTranslatable } from '@lib/chat/useTranslatable.js'
 import { renderExcerptHtml } from '@lib/chat/chatMarkers.js'
 import CommentaryCard from '@lib/ui/chat/CommentaryCard.vue'
+import type { CommentaryPayload } from './types/chat'
 
-const props = defineProps<{ body?: any }>()
+const props = defineProps<{ body?: CommentaryPayload }>()
 
 const body = computed(() => props.body ?? null)
 const { isMt, showOriginal, displayText } = useTranslatable(() => body.value)

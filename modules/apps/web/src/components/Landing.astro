@@ -1,175 +1,38 @@
 ---
 import StoreBadges from './StoreBadges.astro'
-import ScreenshotGallery from './ScreenshotGallery.astro'
-import { useT, FAQ, type Lang } from '../i18n/ui'
+import HeroSection from './HeroSection.astro'
+import ScreenshotShowcase from './ScreenshotShowcase.astro'
+import FeatureList from './FeatureList.astro'
+import CTABand from './CTABand.astro'
+import FAQSection from './FAQSection.astro'
+import { useT, type Lang } from '../i18n/ui'
 interface Props { lang: Lang }
 const { lang } = Astro.props
 const t = useT(lang)
 const chatHref = `/${lang}/app`
-
-const features = [
-  'feature.library',
-  'feature.transcript',
-  'feature.bookmarks',
-  'feature.search',
-  'feature.offline',
-  'feature.chat',
-  'feature.share',
-  'feature.streak',
-] as const
-
-const faq = FAQ[lang]
-
-const shots = lang === 'ru'
-  ? [
-      ['01_home', 'Отслеживание прогресса', 'Серия дней и продолжение с того места, где остановились.'],
-      ['07_library', 'Тысячи лекций', 'По «Гите», «Бхагаватам» и другим писаниям — всегда под рукой.'],
-      ['04_transcript', 'Текст рядом с аудио', 'Читайте и слушайте одновременно — текущий абзац перед глазами.'],
-      ['05_chat', 'Спроси Садху', 'Понятный ответ со ссылками на конкретные лекции.'],
-      ['07_search', 'Поиск и фильтры', 'Находите лекции по теме, автору и дате.'],
-      ['08_track', 'Слушайте где угодно', 'Загружайте лекции и слушайте без интернета.'],
-    ]
-  : [
-      ['01_home', 'Track your progress', 'A day streak and picking up right where you left off.'],
-      ['07_library', 'Thousands of lectures', 'On the Gita, the Bhagavatam and other scriptures — always at hand.'],
-      ['04_transcript', 'Text beside the audio', 'Read and listen at once — the current passage in view.'],
-      ['05_chat', 'Ask Sadhu', 'A clear answer with links to the specific lectures.'],
-      ['07_search', 'Search & filters', 'Find lectures by topic, author and date.'],
-      ['08_track', 'Listen anywhere', 'Download lectures and listen offline.'],
-    ]
-// Safe-zone colours per screenshot — top band matches the image's top edge,
-// bottom band its bottom edge. Tweak per screen here (no resampling needed).
-const SHOT_BG: Record<string, { top: string; bottom: string }> = {
-  '01_home': { top: '#faf5ea', bottom: '#faf5ea' },
-  '07_library': { top: '#faf5ea', bottom: '#faf5ea' },
-  '04_transcript': { top: '#1a130d', bottom: '#d18750' },
-  '05_chat': { top: '#eee9df', bottom: '#faf5ea' },
-  '07_search': { top: '#faf5ea', bottom: '#faf5ea' },
-  '08_track': { top: '#a9a69f', bottom: '#faf5ea' },
-}
-const slides = shots.map(([file, title, desc]) => ({
-  src: `/screens/${lang}/${file}.png?v=3`,
-  title,
-  desc,
-  top: SHOT_BG[file]?.top ?? '#faf5ea',
-  bottom: SHOT_BG[file]?.bottom ?? '#d4a986',
-}))
 ---
-<!-- HERO -->
-<section id="about" class="relative overflow-hidden">
-  <div class="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-saffron/10 blur-3xl"></div>
-  <div class="pointer-events-none absolute -left-24 top-40 h-72 w-72 rounded-full bg-moss/10 blur-3xl"></div>
-  <div class="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-2 md:py-24">
-    <div>
-      <h1 class="text-4xl font-bold leading-[1.05] text-ink sm:text-5xl md:text-6xl">{t('hero.title')}</h1>
-      <p class="mt-5 text-xl text-coffee sm:text-2xl">{t('hero.subtitle')}</p>
-      <p class="mt-5 max-w-md text-base leading-relaxed text-medium">{t('hero.lead')}</p>
-      <div class="mt-8 max-w-md"><StoreBadges full /></div>
-    </div>
+<HeroSection lang={lang} />
 
-    <div class="relative mx-auto w-full max-w-sm">
-      <div class="absolute inset-0 -rotate-3 rounded-[2.2rem] bg-gradient-to-br from-saffron/25 to-coffee/15"></div>
-      <div class="relative overflow-hidden rounded-[2rem] border-4 border-ink bg-cream py-[4.5%] shadow-2xl">
-        <img src={`/screens/${lang}/01_home.png?v=3`} alt={t('hero.title')} class="block w-full" />
-      </div>
-    </div>
-  </div>
-</section>
+<ScreenshotShowcase lang={lang} />
 
-<!-- SHOWCASE — all screens -->
-<section class="bg-cream-deep/50 py-16">
-  <div class="mx-auto mb-10 max-w-2xl px-5 text-center">
-    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{lang === 'en' ? 'A look inside' : 'Как выглядит приложение'}</h2>
-  </div>
-  <ScreenshotGallery slides={slides} />
-</section>
+<FeatureList lang={lang} />
 
-<!-- FEATURES -->
-<section id="features" class="mx-auto max-w-6xl px-5 py-16">
-  <div class="max-w-2xl">
-    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('features.title')}</h2>
-    <p class="mt-3 text-medium">{t('features.lead')}</p>
-  </div>
-  <div class="mt-12 grid gap-x-14 gap-y-10 sm:grid-cols-2">
-    {features.map((key, i) => (
-      <div class="feat-item flex gap-5 pt-7">
-        <span class="shrink-0 font-serif text-2xl font-bold tabular-nums text-saffron/55">
-          {String(i + 1).padStart(2, '0')}
-        </span>
-        <div>
-          <h3 class="font-serif text-xl font-semibold leading-snug text-ink">{t(`${key}.t` as any)}</h3>
-          <p class="mt-2.5 text-[15px] leading-relaxed text-medium">{t(`${key}.d` as any)}</p>
-        </div>
-      </div>
-    ))}
-  </div>
-</section>
+<CTABand id="chat" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')}>
+  <a href={chatHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
+    {t('chat.band.cta')} →
+  </a>
+</CTABand>
 
-<!-- ASK SADHU BAND -->
-<section id="chat" class="mx-auto max-w-6xl px-5 py-10">
-  <div class="relative overflow-hidden rounded-3xl bg-ink px-7 py-12 text-cream sm:px-12">
-    <img src="/cta-bg.jpg" alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-right" />
-    <div class="absolute inset-0 bg-gradient-to-r from-ink via-ink/75 to-transparent"></div>
-    <div class="relative max-w-2xl">
-      <h2 class="text-3xl font-bold text-cream sm:text-4xl">{t('chat.band.title')}</h2>
-      <p class="mt-4 text-cream/80">{t('chat.band.lead')}</p>
-      <a href={chatHref} class="mt-7 inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
-        {t('chat.band.cta')} →
-      </a>
-    </div>
-  </div>
-</section>
+<FAQSection lang={lang} />
 
-<!-- FAQ -->
-<section id="faq" class="mx-auto max-w-6xl px-5 py-16">
-  <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('faq.title')}</h2>
-  <div class="mt-8">
-    {faq.map(([q, a]) => (
-      <details class="faq-item group py-5">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-serif text-lg font-semibold leading-snug text-ink">
-          {q}
-          <span class="shrink-0 text-2xl font-normal leading-none text-saffron transition group-open:rotate-45">+</span>
-        </summary>
-        <p class="mt-3 text-[15px] leading-relaxed text-medium">{a}</p>
-      </details>
-    ))}
-  </div>
-</section>
-
-<!-- DOWNLOAD -->
-<section id="download" class="mx-auto max-w-6xl px-5 py-16">
-  <div class="relative overflow-hidden rounded-3xl bg-ink px-7 py-12 text-cream sm:px-12">
-    <img src="/getapp-bg.jpg" alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-right" />
-    <div class="absolute inset-0 bg-gradient-to-r from-ink via-ink/75 to-transparent"></div>
-    <div class="relative max-w-md">
-      <h2 class="text-3xl font-bold text-cream sm:text-4xl">{t('download.title')}</h2>
-      <p class="mt-4 text-cream/80">{t('download.lead')}</p>
-      <div class="mt-8"><StoreBadges full onDark /></div>
-    </div>
-  </div>
-</section>
-
-<style>
-  .feat-item,
-  .faq-item {
-    position: relative;
-  }
-  .feat-item::before,
-  .faq-item::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 1px;
-    background: linear-gradient(to right, transparent, var(--shruti-divider, rgba(61, 43, 31, 0.12)), transparent);
-  }
-  /* No divider above the top row — only between blocks. */
-  .feat-item:first-child::before,
-  .faq-item:first-child::before {
-    display: none;
-  }
-  @media (min-width: 640px) {
-    .feat-item:nth-child(2)::before {
-      display: none;
-    }
-  }
-</style>
+<CTABand
+  id="download"
+  bg="/getapp-bg.jpg"
+  title={t('download.title')}
+  lead={t('download.lead')}
+  sectionClass="py-16"
+  contentClass="max-w-md"
+  actionClass="mt-8"
+>
+  <StoreBadges full onDark />
+</CTABand>
