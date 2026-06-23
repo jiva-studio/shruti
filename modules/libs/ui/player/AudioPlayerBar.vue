@@ -138,7 +138,7 @@ function onPointerDown(event: PointerEvent) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 12px;
   background: var(--ion-color-light);
   border: 1px solid var(--ion-border-color);
   border-radius: 10px;
@@ -219,6 +219,9 @@ function onPointerDown(event: PointerEvent) {
 
 .play-spinner {
   --color: var(--ion-color-primary-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
   height: 18px;
 }
