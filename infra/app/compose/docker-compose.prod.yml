@@ -54,9 +54,19 @@ services:
       # On proxy: real global host name (shruti.example.com), set
       # by the operator in /opt/shruti/.env.
       SHRUTI_GLOBAL_HOST: ${SHRUTI_GLOBAL_HOST:-global.invalid}
+      # Public hostname for the static website (Caddy serves /srv/web here
+      # and auto-issues Let's Encrypt). Set on origin (an <ip>.sslip.io for
+      # first tests, the real domain later). Defaults to an internal-only
+      # ":8088" so hosts that don't serve the site (RU proxy) parse the
+      # web block without attempting ACME for a real name.
+      SHRUTI_WEB_DOMAIN: ${SHRUTI_WEB_DOMAIN:-:8088}
     volumes:
       - caddydata:/data
       - caddyconfig:/config
+      # Prebuilt static site, rsync'd to the host. read-only; Caddy only
+      # serves it. Missing on proxy hosts → Docker creates an empty dir,
+      # the web block 404s harmlessly on its internal :8088.
+      - ${SHRUTI_WEB_DIR:-/opt/shruti/web}:/srv/web:ro
     networks: [shruti]
     # required: false lets caddy start on proxy hosts where chat/auth
     # are profile-excluded (the proxy reverse-proxies them to global).
