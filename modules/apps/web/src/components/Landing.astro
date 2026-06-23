@@ -1,0 +1,38 @@
+---
+import StoreBadges from './StoreBadges.astro'
+import HeroSection from './HeroSection.astro'
+import ScreenshotShowcase from './ScreenshotShowcase.astro'
+import FeatureList from './FeatureList.astro'
+import CTABand from './CTABand.astro'
+import FAQSection from './FAQSection.astro'
+import { useT, type Lang } from '../i18n/ui'
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = useT(lang)
+const chatHref = `/${lang}/app`
+---
+<HeroSection lang={lang} />
+
+<ScreenshotShowcase lang={lang} />
+
+<FeatureList lang={lang} />
+
+<CTABand id="chat" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')}>
+  <a href={chatHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
+    {t('chat.band.cta')} →
+  </a>
+</CTABand>
+
+<FAQSection lang={lang} />
+
+<CTABand
+  id="download"
+  bg="/getapp-bg.jpg"
+  title={t('download.title')}
+  lead={t('download.lead')}
+  sectionClass="py-16"
+  contentClass="max-w-md"
+  actionClass="mt-8"
+>
+  <StoreBadges full onDark />
+</CTABand>

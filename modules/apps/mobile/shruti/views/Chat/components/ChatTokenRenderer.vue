@@ -9,7 +9,7 @@
       markdown through this path, swap in a DOMPurify pass first.
     -->
     <span v-if="token.kind === 'text'" v-html="token.html" />
-    <CitationCard
+    <CitationCardContainer
       v-else-if="token.kind === 'cite'"
       :track-id="token.trackId"
       :start-ms="token.startMs"
@@ -19,7 +19,7 @@
       @activate="onActivateCite(token)"
     />
     <TrackList v-else-if="token.kind === 'cards'" :track-ids="token.trackIds" />
-    <OutlineCard
+    <OutlineCardContainer
       v-else-if="token.kind === 'outline'"
       :track-id="token.trackId"
       :items="message.outlines?.[token.trackId]?.items ?? []"
@@ -60,12 +60,13 @@
       :state="actionState(token.actionId)"
       @confirm="onConfirmAction"
     />
-    <VerseCard
+    <VerseCardContainer
       v-else-if="token.kind === 'verse'"
       :source-id="token.sourceId"
       :tokens="token.tokens"
       :caption="token.caption"
       :body="message.verses?.[`${token.sourceId}|${token.tokens}`]"
+      :locale="locale"
     />
     <ChapterCard
       v-else-if="token.kind === 'chapter'"
@@ -74,8 +75,16 @@
       :caption="token.caption"
       :body="message.chapters?.[`${token.sourceId}|${token.regionToken}`]"
     />
-    <MediaCard v-else-if="token.kind === 'media'" :payload="message.media?.[token.mediaId]" />
-    <CommentaryCard
+    <MediaCardContainer
+      v-else-if="token.kind === 'media'"
+      :payload="message.media?.[token.mediaId]"
+      :resolve-url="storagePublicUrlGet"
+    >
+      <template #play-icon="{ size }"><IconPlayerPlayFilled :size="size" /></template>
+      <template #pause-icon="{ size }"><IconPlayerPauseFilled :size="size" /></template>
+      <template #expand-icon="{ size }"><IconChevronDown :size="size" /></template>
+    </MediaCardContainer>
+    <CommentaryCardContainer
       v-else-if="token.kind === 'commentary'"
       :body="message.commentaries?.[String(token.ref)]"
     />
@@ -113,20 +122,23 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { useI18n } from "vue-i18n"
+import { IconChevronDown, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import router from "@shruti/router/index.js"
-import { parseChatMarkers } from "@shruti/composables/chatMarkers.js"
+import { parseChatMarkers } from "@lib/chat/chatMarkers.js"
+import { useShruti } from "@shruti/shruti.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { CitationCoords } from "../composables/useCitationMeta.js"
-import AccentFrame from "./AccentFrame.vue"
-import CitationCard from "./CitationCard.vue"
+import AccentFrame from "@lib/ui/chat/AccentFrame.vue"
+import CitationCardContainer from "./CitationCardContainer.vue"
 import CitationActionSheet from "./CitationActionSheet.vue"
 import TrackList from "./TrackList.vue"
-import OutlineCard from "./OutlineCard.vue"
-import VerseCard from "./VerseCard.vue"
-import ChapterCard from "./ChapterCard.vue"
-import MediaCard from "./MediaCard.vue"
-import CommentaryCard from "./CommentaryCard.vue"
+import OutlineCardContainer from "./OutlineCardContainer.vue"
+import VerseCardContainer from "./VerseCardContainer.vue"
+import ChapterCard from "@lib/ui/chat/ChapterCard.vue"
+import MediaCardContainer from "./MediaCardContainer.vue"
+import CommentaryCardContainer from "./CommentaryCardContainer.vue"
 import WeeklyDigestCard from "./WeeklyDigestCard.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
@@ -146,6 +158,11 @@ defineEmits<{
 }>()
 
 const chat = useChatStore()
+const app = useShruti()
+const { locale } = useI18n()
+
+// MediaCard turns a relative storage path into the active server's CDN URL.
+const storagePublicUrlGet = (path: string): string => app.storagePublicUrl.get(path)
 
 const tokens = computed(() => {
   if (props.message.role !== "assistant") return []

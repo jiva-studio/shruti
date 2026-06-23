@@ -1,0 +1,68 @@
+---
+import '../styles/global.css'
+import SiteNav from '../components/SiteNav.astro'
+import Footer from '../components/Footer.astro'
+import { defaultLang, type Lang } from '../i18n/ui'
+
+interface Props {
+  title: string
+  description: string
+  lang?: Lang
+  /** path WITHOUT locale prefix, e.g. "/" or "/chat" */
+  path?: string
+  /** Single-screen app shell: drop the footer and lock page scroll. */
+  fullscreen?: boolean
+  /** Social-card image: absolute URL or root-relative path. */
+  image?: string
+}
+const { title, description, lang = defaultLang, path = '/', fullscreen = false, image } = Astro.props
+
+const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
+const enPath = path === '/' ? '/en/' : `/en${path}`
+const ruPath = path === '/' ? '/ru/' : `/ru${path}`
+const canonical = site + (lang === 'en' ? enPath : ruPath)
+
+const rawImage = image ?? '/og-default.jpg'
+const ogImage = rawImage.startsWith('http') ? rawImage : site + rawImage
+const siteName = lang === 'en' ? 'Shruti' : 'Слушай Садху'
+const ogLocale = lang === 'en' ? 'en_US' : 'ru_RU'
+const altLocale = lang === 'en' ? 'ru_RU' : 'en_US'
+---
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="ru" href={site + ruPath} />
+    <link rel="alternate" hreflang="en" href={site + enPath} />
+    <link rel="alternate" hreflang="x-default" href={site + enPath} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={ogLocale} />
+    <meta property="og:locale:alternate" content={altLocale} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <meta name="theme-color" content="#f7f3ec" />
+    <meta name="apple-itunes-app" content="app-id=6745510353" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/app-icon.png" />
+  </head>
+  <body class={fullscreen ? 'h-screen overflow-hidden' : 'min-h-screen'}>
+    <SiteNav lang={lang} path={path} />
+    <main>
+      <slot />
+    </main>
+    {!fullscreen && <Footer lang={lang} />}
+  </body>
+</html>

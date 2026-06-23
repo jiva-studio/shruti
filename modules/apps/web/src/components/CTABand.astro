@@ -1,0 +1,31 @@
+---
+interface Props {
+  id: string
+  bg: string
+  title: string
+  lead: string
+  sectionClass?: string
+  contentClass?: string
+  actionClass?: string
+}
+const {
+  id,
+  bg,
+  title,
+  lead,
+  sectionClass = 'py-10',
+  contentClass = 'max-w-2xl',
+  actionClass = 'mt-7',
+} = Astro.props
+---
+<section id={id} class={`mx-auto max-w-6xl px-5 ${sectionClass}`}>
+  <div class="relative overflow-hidden rounded-2xl bg-ink px-7 py-12 text-cream sm:px-12">
+    <img src={bg} alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-right" />
+    <div class="absolute inset-0 bg-gradient-to-r from-ink via-ink/75 to-transparent"></div>
+    <div class={`relative ${contentClass}`}>
+      <h2 class="text-3xl font-bold text-cream sm:text-4xl">{title}</h2>
+      <p class="mt-4 text-cream/80">{lead}</p>
+      <div class={actionClass}><slot /></div>
+    </div>
+  </div>
+</section>

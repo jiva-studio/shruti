@@ -1,0 +1,29 @@
+---
+import { useT, type Lang } from '../i18n/ui'
+import { topics, lectureCountForLang } from '../lib/catalog'
+import TopicCard from './TopicCard.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = useT(lang)
+const topicTeaser = topics
+  .map((topic) => ({ topic, count: lectureCountForLang(topic.trackIds, lang) }))
+  .filter(({ count }) => count > 0)
+  .slice(0, 12)
+---
+<section class="mt-16">
+  <div class="flex items-end justify-between gap-4">
+    <div class="max-w-2xl">
+      <h2 class="font-serif text-2xl font-semibold text-ink">{t('library.topicsTitle')}</h2>
+      <p class="mt-2 text-sm text-medium">{t('library.topicsLead')}</p>
+    </div>
+    <a href={`/${lang}/app/topics`} class="shrink-0 text-sm font-semibold text-saffron-shade">
+      {t('library.allTopics')} →
+    </a>
+  </div>
+  <div class="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+    {topicTeaser.map(({ topic, count }) => <TopicCard topic={topic} lang={lang} count={count} />)}
+  </div>
+</section>
