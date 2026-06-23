@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../../../../layouts/BaseLayout.astro'
+import WebApp from '../../../../components/vue/WebApp.vue'
+import TopicsGrid from '../../../../components/TopicsGrid.astro'
+import { useT } from '../../../../i18n/ui'
+const lang = 'en'
+const t = useT(lang)
+---
+<BaseLayout
+  lang={lang}
+  path="/app/topics"
+  fullscreen
+  title={`${t('topics.title')} — ${t('hero.title')}`}
+  description={t('topics.lead')}
+>
+  <WebApp client:load lang={lang}>
+    <TopicsGrid slot="left" lang={lang} />
+  </WebApp>
+</BaseLayout>
