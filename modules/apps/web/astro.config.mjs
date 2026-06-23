@@ -73,10 +73,11 @@ export default defineConfig({
   // TODO: set the real domain before deploy (drives canonical + sitemap URLs)
   site: 'https://shruti.app',
   i18n: {
-    defaultLocale: 'ru',
+    defaultLocale: 'en',
     locales: ['ru', 'en'],
-    routing: { prefixDefaultLocale: false },
+    routing: { prefixDefaultLocale: true },
   },
+  redirects: { '/': '/en/' },
   integrations: [vue({ appEntrypoint: '/src/vue-app' }), sitemap()],
   vite: {
     plugins: [monorepoSourceAlias(), tailwindcss()],

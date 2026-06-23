@@ -1,39 +1,26 @@
 <template>
   <div class="chat-inputbar">
     <ChatUsageChip :chat-usage="chatUsage" :quota-locked="quotaLocked" />
-    <div class="input-capsule" :class="{ 'has-text': hasText }">
-      <textarea
-        ref="textareaRef"
-        v-model="text"
-        rows="1"
-        :placeholder="placeholder"
-        :aria-label="ariaLabel"
-        :disabled="sending || quotaLocked"
-        class="input"
-        @keydown="onKeydown"
-        @input="resize"
-      />
-      <button
-        type="button"
-        class="send"
-        :class="{ visible: canSend || sending }"
-        :aria-label="sendAriaLabel"
-        :disabled="(!canSend && !sending) || quotaLocked"
-        :tabindex="(canSend || sending) && !quotaLocked ? 0 : -1"
-        @click="onSendClick"
-      >
-        <IconArrowUp v-if="!sending" :size="20" stroke="2.5" />
-        <IonSpinner v-else name="dots" />
-      </button>
-    </div>
+    <ChatComposer
+      ref="composerRef"
+      :sending="sending"
+      :disabled="quotaLocked"
+      :placeholder="placeholder"
+      :send-aria-label="sendAriaLabel"
+      :compose-aria-label="ariaLabel"
+      @send="(t: string) => emit('send', t)"
+      @cancel="emit('cancel')"
+    >
+      <template #spinner><IonSpinner name="dots" /></template>
+    </ChatComposer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue"
+import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
-import { IconArrowUp } from "@tabler/icons-vue"
+import ChatComposer from "@lib/ui/chat/ChatComposer.vue"
 import ChatUsageChip from "./ChatUsageChip.vue"
 
 const props = defineProps<{
@@ -57,11 +44,7 @@ const emit = defineEmits<{ send: [text: string]; cancel: [] }>()
 
 const { t } = useI18n()
 
-const text = ref("")
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-
-const hasText = computed(() => text.value.trim().length > 0)
-const canSend = computed(() => !props.sending && hasText.value && !props.quotaLocked)
+const composerRef = ref<{ setText: (s: string) => void; focus: () => void } | null>(null)
 
 /** Format the `{when}` fragment for the lockout copy: `"at HH:MM"` when
  *  the reset lands later today (local), `"tomorrow at HH:MM"` when it
@@ -122,62 +105,19 @@ const sendAriaLabel = computed<string>(() => {
   return t("chat.send")
 })
 
-function resize(): void {
-  const el = textareaRef.value
-  if (!el) return
-  el.style.height = "auto"
-  el.style.height = `${el.scrollHeight}px`
-}
-
-watch(text, () => {
-  void nextTick(resize)
-})
-
-function onSendClick(): void {
-  // While a turn is streaming the button is the Stop affordance —
-  // emit `cancel` so the parent can abort the SSE stream. Quota-lock
-  // still wins so users can't fire cancel during a 429 cooldown.
-  if (props.sending && !props.quotaLocked) {
-    emit("cancel")
-    return
-  }
-  if (!canSend.value) return
-  const payload = text.value.trim()
-  text.value = ""
-  emit("send", payload)
-}
-
-function onKeydown(event: KeyboardEvent): void {
-  // Enter without modifiers sends; Shift+Enter / Alt+Enter insert a
-  // newline. On native mobile the on-screen "Send" key triggers a plain
-  // Enter, mirroring Telegram / Claude.
-  if (event.key !== "Enter") return
-  if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return
-  event.preventDefault()
-  if (canSend.value) onSendClick()
-}
-
 /** Programmatically fill the input — used by SuggestionChips to seed a
- *  prompt onto the empty composer. Focuses + grows the textarea so the
- *  user can tweak before sending. */
+ *  prompt onto the empty composer. Forwarded to the shared composer,
+ *  which grows + focuses the textarea so the user can tweak before
+ *  sending. */
 function setText(next: string): void {
-  text.value = next
-  void nextTick(() => {
-    resize()
-    textareaRef.value?.focus()
-    // Move caret to end so further typing appends.
-    const el = textareaRef.value
-    if (el) el.setSelectionRange(el.value.length, el.value.length)
-  })
+  composerRef.value?.setText(next)
 }
 
 /** Focus the textarea without changing its content. Used after the
  *  "Ask Sadhu" navigation: the focus card + chips are already in place
  *  and the user expects the keyboard to come up immediately. */
 function focus(): void {
-  void nextTick(() => {
-    textareaRef.value?.focus()
-  })
+  composerRef.value?.focus()
 }
 
 defineExpose({ setText, focus })
@@ -204,98 +144,5 @@ defineExpose({ setText, focus })
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-end;
-}
-
-.input-capsule {
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-  /* Palette tokens — see theme/variables.css :root +
-   * @media (prefers-color-scheme: dark). Light theme lifts to white
-   * above the cream page; dark theme picks a tone slightly above
-   * --ion-card-background. */
-  background: var(--lectorium-input-surface);
-  border: 1px solid var(--lectorium-input-border);
-  border-radius: 24px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-  pointer-events: auto;
-  /* Single-line geometry: capsule height matches the 36px send button
-   * + 4px padding top/bottom = 44px total. With input.padding 7/7 the
-   * one-line text sits flush vertical-center with the button. */
-  padding: 4px 4px 4px 0;
-  min-height: 44px;
-  transition: padding-right 180ms cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.input-capsule.has-text {
-  padding-right: 44px;
-}
-
-.input {
-  flex: 1;
-  margin: 0;
-  border: 0;
-  outline: none;
-  resize: none;
-  background: transparent;
-  color: var(--ion-text-color);
-  font: inherit;
-  font-size: 15px;
-  line-height: 21px;
-  /* Own vertical padding (7/7) — combined with the capsule's 4/4 this
-   * makes the one-line scrollHeight = 35px and total capsule height
-   * = 35 + 8 ≈ 44px (clamped by min-height). The text sits flush with
-   * the 36px send button. */
-  padding: 7px 8px 7px 16px;
-  max-height: 126px;
-  overflow-y: auto;
-  scrollbar-width: none;
-  caret-color: var(--ion-color-primary);
-}
-
-.input::-webkit-scrollbar {
-  display: none;
-}
-
-.input::placeholder {
-  color: var(--ion-color-step-500, #8a8a8a);
-  opacity: 1;
-}
-
-.send {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 0;
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transform: scale(0.5);
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 140ms ease-out;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.send.visible {
-  transform: scale(1);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.send:disabled {
-  cursor: not-allowed;
-}
-
-.send:active:not(:disabled) {
-  opacity: 0.75;
 }
 </style>

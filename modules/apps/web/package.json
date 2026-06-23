@@ -7,7 +7,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "sync:all": "SYNC_LIMIT=100000 node scripts/sync-catalog.mjs",
+    "deploy": "wrangler pages deploy dist --project-name=listen-to-sadhu"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.2.1",
@@ -19,5 +21,9 @@
     "marked": "^18.0.5",
     "tailwindcss": "^4.0.6",
     "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^12.11.1",
+    "wrangler": "^4.103.0"
   }
 }

@@ -1,0 +1,103 @@
+export type LangMap = Record<string, string>
+
+export interface LectureRef {
+  sourceId: string
+  shortNames: LangMap
+  tokens: string
+}
+
+export interface LectureIndexEntry {
+  id: string
+  slug: string
+  date: string | null
+  durationMs: number | null
+  contentLanguages: string[]
+  authorId: string | null
+  authorNames: LangMap
+  locationId: string | null
+  locationNames: LangMap
+  titles: LangMap
+  refs: LectureRef[]
+  hasTranscript: boolean
+  hasOutline: boolean
+}
+
+export interface OutlineChapter {
+  title: string
+  startMs: number
+  endMs: number
+}
+
+export interface SentenceBlock {
+  type: 'sentence'
+  start: number
+  end: number
+  text: string
+  speaker?: string
+  reference?: { sourceId: string; tokens: string }
+}
+
+export interface VerseTextBlock {
+  type: 'verse:text'
+  start: number
+  end: number
+  text: string[]
+  reference?: { sourceId: string; tokens: string }
+}
+
+export interface VerseTranslationBlock {
+  type: 'verse:translation'
+  start: number
+  end: number
+  text: string
+}
+
+export interface ParagraphBlock {
+  type: 'paragraph'
+  start: number
+  end: number
+}
+
+export type TranscriptBlock =
+  | SentenceBlock
+  | VerseTextBlock
+  | VerseTranslationBlock
+  | ParagraphBlock
+
+export interface LectureTranscript {
+  version: number | null
+  blocks: TranscriptBlock[]
+}
+
+export interface LectureAudio {
+  url: string
+  durationMs: number | null
+}
+
+export interface LectureVariant {
+  title: string
+  description: string | null
+  outline: OutlineChapter[]
+  audio: LectureAudio | null
+  transcript: LectureTranscript | null
+}
+
+export interface LectureRecord {
+  id: string
+  slug: string
+  date: string | null
+  authorId: string | null
+  authorNames: LangMap
+  locationId: string | null
+  locationNames: LangMap
+  variants: Record<string, LectureVariant>
+  refs: LectureRef[]
+}
+
+export interface TranscriptGroup {
+  heading?: string
+  headingStartMs?: number
+  startMs: number
+  endMs: number
+  blocks: TranscriptBlock[]
+}
