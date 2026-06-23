@@ -180,7 +180,11 @@
   --ion-item-background: transparent;
 }
 
-@media (prefers-color-scheme: dark) {
+/* Dark theme temporarily disabled on the site. The override block below is
+ * kept intact — to re-enable, restore the media query to
+ * `@media (prefers-color-scheme: dark)`. The extra `and (prefers-color-scheme:
+ * light)` can never be true, so none of these overrides apply for now. */
+@media (prefers-color-scheme: dark) and (prefers-color-scheme: light) {
   :root {
     /* Brand — saffron lightened for dark backgrounds */
     --ion-color-primary: #f0a55c;

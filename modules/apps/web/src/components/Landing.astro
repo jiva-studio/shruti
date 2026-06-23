@@ -5,15 +5,17 @@ import { useT, FAQ, type Lang } from '../i18n/ui'
 interface Props { lang: Lang }
 const { lang } = Astro.props
 const t = useT(lang)
-const chatHref = lang === 'en' ? '/en/chat' : '/chat'
+const chatHref = `/${lang}/app`
 
 const features = [
-  ['feature.library', '📚'],
-  ['feature.transcript', '📖'],
-  ['feature.bookmarks', '🔖'],
-  ['feature.search', '🔎'],
-  ['feature.offline', '⤓'],
-  ['feature.chat', '💬'],
+  'feature.library',
+  'feature.transcript',
+  'feature.bookmarks',
+  'feature.search',
+  'feature.offline',
+  'feature.chat',
+  'feature.share',
+  'feature.streak',
 ] as const
 
 const faq = FAQ[lang]
@@ -35,7 +37,23 @@ const shots = lang === 'ru'
       ['07_search', 'Search & filters', 'Find lectures by topic, author and date.'],
       ['08_track', 'Listen anywhere', 'Download lectures and listen offline.'],
     ]
-const slides = shots.map(([file, title, desc]) => ({ src: `/screens/${lang}/${file}.png?v=2`, title, desc }))
+// Safe-zone colours per screenshot — top band matches the image's top edge,
+// bottom band its bottom edge. Tweak per screen here (no resampling needed).
+const SHOT_BG: Record<string, { top: string; bottom: string }> = {
+  '01_home': { top: '#faf5ea', bottom: '#faf5ea' },
+  '07_library': { top: '#faf5ea', bottom: '#faf5ea' },
+  '04_transcript': { top: '#1a130d', bottom: '#d18750' },
+  '05_chat': { top: '#eee9df', bottom: '#faf5ea' },
+  '07_search': { top: '#faf5ea', bottom: '#faf5ea' },
+  '08_track': { top: '#a9a69f', bottom: '#faf5ea' },
+}
+const slides = shots.map(([file, title, desc]) => ({
+  src: `/screens/${lang}/${file}.png?v=2`,
+  title,
+  desc,
+  top: SHOT_BG[file]?.top ?? '#faf5ea',
+  bottom: SHOT_BG[file]?.bottom ?? '#d4a986',
+}))
 ---
 <!-- HERO -->
 <section id="about" class="relative overflow-hidden">
@@ -46,7 +64,7 @@ const slides = shots.map(([file, title, desc]) => ({ src: `/screens/${lang}/${fi
       <h1 class="text-4xl font-bold leading-[1.05] text-ink sm:text-5xl md:text-6xl">{t('hero.title')}</h1>
       <p class="mt-5 text-xl text-coffee sm:text-2xl">{t('hero.subtitle')}</p>
       <p class="mt-5 max-w-md text-base leading-relaxed text-medium">{t('hero.lead')}</p>
-      <div class="mt-8"><StoreBadges /></div>
+      <div class="mt-8 max-w-md"><StoreBadges full /></div>
     </div>
 
     <div class="relative mx-auto w-full max-w-sm">
@@ -61,7 +79,7 @@ const slides = shots.map(([file, title, desc]) => ({ src: `/screens/${lang}/${fi
 <!-- SHOWCASE — all screens -->
 <section class="bg-cream-deep/50 py-16">
   <div class="mx-auto mb-10 max-w-2xl px-5 text-center">
-    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{lang === 'en' ? 'A look inside' : 'Загляните внутрь'}</h2>
+    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{lang === 'en' ? 'A look inside' : 'Как выглядит приложение'}</h2>
   </div>
   <ScreenshotGallery slides={slides} />
 </section>
@@ -72,12 +90,16 @@ const slides = shots.map(([file, title, desc]) => ({ src: `/screens/${lang}/${fi
     <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('features.title')}</h2>
     <p class="mt-3 text-medium">{t('features.lead')}</p>
   </div>
-  <div class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-    {features.map(([key, icon]) => (
-      <div class="rounded-2xl border border-line bg-cream-deep/60 p-6 transition hover:border-saffron/60 hover:shadow-sm">
-        <div class="grid h-11 w-11 place-items-center rounded-xl bg-saffron/15 text-xl text-saffron">{icon}</div>
-        <h3 class="mt-4 text-lg font-semibold text-ink">{t(`${key}.t` as any)}</h3>
-        <p class="mt-2 text-sm leading-relaxed text-medium">{t(`${key}.d` as any)}</p>
+  <div class="mt-12 grid gap-x-14 gap-y-10 sm:grid-cols-2">
+    {features.map((key, i) => (
+      <div class="feat-item flex gap-5 pt-7">
+        <span class="shrink-0 font-serif text-2xl font-bold tabular-nums text-saffron/55">
+          {String(i + 1).padStart(2, '0')}
+        </span>
+        <div>
+          <h3 class="font-serif text-xl font-semibold leading-snug text-ink">{t(`${key}.t` as any)}</h3>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-medium">{t(`${key}.d` as any)}</p>
+        </div>
       </div>
     ))}
   </div>
@@ -85,8 +107,10 @@ const slides = shots.map(([file, title, desc]) => ({ src: `/screens/${lang}/${fi
 
 <!-- ASK SADHU BAND -->
 <section id="chat" class="mx-auto max-w-6xl px-5 py-10">
-  <div class="overflow-hidden rounded-3xl bg-gradient-to-br from-coffee to-ink px-7 py-12 text-cream sm:px-12">
-    <div class="max-w-2xl">
+  <div class="relative overflow-hidden rounded-3xl bg-ink px-7 py-12 text-cream sm:px-12">
+    <img src="/cta-bg.jpg" alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-right" />
+    <div class="absolute inset-0 bg-gradient-to-r from-ink via-ink/75 to-transparent"></div>
+    <div class="relative max-w-2xl">
       <h2 class="text-3xl font-bold text-cream sm:text-4xl">{t('chat.band.title')}</h2>
       <p class="mt-4 text-cream/80">{t('chat.band.lead')}</p>
       <a href={chatHref} class="mt-7 inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
@@ -97,16 +121,16 @@ const slides = shots.map(([file, title, desc]) => ({ src: `/screens/${lang}/${fi
 </section>
 
 <!-- FAQ -->
-<section id="faq" class="mx-auto max-w-3xl px-5 py-16">
+<section id="faq" class="mx-auto max-w-6xl px-5 py-16">
   <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('faq.title')}</h2>
-  <div class="mt-8 divide-y divide-line rounded-2xl border border-line bg-cream-deep/50">
+  <div class="mt-8">
     {faq.map(([q, a]) => (
-      <details class="group px-6 py-5">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold text-ink">
+      <details class="faq-item group py-5">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-serif text-lg font-semibold leading-snug text-ink">
           {q}
-          <span class="text-saffron transition group-open:rotate-45">+</span>
+          <span class="shrink-0 text-2xl font-normal leading-none text-saffron transition group-open:rotate-45">+</span>
         </summary>
-        <p class="mt-3 text-sm leading-relaxed text-medium">{a}</p>
+        <p class="mt-3 text-[15px] leading-relaxed text-medium">{a}</p>
       </details>
     ))}
   </div>
@@ -114,9 +138,38 @@ const slides = shots.map(([file, title, desc]) => ({ src: `/screens/${lang}/${fi
 
 <!-- DOWNLOAD -->
 <section id="download" class="mx-auto max-w-6xl px-5 py-16">
-  <div class="rounded-3xl border border-line bg-cream-deep px-7 py-14 text-center sm:px-12">
-    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('download.title')}</h2>
-    <p class="mt-3 text-medium">{t('download.lead')}</p>
-    <div class="mt-8 flex justify-center"><StoreBadges /></div>
+  <div class="relative overflow-hidden rounded-3xl bg-ink px-7 py-12 text-cream sm:px-12">
+    <img src="/getapp-bg.jpg" alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-right" />
+    <div class="absolute inset-0 bg-gradient-to-r from-ink via-ink/75 to-transparent"></div>
+    <div class="relative max-w-md">
+      <h2 class="text-3xl font-bold text-cream sm:text-4xl">{t('download.title')}</h2>
+      <p class="mt-4 text-cream/80">{t('download.lead')}</p>
+      <div class="mt-8"><StoreBadges full onDark /></div>
+    </div>
   </div>
 </section>
+
+<style>
+  .feat-item,
+  .faq-item {
+    position: relative;
+  }
+  .feat-item::before,
+  .faq-item::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--shruti-divider, rgba(61, 43, 31, 0.12)), transparent);
+  }
+  /* No divider above the top row — only between blocks. */
+  .feat-item:first-child::before,
+  .faq-item:first-child::before {
+    display: none;
+  }
+  @media (min-width: 640px) {
+    .feat-item:nth-child(2)::before {
+      display: none;
+    }
+  }
+</style>

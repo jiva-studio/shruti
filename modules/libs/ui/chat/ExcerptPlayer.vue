@@ -16,20 +16,18 @@
         <path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" />
       </svg>
     </button>
-    <div ref="waveformEl" class="waveform" aria-hidden="true" @click="emit('seek', $event)">
-      <span
-        v-for="(h, i) in peaks"
-        :key="i"
-        class="bar"
-        :class="{ 'is-played': i / peaks.length < progressFraction }"
-        :style="{ height: h + '%' }"
-      />
-    </div>
+    <Waveform
+      ref="waveformInner"
+      :peaks="peaks"
+      :progress-fraction="progressFraction"
+      @seek="emit('seek', $event)"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { useTemplateRef } from "vue"
+import { computed, useTemplateRef } from "vue"
+import Waveform from "../player/Waveform.vue"
 
 defineProps<{
   /** Bar heights (0–100%) — decoded peaks or a placeholder. Owned by the host. */
@@ -52,7 +50,8 @@ const emit = defineEmits<{
 // Exposed so a host can measure the bar container's width (responsive bar
 // count) and observe visibility — both pure DOM concerns the host's
 // waveform/audio composables drive.
-const waveformEl = useTemplateRef<HTMLDivElement>("waveformEl")
+const waveformInner = useTemplateRef<{ waveformEl: HTMLDivElement | null }>("waveformInner")
+const waveformEl = computed<HTMLDivElement | null>(() => waveformInner.value?.waveformEl ?? null)
 defineExpose({ waveformEl })
 </script>
 
@@ -92,44 +91,5 @@ defineExpose({ waveformEl })
   --color: var(--ion-color-medium-contrast);
   width: 14px;
   height: 14px;
-}
-
-.waveform {
-  flex: 1;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  /* `space-between` spreads the bars across the full container width:
-     the bar count is chosen from the measured width (see
-     useResponsiveBarCount) so the leftover space divides into a small,
-     constant gap rather than a single trailing gap on the right. Drops
-     the explicit `gap` for the same reason. */
-  justify-content: space-between;
-  min-width: 0;
-  overflow: hidden;
-  cursor: pointer;
-}
-
-.bar {
-  display: inline-block;
-  flex: 0 0 2px;
-  width: 2px;
-  min-height: 2px;
-  background: rgba(var(--ion-color-medium-rgb), 0.35);
-  border-radius: 2px;
-  /* `background-color` eases over ~300ms so each bar visibly fades from
-   * the faint unplayed tint to the solid played colour as the playhead
-   * crosses it, trailing the progress edge rather than snapping.
-   * `height` transitions so the swap from the random placeholder peaks
-   * to the real decoded peaks reads as a wave settling into shape rather
-   * than a hard jump. At a given width the bar count is stable, so Vue
-   * updates inline styles in place and CSS handles the tween. */
-  transition:
-    background-color 300ms ease,
-    height 350ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.bar.is-played {
-  background: var(--ion-color-medium);
 }
 </style>
