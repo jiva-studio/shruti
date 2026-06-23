@@ -18,7 +18,7 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import { escapeHtml } from "@lectorium/utils/escapeHtml.js"
+import { escapeHtml } from "@lib/chat/utils/escapeHtml.js"
 import { resolveShareArtifact } from "@lectorium/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"

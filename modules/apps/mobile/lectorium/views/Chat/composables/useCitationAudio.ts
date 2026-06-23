@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref, type Ref, type ShallowRef } from "vue"
-import { useAudioSource } from "@lectorium/composables/useAudioOrchestrator.js"
+import { useAudioSource } from "@lib/chat/audio/useAudioOrchestrator.js"
 
 const PLAY_TIMEOUT_MS = 15000
 

@@ -7,7 +7,7 @@ import { useChatStore, type ChatMessage, type ChatSession } from "@lectorium/sto
 import { useToast } from "@kit/composables"
 import { useTrackUserState } from "@lectorium/composables/useTrackUserState.js"
 import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
-import { pauseGroup } from "@lectorium/composables/useAudioOrchestrator.js"
+import { pauseGroup } from "@lib/chat/audio/useAudioOrchestrator.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { reportError } from "@lectorium/services/monitoring/reportError.js"
 

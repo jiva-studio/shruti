@@ -21,7 +21,7 @@ import {
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
-import { extractFollowups } from "@lectorium/composables/chatMarkers.js"
+import { extractFollowups } from "@lib/chat/chatMarkers.js"
 import {
   recordInlineHintCooldown as recordInlineHintCooldownUC,
   replayChatTurn,
@@ -56,6 +56,9 @@ export type ChatResearchSource = {
   readonly sourceKind: "verse" | "lecture_chunk" | "library_doc"
   readonly label: string
 }
+/** Interpolation values for a status i18n key — e.g. `{ intent: "research" }`
+ *  for `chat.status.router_decision`. */
+export type ChatStatusParams = Readonly<Record<string, string | number>>
 export type ChatMessage = DomainChatMessage & {
   streaming?: boolean
   /** Ephemeral i18n status key (e.g. "searching_corpus") set on the
@@ -63,7 +66,7 @@ export type ChatMessage = DomainChatMessage & {
    *  `finalised`. UI maps to a localized label via
    *  `t(`chat.status.${statusKey}`, params)`. */
   statusKey?: string
-  statusParams?: Readonly<Record<string, string | number>>
+  statusParams?: ChatStatusParams
   /** Ephemeral list of sub-queries the research pipeline generated for
    *  this turn. Append-only during the stream, dropped when the prose
    *  deltas start landing — same lifetime as `statusKey`. */

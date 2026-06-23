@@ -1,0 +1,26 @@
+---
+import type { CollectionGroupIndexEntry, CollectionIndexEntry } from '@lib/catalog/types.js'
+import { collectionForId, lectureCountForLang, pickName } from '../lib/catalog'
+import type { Lang } from '../i18n/ui'
+import CollectionCard from './CollectionCard.astro'
+
+interface Props {
+  group: CollectionGroupIndexEntry
+  lang: Lang
+}
+const { group, lang } = Astro.props
+const cols = group.collectionIds
+  .map((id) => collectionForId(id))
+  .filter((c): c is CollectionIndexEntry => !!c && lectureCountForLang(c.trackIds, lang) > 0)
+const groupName = pickName(group.names, lang)
+const groupDesc = pickName(group.descriptions, lang)
+---
+{cols.length > 0 && (
+<section class="mt-12">
+  <h2 class="font-serif text-2xl font-semibold text-ink">{groupName}</h2>
+  {groupDesc && <p class="mt-2 max-w-3xl text-sm text-medium">{groupDesc}</p>}
+  <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    {cols.map((c) => <CollectionCard collection={c} lang={lang} />)}
+  </div>
+</section>
+)}

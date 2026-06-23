@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { registerAudioSource, pauseGroup } from "../useAudioOrchestrator.js"
+import { registerAudioSource, pauseGroup } from "@lib/chat/audio/useAudioOrchestrator.js"
 
 // The orchestrator is a module singleton. These tests exercise the
 // non-Vue API (registerAudioSource / pauseGroup); the useAudioSource

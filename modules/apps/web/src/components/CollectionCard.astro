@@ -1,0 +1,35 @@
+---
+import type { CollectionIndexEntry } from '@lib/catalog/types.js'
+import { pickName } from '../lib/catalog'
+import type { Lang } from '../i18n/ui'
+
+interface Props {
+  collection: CollectionIndexEntry
+  lang: Lang
+}
+const { collection, lang } = Astro.props
+const name = pickName(collection.names, lang)
+const desc = pickName(collection.descriptions, lang)
+const href = `/${lang}/app/library/${collection.slug}`
+---
+<a
+  href={href}
+  class="flex flex-col overflow-hidden rounded-2xl border border-line bg-cream-deep transition hover:border-saffron/40 hover:shadow-md"
+>
+  {collection.cover && (
+    <img
+      src={collection.cover}
+      alt=""
+      loading="lazy"
+      width="600"
+      height="400"
+      class="aspect-[3/2] w-full object-cover"
+    />
+  )}
+  <div class="flex flex-1 flex-col px-5 py-4">
+    <h3 class="font-serif text-lg font-semibold leading-snug text-ink">
+      {name}
+    </h3>
+    {desc && <p class="mt-1.5 line-clamp-3 text-sm text-medium">{desc}</p>}
+  </div>
+</a>

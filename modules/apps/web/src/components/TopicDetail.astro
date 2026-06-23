@@ -1,0 +1,26 @@
+---
+import type { TopicIndexEntry } from '@lib/catalog/types.js'
+import { useT, type Lang } from '../i18n/ui'
+import { lecturesByIdsForLang, pickName } from '../lib/catalog'
+import LectureListPage from './LectureListPage.astro'
+
+interface Props {
+  topic: TopicIndexEntry
+  lang: Lang
+}
+const { topic, lang } = Astro.props
+const t = useT(lang)
+const name = pickName(topic.names, lang)
+const lectures = lecturesByIdsForLang(topic.trackIds, lang).slice(0, 90)
+---
+<LectureListPage
+  lang={lang}
+  kicker={t('topic.kicker')}
+  title={name}
+  count={lectures.length}
+  lectures={lectures}
+  backHref={`/${lang}/app/topics`}
+  backLabel={t('common.backToTopics')}
+  cover={topic.cover ?? undefined}
+  coverClass="max-w-[14rem]"
+/>
