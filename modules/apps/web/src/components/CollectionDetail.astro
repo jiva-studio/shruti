@@ -1,0 +1,51 @@
+---
+import type { CollectionIndexEntry } from '@lib/catalog/types.js'
+import { useT, type Lang } from '../i18n/ui'
+import { lecturesByIds, pickName, shortSlug } from '../lib/catalog'
+import WebLectureRow from './vue/WebLectureRow.vue'
+import StoreBadges from './StoreBadges.astro'
+
+interface Props {
+  collection: CollectionIndexEntry
+  lang: Lang
+}
+const { collection, lang } = Astro.props
+const t = useT(lang)
+const name = pickName(collection.names, lang)
+const desc = pickName(collection.descriptions, lang)
+const items = lecturesByIds(collection.trackIds)
+---
+<div class="mx-auto max-w-5xl px-5 py-12">
+  <nav class="mb-6 text-sm text-medium">
+    <a href={`/${lang}/app`} class="transition hover:text-saffron">{t('common.backToLibrary')}</a>
+  </nav>
+
+  <header class="flex flex-col gap-6 sm:flex-row sm:items-start">
+    {collection.cover && (
+      <img
+        src={collection.cover}
+        alt=""
+        width="320"
+        height="213"
+        class="aspect-[3/2] w-full max-w-xs rounded-2xl border border-line object-cover"
+      />
+    )}
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wide text-saffron-shade">{t('collection.kicker')}</p>
+      <h1 class="mt-1 font-serif text-3xl font-bold text-ink sm:text-4xl">{name}</h1>
+      <p class="mt-1 text-sm text-medium">{items.length} {t('common.lecturesN')}</p>
+      {desc && <p class="mt-4 max-w-2xl text-medium">{desc}</p>}
+    </div>
+  </header>
+
+  <div class="mt-8 flex flex-col divide-y divide-line/60">
+    {items.map((entry) => (
+      <WebLectureRow entry={entry} lang={lang} href={`/${lang}/app/${shortSlug(entry.slug)}`} />
+    ))}
+  </div>
+
+  <div class="mt-14 rounded-2xl border border-line bg-cream-deep px-6 py-8 text-center">
+    <p class="font-serif text-xl font-semibold text-ink">{t('common.listenInApp')}</p>
+    <div class="mt-5 flex justify-center"><StoreBadges /></div>
+  </div>
+</div>

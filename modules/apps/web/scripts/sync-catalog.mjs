@@ -62,6 +62,47 @@ function langMapFor(map, id) {
   return map.get(id) ?? {}
 }
 
+// Fold a multi-language dictionary keyed by id into { id → { lang → {field: val} } }.
+function foldFields(rows, fields) {
+  const map = new Map()
+  for (const r of rows) {
+    let langs = map.get(r.id)
+    if (!langs) {
+      langs = {}
+      map.set(r.id, langs)
+    }
+    const obj = {}
+    for (const f of fields) obj[f] = r[f] ?? null
+    langs[r.language] = obj
+  }
+  return map
+}
+
+function pickField(langs, field) {
+  if (!langs) return {}
+  const out = {}
+  for (const [lang, obj] of Object.entries(langs)) {
+    if (obj[field]) out[lang] = obj[field]
+  }
+  return out
+}
+
+// URL slug from an English-leaning name, kept unique against `seen`.
+function slugify(name, idTail, seen) {
+  let base = String(name || '')
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+  if (!base) base = idTail
+  let slug = base
+  if (seen.has(slug)) slug = `${base}-${idTail}`
+  seen.add(slug)
+  return slug
+}
+
 async function fetchTranscript(id, lang, transcriptPath) {
   if (!transcriptPath) return null
   const cacheFile = join(transcriptCacheDir, `${id}.${lang}.json`)
@@ -151,6 +192,59 @@ async function main() {
   const sourcesFull = foldDict(db.prepare('SELECT id, language, full_name, short_name FROM sources').all(), (r) => r.full_name)
   const sourcesShort = foldDict(db.prepare('SELECT id, language, full_name, short_name FROM sources').all(), (r) => r.short_name ?? r.full_name)
 
+  // --- Topics: per-track top-N associations + reverse topic→tracks index ---
+  const topicDict = foldFields(
+    db.prepare('SELECT id, language, full_name, short_name, cover FROM topics').all(),
+    ['full_name', 'short_name', 'cover']
+  )
+  const TOPICS_PER_TRACK = 8
+  const topicsByTrack = new Map()
+  for (const r of db.prepare('SELECT track_id, topic_id, weight FROM track_topics').all()) {
+    let arr = topicsByTrack.get(r.track_id)
+    if (!arr) {
+      arr = []
+      topicsByTrack.set(r.track_id, arr)
+    }
+    arr.push({ topicId: r.topic_id, weight: r.weight })
+  }
+  for (const arr of topicsByTrack.values()) {
+    arr.sort((a, b) => b.weight - a.weight)
+    arr.length = Math.min(arr.length, TOPICS_PER_TRACK)
+  }
+  const topicTracks = new Map() // topic_id → [{ trackId, weight }]
+
+  // --- Collections + groups (the curated "categories") ---
+  const groupDict = foldFields(
+    db.prepare('SELECT id, language, name, description, sort_order FROM collection_groups').all(),
+    ['name', 'description', 'sort_order']
+  )
+  const collectionDict = foldFields(
+    db.prepare('SELECT id, language, name, description, cover, sort_order FROM collections').all(),
+    ['name', 'description', 'cover', 'sort_order']
+  )
+  const groupItems = new Map() // group_id → [{ collectionId, position }]
+  for (const r of db.prepare('SELECT group_id, collection_id, position FROM collection_group_items').all()) {
+    let arr = groupItems.get(r.group_id)
+    if (!arr) {
+      arr = []
+      groupItems.set(r.group_id, arr)
+    }
+    if (!arr.some((x) => x.collectionId === r.collection_id)) {
+      arr.push({ collectionId: r.collection_id, position: r.position })
+    }
+  }
+  const collectionTracks = new Map() // collection_id → [{ trackId, position }]
+  for (const r of db.prepare('SELECT collection_id, track_id, position FROM collection_tracks ORDER BY position').all()) {
+    let arr = collectionTracks.get(r.collection_id)
+    if (!arr) {
+      arr = []
+      collectionTracks.set(r.collection_id, arr)
+    }
+    if (!arr.some((x) => x.trackId === r.track_id)) {
+      arr.push({ trackId: r.track_id, position: r.position })
+    }
+  }
+
   const tracks = db
     .prepare('SELECT id, author_id, location_id, date FROM tracks WHERE hidden = 0 OR hidden IS NULL')
     .all()
@@ -195,6 +289,17 @@ async function main() {
       tokens: r.tokens,
     }))
 
+    const trackTopics = topicsByTrack.get(t.id) ?? []
+    const topicIds = trackTopics.map((x) => x.topicId)
+    for (const { topicId, weight } of trackTopics) {
+      let arr = topicTracks.get(topicId)
+      if (!arr) {
+        arr = []
+        topicTracks.set(topicId, arr)
+      }
+      arr.push({ trackId: t.id, weight })
+    }
+
     const entry = {
       id: t.id,
       slug: t.id,
@@ -207,21 +312,84 @@ async function main() {
       locationNames: langMapFor(locations, t.location_id),
       titles,
       refs,
+      topicIds,
       hasTranscript,
       hasOutline,
     }
     index.push(entry)
 
     if (hasTranscript) {
-      fullCandidates.push({ track: t, variants, audios, refs, entry })
+      fullCandidates.push({ track: t, variants, audios, refs, topicIds, hasOutline })
     }
   }
 
   writeFileSync(join(dataDir, 'lectures-index.json'), JSON.stringify(index))
 
+  // --- topics-index.json: one entry per topic that has lectures ---
+  const topicSlugs = new Set()
+  const topicsIndex = []
+  for (const [topicId, langs] of topicDict) {
+    const trackArr = (topicTracks.get(topicId) ?? []).slice().sort((a, b) => b.weight - a.weight)
+    if (trackArr.length === 0) continue
+    const names = pickField(langs, 'full_name')
+    const shortNames = pickField(langs, 'short_name')
+    const cover = resolveUrl(langs.en?.cover ?? Object.values(langs)[0]?.cover ?? null)
+    topicsIndex.push({
+      id: topicId,
+      slug: slugify(names.en || Object.values(names)[0] || topicId, topicId.slice(-6), topicSlugs),
+      names,
+      shortNames,
+      cover,
+      count: trackArr.length,
+      trackIds: trackArr.map((x) => x.trackId),
+    })
+  }
+  topicsIndex.sort((a, b) => b.count - a.count)
+  writeFileSync(join(dataDir, 'topics-index.json'), JSON.stringify(topicsIndex))
+
+  // --- collections-index.json: curated groups → collections → lectures ---
+  const collectionSlugs = new Set()
+  const collectionsById = {}
+  for (const [collId, langs] of collectionDict) {
+    const trackArr = collectionTracks.get(collId) ?? []
+    if (trackArr.length === 0) continue
+    const names = pickField(langs, 'name')
+    collectionsById[collId] = {
+      id: collId,
+      slug: slugify(names.en || Object.values(names)[0] || collId, collId.slice(-6), collectionSlugs),
+      names,
+      descriptions: pickField(langs, 'description'),
+      cover: resolveUrl(langs.en?.cover ?? Object.values(langs)[0]?.cover ?? null),
+      count: trackArr.length,
+      trackIds: trackArr.map((x) => x.trackId),
+    }
+  }
+  const collectionGroups = []
+  const sortOrderOf = (langs) => Number(langs.en?.sort_order ?? Object.values(langs)[0]?.sort_order ?? 0)
+  const groupIds = [...groupDict.keys()].sort((a, b) => sortOrderOf(groupDict.get(a)) - sortOrderOf(groupDict.get(b)))
+  for (const groupId of groupIds) {
+    const langs = groupDict.get(groupId)
+    const items = (groupItems.get(groupId) ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((x) => collectionsById[x.collectionId])
+      .filter(Boolean)
+    if (items.length === 0) continue
+    collectionGroups.push({
+      id: groupId,
+      names: pickField(langs, 'name'),
+      descriptions: pickField(langs, 'description'),
+      collectionIds: items.map((c) => c.id),
+    })
+  }
+  writeFileSync(
+    join(dataDir, 'collections-index.json'),
+    JSON.stringify({ groups: collectionGroups, collections: collectionsById })
+  )
+
   fullCandidates.sort((a, b) => {
-    const ao = a.entry.hasOutline ? 0 : 1
-    const bo = b.entry.hasOutline ? 0 : 1
+    const ao = a.hasOutline ? 0 : 1
+    const bo = b.hasOutline ? 0 : 1
     if (ao !== bo) return ao - bo
     return String(a.track.date ?? '').localeCompare(String(b.track.date ?? ''))
   })
@@ -266,6 +434,7 @@ async function main() {
       locationNames: langMapFor(locations, track.location_id),
       variants: outVariants,
       refs,
+      topicIds: c.topicIds,
     }
     writeFileSync(join(lecturesDir, `${track.id}.json`), JSON.stringify(record))
     fullCount++
@@ -275,6 +444,8 @@ async function main() {
 
   console.log('')
   console.log(`Index entries:        ${index.length}`)
+  console.log(`Topics indexed:       ${topicsIndex.length}`)
+  console.log(`Collections / groups: ${Object.keys(collectionsById).length} / ${collectionGroups.length}`)
   console.log(`Tracks w/ transcript: ${fullCandidates.length}`)
   console.log(`Full records written: ${fullCount} (SYNC_LIMIT=${SYNC_LIMIT})`)
 }
