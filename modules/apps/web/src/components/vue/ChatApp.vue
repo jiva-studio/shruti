@@ -4,10 +4,11 @@ import { STORE } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
 // REAL reused component (decoupled: status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
+import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
 import { webLocale } from '../../lib/i18n'
 
 type Lang = 'ru' | 'en'
-const props = defineProps<{ lang: Lang; trackId?: string }>()
+const props = defineProps<{ lang: Lang; trackId?: string; bare?: boolean }>()
 webLocale.value = props.lang
 
 const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
@@ -329,13 +330,16 @@ async function send(text?: string) {
 </script>
 
 <template>
-  <div class="flex h-full flex-col overflow-hidden rounded-3xl border border-line bg-cream-deep/40">
-    <header class="border-b border-line bg-cream/70 px-5 py-4">
+  <div
+    class="flex h-full flex-col overflow-hidden"
+    :class="bare ? '' : 'rounded-3xl border border-line bg-cream-deep/40'"
+  >
+    <header v-if="!bare" class="border-b border-line bg-cream/70 px-5 py-4">
       <h2 class="font-serif text-lg font-bold text-ink">{{ L.title }}</h2>
       <p class="text-xs text-medium">{{ L.sub }}</p>
     </header>
 
-    <div ref="scroller" class="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+    <div ref="scroller" class="app-scroll flex-1 space-y-5 overflow-y-auto px-5 py-5">
       <template v-if="!messages.length">
         <div class="flex flex-wrap gap-2">
           <button
@@ -378,30 +382,18 @@ async function send(text?: string) {
       </div>
     </div>
 
-    <footer class="border-t border-line bg-cream/70 px-4 py-3">
+    <footer class="px-3 pb-4 pt-2">
       <p v-if="!capped && (srvLimit !== null || turns > 0)" class="mb-2 text-center text-xs text-medium">{{ L.left(left) }}</p>
-      <form class="flex items-end gap-2" @submit.prevent="send()">
-        <textarea
-          v-model="input"
-          :placeholder="L.placeholder"
-          rows="1"
-          :disabled="capped"
-          class="max-h-32 flex-1 resize-none rounded-xl border border-line bg-cream px-4 py-2.5 text-[0.95rem] text-ink outline-none focus:border-saffron disabled:opacity-50"
-          @keydown.enter.exact.prevent="send()"
-        ></textarea>
-        <button
-          v-if="busy"
-          type="button"
-          class="rounded-xl border border-line bg-cream px-5 py-2.5 text-sm font-semibold text-ink-soft transition hover:border-saffron hover:text-saffron"
-          @click="stop"
-        >{{ L.stop }}</button>
-        <button
-          v-else
-          type="submit"
-          :disabled="capped || !input.trim()"
-          class="rounded-xl bg-saffron px-5 py-2.5 text-sm font-semibold text-cream transition hover:bg-saffron-shade disabled:opacity-40"
-        >{{ L.send }}</button>
-      </form>
+      <ChatComposer
+        :sending="busy"
+        :disabled="capped"
+        :placeholder="L.placeholder"
+        :send-aria-label="L.send"
+        @send="send"
+        @cancel="stop"
+      >
+        <template #spinner><span class="dots-spinner" /></template>
+      </ChatComposer>
     </footer>
   </div>
 </template>

@@ -1,0 +1,15 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import WebApp from '../../components/vue/WebApp.vue'
+import { useT } from '../../i18n/ui'
+const t = useT('ru')
+---
+<BaseLayout
+  lang="ru"
+  path="/app"
+  fullscreen
+  title={`${t('nav.lectures')} — ${t('hero.title')}`}
+  description={t('chat.band.lead')}
+>
+  <WebApp client:load lang="ru" />
+</BaseLayout>

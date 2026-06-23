@@ -10,12 +10,15 @@ interface Props {
   lang?: Lang
   /** path WITHOUT locale prefix, e.g. "/" or "/chat" */
   path?: string
+  /** Single-screen app shell: drop the footer and lock page scroll. */
+  fullscreen?: boolean
 }
-const { title, description, lang = defaultLang, path = '/' } = Astro.props
+const { title, description, lang = defaultLang, path = '/', fullscreen = false } = Astro.props
 
 const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
 const enPath = path === '/' ? '/en/' : `/en${path}`
-const canonical = site + (lang === 'en' ? enPath : path)
+const ruPath = path === '/' ? '/ru/' : `/ru${path}`
+const canonical = site + (lang === 'en' ? enPath : ruPath)
 ---
 <!doctype html>
 <html lang={lang}>
@@ -25,9 +28,9 @@ const canonical = site + (lang === 'en' ? enPath : path)
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" hreflang="ru" href={site + path} />
+    <link rel="alternate" hreflang="ru" href={site + ruPath} />
     <link rel="alternate" hreflang="en" href={site + enPath} />
-    <link rel="alternate" hreflang="x-default" href={site + path} />
+    <link rel="alternate" hreflang="x-default" href={site + enPath} />
 
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
@@ -38,11 +41,11 @@ const canonical = site + (lang === 'en' ? enPath : path)
 
     <link rel="icon" type="image/png" href="/favicon.png" />
   </head>
-  <body class="min-h-screen">
+  <body class={fullscreen ? 'h-screen overflow-hidden' : 'min-h-screen'}>
     <SiteNav lang={lang} path={path} />
     <main>
       <slot />
     </main>
-    <Footer lang={lang} />
+    {!fullscreen && <Footer lang={lang} />}
   </body>
 </html>
