@@ -9,7 +9,7 @@
   -->
   <ScriptureBlock v-if="body">
     <button v-if="hasAudio" type="button" class="verse-play" @click="$emit('toggle-audio')">
-      <slot v-if="isPreparing" name="spinner" />
+      <span v-if="isPreparing" class="verse-play-spinner"><slot name="spinner" /></span>
       <svg v-else-if="isPlaying" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
         <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
         <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
@@ -171,10 +171,17 @@ function onTap() {
   background: rgba(var(--ion-color-primary-rgb), 0.28);
   transform: scale(0.92);
 }
-.verse-play-spin {
-  width: 12px;
-  height: 12px;
+.verse-play-spinner {
   --color: var(--ion-color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+.verse-play-spinner :deep(*) {
+  width: 100%;
+  height: 100%;
 }
 .verse-card-addr {
   font-weight: 700;

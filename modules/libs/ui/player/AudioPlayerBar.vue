@@ -225,6 +225,10 @@ function onPointerDown(event: PointerEvent) {
   width: 18px;
   height: 18px;
 }
+.play-spinner :deep(*) {
+  width: 100%;
+  height: 100%;
+}
 
 .ctrl-btn {
   position: relative;
