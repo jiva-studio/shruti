@@ -2,13 +2,15 @@
 import { STORE } from '../i18n/ui'
 interface Props { class?: string; full?: boolean; onDark?: boolean }
 const { class: cls = '', full = false, onDark = false } = Astro.props
-const wrap = full ? 'grid w-full grid-cols-2 gap-3' : 'flex flex-wrap items-center gap-3'
+const wrap = full
+  ? 'flex flex-col gap-3 sm:flex-row sm:flex-wrap'
+  : 'flex flex-wrap items-center gap-3'
 const skin = onDark
   ? 'border border-cream/25 bg-cream/10 text-cream backdrop-blur hover:bg-cream/20'
   : 'bg-ink text-cream hover:bg-coffee'
 const badge =
-  `group inline-flex items-center gap-3 rounded-xl px-5 py-3 transition ${skin}` +
-  (full ? ' w-full' : '')
+  `group inline-flex items-center gap-3 whitespace-nowrap rounded-xl px-5 py-3 transition ${skin}` +
+  (full ? ' w-full sm:w-auto' : '')
 ---
 <div class:list={[wrap, cls]}>
   <a

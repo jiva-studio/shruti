@@ -4,7 +4,17 @@ interface Props { lang: Lang }
 const { lang } = Astro.props
 const t = useT(lang)
 const faq = FAQ[lang]
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faq.map(([q, a]) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+}
 ---
+<script type="application/ld+json" set:html={JSON.stringify(faqLd)} is:inline />
 <section id="faq" class="mx-auto max-w-6xl px-5 py-16">
   <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('faq.title')}</h2>
   <div class="mt-8">
