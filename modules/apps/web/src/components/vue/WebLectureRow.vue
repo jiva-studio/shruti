@@ -3,8 +3,8 @@
     :is="href ? 'a' : 'button'"
     :type="href ? undefined : 'button'"
     :href="href"
-    class="block w-full rounded-xl px-4 py-3.5 text-left"
-    :class="selected ? 'bg-cream-deep' : ''"
+    class="block w-full rounded-xl px-4 py-3.5 text-left transition-colors"
+    :class="selected ? 'bg-cream-deep' : 'hover:bg-cream-deep'"
     @click="onClick"
   >
     <h3 class="text-lg font-semibold leading-snug text-ink">{{ title }}</h3>
