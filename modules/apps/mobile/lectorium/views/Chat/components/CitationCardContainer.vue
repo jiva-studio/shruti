@@ -38,12 +38,7 @@
     </template>
     <!-- No-body fallback: the interactive (Ionic/audio + long-press) chip. -->
     <template #chip>
-      <CitationChip
-        :track-id="trackId"
-        :start-ms="startMs"
-        :end-ms="endMs"
-        :caption="caption"
-      />
+      <CitationChip :track-id="trackId" :start-ms="startMs" :end-ms="endMs" :caption="caption" />
     </template>
   </CitationCard>
 </template>
