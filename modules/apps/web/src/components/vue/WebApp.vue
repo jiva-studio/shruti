@@ -19,7 +19,7 @@
           <p class="text-medium">{{ t('app.notAvailable') }}</p>
           <button
             type="button"
-            class="mt-5 rounded-full border border-line bg-cream-deep px-4 py-1.5 text-sm font-medium text-coffee transition hover:border-saffron/50"
+            class="mt-5 rounded-full border border-line bg-cream-deep px-4 py-1.5 text-sm font-medium text-coffee"
             @click="backToList"
           >
             ← {{ t('app.backToList') }}
@@ -29,7 +29,7 @@
         <div v-else-if="lecture" class="relative py-6">
           <button
             type="button"
-            class="absolute left-4 top-6 z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-cream-deep text-coffee transition hover:border-saffron/50 hover:text-saffron"
+            class="absolute left-4 top-6 z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-cream-deep text-coffee"
             :aria-label="t('app.backToList')"
             :title="t('app.backToList')"
             @click="backToList"
@@ -67,6 +67,7 @@ import WebLectureSearch from './WebLectureSearch.vue'
 import WebLecturePlayer from './WebLecturePlayer.vue'
 import ChatApp from './ChatApp.vue'
 import { useT, type Lang } from '../../i18n/ui'
+import { lectureTitle, lectureMeta } from '../../lib/lectureDisplay'
 import indexRaw from '../../data/lectures-index.json'
 
 const props = defineProps<{ lang: Lang; slug?: string; lecture?: LectureRecord | null }>()
@@ -115,22 +116,13 @@ const lecture = shallowRef<LectureRecord | null>(props.lecture ?? null)
 const loading = ref(false)
 const loadError = ref(false)
 
-function pick(map: Record<string, string>): string {
-  return map[props.lang] || Object.values(map)[0] || ''
-}
-
 const selectedTitle = computed(() =>
-  selectedEntry.value ? pick(selectedEntry.value.titles) || selectedEntry.value.id : ''
+  selectedEntry.value ? lectureTitle(selectedEntry.value, props.lang) : ''
 )
 
-const selectedMeta = computed(() => {
-  const e = selectedEntry.value
-  if (!e) return ''
-  const author = pick(e.authorNames)
-  const location = pick(e.locationNames)
-  const year = e.date ? e.date.slice(0, 4) : ''
-  return [author, location, year].filter(Boolean).join(' · ')
-})
+const selectedMeta = computed(() =>
+  selectedEntry.value ? lectureMeta(selectedEntry.value, props.lang) : ''
+)
 
 async function select(entry: LectureIndexEntry, push = true) {
   if (selectedId.value === entry.id && lecture.value) return
@@ -183,11 +175,4 @@ function syncFromPath() {
 
 onMounted(() => window.addEventListener('popstate', syncFromPath))
 onBeforeUnmount(() => window.removeEventListener('popstate', syncFromPath))
-
-function toggleClass(active: boolean): string {
-  const base = 'rounded-full border px-4 py-1.5 text-sm font-medium transition'
-  return active
-    ? `${base} border-saffron/60 bg-saffron/10 text-saffron-shade`
-    : `${base} border-line bg-cream-deep text-medium hover:border-saffron/50`
-}
 </script>
