@@ -1,7 +1,8 @@
 ---
 import type { TopicIndexEntry } from '@lib/catalog/types.js'
 import { useT, type Lang } from '../i18n/ui'
-import { lecturesByIdsForLang, pickName } from '../lib/catalog'
+import { lecturesByIdsForLang, pickName, shortSlug } from '../lib/catalog'
+import { lectureTitle } from '../lib/lectureDisplay'
 import LectureListPage from './LectureListPage.astro'
 
 interface Props {
@@ -12,7 +13,26 @@ const { topic, lang } = Astro.props
 const t = useT(lang)
 const name = pickName(topic.names, lang)
 const lectures = lecturesByIdsForLang(topic.trackIds, lang).slice(0, 90)
+const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
+const topicLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name,
+  inLanguage: lang,
+  url: `${site}/${lang}/app/topics/${topic.slug}`,
+  mainEntity: {
+    '@type': 'ItemList',
+    numberOfItems: lectures.length,
+    itemListElement: lectures.map((l, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: `${site}/${lang}/app/${shortSlug(l.slug)}`,
+      name: lectureTitle(l, lang),
+    })),
+  },
+}
 ---
+<script type="application/ld+json" set:html={JSON.stringify(topicLd)} is:inline />
 <LectureListPage
   lang={lang}
   kicker={t('topic.kicker')}
