@@ -5,23 +5,61 @@ import ScreenshotShowcase from './ScreenshotShowcase.astro'
 import FeatureList from './FeatureList.astro'
 import CTABand from './CTABand.astro'
 import FAQSection from './FAQSection.astro'
-import { useT, type Lang } from '../i18n/ui'
+import { useT, STORE, type Lang } from '../i18n/ui'
 interface Props { lang: Lang }
 const { lang } = Astro.props
 const t = useT(lang)
 const chatHref = `/${lang}/app`
+
+const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
+const siteName = lang === 'en' ? 'Shruti' : 'Слушай Садху'
+const homeLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${site}/#org`,
+      name: siteName,
+      url: `${site}/`,
+      logo: `${site}/app-icon.png`,
+      sameAs: [STORE.telegram, STORE.vk],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${site}/#website`,
+      name: siteName,
+      url: `${site}/`,
+      inLanguage: lang,
+      publisher: { '@id': `${site}/#org` },
+    },
+    {
+      '@type': 'MobileApplication',
+      name: siteName,
+      description: t('hero.lead'),
+      operatingSystem: 'iOS, Android',
+      applicationCategory: 'EducationApplication',
+      url: `${site}/`,
+      installUrl: [STORE.appStore, STORE.googlePlay],
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    },
+  ],
+}
 ---
+<script type="application/ld+json" set:html={JSON.stringify(homeLd)} is:inline />
+
 <HeroSection lang={lang} />
 
 <ScreenshotShowcase lang={lang} />
 
 <FeatureList lang={lang} />
 
-<CTABand id="chat" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')}>
-  <a href={chatHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
-    {t('chat.band.cta')} →
-  </a>
-</CTABand>
+<div class="hidden md:block">
+  <CTABand id="chat" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')}>
+    <a href={chatHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
+      {t('chat.band.cta')} →
+    </a>
+  </CTABand>
+</div>
 
 <FAQSection lang={lang} />
 
