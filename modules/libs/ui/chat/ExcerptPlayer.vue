@@ -89,7 +89,14 @@ defineExpose({ waveformEl })
 
 .play-btn-spinner {
   --color: var(--ion-color-medium-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 14px;
   height: 14px;
+}
+.play-btn-spinner :deep(*) {
+  width: 100%;
+  height: 100%;
 }
 </style>

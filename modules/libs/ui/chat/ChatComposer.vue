@@ -20,7 +20,7 @@
       :tabindex="(canSend || sending) && !disabled ? 0 : -1"
       @click="onSendClick"
     >
-      <slot v-if="sending" name="spinner" />
+      <span v-if="sending" class="send-spinner"><slot name="spinner" /></span>
       <svg
         v-else
         viewBox="0 0 24 24"
@@ -189,5 +189,17 @@ defineExpose({ setText, focus })
 
 .send:active:not(:disabled) {
   opacity: 0.75;
+}
+
+.send-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+.send-spinner :deep(*) {
+  width: 100%;
+  height: 100%;
 }
 </style>

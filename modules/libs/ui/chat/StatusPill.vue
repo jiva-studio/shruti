@@ -217,10 +217,17 @@ onBeforeUnmount(() => {
   transition: width 280ms ease;
 }
 .spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
   height: 18px;
   color: currentColor;
   flex-shrink: 0;
+}
+.spinner :deep(*) {
+  width: 100%;
+  height: 100%;
 }
 /* Ticker viewport — overflow-hidden window the labels slide through.
  * Uses CSS grid stacking so the enter/leave siblings during a
