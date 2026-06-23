@@ -19,7 +19,7 @@ const links = [
 
     <ul class="my-0 hidden h-full list-none items-center gap-6 p-0 text-sm leading-7 text-ink-soft md:flex">
       {links.map(([href, label]) => (
-        <li class="flex items-center"><a href={href} class="transition hover:text-saffron">{label}</a></li>
+        <li class:list={['items-center', href.endsWith('/app') ? 'hidden lg:flex' : 'flex']}><a href={href} class="transition hover:text-saffron">{label}</a></li>
       ))}
     </ul>
 
