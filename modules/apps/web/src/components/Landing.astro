@@ -17,11 +17,13 @@ const chatHref = `/${lang}/app`
 
 <FeatureList lang={lang} />
 
-<CTABand id="chat" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')}>
-  <a href={chatHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
-    {t('chat.band.cta')} →
-  </a>
-</CTABand>
+<div class="hidden md:block">
+  <CTABand id="chat" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')}>
+    <a href={chatHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
+      {t('chat.band.cta')} →
+    </a>
+  </CTABand>
+</div>
 
 <FAQSection lang={lang} />
 
