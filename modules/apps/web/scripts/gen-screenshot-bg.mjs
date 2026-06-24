@@ -1,7 +1,7 @@
 // Derives the gradient backdrop map (file -> {top, bottom}) consumed by
 // ScreenshotShowcase.astro from the committed screenshot PNGs themselves:
-// the top/bottom colours are the mean colour of each shot's top and bottom
-// edge band, so the page background blends into the screenshot.
+// the top/bottom colours are the single centre pixel of each shot's top and
+// bottom edge, so the page background blends exactly into the screenshot.
 import { readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -14,12 +14,11 @@ const outFile = join(webRoot, 'src', 'data', 'screenshots.json')
 
 const hex = (c) => '#' + [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')
 
-async function bandColor(srcPath, meta, fromTop) {
-  const bandH = Math.max(1, Math.round(meta.height * 0.04))
-  const top = fromTop ? 0 : meta.height - bandH
+async function edgeColor(srcPath, meta, fromTop) {
+  const left = Math.floor(meta.width / 2)
+  const top = fromTop ? 0 : meta.height - 1
   const { data } = await sharp(srcPath)
-    .extract({ left: 0, top, width: meta.width, height: bandH })
-    .resize(1, 1, { fit: 'fill' })
+    .extract({ left, top, width: 1, height: 1 })
     .raw()
     .toBuffer({ resolveWithObject: true })
   return hex({ r: data[0], g: data[1], b: data[2] })
@@ -30,7 +29,7 @@ for (const f of readdirSync(screensDir).filter((f) => f.endsWith('.png'))) {
   const key = f.replace(/\.png$/, '')
   const srcPath = join(screensDir, f)
   const meta = await sharp(srcPath).metadata()
-  map[key] = { top: await bandColor(srcPath, meta, true), bottom: await bandColor(srcPath, meta, false) }
+  map[key] = { top: await edgeColor(srcPath, meta, true), bottom: await edgeColor(srcPath, meta, false) }
 }
 
 if (!existsSync(dirname(outFile))) mkdirSync(dirname(outFile), { recursive: true })
