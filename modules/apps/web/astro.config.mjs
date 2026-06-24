@@ -5,9 +5,26 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { createRequire } from 'node:module'
+import { execFileSync } from 'node:child_process'
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Regenerate src/data/screenshots.json (the gallery's per-shot top/bottom
+// safe-zone band colors, sampled from public/screens/*) on every dev start
+// and build. It's a generated, gitignored artifact — without this it drifts
+// whenever screenshots change (a missing entry falls back to a wrong default
+// band), so derive it from the committed PNGs at build time instead.
+const screenshotBands = {
+  name: 'screenshot-bands',
+  hooks: {
+    'astro:config:setup': () => {
+      execFileSync('node', [path.join(__dirname, 'scripts/gen-screenshot-bg.mjs')], {
+        stdio: 'inherit',
+      })
+    },
+  },
+}
 const SHRUTI_ROOT = path.resolve(__dirname, '../mobile/shruti')
 const UI_ROOT = path.resolve(__dirname, '../mobile/ui')
 const LIBS_ROOT = path.resolve(__dirname, '../../libs')
@@ -78,6 +95,7 @@ export default defineConfig({
   },
   redirects: { '/': '/en/' },
   integrations: [
+    screenshotBands,
     vue({ appEntrypoint: '/src/vue-app' }),
     sitemap({
       i18n: {
