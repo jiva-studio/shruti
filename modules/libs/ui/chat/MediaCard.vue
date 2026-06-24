@@ -46,7 +46,10 @@
 
     <div class="media-card-body">
       <div class="media-card-meta">
-        <span class="media-card-title">{{ payload.title }}</span>
+        <div class="media-card-titles">
+          <span class="media-card-title">{{ payload.title }}</span>
+          <span v-if="attribution" class="media-card-attribution">{{ attribution }}</span>
+        </div>
         <button
           v-if="payload.text"
           class="expand-btn"
@@ -119,6 +122,12 @@ const emit = defineEmits<{
 
 const expanded = ref(false)
 
+// Attribution line under the title: "speaker · date" (either part may be
+// absent — join only what's present, blank → the line is hidden).
+const attribution = computed(() =>
+  [props.payload?.speaker, props.payload?.date].filter(Boolean).join(" · ")
+)
+
 const pct = computed(() => `${Math.min(100, Math.max(0, props.progressFraction * 100))}%`)
 const bufferedPct = computed(() => `${Math.min(100, Math.max(0, props.bufferedFraction * 100))}%`)
 
@@ -133,7 +142,7 @@ function onSeek(event: MouseEvent): void {
 .media-card {
   display: block;
   margin: 10px 0;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
@@ -263,12 +272,27 @@ function onSeek(event: MouseEvent): void {
   padding: 8px 12px;
   background: rgba(var(--ion-color-primary-rgb), 0.08);
 }
-.media-card-title {
+/* Title (bold) over attribution (lighter), stacked — takes the row's free
+ * width so the expand chevron stays pinned to the right. */
+.media-card-titles {
   flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.media-card-title {
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--ion-color-medium-shade);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.media-card-attribution {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ion-color-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

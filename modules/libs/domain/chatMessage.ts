@@ -84,9 +84,9 @@ export interface ChatOutlinePayload {
  * `ChatMessage.media[id]`; `MediaCard.vue` renders the file (video/audio
  * player) plus the transcript. `url` is a RELATIVE storage path (from the
  * bucket root, e.g. `public/media/<id>.mp4`) resolved to a CDN URL at
- * render time via `storagePublicUrl`. `title` is the server-built label
- * (e.g. "speaker · date") and `text` the transcript — both rendered
- * verbatim; the client never reassembles them from parts.
+ * render time via `storagePublicUrl`. `title` is the curated human title
+ * and `text` the transcript — both rendered verbatim; `speaker` · `date`
+ * form the attribution line the card shows under the title.
  */
 export interface MediaPayload {
   readonly id: string
@@ -94,6 +94,7 @@ export interface MediaPayload {
   readonly type: "video" | "audio"
   readonly title: string
   readonly speaker?: string
+  readonly date?: string
   readonly text: string
   /** True when `text` is a machine translation into the answer language.
    *  `MediaCard.vue` shows a "translated automatically" footnote and lets

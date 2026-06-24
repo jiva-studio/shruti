@@ -21,7 +21,13 @@ import initSqlJs, { type Database } from "sql.js"
 import type { IDatabase, QueryParams } from "@ports/app/index.js"
 import { runUserMigrations } from "@infra/persistence/migrations/user/runMigrations.js"
 import { playlistTracksFor, demoTranscriptTrackId } from "./tracks.js"
-import { chatFixtureFor, DEMO_SESSION_ID } from "./chat.js"
+import {
+  chatFixtureFor,
+  mediaChatFixtureFor,
+  DEMO_SESSION_ID,
+  DEMO_MEDIA_SESSION_ID,
+  type ChatFixture,
+} from "./chat.js"
 import { CAPTURE_LOCALES, contentLanguageFor } from "../config.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -472,12 +478,37 @@ async function seedNotes(db: IDatabase, args: Args, rng: () => number): Promise<
 }
 
 async function seedChat(db: IDatabase, args: Args): Promise<void> {
-  const fixture = chatFixtureFor(args.locale)
-  const sessionCreatedAt = args.now - 30 * 60 * 1000
+  // Two demo sessions: the soul Q&A (verse + citation cards) and the
+  // remembrance Q&A (media video card). Stagger their creation so the
+  // recent-chats list has a stable order; each scenario opens its own
+  // session directly via the debug bridge.
+  await seedChatSession(
+    db,
+    DEMO_SESSION_ID,
+    chatFixtureFor(args.locale),
+    args.now - 30 * 60 * 1000,
+    args.now
+  )
+  await seedChatSession(
+    db,
+    DEMO_MEDIA_SESSION_ID,
+    mediaChatFixtureFor(args.locale),
+    args.now - 20 * 60 * 1000,
+    args.now
+  )
+}
+
+async function seedChatSession(
+  db: IDatabase,
+  sessionId: string,
+  fixture: ChatFixture,
+  sessionCreatedAt: number,
+  updatedAt: number
+): Promise<void> {
   await db.execute(
     `INSERT INTO chat_sessions (id, title, created_at, updated_at, track_id)
      VALUES (?, ?, ?, ?, NULL)`,
-    [DEMO_SESSION_ID, fixture.sessionTitle, sessionCreatedAt, args.now]
+    [sessionId, fixture.sessionTitle, sessionCreatedAt, updatedAt]
   )
   // Stagger message timestamps by 1s so listBySession's
   // ORDER BY created_at ASC keeps user-before-assistant order even
@@ -485,19 +516,20 @@ async function seedChat(db: IDatabase, args: Args): Promise<void> {
   for (let i = 0; i < fixture.messages.length; i++) {
     const msg = fixture.messages[i]!
     const createdAt = sessionCreatedAt + i * 1_000
-    // Verse / cite bodies ride the message's `meta` envelope (the persisted
-    // form of the server's SSE payloads). The renderer reads them off the
-    // message and only shows the small chip when a body is absent — so this
-    // is what makes the screenshot render the full verse + citation cards.
+    // Verse / cite / media bodies ride the message's `meta` envelope (the
+    // persisted form of the server's SSE payloads). The renderer reads them
+    // off the message and only shows the small chip when a body is absent —
+    // so this is what makes the screenshot render the full cards.
     const data: Record<string, unknown> = {}
     if (msg.verses) data.verses = msg.verses
     if (msg.cites) data.cites = msg.cites
+    if (msg.media) data.media = msg.media
     const meta = JSON.stringify({ _v: 1, data })
     await db.execute(
       `INSERT INTO chat_messages
          (id, session_id, role, content, created_at, meta)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [msg.id, DEMO_SESSION_ID, msg.role, msg.content, createdAt, meta]
+      [msg.id, sessionId, msg.role, msg.content, createdAt, meta]
     )
   }
   console.log(`  wrote chat session "${fixture.sessionTitle}" with ${fixture.messages.length} messages`)
