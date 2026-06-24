@@ -17,7 +17,7 @@ const links = [
       <span>{lang === 'en' ? 'Shruti' : 'Слушай Садху'}</span>
     </a>
 
-    <ul class="my-0 hidden h-full list-none items-center gap-6 p-0 text-sm leading-7 text-ink-soft md:flex">
+    <ul class="my-0 hidden list-none items-center gap-6 p-0 text-sm text-ink-soft md:flex" style="transform: translateY(1.5px)">
       {links.map(([href, label]) => (
         <li class:list={['items-center', href.endsWith('/app') ? 'hidden lg:flex' : 'flex']}><a href={href} class="transition hover:text-saffron">{label}</a></li>
       ))}
