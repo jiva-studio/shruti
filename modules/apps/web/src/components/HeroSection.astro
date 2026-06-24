@@ -17,6 +17,11 @@ const t = useT(lang)
         class="pointer-events-none absolute left-1/2 top-0 -z-10 w-[150%] max-w-none -translate-x-1/2 -translate-y-[62%] select-none opacity-25 md:max-w-[620px] xl:left-[35%] xl:max-w-[640px]"
         style="-webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent); mask-image: radial-gradient(closest-side, #000 62%, transparent);"
       />
+      <div
+        aria-hidden="true"
+        class="pointer-events-none absolute -inset-x-12 -inset-y-24 -z-[1]"
+        style="background: var(--color-cream); -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 42% 78%, transparent 100%), linear-gradient(to right, transparent 0%, #000 14% 86%, transparent 100%); -webkit-mask-composite: source-in; mask-image: linear-gradient(to bottom, transparent 0%, #000 42% 78%, transparent 100%), linear-gradient(to right, transparent 0%, #000 14% 86%, transparent 100%); mask-composite: intersect;"
+      ></div>
       <h1 class="text-4xl font-bold leading-[1.05] text-ink sm:text-5xl xl:text-6xl">{t('hero.title')}</h1>
       <p class="mt-5 text-xl text-coffee sm:text-2xl">{t('hero.subtitle')}</p>
       <p class="mt-5 max-w-md text-base leading-relaxed text-medium mx-auto xl:mx-0">{t('hero.lead')}</p>
