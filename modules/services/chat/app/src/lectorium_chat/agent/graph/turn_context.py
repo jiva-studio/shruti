@@ -120,6 +120,11 @@ class TurnContext:
     # повреждена». Shared by reference with the expander — see
     # `application/chat_turn.py`.
     emitted_action_ids: set[str] = field(default_factory=set)
+    # Per-turn `(track_id, lang)` → resolved display attribution (title /
+    # author / date / references) for card payloads. Thin clients (web) hold
+    # no local catalog, so the server resolves it once here and ships it on
+    # the card; several cites of the same lecture share one catalog read.
+    track_display_cache: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
 
     # ── Injected services ──────────────────────────────────────────────
     # Optional fields are typed as `Any | None` at runtime to avoid

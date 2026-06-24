@@ -74,12 +74,18 @@ async def get_track_outline(
             "track_id": track_id,
             "lang": effective_lang,
         }
+    # Lecture title (effective transcript lang) so a client with no local
+    # catalog (web) can render the outline header; absent → header hidden.
+    track = await catalog_repo.get_track(track_id, lang=effective_lang)
+    payload: dict[str, Any] = {"track_id": track_id, "items": items}
+    if track and track.title:
+        payload["track_title"] = track.title
     yield_event(
         "action",
         {
             "kind": "outline",
             "id": f"outline_{track_id}",
-            "payload": {"track_id": track_id, "items": items},
+            "payload": payload,
         },
     )
     return {
