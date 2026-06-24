@@ -15,9 +15,14 @@
  * carries those maps per message and seedChat() writes them into `meta` —
  * the old global localStorage LRU caches are no longer read.
  */
-import type { ChatVerseBody, ChatCiteSnippet } from "@lib/domain/chatMessage.js"
+import type { ChatVerseBody, ChatCiteSnippet, MediaPayload } from "@lib/domain/chatMessage.js"
 
 export const DEMO_SESSION_ID = "chat_demo_soul"
+/** Second demo session — a "remembrance video" Q&A whose assistant reply
+ *  carries a `[media:…]` marker, so the screenshot showcases the MediaCard
+ *  (video poster + play overlay + title). Opened by the `07_media`
+ *  scenario via the debug bridge. */
+export const DEMO_MEDIA_SESSION_ID = "chat_demo_remembrance"
 
 export interface ChatFixtureMessage {
   /** ID is supplied here (not generated) so the assistant message
@@ -35,6 +40,10 @@ export interface ChatFixtureMessage {
   /** Citation transcript snippets, keyed `${trackId}|${startMs}-${endMs}` —
    *  the persisted form of the server's `cite_transcript` SSE event. */
   readonly cites?: Record<string, ChatCiteSnippet>
+  /** Media result payloads, keyed by the id used in this message's
+   *  `[media:<id>]` marker(s) — the persisted form of the server's `media`
+   *  SSE action. Undefined for messages with no media marker (most). */
+  readonly media?: Record<string, MediaPayload>
 }
 
 export interface ChatFixture {
@@ -143,4 +152,110 @@ const EN: ChatFixture = {
 
 export function chatFixtureFor(locale: string): ChatFixture {
   return locale === "ru" ? RU : EN
+}
+
+/* -------------------------------------------------------------------------- */
+/*                      Media remembrance session (07_media)                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Shared media id for both locales. The marker `[media:<id>]`, the
+ * `meta.data.media` key, and the intercepted `public/media/<id>.{mp4,jpg}`
+ * path all derive from it. The clip is the "Following Śrīla Prabhupāda"
+ * (DVD 7) remembrance of Gopalasyapriya dasi: at a cold evening darshan in
+ * Māyāpur, Śrīla Prabhupāda noticed her thin cloth, asked "Are you all
+ * right?", and instructed that the women devotees' needs be looked after —
+ * a moment of his personal care for a disciple. The same story exists in
+ * EN and RU, so one poster frame (`fixtures/media/remembrance-poster.jpg`)
+ * serves both screenshots.
+ */
+const DEMO_MEDIA_ID = "media_demo_remembrance"
+const DEMO_MEDIA_URL = `public/media/${DEMO_MEDIA_ID}.mp4`
+
+/**
+ * Russian remembrance fixture. The assistant intro frames the clip and the
+ * `[media:…]` marker renders the video card (poster + play overlay + the
+ * localized title / speaker). The transcript text rides the payload so the
+ * card shows its expand chevron.
+ */
+const RU_MEDIA: ChatFixture = {
+  sessionTitle: "Как Прабхупада заботился об учениках",
+  messages: [
+    {
+      id: "msg_demo_remembrance_user",
+      role: "user",
+      content: "Как Шрила Прабхупада заботился о своих учениках?",
+    },
+    {
+      id: "msg_demo_remembrance_assistant",
+      role: "assistant",
+      content: [
+        "Ученики вспоминают Шрилу Прабхупаду как удивительно внимательного к их нуждам — он замечал самое малое и следил, чтобы никто не остался без заботы. Гопаласьяприя даси рассказывает о вечернем даршане в Маяпуре:",
+        "",
+        `[media:${DEMO_MEDIA_ID}|«У тебя всё в порядке?»]`,
+        "",
+        "Такими воспоминаниями наполнены фильмы «По стопам Шрилы Прабхупады»: ученики снова и снова рассказывают, как лично он заботился о них — в большом и в малом. Как сказала она сама: «Он действительно беспокоился о каждом из нас».",
+        "",
+        "[followup:Что ещё ученики вспоминают о Прабхупаде?]",
+        "[followup:Покажи больше видео-воспоминаний]",
+      ].join("\n"),
+      media: {
+        [DEMO_MEDIA_ID]: {
+          id: DEMO_MEDIA_ID,
+          url: DEMO_MEDIA_URL,
+          type: "video",
+          title: "«У тебя всё в порядке?»",
+          speaker: "Гопаласьяприя даси",
+          date: "1975",
+          text:
+            "Однажды вечером все матаджи пришли на даршан в переднем дворе. Вдруг наступила тишина, и Прабхупада посмотрел на меня и спросил: «У тебя всё в порядке?» Было прохладно, и он заметил: «Такая тонкая одежда — а есть ли у тебя тёплая одежда?» Потом он повернулся к Калаканте и сказал, что женщин нужно оберегать: «Они сами не попросят — спрашивай их раз в месяц и убедись, что у них есть всё необходимое». Многие преданные потом плакали: он был так внимателен и заботлив, он действительно беспокоился о каждом из нас.",
+        },
+      },
+    },
+  ],
+}
+
+/**
+ * English remembrance fixture — the same Gopalasyapriya dasi / Māyāpur
+ * story, in the source language of the DVD 7 footage.
+ */
+const EN_MEDIA: ChatFixture = {
+  sessionTitle: "How Prabhupāda cared for his disciples",
+  messages: [
+    {
+      id: "msg_demo_remembrance_user",
+      role: "user",
+      content: "How did Śrīla Prabhupāda care for his disciples?",
+    },
+    {
+      id: "msg_demo_remembrance_assistant",
+      role: "assistant",
+      content: [
+        "His disciples remember Śrīla Prabhupāda as endlessly attentive to their wellbeing — he noticed the smallest needs and made sure no one was overlooked. Gopalasyapriya dasi recalls an evening darshan in Māyāpur:",
+        "",
+        `[media:${DEMO_MEDIA_ID}|"Are you all right?"]`,
+        "",
+        "Memories like this fill the *Following Śrīla Prabhupāda* remembrances — again and again his disciples describe how personally he looked after them, in matters great and small. As she put it, \"he just really does care about all of us.\"",
+        "",
+        "[followup:What else do disciples remember about Prabhupāda?]",
+        "[followup:Show me more remembrance videos]",
+      ].join("\n"),
+      media: {
+        [DEMO_MEDIA_ID]: {
+          id: DEMO_MEDIA_ID,
+          url: DEMO_MEDIA_URL,
+          type: "video",
+          title: '"Are you all right?"',
+          speaker: "Gopalasyapriya dasi",
+          date: "1975",
+          text:
+            "One evening all the saṅkīrtana women had darshan out in the front yard. There was a lull, and he just looked at me and asked, \"Are you all right?\" He said it a few times — then, \"Such a thin cloth. Haven't you got a cloth?\" It was chilly and most devotees had chaddars. Then he told Kalakanta, right beside him, that the women must be looked after: \"They will not ask. You must ask them once a month and make sure they have everything they need.\" Afterwards some of the devotees were crying — he was so observant and concerned; he really does care about all of us.",
+        },
+      },
+    },
+  ],
+}
+
+export function mediaChatFixtureFor(locale: string): ChatFixture {
+  return locale === "ru" ? RU_MEDIA : EN_MEDIA
 }

@@ -7,20 +7,24 @@ const { lang } = Astro.props
 
 const shots = lang === 'ru'
   ? [
-      ['07_search', 'Поиск и фильтры', 'Находите лекции по теме, автору и дате.'],
-      ['05_chat', 'Спроси Садху', 'Понятный ответ со ссылками на конкретные лекции.'],
-      ['08_track', 'Слушайте где угодно', 'Загружайте лекции и слушайте без интернета.'],
-      ['04_transcript', 'Текст рядом с аудио', 'Читайте и слушайте одновременно — текущий абзац перед глазами.'],
-      ['07_library', 'Тысячи лекций', 'По «Гите», «Бхагаватам» и другим писаниям — всегда под рукой.'],
       ['01_home', 'Отслеживание прогресса', 'Серия дней и продолжение с того места, где остановились.'],
+      ['02_search', 'Поиск и фильтры', 'Находите лекции по теме, автору и дате.'],
+      ['03_chat', 'Спроси Садху', 'Понятный ответ со ссылками на конкретные лекции.'],
+      ['07_media', 'Воспоминания о Прабхупаде', 'Ассистент находит и показывает видео-воспоминания учеников.'],
+      ['04_transcript', 'Текст рядом с аудио', 'Читайте и слушайте одновременно — текущий абзац перед глазами.'],
+      ['06_notes', 'Закладки на важные мысли', 'Сохраняйте фрагменты транскрипта и возвращайтесь к нужной секунде.'],
+      ['05_track', 'Каждая лекция в деталях', 'Описание, содержание по главам и темы — всё на одном экране.'],
+      ['07_library', 'Тысячи лекций', 'По «Гите», «Бхагаватам» и другим писаниям — всегда под рукой.'],
     ]
   : [
-      ['07_search', 'Search & filters', 'Find lectures by topic, author and date.'],
-      ['05_chat', 'Ask Sadhu', 'A clear answer with links to the specific lectures.'],
-      ['08_track', 'Listen anywhere', 'Download lectures and listen offline.'],
-      ['04_transcript', 'Text beside the audio', 'Read and listen at once — the current passage in view.'],
-      ['07_library', 'Thousands of lectures', 'On the Gita, the Bhagavatam and other scriptures — always at hand.'],
       ['01_home', 'Track your progress', 'A day streak and picking up right where you left off.'],
+      ['02_search', 'Search & filters', 'Find lectures by topic, author and date.'],
+      ['03_chat', 'Ask Sadhu', 'A clear answer with links to the specific lectures.'],
+      ['07_media', 'Memories of Prabhupāda', 'The assistant finds and plays disciples’ remembrance videos.'],
+      ['04_transcript', 'Text beside the audio', 'Read and listen at once — the current passage in view.'],
+      ['06_notes', 'Bookmark what matters', 'Save transcript snippets and jump back to the exact second.'],
+      ['05_track', 'Every lecture in detail', 'Description, chapter outline and topics — all on one screen.'],
+      ['07_library', 'Thousands of lectures', 'On the Gita, the Bhagavatam and other scriptures — always at hand.'],
     ]
 
 const bg = SHOT_BG as Record<string, { top: string; bottom: string }>

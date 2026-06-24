@@ -11,6 +11,9 @@ const REPO_ROOT = path.resolve(TOOL_ROOT, "../../..")
 const FIXTURES_DIR = path.resolve(TOOL_ROOT, "fixtures")
 
 const CONTENT_DB_PATH = path.resolve(FIXTURES_DIR, "content.db")
+/** Committed poster for the `07_media` remembrance clip — served by the
+ *  `public/media/*.jpg` intercept (resources/ isn't available in CI). */
+const MEDIA_POSTER_PATH = path.resolve(FIXTURES_DIR, "media/remembrance-poster.jpg")
 
 /** The mobile app validates the cached / downloaded catalog DB against
  *  its compile-time `SUPPORTED_DB_SCHEME` (Vite `define` injection from
@@ -97,6 +100,32 @@ async function interceptContent(page: Page): Promise<void> {
       body: STUB_MP3,
     })
   })
+
+  // Media remembrance clip (`07_media`). The MediaCard's `<video>` shows
+  // the `.jpg` poster until playback begins, so the poster is all the
+  // screenshot needs — serve it from the committed fixture and stub the
+  // `.mp4` itself (it never plays in capture). Same `public/media/<id>.*`
+  // path the live app resolves from the active CDN.
+  if (!fs.existsSync(MEDIA_POSTER_PATH)) {
+    throw new Error(
+      `Missing ${MEDIA_POSTER_PATH}.\n` +
+        `Copy a clip poster there, e.g.:\n  cp resources/following-prabhupada/` +
+        `build/dvd07/clips/ru/068_068.jpg fixtures/media/remembrance-poster.jpg`
+    )
+  }
+  const posterBytes = fs.readFileSync(MEDIA_POSTER_PATH)
+  await page.route("**/public/media/*.jpg", (route) => {
+    route.fulfill({ status: 200, contentType: "image/jpeg", body: posterBytes })
+  })
+  const STUB_MP4 = Buffer.alloc(1)
+  await page.route("**/public/media/*.mp4", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "video/mp4",
+      headers: { "content-length": "1" },
+      body: STUB_MP4,
+    })
+  })
 }
 
 /* ---------------------- IndexedDB pre-seed ------------------------- */
@@ -154,6 +183,25 @@ async function preseedDismissedNags(page: Page): Promise<void> {
 }
 
 /**
+ * Mark onboarding complete so `start()` (main.ts) routes straight to
+ * `/tabs/home`. Without it the app falls back to `/onboarding`: the flag
+ * lives in Capacitor Preferences (web → `localStorage["CapacitorStorage.
+ * onboarding.completed"]`), NOT the seeded user.db, and the history-based
+ * fallback (`listeningSessions.hasAny()`) races the content-DB open and
+ * throws ("content DB is not open yet"). Seeding the flag makes the
+ * capture behave like a returning, onboarded user — deterministically.
+ */
+async function preseedOnboarding(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("CapacitorStorage.onboarding.completed", "true")
+    } catch {
+      // unavailable origin — non-fatal; the app falls back to /onboarding.
+    }
+  })
+}
+
+/**
  * Write the seeded user.db into IndexedDB BEFORE the app boots. The Vite
  * `useSqlJsPersistence` reads from `(lectorium, databases, user.db)` on
  * `open()` and creates an empty DB only when the key is missing — so a
@@ -207,6 +255,7 @@ async function boot(page: Page, code: CaptureLocale): Promise<void> {
   await preseedUserDb(page, code)
   await preseedSearchFilter(page, code)
   await preseedDismissedNags(page)
+  await preseedOnboarding(page)
 
   await page.goto(`/?locale=${code}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })

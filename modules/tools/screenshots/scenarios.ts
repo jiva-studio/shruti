@@ -25,6 +25,12 @@ export const DEMO_CHAT_SESSION_ID = "chat_demo_soul"
  *  Keep this in sync with chat.ts:`messages[0].id`. */
 const DEMO_CHAT_USER_MESSAGE_ID = "msg_demo_soul_user"
 
+/** Remembrance-video demo session — its assistant reply carries a
+ *  `[media:…]` marker → MediaCard. Keep in sync with chat.ts
+ *  `DEMO_MEDIA_SESSION_ID` / its first message id. */
+export const DEMO_MEDIA_SESSION_ID = "chat_demo_remembrance"
+const DEMO_MEDIA_USER_MESSAGE_ID = "msg_demo_remembrance_user"
+
 declare global {
   interface Window {
     __lectorium?: {
@@ -98,10 +104,22 @@ async function openDemoChatSession(page: Page): Promise<void> {
     (id) => window.__lectorium!.debug!.openChatSession(id),
     DEMO_CHAT_SESSION_ID
   )
-  await pinChatUserMessageToTop(page)
+  await pinChatUserMessageToTop(page, DEMO_CHAT_USER_MESSAGE_ID)
 }
 
-async function pinChatUserMessageToTop(page: Page): Promise<void> {
+async function openDemoMediaSession(page: Page): Promise<void> {
+  // Same debug-bridge path as openDemoChatSession (see there for why we
+  // don't deep-link). Opens the remembrance session whose assistant reply
+  // renders the MediaCard, then pins the user question to the top so the
+  // frame shows the question, the intro line, and the video card.
+  await page.evaluate(
+    (id) => window.__lectorium!.debug!.openChatSession(id),
+    DEMO_MEDIA_SESSION_ID
+  )
+  await pinChatUserMessageToTop(page, DEMO_MEDIA_USER_MESSAGE_ID)
+}
+
+async function pinChatUserMessageToTop(page: Page, messageId: string): Promise<void> {
   // ChatView's `onMounted → ensureSessionFromRoute → openSession →
   // scrollToBottom()` lands the viewport on the last message — for
   // the assistant's long verse-card reply that scrolls the user's
@@ -121,7 +139,7 @@ async function pinChatUserMessageToTop(page: Page): Promise<void> {
       `[data-message-id="${id}"]`
     ) as HTMLElement | null
     target?.scrollIntoView({ block: "start", behavior: "auto" })
-  }, DEMO_CHAT_USER_MESSAGE_ID)
+  }, messageId)
 }
 
 async function openSearchFilters(page: Page): Promise<void> {
@@ -306,6 +324,20 @@ export const scenarios: Scenario[] = [
     waitFor: "ion-modal.track-sheet .sheet-actions",
     settle: 700,
     beforeCapture: openTrackSheet,
+  },
+  {
+    name: "07_media",
+    // Stable chat pathname, then open the remembrance session in
+    // `beforeCapture` (same debug-bridge approach as 03_chat).
+    route: "/tabs/chat",
+    // Wait for the MediaCard itself — its poster + play overlay are the
+    // visual centrepiece. The card renders only once the message's
+    // `media` payload is present (seeded into the chat_messages meta), so
+    // this also guards against an empty bubble. `settle` covers the
+    // poster fetch (intercepted → committed fixture) + decode.
+    waitFor: ".media-card",
+    settle: 1000,
+    beforeCapture: openDemoMediaSession,
   },
   // These two don't ship to the stores — they feed the in-app subscription /
   // onboarding paywall screenshot strip (public/onboarding/<lang>/<name>.webp,
