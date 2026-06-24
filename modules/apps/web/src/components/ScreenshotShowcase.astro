@@ -32,9 +32,23 @@ const slides = shots.map(([file, title, desc]) => ({
   bottom: bg[file]?.bottom ?? '#d4a986',
 }))
 ---
-<section class="bg-cream-deep/50 py-16">
-  <div class="mx-auto mb-10 max-w-2xl px-5 text-center">
-    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{lang === 'en' ? 'A look inside' : 'Как выглядит приложение'}</h2>
+<section class="relative overflow-hidden bg-cream-deep/50 py-16">
+  <img
+    src="/hero-feather.png"
+    alt=""
+    aria-hidden="true"
+    class="pointer-events-none absolute left-[2%] top-[58%] z-0 hidden w-[380px] -translate-y-1/2 -scale-x-100 select-none opacity-80 md:block"
+  />
+  <img
+    src="/hero-feather.png"
+    alt=""
+    aria-hidden="true"
+    class="pointer-events-none absolute right-[6%] top-2 z-0 hidden w-[340px] rotate-[270deg] select-none opacity-80 md:block"
+  />
+  <div class="relative z-10">
+    <div class="mx-auto mb-10 max-w-2xl px-5 text-center">
+      <h2 class="text-3xl font-bold text-ink sm:text-4xl">{lang === 'en' ? 'A look inside' : 'Как выглядит приложение'}</h2>
+    </div>
+    <ScreenshotGallery slides={slides} />
   </div>
-  <ScreenshotGallery slides={slides} />
 </section>
