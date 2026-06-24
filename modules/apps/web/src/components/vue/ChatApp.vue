@@ -12,8 +12,9 @@ type Lang = 'ru' | 'en'
 const props = defineProps<{ lang: Lang; trackId?: string; bare?: boolean }>()
 webLocale.value = props.lang
 
-const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
-const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+const BACKEND_FALLBACK = 'https://api.shruti.local'
+const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
+const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
 const FREE_TURNS = 10
 
 const L = {
