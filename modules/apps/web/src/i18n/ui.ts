@@ -1,5 +1,7 @@
-export const languages = { ru: 'Русский', en: 'English' } as const
-export type Lang = keyof typeof languages
+import { UI_LOCALES } from './locales.data.mjs'
+import type { Lang } from './locales'
+export type { Lang }
+export const languages = Object.fromEntries(UI_LOCALES.map((l) => [l.code, l.label])) as Record<Lang, string>
 export const defaultLang: Lang = 'ru'
 
 export const STORE = {
