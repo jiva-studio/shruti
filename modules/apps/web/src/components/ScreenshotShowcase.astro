@@ -7,20 +7,20 @@ const { lang } = Astro.props
 
 const shots = lang === 'ru'
   ? [
-      ['01_home', 'Отслеживание прогресса', 'Серия дней и продолжение с того места, где остановились.'],
-      ['07_library', 'Тысячи лекций', 'По «Гите», «Бхагаватам» и другим писаниям — всегда под рукой.'],
-      ['04_transcript', 'Текст рядом с аудио', 'Читайте и слушайте одновременно — текущий абзац перед глазами.'],
-      ['05_chat', 'Спроси Садху', 'Понятный ответ со ссылками на конкретные лекции.'],
       ['07_search', 'Поиск и фильтры', 'Находите лекции по теме, автору и дате.'],
+      ['05_chat', 'Спроси Садху', 'Понятный ответ со ссылками на конкретные лекции.'],
       ['08_track', 'Слушайте где угодно', 'Загружайте лекции и слушайте без интернета.'],
+      ['04_transcript', 'Текст рядом с аудио', 'Читайте и слушайте одновременно — текущий абзац перед глазами.'],
+      ['07_library', 'Тысячи лекций', 'По «Гите», «Бхагаватам» и другим писаниям — всегда под рукой.'],
+      ['01_home', 'Отслеживание прогресса', 'Серия дней и продолжение с того места, где остановились.'],
     ]
   : [
-      ['01_home', 'Track your progress', 'A day streak and picking up right where you left off.'],
-      ['07_library', 'Thousands of lectures', 'On the Gita, the Bhagavatam and other scriptures — always at hand.'],
-      ['04_transcript', 'Text beside the audio', 'Read and listen at once — the current passage in view.'],
-      ['05_chat', 'Ask Sadhu', 'A clear answer with links to the specific lectures.'],
       ['07_search', 'Search & filters', 'Find lectures by topic, author and date.'],
+      ['05_chat', 'Ask Sadhu', 'A clear answer with links to the specific lectures.'],
       ['08_track', 'Listen anywhere', 'Download lectures and listen offline.'],
+      ['04_transcript', 'Text beside the audio', 'Read and listen at once — the current passage in view.'],
+      ['07_library', 'Thousands of lectures', 'On the Gita, the Bhagavatam and other scriptures — always at hand.'],
+      ['01_home', 'Track your progress', 'A day streak and picking up right where you left off.'],
     ]
 
 const bg = SHOT_BG as Record<string, { top: string; bottom: string }>
