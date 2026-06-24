@@ -46,14 +46,14 @@
         </div>
       </section>
 
-      <div class="relative w-px shrink-0 bg-line/70">
+      <div class="relative hidden w-px shrink-0 bg-line/70 xl:block">
         <div
           class="absolute inset-y-0 -left-2 -right-2 z-10 cursor-col-resize"
           @pointerdown="startResize"
         />
       </div>
 
-      <section class="min-h-0 shrink-0" :style="{ width: chatWidth + 'px' }">
+      <section class="hidden min-h-0 shrink-0 xl:block" :style="{ width: chatWidth + 'px' }">
         <ChatApp :lang="lang" :track-id="selectedId ?? undefined" bare />
       </section>
     </div>
