@@ -255,9 +255,14 @@ def test_clamp_retrieval_lang_in_corpus_passes_through():
     assert clamp_retrieval_lang("en", ["ru", "en"]) == "en"
 
 
+def test_clamp_retrieval_lang_east_slavic_reduces_to_ru():
+    assert clamp_retrieval_lang("uk", ["ru", "en"]) == "ru"
+    assert clamp_retrieval_lang("uk_UA", ["ru", "en"]) == "ru"
+
+
 def test_clamp_retrieval_lang_non_corpus_falls_to_en():
-    assert clamp_retrieval_lang("uk", ["ru", "en"]) == "en"
     assert clamp_retrieval_lang("sr-Cyrl", ["ru", "en"]) == "en"
+    assert clamp_retrieval_lang("uk", ["en"]) == "en"
 
 
 def test_clamp_retrieval_lang_empty_corpus_falls_to_en():
