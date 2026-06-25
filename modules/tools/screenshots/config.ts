@@ -53,7 +53,10 @@ export type CaptureLocale = string
  * the app's localized-name resolver falls back at runtime).
  */
 export function contentLanguageFor(locale: string): "en" | "ru" {
-  return locale === "ru" ? "ru" : "en"
+  // Same East-Slavic collapse the app/web use (ru, uk → ru; everything else
+  // → en). Mirrors @lib/domain reduceLocaleToContentLanguage.
+  const base = locale.toLowerCase().split(/[-_]/)[0]
+  return base === "ru" || base === "uk" ? "ru" : "en"
 }
 
 /**

@@ -13,6 +13,7 @@ import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { currentLocale, setLocale, type SupportedLocale } from "@lectorium/i18n/index.js"
+import { reduceLocaleToContentLanguage } from "@lib/domain/services/contentLanguage.js"
 import router from "@lectorium/router/index.js"
 import {
   setDevSubscriptionOverride,
@@ -68,11 +69,20 @@ interface LectoriumDebugApi {
 export function installDebugApi(): void {
   const api: LectoriumDebugApi = {
     demoTrackId(): string {
-      return DEMO_TRACKS[currentLocale()] ?? DEMO_TRACKS.en
+      // Demo lectures exist in en/ru only — collapse the UI locale to its
+      // content language (uk→ru, sr→en) so a non-content locale gets a real
+      // track, matching the screenshot fixtures.
+      return (
+        DEMO_TRACKS[reduceLocaleToContentLanguage(currentLocale()) as SupportedLocale] ??
+        DEMO_TRACKS.en
+      )
     },
 
     demoPositionMs(): number {
-      return DEMO_POSITIONS_MS[currentLocale()] ?? DEMO_POSITIONS_MS.en
+      return (
+        DEMO_POSITIONS_MS[reduceLocaleToContentLanguage(currentLocale()) as SupportedLocale] ??
+        DEMO_POSITIONS_MS.en
+      )
     },
 
     async navigateTo(path: string): Promise<void> {

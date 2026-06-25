@@ -126,6 +126,20 @@ async function interceptContent(page: Page): Promise<void> {
       body: STUB_MP4,
     })
   })
+
+  // Transcript JSON (`04_transcript` scenario). Served from a committed fixture
+  // instead of real S3 — the live fetch is slow/flaky and times out the
+  // `.highlighted` / `.current` wait. Same doc seedNotes anchors the bookmarks
+  // to, so the highlights line up. `fixtures/transcripts/<id>/<lang>.json`.
+  // The playlist prefetch loop downloads EVERY track's transcript; the demo
+  // track has a fixture, the rest get an empty stub so the prefetch resolves
+  // fast instead of hammering (and 404-ing on) the real CDN.
+  await page.route("**/public/tracks/*/transcripts/*.json", (route, req) => {
+    const m = req.url().match(/\/public\/tracks\/([^/]+)\/transcripts\/([^/?]+\.json)/)
+    const file = m ? path.join(FIXTURES_DIR, "transcripts", m[1], m[2]) : null
+    const body = file && fs.existsSync(file) ? fs.readFileSync(file) : '{"version":1,"blocks":[]}'
+    route.fulfill({ status: 200, contentType: "application/json", body })
+  })
 }
 
 /* ---------------------- IndexedDB pre-seed ------------------------- */

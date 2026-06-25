@@ -429,29 +429,21 @@ interface TranscriptDoc {
   blocks: TranscriptBlock[]
 }
 
-// Same S3 origin the runtime app fetches transcripts from — keeps the
-// fixture in sync with what the user will see in the dialog at capture
-// time, with no local-mirror dependency.
-const TRANSCRIPT_BASE_URL = "https://akds-lectorium.s3.us-east-1.amazonaws.com/public/tracks"
+// Transcript fixture committed under fixtures/transcripts/<id>/<lang>.json —
+// the exact doc the capture serves into the dialog, so the seeded bookmarks
+// line up with the rendered blocks. No S3 at gen or capture time.
+const TRANSCRIPTS_DIR = path.join(TOOL_ROOT, "fixtures", "transcripts")
 
 async function seedNotes(db: IDatabase, args: Args, rng: () => number): Promise<void> {
   const trackId = demoTranscriptTrackId(args.locale)
   // Transcripts only exist in the content language (en/ru); a UI locale like
   // sr-Latn falls back to the English demo track + transcript.
-  const transcriptUrl = `${TRANSCRIPT_BASE_URL}/${trackId}/transcripts/${contentLanguageFor(args.locale)}.json`
-  let doc: TranscriptDoc
-  try {
-    const response = await fetch(transcriptUrl)
-    if (!response.ok) {
-      console.warn(`  transcript fetch ${response.status} ${transcriptUrl} — skipping notes seed`)
-      return
-    }
-    doc = (await response.json()) as TranscriptDoc
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.warn(`  transcript fetch failed (${msg}) — skipping notes seed`)
+  const transcriptFile = path.join(TRANSCRIPTS_DIR, trackId, `${contentLanguageFor(args.locale)}.json`)
+  if (!fs.existsSync(transcriptFile)) {
+    console.warn(`  transcript fixture missing ${transcriptFile} — skipping notes seed`)
     return
   }
+  const doc = JSON.parse(fs.readFileSync(transcriptFile, "utf-8")) as TranscriptDoc
   const sentences = doc.blocks.filter((b) => b.type === "sentence")
   // Pick blocks in the 150–400 char range so the bookmark snippet on the
   // Notes screen has 2–3 lines of readable text — not a single word and

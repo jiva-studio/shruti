@@ -3,6 +3,7 @@ import '../styles/global.css'
 import SiteNav from '../components/SiteNav.astro'
 import Footer from '../components/Footer.astro'
 import { defaultLang, type Lang } from '../i18n/ui'
+import { UI_LOCALES, CONTENT_LOCALES, DEFAULT_LOCALE, contentLangFor, localizePath } from '../i18n/locales'
 
 interface Props {
   title: string
@@ -16,19 +17,23 @@ interface Props {
   image?: string
   /** Keep the page out of the index (interactive/thin app surfaces). */
   noindex?: boolean
+  /** Page exists only in CONTENT_LOCALES (lecture/topic/collection detail);
+   *  other UI locales collapse onto their content language for alternates. */
+  contentOnly?: boolean
 }
-const { title, description, lang = defaultLang, path = '/', fullscreen = false, image, noindex = false } = Astro.props
+const { title, description, lang = defaultLang, path = '/', fullscreen = false, image, noindex = false, contentOnly = false } = Astro.props
 
 const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
-const enPath = path === '/' ? '/en/' : `/en${path}`
-const ruPath = path === '/' ? '/ru/' : `/ru${path}`
-const canonical = site + (lang === 'en' ? enPath : ruPath)
+// Locales this path actually exists in → hreflang alternates + switcher.
+const alternates = contentOnly ? UI_LOCALES.filter((l) => CONTENT_LOCALES.includes(l.code)) : UI_LOCALES
+const canonical = site + localizePath(path, lang, contentOnly)
+const xDefaultHref = site + localizePath(path, DEFAULT_LOCALE, contentOnly)
+const current = UI_LOCALES.find((l) => l.code === lang)
 
-const rawImage = image ?? `/og-default.${lang}.jpg`
+const rawImage = image ?? `/og-default.${contentLangFor(lang)}.jpg`
 const ogImage = rawImage.startsWith('http') ? rawImage : site + rawImage
-const siteName = lang === 'en' ? 'Shruti' : 'Слушай Садху'
-const ogLocale = lang === 'en' ? 'en_US' : 'ru_RU'
-const altLocale = lang === 'en' ? 'ru_RU' : 'en_US'
+const siteName = contentLangFor(lang) === 'ru' ? 'Слушай Садху' : 'Shruti'
+const ogLocale = current?.og ?? 'en_US'
 ---
 <!doctype html>
 <html lang={lang}>
@@ -39,9 +44,10 @@ const altLocale = lang === 'en' ? 'ru_RU' : 'en_US'
     <meta name="description" content={description} />
     {noindex && <meta name="robots" content="noindex, follow" />}
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" hreflang="ru" href={site + ruPath} />
-    <link rel="alternate" hreflang="en" href={site + enPath} />
-    <link rel="alternate" hreflang="x-default" href={site + enPath} />
+    {alternates.map((l) => (
+      <link rel="alternate" hreflang={l.hreflang} href={site + localizePath(path, l.code, contentOnly)} />
+    ))}
+    <link rel="alternate" hreflang="x-default" href={xDefaultHref} />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={siteName} />
@@ -49,7 +55,9 @@ const altLocale = lang === 'en' ? 'ru_RU' : 'en_US'
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:locale" content={ogLocale} />
-    <meta property="og:locale:alternate" content={altLocale} />
+    {alternates.filter((l) => l.code !== lang).map((l) => (
+      <meta property="og:locale:alternate" content={l.og} />
+    ))}
     <meta property="og:image" content={ogImage} />
     {!image && (
       <>
@@ -70,7 +78,7 @@ const altLocale = lang === 'en' ? 'ru_RU' : 'en_US'
     <link rel="apple-touch-icon" href="/app-icon.png" />
   </head>
   <body class={fullscreen ? 'h-screen overflow-hidden' : 'min-h-screen'}>
-    <SiteNav lang={lang} path={path} />
+    <SiteNav lang={lang} path={path} contentOnly={contentOnly} />
     <main>
       <slot />
     </main>

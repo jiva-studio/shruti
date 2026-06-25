@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
+import { UI_LOCALES, DEFAULT_LOCALE } from './src/i18n/locales.data.mjs'
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -89,8 +90,8 @@ function monorepoSourceAlias() {
 export default defineConfig({
   site: 'https://shruti.app',
   i18n: {
-    defaultLocale: 'en',
-    locales: ['ru', 'en'],
+    defaultLocale: DEFAULT_LOCALE,
+    locales: UI_LOCALES.map((l) => l.code),
     routing: { prefixDefaultLocale: true },
   },
   redirects: { '/': '/en/' },
@@ -99,8 +100,8 @@ export default defineConfig({
     vue({ appEntrypoint: '/src/vue-app' }),
     sitemap({
       i18n: {
-        defaultLocale: 'en',
-        locales: { en: 'en', ru: 'ru' },
+        defaultLocale: DEFAULT_LOCALE,
+        locales: Object.fromEntries(UI_LOCALES.map((l) => [l.code, l.hreflang])),
       },
     }),
   ],
