@@ -111,21 +111,28 @@ _DEFAULT_RETRIEVAL_LANG = "en"
 # one is available, falling back to this literal otherwise.
 _PROBE_FAILURE_FALLBACK_LANGS = ("en", "ru")
 
-# Locale → content-language reduction. The Python mirror of the client
-# policy in modules/libs/domain/services/contentLanguage.ts: the UI ships
-# in many locales but the corpus has only a few content languages (today
-# en, ru), so East-Slavic locales reduce to Russian and everyone else to
-# English. Keep this set in sync with the TS `RUSSIAN_REDUCED_LOCALES` so
-# chat, proactive prompts and the website all agree on what a `uk` user sees.
-_RUSSIAN_REDUCED_LOCALES = frozenset({"ru", "uk"})
+# Locale → content-language reduction map. The Python mirror of the client
+# policy in modules/libs/domain/services/contentLanguage.ts. The UI ships in
+# many locales but the corpus carries only a few content languages (today en,
+# ru); this map sends each supported UI locale's base subtag to the content
+# language it reads in. To extend, add a row (a new East-Slavic UI locale →
+# "ru", or a brand-new corpus language → itself) and mirror it on the TS side
+# so chat, proactive prompts and the website agree. Any locale not in the map
+# falls back to `_DEFAULT_CONTENT_LANG`.
+_DEFAULT_CONTENT_LANG = "en"
+_LOCALE_CONTENT_LANG: dict[str, str] = {
+    "en": "en",
+    "ru": "ru",
+    "uk": "ru",  # East-Slavic → Russian (mirrors TS RUSSIAN_REDUCED_LOCALES)
+}
 
 
 def reduce_locale_to_content_lang(locale: str) -> str:
     """Base content language a UI locale reduces to, ignoring corpus
     availability — the Python twin of `reduceLocaleToContentLanguage`.
-    `uk`/`uk_UA`/`ru-RU` → `ru`; `sr-Latn`/`en-US`/garbage → `en`."""
+    `uk`/`uk_UA`/`ru-RU` → `ru`; `sr-Latn`/`en-US`/unknown → `en`."""
     base = (locale or "").lower().replace("_", "-").split("-", 1)[0]
-    return "ru" if base in _RUSSIAN_REDUCED_LOCALES else "en"
+    return _LOCALE_CONTENT_LANG.get(base, _DEFAULT_CONTENT_LANG)
 
 
 def _fallback_corpus_langs() -> list[str]:
