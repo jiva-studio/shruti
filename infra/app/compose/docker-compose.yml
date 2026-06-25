@@ -237,6 +237,10 @@ services:
       RC_WEBHOOK_SECRET_SECONDARY: ${LECTORIUM_RC_WEBHOOK_SECRET_SECONDARY:-}
       RC_WEBHOOK_SECRET: ${LECTORIUM_RC_WEBHOOK_SECRET:-}
       RC_REST_API_KEY: ${LECTORIUM_RC_REST_API_KEY:-}
+      # Shared service-to-service secret. When set, auth exposes
+      # POST /internal/subscription/grant (called by the billing service
+      # after a confirmed crypto payment). Unset → endpoint stays 404.
+      INTERNAL_API_TOKEN: ${LECTORIUM_INTERNAL_API_TOKEN:-}
       PORT: "8081"
       # Datadog log enrichment — service/env/version make it into every
       # slog line via internal/logging/logging.go.
@@ -250,6 +254,48 @@ services:
       migrator: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "/auth", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  billing:
+    # origin only — proxy hosts forward /billing/* to global via Caddy.
+    # Paymento crypto checkout → grants RC "pro" via auth's internal API.
+    profiles: [origin]
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/akdasa-studios}/lectorium-billing:${LECTORIUM_BILLING_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
+    environment:
+      DATABASE_URL: postgresql://lectorium:${LECTORIUM_POSTGRES_PASSWORD:?}@postgres:5432/lectorium
+      # Verifies the user access token at /billing/checkout (read-only).
+      JWT_PUBLIC_KEY_PATH: /secrets/public.pem
+      # Paymento merchant creds — unset → /billing/checkout returns 503.
+      PAYMENTO_API_KEY: ${LECTORIUM_PAYMENTO_API_KEY:-}
+      # HMAC secret for IPN signature verification — unset → webhook 503.
+      PAYMENTO_HMAC_SECRET: ${LECTORIUM_PAYMENTO_HMAC_SECRET:-}
+      PAYMENTO_BASE_URL: ${LECTORIUM_PAYMENTO_BASE_URL:-https://api.paymento.io}
+      # Server-to-server grant call into auth (same shared secret).
+      AUTH_INTERNAL_URL: http://auth:8081
+      INTERNAL_API_TOKEN: ${LECTORIUM_INTERNAL_API_TOKEN:-}
+      # Site origin used to build Paymento ReturnUrl (success page).
+      PUBLIC_BASE_URL: ${LECTORIUM_BILLING_PUBLIC_BASE_URL:-https://shruti.app}
+      PORT: "8082"
+      ENV: ${LECTORIUM_ENV:-dev}
+      SERVICE_VERSION: ${LECTORIUM_BILLING_TAG:-latest}
+    volumes:
+      - ${LECTORIUM_JWT_KEYS_DIR:-/opt/lectorium/jwt}/public.pem:/secrets/public.pem:ro
+    networks: [lectorium]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrator: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "/billing", "healthz"]
       interval: 15s
       timeout: 3s
       retries: 40
