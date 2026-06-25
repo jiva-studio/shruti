@@ -155,10 +155,10 @@
   "auth.apple": "Continue with Apple",
   "auth.cta": "Sign in to use your subscription limits",
   "sub.nav": "PRO",
-  "sub.title": "Get PRO",
-  "sub.lead": "Access to PRO features.",
-  "sub.monthly": "Monthly",
-  "sub.yearly": "Yearly",
+  "sub.title": "Get PRO access",
+  "sub.lead": "Full access to every PRO feature of the app.",
+  "sub.monthly": "One month",
+  "sub.yearly": "One year",
   "sub.perMonth": "for 30 days",
   "sub.perYear": "for 365 days",
   "sub.bestValue": "Best value",
@@ -176,5 +176,8 @@
   "sub.backToApp": "Open the library",
   "sub.errAuth": "Your session expired. Please try again.",
   "sub.errRate": "Too many attempts. Please try again in a moment.",
-  "sub.errGeneric": "Could not start checkout. Please try again."
+  "sub.errGeneric": "Could not start checkout. Please try again.",
+  "sub.noteExtend": "Days are added to your remaining time — you can renew early.",
+  "sub.noteSupport": "Payment issues? Contact us:",
+  "auth.getPro": "Get PRO"
 }

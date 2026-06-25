@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro'
+import FeatureList from '../../components/FeatureList.astro'
 import SubscribeApp from '../../components/vue/SubscribeApp.vue'
 import { useT, type Lang } from '../../i18n/ui'
 import { UI_LOCALE_CODES } from '../../i18n/locales.data.mjs'
@@ -12,5 +13,17 @@ const lang = Astro.params.lang as Lang
 const t = useT(lang)
 ---
 <BaseLayout lang={lang} path="/subscribe" noindex title={`${t('sub.title')} — ${t('hero.title')}`} description={t('sub.lead')}>
-  <SubscribeApp client:load lang={lang} />
+  <div class="relative overflow-hidden border-b-2 border-line">
+    <img
+      src="/pro-bg.jpg"
+      alt=""
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+    />
+    <div class="absolute inset-0 bg-cream/55"></div>
+    <div class="relative z-10">
+      <SubscribeApp client:load lang={lang} />
+    </div>
+  </div>
+  <FeatureList lang={lang} hideHeader />
 </BaseLayout>

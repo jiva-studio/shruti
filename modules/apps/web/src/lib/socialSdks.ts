@@ -46,9 +46,12 @@ export async function renderGoogleButton(
   el: HTMLElement,
   clientId: string,
   onCredential: (idToken: string) => void,
-  opts?: { locale?: string },
+  opts?: { locale?: string; width?: number },
 ): Promise<void> {
-  await loadScript(GIS_SRC)
+  // Force the button language via the script's ?hl= — GIS picks the browser
+  // UI language otherwise and ignores the renderButton `locale` field, which
+  // is why an /en page could show a Serbian button.
+  await loadScript(opts?.locale ? `${GIS_SRC}?hl=${encodeURIComponent(opts.locale)}` : GIS_SRC)
   const id = gis()
   if (!id) return
   id.initialize({
@@ -58,6 +61,11 @@ export async function renderGoogleButton(
       if (resp.credential) onCredential(resp.credential)
     },
   })
+  // GIS clamps width to [200, 400]. Pick an explicit width that fits the
+  // host container (a narrow nav popover vs a wide card) so the rendered
+  // iframe never overflows its parent.
+  const want = opts?.width ?? el.clientWidth ?? 240
+  const width = Math.max(200, Math.min(want, 400))
   id.renderButton(el, {
     type: 'standard',
     theme: 'outline',
@@ -66,7 +74,7 @@ export async function renderGoogleButton(
     text: 'signin_with',
     logo_alignment: 'center',
     locale: opts?.locale,
-    width: Math.min(el.clientWidth || 280, 360),
+    width,
   })
 }
 
