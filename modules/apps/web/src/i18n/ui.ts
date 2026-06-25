@@ -31,6 +31,9 @@ export const ui = {
 
     'features.title': 'Возможности',
     'features.lead': 'Всё, чтобы изучать писания каждый день — слушать, читать и возвращаться к самому важному.',
+
+    'wisdom.title': 'Ежедневная мудрость',
+    'wisdom.lead': 'Короткие фрагменты из лекций о душе, вечности и смысле жизни — новая мудрость каждый день.',
     'feature.library.t': 'Большая библиотека лекций',
     'feature.library.d': 'Тысячи лекций по «Бхагавад-гите», «Шримад-Бхагаватам» и другим ведическим писаниям. Полнотекстовый каталог с фильтрами по автору, месту, источнику, тегу и языку — всё под рукой, слушайте по дороге, на прогулке или дома.',
     'feature.transcript.t': 'Текст рядом с аудио',
@@ -149,6 +152,9 @@ export const ui = {
 
     'features.title': 'Features',
     'features.lead': 'Everything you need to study the scriptures every day — listen, read, and return to what matters.',
+
+    'wisdom.title': 'Daily wisdom',
+    'wisdom.lead': 'Short fragments from the lectures on the soul, eternity, and the meaning of life — a new piece of wisdom every day.',
     'feature.library.t': 'A large library of lectures',
     'feature.library.d': 'Thousands of lectures on the Bhagavad-gita, Srimad-Bhagavatam and other Vedic scriptures. A full-text catalog with filters by author, place, source, tag and language — always at hand.',
     'feature.transcript.t': 'Text alongside the audio',
