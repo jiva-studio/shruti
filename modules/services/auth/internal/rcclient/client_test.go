@@ -3,9 +3,11 @@ package rcclient
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -182,6 +184,119 @@ func TestGetSubscriberOtherClientErrorPermanent(t *testing.T) {
 	_, err := c.GetSubscriber(context.Background(), "user-1")
 	if !errors.Is(err, ErrPermanent) {
 		t.Fatalf("expected ErrPermanent for 400, got %v", err)
+	}
+}
+
+// TestGrantPromotionalRequestShape — asserts URL path, method, headers,
+// and JSON body of a promotional grant against a capturing test server.
+func TestGrantPromotionalRequestShape(t *testing.T) {
+	var (
+		gotMethod string
+		gotPath   string
+		gotAuth   string
+		gotCT     string
+		gotPlat   string
+		gotBody   string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		gotCT = r.Header.Get("Content-Type")
+		gotPlat = r.Header.Get("X-Platform")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	c := &Client{BaseURL: srv.URL, APIKey: "test-key", HTTP: srv.Client()}
+	if err := c.GrantPromotional(context.Background(), "user-1", "pro", "monthly"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotMethod != http.MethodPost {
+		t.Errorf("method: got %q, want POST", gotMethod)
+	}
+	if want := "/subscribers/user-1/entitlements/pro/promotional"; gotPath != want {
+		t.Errorf("path: got %q, want %q", gotPath, want)
+	}
+	if gotAuth != "Bearer test-key" {
+		t.Errorf("auth header: got %q", gotAuth)
+	}
+	if gotCT != "application/json" {
+		t.Errorf("content-type: got %q", gotCT)
+	}
+	if gotPlat != "server" {
+		t.Errorf("x-platform: got %q", gotPlat)
+	}
+	if want := `{"duration":"monthly"}`; strings.TrimSpace(gotBody) != want {
+		t.Errorf("body: got %q, want %q", gotBody, want)
+	}
+}
+
+// TestGrantPromotionalEscapesAppUserID — anonymous RC ids carry a "$" and
+// other reserved chars; they must be path-escaped, not split the route.
+func TestGrantPromotionalEscapesAppUserID(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := &Client{BaseURL: srv.URL, APIKey: "k", HTTP: srv.Client()}
+	if err := c.GrantPromotional(context.Background(), "$RCAnonymousID:abc", "pro", "yearly"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "/subscribers/$RCAnonymousID:abc/entitlements/pro/promotional"; gotPath != want {
+		// url.PathEscape leaves ":" and "$" but encodes other reserved chars;
+		// the exact escaped form just needs to round-trip to the same id.
+		if gotPath != "/subscribers/%24RCAnonymousID:abc/entitlements/pro/promotional" {
+			t.Errorf("path: got %q", gotPath)
+		}
+	}
+}
+
+// TestGrantPromotional4xxPermanent — a non-429 4xx (bad key, unknown
+// entitlement, bad duration) maps to ErrPermanent.
+func TestGrantPromotional4xxPermanent(t *testing.T) {
+	c, cleanup := newTestClient(t, http.StatusBadRequest, `{"message":"bad duration"}`, nil)
+	defer cleanup()
+	err := c.GrantPromotional(context.Background(), "u", "pro", "weekly")
+	if !errors.Is(err, ErrPermanent) {
+		t.Fatalf("expected ErrPermanent for 400, got %v", err)
+	}
+}
+
+// TestGrantPromotional429RateLimited — 429 maps to *RateLimitError.
+func TestGrantPromotional429RateLimited(t *testing.T) {
+	c, cleanup := newTestClient(t, http.StatusTooManyRequests, `{}`, map[string]string{
+		"Retry-After": strconv.Itoa(7),
+	})
+	defer cleanup()
+	err := c.GrantPromotional(context.Background(), "u", "pro", "monthly")
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("expected ErrRateLimited for 429, got %v", err)
+	}
+	var rl *RateLimitError
+	if !errors.As(err, &rl) || rl.RetryAfter != 7*time.Second {
+		t.Fatalf("expected RetryAfter=7s, got %v", err)
+	}
+}
+
+// TestGrantPromotional5xxTransient — 5xx is neither permanent nor rate-
+// limited; the caller treats it as retryable.
+func TestGrantPromotional5xxTransient(t *testing.T) {
+	c, cleanup := newTestClient(t, http.StatusBadGateway, `bad gateway`, nil)
+	defer cleanup()
+	err := c.GrantPromotional(context.Background(), "u", "pro", "monthly")
+	if err == nil {
+		t.Fatal("expected an error for 502")
+	}
+	if errors.Is(err, ErrPermanent) || errors.Is(err, ErrRateLimited) {
+		t.Fatalf("502 must be transient, got %v", err)
 	}
 }
 

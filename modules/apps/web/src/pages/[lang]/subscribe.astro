@@ -1,0 +1,16 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import SubscribeApp from '../../components/vue/SubscribeApp.vue'
+import { useT, type Lang } from '../../i18n/ui'
+import { UI_LOCALE_CODES } from '../../i18n/locales.data.mjs'
+
+export function getStaticPaths() {
+  return UI_LOCALE_CODES.map((lang) => ({ params: { lang } }))
+}
+
+const lang = Astro.params.lang as Lang
+const t = useT(lang)
+---
+<BaseLayout lang={lang} path="/subscribe" noindex title={`${t('sub.title')} — ${t('hero.title')}`} description={t('sub.lead')}>
+  <SubscribeApp client:load lang={lang} />
+</BaseLayout>
