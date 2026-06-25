@@ -111,6 +111,29 @@ _DEFAULT_RETRIEVAL_LANG = "en"
 # one is available, falling back to this literal otherwise.
 _PROBE_FAILURE_FALLBACK_LANGS = ("en", "ru")
 
+# Locale → content-language reduction map. The Python mirror of the client
+# policy in modules/libs/domain/services/contentLanguage.ts. The UI ships in
+# many locales but the corpus carries only a few content languages (today en,
+# ru); this map sends each supported UI locale's base subtag to the content
+# language it reads in. To extend, add a row (a new East-Slavic UI locale →
+# "ru", or a brand-new corpus language → itself) and mirror it on the TS side
+# so chat, proactive prompts and the website agree. Any locale not in the map
+# falls back to `_DEFAULT_CONTENT_LANG`.
+_DEFAULT_CONTENT_LANG = "en"
+_LOCALE_CONTENT_LANG: dict[str, str] = {
+    "en": "en",
+    "ru": "ru",
+    "uk": "ru",
+}
+
+
+def reduce_locale_to_content_lang(locale: str) -> str:
+    """Base content language a UI locale reduces to, ignoring corpus
+    availability — the Python twin of `reduceLocaleToContentLanguage`.
+    `uk`/`uk_UA`/`ru-RU` → `ru`; `sr-Latn`/`en-US`/unknown → `en`."""
+    base = (locale or "").lower().replace("_", "-").split("-", 1)[0]
+    return _LOCALE_CONTENT_LANG.get(base, _DEFAULT_CONTENT_LANG)
+
 
 def _fallback_corpus_langs() -> list[str]:
     """Best-effort static corpus-language set for a probe FAILURE. Prefers
@@ -134,12 +157,18 @@ def clamp_retrieval_lang(answer_lang: str, corpus_langs: list[str]) -> str:
 
     Retrieval is strictly single-language and index-bound, so it must run
     in a real corpus language. If the corpus has `answer_lang`, retrieve in
-    it (ru→ru, en→en — regression-safe); otherwise clamp to English so the
-    user gets the English source rather than empty results / a seq scan.
-    The answer prose stays in `answer_lang` regardless.
+    it (ru→ru, en→en — regression-safe). Otherwise reduce the locale to a
+    content language the same way the client does (`uk`→`ru`, everyone else
+    →`en`) and use it when the corpus offers it — so a Ukrainian turn cites
+    the Russian purport, matching the website and proactive prompts instead
+    of dropping to English. Only when even the reduced language is absent do
+    we clamp to English. The answer prose stays in `answer_lang` regardless.
     """
     if answer_lang and answer_lang in corpus_langs:
         return answer_lang
+    reduced = reduce_locale_to_content_lang(answer_lang)
+    if reduced in corpus_langs:
+        return reduced
     return _DEFAULT_RETRIEVAL_LANG
 
 
