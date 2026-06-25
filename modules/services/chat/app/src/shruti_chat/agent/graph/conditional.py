@@ -5,7 +5,8 @@ Centralised routing matrix:
   direct_chat            → synthesizer        (no tools)
   unknown / default      → research_worker    → synthesizer  (light grounding, #39)
   help                   → help_worker        → synthesizer
-  find_track             → catalog_worker     → synthesizer
+  find_track             → find_tracks_worker → END  (semantic + metadata, no synth)
+                        OR catalog_worker     → synthesizer  (history_ref only)
   recommend              → recommend_worker   → synthesizer      (no LLM loop)
   research               → research_worker    → synthesizer
   create_action          → action_worker      → synthesizer      (short path)
@@ -96,6 +97,21 @@ def _is_recent_ref(state: ChatState) -> bool:
     return bool(args.get("recent_ref"))
 
 
+def _is_history_ref(state: ChatState) -> bool:
+    """True when the user asks for their own listening history by TIME
+    WINDOW — «что я слушал на этой неделе / вчера», "what I listened to this
+    week". The router sets the `history_ref` flag in `extracted_args`.
+
+    This is a PERSONAL query over `user_context` (resolved by the catalog
+    worker's `user_tracks_list(since=…, until=…)`), NOT a corpus search.
+    Routing it to the semantic `find_tracks_worker` would blind-search the
+    corpus for the phrase "что я слушал" and return junk — the user's own
+    listen-log is not in the corpus index.
+    """
+    args = state.get("extracted_args") or {}
+    return bool(args.get("history_ref"))
+
+
 def _is_current_ref(state: ChatState) -> bool:
     """True when the user deictically points at the lecture they are
     CURRENTLY playing — «перескажи / о чём эта / текущая лекция»,
@@ -134,7 +150,17 @@ def route_after_router(state: ChatState) -> str:
     if intent == "help":
         return "help_worker"
     if intent == "find_track":
-        return "catalog_worker"
+        # Listening history by time window («что я слушал на этой неделе») is a
+        # PERSONAL query over user_context (user_tracks_list), not a corpus
+        # search — keep it on the catalog worker so it isn't broken by the
+        # semantic worker. Deictic personal recap («перескажи последнюю/текущую»)
+        # is `research` (recent_ref/current_ref), handled in that branch below.
+        if _is_history_ref(state):
+            return "catalog_worker"
+        # Otherwise: one worker, two search directions — semantic (topic) +
+        # metadata filters — returning lecture cards each with a verbatim
+        # why-quote.
+        return "find_tracks_worker"
     if intent == "recommend":
         # Deterministic topic-affinity recommender — no LLM ReAct loop.
         return "recommend_worker"

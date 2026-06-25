@@ -73,8 +73,20 @@ def test_help_goes_to_help_worker() -> None:
     assert route_after_router({"intent": "help"}) == "help_worker"
 
 
-def test_find_track_goes_to_catalog_worker() -> None:
-    assert route_after_router({"intent": "find_track"}) == "catalog_worker"
+def test_find_track_goes_to_find_tracks_worker() -> None:
+    # find_track now means "search for the lectures themselves" (semantic +
+    # metadata) → the deterministic find_tracks_worker, not catalog_worker.
+    assert route_after_router({"intent": "find_track"}) == "find_tracks_worker"
+
+
+def test_find_track_history_ref_stays_on_catalog_worker() -> None:
+    # Listening history by time window («что я слушал на этой неделе») is a
+    # personal user_tracks_list query, not a corpus search — it must NOT reach
+    # the semantic worker, which would return junk.
+    assert (
+        route_after_router({"intent": "find_track", "extracted_args": {"history_ref": True}})
+        == "catalog_worker"
+    )
 
 
 def test_research_goes_to_research_worker() -> None:
