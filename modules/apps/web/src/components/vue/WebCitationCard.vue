@@ -3,6 +3,10 @@
     :caption="caption"
     :body="body"
     :body-html="bodyHtml"
+    :track-title="body?.trackTitle"
+    :author-name="body?.authorName"
+    :track-date="body?.trackDate"
+    :reference="reference"
     :is-mt="isMt"
     :show-original="showOriginal"
     :language="language"
@@ -37,6 +41,7 @@ const props = defineProps<{
 }>()
 
 const snippet = computed(() => props.body ?? null)
+const reference = computed(() => props.body?.references?.[0]?.label)
 const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
 const bodyHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 
