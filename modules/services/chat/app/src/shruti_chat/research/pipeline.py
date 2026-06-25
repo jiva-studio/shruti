@@ -123,7 +123,7 @@ _DEFAULT_CONTENT_LANG = "en"
 _LOCALE_CONTENT_LANG: dict[str, str] = {
     "en": "en",
     "ru": "ru",
-    "uk": "ru",  # East-Slavic → Russian (mirrors TS RUSSIAN_REDUCED_LOCALES)
+    "uk": "ru",
 }
 
 
