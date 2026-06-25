@@ -2,7 +2,6 @@
 import { ref, nextTick, watch } from 'vue'
 import { STORE, useT } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
-import WebAuthBar from './WebAuthBar.vue'
 // REAL reused component (decoupled: status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
 import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
@@ -96,8 +95,6 @@ function statusLabelFor(m: Msg): string {
       <h2 class="font-serif text-lg font-bold text-ink">{{ L.title }}</h2>
       <p class="text-xs text-medium">{{ L.sub }}</p>
     </header>
-
-    <WebAuthBar :lang="props.lang" class="shrink-0 border-b border-line/60" />
 
     <div ref="scroller" class="app-scroll flex-1 space-y-5 overflow-y-auto px-5 py-5">
       <template v-if="!messages.length">

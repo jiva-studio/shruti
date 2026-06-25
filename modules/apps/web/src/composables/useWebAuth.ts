@@ -25,6 +25,10 @@ export interface WebAuth {
   ready: Ref<boolean>
   signedIn: ComputedRef<boolean>
   isPro: ComputedRef<boolean>
+  // Read the persisted session from storage without any network call —
+  // lets a site-wide nav button show the signed-in state without minting a
+  // throwaway anon on every page view (chat bootstraps anon lazily on send).
+  hydrate: () => void
   // ChatAuth-compatible surface consumed by useChatStream.
   getToken: () => string | null
   ensureToken: () => Promise<string>
@@ -313,6 +317,7 @@ export function useWebAuth(config?: WebAuthConfig): WebAuth {
     ready,
     signedIn: computed(() => !!session.value && !session.value.anonymous),
     isPro: computed(() => session.value?.tier === 'pro'),
+    hydrate: () => init(),
     getToken: () => stored?.accessToken ?? null,
     ensureToken,
     // On a chat 401 we expire the cached access token so the next
