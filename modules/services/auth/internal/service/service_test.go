@@ -140,6 +140,7 @@ func boot(t *testing.T) (*Service, *stubVerifier) {
 		Users:          &store.UserRepo{Pool: pool},
 		Identities:     &store.IdentityRepo{Pool: pool},
 		RefreshTokens:  &store.RefreshTokenRepo{Pool: pool},
+		WebhookEvents:  &store.WebhookEventRepo{Pool: pool},
 		Signer:         signer,
 		Verifier:       verifier,
 		GoogleVerifier: stub,

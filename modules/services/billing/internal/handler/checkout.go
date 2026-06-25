@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	logpkg "github.com/akdasa-studios/lectorium/billing/internal/logging"
 	"github.com/akdasa-studios/lectorium/billing/internal/orders"
@@ -14,6 +15,27 @@ import (
 
 type checkoutRequest struct {
 	Plan string `json:"plan"`
+	// ReturnPath is the site-relative, locale-correct success path the web
+	// app wants the user redirected back to (e.g. "/en/subscribe/success").
+	// Validated against an allowlist to avoid turning Paymento's ReturnUrl
+	// into an open redirect; falls back to the default when absent/invalid.
+	ReturnPath string `json:"returnPath"`
+}
+
+// safeReturnPath accepts only a site-relative ".../subscribe/success" path
+// (single leading slash, no scheme/host) so a caller can't smuggle an
+// off-site ReturnUrl. Returns "" when the path is not acceptable.
+func safeReturnPath(p string) string {
+	if len(p) < 2 || p[0] != '/' || strings.HasPrefix(p, "//") {
+		return ""
+	}
+	if strings.ContainsAny(p, " \t\r\n") || strings.Contains(p, "..") {
+		return ""
+	}
+	if !strings.HasSuffix(p, "/subscribe/success") {
+		return ""
+	}
+	return p
 }
 
 // checkout starts a Paymento payment for a signed-in user.
@@ -70,7 +92,11 @@ func (h *BillingHandler) checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	returnURL := h.PublicBaseURL + "/subscribe/success?order=" + order.ID.String()
+	successPath := "/subscribe/success"
+	if p := safeReturnPath(req.ReturnPath); p != "" {
+		successPath = p
+	}
+	returnURL := h.PublicBaseURL + successPath + "?order=" + order.ID.String()
 	token, err := h.Paymento.CreatePayment(ctx,
 		dollars(amountCents), "USD", returnURL, order.ID.String(),
 		map[string]string{"userId": userID.String(), "plan": req.Plan}, "")
