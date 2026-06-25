@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/akdasa-studios/shruti/auth/internal/rcclient"
 	"github.com/akdasa-studios/shruti/auth/internal/store"
@@ -372,3 +375,93 @@ func TestConcurrentApplySerialised(t *testing.T) {
 	}
 }
 
+
+// fakeGranter is a DB-free RCGranter for GrantAndApply tests: it records
+// the grant call and returns a canned subscriber on refetch.
+type fakeGranter struct {
+	grantAppUserID string
+	grantEnt       string
+	grantDuration  string
+	grantErr       error
+	resp           *rcclient.SubscriberResponse
+	getErr         error
+}
+
+func (f *fakeGranter) GrantPromotional(_ context.Context, appUserID, entitlementID, duration string) error {
+	f.grantAppUserID = appUserID
+	f.grantEnt = entitlementID
+	f.grantDuration = duration
+	return f.grantErr
+}
+
+func (f *fakeGranter) GetSubscriber(_ context.Context, _ string) (*rcclient.SubscriberResponse, error) {
+	return f.resp, f.getErr
+}
+
+// TestGrantAndApplyMakesUserPro — the happy path: bind rc_app_user_id,
+// grant the promotional entitlement, refetch + apply so tier=pro lands in
+// auth.users immediately (RC doesn't webhook promo grants).
+func TestGrantAndApplyMakesUserPro(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	first, err := svc.Anonymous(ctx, "dev-grant", "")
+	if err != nil {
+		t.Fatalf("anon: %v", err)
+	}
+	userID := first.UserID
+
+	future := time.Now().UTC().Add(30 * 24 * time.Hour)
+	g := &fakeGranter{
+		resp: &rcclient.SubscriberResponse{
+			Subscriber: &rcclient.Subscriber{
+				OriginalAppUserID: userID.String(),
+				Entitlements: map[string]rcclient.Entitlement{
+					"pro": {ExpiresDate: ptr(future)},
+				},
+			},
+		},
+	}
+	svc.RC = g
+	svc.RCProEntitlement = "pro"
+
+	if err := svc.GrantAndApply(ctx, userID, "monthly"); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+
+	if g.grantAppUserID != userID.String() {
+		t.Errorf("grant app_user_id: got %q, want %q", g.grantAppUserID, userID.String())
+	}
+	if g.grantEnt != "pro" || g.grantDuration != "monthly" {
+		t.Errorf("grant args: ent=%q duration=%q", g.grantEnt, g.grantDuration)
+	}
+
+	u, err := svc.Users.Get(ctx, userID)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if u.Tier != TierPro {
+		t.Errorf("tier: got %q, want pro", u.Tier)
+	}
+	if u.RCAppUserID == nil || *u.RCAppUserID != userID.String() {
+		t.Errorf("rc_app_user_id must be bound, got %v", u.RCAppUserID)
+	}
+}
+
+// TestGrantAndApplyUnknownUser — a userID with no auth.users row returns
+// ErrGrantUserNotFound (handler maps to 404) and never calls RC.
+func TestGrantAndApplyUnknownUser(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	g := &fakeGranter{}
+	svc.RC = g
+	svc.RCProEntitlement = "pro"
+
+	if err := svc.GrantAndApply(ctx, uuid.New(), "yearly"); !errors.Is(err, ErrGrantUserNotFound) {
+		t.Fatalf("want ErrGrantUserNotFound, got %v", err)
+	}
+	if g.grantAppUserID != "" {
+		t.Errorf("RC must not be called for unknown user, got grant %q", g.grantAppUserID)
+	}
+}

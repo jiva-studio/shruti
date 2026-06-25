@@ -113,6 +113,10 @@ func main() {
 	hasWebhookSecret := cfg.RCWebhookSecretPrimary != "" || cfg.RCWebhookSecretSecondary != ""
 	if hasWebhookSecret && cfg.RCRestAPIKey != "" {
 		rc := rcclient.New(cfg.RCRestAPIKey)
+		// Same RC client backs both the webhook refetch and the internal
+		// promotional-grant endpoint.
+		svc.RC = rc
+		svc.RCProEntitlement = cfg.RCProEntitlement
 		root = handler.AttachRCWebhook(root, &handler.RCWebhookHandler{
 			SecretPrimary:   cfg.RCWebhookSecretPrimary,
 			SecretSecondary: cfg.RCWebhookSecretSecondary,
@@ -140,6 +144,20 @@ func main() {
 			"secondary_set", cfg.RCWebhookSecretSecondary != "")
 	} else {
 		slog.Info("rc_webhook_disabled", "reason", "RC_WEBHOOK_SECRET_PRIMARY/SECONDARY or RC_REST_API_KEY unset")
+	}
+
+	// Internal promotional-grant endpoint. Needs both the shared token and
+	// an RC client (svc.RC, set only when RC creds are configured above) —
+	// without RC there's nothing to grant against. Disabled by default so
+	// the route 404s unless an operator opts in.
+	if cfg.InternalAPIToken != "" && svc.RC != nil {
+		root = handler.AttachInternalGrant(root, &handler.InternalGrantHandler{
+			Token: cfg.InternalAPIToken,
+			Svc:   svc,
+		})
+		slog.Info("internal_grant_enabled")
+	} else {
+		slog.Info("internal_grant_disabled", "reason", "INTERNAL_API_TOKEN unset or RC client not configured")
 	}
 
 	srv := &http.Server{

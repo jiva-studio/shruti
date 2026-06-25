@@ -80,6 +80,20 @@ func AttachRCWebhook(r http.Handler, h *RCWebhookHandler) http.Handler {
 	return chiR
 }
 
+// AttachInternalGrant adds the internal subscription-grant endpoint to an
+// existing router. Called from main.go only when INTERNAL_API_TOKEN is set,
+// so the route is absent (chi returns 404) when the feature is disabled —
+// it must not be reachable by default. Auth is the X-Internal-Token shared
+// secret, not a user JWT, so the endpoint lives outside /auth/*.
+func AttachInternalGrant(r http.Handler, h *InternalGrantHandler) http.Handler {
+	chiR, ok := r.(chi.Router)
+	if !ok {
+		return r
+	}
+	chiR.Post("/internal/subscription/grant", h.ServeHTTP)
+	return chiR
+}
+
 // buildSHA / buildTime — populated by the image build (Dockerfile ARGs
 // → ENVs). Empty in local-dev binaries; operators hit /healthz post-
 // deploy to confirm Watchtower rolled the new image.
