@@ -29,7 +29,6 @@
         <IonButton fill="clear" class="act share-btn" @click="onShare">
           <IconShare slot="start" :size="18" />
           {{ t("search.actions.share") }}
-          <span v-if="!isSubscribed" class="pro">PRO</span>
         </IonButton>
         <IonButton
           class="act add-btn"
@@ -66,8 +65,6 @@ import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useShareTrack } from "@lectorium/composables/useShareTrack.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
-import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
-import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
@@ -81,8 +78,6 @@ const appLanguage = useAppLanguage()
 const libraryLanguages = useLibraryLanguages()
 const sheet = useTrackSheetStore()
 const dictionaries = useDictionariesStore()
-const purchases = usePurchasesStore()
-const paywall = usePaywallStore()
 const overlays = useOverlaysStore()
 const downloads = useDownloadStore()
 const playlist = usePlaylistStore()
@@ -94,7 +89,6 @@ const authorEntity = ref<Author | null>(null)
 const selectedLanguage = ref<LanguageCode | null>(null)
 
 const open = computed(() => sheet.trackId !== null)
-const isSubscribed = computed(() => purchases.isSubscribed)
 // A failed/stuck download turns the primary button into a "Download again"
 // retry — the row no longer retries on tap, so the sheet is where the user
 // recovers from a download error.
@@ -224,13 +218,7 @@ function onDownloadAgain(): void {
 function onShare(): void {
   const id = sheet.trackId
   if (!id) return
-  // Pro feature — non-subscribers get the paywall; subscribers get the
-  // per-format share menu (PDF / text / audio).
-  if (!purchases.isSubscribed) {
-    sheet.close()
-    paywall.requestOpen("shareTranscript")
-    return
-  }
+  // Sharing is free; only the PDF export inside the menu is Pro-gated.
   void presentShareMenu(id)
 }
 </script>
@@ -359,19 +347,6 @@ function onShare(): void {
   --background: var(--ion-color-step-100, rgba(0, 0, 0, 0.05));
   --background-hover: var(--ion-color-step-150, rgba(0, 0, 0, 0.08));
   --color: var(--ion-color-medium, #777);
-}
-
-.pro {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  background: var(--ion-color-warning, #ffc409);
-  color: #1f1300;
 }
 </style>
 

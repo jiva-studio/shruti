@@ -30,6 +30,8 @@ export default {
   },
   share: {
     title: "Condividi",
+    link: "Link alla conferenza",
+    dialogLink: "Condividi link",
     pdf: "Trascrizione (PDF)",
     text: "Trascrizione (testo)",
     audio: "Audio",
