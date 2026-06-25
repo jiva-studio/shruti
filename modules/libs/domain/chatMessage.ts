@@ -76,6 +76,9 @@ export interface ChatSharePdfItemPayload {
 export interface ChatOutlinePayload {
   readonly trackId: string
   readonly items: readonly { readonly startMs: number; readonly title: string }[]
+  /** Lecture title for the card header, resolved server-side for clients with
+   *  no local catalog (web). Mobile resolves it from its on-device DB. */
+  readonly trackTitle?: string
 }
 
 /**
@@ -142,6 +145,25 @@ export interface ChatCiteSnippet {
   readonly mt?: boolean
   /** Verbatim source-language transcript, present only when `mt` is true. */
   readonly textOriginal?: string
+  /** Display attribution, resolved server-side in the answer language for
+   *  clients that hold no local catalog (web). Mobile leaves these unset and
+   *  resolves the same fields from its on-device DB. All optional so older
+   *  servers / persisted messages without them still typecheck. */
+  readonly trackTitle?: string
+  readonly authorName?: string
+  /** Lecture date, e.g. "1972-08-14". */
+  readonly trackDate?: string
+  /** Source references; the client renders the first `label` for now. */
+  readonly references?: readonly ChatCiteReference[]
+}
+
+/** One source reference on a cite snippet. `label` is pre-formatted by the
+ *  server as the client shows it (e.g. "ŚB 1.2.3") — the consumer never
+ *  touches a sources dictionary. */
+export interface ChatCiteReference {
+  readonly sourceId: string
+  readonly tokens: string | null
+  readonly label: string
 }
 
 /**

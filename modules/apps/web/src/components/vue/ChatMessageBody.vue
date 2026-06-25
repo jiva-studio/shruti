@@ -151,6 +151,7 @@ const getAppLabel = computed(() =>
           v-if="outlineBody(tk)"
           :track-id="tk.trackId"
           :items="outlineBody(tk).items"
+          :track-title="outlineBody(tk).trackTitle"
           @open-lecture="() => {}"
         >
           <template #more="{ n }">+{{ n }}</template>
