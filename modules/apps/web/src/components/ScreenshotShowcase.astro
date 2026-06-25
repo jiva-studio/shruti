@@ -34,7 +34,7 @@ const slides = shots.map(([file, title, desc]) => ({
   />
   <div class="relative z-10">
     <div class="mx-auto mb-10 max-w-2xl px-5 text-center">
-      <h2 class="text-3xl font-bold text-ink sm:text-4xl">{lang === 'en' ? 'A look inside' : 'Как выглядит приложение'}</h2>
+      <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('gallery.heading' as UiKey)}</h2>
     </div>
     <ScreenshotGallery slides={slides} />
   </div>

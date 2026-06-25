@@ -13,7 +13,7 @@ const t = useT(lang)
 const chatHref = `/${lang}/app`
 
 const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
-const siteName = lang === 'en' ? 'Shruti' : 'Слушай Садху'
+const siteName = t('site.name')
 const homeLd = {
   '@context': 'https://schema.org',
   '@graph': [
