@@ -58,6 +58,61 @@ func RCResponseMalformedTotal() int64 {
 	return rcResponseMalformedTotal.Load()
 }
 
+// ErrGrantUserNotFound is returned by GrantAndApply when no auth.users
+// row owns the given userID. The handler maps it to 404.
+var ErrGrantUserNotFound = errors.New("grant: user not found")
+
+// GrantAndApply grants a RevenueCat *promotional* "pro" entitlement to the
+// user and immediately reflects it as tier=pro. RC does NOT fire a webhook
+// on a promotional grant, so we refetch + apply right away instead of
+// waiting for one — the reconcile cron is only a slow backstop.
+//
+// Steps:
+//  1. Ensure rc_app_user_id is bound to userID.String() (idempotent;
+//     BindRCAppUserID only writes when the column is NULL).
+//  2. Grant the promotional entitlement on that RC app_user_id.
+//  3. Refetch the subscriber + apply the resulting snapshot under a
+//     synthetic event_id so tier=pro lands in auth.users now.
+//
+// `duration` is an RC promotional-duration token: "monthly" or "yearly".
+func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration string) error {
+	u, err := s.Users.Get(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if u == nil {
+		return ErrGrantUserNotFound
+	}
+
+	appUserID := userID.String()
+	// Bind the RC app_user_id if it hasn't been set yet (e.g. the user
+	// never completed a social signin). No-op once bound.
+	if err := s.Users.BindRCAppUserID(ctx, nil, userID, appUserID); err != nil {
+		return fmt.Errorf("grant: bind rc: %w", err)
+	}
+
+	entitlement := s.RCProEntitlement
+	if entitlement == "" {
+		entitlement = TierPro
+	}
+	if err := s.RC.GrantPromotional(ctx, appUserID, entitlement, duration); err != nil {
+		return fmt.Errorf("grant: %w", err)
+	}
+
+	// RC doesn't webhook promo grants → refetch + apply now so tier=pro
+	// is visible immediately rather than after the next reconcile tick.
+	resp, err := s.RC.GetSubscriber(ctx, appUserID)
+	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
+		return fmt.Errorf("grant: refetch: %w", err)
+	}
+	snap := SnapshotFromRCResponse(appUserID, resp, time.Now().UTC())
+	eventID := fmt.Sprintf("billing-grant:%s:%s:%d", userID, duration, time.Now().Unix())
+	if _, _, err := s.ApplyRCSubscriberState(ctx, eventID, snap); err != nil {
+		return fmt.Errorf("grant: apply: %w", err)
+	}
+	return nil
+}
+
 // SnapshotFromRCResponse derives the durable tier state from a fresh
 // RC `GET /subscribers/{id}` body. Pro iff any entitlement is currently
 // active (ExpiresDate in the future OR nil for lifetime). tier_expires_at
