@@ -2,6 +2,9 @@
   "$comment": "Single source of truth for store publishing. Each key is an app UI locale (must be one of SUPPORTED_LOCALES in shruti/i18n/index.ts). Listing a locale here means we publish it; adding a language to the stores = add one entry (+ run translate-titles / translate-store-copy). Consumed by the screenshot pipeline (modules/tools/screenshots/config.ts) and fastlane (modules/apps/mobile/fastlane/Fastfile). Fields: play = Google Play locale code (null = not published on Play); appStore = App Store Connect locale code (null = store does not support this language, e.g. Serbian); capture = generate marketing screenshots; canonical = hand-authored copy that auto-translation must never overwrite.",
   "locales": {
     "en": { "play": "en-US", "appStore": "en-US", "capture": true, "canonical": true },
-    "ru": { "play": "ru-RU", "appStore": "ru", "capture": true, "canonical": true }
+    "ru": { "play": "ru-RU", "appStore": "ru", "capture": true, "canonical": true },
+    "uk": { "play": "uk", "appStore": "uk", "capture": true, "canonical": false },
+    "sr-Latn": { "play": "sr", "appStore": null, "capture": true, "canonical": false },
+    "sr-Cyrl": { "play": null, "appStore": null, "capture": true, "canonical": false }
   }
 }
