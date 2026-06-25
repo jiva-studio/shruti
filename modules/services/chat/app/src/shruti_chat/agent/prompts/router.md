@@ -17,12 +17,18 @@ Intents:
                  "what does the green dot mean".
   Personal-history asks like "что мне послушать" / "что я слушал" /
   "recommend me a lecture" route to `find_track`, not `help`.
-- research: ANY content search (lectures, verses, letters,
-  commentaries) — including semantic search of the user's listening
-  history when they remember a TOPIC ("про X") but not a date,
-  AND any "find more like this fragment / lecture" request when
-  there's a focused track/fragment in context (chunks_find_similar
-  is a research tool).
+- research: a question to be ANSWERED from the corpus — the user wants
+  synthesized prose (an explanation, retelling, or doctrinal answer),
+  with citations, NOT a list of lecture cards. Covers verses, letters,
+  commentaries and lectures as SOURCES for that answer, semantic search
+  of the user's listening history when they remember a TOPIC ("про X")
+  but not a date, AND any "find more like this fragment / lecture"
+  request when there's a focused track/fragment in context
+  (chunks_find_similar is a research tool).
+  BOUNDARY vs find_track: if the user asks to FIND / SHOW / СОБРАТЬ
+  lectures про X (wants the tracks themselves as cards) → find_track.
+  research is for «расскажи / объясни / что говорил про X», a doctrinal
+  question, or a retell — where the answer is prose, not a card list.
   A PHILOSOPHICAL / THEOLOGICAL / doctrinal question — about God, the
   soul (jīva), karma, reincarnation, the nature of reality, devotion,
   the material world, liberation, etc. — is ALWAYS research, even when
@@ -94,26 +100,44 @@ Intents:
                  "where in scripture is the Markandeya story",
                  "where is that found?",
                  "which verse mentions linux-client-kshema".
-- find_track: catalog lookup by metadata — title, source/verse
-  address, date, location, author, OR the user's listening history
-  by TIME WINDOW (this week, yesterday). **Playlist requests ("собери
-  плейлист", "make a playlist") also belong here** — the result is a
-  list of tracks; the client renders them as card-stack and offers a
-  save-as-playlist action separately.
-  Crucially: ANY "show / list / покажи / give me LECTURES" phrasing
-  is find_track even when paired with a verse address, because the
-  user wants a LIST OF TRACKS (rendered as `[^N]` cards), not
-  a semantic snippet inside one. The catalog worker has
-  `tracks_list(referenced_source_id=…)` for that case.
-  Examples (ru): "утренние прогулки 1976 Бомбей",
+- find_track: the user wants the LECTURES THEMSELVES — a ranked list of
+  lecture cards they can open, play, or add to a playlist — NOT a
+  synthesized answer. One worker searches two ways and the user need not
+  say which:
+  (a) by TOPIC / CONTENT — "найди лекцию(и) про X", "find lectures about
+      X", "где Прабхупада говорил о X". Semantic search over transcripts;
+      each card carries a verbatim why-it-matched quote.
+  (b) by METADATA — title, source/verse address, date, location, author
+      ("утренние прогулки 1976 Бомбей", "покажи лекции по БГ 2.13"). These
+      ride as filters on the same search.
+  The two combine freely ("лекции 1976 про преданность" = topic + year).
+  **Playlist requests ("собери плейлист", "make a playlist") also belong
+  here** — same list of tracks; the client offers save-as-playlist.
+  The TELL vs `research`: the user asks to FIND / SHOW / СОБРАТЬ
+  lectures (wants the tracks), not to EXPLAIN / RETELL a topic (wants
+  prose). "найди лекцию про очищение сердца" → find_track; "расскажи про
+  очищение сердца" → research. The verbs «найди/покажи/собери лекци(ю/и)»
+  win; «расскажи/объясни/что говорил про» go to research.
+  Listening history by TIME WINDOW ("что я слушал на этой неделе", "what I
+  listened to this week / yesterday") is also find_track, but you MUST set
+  `history_ref: true` — it points at the user's own listen-log, NOT the
+  corpus, so it is resolved against listening history (user_tracks_list),
+  not by semantic search.
+  Examples (ru) — history: "что я слушал на этой неделе",
+                 "какие лекции я слушал вчера".
+  Examples (en) — history: "what I listened to this week",
+                 "lectures I played yesterday".
+  Examples (ru): "найди лекцию где говорилось о важности очищения сердца",
+                 "найди лекции про преданное служение",
+                 "утренние прогулки 1976 Бомбей",
                  "покажи лекции по БГ 2.13",
                  "лекции по второй главе Гиты",
-                 "что я слушал на этой неделе",
                  "собери плейлист про карму".
-  Examples (en): "morning walks 1976 Bombay",
+  Examples (en): "find a lecture on the importance of cleansing the heart",
+                 "find lectures about devotional service",
+                 "morning walks 1976 Bombay",
                  "show lectures on SB 5.5.3",
                  "give me lectures about chapter 2",
-                 "what I listened to this week",
                  "build a playlist on bhakti".
 - recommend: the user wants a PERSONAL "what to listen to next" pick
   driven by their own listening history — NOT a named topic, author,
@@ -225,6 +249,12 @@ Extract structured args ONLY for fields you can identify from the query:
   downstream worker to recap the open `current_track_id` instead of
   searching the corpus. Do NOT set it when the user names a title, a
   topic, or their last/previous lecture (that's `recent_ref`).
+- history_ref (bool) — set `true` ONLY on a find_track query for the user's
+  own listening history by TIME WINDOW («что я слушал на этой неделе / вчера»,
+  "what I listened to this week"). Routes to the listening-history lookup
+  (user_tracks_list) instead of the semantic corpus search. Do NOT set it for
+  a topical/metadata lecture search (that's plain find_track) or a deictic
+  last/current lecture (those are `recent_ref` / `current_ref`).
 - action_kind (one of "pdf" | "reminder" | "smart_library" | "pro") —
   REQUIRED when intent=create_action. Pick by the trigger token:
   pdf/скачать/поделиться/download/share/export/print → "pdf";

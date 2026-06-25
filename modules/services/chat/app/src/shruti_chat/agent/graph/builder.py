@@ -31,6 +31,12 @@ doesn't need tracks (reminder / smart_library / pro) OR the user
 has a track anchored in context (current_track_ref / focus_ref) —
 see `conditional.route_after_router`.
 
+`find_track` routes to `find_tracks_worker` (not shown in the diagram
+above): a deterministic terminal that semantic-searches lectures, emits
+each card + verbatim why-quote itself, and goes straight to END — no
+synthesizer. The one exception is listening-history-by-time-window
+(`history_ref`), which stays on `catalog_worker` (user_tracks_list).
+
 `synthesis_planner` only sits in the research_worker → synthesizer
 arm because that's the only path that produces prose-grounding notes;
 catalog/action/help workers go straight to the synthesizer.
@@ -59,6 +65,7 @@ from shruti_chat.agent.graph.nodes import (
     action_worker_node,
     catalog_worker_node,
     corpus_fallback_node,
+    find_tracks_worker_node,
     help_worker_node,
     locate_worker_node,
     recommend_worker_node,
@@ -89,6 +96,7 @@ def build_chat_graph() -> Pregel:
     builder.add_node("research_worker", research_worker_node)
     builder.add_node("locate_worker", locate_worker_node)
     builder.add_node("catalog_worker", catalog_worker_node)
+    builder.add_node("find_tracks_worker", find_tracks_worker_node)
     builder.add_node("recommend_worker", recommend_worker_node)
     builder.add_node("action_worker", action_worker_node)
     builder.add_node("help_worker", help_worker_node)
@@ -106,6 +114,7 @@ def build_chat_graph() -> Pregel:
             "research_worker": "research_worker",
             "locate_worker": "locate_worker",
             "catalog_worker": "catalog_worker",
+            "find_tracks_worker": "find_tracks_worker",
             "recommend_worker": "recommend_worker",
             "action_worker": "action_worker",
             "help_worker": "help_worker",
@@ -151,6 +160,10 @@ def build_chat_graph() -> Pregel:
         },
     )
     builder.add_edge("action_responder", END)
+    # find_tracks_worker is a fully deterministic terminal: it retrieves
+    # lectures, force-emits each card + verbatim why-quote, and writes the
+    # global + per-lecture headers (the only LLM hop) itself — no synthesizer.
+    builder.add_edge("find_tracks_worker", END)
     # recommend_worker emits topic-affinity lecture cards (or a "listen first"
     # note) deterministically — straight to the synthesizer, which only phrases
     # the lead-in + follow-up chips. No synthesis_planner (these are list-tile

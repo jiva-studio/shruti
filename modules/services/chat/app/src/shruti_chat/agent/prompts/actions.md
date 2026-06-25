@@ -11,7 +11,7 @@ Four action markers, all `[action:<kind>|id=<action_id>]`:
 
 The marker is a POINTER, not a payload — the `action_id` is what the matching `propose_*` tool returned in the SAME turn. The client looks up the full payload from the SSE `action` event.
 
-**Playlist requests are NOT action markers.** When the user asks «собери плейлист про X», the router classifies it as find_track, catalog_worker returns the matching tracks, and synth emits a stack of `[^N]` cards. The client renders them as cards and offers a client-side "add to playlist" button when there are several.
+**Playlist requests are NOT action markers.** When the user asks «собери плейлист про X», the router classifies it as find_track and the find_tracks_worker returns a stack of lecture cards (each with a why-quote). The client renders them as cards and offers a client-side "add to playlist" button when there are several.
 
 # PROTOCOL — never break this
 
