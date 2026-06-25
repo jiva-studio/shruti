@@ -64,6 +64,7 @@
 import { ref, watch } from 'vue'
 import type { LectureIndexEntry } from '@lib/catalog/types.js'
 import { useT, type Lang } from '../../i18n/ui'
+import { contentLangFor } from '../../i18n/locales'
 import indexRaw from '../../data/lectures-index.json'
 import WebLectureRow from './WebLectureRow.vue'
 import SearchFilters from './SearchFilters.vue'
@@ -116,7 +117,7 @@ watch([debounced, selectedAuthors, selectedLocations, selectedLanguages, yearFro
 })
 
 function hrefFor(e: LectureIndexEntry): string {
-  return `/${props.lang}/app/${e.slug.replace(/^track_/, '')}`
+  return `/${contentLangFor(props.lang)}/app/${e.slug.replace(/^track_/, '')}`
 }
 
 function reset() {
