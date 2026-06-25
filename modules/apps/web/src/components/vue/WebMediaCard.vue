@@ -73,8 +73,10 @@ const transcriptText = computed<string>(() => {
   return showOriginal.value && p.textOriginal ? p.textOriginal : p.text
 })
 
-const fileUrl = computed<string>(() => props.payload?.url ?? '')
+const S3_BASE = 'https://cdn-s3.shruti.local'
+const resolve = (path: string): string => (/^https?:\/\//.test(path) ? path : `${S3_BASE}/${path}`)
+const fileUrl = computed<string>(() => (props.payload ? resolve(props.payload.url) : ''))
 const posterUrl = computed<string>(() =>
-  props.payload ? String(props.payload.url).replace(/\.[^./]+$/, '.jpg') : ''
+  props.payload ? resolve(String(props.payload.url).replace(/\.[^./]+$/, '.jpg')) : ''
 )
 </script>
