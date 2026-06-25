@@ -61,8 +61,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount, provide } from 'vue'
 import type { LectureIndexEntry, LectureRecord } from '@lib/catalog/types.js'
+import { OPEN_TRACK } from './injection'
 import WebLectureSearch from './WebLectureSearch.vue'
 import WebLecturePlayer from './WebLecturePlayer.vue'
 import ChatApp from './ChatApp.vue'
@@ -84,7 +85,19 @@ function shortSlug(slug: string): string {
 }
 
 const entryBySlug = new Map<string, LectureIndexEntry>()
-for (const e of indexRaw as unknown as LectureIndexEntry[]) entryBySlug.set(shortSlug(e.slug), e)
+const entryById = new Map<string, LectureIndexEntry>()
+for (const e of indexRaw as unknown as LectureIndexEntry[]) {
+  entryBySlug.set(shortSlug(e.slug), e)
+  entryById.set(e.id, e)
+}
+
+// In-chat track cards open the lecture in the left panel through the same
+// client-side select() — no page reload, the chat island stays mounted. A
+// track the static index doesn't carry (rare) is simply a no-op.
+provide(OPEN_TRACK, (trackId: string) => {
+  const entry = entryById.get(trackId)
+  if (entry) void select(entry, true)
+})
 
 // Lecture records are static files under public/data/lectures/, fetched on
 // demand for in-app navigation. NOT bundled via import.meta.glob — globbing
