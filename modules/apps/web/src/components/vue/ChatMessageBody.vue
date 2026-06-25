@@ -158,7 +158,8 @@ const getAppLabel = computed(() =>
         :body="commentaryBody(tk)"
       />
 
-      <!-- MEDIA: real MediaCard; payload.url is already absolute on web. -->
+      <!-- MEDIA: real MediaCard; WebMediaCard resolves the relative
+           bucket path (`public/media/<id>.mp4`) against the CDN base. -->
       <WebMediaCard
         v-else-if="tk.kind === 'media'"
         :payload="mediaBody(tk)"
