@@ -212,7 +212,7 @@ func TestGrantPromotionalRequestShape(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{BaseURL: srv.URL, APIKey: "test-key", HTTP: srv.Client()}
-	if err := c.GrantPromotional(context.Background(), "user-1", "pro", "monthly"); err != nil {
+	if err := c.GrantPromotional(context.Background(), "user-1", "pro", 1893456000000); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -231,7 +231,7 @@ func TestGrantPromotionalRequestShape(t *testing.T) {
 	if gotPlat != "server" {
 		t.Errorf("x-platform: got %q", gotPlat)
 	}
-	if want := `{"duration":"monthly"}`; strings.TrimSpace(gotBody) != want {
+	if want := `{"end_time_ms":1893456000000}`; strings.TrimSpace(gotBody) != want {
 		t.Errorf("body: got %q, want %q", gotBody, want)
 	}
 }
@@ -247,7 +247,7 @@ func TestGrantPromotionalEscapesAppUserID(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{BaseURL: srv.URL, APIKey: "k", HTTP: srv.Client()}
-	if err := c.GrantPromotional(context.Background(), "$RCAnonymousID:abc", "pro", "yearly"); err != nil {
+	if err := c.GrantPromotional(context.Background(), "$RCAnonymousID:abc", "pro", 1893456000000); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if want := "/subscribers/$RCAnonymousID:abc/entitlements/pro/promotional"; gotPath != want {
@@ -264,7 +264,7 @@ func TestGrantPromotionalEscapesAppUserID(t *testing.T) {
 func TestGrantPromotional4xxPermanent(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusBadRequest, `{"message":"bad duration"}`, nil)
 	defer cleanup()
-	err := c.GrantPromotional(context.Background(), "u", "pro", "weekly")
+	err := c.GrantPromotional(context.Background(), "u", "pro", 1893456000000)
 	if !errors.Is(err, ErrPermanent) {
 		t.Fatalf("expected ErrPermanent for 400, got %v", err)
 	}
@@ -276,7 +276,7 @@ func TestGrantPromotional429RateLimited(t *testing.T) {
 		"Retry-After": strconv.Itoa(7),
 	})
 	defer cleanup()
-	err := c.GrantPromotional(context.Background(), "u", "pro", "monthly")
+	err := c.GrantPromotional(context.Background(), "u", "pro", 1893456000000)
 	if !errors.Is(err, ErrRateLimited) {
 		t.Fatalf("expected ErrRateLimited for 429, got %v", err)
 	}
@@ -291,7 +291,7 @@ func TestGrantPromotional429RateLimited(t *testing.T) {
 func TestGrantPromotional5xxTransient(t *testing.T) {
 	c, cleanup := newTestClient(t, http.StatusBadGateway, `bad gateway`, nil)
 	defer cleanup()
-	err := c.GrantPromotional(context.Background(), "u", "pro", "monthly")
+	err := c.GrantPromotional(context.Background(), "u", "pro", 1893456000000)
 	if err == nil {
 		t.Fatal("expected an error for 502")
 	}

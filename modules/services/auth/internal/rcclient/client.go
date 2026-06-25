@@ -28,15 +28,15 @@ const defaultBaseURL = "https://api.revenuecat.com/v1"
 //
 // Classification:
 //   - 404            → ErrSubscriberNotFound (soft success, RC creates
-//                      subscribers lazily on first event)
+//     subscribers lazily on first event)
 //   - 401, 403       → ErrPermanent (wrapped via fmt.Errorf %w) — API key
-//                      invalid or revoked, retrying won't help
+//     invalid or revoked, retrying won't help
 //   - 429            → *RateLimitError (wraps ErrRateLimited) carrying
-//                      the Retry-After header value, if any
+//     the Retry-After header value, if any
 //   - other 4xx      → ErrPermanent (we don't know what RC means by them
-//                      but they aren't going to resolve themselves)
+//     but they aren't going to resolve themselves)
 //   - 5xx, network   → plain error (retryable; existing webhook /
-//                      reconcile retry budgets cover these)
+//     reconcile retry budgets cover these)
 var (
 	ErrSubscriberNotFound = errors.New("rcclient: subscriber not found")
 	ErrPermanent          = errors.New("rcclient: permanent failure")
@@ -189,9 +189,10 @@ func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*Subscrib
 
 // GrantPromotional grants a RevenueCat *promotional* entitlement to
 // appUserID via `POST /subscribers/{id}/entitlements/{entitlement}/promotional`.
-// `duration` is an RC promotional-duration token — we use "monthly" or
-// "yearly". RC does NOT fire a webhook on a promotional grant, so the
-// caller must refetch + apply the resulting state itself.
+// `endTimeMs` is the absolute UNIX-epoch-ms expiry for the entitlement.
+// RC does NOT fire a webhook on a promotional grant, so the caller must
+// refetch + apply the resulting state itself. The subscriber must already
+// exist (a prior GET creates it) — granting an unknown id returns 404.
 //
 // Classification mirrors GetSubscriber:
 //   - 2xx            → success
@@ -199,13 +200,17 @@ func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*Subscrib
 //     duration — retrying won't help)
 //   - 429            → *RateLimitError (wraps ErrRateLimited)
 //   - 5xx, network   → plain error (transient, retryable)
-func (c *Client) GrantPromotional(ctx context.Context, appUserID, entitlementID, duration string) error {
+func (c *Client) GrantPromotional(ctx context.Context, appUserID, entitlementID string, endTimeMs int64) error {
 	if c.APIKey == "" {
 		return fmt.Errorf("rcclient: API key not configured")
 	}
 	u := c.BaseURL + "/subscribers/" + url.PathEscape(appUserID) +
 		"/entitlements/" + url.PathEscape(entitlementID) + "/promotional"
-	payload, err := json.Marshal(map[string]string{"duration": duration})
+	// RC accepts an absolute `end_time_ms` (in addition to its duration
+	// enum) and sets the entitlement to expire exactly then — re-granting
+	// REPLACES the expiry (it does not stack), so the caller computes
+	// max(now, current_expiry)+period to extend without losing time.
+	payload, err := json.Marshal(map[string]int64{"end_time_ms": endTimeMs})
 	if err != nil {
 		return err
 	}
