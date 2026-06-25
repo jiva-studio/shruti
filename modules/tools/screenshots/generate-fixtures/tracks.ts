@@ -1,3 +1,5 @@
+import { contentLanguageFor } from "../config.js"
+
 /**
  * Curated demo track IDs. Each list's first element is the transcript
  * demo for scenario `04_transcript`; the rest fill the home playlist
@@ -36,7 +38,9 @@ export const PLAYLIST_TRACKS_RU: readonly string[] = [
 ]
 
 export function playlistTracksFor(locale: string): readonly string[] {
-  return locale === "ru" ? PLAYLIST_TRACKS_RU : PLAYLIST_TRACKS_EN
+  // Collapse the UI locale to its content language (uk→ru, sr→en) so a
+  // non-content locale shows the demo lectures it would actually see.
+  return contentLanguageFor(locale) === "ru" ? PLAYLIST_TRACKS_RU : PLAYLIST_TRACKS_EN
 }
 
 export function demoTranscriptTrackId(locale: string): string {
