@@ -18,6 +18,7 @@ const { topic } = Astro.props as { topic: TopicIndexEntry }
 const name = pickName(topic.names, lang)
 ---
 <BaseLayout
+  contentOnly
   lang={lang}
   path={`/app/topics/${topic.slug}`}
   fullscreen
