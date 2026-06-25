@@ -145,7 +145,10 @@ func (c *Client) Verify(ctx context.Context, token string) (*VerifyResult, error
 		}
 	}
 	return &VerifyResult{
-		Approved:    equalFoldTrim(status, "Approve"),
+		// Paymento's verify returns the numeric status code, not a word:
+		// 8 == Approve (a fully-confirmed payment). It does NOT send the
+		// string "Approve" despite the docs, so accept the code too.
+		Approved:    status == "8" || equalFoldTrim(status, "Approve"),
 		OrderStatus: status,
 		PaymentID:   paymentID,
 	}, nil
