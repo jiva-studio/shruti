@@ -1,0 +1,58 @@
+{
+  "soul": {
+    "sessionTitle": "What is the soul?",
+    "messages": [
+      {
+        "id": "msg_demo_soul_user",
+        "role": "user",
+        "content": "What is the soul?"
+      },
+      {
+        "id": "msg_demo_soul_assistant",
+        "role": "assistant",
+        "content": "The soul (Sanskrit *ātmā*) is the eternal spiritual spark, the true self, distinct from the material body. In the *Bhagavad-gītā*, Lord Kṛṣṇa explains it to Arjuna:\n\n[verse:source_dsicuBsFvinZ/2.20|BG 2.20]\n\nThe body changes — childhood, youth, old age, death — but the soul itself remains unchanged. Śrīla Prabhupāda elaborates on this in his lecture [cite:track_0dRAV1Swc3ak@0-300000|Prahlāda on the Eternal Soul]\n\n[followup:What happens to the soul after death?]\n[followup:How is the soul different from the mind?]",
+        "verses": {
+          "source_dsicuBsFvinZ|2.20": {
+            "addrLabel": "BG 2.20",
+            "sanskrit": "न जायते म्रियते वा कदाचि-\nन्नायं भूत्वा भविता वा न भूयः ।\nअजो नित्यः शाश्वतोऽयं पुराणो\nन हन्यते हन्यमाने शरीरे ॥२०॥",
+            "transliteration": "na jāyate mriyate vā kadācin\nnāyaṁ bhūtvā bhavitā vā na bhūyaḥ\najo nityaḥ śāśvato 'yaṁ purāṇo\nna hanyate hanyamāne śarīre",
+            "translation": {
+              "en": "For the soul there is neither birth nor death at any time. He has not come into being, does not come into being, and will not come into being. He is unborn, eternal, ever-existing and primeval. He is not slain when the body is slain."
+            }
+          }
+        },
+        "cites": {
+          "track_0dRAV1Swc3ak|0-300000": {
+            "text": "This instruction of Prahlāda Mahārāja to his class fellows we are discussing for the last few days. Everyone is engaged in a particular type of occupational duty, never mind what is that occupation."
+          }
+        }
+      }
+    ]
+  },
+  "media": {
+    "sessionTitle": "How Prabhupāda cared for his disciples",
+    "messages": [
+      {
+        "id": "msg_demo_remembrance_user",
+        "role": "user",
+        "content": "How did Śrīla Prabhupāda care for his disciples?"
+      },
+      {
+        "id": "msg_demo_remembrance_assistant",
+        "role": "assistant",
+        "content": "His disciples remember Śrīla Prabhupāda as endlessly attentive to their wellbeing — he noticed the smallest needs and made sure no one was overlooked. Gopalasyapriya dasi recalls an evening darshan in Māyāpur:\n\n[media:media_demo_remembrance|\"Are you all right?\"]\n\nMemories like this fill the *Following Śrīla Prabhupāda* remembrances — again and again his disciples describe how personally he looked after them, in matters great and small. As she put it, \"he just really does care about all of us.\"\n\n[followup:What else do disciples remember about Prabhupāda?]\n[followup:Show me more remembrance videos]",
+        "media": {
+          "media_demo_remembrance": {
+            "id": "media_demo_remembrance",
+            "url": "public/media/media_demo_remembrance.mp4",
+            "type": "video",
+            "title": "\"Are you all right?\"",
+            "speaker": "Gopalasyapriya dasi",
+            "date": "1975",
+            "text": "One evening all the saṅkīrtana women had darshan out in the front yard. There was a lull, and he just looked at me and asked, \"Are you all right?\" He said it a few times — then, \"Such a thin cloth. Haven't you got a cloth?\" It was chilly and most devotees had chaddars. Then he told Kalakanta, right beside him, that the women must be looked after: \"They will not ask. You must ask them once a month and make sure they have everything they need.\" Afterwards some of the devotees were crying — he was so observant and concerned; he really does care about all of us."
+          }
+        }
+      }
+    ]
+  }
+}
