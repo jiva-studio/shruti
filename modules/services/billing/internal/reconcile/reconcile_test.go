@@ -81,7 +81,7 @@ func TestReconcileRedrivesCreatedOrder(t *testing.T) {
 	ctx := context.Background()
 
 	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"orderStatus":"Approve","paymentId":"` + uuid.NewString() + `"}`))
+		_, _ = w.Write([]byte(`{"orderStatus":"8","paymentId":"` + uuid.NewString() + `"}`))
 	}))
 	t.Cleanup(pmtSrv.Close)
 	authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
