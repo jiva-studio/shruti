@@ -23,6 +23,7 @@ import (
 	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/profile"
 	"github.com/jiva-studio/shruti/auth/internal/providers"
+	"github.com/jiva-studio/shruti/auth/internal/rcclient"
 	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
@@ -60,6 +61,22 @@ type Service struct {
 	// EmailHash / EmailVerified. Production sets it from config.yaml
 	// at boot, indexed by PROFILE env (global vs ru).
 	ProfilePolicy profile.ProfilePolicy
+	// RC is the RevenueCat REST client used by GrantAndApply (the same
+	// client the webhook handler refetches with). nil unless RC creds
+	// are configured — GrantAndApply is only reachable when the internal
+	// endpoint is wired, which itself requires RC creds.
+	RC RCGranter
+	// RCProEntitlement is the RC entitlement id granted by GrantAndApply.
+	// Defaults to "pro" when blank.
+	RCProEntitlement string
+}
+
+// RCGranter is the subset of *rcclient.Client that GrantAndApply needs:
+// grant a promotional entitlement, then refetch the resulting state so we
+// can apply tier=pro immediately. Tests inject a fake to skip the network.
+type RCGranter interface {
+	GrantPromotional(ctx context.Context, appUserID, entitlementID, duration string) error
+	GetSubscriber(ctx context.Context, appUserID string) (*rcclient.SubscriberResponse, error)
 }
 
 // ProviderVerifier is the interface satisfied by providers/{google,apple}.Verifier.
