@@ -149,5 +149,9 @@
   "gallery.07_library.t": "Hiljade predavanja",
   "gallery.07_library.d": "O Giti, Bhagavatamu i drugim spisima — uvek pri ruci.",
   "wisdom.title": "Svakodnevna mudrost",
-  "wisdom.lead": "Kratki odlomci iz predavanja o duši, večnosti i smislu života — nova mudrost svakog dana."
+  "wisdom.lead": "Kratki odlomci iz predavanja o duši, večnosti i smislu života — nova mudrost svakog dana.",
+  "auth.signIn": "Prijava",
+  "auth.signOut": "Odjava",
+  "auth.apple": "Nastavi sa Apple",
+  "auth.cta": "Prijavite se da koristite limite svoje pretplate"
 }
