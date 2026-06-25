@@ -8,10 +8,14 @@
         @skip="finish"
       >
         <template #slide="{ index, active }">
-          <WelcomeScreen v-if="index === 0" />
-          <TopicsScreen v-else-if="index === 1" :topics="topicOptions" v-model="selectedTopicIds" />
+          <WelcomeScreen v-if="PAGES[index] === 'welcome'" />
+          <TopicsScreen
+            v-else-if="PAGES[index] === 'topics'"
+            :topics="topicOptions"
+            v-model="selectedTopicIds"
+          />
           <DailyWisdomScreen
-            v-else-if="index === 2"
+            v-else-if="PAGES[index] === 'dailyWisdom'"
             :enabled="wisdomEnabled"
             :time="wisdomTime"
             :active="active"
@@ -19,12 +23,12 @@
             @update:time="wisdomTime = $event"
           />
           <ValueMomentScreen
-            v-else-if="index === 3"
+            v-else-if="PAGES[index] === 'valueMoment'"
             :topic-ids="selectedTopicIds"
             :seed="page > TOPICS_PAGE"
           />
           <PaywallScreen
-            v-else
+            v-else-if="PAGES[index] === 'paywall'"
             :legal-documents="subscription.legalDocuments"
             :restoring="subscription.restoring"
             @restore="onRestore"
@@ -39,7 +43,7 @@
                Restore/legal links live in PaywallScreen and there's no
                disclaimer here. -->
           <SubscriptionPlans
-            v-if="page === PAGE_COUNT - 1"
+            v-if="PAGES[page] === 'paywall'"
             class="ob-paywall-footer"
             :packages="subscription.packages"
             :ready="subscription.ready"
@@ -73,6 +77,7 @@ import ValueMomentScreen from "./screens/ValueMomentScreen.vue"
 import PaywallScreen from "./screens/PaywallScreen.vue"
 import {
   useOnboardingViewController,
+  PAGES,
   PAGE_COUNT,
   TOPICS_PAGE,
 } from "./OnboardingView.controller.js"

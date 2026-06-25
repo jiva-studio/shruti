@@ -13,10 +13,34 @@ import { useOnboardingStore } from "@lectorium/stores/useOnboardingStore.js"
 import { loadOnboardingTopics, type OnboardingTopicOption } from "./loadOnboardingTopics.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 
-export const PAGE_COUNT = 5
+export type OnboardingPageId = "welcome" | "topics" | "dailyWisdom" | "valueMoment" | "paywall"
+
+interface OnboardingPageMeta {
+  id: OnboardingPageId
+  /** Whether this page is part of the flow for the current build. The
+   *  paywall is dropped in the off-store build (no in-app purchase —
+   *  subscriptions are managed on the website). */
+  enabled: boolean
+}
+
+// Ordered onboarding flow. Inclusion lives on the page itself, so the count
+// and the rendered sequence both derive from this list — no magic indices.
+const ALL_PAGES: readonly OnboardingPageMeta[] = [
+  { id: "welcome", enabled: true },
+  { id: "topics", enabled: true },
+  { id: "dailyWisdom", enabled: true },
+  { id: "valueMoment", enabled: true },
+  { id: "paywall", enabled: !__OFFSTORE_BUILD__ },
+]
+
+/** The active pages for this build, in order. The view renders by `id`. */
+export const PAGES: readonly OnboardingPageId[] = ALL_PAGES.filter((p) => p.enabled).map(
+  (p) => p.id
+)
+export const PAGE_COUNT = PAGES.length
 // Topics picker; once the user advances past it the value screen starts
 // seeding + prefetching the matched lectures.
-export const TOPICS_PAGE = 1
+export const TOPICS_PAGE = PAGES.indexOf("topics")
 
 export interface OnboardingViewBinding {
   readonly subscription: SubscriptionBinding
@@ -83,7 +107,7 @@ export function useOnboardingViewController(): OnboardingViewBinding {
   }
 
   async function onPrimary(): Promise<void> {
-    if (page.value === 1) await persistTopics()
+    if (page.value === TOPICS_PAGE) await persistTopics()
     if (page.value < PAGE_COUNT - 1) {
       page.value += 1
       return
