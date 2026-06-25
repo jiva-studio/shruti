@@ -97,7 +97,12 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
       mt: p.mt,
     } as ChapterPayload)
   } else if (kind === 'cite_transcript' && p.track_id != null) {
-    a.cites!.set(`${p.track_id}|${p.start_ms}-${p.end_ms}`, { text: p.text, mt: p.mt, textOriginal: p.text_original } as CitationPayload)
+    const refs = (Array.isArray(p.references) ? p.references : []) as Record<string, unknown>[]
+    a.cites!.set(`${p.track_id}|${p.start_ms}-${p.end_ms}`, {
+      text: p.text, mt: p.mt, textOriginal: p.text_original,
+      trackTitle: p.track_title, authorName: p.author_name, trackDate: p.date,
+      references: refs.map((r) => ({ sourceId: r.source_id, tokens: r.tokens, label: r.label })),
+    } as CitationPayload)
   } else if (kind === 'commentary') {
     const ref = p.ref != null ? p.ref : Number(String(p.id ?? '').match(/(\d+)$/)?.[1])
     if (Number.isFinite(ref)) {
@@ -108,7 +113,7 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
     }
   } else if (kind === 'media' && p.id != null) {
     a.media!.set(String(p.id), {
-      id: p.id, url: p.url, type: p.type, title: p.title, speaker: p.speaker,
+      id: p.id, url: p.url, type: p.type, title: p.title, speaker: p.speaker, date: p.date,
       text: p.text, mt: p.mt, textOriginal: p.text_original,
     } as MediaPayload)
   } else if (kind === 'outline' && p.track_id != null) {
@@ -116,6 +121,7 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
     a.outlines!.set(String(p.track_id), {
       trackId: p.track_id,
       items: items.map((it) => ({ startMs: it.start_ms, title: it.title })),
+      trackTitle: p.track_title,
     } as OutlinePayload)
   } else if (kind === 'share_pdf' && actionId != null) {
     a.pdfActions!.set(actionId, p as PdfActionPayload)

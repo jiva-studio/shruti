@@ -326,9 +326,13 @@ async def build_media_payload(ctx: TurnContext, mref: MediaRef) -> dict[str, Any
             payload["text"] = shown
             payload["text_original"] = original
             payload["mt"] = True
-    speaker = (row["meta"] or {}).get("speaker")
+    meta = row["meta"] or {}
+    speaker = meta.get("speaker")
     if speaker:
         payload["speaker"] = speaker
+    media_date = meta.get("date")
+    if media_date:
+        payload["date"] = media_date
     return payload
 
 
@@ -373,6 +377,59 @@ async def _fetch_cite_text(ctx: TurnContext, cref: ChunkRef) -> str:
     return text.strip() if isinstance(text, str) else ""
 
 
+def _format_reference_label(ref: Any) -> str:
+    """Render one catalog reference as the client shows it — "{short} {tokens}"
+    (e.g. "ŚB 1.2.3"), falling back to the source id when the localized short
+    name is absent. The thin client renders this verbatim, never touching a
+    sources dictionary."""
+    short = ref.short_name or ref.source_id
+    tokens = (ref.tokens or "").strip()
+    return f"{short} {tokens}".strip() if tokens else short
+
+
+async def resolve_track_display(ctx: TurnContext, track_id: str) -> dict[str, Any]:
+    """Resolve a track's display attribution (title / author / date /
+    references) localized to the answer language, for clients that hold no
+    local catalog (web). Cached per-turn by `(track_id, lang)` so several
+    cites of one lecture cost a single catalog read. Returns {} on any miss
+    (no repo, unknown track, DB error) so the card still renders without a
+    header — never raises into the SSE stream."""
+    if ctx.catalog_repo is None:
+        return {}
+    key = (track_id, ctx.lang)
+    cached = ctx.track_display_cache.get(key)
+    if cached is not None:
+        return cached
+    out: dict[str, Any] = {}
+    try:
+        track = await ctx.catalog_repo.get_track(track_id, lang=ctx.lang)
+    except Exception as exc:
+        log.warning(
+            "track_display_resolve_failed",
+            request_id=ctx.request_id, track_id=track_id, error=str(exc),
+        )
+        track = None
+    if track is not None:
+        if track.title:
+            out["track_title"] = track.title
+        if track.author_name:
+            out["author_name"] = track.author_name
+        if track.date:
+            out["date"] = track.date
+        refs = [
+            {
+                "source_id": r.source_id,
+                "tokens": r.tokens,
+                "label": _format_reference_label(r),
+            }
+            for r in track.references
+        ]
+        if refs:
+            out["references"] = refs
+    ctx.track_display_cache[key] = out
+    return out
+
+
 async def build_cite_payload(ctx: TurnContext, ref_num: int, cref: Any) -> dict[str, Any] | None:
     """Build ONE lecture-transcript cite payload: resolve the snippet text
     (stashed by the research caption pass, else re-fetched) and, for a
@@ -396,6 +453,10 @@ async def build_cite_payload(ctx: TurnContext, ref_num: int, cref: Any) -> dict[
         "end_ms": cref.end_ms,
         "text": text,
     }
+    # Display attribution (title / author / date / references) so a client
+    # with no local catalog (web) can render the card header. Mobile keeps
+    # resolving it from its on-device DB and ignores these fields.
+    payload.update(await resolve_track_display(ctx, cref.track_id))
     # Transcript localisation. A fragment is "native" when its language
     # matches the answer language; otherwise translate-if-opted-in, else show
     # the (English / source) transcript verbatim. There is no per-lang
