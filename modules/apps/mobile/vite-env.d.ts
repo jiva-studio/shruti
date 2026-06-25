@@ -21,3 +21,7 @@ declare const __GOOGLE_WEB_CLIENT_ID__: string
 declare const __GOOGLE_IOS_CLIENT_ID__: string
 declare const __SENTRY_DSN__: string
 declare const __SENTRY_RELEASE__: string
+/** True in the off-store build (sideloaded APK) that runs without Google
+ *  services: email-only sign-in, no in-app purchase, subscription managed
+ *  on the website. */
+declare const __OFFSTORE_BUILD__: boolean
