@@ -1,6 +1,7 @@
 import lecturesIndex from '../data/lectures-index.json'
 import topicsIndex from '../data/topics-index.json'
 import collectionsIndex from '../data/collections-index.json'
+import wisdomIndex from '../data/wisdom-index.json'
 import type {
   LectureIndexEntry,
   TopicIndexEntry,
@@ -48,4 +49,20 @@ export function collectionForId(id: string): CollectionIndexEntry | undefined {
 
 export function shortSlug(slug: string): string {
   return slug.replace(/^track_/, '')
+}
+
+export interface WisdomIndexEntry {
+  id: string
+  trackId: string
+  language: string
+  startMs: number
+  endMs: number
+  text: string
+  topicId: string
+}
+
+export const wisdom = wisdomIndex as unknown as WisdomIndexEntry[]
+
+export function wisdomForLang(lang: string): WisdomIndexEntry[] {
+  return wisdom.filter((w) => w.language === lang)
 }

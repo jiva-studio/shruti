@@ -387,6 +387,40 @@ async function main() {
     JSON.stringify({ groups: collectionGroups, collections: collectionsById })
   )
 
+  // --- wisdom-index.json: a small handful of daily-wisdom fragments per
+  //     content language for the landing "Daily wisdom" section. Capped so the
+  //     page payload stays light; the section renders a subset. Wrapped in
+  //     try/catch because older catalog DBs predate the daily_wisdom table.
+  const WISDOM_PER_LANG = 16
+  try {
+    const rows = db
+      .prepare(
+        'SELECT id, track_id, language, start_ms, end_ms, text, topic_id FROM daily_wisdom ORDER BY id'
+      )
+      .all()
+    const perLang = new Map()
+    const wisdomIndex = []
+    for (const r of rows) {
+      const n = perLang.get(r.language) ?? 0
+      if (n >= WISDOM_PER_LANG) continue
+      perLang.set(r.language, n + 1)
+      wisdomIndex.push({
+        id: r.id,
+        trackId: r.track_id,
+        language: r.language,
+        startMs: r.start_ms,
+        endMs: r.end_ms,
+        text: r.text,
+        topicId: r.topic_id,
+      })
+    }
+    writeFileSync(join(dataDir, 'wisdom-index.json'), JSON.stringify(wisdomIndex))
+    console.log(`Wisdom fragments:     ${wisdomIndex.length}`)
+  } catch (e) {
+    writeFileSync(join(dataDir, 'wisdom-index.json'), '[]')
+    console.warn(`  daily_wisdom skipped: ${e.message}`)
+  }
+
   fullCandidates.sort((a, b) => {
     const ao = a.hasOutline ? 0 : 1
     const bo = b.hasOutline ? 0 : 1
