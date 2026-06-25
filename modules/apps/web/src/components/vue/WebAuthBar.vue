@@ -1,18 +1,31 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useT, type Lang } from '../../i18n/ui'
+import { contentLangFor } from '../../i18n/locales'
 import { useWebAuth } from '../../composables/useWebAuth'
 
 const props = defineProps<{ lang: Lang }>()
 const t = useT(props.lang)
 
-const auth = useWebAuth()
+const BACKEND_FALLBACK = 'https://api.shruti.local'
+const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
+const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID as string | undefined
+const appleServicesId = import.meta.env.PUBLIC_APPLE_SERVICES_ID as string | undefined
+
+const auth = useWebAuth({
+  authBase: AUTH,
+  googleClientId,
+  appleServicesId,
+  appleRedirectUri: import.meta.env.PUBLIC_APPLE_REDIRECT_URI as string | undefined,
+  locale: contentLangFor(props.lang),
+})
+
 const googleSlot = ref<HTMLElement>()
 const open = ref(false)
 const busy = ref(false)
 
-const appleEnabled = computed(() => !!(import.meta.env.PUBLIC_APPLE_SERVICES_ID as string | undefined))
-const googleEnabled = computed(() => !!(import.meta.env.PUBLIC_GOOGLE_CLIENT_ID as string | undefined))
+const appleEnabled = computed(() => !!appleServicesId)
+const googleEnabled = computed(() => !!googleClientId)
 
 const displayName = computed(() => {
   const s = auth.session.value
@@ -39,40 +52,52 @@ async function onApple() {
 }
 
 async function onSignOut() {
+  open.value = false
   await auth.signOut()
 }
 
 onMounted(() => {
-  // Surfaces the persisted session (if any) and lands the visitor on the
-  // anonymous floor so chat works before any explicit sign-in.
-  void auth.ensureToken()
+  // Read-only: show the persisted session if any. The anonymous floor is
+  // bootstrapped lazily (chat send / sign-in click), so a site-wide nav
+  // button doesn't mint a throwaway anon on every page view.
+  auth.hydrate()
 })
 </script>
 
 <template>
-  <div v-if="auth.ready.value" class="relative flex items-center justify-end gap-2 px-3 py-2 text-sm">
+  <div v-if="auth.ready.value" class="relative flex items-center">
     <template v-if="auth.signedIn.value">
-      <span
-        class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-saffron/20 text-xs font-semibold text-saffron"
+      <button
+        type="button"
+        class="flex h-9 items-center gap-2 rounded-lg border border-line bg-cream px-3 text-sm text-ink-soft transition hover:border-saffron"
+        @click="toggle"
       >
-        <img v-if="auth.session.value?.picture" :src="auth.session.value.picture" alt="" class="h-full w-full object-cover" />
-        <span v-else>{{ initial }}</span>
-      </span>
-      <span class="max-w-[10rem] truncate text-ink-soft">{{ displayName }}</span>
-      <span
-        v-if="auth.isPro.value"
-        class="rounded-full bg-saffron px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-cream"
-        >Pro</span
-      >
-      <button type="button" class="text-medium hover:text-ink" @click="onSignOut">
-        {{ t('auth.signOut') }}
+        <span class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-saffron/20 text-xs font-semibold text-saffron">
+          <img v-if="auth.session.value?.picture" :src="auth.session.value.picture" alt="" class="h-full w-full object-cover" />
+          <span v-else>{{ initial }}</span>
+        </span>
+        <span class="hidden max-w-[8rem] truncate sm:inline">{{ displayName }}</span>
+        <span
+          v-if="auth.isPro.value"
+          class="rounded-full bg-saffron px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-cream"
+          >Pro</span
+        >
       </button>
+
+      <div
+        v-if="open"
+        class="absolute right-0 top-full z-50 mt-1 w-48 rounded-2xl border border-line bg-cream p-2 shadow-lg"
+      >
+        <button type="button" class="w-full rounded-lg px-3 py-2 text-left text-sm text-ink-soft transition hover:bg-cream-deep" @click="onSignOut">
+          {{ t('auth.signOut') }}
+        </button>
+      </div>
     </template>
 
     <template v-else>
       <button
         type="button"
-        class="rounded-full border border-line bg-cream px-3 py-1.5 font-medium text-ink-soft transition hover:border-saffron hover:text-saffron"
+        class="flex h-9 items-center rounded-lg border border-line bg-cream px-4 text-sm font-semibold text-ink-soft transition hover:border-saffron hover:text-saffron"
         @click="toggle"
       >
         {{ t('auth.signIn') }}
@@ -80,7 +105,7 @@ onMounted(() => {
 
       <div
         v-if="open"
-        class="absolute right-3 top-full z-20 mt-1 w-64 rounded-2xl border border-line bg-cream p-4 shadow-lg"
+        class="absolute right-0 top-full z-50 mt-1 w-64 rounded-2xl border border-line bg-cream p-4 shadow-lg"
       >
         <p class="mb-3 text-center text-xs text-medium">{{ t('auth.cta') }}</p>
         <div v-if="googleEnabled" ref="googleSlot" class="flex justify-center"></div>
