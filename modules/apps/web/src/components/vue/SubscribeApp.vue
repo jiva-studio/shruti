@@ -129,7 +129,7 @@ onMounted(() => {
         <div class="mt-10 grid gap-5 sm:grid-cols-2">
           <div class="flex flex-col rounded-2xl border border-line bg-cream p-6">
             <p class="font-serif text-lg font-semibold text-ink">{{ t('sub.monthly') }}</p>
-            <p class="mt-3 font-serif text-3xl font-bold text-ink">$2.99</p>
+            <p class="mt-3 font-serif text-3xl font-bold text-ink">2.99 <span class="text-xl font-semibold">USDT</span></p>
             <p class="text-sm text-medium">{{ t('sub.perMonth') }}</p>
             <button
               type="button"
@@ -146,7 +146,7 @@ onMounted(() => {
               {{ t('sub.bestValue') }}
             </span>
             <p class="font-serif text-lg font-semibold text-ink">{{ t('sub.yearly') }}</p>
-            <p class="mt-3 font-serif text-3xl font-bold text-ink">$29.99</p>
+            <p class="mt-3 font-serif text-3xl font-bold text-ink">29.99 <span class="text-xl font-semibold">USDT</span></p>
             <p class="text-sm text-medium">{{ t('sub.perYear') }}</p>
             <button
               type="button"
@@ -160,11 +160,6 @@ onMounted(() => {
         </div>
 
         <p v-if="error" class="mt-5 text-center text-sm font-medium text-crimson">{{ error }}</p>
-
-        <div class="mt-8 space-y-2 rounded-2xl border border-line bg-cream-deep/40 p-5 text-center text-sm text-medium">
-          <p>{{ t('sub.usdtNote') }}</p>
-          <p>{{ t('sub.oneTimeNote') }}</p>
-        </div>
       </template>
     </template>
   </section>
