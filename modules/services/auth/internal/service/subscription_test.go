@@ -381,16 +381,16 @@ func TestConcurrentApplySerialised(t *testing.T) {
 type fakeGranter struct {
 	grantAppUserID string
 	grantEnt       string
-	grantDuration  string
+	grantEndMs     int64
 	grantErr       error
 	resp           *rcclient.SubscriberResponse
 	getErr         error
 }
 
-func (f *fakeGranter) GrantPromotional(_ context.Context, appUserID, entitlementID, duration string) error {
+func (f *fakeGranter) GrantPromotional(_ context.Context, appUserID, entitlementID string, endTimeMs int64) error {
 	f.grantAppUserID = appUserID
 	f.grantEnt = entitlementID
-	f.grantDuration = duration
+	f.grantEndMs = endTimeMs
 	return f.grantErr
 }
 
@@ -432,8 +432,11 @@ func TestGrantAndApplyMakesUserPro(t *testing.T) {
 	if g.grantAppUserID != userID.String() {
 		t.Errorf("grant app_user_id: got %q, want %q", g.grantAppUserID, userID.String())
 	}
-	if g.grantEnt != "pro" || g.grantDuration != "monthly" {
-		t.Errorf("grant args: ent=%q duration=%q", g.grantEnt, g.grantDuration)
+	// Renewal extends from the current expiry: existing pro expires at
+	// `future`, so a monthly grant must land at future + 1 month, not now+1mo.
+	wantEnd := future.AddDate(0, 1, 0).UnixMilli()
+	if g.grantEnt != "pro" || g.grantEndMs != wantEnd {
+		t.Errorf("grant args: ent=%q endMs=%d want endMs=%d (future+1mo)", g.grantEnt, g.grantEndMs, wantEnd)
 	}
 
 	u, err := svc.Users.Get(ctx, userID)

@@ -75,7 +75,7 @@ type Service struct {
 // grant a promotional entitlement, then refetch the resulting state so we
 // can apply tier=pro immediately. Tests inject a fake to skip the network.
 type RCGranter interface {
-	GrantPromotional(ctx context.Context, appUserID, entitlementID, duration string) error
+	GrantPromotional(ctx context.Context, appUserID, entitlementID string, endTimeMs int64) error
 	GetSubscriber(ctx context.Context, appUserID string) (*rcclient.SubscriberResponse, error)
 }
 
