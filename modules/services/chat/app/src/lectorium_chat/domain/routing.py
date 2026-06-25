@@ -27,7 +27,7 @@ Intent = Literal[
     "help",             # capability questions; routed to help_worker
     "research",         # search across lectures / verses / commentaries / letters
     "locate",           # WHERE in scripture is a topic/story — canto/chapter/verse address
-    "find_track",       # catalog lookup by author/source/date — specific track or list
+    "find_track",       # lecture search — semantic (topic) + metadata filters → ranked cards + why-quote
     "recommend",        # personal "what to listen next" — topic-affinity from history
     "show_verse",       # a bare scripture reference ("БГ 2.13") — fetch + show that verse
     "create_action",    # user wants to create something (playlist, PDF, reminder)
