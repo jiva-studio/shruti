@@ -203,12 +203,20 @@ export function buildTranscriptViewData(
                   : formatReference(block.reference, sourcesById, lang)
                 : undefined,
             }
-          : {
-              type: "verse:translation",
-              start: block.start,
-              end: block.end,
-              text: block.text,
-            }
+          : block.type === "verse:translation"
+            ? {
+                type: "verse:translation",
+                start: block.start,
+                end: block.end,
+                text: block.text,
+              }
+            : {
+                type: "marker",
+                start: block.start,
+                end: block.end,
+                text: block.text,
+                speaker: block.speaker,
+              }
 
     const overlap = collectOverlap(raw.start, raw.end)
     current.push({

@@ -10,20 +10,25 @@
     >
       {{ reference }}
     </span>
-    {{ text }}.
+    <span v-html="html" />.
   </span>
 </template>
 
 <script lang="ts" setup>
+import { computed } from "vue"
+import { renderInlineMarkdown } from "@lib/ui/transcript/renderInlineMarkdown.js"
+
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-defineProps<{
+const props = defineProps<{
   reference?: string
   referenceVisible: boolean
   text: string
 }>()
+
+const html = computed(() => renderInlineMarkdown(props.text))
 </script>
 
 <style scoped>

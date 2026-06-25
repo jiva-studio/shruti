@@ -1,7 +1,5 @@
 <template>
-  <span class="VerseTranslationBlock">
-    <span v-html="html" />
-  </span>
+  <span class="marker" v-html="html" />
 </template>
 
 <script lang="ts" setup>
@@ -16,11 +14,13 @@ const props = defineProps<{
   text: string
 }>()
 
-const html = computed(() => renderInlineMarkdown(props.text) + " ")
+const html = computed(() => `[${renderInlineMarkdown(props.text)}] `)
 </script>
 
 <style scoped>
-.VerseTranslationBlock {
-  font-weight: bold;
+.marker {
+  color: var(--ion-color-medium);
+  font-style: italic;
+  opacity: 0.7;
 }
 </style>
