@@ -7,6 +7,7 @@
 package rcclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -184,6 +185,64 @@ func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*Subscrib
 		return nil, fmt.Errorf("rcclient: decode: %w", err)
 	}
 	return &out, nil
+}
+
+// GrantPromotional grants a RevenueCat *promotional* entitlement to
+// appUserID via `POST /subscribers/{id}/entitlements/{entitlement}/promotional`.
+// `duration` is an RC promotional-duration token — we use "monthly" or
+// "yearly". RC does NOT fire a webhook on a promotional grant, so the
+// caller must refetch + apply the resulting state itself.
+//
+// Classification mirrors GetSubscriber:
+//   - 2xx            → success
+//   - 4xx except 429 → ErrPermanent (bad key / unknown entitlement / bad
+//     duration — retrying won't help)
+//   - 429            → *RateLimitError (wraps ErrRateLimited)
+//   - 5xx, network   → plain error (transient, retryable)
+func (c *Client) GrantPromotional(ctx context.Context, appUserID, entitlementID, duration string) error {
+	if c.APIKey == "" {
+		return fmt.Errorf("rcclient: API key not configured")
+	}
+	u := c.BaseURL + "/subscribers/" + url.PathEscape(appUserID) +
+		"/entitlements/" + url.PathEscape(entitlementID) + "/promotional"
+	payload, err := json.Marshal(map[string]string{"duration": duration})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Platform", "server")
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("rcclient: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch {
+	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		return nil
+
+	case resp.StatusCode == http.StatusTooManyRequests:
+		retry := parseRetryAfter(resp.Header.Get("Retry-After"))
+		return &RateLimitError{Status: resp.StatusCode, RetryAfter: retry}
+
+	case resp.StatusCode >= 400 && resp.StatusCode < 500:
+		// Any non-429 4xx — bad key, unknown entitlement, malformed
+		// duration. Not retryable; surface as ErrPermanent.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return fmt.Errorf("%w: status=%d body=%s", ErrPermanent,
+			resp.StatusCode, sanitizeBody(body))
+
+	default:
+		// 5xx → plain error, retryable.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return fmt.Errorf("rcclient: %s: %s", resp.Status, sanitizeBody(body))
+	}
 }
 
 // parseRetryAfter accepts the integer-seconds form of the Retry-After
