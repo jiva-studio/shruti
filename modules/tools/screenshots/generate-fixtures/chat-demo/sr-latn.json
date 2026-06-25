@@ -1,0 +1,58 @@
+{
+  "soul": {
+    "sessionTitle": "Šta je duša?",
+    "messages": [
+      {
+        "id": "msg_demo_soul_user",
+        "role": "user",
+        "content": "Šta je duša?"
+      },
+      {
+        "id": "msg_demo_soul_assistant",
+        "role": "assistant",
+        "content": "Duša (na sanskritu *atma*) je večna duhovna iskra, pravo „ja”, različito od materijalnog tela. U „Bhagavad-giti” Gospod Krišna to objašnjava Arđuni:\n\n[verse:source_dsicuBsFvinZ/2.20|BG 2.20]\n\nTelo se menja — detinjstvo, mladost, starost, smrt — ali sama duša ostaje nepromenjena. Šrila Prabhupada o tome opširnije govori u predavanju [cite:track_0dRAV1Swc3ak@0-300000|Prahlāda on the Eternal Soul]\n\n[followup:Šta se dešava sa dušom posle smrti?]\n[followup:Po čemu se duša razlikuje od uma?]",
+        "verses": {
+          "source_dsicuBsFvinZ|2.20": {
+            "addrLabel": "BG 2.20",
+            "sanskrit": "न जायते म्रियते वा कदाचि-\nन्नायं भूत्वा भविता वा न भूयः ।\nअजो नित्यः शाश्वतोऽयं पुराणो\nन हन्यते हन्यमाने शरीरे ॥२०॥",
+            "transliteration": "na jāyate mriyate vā kadācin\nnāyaṁ bhūtvā bhavitā vā na bhūyaḥ\najo nityaḥ śāśvato 'yaṁ purāṇo\nna hanyate hanyamāne śarīre",
+            "translation": {
+              "sr-Latn": "Duša se niti rađa niti umire. Nikada nije nastala, ne nastaje niti će nastati. Nerođena je, večna, uvek postojeća i iskonska. Ne biva ubijena kada telo biva ubijeno."
+            }
+          }
+        },
+        "cites": {
+          "track_0dRAV1Swc3ak|0-300000": {
+            "text": "Ovo uputstvo koje je Prahlada Maharadža dao svojim drugovima iz razreda razmatramo već nekoliko dana. Svako je zaokupljen određenom vrstom zanimanja, bez obzira na to koje je."
+          }
+        }
+      }
+    ]
+  },
+  "media": {
+    "sessionTitle": "Kako se Prabhupada starao o učenicima",
+    "messages": [
+      {
+        "id": "msg_demo_remembrance_user",
+        "role": "user",
+        "content": "Kako se Šrila Prabhupada starao o svojim učenicima?"
+      },
+      {
+        "id": "msg_demo_remembrance_assistant",
+        "role": "assistant",
+        "content": "Učenici pamte Šrilu Prabhupadu kao izuzetno pažljivog prema njihovim potrebama — primećivao je i najmanje i pazio da niko ne ostane bez brige. Gopalasjaprija dasi se seća večernjeg daršana u Majapuru:\n\n[media:media_demo_remembrance|„Jesi li dobro?”]\n\nTakvim sećanjima ispunjeni su filmovi „Stopama Šrile Prabhupade”: učenici iznova pričaju kako se lično starao o njima — u velikom i malom. Kako je sama rekla: „On zaista brine o svakome od nas”.\n\n[followup:Čega se još učenici sećaju o Prabhupadi?]\n[followup:Pokaži više video-sećanja]",
+        "media": {
+          "media_demo_remembrance": {
+            "id": "media_demo_remembrance",
+            "url": "public/media/media_demo_remembrance.mp4",
+            "type": "video",
+            "title": "„Jesi li dobro?”",
+            "speaker": "Gopalasjaprija dasi",
+            "date": "1975",
+            "text": "Jedne večeri sve matadži su došle na daršan u prednjem dvorištu. Odjednom je nastala tišina, i Prabhupada me pogledao i upitao: „Jesi li dobro?” Bilo je hladno, i primetio je: „Tako tanka odeća — imaš li topliju?” Zatim se okrenuo Kalakanti i rekao da žene treba čuvati: „One same neće tražiti — pitaj ih jednom mesečno i postaraj se da imaju sve što im treba”. Mnogi predani su potom plakali: bio je tako pažljiv i brižan, zaista brine o svakome od nas."
+          }
+        }
+      }
+    ]
+  }
+}

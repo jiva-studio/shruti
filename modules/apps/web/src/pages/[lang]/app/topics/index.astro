@@ -3,9 +3,10 @@ import BaseLayout from '../../../../layouts/BaseLayout.astro'
 import WebApp from '../../../../components/vue/WebApp.vue'
 import TopicsGrid from '../../../../components/TopicsGrid.astro'
 import { useT, type Lang } from '../../../../i18n/ui'
+import { UI_LOCALE_CODES } from '../../../../i18n/locales.data.mjs'
 
 export function getStaticPaths() {
-  return [{ params: { lang: 'en' } }, { params: { lang: 'ru' } }]
+  return UI_LOCALE_CODES.map((lang) => ({ params: { lang } }))
 }
 
 const lang = Astro.params.lang as Lang

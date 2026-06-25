@@ -2,6 +2,7 @@
 import type { TopicIndexEntry } from '@lib/catalog/types.js'
 import { pickName } from '../lib/catalog'
 import { useT, type Lang } from '../i18n/ui'
+import { contentLangFor } from '../i18n/locales'
 
 interface Props {
   topic: TopicIndexEntry
@@ -11,7 +12,7 @@ interface Props {
 const { topic, lang, count } = Astro.props
 const t = useT(lang)
 const name = pickName(topic.names, lang)
-const href = `/${lang}/app/topics/${topic.slug}`
+const href = `/${contentLangFor(lang)}/app/topics/${topic.slug}`
 const lectureCount = count ?? topic.count
 ---
 <a
