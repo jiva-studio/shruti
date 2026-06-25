@@ -2,39 +2,44 @@
 
 The user asks to FIND lectures about a topic ("найди лекцию про очищение
 сердца"). Unlike `research` (which synthesizes an essay), this returns the
-LECTURES THEMSELVES as a ranked list of cards, each with a verbatim
-transcript quote showing why it matched.
+LECTURES THEMSELVES as a ranked list of cards, each with a short description
+and a verbatim transcript quote showing why it matched.
 
 Everything happens in this node, which terminates at END (no synthesizer):
 
-1. Embed the query and semantic-search transcript chunks, constrained by
-   the metadata filters the router extracted (source / year / author /
-   location). Group by track, keep the best-scoring chunk per lecture, take
-   the top N. Progressive relaxation: if the filters yield nothing, drop
-   them one by one and retry so we always surface SOMETHING.
-2. Per lecture, pull its catalog description (the verbatim quote is just the
-   best chunk's text) — all reads run concurrently.
-3. Headers are the ONLY LLM hop and the only thing the model writes: one
-   independent call per lecture ({title, description, question} → one line)
-   plus one global header, all run concurrently. The model never sees a
-   track_id or an array, so there is nothing for it to mis-order or
-   hallucinate.
-4. Emit deterministically, straight to the client (bypassing the synthesizer
-   like `action_responder`): the global header, then per lecture a header, a
-   `[card:track]` tile and a `[cite:…]` quote — each quote's `cite_transcript`
-   action payload is force-emitted first, honouring the action-before-marker
-   ordering invariant.
+1. Embed the query and semantic-search transcript chunks, constrained by the
+   metadata filters the router extracted (source / year / author / location).
+   Group by track, rank lectures by their best chunk score, DROP anything
+   below the relevance floor, and quote the best NON-intro chunk (the lecture
+   opening is boilerplate, not a reason). Progressive relaxation drops the
+   narrowest filter on an empty hit.
+2. Resolve each lecture's catalog display (title / author / date / refs) and
+   its description — concurrently. A lecture the published catalog doesn't
+   carry is dropped (the client couldn't render its card anyway).
+3. The ONLY LLM hop: per lecture a short DESCRIPTION blending the lecture's
+   own catalog description with the user's question, plus one global intro —
+   all run concurrently. The model writes prose only; it never sees a
+   track_id or an array, so there is nothing for it to mis-order.
+4. Emit straight to the client (bypassing the synthesizer like
+   `action_responder`): the global intro, then per lecture a description
+   paragraph, a `[card:track]` tile and a `[cite:…]` quote. Each card and
+   quote ships a server-resolved `action` payload FIRST (so thin clients with
+   no local catalog — web — can render), honouring action-before-marker.
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 from pydantic import BaseModel
 
-from lectorium_chat.agent.graph.nodes._worker_common import build_cite_payload
+from lectorium_chat.agent.graph.nodes._worker_common import (
+    build_cite_payload,
+    resolve_track_display,
+)
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.config import get_settings
@@ -43,17 +48,23 @@ from lectorium_chat.observability.logging import bind_node_role, get_logger
 
 log = get_logger(__name__)
 
-# At most five lecture cards — the user scans a short, scannable list and
-# adds one to a playlist; beyond that the LLM header fan-out and the wall of
-# quotes stop being useful.
+# At most five lecture cards — the user scans a short, scannable list and adds
+# one to a playlist; beyond that it stops being useful.
 _MAX_LECTURES = 5
-# Pull more chunks than lectures so grouping-by-track still yields a full
-# list when several top chunks belong to the same lecture.
-_SEARCH_TOP_K = 16
+# Pull well over `_MAX_LECTURES` chunks so grouping-by-track still yields a
+# full list AND leaves a non-intro chunk to quote per track.
+_SEARCH_TOP_K = 24
+# Cosine floor — below this the lecture isn't really "about" the query; we'd
+# rather show fewer cards than an off-topic one. Matches chunks_search.
+_MIN_SCORE = 0.45
+# Chunks starting in the first minute are the lecture's standard opening
+# ("Лекция по ШБ … итак, зачитайте"). Never quote those when a real passage
+# exists.
+_INTRO_MS = 60_000
 
 
-class _Header(BaseModel):
-    """One header line, the sole text the model produces this turn."""
+class _Prose(BaseModel):
+    """A single prose string — the only thing the model produces this turn."""
 
     text: str
 
@@ -79,12 +90,8 @@ async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
 
 
 async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]:
-    """Build the ordered (label, filter-kwargs) relaxation ladder.
-
-    Index 0 is the fully-constrained filter; each subsequent entry drops the
-    narrowest remaining constraint. The labels name what was relaxed so the
-    global header can tell the user ("по 1976 не нашлось, показываю без года").
-    """
+    """Ordered (relaxed-label, filter-kwargs) ladder: index 0 is fully
+    constrained, each next entry drops the narrowest remaining constraint."""
     source_id = args.get("source_id") if isinstance(args.get("source_id"), str) else None
     date_from, date_to = _year_range(args.get("year"))
     author_id = await _resolve_id(ctx, "author", args.get("author"))
@@ -98,7 +105,6 @@ async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]
         "date_from": date_from,
         "date_to": date_to,
     }
-    # Relax narrowest first: year, then location, then author, then source.
     ladder: list[tuple[str, dict]] = [("", dict(full))]
     relaxed: list[str] = []
     for label, keys in (
@@ -131,39 +137,56 @@ async def _search(ctx: TurnContext, embedding: list[float], flt: dict) -> list[S
 
 
 def _top_lectures(chunks: list[ScoredChunk]) -> list[ScoredChunk]:
-    """Best-scoring chunk per track, ranked by that score, capped at N."""
-    best: dict[str, ScoredChunk] = {}
+    """One ScoredChunk per track — the chunk we'll QUOTE — ranked by the
+    track's relevance and filtered to the score floor.
+
+    Relevance = the track's best chunk score (intro or not). The quoted chunk
+    is the best NON-intro chunk when one exists, else the best chunk.
+    """
+    by_track: dict[str, list[ScoredChunk]] = defaultdict(list)
     for sc in chunks:
-        cur = best.get(sc.chunk.track_id)
-        if cur is None or sc.score > cur.score:
-            best[sc.chunk.track_id] = sc
-    ranked = sorted(best.values(), key=lambda sc: sc.score, reverse=True)
-    return ranked[:_MAX_LECTURES]
+        by_track[sc.chunk.track_id].append(sc)
+
+    picked: list[tuple[float, ScoredChunk]] = []
+    for scs in by_track.values():
+        relevance = max(s.score for s in scs)
+        if relevance < _MIN_SCORE:
+            continue
+        body = [s for s in scs if s.chunk.start_ms >= _INTRO_MS] or scs
+        quote = max(body, key=lambda s: s.score)
+        picked.append((relevance, quote))
+
+    picked.sort(key=lambda p: p[0], reverse=True)
+    return [q for _, q in picked[:_MAX_LECTURES]]
 
 
-async def _header(ctx: TurnContext, query: str, title: str, description: str) -> str:
-    """One per-lecture header. Independent call — the model only ever sees a
-    single lecture, so there is no list to mis-order and no id to mangle."""
+async def _describe(ctx: TurnContext, query: str, title: str, description: str, excerpt: str) -> str:
+    """A short, grounded description of ONE lecture, tilted toward the user's
+    question. Built from the lecture's own catalog description — NOT a verdict
+    on whether it matches (that produced "this lecture is NOT about X")."""
     sys = (
-        "You write ONE short header line (max ~12 words) for a lecture card in "
-        "a search result, in the user's language. Given the user's query and a "
-        "lecture's title and description, say how THIS lecture speaks to the "
-        "query. Plain text only — no quotes, no markdown, no lecture title."
+        "You write a SHORT 1–2 sentence description of a lecture for a "
+        "search-result card, in the user's language. Base it on the lecture's "
+        "own description and the excerpt; bring out the part relevant to the "
+        "user's question. Describe what the lecture COVERS — never comment on "
+        "whether it matches the query, never say 'this lecture is about…'. "
+        "Plain text, no markdown, do not repeat the title."
     )
     usr = (
-        f"User query: {query}\n"
+        f"User question: {query}\n"
         f"Lecture title: {title or '—'}\n"
-        f"Lecture description: {description or '—'}\n\n"
-        f"Write the header in language code '{ctx.lang}'."
+        f"Lecture description: {description or '—'}\n"
+        f"Relevant excerpt: {excerpt[:300]}\n\n"
+        f"Write the description in language code '{ctx.lang}'."
     )
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     out = await ctx.llm.structured_output(
-        msgs, _Header, model=get_settings().llm_cheap, run_name="find_tracks_header"
+        msgs, _Prose, model=get_settings().llm_cheap, run_name="find_tracks_description"
     )
     return out.text.strip()
 
 
-async def _global_header(ctx: TurnContext, query: str, n: int, relaxed: str) -> str:
+async def _intro(ctx: TurnContext, query: str, n: int, relaxed: str) -> str:
     sys = (
         "Write ONE short intro line (max ~14 words) in the user's language for "
         "a list of lectures found for the user's query — e.g. 'Вот лекции об "
@@ -178,7 +201,7 @@ async def _global_header(ctx: TurnContext, query: str, n: int, relaxed: str) -> 
     )
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     out = await ctx.llm.structured_output(
-        msgs, _Header, model=get_settings().llm_cheap, run_name="find_tracks_global_header"
+        msgs, _Prose, model=get_settings().llm_cheap, run_name="find_tracks_intro"
     )
     return out.text.strip()
 
@@ -215,55 +238,70 @@ async def find_tracks_worker_node(
         return await _emit_empty(ctx, writer, query)
 
     track_ids = [sc.chunk.track_id for sc in lectures]
-    titles = await ctx.catalog_repo.get_titles(track_ids, lang=ctx.lang)
-    descriptions = await asyncio.gather(
-        *(ctx.catalog_repo.get_outline(tid, ctx.lang) for tid in track_ids)
+    # Server-resolved display (title/author/date/refs) for thin clients, and
+    # the per-track description — concurrently. A track the published catalog
+    # doesn't carry has no display title → drop it (client can't render it).
+    displays, outlines = await asyncio.gather(
+        asyncio.gather(*(resolve_track_display(ctx, tid) for tid in track_ids)),
+        asyncio.gather(*(ctx.catalog_repo.get_outline(tid, ctx.lang) for tid in track_ids)),
     )
-    desc_by_track = {tid: (d[1] or "") for tid, d in zip(track_ids, descriptions)}
-
-    # Headers are the only LLM hop — fan out one tiny call per lecture plus
-    # the global header, all concurrently. wall-clock ≈ one call.
-    header_tasks = [
-        _header(ctx, query, titles.get(tid, ""), desc_by_track[tid]) for tid in track_ids
+    kept = [
+        (sc, disp, (outline[1] or ""))
+        for sc, disp, outline in zip(lectures, displays, outlines)
+        if disp.get("track_title")
     ]
-    global_task = _global_header(ctx, query, len(lectures), relaxed)
-    headers = await asyncio.gather(global_task, *header_tasks)
-    global_header, lecture_headers = headers[0], list(headers[1:])
+    if not kept:
+        log.info("find_tracks_all_uncatalogued", request_id=ctx.request_id)
+        return await _emit_empty(ctx, writer, query)
+
+    # The only LLM hop — per-lecture descriptions + the global intro, all
+    # concurrent. Each call sees ONE lecture; wall-clock ≈ one call.
+    desc_tasks = [
+        _describe(ctx, query, disp.get("track_title", ""), description, sc.chunk.text)
+        for sc, disp, description in kept
+    ]
+    intro_task = _intro(ctx, query, len(kept), relaxed)
+    prose = await asyncio.gather(intro_task, *desc_tasks)
+    intro, descriptions = prose[0], list(prose[1:])
 
     writer({"type": "status", "data": {"key": "composing_answer"}})
-    writer({"type": "delta", "data": {"text": global_header + "\n\n"}})
+    writer({"type": "delta", "data": {"text": intro + "\n\n"}})
 
-    for sc, header in zip(lectures, lecture_headers):
+    for (sc, disp, _description), desc_text in zip(kept, descriptions):
         chunk = sc.chunk
-        # Fallback to the lecture title if the header model returned nothing.
-        line = header or titles.get(chunk.track_id, "")
-        if line:
-            writer({"type": "delta", "data": {"text": f"### {line}\n"}})
+        tid = chunk.track_id
+        if desc_text:
+            writer({"type": "delta", "data": {"text": desc_text + "\n\n"}})
 
-        ref = ctx.aliases.alias_chunk(chunk.track_id, chunk.start_ms, chunk.end_ms, lang=chunk.lang)
+        # Card attribution payload — so a catalog-less client (web) can render
+        # the lecture tile. Emitted BEFORE the [card:] marker.
+        writer({
+            "type": "action",
+            "data": {"kind": "card", "id": tid, "payload": {"track_id": tid, **disp}},
+        })
+
+        ref = ctx.aliases.alias_chunk(tid, chunk.start_ms, chunk.end_ms, lang=chunk.lang)
         ctx.aliases.chunk_texts[ref] = chunk.text
-        payload = await build_cite_payload(ctx, ref, ctx.aliases.resolve(ref))
-
-        # Action-before-marker: ship the quote payload, THEN the markers that
-        # reference it (the tappable lecture tile + the quote).
-        if payload is not None:
+        cite = await build_cite_payload(ctx, ref, ctx.aliases.resolve(ref))
+        if cite is not None:
             writer({
                 "type": "action",
                 "data": {
                     "kind": "cite_transcript",
-                    "id": f"cite_{chunk.track_id}_{chunk.start_ms}_{chunk.end_ms}",
-                    "payload": payload,
+                    "id": f"cite_{tid}_{chunk.start_ms}_{chunk.end_ms}",
+                    "payload": cite,
                 },
             })
-        marker = f"[card:{chunk.track_id}]\n"
-        if payload is not None:
-            marker += f"[cite:{chunk.track_id}@{chunk.start_ms}-{chunk.end_ms}]\n"
+
+        marker = f"[card:{tid}]\n"
+        if cite is not None:
+            marker += f"[cite:{tid}@{chunk.start_ms}-{chunk.end_ms}]\n"
         writer({"type": "delta", "data": {"text": marker + "\n"}})
 
     log.info(
         "find_tracks_ok",
         request_id=ctx.request_id,
-        n_lectures=len(lectures),
+        n_lectures=len(kept),
         relaxed=relaxed,
     )
     return {}
@@ -275,9 +313,9 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
     line = ""
     if ctx.llm is not None and query:
         try:
-            line = await _global_header(ctx, query, 0, "")
+            line = await _intro(ctx, query, 0, "")
         except Exception:
-            log.exception("find_tracks_empty_header_failed", request_id=ctx.request_id)
+            log.exception("find_tracks_empty_intro_failed", request_id=ctx.request_id)
     if line:
         writer({"type": "delta", "data": {"text": line}})
     return {}

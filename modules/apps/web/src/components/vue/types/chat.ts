@@ -12,6 +12,22 @@ export type CitationPayload = ChatCiteSnippet
 export type CommentaryPayload = ChatCommentaryBody
 export type OutlinePayload = ChatOutlinePayload
 
+export interface CardReference {
+  sourceId?: unknown
+  tokens?: unknown
+  label?: unknown
+}
+
+/** Whole-lecture card attribution (a `[card:<track_id>]` tile). Resolved
+ *  server-side for clients with no local catalog (web). */
+export interface CardPayload {
+  trackId: string
+  trackTitle?: unknown
+  authorName?: unknown
+  trackDate?: unknown
+  references?: CardReference[]
+}
+
 export interface PdfItemPayload {
   track_id?: string
   trackId?: string
