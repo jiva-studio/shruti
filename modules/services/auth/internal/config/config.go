@@ -46,6 +46,14 @@ type Config struct {
 	// from ConfigPath governs optional profile-field collection. Default
 	// "global"; "ru" minimises stored fields for the Russia deployment.
 	Profile string
+	// InternalAPIToken is the shared secret a trusted server-to-server
+	// caller (e.g. the Paymento crypto-billing webhook) sends in the
+	// X-Internal-Token header to reach POST /internal/subscription/grant.
+	// Empty disables the endpoint entirely (the route isn't even wired).
+	InternalAPIToken string
+	// RCProEntitlement is the RevenueCat entitlement id granted by the
+	// internal grant endpoint. Defaults to "pro".
+	RCProEntitlement string
 }
 
 func Load() (*Config, error) {
@@ -63,6 +71,8 @@ func Load() (*Config, error) {
 		ServiceVersion:    env("SERVICE_VERSION", "dev"),
 		ConfigPath:        env("CONFIG_PATH", "/etc/lectorium/auth/config.yaml"),
 		Profile:           env("PROFILE", "global"),
+		InternalAPIToken:  os.Getenv("INTERNAL_API_TOKEN"),
+		RCProEntitlement:  env("RC_PRO_ENTITLEMENT", "pro"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
