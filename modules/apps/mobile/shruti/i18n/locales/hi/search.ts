@@ -29,6 +29,8 @@ export default {
   },
   share: {
     title: "साझा करें",
+    link: "व्याख्यान का लिंक",
+    dialogLink: "लिंक साझा करें",
     pdf: "प्रतिलिपि (PDF)",
     text: "प्रतिलिपि (टेक्स्ट)",
     audio: "ऑडियो",

@@ -32,6 +32,8 @@ export default {
   },
   share: {
     title: "Подели",
+    link: "Линк ка предавању",
+    dialogLink: "Подели линк",
     pdf: "Транскрипт (PDF)",
     text: "Транскрипт (текст)",
     audio: "Аудио",

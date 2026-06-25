@@ -29,6 +29,8 @@ export default {
   },
   share: {
     title: "Megosztás",
+    link: "Hivatkozás az előadásra",
+    dialogLink: "Hivatkozás megosztása",
     pdf: "Átirat (PDF)",
     text: "Átirat (szöveg)",
     audio: "Hang",

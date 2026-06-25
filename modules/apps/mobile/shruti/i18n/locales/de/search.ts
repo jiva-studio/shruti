@@ -29,6 +29,8 @@ export default {
   },
   share: {
     title: "Teilen",
+    link: "Link zur Vorlesung",
+    dialogLink: "Link teilen",
     pdf: "Transkript (PDF)",
     text: "Transkript (Text)",
     audio: "Audio",

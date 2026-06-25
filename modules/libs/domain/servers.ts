@@ -20,6 +20,26 @@ import type { CdnServer as KitCdnServer } from "@kit/servers"
 export { buildServerUrl } from "@kit/servers"
 
 /**
+ * Public web app (https://shruti.app). Shareable lecture deep-links
+ * resolve to `${WEB_APP_BASE_URL}/<locale>/app/<slug>`. Region-independent —
+ * a shared link is a public URL the recipient opens from anywhere — so it is
+ * a flat constant, not a per-region CdnServer field.
+ */
+export const WEB_APP_BASE_URL = "https://shruti.app"
+
+/**
+ * UI locales the web app serves, as its URL prefixes (lowercase). The deep-
+ * link opens in the user's app UI language when the web has a matching
+ * locale, else WEB_APP_DEFAULT_LOCALE. Mobile UI codes are normalised to this
+ * casing (`sr-Latn` → `sr-latn`). Keep in sync with the web's astro i18n
+ * `locales` as more languages ship there.
+ */
+export const WEB_APP_LOCALES: readonly string[] = ["en", "ru", "uk", "sr-latn", "sr-cyrl"]
+
+/** Fallback locale when the user's UI language has no web page. */
+export const WEB_APP_DEFAULT_LOCALE = "en"
+
+/**
  * Shruti's region descriptor. Extends kit's generic `CdnServer`
  * ({ id, name, urlTemplate }) with the app-specific per-region service
  * endpoints. The probe + failover machinery lives in `@kit/servers` and

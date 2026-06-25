@@ -31,6 +31,8 @@ export default {
   },
   share: {
     title: "Поделиться",
+    link: "Ссылка на лекцию",
+    dialogLink: "Поделиться ссылкой",
     pdf: "Транскрипт (PDF)",
     text: "Транскрипт (текст)",
     audio: "Аудио",
