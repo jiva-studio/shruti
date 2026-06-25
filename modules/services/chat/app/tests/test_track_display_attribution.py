@@ -92,8 +92,27 @@ async def test_resolve_track_display_full() -> None:
     assert out["author_name"] == "A. C. Bhaktivedanta Swami"
     assert out["date"] == "1972-08-14"
     assert out["references"] == [{"source_id": "bg", "tokens": "4.8", "label": "BG 4.8"}]
-    # Resolved in the ANSWER language.
+    # Resolved in the content language the answer locale reduces to (ru→ru).
     assert repo.calls == [("t1", "ru")]
+
+
+async def test_resolve_track_display_collapses_uk_to_ru() -> None:
+    # Catalog name dicts exist only in en/ru, so a uk answer must resolve in
+    # the collapsed content language (uk→ru) — otherwise the join finds no
+    # uk rows and the web card renders the raw catalog id ("source_… 2.19").
+    repo = FakeCatalogRepo(_track())
+    ctx = TurnContext(lang="uk", catalog_repo=repo)
+    out = await resolve_track_display(ctx, "t1")
+    assert out["references"] == [{"source_id": "bg", "tokens": "4.8", "label": "BG 4.8"}]
+    assert repo.calls == [("t1", "ru")]  # collapsed, not the raw "uk"
+
+
+async def test_resolve_track_display_collapses_sr_to_en() -> None:
+    # A non-East-Slavic non-corpus locale reduces to English.
+    repo = FakeCatalogRepo(_track())
+    ctx = TurnContext(lang="sr-Cyrl", catalog_repo=repo)
+    await resolve_track_display(ctx, "t1")
+    assert repo.calls == [("t1", "en")]
 
 
 async def test_resolve_track_display_caches_per_turn() -> None:

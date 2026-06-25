@@ -37,6 +37,7 @@ from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.config import get_settings
 from lectorium_chat.indexer.library.repo import fetch_media, fetch_verse_body
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
+from lectorium_chat.research.pipeline import reduce_locale_to_content_lang
 from lectorium_chat.observability.logging import bind_node_role, get_logger
 
 
@@ -393,16 +394,25 @@ async def resolve_track_display(ctx: TurnContext, track_id: str) -> dict[str, An
     local catalog (web). Cached per-turn by `(track_id, lang)` so several
     cites of one lecture cost a single catalog read. Returns {} on any miss
     (no repo, unknown track, DB error) so the card still renders without a
-    header — never raises into the SSE stream."""
+    header — never raises into the SSE stream.
+
+    The catalog dictionaries (source/author/location/tag names) exist only in
+    corpus content languages (en, ru), so we resolve in the collapsed content
+    language (`uk`→`ru`, `sr`→`en`) rather than the raw answer locale. Without
+    it a Ukrainian turn finds no `uk` rows and renders the raw catalog ids
+    (`source_dsicuBsFvinZ 2.19`, raw `tag_id`s) verbatim — the mobile client
+    sidesteps this by resolving from its on-device dictionary, but the web
+    client trusts these server labels."""
     if ctx.catalog_repo is None:
         return {}
-    key = (track_id, ctx.lang)
+    display_lang = reduce_locale_to_content_lang(ctx.lang)
+    key = (track_id, display_lang)
     cached = ctx.track_display_cache.get(key)
     if cached is not None:
         return cached
     out: dict[str, Any] = {}
     try:
-        track = await ctx.catalog_repo.get_track(track_id, lang=ctx.lang)
+        track = await ctx.catalog_repo.get_track(track_id, lang=display_lang)
     except Exception as exc:
         log.warning(
             "track_display_resolve_failed",
