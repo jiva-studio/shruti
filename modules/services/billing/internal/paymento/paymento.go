@@ -45,14 +45,23 @@ func New(baseURL, apiKey string) *Client {
 // Configured reports whether the API key is present.
 func (c *Client) Configured() bool { return c.APIKey != "" }
 
+// additionalKV is one entry of Paymento's additionalData. The API expects
+// an ARRAY of {key,value} objects, not a map — sending a map fails model
+// binding ("Cannot deserialize ... into List<AdditionalData>") which then
+// surfaces as the misleading "The request field is required".
+type additionalKV struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type createRequest struct {
-	FiatAmount     string            `json:"fiatAmount"`
-	FiatCurrency   string            `json:"fiatCurrency"`
-	ReturnURL      string            `json:"ReturnUrl"`
-	OrderID        string            `json:"orderId"`
-	Speed          int               `json:"Speed"`
-	AdditionalData map[string]string `json:"additionalData,omitempty"`
-	EmailAddress   string            `json:"EmailAddress,omitempty"`
+	FiatAmount     string         `json:"fiatAmount"`
+	FiatCurrency   string         `json:"fiatCurrency"`
+	ReturnURL      string         `json:"ReturnUrl"`
+	OrderID        string         `json:"orderId"`
+	Speed          int            `json:"Speed"`
+	AdditionalData []additionalKV `json:"additionalData,omitempty"`
+	EmailAddress   string         `json:"EmailAddress,omitempty"`
 }
 
 type createResponse struct {
@@ -67,13 +76,17 @@ func (c *Client) CreatePayment(ctx context.Context, fiatAmount, fiatCurrency, re
 	if !c.Configured() {
 		return "", ErrNotConfigured
 	}
+	var ad []additionalKV
+	for k, v := range additional {
+		ad = append(ad, additionalKV{Key: k, Value: v})
+	}
 	reqBody := createRequest{
 		FiatAmount:     fiatAmount,
 		FiatCurrency:   fiatCurrency,
 		ReturnURL:      returnURL,
 		OrderID:        orderID,
 		Speed:          1,
-		AdditionalData: additional,
+		AdditionalData: ad,
 		EmailAddress:   email,
 	}
 	raw, err := c.do(ctx, "/v1/payment/request", reqBody, "text/plain")
