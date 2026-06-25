@@ -68,13 +68,16 @@ var ErrGrantUserNotFound = errors.New("grant: user not found")
 // waiting for one — the reconcile cron is only a slow backstop.
 //
 // Steps:
-//  1. Ensure rc_app_user_id is bound to userID.String() (idempotent;
-//     BindRCAppUserID only writes when the column is NULL).
-//  2. Grant the promotional entitlement on that RC app_user_id.
-//  3. Refetch the subscriber + apply the resulting snapshot under a
-//     synthetic event_id so tier=pro lands in auth.users now.
+//  1. Ensure rc_app_user_id is bound to userID.String() (idempotent).
+//  2. GET the subscriber FIRST — RC returns 404 on a grant to a subscriber
+//     that doesn't exist yet (a web-only user never seen by the RC SDK),
+//     and GET creates it. The GET also yields the current expiry.
+//  3. Compute the new expiry = max(now, current_expiry) + period, so a
+//     renewal EXTENDS rather than resets (RC's grant replaces the expiry).
+//  4. Grant with that absolute end_time, refetch + apply under a synthetic
+//     event_id so tier=pro lands in auth.users now (RC doesn't webhook grants).
 //
-// `duration` is an RC promotional-duration token: "monthly" or "yearly".
+// `duration` is the purchased plan: "monthly" or "yearly".
 func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration string) error {
 	u, err := s.Users.Get(ctx, userID)
 	if err != nil {
@@ -85,8 +88,6 @@ func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration 
 	}
 
 	appUserID := userID.String()
-	// Bind the RC app_user_id if it hasn't been set yet (e.g. the user
-	// never completed a social signin). No-op once bound.
 	if err := s.Users.BindRCAppUserID(ctx, nil, userID, appUserID); err != nil {
 		return fmt.Errorf("grant: bind rc: %w", err)
 	}
@@ -95,12 +96,36 @@ func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration 
 	if entitlement == "" {
 		entitlement = TierPro
 	}
-	if err := s.RC.GrantPromotional(ctx, appUserID, entitlement, duration); err != nil {
+
+	// GET creates the subscriber if missing (grant 404s otherwise) and gives
+	// the current pro expiry to extend from.
+	now := time.Now().UTC()
+	pre, err := s.RC.GetSubscriber(ctx, appUserID)
+	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
+		return fmt.Errorf("grant: pre-fetch: %w", err)
+	}
+	base := now
+	if pre != nil && pre.Subscriber != nil {
+		if ent, ok := pre.Subscriber.Entitlements[entitlement]; ok &&
+			ent.ExpiresDate != nil && ent.ExpiresDate.After(base) {
+			base = *ent.ExpiresDate
+		}
+	}
+
+	var end time.Time
+	switch duration {
+	case "monthly":
+		end = base.AddDate(0, 1, 0)
+	case "yearly":
+		end = base.AddDate(1, 0, 0)
+	default:
+		return fmt.Errorf("grant: unsupported duration %q", duration)
+	}
+
+	if err := s.RC.GrantPromotional(ctx, appUserID, entitlement, end.UnixMilli()); err != nil {
 		return fmt.Errorf("grant: %w", err)
 	}
 
-	// RC doesn't webhook promo grants → refetch + apply now so tier=pro
-	// is visible immediately rather than after the next reconcile tick.
 	resp, err := s.RC.GetSubscriber(ctx, appUserID)
 	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
 		return fmt.Errorf("grant: refetch: %w", err)
@@ -318,4 +343,3 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 	}
 	return userID, matched, nil
 }
-
