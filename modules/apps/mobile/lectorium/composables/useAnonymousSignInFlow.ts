@@ -54,25 +54,41 @@ export function useAnonymousSignInFlow(): UseAnonymousSignInFlowReturn {
     }
   }
 
+  // Email is a non-blocking flow: it opens the global modal (mounted in
+  // App.vue) instead of awaiting a single round-trip, so `busy` doesn't
+  // apply here — the modal owns its own in-flight state.
+  function runEmail(): void {
+    overlays.emailSignInOpen = true
+  }
+
   async function presentSheet(): Promise<void> {
-    const sheet = await actionSheetController.create({
-      buttons: [
-        // iOS convention: Apple first.
-        {
-          text: t("settings.account.signInWithApple"),
-          handler: () => {
-            void runApple()
-          },
+    const buttons = [
+      // iOS convention: Apple first. Android/web don't offer Apple.
+      ...(app.platform === "ios"
+        ? [
+            {
+              text: t("settings.account.signInWithApple"),
+              handler: () => {
+                void runApple()
+              },
+            },
+          ]
+        : []),
+      {
+        text: t("settings.account.signInWithGoogle"),
+        handler: () => {
+          void runGoogle()
         },
-        {
-          text: t("settings.account.signInWithGoogle"),
-          handler: () => {
-            void runGoogle()
-          },
+      },
+      {
+        text: t("settings.account.signInWithEmail"),
+        handler: () => {
+          runEmail()
         },
-        { text: t("app.cancel"), role: "cancel" },
-      ],
-    })
+      },
+      { text: t("app.cancel"), role: "cancel" },
+    ]
+    const sheet = await actionSheetController.create({ buttons })
     overlays.actionSheetOpen = true
     void sheet.onDidDismiss().then(() => {
       overlays.actionSheetOpen = false
@@ -82,13 +98,9 @@ export function useAnonymousSignInFlow(): UseAnonymousSignInFlowReturn {
 
   async function triggerSignIn(): Promise<void> {
     if (busy.value) return
-    // Only iOS offers a real choice. Android and web come down to
-    // Google-only — skip the one-option sheet and trigger directly.
-    if (app.platform === "ios") {
-      await presentSheet()
-      return
-    }
-    await runGoogle()
+    // Every platform now has at least two methods (Google + Email, plus
+    // Apple on iOS), so always present the chooser sheet.
+    await presentSheet()
   }
 
   return { triggerSignIn, busy }

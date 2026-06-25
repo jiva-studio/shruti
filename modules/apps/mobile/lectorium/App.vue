@@ -64,6 +64,7 @@
       @dismissed="onSelectionPopoverDismissed"
     />
     <TrackSheet />
+    <EmailSignInModal v-model:open="overlays.emailSignInOpen" />
   </IonApp>
 </template>
 
@@ -79,6 +80,7 @@ import { useTrackMetadataFields } from "@lectorium/composables/useTrackMetadataF
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
 import TrackSheet from "@lectorium/components/TrackSheet.vue"
+import EmailSignInModal from "@lectorium/components/EmailSignInModal.vue"
 import type { SelectionActionEvent } from "@lectorium/composables/transcript/useTranscriptSelectionActions.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
