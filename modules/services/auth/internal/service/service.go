@@ -198,17 +198,15 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 			return s.applyProfile(ctx, tx, userID, filtered)
 		}
 
-		// 2. Anonymous Bearer in play → upgrade that user.
-		if uid, ok := s.userFromBearer(in.BearerAccess); ok && isAnonymousClaim(in.BearerAccess, s.Verifier) {
-			userID = uid
-			return s.createIdentity(ctx, tx, uid, filtered)
-		}
-
-		// 3. Cross-link by verified email — only useful if this
-		//    deployment collects email at all. With email disabled,
-		//    Google + Apple on the same human produce two separate
-		//    user rows; the user's tier travels with whichever they
-		//    signed in with first, and the duplicate is harmless.
+		// 2. Cross-link by verified email. A returning human who already
+		//    has an account (e.g. Google in the app) must land on THAT
+		//    account when they sign in with another provider sharing the
+		//    same verified email (e.g. Apple on the web), so tier and chat
+		//    quota stay unified. This deliberately beats the anonymous
+		//    upgrade below: every web visitor gets a throwaway per-device
+		//    anon, and if that captured the new identity first it would
+		//    split one human into two accounts on the same email. Gated on
+		//    email collection — with email disabled the two stay separate.
 		if s.ProfilePolicy.Email.Enabled && filtered.EmailVerified && filtered.Email != "" {
 			matchUID, err := s.Identities.FindUserByVerifiedEmail(ctx, filtered.Email)
 			if err != nil {
@@ -218,6 +216,15 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 				userID = matchUID
 				return s.createIdentity(ctx, tx, matchUID, filtered)
 			}
+		}
+
+		// 3. Anonymous Bearer in play → upgrade that user. Reached only
+		//    when no pre-existing account owns this verified email (a
+		//    brand-new human, or email collection disabled), so claiming
+		//    the identity preserves the anon user's accumulated data.
+		if uid, ok := s.userFromBearer(in.BearerAccess); ok && isAnonymousClaim(in.BearerAccess, s.Verifier) {
+			userID = uid
+			return s.createIdentity(ctx, tx, uid, filtered)
 		}
 
 		// 4. Fresh user.
