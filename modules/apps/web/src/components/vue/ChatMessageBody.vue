@@ -6,10 +6,12 @@ import ChapterCard from '@lib/ui/chat/ChapterCard.vue'
 import OutlineCard from '@lib/ui/chat/OutlineCard.vue'
 import WebVerseCard from './WebVerseCard.vue'
 import WebCitationCard from './WebCitationCard.vue'
+import WebTrackCard from './WebTrackCard.vue'
 import WebCommentaryCard from './WebCommentaryCard.vue'
 import WebMediaCard from './WebMediaCard.vue'
 import { STORE } from '../../i18n/ui'
 import type {
+  CardPayload,
   ChapterPayload,
   CitationPayload,
   CommentaryPayload,
@@ -26,6 +28,7 @@ const props = defineProps<{
   verses?: Map<string, VersePayload>
   chapters?: Map<string, ChapterPayload>
   cites?: Map<string, CitationPayload>
+  cards?: Map<string, CardPayload>
   commentaries?: Map<string, CommentaryPayload>
   media?: Map<string, MediaPayload>
   outlines?: Map<string, OutlinePayload>
@@ -41,6 +44,7 @@ type ChapterToken = Extract<ChatToken, { kind: 'chapter' }>
 type CiteToken = Extract<ChatToken, { kind: 'cite' }>
 type CommentaryToken = Extract<ChatToken, { kind: 'commentary' }>
 type MediaToken = Extract<ChatToken, { kind: 'media' }>
+type CardsToken = Extract<ChatToken, { kind: 'cards' }>
 type OutlineToken = Extract<ChatToken, { kind: 'outline' }>
 type ActionToken = Extract<ChatToken, { kind: 'action' }>
 
@@ -61,6 +65,9 @@ function mediaBody(t: MediaToken) {
 }
 function outlineBody(t: OutlineToken) {
   return props.outlines?.get(t.trackId)
+}
+function cardBody(trackId: string) {
+  return props.cards?.get(trackId)
 }
 function pdfBody(t: ActionToken) {
   return props.pdfActions?.get(t.actionId)
@@ -132,6 +139,18 @@ const getAppLabel = computed(() =>
         :caption="tk.caption"
         :language="lang"
       />
+
+      <!-- CARDS: whole-lecture tiles (find_track results). Rendered from the
+           server-sent `card` attribution — web has no local catalog. -->
+      <template v-else-if="tk.kind === 'cards'">
+        <WebTrackCard
+          v-for="tid in tk.trackIds"
+          :key="tid"
+          :track-id="tid"
+          :body="cardBody(tid)"
+          :language="lang"
+        />
+      </template>
 
       <!-- COMMENTARY: real CommentaryCard. Absent body → nothing. -->
       <WebCommentaryCard

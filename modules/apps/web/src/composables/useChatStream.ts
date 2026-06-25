@@ -1,6 +1,7 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { useWebAuth } from './useWebAuth'
 import type {
+  CardPayload,
   ChapterPayload,
   CitationPayload,
   CommentaryPayload,
@@ -23,6 +24,7 @@ export interface Msg {
   verses?: Map<string, VersePayload>
   chapters?: Map<string, ChapterPayload>
   cites?: Map<string, CitationPayload>
+  cards?: Map<string, CardPayload>
   commentaries?: Map<string, CommentaryPayload>
   media?: Map<string, MediaPayload>
   outlines?: Map<string, OutlinePayload>
@@ -103,6 +105,13 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
       trackTitle: p.track_title, authorName: p.author_name, trackDate: p.date,
       references: refs.map((r) => ({ sourceId: r.source_id, tokens: r.tokens, label: r.label })),
     } as CitationPayload)
+  } else if (kind === 'card' && p.track_id != null) {
+    const refs = (Array.isArray(p.references) ? p.references : []) as Record<string, unknown>[]
+    a.cards!.set(String(p.track_id), {
+      trackId: String(p.track_id),
+      trackTitle: p.track_title, authorName: p.author_name, trackDate: p.date,
+      references: refs.map((r) => ({ sourceId: r.source_id, tokens: r.tokens, label: r.label })),
+    } as CardPayload)
   } else if (kind === 'commentary') {
     const ref = p.ref != null ? p.ref : Number(String(p.id ?? '').match(/(\d+)$/)?.[1])
     if (Number.isFinite(ref)) {
@@ -178,6 +187,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
       verses: new Map(),
       chapters: new Map(),
       cites: new Map(),
+      cards: new Map(),
       commentaries: new Map(),
       media: new Map(),
       outlines: new Map(),
