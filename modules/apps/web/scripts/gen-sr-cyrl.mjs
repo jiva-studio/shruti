@@ -17,7 +17,7 @@ const STRINGS = join(__dirname, '../src/i18n/strings')
 
 // Latin brand / product tokens that must stay in Latin (the transliterator
 // would otherwise turn iPhone → иПхоне). Longest first.
-const PROTECTED = ['App Store', 'Google Play', 'iPhone', 'iPad', 'Android', 'iOS', 'PRO']
+const PROTECTED = ['App Store', 'Google Play', 'Apple', 'Google', 'iPhone', 'iPad', 'Android', 'iOS', 'PRO']
 const SPLIT = new RegExp(`(${PROTECTED.join('|')})`, 'g')
 
 function translit(value) {
