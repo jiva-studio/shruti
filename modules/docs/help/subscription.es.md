@@ -44,6 +44,5 @@ o Google; nosotros nunca vemos los datos de tu tarjeta.
   cambiar de plan o cancelar. Cancelar deja PRO activo hasta que se agote el
   periodo que pagaste.
 
-Si pagar a través de la tienda no es posible en tu país, la opción **No puedo
-pagar** (mostrada donde los pagos de la tienda no están disponibles) envía un
-correo a nuestro equipo de soporte para que podamos ayudarte.
+Si tienes algún problema con el pago, también puedes suscribirte en nuestro
+sitio web: inicia sesión con la misma cuenta: <https://shruti.app/en/subscribe>.

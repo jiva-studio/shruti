@@ -42,6 +42,5 @@ Naplatu obavlja Apple ili Google; mi nikada ne vidimo podatke vaše kartice.
   menjate planove ili otkažete. Otkazivanje ostavlja PRO aktivnim do isteka
   perioda koji ste platili.
 
-Ako plaćanje preko prodavnice nije moguće u vašoj zemlji, opcija **Ne mogu da
-platim** (prikazana tamo gde plaćanja u prodavnici nisu dostupna) šalje
-e-poruku našem timu podrške da bismo mogli da pomognemo.
+Ako imate poteškoća sa plaćanjem, pretplatu možete obaviti i na našem sajtu —
+prijavite se istim nalogom: <https://shruti.app/sr-latn/subscribe>.

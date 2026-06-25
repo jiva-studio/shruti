@@ -88,6 +88,7 @@ modules/
 | [Sentry](https://akdasa-studio.sentry.io/issues/?project=4511584811220992) | Error & crash tracking |
 | [Langfuse](https://langfuse.obs.eu.lectorium.akdasa.studio/) | LLM/chat observability & prompt management |
 | [Grafana](https://grafana.obs.eu.lectorium.akdasa.studio/) | Metrics & infrastructure dashboards |
+| [Paymento](https://app.paymento.io/panel/stores) | Payment gateway for web checkout where store IAP is unavailable |
 
 # Get involved
 

@@ -45,6 +45,6 @@ kezeli; a kártyaadataidat sosem látjuk.
   ahol csomagot válthatsz vagy lemondhatod. A lemondás után a PRO aktív
   marad addig, amíg a kifizetett időszak le nem jár.
 
-Ha a bolton keresztüli fizetés az országodban nem lehetséges, a **Nem tudok
-fizetni** lehetőség (ott jelenik meg, ahol a bolti fizetés nem érhető el)
-e-mailt küld a támogatási csapatunknak, hogy segíthessünk.
+Ha bármilyen gondod van a fizetéssel, az előfizetést a weboldalunkon is
+elvégezheted — jelentkezz be ugyanazzal a fiókkal:
+<https://shruti.app/en/subscribe>.

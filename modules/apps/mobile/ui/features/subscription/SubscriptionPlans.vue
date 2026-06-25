@@ -45,17 +45,6 @@
     <IonNote v-else class="footer-status">
       {{ $t("settings.subscription.unavailable") }}
     </IonNote>
-
-    <IonButton
-      v-if="showCantPay"
-      expand="block"
-      fill="clear"
-      color="medium"
-      class="cant-pay"
-      @click="emit('cantPay')"
-    >
-      {{ $t("settings.subscription.cantPay") }}
-    </IonButton>
   </div>
 </template>
 
@@ -76,12 +65,10 @@ const props = defineProps<{
    */
   ready: boolean
   purchasing: boolean
-  showCantPay?: boolean
 }>()
 
 const emit = defineEmits<{
   subscribe: [packageId: string]
-  cantPay: []
   /** Whether the currently-selected plan carries a free trial — the host
    *  feeds this to a SubscriptionDisclaimer when it composes one. */
   "update:hasTrial": [hasTrial: boolean]
@@ -209,11 +196,6 @@ function onSubscribeClick(): void {
   line-height: 1.4;
   background: var(--ion-color-success, #2dd36f);
   color: var(--ion-color-success-contrast, #fff);
-}
-.cant-pay {
-  margin: 0;
-  --box-shadow: none;
-  font-size: 0.9rem;
 }
 .footer-status {
   display: block;

@@ -47,7 +47,6 @@ Google; deine Kartendaten sehen wir nie.
   wechseln oder kündigen kannst. Nach dem Kündigen bleibt PRO bis zum Ende des
   bezahlten Zeitraums aktiv.
 
-Wenn das Bezahlen über den Store in deinem Land nicht möglich ist, schickt die
-Option **Ich kann nicht bezahlen** (dort eingeblendet, wo Store-Zahlungen
-nicht verfügbar sind) eine E-Mail an unser Support-Team, damit wir helfen
-können.
+Falls du Probleme mit der Bezahlung hast, kannst du das Abo auch auf unserer
+Website abschließen — melde dich mit demselben Konto an:
+<https://shruti.app/en/subscribe>.

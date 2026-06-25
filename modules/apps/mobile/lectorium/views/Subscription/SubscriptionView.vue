@@ -26,11 +26,9 @@
           :purchasing="subscription.purchasing"
           :restoring="subscription.restoring"
           :legal-documents="subscription.legalDocuments"
-          :show-cant-pay="subscription.showCantPay"
           @subscribe="subscription.onSubscribe"
           @restore="subscription.onRestore"
           @manage="subscription.onManage"
-          @cant-pay="subscription.onCantPay"
         />
       </div>
     </IonContent>
