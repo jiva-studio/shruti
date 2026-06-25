@@ -21,17 +21,20 @@
       <br v-else-if="newLine" />
       <span v-if="showDash" class="no-stretch">–&nbsp;</span>
 
-      <span v-bind="$attrs" v-html="text + ' '" />
+      <span v-bind="$attrs" v-html="html" />
     </span>
   </span>
 </template>
 
 <script lang="ts" setup>
+import { computed } from "vue"
+import { renderInlineMarkdown } from "@lib/ui/transcript/renderInlineMarkdown.js"
+
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-defineProps<{
+const props = defineProps<{
   text: string
   icon?: string
   newLine?: boolean
@@ -39,6 +42,8 @@ defineProps<{
   reference?: string
   referenceVisible: boolean
 }>()
+
+const html = computed(() => renderInlineMarkdown(props.text) + " ")
 </script>
 
 <style scoped>
