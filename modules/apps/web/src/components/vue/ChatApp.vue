@@ -133,6 +133,7 @@ function statusLabelFor(m: Msg): string {
         <p class="font-serif text-base font-semibold text-ink">{{ capped ? L.capTitle : L.errTitle }}</p>
         <p class="mt-1 text-sm text-medium">{{ capped ? L.capBody : L.errBody }}</p>
         <div class="mt-4 flex flex-wrap justify-center gap-3">
+          <a v-if="capped" :href="`/${props.lang}/subscribe`" class="rounded-lg bg-saffron px-4 py-2 text-sm font-semibold text-cream hover:bg-saffron-shade">{{ t('sub.cta') }}</a>
           <a :href="STORE.appStore" target="_blank" rel="noopener" class="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-cream hover:bg-coffee">App Store</a>
           <a :href="STORE.googlePlay" target="_blank" rel="noopener" class="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-cream hover:bg-coffee">Google Play</a>
         </div>
