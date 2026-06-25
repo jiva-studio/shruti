@@ -68,9 +68,6 @@ export default {
     error: "Bei der Aktion ist ein Fehler aufgetreten. Bitte versuche es erneut.",
     noSubscriptionFound:
       "Kein aktives Abonnement gefunden. Bitte abonniere, um Zugang zu den Premium-Funktionen zu erhalten.",
-    cantPay: "Ich kann nicht bezahlen",
-    cantPayEmailSubject: "Ich kann nicht bezahlen",
-    cantPayEmailIntro: "Ich kann nicht bezahlen.",
     thanks:
       "Danke für dein Abonnement und deine Unterstützung 🙏 Möge dein Herz von Glück erfüllt sein und dich jeder Tag der Wahrheit näherbringen. Wir freuen uns, dass du auf diesem Weg bei uns bist.",
     benefits: {

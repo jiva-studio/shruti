@@ -69,9 +69,6 @@ export default {
     error: "A művelet közben hiba történt. Kérlek, próbáld újra.",
     noSubscriptionFound:
       "Nem található aktív előfizetés. Fizess elő a prémium funkciók eléréséhez.",
-    cantPay: "Nem tudok fizetni",
-    cantPayEmailSubject: "Nem tudok fizetni",
-    cantPayEmailIntro: "Nem tudok fizetni.",
     thanks:
       "Köszönjük az előfizetésedet és a támogatásodat 🙏 Töltse el szívedet boldogság, és minden nap közelebb vigyen az Igazsághoz. Örülünk, hogy velünk tartasz ezen az úton.",
     benefits: {

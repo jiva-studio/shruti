@@ -49,7 +49,6 @@ Google ; nous ne voyons jamais les détails de votre carte.
   changer de formule ou annuler. L'annulation laisse PRO actif jusqu'à la
   fin de la période que vous avez payée.
 
-Si payer via le store n'est pas possible dans votre pays, l'option **Je ne
-peux pas payer** (affichée là où les paiements via le store ne sont pas
-disponibles) envoie un e-mail à notre équipe d'assistance afin que nous
-puissions vous aider.
+Si vous rencontrez des difficultés de paiement, vous pouvez aussi vous
+abonner sur notre site web — connectez-vous avec le même compte :
+<https://shruti.app/en/subscribe>.
