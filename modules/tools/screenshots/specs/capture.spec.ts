@@ -216,6 +216,30 @@ async function preseedOnboarding(page: Page): Promise<void> {
 }
 
 /**
+ * Pin the UI language to the captured locale. The app reads `?locale=` only
+ * for the synchronous i18n default, then `useAppLanguageSeed` re-derives the
+ * language from `navigator.language` once the Welcome redirect to `/tabs/home`
+ * has dropped the query string. Chromium normalises the invalid standalone
+ * `sr-Cyrl` context locale to a bare `sr`, which `toSupportedLocale` maps to
+ * `sr-Latn` — so without this the Cyrillic capture renders Latin chrome. The
+ * seed no-ops when `settings.appLanguage` is already set (web →
+ * `localStorage["CapacitorStorage.settings.appLanguage"]`, JSON-encoded by
+ * `useConfig`), so stamping it makes every locale deterministic.
+ */
+async function preseedAppLanguage(page: Page, code: CaptureLocale): Promise<void> {
+  await page.addInitScript(
+    ({ value }: { value: string }) => {
+      try {
+        localStorage.setItem("CapacitorStorage.settings.appLanguage", value)
+      } catch {
+        // unavailable origin — non-fatal; the app falls back to its detected locale.
+      }
+    },
+    { value: JSON.stringify(code) }
+  )
+}
+
+/**
  * Write the seeded user.db into IndexedDB BEFORE the app boots. The Vite
  * `useSqlJsPersistence` reads from `(lectorium, databases, user.db)` on
  * `open()` and creates an empty DB only when the key is missing — so a
@@ -270,6 +294,7 @@ async function boot(page: Page, code: CaptureLocale): Promise<void> {
   await preseedSearchFilter(page, code)
   await preseedDismissedNags(page)
   await preseedOnboarding(page)
+  await preseedAppLanguage(page, code)
 
   await page.goto(`/?locale=${code}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
