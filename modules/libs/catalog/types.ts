@@ -91,11 +91,20 @@ export interface ParagraphBlock {
   end: number
 }
 
+export interface MarkerBlock {
+  type: 'marker'
+  start: number
+  end: number
+  text: string
+  speaker?: string
+}
+
 export type TranscriptBlock =
   | SentenceBlock
   | VerseTextBlock
   | VerseTranslationBlock
   | ParagraphBlock
+  | MarkerBlock
 
 export interface LectureTranscript {
   version: number | null

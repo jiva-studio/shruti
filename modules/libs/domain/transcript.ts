@@ -17,6 +17,7 @@ export type TranscriptBlock =
   | TranscriptSentenceBlock
   | TranscriptVerseTextBlock
   | TranscriptVerseTranslationBlock
+  | TranscriptMarkerBlock
 
 export interface TranscriptParagraphBlock {
   readonly type: "paragraph"
@@ -46,4 +47,12 @@ export interface TranscriptVerseTranslationBlock {
   readonly start: number
   readonly end: number
   readonly text: string
+}
+
+export interface TranscriptMarkerBlock {
+  readonly type: "marker"
+  readonly start: number
+  readonly end: number
+  readonly text: string
+  readonly speaker?: string
 }

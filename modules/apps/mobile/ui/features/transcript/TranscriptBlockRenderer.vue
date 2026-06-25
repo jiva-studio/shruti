@@ -44,6 +44,15 @@
     :data-time-end="block.block.end"
     @click="onBlockClick"
   />
+
+  <MarkerBlock
+    v-else-if="block.block.type === 'marker'"
+    :text="block.block.text"
+    :class="stateClasses"
+    :data-time-start="block.block.start"
+    :data-time-end="block.block.end"
+    @click="onBlockClick"
+  />
 </template>
 
 <script setup lang="ts">
@@ -52,6 +61,7 @@ import SentenceBlock from "./SentenceBlock.vue"
 import VerseTextBlock from "./VerseTextBlock.vue"
 import VerseTextInlineBlock from "./VerseTextInlineBlock.vue"
 import VerseTranslationBlock from "./VerseTranslationBlock.vue"
+import MarkerBlock from "./MarkerBlock.vue"
 import type { UiTranscriptBlockView } from "./types.js"
 
 const props = defineProps<{
