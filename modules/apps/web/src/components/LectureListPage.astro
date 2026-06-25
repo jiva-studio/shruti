@@ -1,6 +1,7 @@
 ---
 import type { LectureIndexEntry } from '@lib/catalog/types.js'
 import { useT, type Lang } from '../i18n/ui'
+import { contentLangFor } from '../i18n/locales'
 import { shortSlug } from '../lib/catalog'
 import WebLectureRow from './vue/WebLectureRow.vue'
 
@@ -55,7 +56,7 @@ const t = useT(lang)
 
   <div class="mt-8 flex flex-col divide-y divide-line/60">
     {lectures.map((entry) => (
-      <WebLectureRow entry={entry} lang={lang} href={`/${lang}/app/${shortSlug(entry.slug)}`} />
+      <WebLectureRow entry={entry} lang={lang} href={`/${contentLangFor(lang)}/app/${shortSlug(entry.slug)}`} />
     ))}
   </div>
 </div>

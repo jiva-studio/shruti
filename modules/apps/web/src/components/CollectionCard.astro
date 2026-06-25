@@ -2,6 +2,7 @@
 import type { CollectionIndexEntry } from '@lib/catalog/types.js'
 import { pickName } from '../lib/catalog'
 import type { Lang } from '../i18n/ui'
+import { contentLangFor } from '../i18n/locales'
 
 interface Props {
   collection: CollectionIndexEntry
@@ -10,7 +11,7 @@ interface Props {
 const { collection, lang } = Astro.props
 const name = pickName(collection.names, lang)
 const desc = pickName(collection.descriptions, lang)
-const href = `/${lang}/app/library/${collection.slug}`
+const href = `/${contentLangFor(lang)}/app/library/${collection.slug}`
 ---
 <a
   href={href}

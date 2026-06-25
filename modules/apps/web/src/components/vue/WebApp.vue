@@ -67,13 +67,17 @@ import WebLectureSearch from './WebLectureSearch.vue'
 import WebLecturePlayer from './WebLecturePlayer.vue'
 import ChatApp from './ChatApp.vue'
 import { useT, type Lang } from '../../i18n/ui'
+import { contentLangFor } from '../../i18n/locales'
 import { lectureTitle, lectureMeta } from '../../lib/lectureDisplay'
 import indexRaw from '../../data/lectures-index.json'
 
 const props = defineProps<{ lang: Lang; slug?: string; lecture?: LectureRecord | null }>()
 const t = useT(props.lang)
 
+// Shell stays on the UI locale; lecture-detail URLs use the content language
+// (uk→ru, sr→en) because catalog detail pages exist only in ru/en.
 const basePath = `/${props.lang}/app`
+const lectureBase = `/${contentLangFor(props.lang)}/app`
 
 function shortSlug(slug: string): string {
   return slug.replace(/^track_/, '')
@@ -130,7 +134,7 @@ async function select(entry: LectureIndexEntry, push = true) {
   selectedEntry.value = entry
   loadError.value = false
   if (push && typeof window !== 'undefined') {
-    window.history.pushState(null, '', `${basePath}/${shortSlug(entry.slug)}`)
+    window.history.pushState(null, '', `${lectureBase}/${shortSlug(entry.slug)}`)
   }
   if (props.lecture && props.lecture.id === entry.id) {
     lecture.value = props.lecture
