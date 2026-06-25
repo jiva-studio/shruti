@@ -115,7 +115,7 @@ function statusLabelFor(m: Msg): string {
         </div>
         <!-- assistant: full-width prose, NO bubble (matches the app) -->
         <div v-else class="text-[0.95rem] text-ink">
-          <ChatMessageBody v-if="m.text" :text="m.text" :lang="props.lang" :verses="m.verses" :chapters="m.chapters" :cites="m.cites" :commentaries="m.commentaries" :media="m.media" :outlines="m.outlines" :pdf-actions="m.pdfActions" />
+          <ChatMessageBody v-if="m.text" :text="m.text" :lang="props.lang" :verses="m.verses" :chapters="m.chapters" :cites="m.cites" :cards="m.cards" :commentaries="m.commentaries" :media="m.media" :outlines="m.outlines" :pdf-actions="m.pdfActions" />
           <StatusPill
             v-if="m.streaming"
             :class="m.text ? 'mt-3' : ''"
