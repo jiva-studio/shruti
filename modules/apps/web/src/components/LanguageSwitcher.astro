@@ -1,0 +1,42 @@
+---
+import { UI_LOCALES, localizePath, type Lang } from '../i18n/locales'
+interface Props { lang: Lang; path?: string; contentOnly?: boolean }
+const { lang, path = '/', contentOnly = false } = Astro.props
+const current = UI_LOCALES.find((l) => l.code === lang) ?? UI_LOCALES[0]
+---
+<details class="lang-switcher relative">
+  <summary
+    class="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-line px-3.5 text-sm text-ink-soft transition hover:border-saffron hover:text-saffron"
+    aria-label="Language"
+  >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+    </svg>
+    <span>{current.label}</span>
+  </summary>
+  <ul
+    class="absolute right-0 z-50 mt-2 min-w-[10rem] list-none overflow-hidden rounded-xl border border-line bg-cream p-1 shadow-lg"
+  >
+    {UI_LOCALES.map((l) => (
+      <li>
+        <a
+          href={localizePath(path, l.code, contentOnly)}
+          hreflang={l.hreflang}
+          lang={l.hreflang}
+          aria-current={l.code === lang ? 'true' : undefined}
+          class:list={[
+            'block rounded-lg px-3 py-2 text-sm transition hover:bg-cream-deep/60',
+            l.code === lang ? 'font-semibold text-saffron' : 'text-ink-soft',
+          ]}
+        >{l.label}</a>
+      </li>
+    ))}
+  </ul>
+</details>
+
+<style>
+  /* Native disclosure dropdown — no JS. Hide the default marker, close on
+     blur is handled by the browser; clicking a link navigates away. */
+  .lang-switcher > summary::-webkit-details-marker { display: none; }
+  .lang-switcher > summary::marker { content: ''; }
+</style>

@@ -1,9 +1,9 @@
 ---
-import { useT, FAQ, type Lang } from '../i18n/ui'
+import { useT, faqFor, type Lang } from '../i18n/ui'
 interface Props { lang: Lang }
 const { lang } = Astro.props
 const t = useT(lang)
-const faq = FAQ[lang]
+const faq = faqFor(lang)
 const faqLd = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',

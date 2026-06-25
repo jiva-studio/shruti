@@ -10,6 +10,7 @@ import type {
   CollectionsIndex,
 } from '@lib/catalog/types.js'
 
+import { contentLangFor } from '../i18n/locales'
 export { pickName } from './lectureDisplay'
 
 export const lectures = lecturesIndex as unknown as LectureIndexEntry[]
@@ -30,8 +31,11 @@ export function lecturesByIds(ids: string[]): LectureIndexEntry[] {
   return out
 }
 
+/** Lectures for `ids` in the UI locale's CONTENT language (uk→ru, sr→en) —
+ *  the catalog only carries the content languages. */
 export function lecturesByIdsForLang(ids: string[], lang: string): LectureIndexEntry[] {
-  return lecturesByIds(ids).filter((l) => l.contentLanguages.includes(lang))
+  const content = contentLangFor(lang)
+  return lecturesByIds(ids).filter((l) => l.contentLanguages.includes(content))
 }
 
 export function lectureCountForLang(ids: string[], lang: string): number {

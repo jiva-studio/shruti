@@ -1,6 +1,7 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type { LectureIndexEntry } from '@lib/catalog/types.js'
 import type { Lang } from '../i18n/ui'
+import { contentLangFor } from '../i18n/locales'
 
 export interface FacetOption {
   id: string
@@ -27,10 +28,9 @@ export interface SearchFilter {
   reset: () => void
 }
 
-const languageNames: Record<string, Record<Lang, string>> = {
-  en: { ru: 'Английский', en: 'English' },
-  ru: { ru: 'Русский', en: 'Russian' },
-}
+// Each language's own name (endonym) — a language label isn't translated per
+// UI locale.
+const languageNames: Record<string, string> = { en: 'English', ru: 'Русский' }
 
 function norm(s: string): string {
   return s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -44,7 +44,9 @@ export function useSearchFilter(
   const debounced = ref('')
   const selectedAuthors = ref<string[]>([])
   const selectedLocations = ref<string[]>([])
-  const selectedLanguages = ref<string[]>([])
+  // Default to the UI locale's content language (uk→ru, sr→en) so a visitor
+  // sees the lectures they can actually read; they can broaden it.
+  const selectedLanguages = ref<string[]>([contentLangFor(lang())])
   const yearFrom = ref('')
   const yearTo = ref('')
   const duration = ref('')
@@ -69,7 +71,7 @@ export function useSearchFilter(
   }
 
   function languageLabel(code: string): string {
-    return languageNames[code]?.[lang()] ?? code
+    return languageNames[code] ?? code
   }
 
   const haystacks = new WeakMap<LectureIndexEntry, string>()
@@ -116,7 +118,7 @@ export function useSearchFilter(
   function refSortKey(e: LectureIndexEntry): string {
     const r = e.refs[0]
     if (!r) return ''
-    const short = r.shortNames[lang()] ?? Object.values(r.shortNames)[0] ?? ''
+    const short = r.shortNames[contentLangFor(lang())] ?? Object.values(r.shortNames)[0] ?? ''
     return norm(`${short} ${r.tokens}`.trim())
   }
 
