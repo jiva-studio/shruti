@@ -5,6 +5,7 @@ import { SocialLogin } from "@capgo/capacitor-social-login"
 
 import {
   AccountDeleteError,
+  EmailOtpError,
   type AuthConfig,
   type AuthPort,
   type AuthSession,
@@ -301,6 +302,61 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return (await res.json()) as TokenResponseBody
   }
 
+  function emailOtpErrorFromResponse(res: Response): EmailOtpError {
+    const retryAfter = Number(res.headers.get("Retry-After")) || undefined
+    switch (res.status) {
+      case 400:
+        return new EmailOtpError("invalid-email")
+      case 401:
+        return new EmailOtpError("invalid-code")
+      case 429:
+        return new EmailOtpError("throttled", retryAfter)
+      case 503:
+        return new EmailOtpError("disabled")
+      default:
+        return new EmailOtpError(res.status >= 500 ? "server" : "unknown")
+    }
+  }
+
+  async function requestEmailOtp(email: string): Promise<void> {
+    let res: Response
+    try {
+      res = await cfg.request("/signin/email/request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // An anonymous bearer lets the server upgrade THIS device's user
+          // in place on the subsequent verify (same userId / progress).
+          ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+        },
+        body: JSON.stringify({ email }),
+      })
+    } catch {
+      throw new EmailOtpError("network")
+    }
+    if (res.ok) return
+    throw emailOtpErrorFromResponse(res)
+  }
+
+  async function verifyEmailOtp(email: string, code: string): Promise<AuthSession> {
+    const deviceId = (await Device.getId()).identifier
+    let res: Response
+    try {
+      res = await cfg.request("/signin/email/verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+        },
+        body: JSON.stringify({ email, code, deviceId }),
+      })
+    } catch {
+      throw new EmailOtpError("network")
+    }
+    if (!res.ok) throw emailOtpErrorFromResponse(res)
+    return commitTokenResponse((await res.json()) as TokenResponseBody)
+  }
+
   // ─── AuthPort ─────────────────────────────────────────────────────────
 
   async function initialize(): Promise<AuthSession> {
@@ -531,6 +587,8 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     initialize,
     signInWithGoogle,
     signInWithApple,
+    requestEmailOtp,
+    verifyEmailOtp,
     signOut,
     deleteAccount,
     getSession,

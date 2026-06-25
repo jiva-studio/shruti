@@ -370,6 +370,36 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
+  /**
+   * Request a passwordless sign-in code to `email`. Thin pass-through to
+   * the port; lets the EmailOtpError bubble so the modal can show the
+   * concrete reason (invalid email / throttled / mail disabled).
+   */
+  async function requestEmailCode(email: string): Promise<void> {
+    const auth = useShruti().auth
+    await auth.requestEmailOtp(email)
+  }
+
+  /**
+   * Verify the emailed code. On success applies the (possibly upgraded)
+   * session and kicks the post-signin tier sync, mirroring signInGoogle.
+   * On failure restores the prior session view and rethrows so the modal
+   * can surface "invalid code" inline.
+   */
+  async function signInEmail(email: string, code: string): Promise<boolean> {
+    const auth = useShruti().auth
+    status.value = "signingIn"
+    try {
+      const session = await auth.verifyEmailOtp(email, code)
+      applySession(session)
+      invalidateAndSyncAfterSignin()
+      return true
+    } catch (e) {
+      applySession(auth.getSession())
+      throw e
+    }
+  }
+
   async function signOut(): Promise<void> {
     const auth = useShruti().auth
     await auth.signOut()
@@ -434,6 +464,8 @@ export const useAuthStore = defineStore("auth", () => {
     restore,
     signInGoogle,
     signInApple,
+    requestEmailCode,
+    signInEmail,
     signOut,
     deleteAccount,
     refreshTokens,
