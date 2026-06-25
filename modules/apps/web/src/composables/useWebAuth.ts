@@ -33,7 +33,7 @@ export interface WebAuth {
   getToken: () => string | null
   ensureToken: () => Promise<string>
   resetToken: () => void
-  mountGoogleButton: (el: HTMLElement) => void
+  mountGoogleButton: (el: HTMLElement, width?: number) => void
   signInApple: () => Promise<boolean>
   signOut: () => Promise<void>
 }
@@ -326,12 +326,13 @@ export function useWebAuth(config?: WebAuthConfig): WebAuth {
     resetToken: () => {
       if (stored) persistTokens({ ...stored, accessTokenExpiresAt: 0 })
     },
-    mountGoogleButton: (el: HTMLElement) => {
+    mountGoogleButton: (el: HTMLElement, width?: number) => {
       init()
       const clientId = cfg?.googleClientId
       if (!clientId) return
       renderGoogleButton(el, clientId, (idToken) => void signinSocial('google', idToken), {
         locale: cfg?.locale,
+        width,
       })
     },
     signInApple: async () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useT, type Lang } from '../../i18n/ui'
 import { contentLangFor } from '../../i18n/locales'
 import { useWebAuth } from '../../composables/useWebAuth'
@@ -20,6 +20,7 @@ const auth = useWebAuth({
   locale: contentLangFor(props.lang),
 })
 
+const root = ref<HTMLElement>()
 const googleSlot = ref<HTMLElement>()
 const open = ref(false)
 const busy = ref(false)
@@ -34,7 +35,7 @@ const displayName = computed(() => {
 const initial = computed(() => (displayName.value.trim()[0] || '?').toUpperCase())
 
 function mountGoogle() {
-  if (googleSlot.value) auth.mountGoogleButton(googleSlot.value)
+  if (googleSlot.value) auth.mountGoogleButton(googleSlot.value, 256)
 }
 
 function toggle() {
@@ -56,20 +57,33 @@ async function onSignOut() {
   await auth.signOut()
 }
 
+function onDocClick(e: MouseEvent) {
+  if (open.value && root.value && !root.value.contains(e.target as Node)) open.value = false
+}
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') open.value = false
+}
+
 onMounted(() => {
   // Read-only: show the persisted session if any. The anonymous floor is
   // bootstrapped lazily (chat send / sign-in click), so a site-wide nav
   // button doesn't mint a throwaway anon on every page view.
   auth.hydrate()
+  document.addEventListener('click', onDocClick)
+  document.addEventListener('keydown', onKey)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
+  document.removeEventListener('keydown', onKey)
 })
 </script>
 
 <template>
-  <div v-if="auth.ready.value" class="relative flex items-center">
+  <div v-if="auth.ready.value" ref="root" class="relative flex items-center">
     <template v-if="auth.signedIn.value">
       <button
         type="button"
-        class="flex h-9 items-center gap-2 rounded-lg border border-line bg-cream px-3 text-sm text-ink-soft transition hover:border-saffron"
+        class="flex h-9 items-center gap-2 rounded-lg border border-saffron/30 bg-saffron/10 px-3 text-sm text-ink-soft transition hover:border-saffron hover:bg-saffron/15"
         @click="toggle"
       >
         <span class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-saffron/20 text-xs font-semibold text-saffron">
@@ -88,6 +102,12 @@ onMounted(() => {
         v-if="open"
         class="absolute right-0 top-full z-50 mt-1 w-48 rounded-2xl border border-line bg-cream p-2 shadow-lg"
       >
+        <a
+          :href="`/${props.lang}/subscribe`"
+          class="block rounded-lg px-3 py-2 text-left text-sm font-semibold text-saffron transition hover:bg-cream-deep"
+        >
+          {{ t('auth.getPro') }}
+        </a>
         <button type="button" class="w-full rounded-lg px-3 py-2 text-left text-sm text-ink-soft transition hover:bg-cream-deep" @click="onSignOut">
           {{ t('auth.signOut') }}
         </button>
@@ -105,10 +125,10 @@ onMounted(() => {
 
       <div
         v-if="open"
-        class="absolute right-0 top-full z-50 mt-1 w-64 rounded-2xl border border-line bg-cream p-4 shadow-lg"
+        class="absolute right-0 top-full z-50 mt-1 w-72 rounded-2xl border border-line bg-cream p-4 shadow-lg"
       >
         <p class="mb-3 text-center text-xs text-medium">{{ t('auth.cta') }}</p>
-        <div v-if="googleEnabled" ref="googleSlot" class="flex justify-center"></div>
+        <div v-if="googleEnabled" ref="googleSlot" class="flex justify-center overflow-hidden"></div>
         <button
           v-if="appleEnabled"
           type="button"
