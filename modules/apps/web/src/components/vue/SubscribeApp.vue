@@ -51,7 +51,7 @@ async function checkout(plan: 'monthly' | 'yearly') {
     const res = await fetch(`${BILLING}/billing/checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ plan, returnPath: `/${props.lang}/subscribe/success` }),
     })
     if (res.status === 401) {
       auth.resetToken()
