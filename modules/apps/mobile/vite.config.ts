@@ -102,6 +102,16 @@ export default defineConfig({
     ),
     // Release name shared with the source-map upload (see sentryRelease above).
     __SENTRY_RELEASE__: JSON.stringify(sentryRelease),
+    // Off-store build (distributed as a sideloaded APK, not via Play). When
+    // SHRUTI_OFFSTORE is set, the web bundle hides Google/Apple sign-in
+    // (email OTP only), drops the onboarding paywall, and routes subscription
+    // management to the website payment page — so the APK runs on devices
+    // without Google services. The CI job that builds this APK also passes
+    // empty REVENUECAT_* keys (purchase UI hides) and omits
+    // google-services.json (no FCM).
+    __OFFSTORE_BUILD__: JSON.stringify(
+      process.env.SHRUTI_OFFSTORE === "1" || process.env.SHRUTI_OFFSTORE === "true"
+    ),
   },
   build: {
     minify: true,
