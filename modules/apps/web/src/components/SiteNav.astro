@@ -1,6 +1,7 @@
 ---
 import { useT, type Lang } from '../i18n/ui'
 import LanguageSwitcher from './LanguageSwitcher.astro'
+import WebAuthBar from './vue/WebAuthBar.vue'
 interface Props { lang: Lang; path?: string; contentOnly?: boolean }
 const { lang, path = '/', contentOnly = false } = Astro.props
 const t = useT(lang)
@@ -29,6 +30,7 @@ const links = [
       <a href={`${base}/#download`} class="hidden h-9 items-center rounded-lg bg-saffron px-4 text-sm font-semibold text-cream transition hover:bg-saffron-shade sm:inline-flex">
         {t('nav.download')}
       </a>
+      <WebAuthBar client:load lang={lang} />
     </div>
   </nav>
 </header>
