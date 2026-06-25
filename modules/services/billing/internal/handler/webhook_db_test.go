@@ -92,7 +92,7 @@ func TestWebhookApproveFulfillsAndIsIdempotent(t *testing.T) {
 
 	paymentID := uuid.NewString()
 	pmtSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"orderStatus":"Approve","paymentId":"` + paymentID + `"}`))
+		_, _ = w.Write([]byte(`{"orderStatus":"8","paymentId":"` + paymentID + `"}`))
 	}))
 	t.Cleanup(pmtSrv.Close)
 

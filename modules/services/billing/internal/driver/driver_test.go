@@ -115,7 +115,7 @@ func TestDriveApproveGrantsAndFulfills(t *testing.T) {
 	pool := testPool(t)
 	repo := &store.Repo{Pool: pool}
 	auth, calls := fakeAuth(t, http.StatusOK)
-	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "Approve", uuid.NewString()), Auth: auth}
+	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
 
 	o := newOrder(t, repo)
 	if err := d.Drive(context.Background(), o.ID); err != nil {
@@ -163,7 +163,7 @@ func TestDriveGrantFailureStaysVerified(t *testing.T) {
 	pool := testPool(t)
 	repo := &store.Repo{Pool: pool}
 	auth, _ := fakeAuth(t, http.StatusInternalServerError)
-	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "Approve", uuid.NewString()), Auth: auth}
+	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
 
 	o := newOrder(t, repo)
 	if err := d.Drive(context.Background(), o.ID); err == nil {
