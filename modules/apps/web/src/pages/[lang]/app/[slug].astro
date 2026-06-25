@@ -35,7 +35,6 @@ const meta = [author, location, year].filter(Boolean).join(' · ')
 
 const topics = (lecture.topicIds ?? []).map((id) => topicForId(id)).filter(Boolean)
 const topicNames = topics.map((tp) => pickLang(tp!.names, lang)).filter(Boolean)
-const ogImage = topics.find((tp) => tp!.cover)?.cover ?? undefined
 
 const audioUrl = variant?.audio?.url ?? ''
 const jsonLd: Record<string, unknown> = {
@@ -59,7 +58,6 @@ const jsonLd: Record<string, unknown> = {
   fullscreen
   title={`${title}${meta ? ` — ${meta}` : ''}`}
   description={description || title}
-  image={ogImage}
 >
   <WebApp client:load lang={lang} slug={slug} lecture={lecture} />
   <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
