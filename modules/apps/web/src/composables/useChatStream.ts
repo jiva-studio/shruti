@@ -1,5 +1,5 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import { useChatAuth } from './useChatAuth'
+import { useWebAuth } from './useWebAuth'
 import type {
   ChapterPayload,
   CitationPayload,
@@ -61,7 +61,6 @@ interface ResumeResponse {
 }
 
 export interface UseChatStreamOptions {
-  authBase: string
   chatBase: string
   lang: Lang
   trackId?: string
@@ -80,6 +79,7 @@ export interface UseChatStream {
   left: ComputedRef<number>
   send: (q: string) => Promise<void>
   stop: () => void
+  resetLimits: () => void
 }
 
 function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionId?: string) {
@@ -129,8 +129,8 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
 }
 
 export function useChatStream(options: UseChatStreamOptions): UseChatStream {
-  const { authBase, chatBase, lang, trackId, freeTurns, onScroll } = options
-  const auth = useChatAuth(authBase)
+  const { chatBase, lang, trackId, freeTurns, onScroll } = options
+  const auth = useWebAuth()
 
   const messages = ref<Msg[]>([])
   const busy = ref(false)
@@ -320,5 +320,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     }
   }
 
-  return { messages, busy, turns, srvLimit, srvCurrent, failed, capped, left, send, stop }
+  function resetLimits() {
+    turns.value = 0
+    srvLimit.value = null
+    srvCurrent.value = 0
+    failed.value = false
+  }
+
+  return { messages, busy, turns, srvLimit, srvCurrent, failed, capped, left, send, stop, resetLimits }
 }

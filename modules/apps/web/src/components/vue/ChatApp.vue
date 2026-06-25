@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 import { STORE, useT } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
+import WebAuthBar from './WebAuthBar.vue'
 // REAL reused component (decoupled: status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
 import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
 import { webLocale } from '../../lib/i18n'
 import { useChatStream, type Msg } from '../../composables/useChatStream'
+import { useWebAuth } from '../../composables/useWebAuth'
 import { contentLangFor, type Lang } from '../../i18n/locales'
 
 const props = defineProps<{ lang: Lang; trackId?: string; bare?: boolean }>()
@@ -19,6 +21,14 @@ const BACKEND_FALLBACK = 'https://api.shruti.local'
 const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
 const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
 const FREE_TURNS = 10
+
+const auth = useWebAuth({
+  authBase: AUTH,
+  googleClientId: import.meta.env.PUBLIC_GOOGLE_CLIENT_ID as string | undefined,
+  appleServicesId: import.meta.env.PUBLIC_APPLE_SERVICES_ID as string | undefined,
+  appleRedirectUri: import.meta.env.PUBLIC_APPLE_REDIRECT_URI as string | undefined,
+  locale: contentLangFor(props.lang),
+})
 
 const t = useT(props.lang)
 const L = {
@@ -54,14 +64,17 @@ async function scrollDown() {
   scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' })
 }
 
-const { messages, busy, turns, srvLimit, failed, capped, left, send: sendStream, stop } = useChatStream({
-  authBase: AUTH,
+const { messages, busy, turns, srvLimit, failed, capped, left, send: sendStream, stop, resetLimits } = useChatStream({
   chatBase: CHAT,
   lang: props.lang,
   trackId: props.trackId,
   freeTurns: FREE_TURNS,
   onScroll: scrollDown,
 })
+
+// Sign-in / sign-out swaps the rate-limit bucket; drop any anonymous cap so
+// the next turn re-reads the signed-in user's real limits from the server.
+watch(() => auth.session.value?.quotaId, () => resetLimits())
 
 function send(text?: string) {
   const q = text ?? input.value
@@ -83,6 +96,8 @@ function statusLabelFor(m: Msg): string {
       <h2 class="font-serif text-lg font-bold text-ink">{{ L.title }}</h2>
       <p class="text-xs text-medium">{{ L.sub }}</p>
     </header>
+
+    <WebAuthBar :lang="props.lang" class="shrink-0 border-b border-line/60" />
 
     <div ref="scroller" class="app-scroll flex-1 space-y-5 overflow-y-auto px-5 py-5">
       <template v-if="!messages.length">

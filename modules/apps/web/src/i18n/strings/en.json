@@ -149,5 +149,9 @@
   "gallery.07_library.t": "Thousands of lectures",
   "gallery.07_library.d": "On the Gita, the Bhagavatam and other scriptures — always at hand.",
   "wisdom.title": "Daily wisdom",
-  "wisdom.lead": "Short fragments from the lectures on the soul, eternity, and the meaning of life — a new piece of wisdom every day."
+  "wisdom.lead": "Short fragments from the lectures on the soul, eternity, and the meaning of life — a new piece of wisdom every day.",
+  "auth.signIn": "Sign in",
+  "auth.signOut": "Sign out",
+  "auth.apple": "Continue with Apple",
+  "auth.cta": "Sign in to use your subscription limits"
 }
