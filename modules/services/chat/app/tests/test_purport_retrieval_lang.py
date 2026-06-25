@@ -1,14 +1,14 @@
-"""Regression tests for the purport-language bug: a non-corpus answer
-language (uk / sr-*) was getting Russian purports because
+"""Regression tests for the purport-language flow.
 
-  1. `synthesis_planner` passed the ANSWER language to the lazy commentary
-     attach instead of the corpus-clamped `retrieval_lang`, and
-  2. `commentary_expansion._fetch_one` fell back to `lang=None` on a miss
-     and grabbed the purport in whatever language existed.
-
-These cover the shared `resolve_retrieval_lang`, the removed fallback, and
-the idempotent `translate_commentaries` (so the planner's late attaches get
-translated without re-translating the worker's).
+`resolve_retrieval_lang` clamps a turn's answer language onto a real corpus
+language: corpus languages pass through (ru→ru, en→en); an East-Slavic
+non-corpus locale reduces to Russian (uk→ru, mirroring the client's
+locale→content policy) so a Ukrainian turn cites the Russian purport; any
+other non-corpus locale clamps to English (sr-*→en). `_fetch_one` then has
+no `lang=None` cross-language fallback, so a miss returns nothing rather
+than a stray foreign purport. These also cover the idempotent
+`translate_commentaries` (so the planner's late attaches get translated
+without re-translating the worker's).
 """
 
 from __future__ import annotations
@@ -32,9 +32,24 @@ class _LangsRepo:
         return self._langs
 
 
+async def test_resolve_retrieval_lang_east_slavic_reduces_to_russian() -> None:
+    # `uk` is not a corpus language, but it reduces to `ru` (mirroring the
+    # client's locale→content policy), so a Ukrainian turn cites the Russian
+    # purport instead of dropping to English.
+    repo = _LangsRepo(["en", "ru"])
+    assert await resolve_retrieval_lang(repo, "uk") == "ru"
+    assert await resolve_retrieval_lang(repo, "uk_UA") == "ru"
+
+
 async def test_resolve_retrieval_lang_non_corpus_clamps_to_english() -> None:
+    # A non-corpus locale that does NOT reduce to Russian still clamps to en.
     repo = _LangsRepo(["en", "ru"])
     assert await resolve_retrieval_lang(repo, "sr-Cyrl") == "en"
+
+
+async def test_resolve_retrieval_lang_reduced_lang_absent_clamps_to_english() -> None:
+    # `uk` reduces to `ru`, but if the corpus lacks `ru` we fall through to en.
+    repo = _LangsRepo(["en"])
     assert await resolve_retrieval_lang(repo, "uk") == "en"
 
 
@@ -54,8 +69,10 @@ async def test_resolve_retrieval_lang_probe_failure_retrieves_natively() -> None
 
     assert await resolve_retrieval_lang(_BoomRepo(), "ru") == "ru"
     assert await resolve_retrieval_lang(_BoomRepo(), "en") == "en"
-    # A non-corpus answer language still clamps to English on probe failure.
-    assert await resolve_retrieval_lang(_BoomRepo(), "uk") == "en"
+    # `uk` reduces to `ru`, present in the static fallback set (en+ru).
+    assert await resolve_retrieval_lang(_BoomRepo(), "uk") == "ru"
+    # A locale that reduces to English still clamps to en on probe failure.
+    assert await resolve_retrieval_lang(_BoomRepo(), "sr-Cyrl") == "en"
 
 
 async def test_resolve_retrieval_lang_empty_corpus_result_clamps_to_english() -> None:
