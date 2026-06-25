@@ -3,6 +3,7 @@ import StoreBadges from './StoreBadges.astro'
 import HeroSection from './HeroSection.astro'
 import ScreenshotShowcase from './ScreenshotShowcase.astro'
 import FeatureList from './FeatureList.astro'
+import WisdomSection from './WisdomSection.astro'
 import CTABand from './CTABand.astro'
 import FAQSection from './FAQSection.astro'
 import { useT, STORE, type Lang } from '../i18n/ui'
@@ -52,6 +53,8 @@ const homeLd = {
 <ScreenshotShowcase lang={lang} />
 
 <FeatureList lang={lang} />
+
+<WisdomSection lang={lang} />
 
 <div class="hidden md:block">
   <CTABand id="chat" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')}>
