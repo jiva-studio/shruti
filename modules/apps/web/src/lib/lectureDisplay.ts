@@ -1,10 +1,13 @@
-import type { LectureIndexEntry } from '@lib/catalog/types.js'
+import type { LectureIndexEntry, LangMap } from '@lib/catalog/types.js'
 import type { Lang } from '../i18n/ui'
+import { contentLangFor } from '../i18n/locales'
 
-/** Pick a localized string from a { lang: value } map, falling back to English then any value. */
-export function pickName(map: Record<string, string> | undefined, lang: Lang): string {
+/** Pick a localized catalog string from a { lang: value } map. Catalog content
+ *  exists only in the content languages, so a UI locale collapses onto its
+ *  content language (uk→ru, sr→en) before falling back to English / any value. */
+export function pickName(map: LangMap | undefined, lang: Lang): string {
   if (!map) return ''
-  return map[lang] || map.en || Object.values(map)[0] || ''
+  return map[contentLangFor(lang)] || map.en || Object.values(map)[0] || ''
 }
 
 export function lectureTitle(entry: LectureIndexEntry, lang: Lang): string {

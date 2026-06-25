@@ -1,54 +1,50 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
-import { STORE } from '../../i18n/ui'
+import { STORE, useT } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
 // REAL reused component (decoupled: status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
 import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
 import { webLocale } from '../../lib/i18n'
 import { useChatStream, type Msg } from '../../composables/useChatStream'
+import { contentLangFor, type Lang } from '../../i18n/locales'
 
-type Lang = 'ru' | 'en'
 const props = defineProps<{ lang: Lang; trackId?: string; bare?: boolean }>()
-webLocale.value = props.lang
+// Reused chat cards carry their own ru/en i18n (lib/i18n) — collapse uk→ru,
+// sr→en for them. Widget labels below follow the same collapse.
+const cl = contentLangFor(props.lang)
+webLocale.value = cl
 
 const BACKEND_FALLBACK = 'https://api.shruti.local'
 const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
 const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
 const FREE_TURNS = 10
 
+const t = useT(props.lang)
 const L = {
-  ru: {
-    title: 'Спросить Садху',
-    sub: 'Анонимно, без регистрации. Спросите о душе, карме или смысле жизни.',
-    placeholder: props.trackId ? 'Спросите об этой лекции…' : 'Напишите вопрос…',
-    send: 'Спросить',
-    stop: 'Стоп',
-    left: (n: number) => `Осталось вопросов: ${n}`,
-    capTitle: 'Продолжите в приложении',
-    capBody: 'Установите «Слушай Садху», чтобы спрашивать без ограничений и слушать лекции целиком.',
-    errTitle: 'Чат пока недоступен здесь',
-    errBody: 'Полная версия ассистента — в приложении. Установите «Слушай Садху» и спрашивайте без ограничений.',
-    suggestions: ['Что такое душа?', 'Зачем нужна карма?', 'В чём смысл жизни?'],
-  },
-  en: {
-    title: 'Ask Sadhu',
-    sub: 'Anonymous, no sign-up. Ask about the soul, karma or the meaning of life.',
-    placeholder: props.trackId ? 'Ask about this lecture…' : 'Type your question…',
-    send: 'Ask',
-    stop: 'Stop',
-    left: (n: number) => `Questions left: ${n}`,
-    capTitle: 'Continue in the app',
-    capBody: 'Install Shruti to ask without limits and hear the full lectures.',
-    errTitle: 'Chat is not available here yet',
-    errBody: 'The full assistant lives in the app. Install Shruti and ask without limits.',
-    suggestions: ['What is the soul?', 'Why does karma matter?', 'What is the meaning of life?'],
-  },
-}[props.lang]
+  title: t('chat.widget.title'),
+  sub: t('chat.widget.sub'),
+  placeholder: props.trackId ? t('chat.widget.placeholderTrack') : t('chat.widget.placeholder'),
+  send: t('chat.widget.send'),
+  stop: t('chat.widget.stop'),
+  left: (n: number) => t('chat.widget.left').replace('{n}', String(n)),
+  capTitle: t('chat.widget.capTitle'),
+  capBody: t('chat.widget.capBody'),
+  errTitle: t('chat.widget.errTitle'),
+  errBody: t('chat.widget.errBody'),
+  suggestions: [t('chat.suggest.1'), t('chat.suggest.2'), t('chat.suggest.3')],
+}
 
-const STATUS: Record<string, string> = props.lang === 'ru'
-  ? { thinking: 'Думаю…', router_decision: 'Понимаю вопрос…', searching_corpus: 'Ищу в лекциях…', browsing_catalog: 'Просматриваю каталог…', locating: 'Ищу место…', preparing_action: 'Готовлю ответ…', composing_answer: 'Составляю ответ…', synthesizing_answer: 'Составляю ответ…' }
-  : { thinking: 'Thinking…', router_decision: 'Understanding…', searching_corpus: 'Searching the lectures…', browsing_catalog: 'Browsing the catalog…', locating: 'Locating…', preparing_action: 'Preparing…', composing_answer: 'Composing the answer…', synthesizing_answer: 'Composing the answer…' }
+const STATUS: Record<string, string> = {
+  thinking: t('chat.status.thinking'),
+  router_decision: t('chat.status.router_decision'),
+  searching_corpus: t('chat.status.searching_corpus'),
+  browsing_catalog: t('chat.status.browsing_catalog'),
+  locating: t('chat.status.locating'),
+  preparing_action: t('chat.status.preparing_action'),
+  composing_answer: t('chat.status.composing_answer'),
+  synthesizing_answer: t('chat.status.synthesizing_answer'),
+}
 
 const scroller = ref<HTMLElement>()
 const input = ref('')

@@ -78,7 +78,7 @@ const ogLocale = current?.og ?? 'en_US'
     <link rel="apple-touch-icon" href="/app-icon.png" />
   </head>
   <body class={fullscreen ? 'h-screen overflow-hidden' : 'min-h-screen'}>
-    <SiteNav lang={lang} path={path} />
+    <SiteNav lang={lang} path={path} contentOnly={contentOnly} />
     <main>
       <slot />
     </main>
