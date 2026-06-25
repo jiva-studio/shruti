@@ -30,6 +30,8 @@ export default {
   },
   share: {
     title: "Podeli",
+    link: "Link ka predavanju",
+    dialogLink: "Podeli link",
     pdf: "Transkript (PDF)",
     text: "Transkript (tekst)",
     audio: "Audio",

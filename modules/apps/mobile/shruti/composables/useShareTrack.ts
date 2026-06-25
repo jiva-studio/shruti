@@ -3,6 +3,7 @@ import { actionSheetController, loadingController } from "@ionic/vue"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { RenderTranscriptRequest, ShareOptions } from "@ports/app/index.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
+import { WEB_APP_BASE_URL, WEB_APP_DEFAULT_LOCALE, WEB_APP_LOCALES } from "@lib/domain/servers.js"
 import {
   preferredContentLanguage,
   resolveLocalizedName,
@@ -14,6 +15,9 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
+import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
+import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
+import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
 import { useToast } from "@kit/composables"
 import { useShareJobStore, type ShareJobKind } from "@shruti/stores/useShareJobStore.js"
 import { useShareTranscript } from "./useShareTranscript.js"
@@ -27,6 +31,9 @@ type ShareReason = "no_transcript" | "no_audio" | "error"
 type Produced =
   | { readonly ok: true; readonly options: ShareOptions }
   | { readonly ok: false; readonly reason: ShareReason }
+
+// The web route param is the track id without the `track_` prefix it strips.
+const TRACK_ID_PREFIX = /^track_/
 
 // Filesystem-unsafe across Android / iOS / Windows share targets.
 // eslint-disable-next-line no-control-regex
@@ -83,6 +90,9 @@ export function useShareTrack(): UseShareTrackReturn {
   const toast = useToast()
   const shareJob = useShareJobStore()
   const dicts = useDictionariesStore()
+  const purchases = usePurchasesStore()
+  const paywall = usePaywallStore()
+  const trackSheet = useTrackSheetStore()
   const shareTranscript = useShareTranscript()
 
   /** Assemble the share-transcript cover fields from the local DB +
@@ -178,9 +188,22 @@ export function useShareTrack(): UseShareTrackReturn {
       header: t("search.share.title"),
       buttons: [
         {
+          text: t("search.share.link"),
+          handler: () => {
+            void shareLink(trackId)
+          },
+        },
+        {
           text: t("search.share.pdf"),
+          // PDF export is the one Pro-gated format; the rest are free.
+          cssClass: purchases.isSubscribed ? undefined : "action-sheet-pro",
           disabled: !hasTranscript,
           handler: () => {
+            if (!purchases.isSubscribed) {
+              trackSheet.close()
+              paywall.requestOpen("shareTranscript")
+              return
+            }
             void shareTranscriptPdf(trackId)
           },
         },
@@ -260,6 +283,34 @@ export function useShareTrack(): UseShareTrackReturn {
     } finally {
       await close()
       shareJob.finish()
+    }
+  }
+
+  // Share the public web deep-link to the lecture. The page opens in the
+  // user's app UI language (the web locale is its URL prefix; `sr-Latn` →
+  // `sr-latn`), falling back to the web default for a UI language the web
+  // doesn't serve. The share title still follows the lecture's content
+  // language so it reads in the language the lecture is actually in.
+  async function shareLink(trackId: TrackId): Promise<void> {
+    void app.haptics.impact("light")
+    try {
+      const uiLocale = appLanguage.value.toLowerCase()
+      const webLang = WEB_APP_LOCALES.includes(uiLocale) ? uiLocale : WEB_APP_DEFAULT_LOCALE
+      const slug = trackId.replace(TRACK_ID_PREFIX, "")
+      const track = await app.repositories().tracks.getById(trackId)
+      const contentLang = track
+        ? (preferredContentLanguage(track, libraryLanguages.value, appLanguage.value) ??
+          appLanguage.value)
+        : appLanguage.value
+      const title = track ? (resolveTrackTitle(track, contentLang) ?? trackId) : trackId
+      await app.shareService.share({
+        url: `${WEB_APP_BASE_URL}/${webLang}/app/${slug}`,
+        title,
+        dialogTitle: t("search.share.dialogLink"),
+      })
+    } catch (err) {
+      console.warn("[share-track] link failed", err)
+      await toast.error(t("search.share.error"))
     }
   }
 

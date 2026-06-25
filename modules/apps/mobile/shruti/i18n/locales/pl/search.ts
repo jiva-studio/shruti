@@ -30,6 +30,8 @@ export default {
   },
   share: {
     title: "Udostępnij",
+    link: "Link do wykładu",
+    dialogLink: "Udostępnij link",
     pdf: "Transkrypcja (PDF)",
     text: "Transkrypcja (tekst)",
     audio: "Audio",

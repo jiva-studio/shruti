@@ -29,6 +29,8 @@ export default {
   },
   share: {
     title: "Compartir",
+    link: "Enlace a la conferencia",
+    dialogLink: "Compartir enlace",
     pdf: "Transcripción (PDF)",
     text: "Transcripción (texto)",
     audio: "Audio",
