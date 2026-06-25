@@ -285,6 +285,62 @@ func TestExistingProviderSubBeatsAnonBearer(t *testing.T) {
 	}
 }
 
+// TestVerifiedEmailLinkBeatsAnonBearer — parity guard. A human with an
+// existing account (Google, e.g. from the app) signs in with another
+// provider that shares the same verified email (Apple on the web) while a
+// fresh per-device web anon Bearer is in play. The verified-email
+// cross-link must win over the anonymous upgrade so the new identity lands
+// on the existing account (one human, one tier/quota), instead of being
+// captured by the throwaway anon and splitting into two accounts.
+func TestVerifiedEmailLinkBeatsAnonBearer(t *testing.T) {
+	svc, stub := boot(t)
+	ctx := context.Background()
+
+	// Existing account: Google sign-in (e.g. in the mobile app).
+	stub.Want = providers.Identity{Subject: "google-sub-link", Email: "shared@example.com", EmailVerified: true}
+	g, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub", DeviceID: "phone"})
+	if err != nil {
+		t.Fatalf("google signin: %v", err)
+	}
+
+	// Fresh throwaway anon for the web visitor.
+	anon, err := svc.Anonymous(ctx, "web-device", "")
+	if err != nil {
+		t.Fatalf("anon: %v", err)
+	}
+	if anon.UserID == g.UserID {
+		t.Fatal("web anon must be a distinct fresh user")
+	}
+
+	// Apple sign-in on the web: same verified email, anon Bearer attached.
+	stub.Want = providers.Identity{Subject: "apple-sub-link", Email: "shared@example.com", EmailVerified: true}
+	a, err := svc.SigninApple(ctx, SocialInput{
+		IDToken:      "stub",
+		DeviceID:     "web-device",
+		BearerAccess: anon.AccessToken,
+	})
+	if err != nil {
+		t.Fatalf("apple signin: %v", err)
+	}
+	if a.UserID != g.UserID {
+		t.Errorf("verified-email link must beat anon upgrade: google=%s apple=%s", g.UserID, a.UserID)
+	}
+
+	// The apple identity joined the existing account (google + apple = 2).
+	me, err := svc.Me(ctx, g.UserID)
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	if len(me.Identities) != 2 {
+		t.Errorf("expected google+apple on the linked account, got %d", len(me.Identities))
+	}
+
+	// The throwaway anon stays its own (orphaned) user — not merged, not deleted.
+	if u, _ := svc.Users.Get(ctx, anon.UserID); u == nil {
+		t.Error("web anon user should still exist as a separate device user")
+	}
+}
+
 func TestCrossLinkVerifiedEmail(t *testing.T) {
 	svc, stub := boot(t)
 	ctx := context.Background()
