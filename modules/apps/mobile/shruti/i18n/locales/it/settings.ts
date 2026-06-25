@@ -67,9 +67,6 @@ export default {
     error: "Si è verificato un errore durante l'operazione. Riprova.",
     noSubscriptionFound:
       "Nessun abbonamento attivo trovato. Abbonati per accedere alle funzioni premium.",
-    cantPay: "Non riesco a pagare",
-    cantPayEmailSubject: "Non riesco a pagare",
-    cantPayEmailIntro: "Non riesco a pagare.",
     thanks:
       "Grazie per il tuo abbonamento e il tuo sostegno 🙏 Che il tuo cuore si riempia di felicità e che ogni giorno ti avvicini alla Verità. Siamo felici che tu sia con noi su questo cammino.",
     benefits: {

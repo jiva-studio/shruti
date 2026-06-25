@@ -46,6 +46,5 @@ carta.
   piano o disdire. La disdetta lascia il PRO attivo fino allo scadere del
   periodo che hai pagato.
 
-Se pagare tramite lo store non è possibile nel tuo paese, l'opzione **Non
-riesco a pagare** (mostrata dove i pagamenti dello store non sono disponibili)
-invia un'email al nostro team di supporto, così possiamo aiutarti.
+Se hai difficoltà con il pagamento, puoi abbonarti anche sul nostro sito
+web — accedi con lo stesso account: <https://shruti.app/en/subscribe>.

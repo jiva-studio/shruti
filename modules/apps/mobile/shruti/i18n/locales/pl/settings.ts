@@ -67,9 +67,6 @@ export default {
     error: "Podczas operacji wystąpił błąd. Spróbuj ponownie.",
     noSubscriptionFound:
       "Nie znaleziono aktywnej subskrypcji. Wykup subskrypcję, aby uzyskać dostęp do funkcji premium.",
-    cantPay: "Nie mogę zapłacić",
-    cantPayEmailSubject: "Nie mogę zapłacić",
-    cantPayEmailIntro: "Nie mogę zapłacić.",
     thanks:
       "Dziękujemy za subskrypcję i wsparcie 🙏 Niech Twoje serce wypełni się szczęściem, a każdy dzień przybliża Cię do Prawdy. Cieszymy się, że jesteś z nami na tej drodze.",
     benefits: {

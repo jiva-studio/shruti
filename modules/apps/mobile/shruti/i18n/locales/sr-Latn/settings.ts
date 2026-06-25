@@ -76,9 +76,6 @@ export default {
     error: "Došlo je do greške tokom operacije. Pokušajte ponovo.",
     noSubscriptionFound:
       "Aktivna pretplata nije pronađena. Pretplatite se da biste pristupili Pro funkcijama.",
-    cantPay: "Ne mogu da platim",
-    cantPayEmailSubject: "Ne mogu da platim",
-    cantPayEmailIntro: "Ne mogu da platim.",
     thanks:
       "Hvala vam na pretplati i podršci 🙏 Neka vam srce bude ispunjeno srećom, a svaki dan vas približi Istini. Drago nam je što ste sa nama na ovom putu.",
     benefits: {

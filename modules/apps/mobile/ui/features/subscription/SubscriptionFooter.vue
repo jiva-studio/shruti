@@ -8,9 +8,7 @@
         :packages="packages"
         :ready="ready"
         :purchasing="purchasing"
-        :show-cant-pay="showCantPay"
         @subscribe="emit('subscribe', $event)"
-        @cant-pay="emit('cantPay')"
         @update:has-trial="hasTrial = $event"
       />
       <SubscriptionDisclaimer v-if="packages.length > 0" :has-trial="hasTrial" />
@@ -46,14 +44,12 @@ defineProps<{
   purchasing: boolean
   restoring: boolean
   legalDocuments: LegalDocumentView[]
-  showCantPay?: boolean
 }>()
 
 const emit = defineEmits<{
   subscribe: [packageId: string]
   restore: []
   manage: []
-  cantPay: []
 }>()
 
 const hasTrial = ref(false)

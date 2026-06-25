@@ -69,9 +69,6 @@ export default {
     error: "Une erreur s'est produite lors de l'opération. Veuillez réessayer.",
     noSubscriptionFound:
       "Aucun abonnement actif trouvé. Veuillez vous abonner pour accéder aux fonctionnalités premium.",
-    cantPay: "Je ne peux pas payer",
-    cantPayEmailSubject: "Je ne peux pas payer",
-    cantPayEmailIntro: "Je ne peux pas payer.",
     thanks:
       "Merci pour votre abonnement et votre soutien 🙏 Que votre cœur se remplisse de bonheur et que chaque jour vous rapproche de la Vérité. Nous sommes heureux de vous compter parmi nous sur ce chemin.",
     benefits: {

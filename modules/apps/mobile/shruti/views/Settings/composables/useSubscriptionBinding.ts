@@ -2,16 +2,12 @@ import { computed, reactive } from "vue"
 import { useI18n } from "vue-i18n"
 import { alertController } from "@ionic/vue"
 import { useShruti } from "@shruti/shruti.js"
-import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import {
   PurchaseCancelledError,
   PurchaseNotAllowedError,
   type PurchasePackage,
 } from "@ports/app/purchases.js"
-
-/** Where the "can't pay" requests land so an operator can grant PRO. */
-const SUPPORT_EMAIL = "support@akdasa.studio"
 
 export interface LegalDocument {
   title: string
@@ -48,17 +44,9 @@ export interface SubscriptionBinding {
   readonly legalDocuments: LegalDocument[]
   /** RC-side customer id; surfaced in the debug build-info footer. */
   readonly appUserId: string | undefined
-  /**
-   * `true` when the "Can't pay?" escape hatch should be offered: the
-   * Russian UI, where in-app purchases are unavailable, so users ask
-   * support to grant PRO manually. Only shown once we know the user
-   * isn't already subscribed, to avoid flashing it at Pro users.
-   */
-  readonly showCantPay: boolean
   onSubscribe: (packageId: string) => Promise<void>
   onRestore: () => Promise<void>
   onManage: () => void
-  onCantPay: () => Promise<void>
 }
 
 /**
@@ -72,7 +60,6 @@ export function useSubscriptionBinding(): SubscriptionBinding {
   const i18n = useI18n()
   const { t } = i18n
   const store = usePurchasesStore()
-  const auth = useAuthStore()
   const platform = useShruti().platform
 
   const legalDocuments = computed<LegalDocument[]>(() => {
@@ -147,54 +134,6 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     await alert.present()
   }
 
-  /**
-   * Opens the system mail client pre-filled with the identifiers support
-   * needs to find this user and grant PRO out-of-band. The RevenueCat
-   * app-user-id is the key one: granting a promotional entitlement there
-   * (keyed by it) flows back into our DB via the RC webhook/reconcile,
-   * which is the robust path — a direct DB tier flip would be reverted by
-   * the next reconcile against RevenueCat.
-   */
-  async function onCantPay(): Promise<void> {
-    const lines = [
-      t("settings.subscription.cantPayEmailIntro"),
-      "",
-      "—",
-      `RevenueCat App User ID: ${store.appUserId ?? "—"}`,
-      `User ID: ${auth.userId ?? "—"}`,
-      `Email: ${auth.email ?? "—"}`,
-      `Device ID: ${await deviceId()}`,
-      `Platform: ${platform}`,
-      `App version: ${await appVersion()}`,
-      `Locale: ${i18n.locale.value as string}`,
-    ]
-    const subject = encodeURIComponent(t("settings.subscription.cantPayEmailSubject"))
-    const body = encodeURIComponent(lines.join("\n"))
-    // Same pattern as Settings' contact links: `_system` hands the
-    // mailto scheme to the OS mail client instead of the in-app webview.
-    window.open(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`, "_system")
-  }
-
-  async function deviceId(): Promise<string> {
-    try {
-      const { Device } = await import("@capacitor/device")
-      return (await Device.getId()).identifier
-    } catch {
-      return "—"
-    }
-  }
-
-  async function appVersion(): Promise<string> {
-    try {
-      const { App } = await import("@capacitor/app")
-      const info = await App.getInfo()
-      return `${info.version} (${info.build})`
-    } catch {
-      // Web build has no native App plugin.
-      return "—"
-    }
-  }
-
   function onManage(): void {
     const url = store.managementUrl
     if (!url) return
@@ -225,15 +164,9 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     purchasing: computed(() => store.purchasing),
     restoring: computed(() => store.restoring),
     appUserId: computed(() => store.appUserId),
-    // RU UI only: App/Play Store IAP is unavailable in Russia, so offer
-    // the manual support route once we know the user isn't already Pro.
-    showCantPay: computed(
-      () => (i18n.locale.value as string) === "ru" && store.ready && !store.isSubscribed
-    ),
     legalDocuments,
     onSubscribe,
     onRestore,
     onManage,
-    onCantPay,
   }) as SubscriptionBinding
 }

@@ -42,6 +42,5 @@ obsługują Apple lub Google; nigdy nie widzimy danych Twojej karty.
   zmienić plan lub anulować subskrypcję. Anulowanie pozostawia PRO aktywne do
   końca opłaconego okresu.
 
-Jeśli płatność przez sklep nie jest możliwa w Twoim kraju, opcja **Nie mogę
-zapłacić** (pokazywana tam, gdzie płatności w sklepie są niedostępne) wysyła
-e-mail do naszego zespołu wsparcia, abyśmy mogli pomóc.
+Jeśli masz trudności z płatnością, subskrypcję możesz też wykupić na naszej
+stronie — zaloguj się tym samym kontem: <https://shruti.app/en/subscribe>.

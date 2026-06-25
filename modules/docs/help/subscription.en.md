@@ -42,6 +42,5 @@ Google; we never see your card details.
   switch plans or cancel. Cancelling leaves PRO active until the period you
   paid for runs out.
 
-If paying through the store is not possible in your country, the **Can't
-pay?** option (shown where store payments are unavailable) emails our support
-team so we can help.
+If you have any trouble with payment, you can subscribe on our website —
+sign in with the same account: <https://shruti.app/en/subscribe>.
