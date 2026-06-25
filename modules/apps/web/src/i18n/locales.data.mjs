@@ -15,11 +15,11 @@
 // BCP-47 tag emitted in <link rel="alternate"> / sitemap / og:locale.
 
 export const UI_LOCALES = [
-  { code: 'ru', label: 'Русский', hreflang: 'ru', og: 'ru_RU', dir: 'ltr' },
-  { code: 'en', label: 'English', hreflang: 'en', og: 'en_US', dir: 'ltr' },
-  { code: 'uk', label: 'Українська', hreflang: 'uk', og: 'uk_UA', dir: 'ltr' },
-  { code: 'sr-latn', label: 'Srpski', hreflang: 'sr-Latn', og: 'sr_RS', dir: 'ltr' },
-  { code: 'sr-cyrl', label: 'Српски', hreflang: 'sr-Cyrl', og: 'sr_RS', dir: 'ltr' },
+  { code: 'ru', label: 'Русский', flag: '🇷🇺', hreflang: 'ru', og: 'ru_RU', dir: 'ltr' },
+  { code: 'en', label: 'English', flag: '🇬🇧', hreflang: 'en', og: 'en_US', dir: 'ltr' },
+  { code: 'uk', label: 'Українська', flag: '🇺🇦', hreflang: 'uk', og: 'uk_UA', dir: 'ltr' },
+  { code: 'sr-latn', label: 'Srpski', flag: '🇷🇸', hreflang: 'sr-Latn', og: 'sr_RS', dir: 'ltr' },
+  { code: 'sr-cyrl', label: 'Српски', flag: '🇷🇸', hreflang: 'sr-Cyrl', og: 'sr_RS', dir: 'ltr' },
 ]
 
 export const CONTENT_LOCALES = ['ru', 'en']

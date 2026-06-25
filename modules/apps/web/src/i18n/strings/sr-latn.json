@@ -155,10 +155,10 @@
   "auth.apple": "Nastavi sa Apple",
   "auth.cta": "Prijavite se da koristite limite svoje pretplate",
   "sub.nav": "PRO",
-  "sub.title": "Nabavite PRO",
-  "sub.lead": "Pristup PRO funkcijama.",
-  "sub.monthly": "Mesečno",
-  "sub.yearly": "Godišnje",
+  "sub.title": "Nabavite PRO pristup",
+  "sub.lead": "Pun pristup svim PRO funkcijama aplikacije.",
+  "sub.monthly": "Jedan mesec",
+  "sub.yearly": "Jedna godina",
   "sub.perMonth": "za 30 dana",
   "sub.perYear": "za 365 dana",
   "sub.bestValue": "Najisplativije",
@@ -176,5 +176,8 @@
   "sub.backToApp": "Otvori biblioteku",
   "sub.errAuth": "Sesija je istekla. Pokušajte ponovo.",
   "sub.errRate": "Previše pokušaja. Pokušajte ponovo za trenutak.",
-  "sub.errGeneric": "Nije moguće započeti plaćanje. Pokušajte ponovo."
+  "sub.errGeneric": "Nije moguće započeti plaćanje. Pokušajte ponovo.",
+  "sub.noteExtend": "Dani se dodaju na preostalo vreme — možete obnoviti unapred.",
+  "sub.noteSupport": "Problemi sa plaćanjem? Pišite nam:",
+  "auth.getPro": "Nabavi PRO"
 }

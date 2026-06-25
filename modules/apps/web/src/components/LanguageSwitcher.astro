@@ -9,9 +9,7 @@ const current = UI_LOCALES.find((l) => l.code === lang) ?? UI_LOCALES[0]
     class="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-line px-3.5 text-sm text-ink-soft transition hover:border-saffron hover:text-saffron"
     aria-label="Language"
   >
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
-    </svg>
+    <span class="text-base leading-none" aria-hidden="true">{current.flag}</span>
     <span>{current.label}</span>
   </summary>
   <ul
@@ -25,10 +23,10 @@ const current = UI_LOCALES.find((l) => l.code === lang) ?? UI_LOCALES[0]
           lang={l.hreflang}
           aria-current={l.code === lang ? 'true' : undefined}
           class:list={[
-            'block rounded-lg px-3 py-2 text-sm transition hover:bg-cream-deep/60',
+            'flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-cream-deep/60',
             l.code === lang ? 'font-semibold text-saffron' : 'text-ink-soft',
           ]}
-        >{l.label}</a>
+        ><span class="text-base leading-none" aria-hidden="true">{l.flag}</span>{l.label}</a>
       </li>
     ))}
   </ul>
@@ -40,3 +38,16 @@ const current = UI_LOCALES.find((l) => l.code === lang) ?? UI_LOCALES[0]
   .lang-switcher > summary::-webkit-details-marker { display: none; }
   .lang-switcher > summary::marker { content: ''; }
 </style>
+
+<script>
+  // Native <details> doesn't close on outside click — add it (and Esc) so
+  // the language menu dismisses like the account popover.
+  const close = (except?: EventTarget | null) =>
+    document.querySelectorAll('details.lang-switcher[open]').forEach((d) => {
+      if (!except || !d.contains(except as Node)) d.removeAttribute('open')
+    })
+  document.addEventListener('click', (e) => close(e.target))
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close()
+  })
+</script>

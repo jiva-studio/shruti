@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useT, type Lang } from '../../i18n/ui'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { STORE, useT, type Lang } from '../../i18n/ui'
 import { contentLangFor } from '../../i18n/locales'
 import { useWebAuth } from '../../composables/useWebAuth'
 
@@ -35,8 +35,18 @@ const expiresLabel = computed(() => {
 })
 
 function mountGoogle() {
-  if (googleSlot.value) auth.mountGoogleButton(googleSlot.value)
+  if (googleSlot.value) auth.mountGoogleButton(googleSlot.value, 300)
 }
+
+// The sign-in card is shown inline (no popover toggle), so render the Google
+// button as soon as that state is active and its slot is in the DOM.
+watch(
+  () => auth.ready.value && !auth.signedIn.value && !auth.isPro.value && googleEnabled.value,
+  (show) => {
+    if (show) nextTick(mountGoogle)
+  },
+  { immediate: true },
+)
 
 async function onApple() {
   await auth.signInApple()
@@ -108,11 +118,11 @@ onMounted(() => {
 
       <div v-else-if="!auth.signedIn.value" class="mt-10 rounded-2xl border border-line bg-cream-deep/40 p-8 text-center">
         <p class="font-serif text-lg font-semibold text-ink">{{ t('sub.signInFirst') }}</p>
-        <div v-if="googleEnabled" ref="googleSlot" class="mt-5 flex justify-center"></div>
+        <div v-if="googleEnabled" ref="googleSlot" class="mt-5 flex justify-center overflow-hidden"></div>
         <button
           v-if="appleEnabled"
           type="button"
-          class="mx-auto mt-3 flex w-full max-w-xs items-center justify-center gap-2 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-cream transition hover:bg-coffee"
+          class="mx-auto mt-3 flex h-10 w-[300px] max-w-full items-center justify-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-cream transition hover:bg-coffee"
           @click="onApple"
         >
           <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
@@ -127,10 +137,10 @@ onMounted(() => {
 
       <template v-else>
         <div class="mt-10 grid gap-5 sm:grid-cols-2">
-          <div class="flex flex-col rounded-2xl border border-line bg-cream p-6">
-            <p class="font-serif text-lg font-semibold text-ink">{{ t('sub.monthly') }}</p>
-            <p class="mt-3 font-serif text-3xl font-bold text-ink">2.99 <span class="text-xl font-semibold">USDT</span></p>
-            <p class="text-sm text-medium">{{ t('sub.perMonth') }}</p>
+          <div class="flex flex-col rounded-2xl border border-line bg-cream p-8">
+            <p class="font-serif text-2xl font-semibold text-ink">{{ t('sub.monthly') }}</p>
+            <p class="mt-3 font-serif text-5xl font-bold text-ink">2.99 <span class="text-2xl font-semibold">USDT</span></p>
+            <p class="mt-1 text-base text-medium">{{ t('sub.perMonth') }}</p>
             <button
               type="button"
               :disabled="!!busy"
@@ -141,13 +151,13 @@ onMounted(() => {
             </button>
           </div>
 
-          <div class="relative flex flex-col rounded-2xl border-2 border-saffron bg-cream p-6">
+          <div class="relative flex flex-col rounded-2xl border-2 border-saffron bg-cream p-8">
             <span class="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-saffron px-3 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-cream">
               {{ t('sub.bestValue') }}
             </span>
-            <p class="font-serif text-lg font-semibold text-ink">{{ t('sub.yearly') }}</p>
-            <p class="mt-3 font-serif text-3xl font-bold text-ink">29.99 <span class="text-xl font-semibold">USDT</span></p>
-            <p class="text-sm text-medium">{{ t('sub.perYear') }}</p>
+            <p class="font-serif text-2xl font-semibold text-ink">{{ t('sub.yearly') }}</p>
+            <p class="mt-3 font-serif text-5xl font-bold text-ink">29.99 <span class="text-2xl font-semibold">USDT</span></p>
+            <p class="mt-1 text-base text-medium">{{ t('sub.perYear') }}</p>
             <button
               type="button"
               :disabled="!!busy"
@@ -160,6 +170,14 @@ onMounted(() => {
         </div>
 
         <p v-if="error" class="mt-5 text-center text-sm font-medium text-crimson">{{ error }}</p>
+
+        <div class="mt-8 space-y-1 text-center text-sm text-medium">
+          <p>{{ t('sub.noteExtend') }}</p>
+          <p>
+            {{ t('sub.noteSupport') }}
+            <a :href="`mailto:${STORE.email}`" class="text-saffron underline">{{ STORE.email }}</a>
+          </p>
+        </div>
       </template>
     </template>
   </section>

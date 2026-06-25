@@ -1,7 +1,7 @@
 ---
 import { useT, type Lang } from '../i18n/ui'
-interface Props { lang: Lang }
-const { lang } = Astro.props
+interface Props { lang: Lang; hideHeader?: boolean }
+const { lang, hideHeader = false } = Astro.props
 const t = useT(lang)
 
 const features = [
@@ -23,11 +23,13 @@ const features = [
     class="pointer-events-none absolute -bottom-16 -right-20 hidden w-[500px] select-none opacity-[0.18] md:block"
     style="-webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent); mask-image: radial-gradient(closest-side, #000 55%, transparent);"
   />
-  <div class="max-w-2xl">
-    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('features.title')}</h2>
-    <p class="mt-3 text-medium">{t('features.lead')}</p>
-  </div>
-  <div class="mt-12 grid gap-x-14 gap-y-10 sm:grid-cols-2">
+  {!hideHeader && (
+    <div class="max-w-2xl">
+      <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('features.title')}</h2>
+      <p class="mt-3 text-medium">{t('features.lead')}</p>
+    </div>
+  )}
+  <div class:list={['grid gap-x-14 gap-y-10 sm:grid-cols-2', !hideHeader && 'mt-12']}>
     {features.map((key, i) => (
       <div class="feat-item flex gap-5 pt-7">
         <span class="shrink-0 font-serif text-2xl font-bold tabular-nums text-saffron/55">
