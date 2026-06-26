@@ -54,25 +54,41 @@ type Config struct {
 	// RCProEntitlement is the RevenueCat entitlement id granted by the
 	// internal grant endpoint. Defaults to "pro".
 	RCProEntitlement string
+	// SMTP* configure the mail transport for passwordless email sign-in
+	// (OTP codes). Works with AWS SES SMTP credentials or any SMTP server.
+	// When SMTPHost or EmailFrom is empty the email-OTP endpoints are
+	// disabled (503) in prod, or fall back to a log-only sender in dev.
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUsername string
+	SMTPPassword string
+	// EmailFrom is the From header / envelope sender, e.g.
+	// "Shruti <no-reply@shruti.app>".
+	EmailFrom string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:              env("PORT", "8081"),
-		DatabaseURL:       env("DATABASE_URL", ""),
-		JWTPrivateKeyPath: env("JWT_PRIVATE_KEY_PATH", "/secrets/private.pem"),
-		JWTPublicKeyPath:  env("JWT_PUBLIC_KEY_PATH", "/secrets/public.pem"),
-		GoogleClientIDs:   splitCSV(os.Getenv("GOOGLE_CLIENT_IDS")),
-		AppleBundleIDs:    splitCSV(os.Getenv("APPLE_BUNDLE_IDS")),
+		Port:                     env("PORT", "8081"),
+		DatabaseURL:              env("DATABASE_URL", ""),
+		JWTPrivateKeyPath:        env("JWT_PRIVATE_KEY_PATH", "/secrets/private.pem"),
+		JWTPublicKeyPath:         env("JWT_PUBLIC_KEY_PATH", "/secrets/public.pem"),
+		GoogleClientIDs:          splitCSV(os.Getenv("GOOGLE_CLIENT_IDS")),
+		AppleBundleIDs:           splitCSV(os.Getenv("APPLE_BUNDLE_IDS")),
 		RCWebhookSecretPrimary:   os.Getenv("RC_WEBHOOK_SECRET_PRIMARY"),
 		RCWebhookSecretSecondary: os.Getenv("RC_WEBHOOK_SECRET_SECONDARY"),
 		RCRestAPIKey:             os.Getenv("RC_REST_API_KEY"),
-		Env:               env("ENV", "dev"),
-		ServiceVersion:    env("SERVICE_VERSION", "dev"),
-		ConfigPath:        env("CONFIG_PATH", "/etc/lectorium/auth/config.yaml"),
-		Profile:           env("PROFILE", "global"),
-		InternalAPIToken:  os.Getenv("INTERNAL_API_TOKEN"),
-		RCProEntitlement:  env("RC_PRO_ENTITLEMENT", "pro"),
+		Env:                      env("ENV", "dev"),
+		ServiceVersion:           env("SERVICE_VERSION", "dev"),
+		ConfigPath:               env("CONFIG_PATH", "/etc/lectorium/auth/config.yaml"),
+		Profile:                  env("PROFILE", "global"),
+		InternalAPIToken:         os.Getenv("INTERNAL_API_TOKEN"),
+		RCProEntitlement:         env("RC_PRO_ENTITLEMENT", "pro"),
+		SMTPHost:                 os.Getenv("SMTP_HOST"),
+		SMTPPort:                 env("SMTP_PORT", "587"),
+		SMTPUsername:             os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:             os.Getenv("SMTP_PASSWORD"),
+		EmailFrom:                os.Getenv("EMAIL_FROM"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")

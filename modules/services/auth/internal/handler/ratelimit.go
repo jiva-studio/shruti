@@ -72,6 +72,78 @@ func (l *userRateLimiter) allow(userID uuid.UUID) (bool, time.Duration) {
 	return true, 0
 }
 
+// countingLimiter caps a string key (here: client IP) to `limit` hits per
+// fixed `window`. It bounds OTP-email flooding from a single source — the
+// durable per-email resend cooldown lives in the DB; this only stops one IP
+// from fanning out across many distinct addresses. In-process like
+// userRateLimiter, and for the same reason: a sidecar missing another
+// instance's recent hits at worst doubles the per-window budget, far below
+// what would justify a Redis dependency on the boot path.
+type countingLimiter struct {
+	limit  int
+	window time.Duration
+	now    func() time.Time
+
+	mu    sync.Mutex
+	state map[string]*windowCount
+}
+
+type windowCount struct {
+	start time.Time
+	count int
+}
+
+func newCountingLimiter(limit int, window time.Duration) *countingLimiter {
+	return &countingLimiter{
+		limit:  limit,
+		window: window,
+		now:    time.Now,
+		state:  make(map[string]*windowCount),
+	}
+}
+
+// allow records a hit for key and reports whether it stayed under the limit.
+func (l *countingLimiter) allow(key string) bool {
+	now := l.now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Opportunistic GC: drop one expired neighbour per touch (same bounded
+	// strategy as userRateLimiter).
+	for k, wc := range l.state {
+		if now.Sub(wc.start) >= l.window {
+			delete(l.state, k)
+		}
+		break
+	}
+
+	wc := l.state[key]
+	if wc == nil || now.Sub(wc.start) >= l.window {
+		l.state[key] = &windowCount{start: now, count: 1}
+		return true
+	}
+	if wc.count >= l.limit {
+		return false
+	}
+	wc.count++
+	return true
+}
+
+// rateLimitPerIP throttles an endpoint by client IP. Used for the public
+// (unauthenticated) OTP-request endpoint, where there's no user id to key on.
+func rateLimitPerIP(l *countingLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !l.allow(clientIP(r)) {
+				w.Header().Set("Retry-After", "60")
+				writeErr(w, http.StatusTooManyRequests, "rate_limited", "too many requests; retry later")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // rateLimitPerUser is a middleware that throttles a per-user-keyed
 // endpoint. It MUST be installed AFTER requireBearer so the user id is
 // already on the context. A missing user is a programmer error (the
