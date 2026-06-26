@@ -191,4 +191,7 @@ export interface AuthConfig {
   googleWebClientId: string
   /** Google OAuth iOS client ID. */
   googleIOSClientId: string
+  /** Current UI locale, sent with the email-OTP request so the code email is
+   *  localized. Optional; the server falls back to English. */
+  getLocale?: () => string
 }

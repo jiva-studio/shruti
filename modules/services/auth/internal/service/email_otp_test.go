@@ -3,11 +3,38 @@ package service
 import (
 	"context"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/akdasa-studios/lectorium/auth/internal/providers"
 	"github.com/akdasa-studios/lectorium/auth/internal/store"
 )
+
+func TestOtpEmailContent_Localized(t *testing.T) {
+	// Pure (no DB): exact/script/prefix/fallback resolution + code interpolation.
+	cases := []struct {
+		locale string
+		subSub string // substring expected in the subject
+	}{
+		{"en", "sign-in code"},
+		{"ru", "код для входа"},
+		{"uk", "код для входу"},
+		{"sr-Latn", "kod za prijavu"},
+		{"sr-Cyrl", "код за пријаву"},
+		{"ru-RU", "код для входа"}, // prefix match
+		{"de", "sign-in code"},     // unmapped → English
+		{"", "sign-in code"},       // empty → English
+	}
+	for _, c := range cases {
+		subject, body := otpEmailContent("123456", c.locale)
+		if !strings.Contains(subject, c.subSub) {
+			t.Errorf("locale %q: subject %q missing %q", c.locale, subject, c.subSub)
+		}
+		if !strings.Contains(body, "123456") {
+			t.Errorf("locale %q: body missing the code", c.locale)
+		}
+	}
+}
 
 // captureSender records the last email it was asked to send so tests can
 // read back the OTP code from the body.
@@ -37,7 +64,7 @@ func bootOTP(t *testing.T) (*Service, *captureSender) {
 // sent email.
 func requestCode(t *testing.T, svc *Service, cs *captureSender, email string) string {
 	t.Helper()
-	if err := svc.RequestEmailOTP(context.Background(), email); err != nil {
+	if err := svc.RequestEmailOTP(context.Background(), email, ""); err != nil {
 		t.Fatalf("request otp: %v", err)
 	}
 	code := sixDigits.FindString(cs.body)
@@ -114,10 +141,10 @@ func TestEmailOTP_ResendThrottled(t *testing.T) {
 	svc, cs := bootOTP(t)
 	ctx := context.Background()
 
-	if err := svc.RequestEmailOTP(ctx, "t@example.com"); err != nil {
+	if err := svc.RequestEmailOTP(ctx, "t@example.com", ""); err != nil {
 		t.Fatalf("first request: %v", err)
 	}
-	if err := svc.RequestEmailOTP(ctx, "t@example.com"); err != ErrOTPThrottled {
+	if err := svc.RequestEmailOTP(ctx, "t@example.com", ""); err != ErrOTPThrottled {
 		t.Fatalf("want ErrOTPThrottled on immediate resend, got %v", err)
 	}
 	if cs.sends != 1 {
@@ -127,7 +154,7 @@ func TestEmailOTP_ResendThrottled(t *testing.T) {
 
 func TestEmailOTP_InvalidEmailRejected(t *testing.T) {
 	svc, _ := bootOTP(t)
-	if err := svc.RequestEmailOTP(context.Background(), "not-an-email"); err != ErrEmailInvalid {
+	if err := svc.RequestEmailOTP(context.Background(), "not-an-email", ""); err != ErrEmailInvalid {
 		t.Fatalf("want ErrEmailInvalid, got %v", err)
 	}
 }
@@ -135,7 +162,7 @@ func TestEmailOTP_InvalidEmailRejected(t *testing.T) {
 func TestEmailOTP_DisabledWithoutSender(t *testing.T) {
 	svc, _ := bootOTP(t)
 	svc.Emailer = nil
-	if err := svc.RequestEmailOTP(context.Background(), "a@example.com"); err != ErrEmailDisabled {
+	if err := svc.RequestEmailOTP(context.Background(), "a@example.com", ""); err != ErrEmailDisabled {
 		t.Fatalf("want ErrEmailDisabled, got %v", err)
 	}
 }

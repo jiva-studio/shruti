@@ -11,6 +11,9 @@ import (
 
 type emailOTPRequestReq struct {
 	Email string `json:"email"`
+	// Locale selects the email template language (e.g. "ru", "sr-Latn").
+	// Optional; unknown/empty falls back to English.
+	Locale string `json:"locale,omitempty"`
 }
 
 type emailOTPVerifyReq struct {
@@ -28,7 +31,7 @@ func (h *authHandler) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
-	err := h.svc.RequestEmailOTP(r.Context(), body.Email)
+	err := h.svc.RequestEmailOTP(r.Context(), body.Email, body.Locale)
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusOK, map[string]any{})
