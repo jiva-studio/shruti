@@ -335,12 +335,12 @@ func (c *Config) applyDefaults() {
 		c.RunsDB = filepath.Join(c.Out, "artifacts", "lake", "runs.db")
 	}
 	if c.CDN.ReadBaseURL == "" {
-		c.CDN.ReadBaseURL = "https://akds-lectorium.s3.us-east-1.amazonaws.com"
+		c.CDN.ReadBaseURL = "https://akds-lectorium.b-cdn.net"
 	}
-	if c.S3.AWS.Bucket == "" {
-		c.S3.AWS.Bucket = "akds-lectorium"
-	}
-	if c.S3.AWS.Region == "" {
+	// AWS is opt-in: catalog publish targets Bunny Edge Storage. Only default
+	// the region when a bucket is explicitly configured — an empty aws block
+	// means "no S3 publish target" (main.go skips it when Bucket == "").
+	if c.S3.AWS.Bucket != "" && c.S3.AWS.Region == "" {
 		c.S3.AWS.Region = "us-east-1"
 	}
 	if c.S3.Yandex.Region == "" {
