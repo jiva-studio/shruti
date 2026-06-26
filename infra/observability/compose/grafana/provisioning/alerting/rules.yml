@@ -141,7 +141,7 @@ groups:
     labels:
       severity: P1
     annotations:
-      summary: Container {{ .Labels.name }} restarted >3 times in 5m
+      summary: Container {{ .Labels.image }} restarted >3 times in 5m
     data:
     - refId: A
       datasourceUid: prometheus
@@ -163,10 +163,9 @@ groups:
             type: gt
             params:
             - 3
-    # NoData is the steady state on hosts whose Docker uses the containerd
-    # image store (cAdvisor can't read per-container layers there) — so keep
-    # this OK and let the dedicated cadvisor_metrics_missing watchdog (below)
-    # be the single P2 signal for missing data, instead of paging P1 forever.
+    # Keep OK on NoData and let the dedicated cadvisor_metrics_missing watchdog
+    # (below) be the single P2 signal for missing data, instead of paging P1
+    # forever if the metrics pipeline ever breaks.
     noDataState: OK
     execErrState: OK
   - uid: container_oom_killed
@@ -176,7 +175,7 @@ groups:
     labels:
       severity: P1
     annotations:
-      summary: Container {{ .Labels.name }} OOM-killed
+      summary: Container {{ .Labels.image }} OOM-killed
     data:
     - refId: A
       datasourceUid: prometheus
@@ -185,7 +184,7 @@ groups:
         to: 0
       model:
         refId: A
-        expr: sum by(name) (rate(container_oom_events_total[5m])) > 0
+        expr: sum by(name, image) (rate(container_oom_events_total[5m])) > 0
         instant: true
     - refId: B
       datasourceUid: __expr__
