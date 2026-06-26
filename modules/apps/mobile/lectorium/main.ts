@@ -34,7 +34,8 @@ import router from "./router/index.js"
 import { i18n } from "./i18n/index.js"
 import { initLectorium } from "./lectorium.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
-import { getRegions, hydrateRegions } from "@lectorium/services/regionsRegistry.js"
+import { findRegion, getRegions, hydrateRegions } from "@lectorium/services/regionsRegistry.js"
+import { readPreferredServerId } from "@lectorium/services/preferredServer.js"
 import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
 import { useCapacitorSqlPersistence } from "@infra/persistence/capacitor/index.js"
 import { useDatabaseToIndexedDbFetcher } from "@infra/persistence/fetchers/idb/index.js"
@@ -215,6 +216,16 @@ async function start(): Promise<void> {
   await hydrateRegions(preferences).catch((e) => {
     console.warn("[lectorium] region hydration failed; using bundled defaults", e)
   })
+
+  // Seed the active region from the user's last explicit pick (Settings
+  // server picker) BEFORE the bootstrap probe, so the probe tries it
+  // first instead of always preferring the config's first region. A
+  // stored id that no longer exists in the hydrated region list is
+  // ignored — the probe falls back to the bundled default order.
+  const preferredId = await readPreferredServerId(preferences)
+  if (preferredId && findRegion(preferredId)) {
+    useLectorium().setActiveServerById(preferredId)
+  }
 
   const startup = await runStartupBootstrap()
   if (!startup.ready) {
