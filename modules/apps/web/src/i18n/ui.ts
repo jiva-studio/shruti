@@ -10,7 +10,7 @@ export const STORE = {
   googlePlay: 'https://play.google.com/store/apps/details?id=studio.jiva.shruti',
   // Off-store (no Google services) APK, published by the
   // apps-mobile-offstore.yml workflow to the bucket's public prefix.
-  apkDownload: 'https://akds-lectorium.s3.us-east-1.amazonaws.com/public/app/lectorium-offstore.apk',
+  apkDownload: 'https://akds-lectorium.s3.us-east-1.amazonaws.com/public/app/lectorium.apk',
   vk: 'https://vk.com/shruti',
   telegram: 'https://t.me/shrutiapp',
   email: 'support@akdasa.studio',
