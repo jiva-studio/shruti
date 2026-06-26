@@ -12,6 +12,24 @@ export interface WebSession {
   quotaId: string
 }
 
+export type WebEmailOtpErrorKind =
+  | 'invalid-email'
+  | 'invalid-code'
+  | 'throttled'
+  | 'disabled'
+  | 'network'
+  | 'server'
+  | 'unknown'
+
+/** Thrown by requestEmailCode / verifyEmailCode so the UI can branch on
+ *  `kind` without parsing HTTP statuses. */
+export class WebEmailOtpError extends Error {
+  constructor(public readonly kind: WebEmailOtpErrorKind) {
+    super(`email-otp: ${kind}`)
+    this.name = 'WebEmailOtpError'
+  }
+}
+
 export interface WebAuthConfig {
   authBase: string
   googleClientId?: string
@@ -35,6 +53,10 @@ export interface WebAuth {
   resetToken: () => void
   mountGoogleButton: (el: HTMLElement, width?: number) => void
   signInApple: () => Promise<boolean>
+  // Passwordless email sign-in. requestEmailCode mails a one-time code;
+  // verifyEmailCode exchanges it for a session. Both throw WebEmailOtpError.
+  requestEmailCode: (email: string) => Promise<void>
+  verifyEmailCode: (email: string, code: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -276,6 +298,60 @@ async function signinSocial(
   await commitTokenResponse((await res.json()) as TokenResponseBody)
 }
 
+function emailOtpErrorFor(res: Response): WebEmailOtpError {
+  switch (res.status) {
+    case 400:
+      return new WebEmailOtpError('invalid-email')
+    case 401:
+      return new WebEmailOtpError('invalid-code')
+    case 429:
+      return new WebEmailOtpError('throttled')
+    case 503:
+      return new WebEmailOtpError('disabled')
+    default:
+      return new WebEmailOtpError(res.status >= 500 ? 'server' : 'unknown')
+  }
+}
+
+async function requestEmailCode(email: string): Promise<void> {
+  init()
+  let res: Response
+  try {
+    res = await fetch(`${authBase()}/auth/signin/email/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Forward the anon bearer (if any) so verify can upgrade this
+        // browser's anonymous identity in place — same as signinSocial.
+        ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+      },
+      body: JSON.stringify({ email }),
+    })
+  } catch {
+    throw new WebEmailOtpError('network')
+  }
+  if (!res.ok) throw emailOtpErrorFor(res)
+}
+
+async function verifyEmailCode(email: string, code: string): Promise<void> {
+  init()
+  let res: Response
+  try {
+    res = await fetch(`${authBase()}/auth/signin/email/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+      },
+      body: JSON.stringify({ email, code }),
+    })
+  } catch {
+    throw new WebEmailOtpError('network')
+  }
+  if (!res.ok) throw emailOtpErrorFor(res)
+  await commitTokenResponse((await res.json()) as TokenResponseBody)
+}
+
 function init(): void {
   if (initialized) return
   initialized = true
@@ -345,6 +421,8 @@ export function useWebAuth(config?: WebAuthConfig): WebAuth {
       await signinSocial('apple', r.idToken, r.fullName)
       return true
     },
+    requestEmailCode,
+    verifyEmailCode,
     signOut: async () => {
       init()
       if (stored && !stored.anonymous) {
