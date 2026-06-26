@@ -60,7 +60,7 @@ func loadCfg() cfg {
 		zone:        os.Getenv("STORAGE_ZONE"),
 		key:         os.Getenv("STORAGE_KEY"),
 		endpoint:    strings.TrimRight(env("STORAGE_ENDPOINT", "https://storage.bunnycdn.com"), "/"),
-		prefix:      strings.TrimLeft(env("SYNC_PREFIX", "public/"), "/"),
+		prefix:      strings.TrimLeft(env("SYNC_PREFIX", ""), "/"),
 		concurrency: conc,
 		delete:      env("SYNC_DELETE", "false") == "true",
 		dryRun:      env("DRY_RUN", "false") == "true",
