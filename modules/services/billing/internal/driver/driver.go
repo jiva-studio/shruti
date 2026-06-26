@@ -106,7 +106,7 @@ func (d *Driver) verify(ctx context.Context, o *orders.Order) error {
 // and transitions verified/granted → fulfilled. A grant failure leaves the
 // order at verified for the reconcile worker.
 func (d *Driver) grantAndFulfill(ctx context.Context, o *orders.Order) error {
-	if err := d.Auth.Grant(ctx, o.UserID.String(), o.Plan); err != nil {
+	if err := d.Auth.Grant(ctx, o.UserID.String(), o.Plan, o.ID.String()); err != nil {
 		_ = d.Repo.BumpAttempt(ctx, o.ID, "grant: "+err.Error())
 		return err
 	}

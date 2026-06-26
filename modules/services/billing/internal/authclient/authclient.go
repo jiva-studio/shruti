@@ -38,16 +38,19 @@ func (c *Client) Configured() bool { return c.Token != "" }
 type grantRequest struct {
 	UserID   string `json:"userId"`
 	Duration string `json:"duration"`
+	GrantKey string `json:"grantKey,omitempty"`
 }
 
 // Grant calls POST {BaseURL}/internal/subscription/grant. duration is the plan
-// ("monthly"/"yearly"). Returns nil on 2xx; a non-nil error means the grant
-// did not land and the order should stay at `verified` for re-drive.
-func (c *Client) Grant(ctx context.Context, userID, duration string) error {
+// ("monthly"/"yearly"); grantKey (the billing order id) idempotency-keys the
+// grant so a re-drive after a lost response doesn't extend the subscription
+// twice. Returns nil on 2xx; a non-nil error means the grant did not land and
+// the order should stay at `verified` for re-drive.
+func (c *Client) Grant(ctx context.Context, userID, duration, grantKey string) error {
 	if !c.Configured() {
 		return ErrNotConfigured
 	}
-	buf, err := json.Marshal(grantRequest{UserID: userID, Duration: duration})
+	buf, err := json.Marshal(grantRequest{UserID: userID, Duration: duration, GrantKey: grantKey})
 	if err != nil {
 		return err
 	}

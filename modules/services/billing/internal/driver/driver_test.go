@@ -2,6 +2,8 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -108,6 +110,40 @@ func newOrder(t *testing.T, repo *store.Repo) *orders.Order {
 		t.Fatal(err)
 	}
 	return o
+}
+
+// The driver must send the order id as the grant key so the auth service can
+// make the grant idempotent (a re-drive after a lost response must not extend
+// the subscription twice).
+func TestDriveSendsOrderIDAsGrantKey(t *testing.T) {
+	pool := testPool(t)
+	repo := &store.Repo{Pool: pool}
+
+	var gotKey string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/internal/subscription/grant" {
+			body, _ := io.ReadAll(r.Body)
+			var req struct {
+				UserID   string `json:"userId"`
+				Duration string `json:"duration"`
+				GrantKey string `json:"grantKey"`
+			}
+			_ = json.Unmarshal(body, &req)
+			gotKey = req.GrantKey
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	auth := authclient.New(srv.URL, "internal-token")
+	d := &Driver{Pool: pool, Repo: repo, Paymento: fakePaymento(t, "8", uuid.NewString()), Auth: auth}
+
+	o := newOrder(t, repo)
+	if err := d.Drive(context.Background(), o.ID); err != nil {
+		t.Fatal(err)
+	}
+	if gotKey != o.ID.String() {
+		t.Errorf("grant key: got %q, want order id %q", gotKey, o.ID.String())
+	}
 }
 
 // Approve → grant → fulfilled.
