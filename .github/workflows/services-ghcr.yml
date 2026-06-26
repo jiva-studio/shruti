@@ -28,6 +28,7 @@ on:
       - 'modules/services/share-audio/**'
       - 'modules/services/share-video/**'
       - 'modules/services/share-transcript/**'
+      - 'modules/services/storage-sync/**'
       - 'modules/services/search-mcp/**'
       - 'modules/docs/help/**'              # chat COPYs the help corpus
       - 'modules/.dockerignore'             # affects every service build
