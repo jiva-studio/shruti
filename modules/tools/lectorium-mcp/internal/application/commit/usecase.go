@@ -7,8 +7,11 @@ package commit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -259,6 +262,13 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 		TranscriptPath: uc.Transcripts.PublicTranscriptKey(id, language),
 		TranscriptKind: "generated",
 		SortReference:  sortRef,
+	}
+	// Content hash of the published transcript file → asset_hashes change-token
+	// the chat indexer diffs against (replaces S3 listing). Best-effort: the
+	// file was just validated to exist; a read error simply skips the row.
+	if b, err := os.ReadFile(publicTranscriptDiskPath(uc.OutDir, id, language)); err == nil {
+		sum := sha256.Sum256(b)
+		variantRow.TranscriptSHA256 = hex.EncodeToString(sum[:])
 	}
 	// The published recording is the 'original' audio version. The denoiser
 	// adds a 'clean' track_audio row later.

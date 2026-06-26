@@ -19,8 +19,11 @@ const dataDir = join(webRoot, 'src', 'data')
 // bundled into thousands of Vite chunks — which OOMs the client build.
 const lecturesDir = join(webRoot, 'public', 'data', 'lectures')
 
-const S3_BASE = 'https://akds-lectorium.s3.us-east-1.amazonaws.com'
-const CONFIG_URL = `${S3_BASE}/public/config.json`
+// Everything (catalog config.json, versioned db, and the baked media delivery
+// URLs) comes from the Bunny.net CDN (US+EU edge). config.json has a 60s edge
+// cache rule so publishes still propagate.
+const MEDIA_BASE = process.env.LECTORIUM_MEDIA_BASE_URL ?? 'https://akds-lectorium.b-cdn.net'
+const CONFIG_URL = `${MEDIA_BASE}/public/config.json`
 const SYNC_LIMIT = Number(process.env.SYNC_LIMIT ?? 60)
 
 for (const dir of [cacheDir, transcriptCacheDir, dataDir, lecturesDir]) {
@@ -41,7 +44,7 @@ async function downloadTo(url, dest) {
 
 function resolveUrl(path) {
   if (!path) return null
-  return `${S3_BASE}/${path.replace(/^\/+/, '')}`
+  return `${MEDIA_BASE}/${path.replace(/^\/+/, '')}`
 }
 
 function foldDict(rows, pick) {
@@ -192,7 +195,7 @@ async function main() {
   if (existsSync(dbFile)) {
     console.log(`DB cached: ${dbFile}`)
   } else {
-    const dbUrl = `${S3_BASE}/public/db/lectorium.${version}.db`
+    const dbUrl = `${MEDIA_BASE}/public/db/lectorium.${version}.db`
     console.log(`Downloading DB ${dbUrl}…`)
     await downloadTo(dbUrl, dbFile)
     console.log(`Saved ${dbFile}`)

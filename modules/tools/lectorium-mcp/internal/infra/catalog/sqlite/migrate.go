@@ -38,6 +38,35 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureDailyWisdomTable(ctx, db); err != nil {
 		return fmt.Errorf("ensure daily_wisdom table: %w", err)
 	}
+	if err := ensureAssetHashesTable(ctx, db); err != nil {
+		return fmt.Errorf("ensure asset_hashes table: %w", err)
+	}
+	return nil
+}
+
+// ensureAssetHashesTable creates `asset_hashes`: one row per published asset
+// (keyed by its public path) carrying a content sha256. The chat indexer reads
+// it from the published current.db to discover transcripts and diff change —
+// replacing the boto3 S3 ListObjects walk (Bunny Edge Storage has no anonymous
+// listing). Server-side only; the mobile app never reads it, so this is a
+// purely additive table with NO scheme bump (mirrors the additive-column
+// migrations) — older binaries ignore it.
+func ensureAssetHashesTable(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS asset_hashes (
+			path     TEXT NOT NULL PRIMARY KEY,   -- public/tracks/<id>/transcripts/<lang>.json
+			sha256   TEXT NOT NULL,
+			track_id TEXT,
+			language TEXT,
+			kind     TEXT                          -- transcript | audio | export | ...
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_asset_hashes_kind ON asset_hashes(kind)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("apply %q: %w", s, err)
+		}
+	}
 	return nil
 }
 

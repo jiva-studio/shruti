@@ -82,6 +82,12 @@ s3:
     access_key_id:     ${S3_YANDEX_ACCESS_KEY_ID}
     secret_access_key: ${S3_YANDEX_SECRET_ACCESS_KEY}
     force_path_style:  true                                   # required for Yandex Object Storage
+  # Bunny.net Edge Storage mirror (NOT S3 — plain HTTP API, AccessKey header).
+  # Enabled when `zone` is set. access_key is the storage-zone password.
+  bunny:
+    zone:              ${S3_BUNNY_ZONE}                       # leave unset to skip; e.g. akds-lectorium-eu
+    endpoint:          ${S3_BUNNY_ENDPOINT}                   # default: https://storage.bunnycdn.com
+    access_key:        ${S3_BUNNY_ACCESS_KEY}                 # storage-zone password
 
 # ──────────────────────────────────────────────────────────────────────────
 # ffmpeg / ffprobe — audio_normalize + ffprobe-based audio.Probe

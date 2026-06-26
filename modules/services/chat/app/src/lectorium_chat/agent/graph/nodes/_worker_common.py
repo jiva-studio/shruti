@@ -254,10 +254,11 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
             translation[ctx.lang] = shown
             payload["mt"] = True
             payload["translation_original_lang"] = orig_lang
-    # Expand the stored relative S3 key into a full public URL (same pattern
-    # as track PDFs). Omitted entirely when the verse has no recitation.
+    # Expand the stored relative key into a full public URL on the media CDN
+    # (Bunny). Omitted entirely when the verse has no recitation.
     if body["audio_path"]:
-        payload["audio_url"] = f"{get_settings().s3_public_url}/{body['audio_path']}"
+        base = get_settings().media_base_url.rstrip("/")
+        payload["audio_url"] = f"{base}/{body['audio_path']}"
     return payload
 
 
