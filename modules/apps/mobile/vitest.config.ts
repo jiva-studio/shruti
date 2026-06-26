@@ -12,6 +12,9 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __BUILD_ID__: JSON.stringify("test"),
     __DB_SCHEME__: JSON.stringify(dbScheme.scheme),
+    // Off-store flag referenced at module top-level (onboarding controller);
+    // tests build the normal variant.
+    __OFFSTORE_BUILD__: JSON.stringify(false),
   },
   resolve: {
     preserveSymlinks: true,
