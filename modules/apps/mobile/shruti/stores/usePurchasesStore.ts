@@ -98,6 +98,10 @@ export const usePurchasesStore = defineStore("purchases", () => {
   // (`activePackageId`) always wins; the override never grants Pro on prod.
   const isSubscribed = computed(() => {
     if (activePackageId.value !== undefined) return true
+    // Off-store build has no RevenueCat — Pro is bought on the website and
+    // mirrored into the auth `tier` claim, so the JWT tier is the source of
+    // truth for every client-side Pro gate here.
+    if (__OFFSTORE_BUILD__) return useAuthStore().isPro
     const ov = devSubscriptionOverride.value
     if (ov === "free") return false
     if (ov === "pro") return isDevBuild
