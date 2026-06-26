@@ -121,7 +121,7 @@ export function useShareTrack(): UseShareTrackReturn {
       }
     }
     const references = track.references.map((r) => {
-      const src = dicts.sourcesById.get(r.sourceId)
+      const src = r.sourceId ? dicts.sourcesById.get(r.sourceId) : undefined
       const name = src ? (src.names.get(lang) ?? [...src.names.values()][0]) : undefined
       const tokens = r.tokens.join(".")
       return {

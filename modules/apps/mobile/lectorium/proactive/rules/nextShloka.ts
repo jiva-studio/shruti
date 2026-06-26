@@ -46,6 +46,7 @@ const handler: ProactiveRuleHandler = {
       const track = tracksById.get(r.trackId)
       if (!track || track.references.length === 0) continue
       const lastRef = track.references[track.references.length - 1]
+      if (!lastRef.sourceId) continue
       const nextTokens = computeNextTokens(lastRef.tokens)
       if (nextTokens === null) continue
       const nextTrack = await repos.tracks.findByReference(lastRef.sourceId, nextTokens)

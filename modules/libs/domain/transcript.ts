@@ -38,8 +38,13 @@ export interface TranscriptVerseTextBlock {
   readonly type: "verse:text"
   readonly start: number
   readonly end: number
+  /** Transliteration (IAST) lines — what is recited. */
   readonly text: readonly string[]
   readonly reference?: Reference
+  /** Original-script lines (Devanagari / Bengali), baked from the library. */
+  readonly original?: readonly string[]
+  /** Translation in the transcript language, baked from the library. */
+  readonly translation?: string
 }
 
 export interface TranscriptVerseTranslationBlock {

@@ -19,6 +19,8 @@
     v-else-if="block.block.type === 'verse:text' && block.block.text.length > 1"
     :lines="block.block.text"
     :reference="block.block.reference"
+    :original="block.block.original"
+    :translation="block.block.translation"
     :class="stateClasses"
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"

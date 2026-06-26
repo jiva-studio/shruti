@@ -11,6 +11,11 @@ import type { SourceId } from "./core.js"
  * array so we can compare/range-detect without re-parsing.
  */
 export interface Reference {
-  readonly sourceId: SourceId
+  /** Catalog `sources.id` for an in-library scripture; the UI looks up the
+   *  localised name. Exactly one of `sourceId` / `sourceName` is present. */
+  readonly sourceId?: SourceId
+  /** Verbatim name of an external work not in the catalog (e.g. an Upaniṣad).
+   *  Rendered as-is when there is no `sourceId`. */
+  readonly sourceName?: string
   readonly tokens: readonly string[]
 }
