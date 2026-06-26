@@ -1,0 +1,117 @@
+name: Mobile / Off-store APK
+
+# Manual builds of the off-store ("no Google services") Android APK:
+# email-only sign-in, no in-app purchase (subscriptions are managed on the
+# website), no FCM. Same project as the Play build, compiled with
+# SHRUTI_OFFSTORE=1 + empty RevenueCat keys, signed with the release
+# keystore, and published to S3 for the website's "Download APK" link.
+#
+# Strictly manual — never auto-builds. The Play/App-Store binaries still come
+# from apps-mobile-binaries.yml; this is a separate, parallel distribution.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: apps-mobile-offstore-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Build the web bundle in off-store mode. Mirrors apps-mobile.yml's
+  # build-web, but flips SHRUTI_OFFSTORE on and ships empty RevenueCat
+  # keys so the in-app purchase UI hides itself.
+  build-web:
+    name: build off-store web bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
+      - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
+      - uses: ./.github/actions/build-audio-player
+      - uses: ./.github/actions/build-media-downloader
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - name: build off-store web bundle
+        env:
+          BUILD_ID: ${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
+          # The whole point of this build: no Google services. Off-store mode
+          # routes sign-in to email OTP only and subscriptions to the website;
+          # empty RevenueCat keys make the purchase SDK unavailable so no
+          # in-app store UI renders.
+          SHRUTI_OFFSTORE: "1"
+          REVENUECAT_IOS_KEY: ""
+          REVENUECAT_ANDROID_KEY: ""
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: cd modules/apps/mobile && npm run build
+      # Named mobile-web-dist (not offstore-*) because kit's
+      # mobile-android-setup action downloads exactly that artifact name into
+      # modules/apps/mobile/dist. This run only ever produces the off-store
+      # bundle, so reusing the name is safe and lets the setup action place it.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobile-web-dist
+          path: modules/apps/mobile/dist
+          retention-days: 3
+
+  # Sign the release APK from the off-store bundle and publish it to S3.
+  build-apk:
+    name: build + sign + upload off-store APK
+    needs: [build-web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
+      - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
+      # Android toolchain (Java/SDK), Ruby + bundler, and npm deps — the same
+      # setup the Play binary build uses.
+      # The setup action itself downloads the mobile-web-dist artifact into
+      # modules/apps/mobile/dist (so fastlane's before_all sees dist/index.html
+      # and skips a rebuild — which would otherwise lack SHRUTI_OFFSTORE).
+      - name: android toolchain + deps (+ web bundle)
+        uses: akdasa-studios/kit/.github/actions/mobile-android-setup@main
+      - name: build signed release APK
+        # before_all: dist/index.html present → no web rebuild; runs
+        # `cap sync android` (copies the off-store bundle into the native
+        # project) + db-sync, then assembleRelease signs with the keystore.
+        # No google-services.json is present, so the google-services plugin is
+        # not applied (no FCM) — exactly what the off-store build wants.
+        # Keystore env names match fastlane's setup_keystore/signing_properties;
+        # secrets are the same ones the Play build uses (same signing identity,
+        # same applicationId).
+        env:
+          KEYSTORE_BASE64: ${{ secrets.GOOGLE_PLAY_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GOOGLE_PLAY_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEY_PASSWORD }}
+        run: cd modules/apps/mobile && bundle exec fastlane android build_release
+      - name: publish APK to S3
+        # public/ is the bucket's anonymously-readable prefix; the website's
+        # "Download APK" link points at this object. Short cache so a re-run
+        # propagates quickly. AWS CLI is preinstalled on ubuntu runners.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          APK="modules/apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK" || { echo "::error::APK not found at $APK"; exit 1; }
+          aws s3 cp "$APK" "s3://shruti-engine/public/app/shruti-offstore.apk" \
+            --content-type application/vnd.android.package-archive \
+            --cache-control "public, max-age=300"
+          echo "Published: https://cdn-s3.shruti.local/public/app/shruti-offstore.apk"
+      # Keep a copy on the run too, for QA / rollback.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: offstore-apk
+          path: modules/apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
