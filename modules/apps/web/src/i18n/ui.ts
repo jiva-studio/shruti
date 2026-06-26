@@ -8,6 +8,9 @@ export const defaultLang: Lang = 'ru'
 export const STORE = {
   appStore: 'https://apps.apple.com/app/id6745510353',
   googlePlay: 'https://play.google.com/store/apps/details?id=studio.jiva.shruti',
+  // Off-store (no Google services) APK, published by the
+  // apps-mobile-offstore.yml workflow to the bucket's public prefix.
+  apkDownload: 'https://cdn-s3.shruti.local/public/app/shruti-offstore.apk',
   vk: 'https://vk.com/shruti',
   telegram: 'https://t.me/shrutiapp',
   email: 'support@akdasa.studio',
