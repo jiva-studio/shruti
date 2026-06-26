@@ -16,6 +16,11 @@ type RenderRequest struct {
 	Theme     string `json:"theme"`
 	VideoID   string `json:"videoId,omitempty"`
 	Title     string `json:"title,omitempty"`
+	// SkipIntro drops the cream title card at the start of the reel even
+	// when Title is set. SkipLogo drops the logo.mp4 clip appended at the
+	// end. Both default false, so existing callers keep the branded reel.
+	SkipIntro bool `json:"skipIntro,omitempty"`
+	SkipLogo  bool `json:"skipLogo,omitempty"`
 }
 
 // TaskPayload is the value stored in public.tasks.payload (jsonb).
