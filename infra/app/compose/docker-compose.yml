@@ -493,6 +493,40 @@ services:
       retries: 20
       start_period: 5s
 
+  # storage-sync: mirrors Bunny Edge Storage (source of truth) -> Yandex Object
+  # Storage (the Russia mirror). Replaces the old GitHub `storage-sync` workflow
+  # (S3 -> Yandex). Long-lived: re-runs an incremental pass every SYNC_INTERVAL
+  # seconds; between passes it sleeps. Origin only — one instance is enough, it
+  # reads Bunny (EU) and writes the regional Yandex bucket.
+  storage-sync:
+    profiles: [origin]
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-storage-sync:${SHRUTI_STORAGE_SYNC_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../../.env}
+    environment:
+      # Source: Bunny Edge Storage.
+      BUNNY_STORAGE_ZONE: ${SHRUTI_BUNNY_STORAGE_ZONE:-shruti-engine-eu}
+      BUNNY_STORAGE_KEY: ${SHRUTI_BUNNY_STORAGE_KEY:?SHRUTI_BUNNY_STORAGE_KEY must be set}
+      # Dest: Yandex Object Storage (S3-compatible).
+      YANDEX_ENDPOINT: ${SHRUTI_YANDEX_ENDPOINT:-https://storage.yandexcloud.net}
+      YANDEX_REGION: ${SHRUTI_YANDEX_REGION:-ru-central1}
+      YANDEX_BUCKET: ${SHRUTI_S3_BUCKET:-shruti-engine}
+      YANDEX_ACCESS_KEY_ID: ${SHRUTI_YC_ACCESS_KEY_ID:?SHRUTI_YC_ACCESS_KEY_ID must be set}
+      YANDEX_SECRET_ACCESS_KEY: ${SHRUTI_YC_SECRET_ACCESS_KEY:?SHRUTI_YC_SECRET_ACCESS_KEY must be set}
+      # What + how often. SYNC_DELETE removes Yandex objects no longer on Bunny.
+      SYNC_PREFIX: ${SHRUTI_STORAGE_SYNC_PREFIX:-public/}
+      SYNC_INTERVAL: ${SHRUTI_STORAGE_SYNC_INTERVAL:-3600}
+      SYNC_CONCURRENCY: ${SHRUTI_STORAGE_SYNC_CONCURRENCY:-16}
+      SYNC_DELETE: ${SHRUTI_STORAGE_SYNC_DELETE:-false}
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_STORAGE_SYNC_TAG:-latest}
+    networks: [shruti]
+
   search-mcp:
     # origin only — read-only MCP over pgvector, reached over tailscale.
     profiles: [origin]
