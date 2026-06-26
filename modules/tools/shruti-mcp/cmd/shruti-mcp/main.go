@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -80,6 +83,7 @@ import (
 	throttledreview "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/review/throttled"
 	sqliteruns "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/runregistry/sqlite"
 	awss3 "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/s3/aws"
+	bunnys3 "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/s3/bunny"
 	razdelsplit "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/sentencesplit/razdel"
 	id3v2tagger "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/tagger/id3v2"
 	openaicompattitle "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/title/openaicompat"
@@ -99,6 +103,86 @@ import (
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/worker"
 )
 
+// runBackfillAssetHashes opens current.db and (re)hashes every published
+// transcript referenced by track_variants, upserting asset_hashes. Idempotent
+// and re-runnable: the chat indexer reads this table from the published db to
+// discover + diff transcripts instead of listing S3 (Bunny has no anonymous
+// listing). Reads each transcript file from <out>/<transcript_path>.
+func runBackfillAssetHashes(outDir string) error {
+	dbPath := filepath.Join(outDir, "artifacts", "catalog", "current.db")
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?_busy_timeout=15000")
+	if err != nil {
+		return fmt.Errorf("open %s: %w", dbPath, err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+
+	for _, ddl := range []string{
+		`CREATE TABLE IF NOT EXISTS asset_hashes (
+			path TEXT NOT NULL PRIMARY KEY, sha256 TEXT NOT NULL,
+			track_id TEXT, language TEXT, kind TEXT)`,
+		`CREATE INDEX IF NOT EXISTS idx_asset_hashes_kind ON asset_hashes(kind)`,
+	} {
+		if _, err := db.ExecContext(ctx, ddl); err != nil {
+			return fmt.Errorf("ensure asset_hashes: %w", err)
+		}
+	}
+
+	rows, err := db.QueryContext(ctx, `SELECT track_id, language, transcript_path
+		FROM track_variants WHERE transcript_path IS NOT NULL AND transcript_path <> ''`)
+	if err != nil {
+		return fmt.Errorf("select variants: %w", err)
+	}
+	type rec struct{ trackID, lang, path string }
+	var recs []rec
+	for rows.Next() {
+		var r rec
+		if err := rows.Scan(&r.trackID, &r.lang, &r.path); err != nil {
+			rows.Close()
+			return err
+		}
+		recs = append(recs, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO asset_hashes (path, sha256, track_id, language, kind)
+		VALUES (?, ?, ?, ?, 'transcript')
+		ON CONFLICT(path) DO UPDATE SET sha256=excluded.sha256, track_id=excluded.track_id,
+			language=excluded.language, kind=excluded.kind`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	var done, missing int
+	for _, r := range recs {
+		b, err := os.ReadFile(filepath.Join(outDir, filepath.FromSlash(r.path)))
+		if err != nil {
+			missing++
+			continue
+		}
+		sum := sha256.Sum256(b)
+		if _, err := stmt.ExecContext(ctx, r.path, hex.EncodeToString(sum[:]), r.trackID, r.lang); err != nil {
+			return fmt.Errorf("upsert %s: %w", r.path, err)
+		}
+		done++
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "[backfill] asset_hashes: %d transcripts hashed, %d files missing (of %d variants)\n",
+		done, missing, len(recs))
+	return nil
+}
+
 func main() {
 	configPath := flag.String("config", "", "path to YAML config (default: ./shruti-mcp.yaml or ~/.config/shruti-mcp/config.yaml)")
 	doServe := flag.Bool("serve", true, "run the MCP HTTP server (default true)")
@@ -106,6 +190,7 @@ func main() {
 	heartbeat := flag.Duration("heartbeat-interval", 15*time.Second, "MCP keepalive heartbeat for streamable HTTP / SSE")
 	workers := flag.Int("workers", 4, "number of file-level pipeline workers")
 	transcribeConcurrency := flag.Int("transcribe-concurrency", 2, "max concurrent transcribe calls (matches M-box worker count)")
+	backfillHashes := flag.Bool("backfill-asset-hashes", false, "scan published transcripts under <out> and (re)populate asset_hashes in current.db, then exit")
 	flag.Parse()
 
 	path, err := resolveConfigPath(*configPath)
@@ -115,6 +200,13 @@ func main() {
 	cfg, err := config.Load(path)
 	if err != nil {
 		log.Fatalf("config load: %v", err)
+	}
+
+	if *backfillHashes {
+		if err := runBackfillAssetHashes(cfg.Out); err != nil {
+			log.Fatalf("backfill-asset-hashes: %v", err)
+		}
+		return
 	}
 
 	if !*doServe {
@@ -208,6 +300,19 @@ func main() {
 			fmt.Fprintf(os.Stderr, "[s3:yandex] init failed: %v\n", err)
 		} else {
 			publishTargets = append(publishTargets, ya)
+		}
+	}
+	if cfg.S3.Bunny.Zone != "" {
+		bny, err := bunnys3.New(bunnys3.Target{
+			Name:      "bunny",
+			Zone:      cfg.S3.Bunny.Zone,
+			Endpoint:  cfg.S3.Bunny.Endpoint,
+			AccessKey: cfg.S3.Bunny.AccessKey,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[s3:bunny] init failed: %v\n", err)
+		} else {
+			publishTargets = append(publishTargets, bny)
 		}
 	}
 

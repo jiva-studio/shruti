@@ -57,6 +57,7 @@
 import { computed, ref } from 'vue'
 import MediaCard from '@lib/ui/chat/MediaCard.vue'
 import { useMediaControls } from '../../composables/useMediaControls'
+import { resolveMediaUrl } from '../../lib/media'
 import type { MediaPayload } from './types/media'
 
 const props = defineProps<{ payload?: MediaPayload }>()
@@ -73,10 +74,8 @@ const transcriptText = computed<string>(() => {
   return showOriginal.value && p.textOriginal ? p.textOriginal : p.text
 })
 
-const S3_BASE = 'https://cdn-s3.shruti.local'
-const resolve = (path: string): string => (/^https?:\/\//.test(path) ? path : `${S3_BASE}/${path}`)
-const fileUrl = computed<string>(() => (props.payload ? resolve(props.payload.url) : ''))
+const fileUrl = computed<string>(() => (props.payload ? resolveMediaUrl(props.payload.url) : ''))
 const posterUrl = computed<string>(() =>
-  props.payload ? resolve(String(props.payload.url).replace(/\.[^./]+$/, '.jpg')) : ''
+  props.payload ? resolveMediaUrl(String(props.payload.url).replace(/\.[^./]+$/, '.jpg')) : ''
 )
 </script>

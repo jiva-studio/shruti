@@ -46,8 +46,9 @@ type CDN struct {
 }
 
 type S3 struct {
-	AWS    S3Target `yaml:"aws"`
-	Yandex S3Target `yaml:"yandex"`
+	AWS    S3Target    `yaml:"aws"`
+	Yandex S3Target    `yaml:"yandex"`
+	Bunny  BunnyTarget `yaml:"bunny"`
 }
 
 type S3Target struct {
@@ -57,6 +58,16 @@ type S3Target struct {
 	AccessKeyID     string `yaml:"access_key_id"`
 	SecretAccessKey string `yaml:"secret_access_key"`
 	ForcePathStyle  bool   `yaml:"force_path_style"`
+}
+
+// BunnyTarget configures a Bunny.net Edge Storage publish target. Bunny is not
+// S3-compatible, so it has its own shape: Zone is the storage-zone name,
+// AccessKey is the storage-zone password (read+write), Endpoint defaults to the
+// main storage host. Enabled when Zone is non-empty.
+type BunnyTarget struct {
+	Zone      string `yaml:"zone"`
+	Endpoint  string `yaml:"endpoint"`
+	AccessKey string `yaml:"access_key"`
 }
 
 type FFmpeg struct {
@@ -337,6 +348,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.S3.Yandex.Endpoint == "" {
 		c.S3.Yandex.Endpoint = "https://storage.yandexcloud.net"
+	}
+	if c.S3.Bunny.Zone != "" && c.S3.Bunny.Endpoint == "" {
+		c.S3.Bunny.Endpoint = "https://storage.bunnycdn.com"
 	}
 	if c.Images.Endpoint == "" {
 		c.Images.Endpoint = "https://openrouter.ai/api/v1"

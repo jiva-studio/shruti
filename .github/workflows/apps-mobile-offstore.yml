@@ -4,7 +4,8 @@ name: Mobile / Off-store APK
 # email-only sign-in, no in-app purchase (subscriptions are managed on the
 # website), no FCM. Same project as the Play build, compiled with
 # SHRUTI_OFFSTORE=1 + empty RevenueCat keys, signed with the release
-# keystore, and published to S3 for the website's "Download APK" link.
+# keystore, and published to Bunny Edge Storage for the website's
+# "Download APK" link.
 #
 # Strictly manual — never auto-builds. The Play/App-Store binaries still come
 # from apps-mobile-binaries.yml; this is a separate, parallel distribution.
@@ -94,24 +95,28 @@ jobs:
           KEY_ALIAS: ${{ secrets.GOOGLE_PLAY_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEY_PASSWORD }}
         run: cd modules/apps/mobile && bundle exec fastlane android build_release
-      - name: publish APK to S3
-        # public/ is the bucket's anonymously-readable prefix; the website's
-        # "Download APK" link points at this object. Short cache so a re-run
-        # propagates quickly. AWS CLI is preinstalled on ubuntu runners.
+      - name: publish APK to Bunny Edge Storage
+        # public/ is the anonymously-readable prefix; the website's "Download
+        # APK" link points at the Bunny CDN object below. The Bunny pull zone
+        # serves directly from this storage zone (EU/US edge).
         env:
-          # Dedicated write-capable user (s3:PutObject on public/app/*). The
-          # org-wide AWS_* secrets are the read-only akdasa-studio-ro user and
-          # can't publish here, so this step uses repo-scoped RW credentials.
-          AWS_ACCESS_KEY_ID: ${{ secrets.SHRUTI_AWS_RW_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SHRUTI_AWS_RW_SECRET }}
-          AWS_DEFAULT_REGION: us-east-1
+          # Storage-zone password (write access to shruti-engine-eu). Account
+          # API key drives the CDN cache purge so a re-run propagates at once.
+          BUNNY_STORAGE_KEY: ${{ secrets.SHRUTI_BUNNY_STORAGE_KEY }}
+          BUNNY_API_KEY: ${{ secrets.SHRUTI_BUNNY_NET_API }}
         run: |
           APK="modules/apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
           test -f "$APK" || { echo "::error::APK not found at $APK"; exit 1; }
-          aws s3 cp "$APK" "s3://shruti-engine/public/app/shruti.apk" \
-            --content-type application/vnd.android.package-archive \
-            --cache-control "public, max-age=300"
-          echo "Published: https://cdn-s3.shruti.local/public/app/shruti.apk"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --fail-with-body \
+            -X PUT "https://storage.bunnycdn.com/shruti-engine-eu/public/app/shruti.apk" \
+            -H "AccessKey: $BUNNY_STORAGE_KEY" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary @"$APK") || { echo "::error::Bunny upload failed (HTTP $code)"; exit 1; }
+          echo "Uploaded to storage (HTTP $code). Purging CDN cache…"
+          curl -s -X POST -H "AccessKey: $BUNNY_API_KEY" \
+            "https://api.bunny.net/purge?url=https://cdn.shruti.local/public/app/shruti.apk" \
+            -o /dev/null -w "purge HTTP %{http_code}\n"
+          echo "Published: https://cdn.shruti.local/public/app/shruti.apk"
       # Keep a copy on the run too, for QA / rollback.
       - uses: actions/upload-artifact@v7
         with:

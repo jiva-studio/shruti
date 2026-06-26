@@ -33,6 +33,7 @@ import { computed, useTemplateRef } from 'vue'
 import { useExcerptAudioPlayer } from '@lib/chat/audio/useExcerptAudioPlayer.js'
 import { useExcerptWaveform, type ExcerptRef } from '@lib/chat/audio/useExcerptWaveform.js'
 import ExcerptPlayer from '@lib/ui/chat/ExcerptPlayer.vue'
+import { MEDIA_BASE } from '../../lib/media'
 
 const props = defineProps<{
   noteId: string
@@ -42,7 +43,6 @@ const props = defineProps<{
 }>()
 
 const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
-const S3_BASE = 'https://cdn-s3.shruti.local'
 
 async function webCut(args: {
   sourceKey: string
@@ -66,7 +66,7 @@ async function webCut(args: {
 }
 
 function predictUrl(id: string): string {
-  return `${S3_BASE}/public/shares/audio/${id}.mp3`
+  return `${MEDIA_BASE}/public/shares/audio/${id}.mp3`
 }
 
 const noteRef = computed<ExcerptRef>(() => ({
