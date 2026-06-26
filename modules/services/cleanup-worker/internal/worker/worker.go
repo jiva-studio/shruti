@@ -131,8 +131,16 @@ func (w *Worker) processByType(ctx context.Context, eventType string) error {
 			_ = tx.Rollback(ctx)
 			return nil
 		}
-		if err := w.dispatchAndCommit(ctx, tx, events); err != nil {
+		stamped, err := w.dispatchAndCommit(ctx, tx, events)
+		if err != nil {
 			return err
+		}
+		// No forward progress on a non-empty batch means every row is a
+		// poison row (handler error / unknown event_type) that the claim
+		// query keeps re-selecting. Stop instead of spinning at 100% CPU;
+		// the ticker-bounded sweep is where these stay loud-by-design.
+		if stamped == 0 {
+			return nil
 		}
 	}
 }
@@ -148,18 +156,22 @@ func (w *Worker) sweep(ctx context.Context) error {
 		_ = tx.Rollback(ctx)
 		return nil
 	}
-	return w.dispatchAndCommit(ctx, tx, events)
+	_, err = w.dispatchAndCommit(ctx, tx, events)
+	return err
 }
 
 // dispatchAndCommit runs the handlers for each event in the claimed
 // batch. Per row: every registered handler must return nil → UPDATE
 // processed_at. Any handler error → log and skip the UPDATE for that
-// row; next sweep retries it.
+// row; next sweep retries it. Returns the number of rows actually
+// stamped processed so the push-path drain can detect no forward
+// progress and stop.
 //
 // Critically, we commit the tx at the end EVEN IF some rows weren't
 // stamped — the UPDATEs for successful rows still need to land, and the
 // rolled-back rows just stay unprocessed.
-func (w *Worker) dispatchAndCommit(ctx context.Context, tx pgx.Tx, events []cwdb.Event) error {
+func (w *Worker) dispatchAndCommit(ctx context.Context, tx pgx.Tx, events []cwdb.Event) (int, error) {
+	stamped := 0
 	for _, evt := range events {
 		hs := w.Registry.HandlersFor(evt.EventType)
 		if len(hs) == 0 {
@@ -196,6 +208,7 @@ func (w *Worker) dispatchAndCommit(ctx context.Context, tx pgx.Tx, events []cwdb
 			)
 			continue
 		}
+		stamped++
 		slog.InfoContext(ctx, "event_processed",
 			slog.Int64("id", evt.ID),
 			slog.String("event_type", evt.EventType),
@@ -203,7 +216,7 @@ func (w *Worker) dispatchAndCommit(ctx context.Context, tx pgx.Tx, events []cwdb
 		)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit: %w", err)
+		return 0, fmt.Errorf("commit: %w", err)
 	}
-	return nil
+	return stamped, nil
 }
