@@ -23,8 +23,16 @@
         :text="formatDuration(totalListenedSeconds)"
         :title="t('chat.weeklyDigestTotalTime')"
       />
-      <CompletedBadge :value="completedCount" />
-      <StreakBadge :value="currentStreak" />
+      <ActivityStatBadge
+        :value="completedCount"
+        variant="neutral"
+        :label="t('activity.completedLectures')"
+      >
+        <template #icon><IconRosetteDiscountCheckFilled /></template>
+      </ActivityStatBadge>
+      <ActivityStatBadge :value="currentStreak" variant="accent" :label="t('activity.streak')">
+        <template #icon><FlameIcon /></template>
+      </ActivityStatBadge>
     </div>
 
     <!-- Lectures listened this week. -->
@@ -52,7 +60,8 @@ import { getActivityOverview } from "@usecases/activity/getActivityOverview.js"
 import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { DurationBadge } from "@ui/components/badges/index.js"
-import { CompletedBadge, StreakBadge } from "@ui/features/activity/index.js"
+import { ActivityStatBadge } from "@ui/features/activity/index.js"
+import { FlameIcon, IconRosetteDiscountCheckFilled } from "@ui/icons/index.js"
 
 const props = defineProps<{
   fromMs: number

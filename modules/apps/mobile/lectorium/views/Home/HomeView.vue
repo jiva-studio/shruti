@@ -29,8 +29,16 @@
       />
       <template v-if="showActivity">
         <SectionHeader :title="$t('activity.title')">
-          <StreakBadge :value="currentStreak" />
-          <CompletedBadge :value="completedCount" />
+          <ActivityStatBadge :value="currentStreak" variant="accent" :label="$t('activity.streak')">
+            <template #icon><FlameIcon /></template>
+          </ActivityStatBadge>
+          <ActivityStatBadge
+            :value="completedCount"
+            variant="neutral"
+            :label="$t('activity.completedLectures')"
+          >
+            <template #icon><IconRosetteDiscountCheckFilled /></template>
+          </ActivityStatBadge>
           <DurationBadge
             v-if="totalListenedSeconds > 0"
             :text="formatDuration(totalListenedSeconds)"
@@ -79,7 +87,8 @@ import {
 } from "@ionic/vue"
 import { AppPage, SectionHeader } from "@ui/primitives/index.js"
 import { DurationBadge } from "@ui/components/badges/index.js"
-import { ActivitySection, CompletedBadge, StreakBadge } from "@ui/features/activity/index.js"
+import { ActivitySection, ActivityStatBadge } from "@ui/features/activity/index.js"
+import { FlameIcon, IconRosetteDiscountCheckFilled } from "@ui/icons/index.js"
 import { useI18n } from "vue-i18n"
 import {
   NagBanner,

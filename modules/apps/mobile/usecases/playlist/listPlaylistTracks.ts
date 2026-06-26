@@ -31,9 +31,9 @@ export interface ActivePlaylistPage {
  * filtered out — they're not a programmer error, just a stale pointer.
  * The discrepancy is visible to the caller as `entries.length < total`.
  *
- * Track hydration is done in parallel (`Promise.all`) — previously this
- * was a sequential loop, which dominated Home's time-to-first-paint on
- * large playlists.
+ * Track hydration is a single batched `getByIds()` read — previously this
+ * fanned out one `getById()` per item (≈6 bridge round-trips each), which
+ * dominated Home's time-to-first-paint on large playlists.
  */
 export async function listActivePlaylistTracks(
   deps: ListPlaylistTracksDeps,
@@ -42,11 +42,11 @@ export async function listActivePlaylistTracks(
   const items = await deps.playlistItems.listActive()
   const { limit, offset = 0 } = input
   const page = limit === undefined ? items.slice(offset) : items.slice(offset, offset + limit)
-  const tracks = await Promise.all(page.map((item) => deps.tracks.getById(item.trackId)))
+  const tracksById = await deps.tracks.getByIds(page.map((item) => item.trackId))
   const entries: PlaylistEntry[] = []
-  for (let i = 0; i < page.length; i++) {
-    const track = tracks[i]
-    if (track) entries.push({ item: page[i], track })
+  for (const item of page) {
+    const track = tracksById.get(item.trackId)
+    if (track) entries.push({ item, track })
   }
   return { entries, total: items.length }
 }
