@@ -121,6 +121,11 @@ const busy = ref(false)
 const error = ref("")
 const resendIn = ref(0)
 let resendTimer: ReturnType<typeof setInterval> | undefined
+// Bumped on every reset (open). The modal is mounted once at the app root and
+// never unmounts, so an in-flight request from a previous open could resolve
+// after the form was reset and stomp the fresh state; handlers capture the
+// epoch and bail if it changed.
+let formGen = 0
 
 function clearResendTimer(): void {
   if (resendTimer) {
@@ -139,7 +144,9 @@ function startResendCooldown(seconds = RESEND_COOLDOWN_S): void {
 }
 
 function reset(): void {
+  formGen++
   step.value = "email"
+  email.value = ""
   code.value = ""
   error.value = ""
   busy.value = false
@@ -178,44 +185,53 @@ function messageFor(e: unknown): string {
 
 async function onSendCode(): Promise<void> {
   if (busy.value || !email.value.trim()) return
+  const g = formGen
   busy.value = true
   error.value = ""
   try {
     await auth.requestEmailCode(email.value.trim())
+    if (g !== formGen) return // modal was reset/reopened mid-request
     step.value = "code"
     startResendCooldown()
   } catch (e) {
+    if (g !== formGen) return
     error.value = messageFor(e)
   } finally {
-    busy.value = false
+    if (g === formGen) busy.value = false
   }
 }
 
 async function onResend(): Promise<void> {
   if (busy.value || resendIn.value > 0) return
+  const g = formGen
   busy.value = true
   error.value = ""
   try {
     await auth.requestEmailCode(email.value.trim())
+    if (g !== formGen) return
     startResendCooldown()
   } catch (e) {
+    if (g !== formGen) return
     error.value = messageFor(e)
   } finally {
-    busy.value = false
+    if (g === formGen) busy.value = false
   }
 }
 
 async function onVerify(): Promise<void> {
   if (busy.value || code.value.trim().length < 6) return
+  const g = formGen
   busy.value = true
   error.value = ""
   try {
     const ok = await auth.signInEmail(email.value.trim(), code.value.trim())
+    if (g !== formGen) return
     if (ok) close()
   } catch (e) {
+    if (g !== formGen) return
     error.value = messageFor(e)
   } finally {
-    busy.value = false
+    if (g === formGen) busy.value = false
   }
 }
 
