@@ -138,9 +138,16 @@ async def run_once(
             embed_model=embedder.name,
         )
 
-        # GC: tracks indexed but no longer in S3
+        # GC: tracks indexed but no longer present in the catalog. Guarded
+        # against an empty listing: list_transcripts() returns [] when the
+        # published catalog has no asset_hashes yet (rollout race) or a fetch
+        # failed — that is NOT "every transcript was deleted". Pruning on an
+        # empty listing once wiped the whole transcript corpus; never GC unless
+        # the listing actually returned something. A real full-delete would
+        # require the catalog to legitimately drop to zero transcripts, which
+        # does not happen in practice.
         objects_set = {(o.track_id, o.lang) for o in objects}
-        stale = [k for k in indexed_map if k not in objects_set]
+        stale = [k for k in indexed_map if k not in objects_set] if objects else []
         if stale:
             async with pool.acquire() as conn:
                 await conn.executemany(
