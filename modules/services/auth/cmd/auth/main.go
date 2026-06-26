@@ -1,9 +1,10 @@
 // Shruti auth service.
 //
 // Single Go binary. Entry behavior:
-//   /auth                  — start HTTP server (default)
-//   /auth healthz          — self-call /auth/healthz over localhost; exit 0/1.
-//                            Used by Docker HEALTHCHECK on the FROM-scratch image.
+//
+//	/auth                  — start HTTP server (default)
+//	/auth healthz          — self-call /auth/healthz over localhost; exit 0/1.
+//	                         Used by Docker HEALTHCHECK on the FROM-scratch image.
 package main
 
 import (
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/akdasa-studios/shruti/auth/internal/config"
+	"github.com/akdasa-studios/shruti/auth/internal/email"
 	"github.com/akdasa-studios/shruti/auth/internal/handler"
 	"github.com/akdasa-studios/shruti/auth/internal/jwt"
 	logpkg "github.com/akdasa-studios/shruti/auth/internal/logging"
@@ -97,11 +99,13 @@ func main() {
 		Identities:     &store.IdentityRepo{Pool: pool},
 		RefreshTokens:  &store.RefreshTokenRepo{Pool: pool},
 		WebhookEvents:  &store.WebhookEventRepo{Pool: pool},
+		EmailOTP:       &store.EmailOTPRepo{Pool: pool},
 		Signer:         signer,
 		Verifier:       verifier,
 		GoogleVerifier: google.NewVerifier(cfg.GoogleClientIDs),
 		AppleVerifier:  apple.NewVerifier(cfg.AppleBundleIDs),
 		ProfilePolicy:  profilePolicy,
+		Emailer:        buildEmailer(cfg),
 	}
 
 	root := handler.NewRouter(svc, verifier)
@@ -110,6 +114,14 @@ func main() {
 	// Cancelled when the process catches SIGTERM/SIGINT.
 	reconcileCtx, reconcileCancel := context.WithCancel(context.Background())
 	defer reconcileCancel()
+
+	// Email-OTP table sweeper: drops requested-but-never-verified codes once
+	// they expire, so the table doesn't accrue a stale row per such address.
+	// Shares the background-task context (cancelled on SIGTERM/SIGINT).
+	if svc.EmailOTP != nil {
+		go runOTPSweeper(reconcileCtx, svc.EmailOTP)
+	}
+
 	hasWebhookSecret := cfg.RCWebhookSecretPrimary != "" || cfg.RCWebhookSecretSecondary != ""
 	if hasWebhookSecret && cfg.RCRestAPIKey != "" {
 		rc := rcclient.New(cfg.RCRestAPIKey)
@@ -190,6 +202,52 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("shutdown_done")
+}
+
+// runOTPSweeper periodically purges expired email-OTP rows until ctx is
+// cancelled. Hourly is plenty — codes live 10 minutes and the table is tiny.
+func runOTPSweeper(ctx context.Context, repo *store.EmailOTPRepo) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := repo.DeleteExpired(ctx)
+			if err != nil {
+				slog.WarnContext(ctx, "otp_sweep_failed", "err", err.Error())
+				continue
+			}
+			if n > 0 {
+				slog.InfoContext(ctx, "otp_sweep", "deleted", n)
+			}
+		}
+	}
+}
+
+// buildEmailer selects the mail transport for passwordless email sign-in.
+// SMTP when configured; in dev, a log-only sender so codes are readable
+// from the logs; otherwise nil — the OTP endpoints then return 503.
+func buildEmailer(cfg *config.Config) email.Sender {
+	if cfg.SMTPHost != "" && cfg.EmailFrom != "" {
+		slog.Info("email_sender", "transport", "smtp", "host", cfg.SMTPHost)
+		return email.NewSMTPSender(email.SMTPConfig{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			Username: cfg.SMTPUsername,
+			Password: cfg.SMTPPassword,
+			From:     cfg.EmailFrom,
+		})
+	}
+	if cfg.Env == "dev" {
+		slog.Warn("email_sender", "transport", "log",
+			"reason", "SMTP_HOST/EMAIL_FROM unset; OTP codes are logged, not emailed")
+		return email.NewLogSender()
+	}
+	slog.Warn("email_sender_disabled",
+		"reason", "SMTP_HOST/EMAIL_FROM unset; email OTP endpoints return 503")
+	return nil
 }
 
 // selfHealthz hits /auth/healthz on localhost and returns the appropriate exit
