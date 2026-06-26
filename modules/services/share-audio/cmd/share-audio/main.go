@@ -32,10 +32,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	s3c, err := storage.New(ctx, cfg.Bucket, cfg.AWSRegion, cfg.S3EndpointURL, cfg.ExcerptsPublicBase)
-	if err != nil {
-		log.Error("s3_init_failed", "err", err.Error())
-		os.Exit(1)
+	var store storage.Store
+	if cfg.StorageBackend == "bunny" {
+		store = storage.NewBunny(cfg.StorageZone, cfg.StorageKey, cfg.StorageEndpoint, cfg.ExcerptsPublicBase)
+		log.Info("storage_backend", "backend", "bunny", "zone", cfg.StorageZone)
+	} else {
+		s3c, err := storage.New(ctx, cfg.Bucket, cfg.AWSRegion, cfg.S3EndpointURL, cfg.ExcerptsPublicBase)
+		if err != nil {
+			log.Error("s3_init_failed", "err", err.Error())
+			os.Exit(1)
+		}
+		store = s3c
+		log.Info("storage_backend", "backend", "s3", "endpoint", cfg.S3EndpointURL)
 	}
 
 	// Worker timeout caps a single background cut. The whole flow
@@ -47,7 +55,7 @@ func main() {
 
 	srvHandlers := &httpx.Server{
 		Cutter: pipeline.Cutter{
-			Storage:         s3c,
+			Storage:         store,
 			FFmpeg:          pipeline.FromFFmpegBin(cfg.FfmpegBin),
 			Bucket:          cfg.Bucket,
 			Prefix:          cfg.ExcerptsPrefix,
