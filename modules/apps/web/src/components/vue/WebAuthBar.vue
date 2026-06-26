@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useT, type Lang } from '../../i18n/ui'
 import { contentLangFor } from '../../i18n/locales'
 import { useWebAuth } from '../../composables/useWebAuth'
+import { useEmailOtpForm } from '../../composables/useEmailOtpForm'
 
 const props = defineProps<{ lang: Lang }>()
 const t = useT(props.lang)
@@ -27,6 +28,20 @@ const busy = ref(false)
 
 const appleEnabled = computed(() => !!appleServicesId)
 const googleEnabled = computed(() => !!googleClientId)
+
+// Email OTP sign-in — shared two-step form; close the popover on success.
+const {
+  step: emailStep,
+  email: emailValue,
+  code: codeValue,
+  busy: emailBusy,
+  error: emailError,
+  sendCode: onSendCode,
+  verify: onVerifyCode,
+  changeEmail: onChangeEmail,
+} = useEmailOtpForm(auth, t, () => {
+  open.value = false
+})
 
 const displayName = computed(() => {
   const s = auth.session.value
@@ -141,6 +156,61 @@ onBeforeUnmount(() => {
           </svg>
           {{ t('auth.apple') }}
         </button>
+
+        <!-- Passwordless email sign-in -->
+        <div
+          v-if="googleEnabled || appleEnabled"
+          class="my-3 flex items-center gap-3 text-xs uppercase tracking-wide text-medium"
+        >
+          <span class="h-px flex-1 bg-line"></span>{{ t('auth.email.or') }}<span class="h-px flex-1 bg-line"></span>
+        </div>
+
+        <template v-if="emailStep === 'idle'">
+          <input
+            v-model="emailValue"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            :placeholder="t('auth.email.placeholder')"
+            class="h-10 w-full rounded-lg border border-line bg-cream px-3 text-sm text-ink"
+            @keyup.enter="onSendCode"
+          />
+          <button
+            type="button"
+            :disabled="emailBusy || !emailValue.trim()"
+            class="mt-2 flex h-10 w-full items-center justify-center rounded-lg bg-ink px-4 text-sm font-medium text-cream transition hover:bg-coffee disabled:opacity-60"
+            @click="onSendCode"
+          >
+            {{ emailBusy ? '…' : t('auth.email.sendCode') }}
+          </button>
+        </template>
+
+        <template v-else>
+          <p class="text-sm text-medium">{{ t('auth.email.codeSentTo').replace('{email}', emailValue) }}</p>
+          <input
+            v-model="codeValue"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            :placeholder="t('auth.email.codePlaceholder')"
+            class="mt-2 h-10 w-full rounded-lg border border-line bg-cream px-3 text-center text-base tracking-[0.3em] text-ink"
+            @keyup.enter="onVerifyCode"
+          />
+          <button
+            type="button"
+            :disabled="emailBusy || codeValue.trim().length < 6"
+            class="mt-2 flex h-10 w-full items-center justify-center rounded-lg bg-saffron px-4 text-sm font-semibold text-cream transition hover:bg-saffron-shade disabled:opacity-60"
+            @click="onVerifyCode"
+          >
+            {{ emailBusy ? '…' : t('auth.email.verify') }}
+          </button>
+          <button type="button" class="mt-2 text-xs text-medium underline" @click="onChangeEmail">
+            {{ t('auth.email.changeEmail') }}
+          </button>
+        </template>
+
+        <p v-if="emailError" class="mt-2 text-sm font-medium text-crimson">{{ emailError }}</p>
       </div>
     </template>
   </div>
