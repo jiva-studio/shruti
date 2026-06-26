@@ -178,6 +178,8 @@ services:
       # a specific ghcr build.
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_CHAT_TAG:-latest}
+      # Public CDN base for client-facing media (recitation audio). Bunny edge.
+      MEDIA_BASE_URL: ${SHRUTI_MEDIA_BASE_URL:-https://cdn.shruti.local}
       # TRUSTED_PROXY_CIDRS gates ProxyHeadersMiddleware's XFF rewrite.
       # When set, it REPLACES the RFC1918 defaults baked into Settings —
       # so we re-include the docker-bridge ranges here alongside the RU
@@ -384,7 +386,7 @@ services:
       # (<bucket>.s3.<region>.amazonaws.com/<key>), which is WRONG when
       # the file actually lives on Yandex Object Storage. Set
       # SHRUTI_S3_PUBLIC_BASE on the RU proxy to override.
-      EXCERPTS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-}
+      EXCERPTS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_SHARE_AUDIO_TAG:-latest}
     networks: [shruti]
@@ -424,7 +426,7 @@ services:
       # Same role as EXCERPTS_PUBLIC_BASE on share-audio — without it
       # share-video returns AWS virtual-host URLs for files actually on
       # Yandex (broken playback). Set SHRUTI_S3_PUBLIC_BASE on RU.
-      OUTPUT_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-}
+      OUTPUT_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
       OPENAI_API_KEY: ${SHRUTI_OPENAI_API_KEY:-}
       TRANSCRIBER: ${SHRUTI_TRANSCRIBER:-whisper}
       # Anchor for JWT verification. Single-key deploy since the #728
@@ -476,7 +478,7 @@ services:
       # Public CDN base for the returned PDF URL. Without it share-transcript
       # builds AWS virtual-host URLs for files that live on Yandex. Set
       # SHRUTI_S3_PUBLIC_BASE on RU.
-      PDFS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-}
+      PDFS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
       # Outline (TOC) generation. Must match the chat service's model so
       # the outline cache artifact is shared.
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}

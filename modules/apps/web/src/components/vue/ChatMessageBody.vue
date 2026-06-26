@@ -10,6 +10,7 @@ import WebTrackCard from './WebTrackCard.vue'
 import WebCommentaryCard from './WebCommentaryCard.vue'
 import WebMediaCard from './WebMediaCard.vue'
 import { STORE } from '../../i18n/ui'
+import { MEDIA_BASE } from '../../lib/media'
 import type {
   CardPayload,
   ChapterPayload,
@@ -73,8 +74,6 @@ function pdfBody(t: ActionToken) {
   return props.pdfActions?.get(t.actionId)
 }
 
-const S3_BASE = 'https://cdn-s3.shruti.local'
-
 function pdfItems(t: ActionToken): PdfItemPayload[] {
   const body = pdfBody(t)
   return Array.isArray(body?.items) ? body.items : []
@@ -88,7 +87,7 @@ function pdfTitle(it: PdfItemPayload): string {
 function pdfUrl(it: PdfItemPayload): string {
   const trackId = pdfTrackId(it)
   const lang = it.lang || props.lang || 'ru'
-  return `${S3_BASE}/public/tracks/${trackId}/exports/${lang}.pdf`
+  return `${MEDIA_BASE}/public/tracks/${trackId}/exports/${lang}.pdf`
 }
 
 const pdfLabel = computed(() => (props.lang === 'ru' ? 'Скачать PDF' : 'Download PDF'))

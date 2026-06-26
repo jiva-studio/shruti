@@ -1,26 +1,25 @@
-"""S3 access helpers.
+"""Catalog/transcript access for the indexer.
 
-Three operations we need:
-- read `public/config.json` (catalog manifest)
-- download a `public/db/shruti.{ver}.db` file
-- list+HEAD `public/tracks/<id>/transcripts/<lang>.json` (with ETag)
-
-For the catalog DB and transcripts the public URL is fine (no signing). We
-still use boto3 for ETag/listing because anonymous list isn't always
-permitted — the IAM key has list permission, anonymous HTTP does not.
+Everything is read over plain HTTPS from the media CDN (Bunny.net) — no S3
+SDK, no credentials, no anonymous-listing requirement:
+- read `public/config.json` (catalog + library manifests)
+- download `public/db/shruti.{ver}.db` / `public/library/library.{ver}.db`
+- discover transcripts + their change-token from the published catalog db's
+  `asset_hashes` table (populated by shruti-mcp), instead of listing S3.
+  Bunny Edge Storage has no anonymous object listing, and the catalog db —
+  which we already download — knows every transcript and its content hash.
+- fetch one transcript JSON by key.
 """
 
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
 import aiofiles
-import boto3
 import httpx
-from botocore.config import Config as BotoConfig
-from botocore.exceptions import ClientError
 
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.observability.logging import get_logger
@@ -33,7 +32,7 @@ class TranscriptObject:
     track_id: str
     lang: str
     key: str
-    etag: str
+    etag: str  # content sha256 from asset_hashes (was the S3 ETag)
 
 
 @dataclass
@@ -42,15 +41,8 @@ class CatalogManifestEntry:
     scheme: int | None = None
 
 
-def _make_s3_client(settings: Settings):
-    return boto3.client(
-        "s3",
-        region_name=settings.s3_region,
-        endpoint_url=settings.s3_endpoint or None,
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
-        config=BotoConfig(retries={"max_attempts": 5, "mode": "standard"}),
-    )
+def _media_base(s: Settings) -> str:
+    return s.media_base_url.rstrip("/")
 
 
 async def read_catalog_manifest(settings: Settings | None = None) -> list[CatalogManifestEntry]:
@@ -60,7 +52,7 @@ async def read_catalog_manifest(settings: Settings | None = None) -> list[Catalo
         {"databases": [{"version": 20260513064605, "scheme": 20260512}, ...]}
     """
     s = settings or get_settings()
-    url = f"{s.s3_public_url}/public/config.json"
+    url = f"{_media_base(s)}/public/config.json"
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.get(url)
         r.raise_for_status()
@@ -76,7 +68,7 @@ async def read_catalog_manifest(settings: Settings | None = None) -> list[Catalo
 async def download_catalog(version: str, dest: Path, settings: Settings | None = None) -> None:
     """Download public/db/shruti.{version}.db to `dest` (streamed)."""
     s = settings or get_settings()
-    url = f"{s.s3_public_url}/public/db/shruti.{version}.db"
+    url = f"{_media_base(s)}/public/db/shruti.{version}.db"
     dest.parent.mkdir(parents=True, exist_ok=True)
     async with httpx.AsyncClient(timeout=300) as client:
         async with client.stream("GET", url) as r:
@@ -108,7 +100,7 @@ async def read_library_manifest(settings: Settings | None = None) -> list[Librar
     written by an older publisher).
     """
     s = settings or get_settings()
-    url = f"{s.s3_public_url}/public/config.json"
+    url = f"{_media_base(s)}/public/config.json"
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.get(url)
         r.raise_for_status()
@@ -126,7 +118,7 @@ async def read_library_manifest(settings: Settings | None = None) -> list[Librar
 async def download_library(version: str, dest: Path, settings: Settings | None = None) -> None:
     """Download public/library/library.{version}.db to `dest` (streamed)."""
     s = settings or get_settings()
-    url = f"{s.s3_public_url}/public/library/library.{version}.db"
+    url = f"{_media_base(s)}/public/library/library.{version}.db"
     dest.parent.mkdir(parents=True, exist_ok=True)
     async with httpx.AsyncClient(timeout=300) as client:
         async with client.stream("GET", url) as r:
@@ -137,37 +129,54 @@ async def download_library(version: str, dest: Path, settings: Settings | None =
 
 
 def list_transcripts(langs: list[str], settings: Settings | None = None) -> list[TranscriptObject]:
-    """Enumerate public/tracks/<id>/transcripts/<lang>.json objects with ETags.
+    """Discover transcripts + their content hash from the published catalog db.
 
-    Synchronous — boto3 paginator is sync, and we call this from a worker.
+    Reads the `asset_hashes` table (kind='transcript') out of the local
+    catalog.db that `catalog.ensure_catalog` already downloaded — no S3 list,
+    no credentials. `etag` carries the sha256 change-token the caller diffs
+    against `indexed_items.etag`. Returns [] (with a warning) when the table is
+    absent, i.e. the published catalog predates the asset_hashes schema — in
+    that case republish from shruti-mcp.
+
+    Synchronous — sqlite is sync, and we call this from a worker thread.
     """
     s = settings or get_settings()
-    client = _make_s3_client(s)
-    paginator = client.get_paginator("list_objects_v2")
-    out: list[TranscriptObject] = []
-    suffixes = {f"/transcripts/{lang}.json": lang for lang in langs}
-    for page in paginator.paginate(Bucket=s.s3_bucket, Prefix="public/tracks/"):
-        for obj in page.get("Contents", []) or []:
-            key: str = obj["Key"]
-            etag: str = obj["ETag"].strip('"')
-            for suf, lang in suffixes.items():
-                if key.endswith(suf):
-                    # key: public/tracks/<track_id>/transcripts/<lang>.json
-                    parts = key.split("/")
-                    track_id = parts[2]
-                    out.append(TranscriptObject(
-                        track_id=track_id, lang=lang, key=key, etag=etag,
-                    ))
-                    break
-    return out
+    db_path = s.catalog_db_path
+    wanted = set(langs)
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except sqlite3.OperationalError as exc:
+        log.warning("catalog_db_unavailable", path=str(db_path), error=str(exc))
+        return []
+    try:
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT track_id, language, path, sha256 "
+                "FROM asset_hashes WHERE kind = 'transcript'"
+            ).fetchall()
+        except sqlite3.OperationalError as exc:
+            log.warning(
+                "asset_hashes_missing",
+                error=str(exc),
+                hint="republish catalog from shruti-mcp (asset_hashes schema)",
+            )
+            return []
+    finally:
+        conn.close()
+    return [
+        TranscriptObject(track_id=r["track_id"], lang=r["language"],
+                         key=r["path"], etag=r["sha256"])
+        for r in rows
+        if r["language"] in wanted
+    ]
 
 
 async def fetch_transcript(key: str, settings: Settings | None = None) -> dict:
     """Download a transcript JSON and parse it."""
     s = settings or get_settings()
-    url = f"{s.s3_public_url}/{key}"
+    url = f"{_media_base(s)}/{key.lstrip('/')}"
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.get(url)
         r.raise_for_status()
         return json.loads(r.text)
-

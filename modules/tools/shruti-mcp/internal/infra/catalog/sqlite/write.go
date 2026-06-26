@@ -67,6 +67,23 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 		return fmt.Errorf("upsert track_variants: %w", err)
 	}
 
+	// Record the transcript's content hash so the chat indexer can discover +
+	// diff it from the published current.db instead of listing S3 (Bunny has no
+	// anonymous listing). Keyed by public path; skipped when unset/no transcript.
+	if v.TranscriptSHA256 != "" && v.TranscriptPath != "" {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO asset_hashes (path, sha256, track_id, language, kind)
+			VALUES (?, ?, ?, ?, 'transcript')
+			ON CONFLICT(path) DO UPDATE SET
+				sha256   = excluded.sha256,
+				track_id = excluded.track_id,
+				language = excluded.language,
+				kind     = excluded.kind`,
+			v.TranscriptPath, v.TranscriptSHA256, v.TrackID, v.Language); err != nil {
+			return fmt.Errorf("upsert asset_hashes: %w", err)
+		}
+	}
+
 	// Replace this variant's audio versions in full.
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM track_audio WHERE track_id = ? AND language = ?`,

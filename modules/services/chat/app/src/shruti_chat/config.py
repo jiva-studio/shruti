@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     s3_endpoint: str | None = None
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
+    # Public CDN base for client-facing media URLs (recitation audio etc.).
+    # Bunny.net edge (US+EU); compose maps SHRUTI_MEDIA_BASE_URL -> this.
+    media_base_url: str = "https://cdn.shruti.local"
 
     # ── Postgres ────────────────────────────────────────────────────────
     database_url: str = "postgresql://chat:chat@localhost:5432/chat"
@@ -306,13 +309,6 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         """Parsed CORS allow-list. `*` stays as-is (single-element list)."""
         return [s.strip() for s in self.cors_allow_origins.split(",") if s.strip()]
-
-    @property
-    def s3_public_url(self) -> str:
-        """Base HTTPS URL for public reads when no signing is needed."""
-        if self.s3_endpoint:
-            return f"{self.s3_endpoint.rstrip('/')}/{self.s3_bucket}"
-        return f"https://{self.s3_bucket}.s3.{self.s3_region}.amazonaws.com"
 
 
 _settings: Settings | None = None

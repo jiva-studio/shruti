@@ -95,6 +95,12 @@ type VariantRow struct {
 	Outline string
 	// Description is a short per-locale overview of the lecture. "" = none.
 	Description string
+
+	// TranscriptSHA256 is the hex sha256 of the published transcript file
+	// (public/tracks/<id>/transcripts/<lang>.json). Recorded in asset_hashes
+	// as the change-token the chat indexer diffs against (replaces the S3
+	// ETag listing). "" = skip the asset_hashes upsert (e.g. no transcript).
+	TranscriptSHA256 string
 }
 
 // Audio kind discriminators for track_audio rows.
