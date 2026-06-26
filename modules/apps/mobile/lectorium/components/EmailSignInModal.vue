@@ -13,25 +13,23 @@
       <!-- Step 1: email -->
       <template v-if="step === 'email'">
         <p class="lead">{{ $t("settings.account.email.emailStep") }}</p>
-        <IonList lines="none" class="ion-no-padding">
-          <IonItem>
-            <IonInput
-              v-model="email"
-              type="email"
-              inputmode="email"
-              autocomplete="email"
-              :label="$t('settings.account.email.emailLabel')"
-              label-placement="stacked"
-              :placeholder="$t('settings.account.email.emailPlaceholder')"
-              :disabled="busy"
-              @keyup.enter="onSendCode"
-            />
-          </IonItem>
-        </IonList>
+        <IonInput
+          v-model="email"
+          type="email"
+          inputmode="email"
+          autocomplete="email"
+          fill="outline"
+          :label="$t('settings.account.email.emailLabel')"
+          label-placement="stacked"
+          :placeholder="$t('settings.account.email.emailPlaceholder')"
+          :disabled="busy"
+          @keyup.enter="onSendCode"
+        />
         <p v-if="error" class="error">{{ error }}</p>
         <IonButton
           expand="block"
           class="ion-margin-top"
+          style="--box-shadow: none"
           :disabled="busy || !email.trim()"
           @click="onSendCode"
         >
@@ -43,26 +41,24 @@
       <!-- Step 2: code -->
       <template v-else>
         <p class="lead">{{ $t("settings.account.email.codeStep", { email }) }}</p>
-        <IonList lines="none" class="ion-no-padding">
-          <IonItem>
-            <IonInput
-              v-model="code"
-              type="text"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              :maxlength="6"
-              :label="$t('settings.account.email.codeLabel')"
-              label-placement="stacked"
-              :placeholder="$t('settings.account.email.codePlaceholder')"
-              :disabled="busy"
-              @keyup.enter="onVerify"
-            />
-          </IonItem>
-        </IonList>
+        <IonInput
+          v-model="code"
+          type="text"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          :maxlength="6"
+          fill="outline"
+          :label="$t('settings.account.email.codeLabel')"
+          label-placement="stacked"
+          :placeholder="$t('settings.account.email.codePlaceholder')"
+          :disabled="busy"
+          @keyup.enter="onVerify"
+        />
         <p v-if="error" class="error">{{ error }}</p>
         <IonButton
           expand="block"
           class="ion-margin-top"
+          style="--box-shadow: none"
           :disabled="busy || code.trim().length < 6"
           @click="onVerify"
         >
@@ -97,8 +93,6 @@ import {
   IonButtons,
   IonButton,
   IonContent,
-  IonList,
-  IonItem,
   IonInput,
   IonSpinner,
 } from "@ionic/vue"
