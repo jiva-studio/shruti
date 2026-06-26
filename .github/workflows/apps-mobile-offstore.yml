@@ -99,8 +99,11 @@ jobs:
         # "Download APK" link points at this object. Short cache so a re-run
         # propagates quickly. AWS CLI is preinstalled on ubuntu runners.
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # Dedicated write-capable user (s3:PutObject on public/app/*). The
+          # org-wide AWS_* secrets are the read-only akdasa-studio-ro user and
+          # can't publish here, so this step uses repo-scoped RW credentials.
+          AWS_ACCESS_KEY_ID: ${{ secrets.SHRUTI_AWS_RW_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SHRUTI_AWS_RW_SECRET }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
           APK="modules/apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
