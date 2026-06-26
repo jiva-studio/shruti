@@ -54,6 +54,13 @@ func Load() (Config, error) {
 	if c.Bucket == "" {
 		return c, fmt.Errorf("BUCKET (or LECTORIUM_S3_BUCKET) is required")
 	}
+	// A non-AWS endpoint (RU → Yandex) MUST come with a matching public
+	// base, or BuildURL falls back to the AWS virtual-hosted form for
+	// objects that live on the alternate endpoint and clients get a dead
+	// URL. Fail loudly rather than silently emit wrong URLs.
+	if c.S3EndpointURL != "" && c.ExcerptsPublicBase == "" {
+		return c, fmt.Errorf("EXCERPTS_PUBLIC_BASE is required when S3_ENDPOINT_URL is set, otherwise URLs point at AWS for objects on non-AWS storage")
+	}
 	return c, nil
 }
 
