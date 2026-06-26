@@ -241,6 +241,15 @@ services:
       # POST /internal/subscription/grant (called by the billing service
       # after a confirmed crypto payment). Unset → endpoint stays 404.
       INTERNAL_API_TOKEN: ${SHRUTI_INTERNAL_API_TOKEN:-}
+      # Passwordless email sign-in (OTP codes). SMTP transport — works with
+      # AWS SES SMTP credentials or any SMTP server. SMTP_HOST or EMAIL_FROM
+      # unset → email-OTP endpoints return 503 (auth boots fine without them;
+      # in dev the code is logged instead of mailed).
+      SMTP_HOST: ${SHRUTI_SMTP_HOST:-}
+      SMTP_PORT: ${SHRUTI_SMTP_PORT:-587}
+      SMTP_USERNAME: ${SHRUTI_SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SHRUTI_SMTP_PASSWORD:-}
+      EMAIL_FROM: ${SHRUTI_EMAIL_FROM:-}
       PORT: "8081"
       # Datadog log enrichment — service/env/version make it into every
       # slog line via internal/logging/logging.go.

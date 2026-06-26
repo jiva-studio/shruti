@@ -86,6 +86,9 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	// the 003N range (e.g. the idempotent-rotation pointer column).
 	moreAuth30, _ := filepath.Glob(filepath.Join(migrationsDir, "003[0-9]_auth_*.up.sql"))
 	authFiles = append(authFiles, moreAuth30...)
+	// 0041_auth_email_otp and any later auth-owned migration in the 004N range.
+	moreAuth40, _ := filepath.Glob(filepath.Join(migrationsDir, "004[0-9]_auth_*.up.sql"))
+	authFiles = append(authFiles, moreAuth40...)
 	// Outbox + the usage table the chat service owns in prod. We just need
 	// the shape — chat's full set isn't required for these tests. 0026 layers
 	// the dedup column onto app.outbox and must run after 0023.
@@ -572,8 +575,8 @@ func TestDeleteAccountEmitsOutbox(t *testing.T) {
 
 	// (2) outbox row exists with the right shape.
 	var (
-		nOutbox     int
-		evt, aggID  string
+		nOutbox    int
+		evt, aggID string
 	)
 	if err := svc.Pool.QueryRow(ctx,
 		`SELECT COUNT(*) FROM app.outbox

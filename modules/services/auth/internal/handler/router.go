@@ -21,6 +21,21 @@ import (
 // is mid-purge from the first hit.
 const deleteAccountWindow = 24 * time.Hour
 
+// otpRequestPerIP / otpRequestIPWindow bound how many email-OTP codes a
+// single IP can request. Generous enough for a user fat-fingering their
+// email a few times, tight enough that one source can't fan out a spam
+// blast across many addresses. The per-email resend cooldown (DB) is the
+// durable second layer.
+const (
+	otpRequestPerIP    = 10
+	otpRequestIPWindow = 10 * time.Minute
+	// Verify is additionally bounded per-code by the atomic attempt cap; this
+	// per-IP limit stops one source from hammering guesses across many codes
+	// or addresses.
+	otpVerifyPerIP    = 30
+	otpVerifyIPWindow = 10 * time.Minute
+)
+
 // NewRouter wires every /auth/* endpoint.
 //
 // If svc is nil the router still serves /auth/healthz (boot probe before deps
@@ -44,9 +59,16 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	h := &authHandler{svc: svc, verifier: verifier}
 	deleteLimiter := newUserRateLimiter(deleteAccountWindow)
 
+	otpRequestLimiter := newCountingLimiter(otpRequestPerIP, otpRequestIPWindow)
+	otpVerifyLimiter := newCountingLimiter(otpVerifyPerIP, otpVerifyIPWindow)
+
 	r.Post("/auth/anonymous", h.anonymous)
 	r.Post("/auth/signin/google", h.signinGoogle)
 	r.Post("/auth/signin/apple", h.signinApple)
+	r.With(rateLimitPerIP(otpRequestLimiter)).
+		Post("/auth/signin/email/request", h.requestEmailOTP)
+	r.With(rateLimitPerIP(otpVerifyLimiter)).
+		Post("/auth/signin/email/verify", h.verifyEmailOTP)
 	r.Post("/auth/refresh", h.refresh)
 
 	r.Group(func(r chi.Router) {

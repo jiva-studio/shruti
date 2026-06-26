@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/auth/internal/email"
 	"github.com/jiva-studio/shruti/auth/internal/identityhash"
 	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/profile"
@@ -34,6 +35,7 @@ const (
 	ProviderGoogle = "google"
 	ProviderApple  = "apple"
 	ProviderDevice = "device"
+	ProviderEmail  = "email"
 )
 
 // Session is what every signin / refresh returns to clients.
@@ -51,10 +53,14 @@ type Service struct {
 	Identities     *store.IdentityRepo
 	RefreshTokens  *store.RefreshTokenRepo
 	WebhookEvents  *store.WebhookEventRepo
+	EmailOTP       *store.EmailOTPRepo
 	Signer         *jwt.Signer
 	Verifier       *jwt.Verifier
 	GoogleVerifier ProviderVerifier
 	AppleVerifier  ProviderVerifier
+	// Emailer delivers passwordless sign-in codes. nil when no mail
+	// transport is configured — RequestEmailOTP then returns ErrEmailDisabled.
+	Emailer email.Sender
 	// ProfilePolicy gates which optional profile fields land in JWT
 	// claims and storage. Zero-value (every field disabled) is safe
 	// for tests that don't care about claim filtering — emits no
