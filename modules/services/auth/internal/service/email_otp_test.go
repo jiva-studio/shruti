@@ -26,12 +26,15 @@ func TestOtpEmailContent_Localized(t *testing.T) {
 		{"", "sign-in code"},       // empty → English
 	}
 	for _, c := range cases {
-		subject, body := otpEmailContent("123456", c.locale)
+		subject, text, html := otpEmailContent("123456", c.locale)
 		if !strings.Contains(subject, c.subSub) {
 			t.Errorf("locale %q: subject %q missing %q", c.locale, subject, c.subSub)
 		}
-		if !strings.Contains(body, "123456") {
-			t.Errorf("locale %q: body missing the code", c.locale)
+		if !strings.Contains(text, "123456") {
+			t.Errorf("locale %q: text body missing the code", c.locale)
+		}
+		if !strings.Contains(html, "123456") || !strings.Contains(html, "<html") {
+			t.Errorf("locale %q: html body missing code or markup", c.locale)
 		}
 	}
 }
@@ -39,12 +42,12 @@ func TestOtpEmailContent_Localized(t *testing.T) {
 // captureSender records the last email it was asked to send so tests can
 // read back the OTP code from the body.
 type captureSender struct {
-	to, subject, body string
-	sends             int
+	to, subject, body, html string
+	sends                   int
 }
 
-func (c *captureSender) Send(_ context.Context, to, subject, body string) error {
-	c.to, c.subject, c.body = to, subject, body
+func (c *captureSender) Send(_ context.Context, to, subject, text, html string) error {
+	c.to, c.subject, c.body, c.html = to, subject, text, html
 	c.sends++
 	return nil
 }
