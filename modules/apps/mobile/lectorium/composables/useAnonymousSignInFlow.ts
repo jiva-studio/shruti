@@ -98,8 +98,14 @@ export function useAnonymousSignInFlow(): UseAnonymousSignInFlowReturn {
 
   async function triggerSignIn(): Promise<void> {
     if (busy.value) return
-    // Every platform now has at least two methods (Google + Email, plus
-    // Apple on iOS), so always present the chooser sheet.
+    // The off-store build has no Google services: email OTP is the only
+    // sign-in method, so skip the chooser and open the email modal directly.
+    if (__OFFSTORE_BUILD__) {
+      runEmail()
+      return
+    }
+    // Otherwise every platform has at least two methods (Google + Email,
+    // plus Apple on iOS), so present the chooser sheet.
     await presentSheet()
   }
 
