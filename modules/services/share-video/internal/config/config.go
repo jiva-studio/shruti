@@ -92,6 +92,13 @@ func Load() (Config, error) {
 	if c.RedisURL == "" {
 		return c, fmt.Errorf("REDIS_URL is required")
 	}
+	// A non-AWS endpoint (RU → Yandex) MUST come with a matching public
+	// base, or the URL builder falls back to the AWS virtual-hosted form
+	// for objects that live on the alternate endpoint and clients get a
+	// dead URL. Fail loudly rather than silently emit wrong URLs.
+	if c.S3EndpointURL != "" && c.OutputPublicBase == "" {
+		return c, fmt.Errorf("OUTPUT_PUBLIC_BASE is required when S3_ENDPOINT_URL is set, otherwise URLs point at AWS for objects on non-AWS storage")
+	}
 	return c, nil
 }
 
