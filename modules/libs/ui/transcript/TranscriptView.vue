@@ -20,11 +20,13 @@
         >
           {{ formatTime(group.startMs) }}
         </button>
-        <TranscriptBlockText
-          v-for="(block, bi) in renderable(group)"
-          :key="bi"
-          :block="block"
-        />
+        <template v-for="(block, bi) in renderable(group)" :key="bi">
+          <template v-if="speakerStarts.has(`${gi}:${bi}`)">
+            <br v-if="bi > 0" />
+            <strong class="tx-speaker">{{ speakerStarts.get(`${gi}:${bi}`) }}:&nbsp;</strong>
+          </template>
+          <TranscriptBlockText :block="block" />
+        </template>
       </p>
     </template>
   </div>
@@ -57,6 +59,24 @@ function isActive(group: TranscriptGroup): boolean {
 function renderable(group: TranscriptGroup): TranscriptBlock[] {
   return group.blocks.filter((b) => b.type !== 'paragraph')
 }
+
+// "{gi}:{bi}" -> speaker name, set on the first sentence after the speaker
+// changes, so the view shows "Name:" before that block (dialogue style).
+const speakerStarts = computed(() => {
+  const out = new Map<string, string>()
+  let prev: string | undefined
+  props.groups.forEach((group, gi) => {
+    renderable(group).forEach((block, bi) => {
+      if (block.type !== 'sentence') return
+      const sp = block.speaker
+      if (sp !== undefined && sp !== prev) {
+        out.set(`${gi}:${bi}`, sp)
+        prev = sp
+      }
+    })
+  })
+  return out
+})
 
 function formatTime(ms: number): string {
   const total = Math.max(0, Math.floor((ms || 0) / 1000))
@@ -123,5 +143,10 @@ function formatTime(ms: number): string {
 
 .tx-time:hover {
   text-decoration: underline;
+}
+
+.tx-speaker {
+  font-weight: 700;
+  color: var(--ion-color-primary);
 }
 </style>

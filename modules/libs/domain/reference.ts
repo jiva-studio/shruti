@@ -18,4 +18,9 @@ export interface Reference {
    *  Rendered as-is when there is no `sourceId`. */
   readonly sourceName?: string
   readonly tokens: readonly string[]
+  /** Baked verse, present on library-resolved inline citations so the client
+   *  can open the full shloka from the chip. */
+  readonly original?: readonly string[]
+  readonly transliteration?: readonly string[]
+  readonly translation?: string
 }
