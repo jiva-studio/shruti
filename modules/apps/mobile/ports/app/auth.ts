@@ -69,6 +69,22 @@ export interface AuthPort {
   /** OAuth signin via Apple. Returns `null` on user-cancel. */
   signInWithApple(): Promise<AuthSession | null>
 
+  /**
+   * Request a one-time sign-in code be emailed. Passwordless — works for
+   * both new and returning users (the server unifies signup + login).
+   * Resolves on a sent code; throws `EmailOtpError` otherwise
+   * (invalid-email / throttled / disabled / network).
+   */
+  requestEmailOtp(email: string): Promise<void>
+
+  /**
+   * Verify an emailed code and upgrade to a signed-in session. An
+   * anonymous session in play is upgraded in place (same userId), exactly
+   * like the social flows. Throws `EmailOtpError("invalid-code")` on a
+   * wrong/expired code.
+   */
+  verifyEmailOtp(email: string, code: string): Promise<AuthSession>
+
   signOut(): Promise<void>
   deleteAccount(): Promise<void>
 
@@ -131,6 +147,33 @@ export class AccountDeleteError extends Error {
   ) {
     super(`account/delete: ${kind}${status ? ` (${status})` : ""}`)
     this.name = "AccountDeleteError"
+  }
+}
+
+/** Discriminates the recoverable failures of the email-OTP flow. */
+export type EmailOtpErrorKind =
+  | "invalid-email"
+  | "invalid-code"
+  | "throttled"
+  | "disabled"
+  | "network"
+  | "server"
+  | "unknown"
+
+/**
+ * Thrown by `AuthPort.requestEmailOtp` / `verifyEmailOtp` on a non-success
+ * outcome. Lives on the port (not the adapter) so views/stores can branch
+ * on `kind` without importing the capacitor implementation. Mirrors
+ * `AccountDeleteError`.
+ */
+export class EmailOtpError extends Error {
+  constructor(
+    public readonly kind: EmailOtpErrorKind,
+    /** Seconds to wait before retrying, from the server's Retry-After. */
+    public readonly retryAfter?: number
+  ) {
+    super(`email-otp: ${kind}`)
+    this.name = "EmailOtpError"
   }
 }
 
