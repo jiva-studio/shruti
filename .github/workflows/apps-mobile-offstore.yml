@@ -108,10 +108,10 @@ jobs:
         run: |
           APK="modules/apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
           test -f "$APK" || { echo "::error::APK not found at $APK"; exit 1; }
-          aws s3 cp "$APK" "s3://shruti-engine/public/app/shruti-offstore.apk" \
+          aws s3 cp "$APK" "s3://shruti-engine/public/app/shruti.apk" \
             --content-type application/vnd.android.package-archive \
             --cache-control "public, max-age=300"
-          echo "Published: https://cdn-s3.shruti.local/public/app/shruti-offstore.apk"
+          echo "Published: https://cdn-s3.shruti.local/public/app/shruti.apk"
       # Keep a copy on the run too, for QA / rollback.
       - uses: actions/upload-artifact@v7
         with:
