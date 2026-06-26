@@ -41,7 +41,7 @@ var (
 // RequestEmailOTP mints a one-time code for the email, stores its hash, and
 // sends it. Unified signup+login: any syntactically valid address gets a
 // code; whether an account already exists is resolved at verify time.
-func (s *Service) RequestEmailOTP(ctx context.Context, rawEmail string) error {
+func (s *Service) RequestEmailOTP(ctx context.Context, rawEmail, locale string) error {
 	if s.Emailer == nil || s.EmailOTP == nil {
 		return ErrEmailDisabled
 	}
@@ -66,7 +66,7 @@ func (s *Service) RequestEmailOTP(ctx context.Context, rawEmail string) error {
 	if err := s.EmailOTP.Upsert(ctx, addr, hashCode(addr, code), time.Now().Add(otpCodeTTL)); err != nil {
 		return err
 	}
-	subject, body := otpEmailContent(code)
+	subject, body := otpEmailContent(code, locale)
 	if err := s.Emailer.Send(ctx, addr, subject, body); err != nil {
 		return fmt.Errorf("send otp email: %w", err)
 	}
@@ -162,12 +162,54 @@ func emailSubject(email string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func otpEmailContent(code string) (subject, body string) {
-	subject = "Your Shruti sign-in code"
-	body = fmt.Sprintf(
-		"Your sign-in code is %s\n\nIt expires in 10 minutes. "+
-			"If you didn't request it, you can safely ignore this email.",
-		code,
-	)
-	return subject, body
+// otpTemplate is a localized email. %s is the code.
+type otpTemplate struct {
+	subject string
+	bodyFmt string
+}
+
+// otpTemplates covers the maintained locale set; everything else (the app's
+// other UI languages) falls back to English. Keyed by lower-cased locale.
+var otpTemplates = map[string]otpTemplate{
+	"en": {
+		"Your Shruti sign-in code",
+		"Your sign-in code is %s\n\nIt expires in 10 minutes. If you didn't request it, you can safely ignore this email.",
+	},
+	"ru": {
+		"Ваш код для входа в Shruti",
+		"Ваш код для входа: %s\n\nКод действителен 10 минут. Если вы не запрашивали его, просто проигнорируйте это письмо.",
+	},
+	"uk": {
+		"Ваш код для входу в Shruti",
+		"Ваш код для входу: %s\n\nКод дійсний 10 хвилин. Якщо ви не запитували його, просто проігноруйте цей лист.",
+	},
+	"sr-latn": {
+		"Vaš kod za prijavu na Shruti",
+		"Vaš kod za prijavu je %s\n\nVaži 10 minuta. Ako ga niste tražili, slobodno zanemarite ovu poruku.",
+	},
+	"sr-cyrl": {
+		"Ваш код за пријаву на Shruti",
+		"Ваш код за пријаву је %s\n\nВажи 10 минута. Ако га нисте тражили, слободно занемарите ову поруку.",
+	},
+}
+
+// otpEmailContent renders the code email for the requester's locale. Match is
+// exact lower-case first (so sr-latn/sr-cyrl pick the right script), then the
+// language prefix before "-", then English.
+func otpEmailContent(code, locale string) (subject, body string) {
+	t := resolveOTPTemplate(locale)
+	return t.subject, fmt.Sprintf(t.bodyFmt, code)
+}
+
+func resolveOTPTemplate(locale string) otpTemplate {
+	l := strings.ToLower(strings.TrimSpace(locale))
+	if t, ok := otpTemplates[l]; ok {
+		return t
+	}
+	if i := strings.IndexByte(l, '-'); i > 0 {
+		if t, ok := otpTemplates[l[:i]]; ok {
+			return t
+		}
+	}
+	return otpTemplates["en"]
 }
