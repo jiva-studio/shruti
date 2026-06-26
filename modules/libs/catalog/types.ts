@@ -66,6 +66,14 @@ export interface BlockReference {
   sourceId?: string
   sourceName?: string
   tokens: string[]
+  /** Localised "short-name + tokens" label (e.g. "BG 5.18"), baked by the web
+   *  sync step which has the sources dictionary. Absent on the raw S3 wire. */
+  label?: string
+  /** Baked verse, present on library-resolved inline citations so the client
+   *  can open the full shloka from the chip. */
+  original?: string[]
+  transliteration?: string[]
+  translation?: string
 }
 
 export interface SentenceBlock {
