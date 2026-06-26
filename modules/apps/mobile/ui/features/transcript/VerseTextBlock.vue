@@ -5,12 +5,24 @@
       {{ reference }}
     </span>
 
-    <!-- Verse Lines -->
+    <!-- Original script (Devanagari / Bengali) -->
+    <div v-if="original && original.length">
+      <div v-for="line in original" :key="line" class="original center">
+        {{ line }}
+      </div>
+    </div>
+
+    <!-- Transliteration -->
     <div>
       <div v-for="line in lines" :key="line" class="lines center">
         {{ line }}
       </div>
     </div>
+
+    <!-- Translation -->
+    <p v-if="translation" class="translation center">
+      {{ translation }}
+    </p>
   </div>
 </template>
 
@@ -22,6 +34,8 @@
 defineProps<{
   reference?: string
   lines: readonly string[]
+  original?: readonly string[]
+  translation?: string
 }>()
 </script>
 
@@ -38,8 +52,19 @@ defineProps<{
   text-align: center;
 }
 
+.original {
+  font-family: "Sanskrit2003", "Noto Sans Devanagari", serif;
+  line-height: 1.5;
+}
+
 .lines {
   font-style: italic;
+  opacity: 0.85;
+}
+
+.translation {
+  margin: 0.25rem 0 0;
+  opacity: 0.9;
 }
 
 .reference {

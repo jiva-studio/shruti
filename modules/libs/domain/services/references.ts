@@ -48,9 +48,14 @@ export function groupReferences(
   return out
 }
 
+/** Identity of a reference's source — catalog id, else the external book name. */
+function srcKey(ref: Reference): string {
+  return ref.sourceId ?? ref.sourceName ?? ""
+}
+
 /** True when `b` is the immediate next reference after `a` per the adjacency rule. */
 function isAdjacent(a: Reference, b: Reference): boolean {
-  if (a.sourceId !== b.sourceId) return false
+  if (srcKey(a) !== srcKey(b)) return false
   if (a.tokens.length !== b.tokens.length) return false
   if (a.tokens.length === 0) return false
 
@@ -126,11 +131,13 @@ function localisedShortName(
   sourcesById: ReadonlyMap<string, Source> | undefined,
   lang: LanguageCode
 ): string {
-  const source = sourcesById?.get(ref.sourceId)
+  const source = ref.sourceId ? sourcesById?.get(ref.sourceId) : undefined
   return (
     source?.names.get(lang)?.shortName ??
     source?.names.values().next().value?.shortName ??
-    ref.sourceId
+    ref.sourceName ??
+    ref.sourceId ??
+    ""
   )
 }
 
@@ -139,15 +146,15 @@ function localisedFullName(
   sourcesById: ReadonlyMap<string, Source> | undefined,
   lang: LanguageCode
 ): string {
-  const source = sourcesById?.get(ref.sourceId)
+  const source = ref.sourceId ? sourcesById?.get(ref.sourceId) : undefined
   const localised = source?.names.get(lang)
   const anyLocale = localised ?? source?.names.values().next().value
   // Treat empty strings as "missing" — DB rows with an absent fullName
   // are stored as "" by the importer, not as `undefined`. We still want
-  // to fall through to the short name (then to the raw sourceId).
+  // to fall through to the short name (then to the external book name).
   const full = anyLocale?.fullName
   if (full && full.length > 0) return full
   const short = anyLocale?.shortName
   if (short && short.length > 0) return short
-  return ref.sourceId
+  return ref.sourceName ?? ref.sourceId ?? ""
 }
