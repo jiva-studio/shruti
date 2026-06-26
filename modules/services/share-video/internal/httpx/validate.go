@@ -46,6 +46,8 @@ type rawBody struct {
 	Theme     *string `json:"theme"`
 	VideoID   *string `json:"video_id"`
 	Title     *string `json:"title"`
+	SkipIntro *bool   `json:"skip_intro"`
+	SkipLogo  *bool   `json:"skip_logo"`
 }
 
 // parseRenderRequest is the Go port of validate.ts:parseRenderRequest.
@@ -135,6 +137,8 @@ func parseRenderRequest(r *http.Request) (types.RenderRequest, error) {
 		Theme:     theme,
 		VideoID:   videoID,
 		Title:     title,
+		SkipIntro: b.SkipIntro != nil && *b.SkipIntro,
+		SkipLogo:  b.SkipLogo != nil && *b.SkipLogo,
 	}, nil
 }
 

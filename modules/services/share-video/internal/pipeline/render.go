@@ -167,7 +167,7 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 	// Title card on top of the first 0.5s (optional). The audio is NOT
 	// shifted — the title overlay sits on top of the first 0.5s of
 	// audio. Matches ReelGenerator.ts:143-159.
-	if strings.TrimSpace(in.Request.Title) != "" && r.TitleIconPath != "" {
+	if !in.Request.SkipIntro && strings.TrimSpace(in.Request.Title) != "" && r.TitleIconPath != "" {
 		titleFramePath := filepath.Join(in.TempDir, "title_frame.png")
 		if err := r.Frames.GenerateTitleFrame(in.Request.Title, titleFramePath); err == nil {
 			// Drop frames the title fully covers; clip the first
@@ -191,10 +191,15 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 		}
 	}
 
-	// Composite.
+	// Composite. SkipLogo suppresses the trailing logo.mp4 append by
+	// handing the composer an empty logo path.
 	finalPath := filepath.Join(in.TempDir, "reel.mp4")
+	logoPath := r.LogoPath
+	if in.Request.SkipLogo {
+		logoPath = ""
+	}
 	log.Info("composite_start", "frames", len(allFrames))
-	if err := r.Composer.Compose(ctx, bgPath, allFrames, cutPath, audioDur, r.LogoPath, finalPath, in.TempDir); err != nil {
+	if err := r.Composer.Compose(ctx, bgPath, allFrames, cutPath, audioDur, logoPath, finalPath, in.TempDir); err != nil {
 		return Output{}, fmt.Errorf("compose: %w", err)
 	}
 
