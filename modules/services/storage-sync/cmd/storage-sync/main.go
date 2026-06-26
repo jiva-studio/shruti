@@ -57,9 +57,9 @@ func loadCfg() cfg {
 	}
 	iv, _ := strconv.Atoi(env("SYNC_INTERVAL", "3600"))
 	return cfg{
-		zone:        os.Getenv("BUNNY_STORAGE_ZONE"),
-		key:         os.Getenv("BUNNY_STORAGE_KEY"),
-		endpoint:    strings.TrimRight(env("BUNNY_STORAGE_ENDPOINT", "https://storage.bunnycdn.com"), "/"),
+		zone:        os.Getenv("STORAGE_ZONE"),
+		key:         os.Getenv("STORAGE_KEY"),
+		endpoint:    strings.TrimRight(env("STORAGE_ENDPOINT", "https://storage.bunnycdn.com"), "/"),
 		prefix:      strings.TrimLeft(env("SYNC_PREFIX", "public/"), "/"),
 		concurrency: conc,
 		delete:      env("SYNC_DELETE", "false") == "true",
@@ -83,9 +83,9 @@ type obj struct {
 }
 
 type syncer struct {
-	c    cfg
-	hc   *http.Client
-	yc   *s3.Client
+	c  cfg
+	hc *http.Client
+	yc *s3.Client
 }
 
 func (s *syncer) listDir(path string) ([]bunnyEntry, error) {
@@ -387,7 +387,7 @@ func asAPIErr(err error, target *smithy.APIError) bool {
 func main() {
 	c := loadCfg()
 	if c.zone == "" || c.key == "" || c.yBucket == "" {
-		log.Fatal("BUNNY_STORAGE_ZONE, BUNNY_STORAGE_KEY and YANDEX_BUCKET are required")
+		log.Fatal("STORAGE_ZONE, STORAGE_KEY and YANDEX_BUCKET are required")
 	}
 	ctx := context.Background()
 	awsCfg, err := config.LoadDefaultConfig(ctx,

@@ -21,26 +21,34 @@ type Config struct {
 	DatabaseURL string
 	RedisURL    string
 
-	Bucket             string
-	BackgroundsPrefix  string
-	OutputPrefix       string
-	OutputPublicBase   string
-	TranscribeScratch  string
-	AWSRegion          string
-	S3EndpointURL      string
+	Bucket            string
+	BackgroundsPrefix string
+	OutputPrefix      string
+	OutputPublicBase  string
+	TranscribeScratch string
+	AWSRegion         string
+	S3EndpointURL     string
 
-	OpenAIAPIKey      string
-	SpeechKitAPIKey   string
-	Transcriber       string
+	// OutputBackend selects where the finished reel is written: "s3" (default,
+	// AWS/Yandex) or "bunny". Reads + SpeechKit always stay on S3 (Bunny has no
+	// presigning), so only the client-facing reel output flips.
+	OutputBackend   string
+	StorageZone     string
+	StorageKey      string
+	StorageEndpoint string
+
+	OpenAIAPIKey    string
+	SpeechKitAPIKey string
+	Transcriber     string
 
 	JWTPublicKeyPath string
 
 	AnonPerDay     int
 	SignedInPerDay int
 
-	FfmpegBin   string
-	FfprobeBin  string
-	TempRoot    string
+	FfmpegBin  string
+	FfprobeBin string
+	TempRoot   string
 
 	// Static rendering knobs that match ReelGenerator defaults.
 	SlideWidth  int
@@ -65,6 +73,11 @@ func Load() (Config, error) {
 		TranscribeScratch: env("TRANSCRIBE_SCRATCH_PREFIX", "private/share/video/transcribe-scratch"),
 		AWSRegion:         env("AWS_REGION", "us-east-1"),
 		S3EndpointURL:     os.Getenv("S3_ENDPOINT_URL"),
+
+		OutputBackend:   strings.ToLower(env("STORAGE_BACKEND", "s3")),
+		StorageZone:     os.Getenv("STORAGE_ZONE"),
+		StorageKey:      os.Getenv("STORAGE_KEY"),
+		StorageEndpoint: os.Getenv("STORAGE_ENDPOINT"),
 
 		OpenAIAPIKey:    os.Getenv("OPENAI_API_KEY"),
 		SpeechKitAPIKey: os.Getenv("SPEECHKIT_API_KEY"),
@@ -98,6 +111,19 @@ func Load() (Config, error) {
 	// dead URL. Fail loudly rather than silently emit wrong URLs.
 	if c.S3EndpointURL != "" && c.OutputPublicBase == "" {
 		return c, fmt.Errorf("OUTPUT_PUBLIC_BASE is required when S3_ENDPOINT_URL is set, otherwise URLs point at AWS for objects on non-AWS storage")
+	}
+	switch c.OutputBackend {
+	case "bunny":
+		if c.StorageZone == "" || c.StorageKey == "" {
+			return c, fmt.Errorf("STORAGE_ZONE and STORAGE_KEY are required when STORAGE_BACKEND=bunny")
+		}
+		if c.OutputPublicBase == "" {
+			return c, fmt.Errorf("OUTPUT_PUBLIC_BASE is required when STORAGE_BACKEND=bunny")
+		}
+	case "s3", "":
+		c.OutputBackend = "s3"
+	default:
+		return c, fmt.Errorf("STORAGE_BACKEND must be 's3' or 'bunny' (got %q)", c.OutputBackend)
 	}
 	return c, nil
 }

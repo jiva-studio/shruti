@@ -96,8 +96,17 @@ func main() {
 	logoPath := filepath.Join(assetsDir, "logo.mp4")
 	iconPath := filepath.Join(assetsDir, "icon.png")
 
+	var bunnyOut *storage.BunnyUploader
+	if cfg.OutputBackend == "bunny" {
+		bunnyOut = storage.NewBunnyUploader(cfg.StorageZone, cfg.StorageKey, cfg.StorageEndpoint)
+		log.Info("output_backend", "backend", "bunny", "zone", cfg.StorageZone)
+	} else {
+		log.Info("output_backend", "backend", "s3", "endpoint", cfg.S3EndpointURL)
+	}
+
 	renderer := &pipeline.Renderer{
 		S3:                store.API,
+		BunnyOut:          bunnyOut,
 		Transcriber:       tx,
 		Frames:            &reel.Renderer{Fonts: fonts, IconPNG: iconPath, Opts: reel.Options{SlideWidth: cfg.SlideWidth, SlideHeight: cfg.SlideHeight, FontSize: cfg.FontSize}},
 		Composer:          reel.Composer{FFmpegBin: cfg.FfmpegBin},
