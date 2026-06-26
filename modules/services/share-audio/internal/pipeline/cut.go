@@ -36,7 +36,7 @@ func newServiceError(format string, a ...any) *ServiceError {
 }
 
 type Cutter struct {
-	Storage *Storage
+	Storage Storage
 	FFmpeg  FFmpeg
 	Bucket  string
 	// Prefix is where excerpts get uploaded under (e.g.
@@ -52,9 +52,9 @@ type Cutter struct {
 	MaxExcerptMs    int64
 }
 
-// Storage is the subset of storage.Client this package uses, declared as
-// an interface so tests can swap it without lifting the AWS SDK.
-type Storage = storage.Client
+// Storage is the storage backend this package uses (S3/Yandex or Bunny),
+// declared as an interface so the backend is swappable and tests can stub it.
+type Storage = storage.Store
 
 // FFmpeg matches ffmpeg.Cutter so tests can stub the binary call.
 type FFmpeg interface {

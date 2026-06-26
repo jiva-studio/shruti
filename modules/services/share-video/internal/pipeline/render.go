@@ -19,12 +19,16 @@ import (
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/align"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/reel"
 	"github.com/jiva-studio/shruti-share-video/internal/pipeline/transcript"
+	"github.com/jiva-studio/shruti-share-video/internal/storage"
 	"github.com/jiva-studio/shruti-share-video/internal/types"
 )
 
 // Renderer is the top-level glue. Hand-assembled at worker boot once.
 type Renderer struct {
-	S3                *s3.Client
+	S3 *s3.Client
+	// BunnyOut, when set, receives the finished reel instead of S3 (the
+	// client-facing output moves to Bunny; reads + SpeechKit stay on S3).
+	BunnyOut          *storage.BunnyUploader
 	Transcriber       transcript.Transcriber
 	Frames            *reel.Renderer
 	Composer          reel.Composer
@@ -225,6 +229,9 @@ func (r *Renderer) downloadSource(ctx context.Context, key, dst string) error {
 }
 
 func (r *Renderer) uploadOutput(ctx context.Context, localPath, key string) error {
+	if r.BunnyOut != nil {
+		return r.BunnyOut.Put(ctx, key, localPath, "video/mp4")
+	}
 	body, err := os.ReadFile(localPath)
 	if err != nil {
 		return err

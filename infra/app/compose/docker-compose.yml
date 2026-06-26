@@ -387,6 +387,13 @@ services:
       # the file actually lives on Yandex Object Storage. Set
       # SHRUTI_S3_PUBLIC_BASE on the RU proxy to override.
       EXCERPTS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
+      # Storage backend: "s3" (AWS/Yandex via S3_ENDPOINT_URL) or "bunny".
+      # Global flips to bunny (set SHRUTI_STORAGE_BACKEND=bunny + the key on
+      # origin); RU stays s3 → Yandex. When bunny, EXCERPTS_PUBLIC_BASE above is
+      # the b-cdn pull zone (its default).
+      STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
+      STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_SHARE_AUDIO_TAG:-latest}
     networks: [shruti]
@@ -427,6 +434,12 @@ services:
       # share-video returns AWS virtual-host URLs for files actually on
       # Yandex (broken playback). Set SHRUTI_S3_PUBLIC_BASE on RU.
       OUTPUT_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
+      # Output backend for the finished reel: "s3" or "bunny". Reads + SpeechKit
+      # always stay on S3 (Bunny has no presigning); only the client-facing reel
+      # output flips. Global → bunny; RU → s3.
+      STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
+      STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
       OPENAI_API_KEY: ${SHRUTI_OPENAI_API_KEY:-}
       TRANSCRIBER: ${SHRUTI_TRANSCRIBER:-whisper}
       # Anchor for JWT verification. Single-key deploy since the #728
@@ -510,8 +523,8 @@ services:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
       # Source: Bunny Edge Storage.
-      BUNNY_STORAGE_ZONE: ${SHRUTI_BUNNY_STORAGE_ZONE:-shruti-engine-eu}
-      BUNNY_STORAGE_KEY: ${SHRUTI_BUNNY_STORAGE_KEY:?SHRUTI_BUNNY_STORAGE_KEY must be set}
+      STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:?SHRUTI_STORAGE_KEY must be set}
       # Dest: Yandex Object Storage (S3-compatible).
       YANDEX_ENDPOINT: ${SHRUTI_YANDEX_ENDPOINT:-https://storage.yandexcloud.net}
       YANDEX_REGION: ${SHRUTI_YANDEX_REGION:-ru-central1}
