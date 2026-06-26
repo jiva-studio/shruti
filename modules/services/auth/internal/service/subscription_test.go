@@ -304,8 +304,8 @@ func TestConcurrentApplySerialised(t *testing.T) {
 	snapB := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierPro, TierExpiresAt: &expiresB}
 
 	var (
-		wg            sync.WaitGroup
-		errA, errB    error
+		wg         sync.WaitGroup
+		errA, errB error
 	)
 	wg.Add(2)
 	go func() {
@@ -375,7 +375,6 @@ func TestConcurrentApplySerialised(t *testing.T) {
 	}
 }
 
-
 // fakeGranter is a DB-free RCGranter for GrantAndApply tests: it records
 // the grant call and returns a canned subscriber on refetch.
 type fakeGranter struct {
@@ -425,7 +424,7 @@ func TestGrantAndApplyMakesUserPro(t *testing.T) {
 	svc.RC = g
 	svc.RCProEntitlement = "pro"
 
-	if err := svc.GrantAndApply(ctx, userID, "monthly"); err != nil {
+	if err := svc.GrantAndApply(ctx, userID, "monthly", ""); err != nil {
 		t.Fatalf("grant: %v", err)
 	}
 
@@ -461,10 +460,95 @@ func TestGrantAndApplyUnknownUser(t *testing.T) {
 	svc.RC = g
 	svc.RCProEntitlement = "pro"
 
-	if err := svc.GrantAndApply(ctx, uuid.New(), "yearly"); !errors.Is(err, ErrGrantUserNotFound) {
+	if err := svc.GrantAndApply(ctx, uuid.New(), "yearly", ""); !errors.Is(err, ErrGrantUserNotFound) {
 		t.Fatalf("want ErrGrantUserNotFound, got %v", err)
 	}
 	if g.grantAppUserID != "" {
 		t.Errorf("RC must not be called for unknown user, got grant %q", g.grantAppUserID)
+	}
+}
+
+// trackingGranter is a stateful RCGranter: GrantPromotional records the absolute
+// end it was called with AND makes the next GetSubscriber reflect that expiry,
+// mimicking RC's "replace the expiry" semantics. This lets a test prove a
+// re-driven grant reuses the original end instead of stacking another period on
+// the already-extended one.
+type trackingGranter struct {
+	entID      string
+	curEndMs   int64 // current RC expiry, mutated by each grant
+	grantCalls int
+	lastEndMs  int64 // end passed to the most recent GrantPromotional
+}
+
+func (g *trackingGranter) GrantPromotional(_ context.Context, _, entitlementID string, endTimeMs int64) error {
+	g.grantCalls++
+	g.entID = entitlementID
+	g.lastEndMs = endTimeMs
+	g.curEndMs = endTimeMs
+	return nil
+}
+
+func (g *trackingGranter) GetSubscriber(_ context.Context, _ string) (*rcclient.SubscriberResponse, error) {
+	sub := &rcclient.Subscriber{OriginalAppUserID: "rc-tracking", Entitlements: map[string]rcclient.Entitlement{}}
+	if g.curEndMs > 0 {
+		ent := "pro"
+		if g.entID != "" {
+			ent = g.entID
+		}
+		exp := time.UnixMilli(g.curEndMs).UTC()
+		sub.Entitlements[ent] = rcclient.Entitlement{ExpiresDate: &exp}
+	}
+	return &rcclient.SubscriberResponse{Subscriber: sub}, nil
+}
+
+// TestGrantAndApplyIdempotentByGrantKey — a re-driven grant (same grantKey) must
+// NOT extend the subscription a second time. Mimics the billing reconcile worker
+// re-running an order whose first attempt's HTTP response was lost after RC
+// already applied. Without the grant ledger, the second call would compute
+// base = max(now, already-extended expiry) and stack another month.
+func TestGrantAndApplyIdempotentByGrantKey(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	anon, err := svc.Anonymous(ctx, "dev-grant-idem", "")
+	if err != nil {
+		t.Fatalf("anon: %v", err)
+	}
+	userID := anon.UserID
+
+	g := &trackingGranter{}
+	svc.RC = g
+	svc.RCProEntitlement = "pro"
+
+	const grantKey = "order-idem-1"
+
+	if err := svc.GrantAndApply(ctx, userID, "monthly", grantKey); err != nil {
+		t.Fatalf("first grant: %v", err)
+	}
+	firstEnd := g.lastEndMs
+	if firstEnd == 0 {
+		t.Fatal("first grant did not call GrantPromotional")
+	}
+
+	// Re-drive with the SAME key: RC now reports the extended expiry, but the
+	// grant must re-apply the ORIGINAL end, not stack another month.
+	if err := svc.GrantAndApply(ctx, userID, "monthly", grantKey); err != nil {
+		t.Fatalf("re-driven grant: %v", err)
+	}
+	if g.lastEndMs != firstEnd {
+		t.Errorf("re-drive extended the subscription: first end=%d, second end=%d (want equal)", firstEnd, g.lastEndMs)
+	}
+	if g.grantCalls != 2 {
+		t.Errorf("expected 2 (idempotent) grant calls, got %d", g.grantCalls)
+	}
+
+	var n int
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM auth.subscription_grants WHERE grant_key = $1`, grantKey,
+	).Scan(&n); err != nil {
+		t.Fatalf("count grants: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected exactly 1 subscription_grants row, got %d", n)
 	}
 }
