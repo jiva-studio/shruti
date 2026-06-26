@@ -86,7 +86,8 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	// the 003N range (e.g. the idempotent-rotation pointer column).
 	moreAuth30, _ := filepath.Glob(filepath.Join(migrationsDir, "003[0-9]_auth_*.up.sql"))
 	authFiles = append(authFiles, moreAuth30...)
-	// 0041_auth_email_otp and any later auth-owned migration in the 004N range.
+	// 0041_auth_email_otp, 0042_auth_subscription_grants and any later
+	// auth-owned migration in the 004N range (e.g. the grant idempotency ledger).
 	moreAuth40, _ := filepath.Glob(filepath.Join(migrationsDir, "004[0-9]_auth_*.up.sql"))
 	authFiles = append(authFiles, moreAuth40...)
 	// Outbox + the usage table the chat service owns in prod. We just need

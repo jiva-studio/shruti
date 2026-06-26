@@ -78,7 +78,16 @@ var ErrGrantUserNotFound = errors.New("grant: user not found")
 //     event_id so tier=pro lands in auth.users now (RC doesn't webhook grants).
 //
 // `duration` is the purchased plan: "monthly" or "yearly".
-func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration string) error {
+//
+// `grantKey` makes the grant idempotent across re-drives (e.g. the billing
+// reconcile worker re-running an order whose first attempt's HTTP response was
+// lost after RC already applied). When non-empty, the absolute end_time
+// computed on the FIRST attempt is persisted under grantKey and reused on every
+// re-drive, so re-applying is a no-op at RC (GrantPromotional replaces the
+// expiry with the same absolute value) instead of stacking another period. An
+// empty grantKey keeps the legacy (non-idempotent) behaviour for callers with
+// no stable key.
+func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration, grantKey string) error {
 	u, err := s.Users.Get(ctx, userID)
 	if err != nil {
 		return err
@@ -122,6 +131,22 @@ func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration 
 		return fmt.Errorf("grant: unsupported duration %q", duration)
 	}
 
+	// Pin the absolute end_time under grantKey BEFORE touching RC. A re-drive
+	// reuses the first attempt's end (reserveGrantUntil returns the stored
+	// value on conflict), so GrantPromotional below re-applies the same expiry
+	// instead of extending from the already-granted one.
+	eventID := fmt.Sprintf("billing-grant:%s:%s:%d", userID, duration, time.Now().Unix())
+	if grantKey != "" {
+		stored, err := s.reserveGrantUntil(ctx, grantKey, userID, duration, end)
+		if err != nil {
+			return fmt.Errorf("grant: reserve: %w", err)
+		}
+		end = stored
+		// Stable event id so the outbox `subscription.changed` emission is also
+		// deduped on re-drive (one event per order, not one per attempt).
+		eventID = "billing-grant:" + grantKey
+	}
+
 	if err := s.RC.GrantPromotional(ctx, appUserID, entitlement, end.UnixMilli()); err != nil {
 		return fmt.Errorf("grant: %w", err)
 	}
@@ -131,11 +156,27 @@ func (s *Service) GrantAndApply(ctx context.Context, userID uuid.UUID, duration 
 		return fmt.Errorf("grant: refetch: %w", err)
 	}
 	snap := SnapshotFromRCResponse(appUserID, resp, time.Now().UTC())
-	eventID := fmt.Sprintf("billing-grant:%s:%s:%d", userID, duration, time.Now().Unix())
 	if _, _, err := s.ApplyRCSubscriberState(ctx, eventID, snap); err != nil {
 		return fmt.Errorf("grant: apply: %w", err)
 	}
 	return nil
+}
+
+// reserveGrantUntil records the absolute end_time for grantKey on first call
+// and returns the stored value unchanged on every subsequent call, so a
+// re-driven grant reuses the original target expiry rather than recomputing it
+// from an already-extended RC state. The no-op ON CONFLICT update lets
+// RETURNING yield the existing row's granted_until.
+func (s *Service) reserveGrantUntil(ctx context.Context, grantKey string, userID uuid.UUID, duration string, desired time.Time) (time.Time, error) {
+	var stored time.Time
+	err := s.Pool.QueryRow(ctx,
+		`INSERT INTO auth.subscription_grants (grant_key, user_id, duration, granted_until)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (grant_key) DO UPDATE SET grant_key = auth.subscription_grants.grant_key
+		 RETURNING granted_until`,
+		grantKey, userID, duration, desired,
+	).Scan(&stored)
+	return stored, err
 }
 
 // SnapshotFromRCResponse derives the durable tier state from a fresh

@@ -31,6 +31,9 @@ type InternalGrantHandler struct {
 type internalGrantReq struct {
 	UserID   string `json:"userId"`
 	Duration string `json:"duration"`
+	// GrantKey idempotency-keys the grant across re-drives (the billing order
+	// id). Optional: an empty key falls back to the legacy non-idempotent path.
+	GrantKey string `json:"grantKey"`
 }
 
 func (h *InternalGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +64,7 @@ func (h *InternalGrantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
-	if err := h.Svc.GrantAndApply(ctx, userID, req.Duration); err != nil {
+	if err := h.Svc.GrantAndApply(ctx, userID, req.Duration, req.GrantKey); err != nil {
 		switch {
 		case errors.Is(err, service.ErrGrantUserNotFound):
 			writeErr(w, http.StatusNotFound, "not_found", "user not found")
