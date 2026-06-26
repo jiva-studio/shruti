@@ -61,13 +61,20 @@ export interface OutlineChapter {
   endMs: number
 }
 
+/** One of `sourceId` (in-library) or `sourceName` (external book) is set. */
+export interface BlockReference {
+  sourceId?: string
+  sourceName?: string
+  tokens: string[]
+}
+
 export interface SentenceBlock {
   type: 'sentence'
   start: number
   end: number
   text: string
   speaker?: string
-  reference?: { sourceId: string; tokens: string }
+  reference?: BlockReference
 }
 
 export interface VerseTextBlock {
@@ -75,7 +82,9 @@ export interface VerseTextBlock {
   start: number
   end: number
   text: string[]
-  reference?: { sourceId: string; tokens: string }
+  reference?: BlockReference
+  original?: string[]
+  translation?: string
 }
 
 export interface VerseTranslationBlock {

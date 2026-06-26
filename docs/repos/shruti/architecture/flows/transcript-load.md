@@ -64,7 +64,7 @@ sequenceDiagram
 
 ## Block rendering
 
-The use case returns a `Transcript` value object whose `blocks` field is a discriminated union of four kinds. The transcript view component (in `ui/features/transcript/`) renders each kind differently:
+The use case returns a `Transcript` value object whose `blocks` field is a discriminated union of five kinds. The transcript view component (in `ui/features/transcript/`) renders each kind differently:
 
 ```mermaid
 classDiagram
@@ -75,6 +75,7 @@ classDiagram
     TranscriptBlock <|-- TranscriptSentenceBlock
     TranscriptBlock <|-- TranscriptVerseTextBlock
     TranscriptBlock <|-- TranscriptVerseTranslationBlock
+    TranscriptBlock <|-- TranscriptMarkerBlock
 
     class TranscriptParagraphBlock {
         type "paragraph"
@@ -93,19 +94,31 @@ classDiagram
         start, end
         text[]
         reference?
+        original[]?
+        translation?
     }
     class TranscriptVerseTranslationBlock {
         type "verse:translation"
         start, end
         text
     }
+    class TranscriptMarkerBlock {
+        type "marker"
+        start, end
+        text
+        speaker?
+    }
 ```
+
+- **`marker`** — a stage direction (`[break]`, `[laughter]`, `devotees repeat`). Text is stored bracket-free; the renderer wraps it. Rendered muted/italic; excluded from shared plain-text.
+- **`verse:text`** — `text[]` is the transliteration (IAST). When the verse resolves in the library, `original[]` (Devanagari / Bengali) and `translation` are baked in, and the component renders all three (original → transliteration → translation), mirroring the chat `VerseCard`.
+- **Inline markdown** — `sentence` / `verse` text may contain `*italic*` / `**bold**`; the client renders it inline via `marked.parseInline` (shared `libs/ui/transcript/renderInlineMarkdown.ts`). Producers must emit balanced markdown.
 
 Definitions live in [`transcript.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/transcript.ts).
 
 ## Transcript JSON wire format
 
-The on-disk JSON mirrors the TS [`Transcript`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/transcript.ts) value object exactly — no transform layer. The MCP server's Go wire struct (`internal/domain/transcript/block.go`) carries the same field names and types; the only producer that emits inline `reference` blocks is the PDF aligner (`scripts/pdf_align/align_fast.py`).
+The on-disk JSON mirrors the TS [`Transcript`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/transcript.ts) value object exactly — no transform layer. The MCP server's Go wire struct (`internal/domain/transcript/block.go`) carries the same field names and types. Producers that emit inline `reference` blocks: the PDF aligner (`scripts/pdf_align/align_fast.py`) and the vedabase converter (`resources/vedabase-convert/`, which converts human-verified vedabase lectures to v2 blocks and aligns timings against `raw.json`).
 
 A typical sentence block with an attached scripture reference:
 
@@ -123,8 +136,11 @@ A typical sentence block with an attached scripture reference:
 }
 ```
 
-- `sourceId` is the catalog `sources.id` PK (see [`Reference`](../../domain/entities.md#reference--referencets)). It is **not** an abbreviated scripture code; the UI looks up the localised full/short name via the `sources` dictionary.
+- A reference carries exactly one of `sourceId` **or** `sourceName`:
+  - `sourceId` is the catalog `sources.id` PK (see [`Reference`](../../domain/entities.md#reference--referencets)) for an in-library scripture; the UI looks up the localised full/short name via the `sources` dictionary. It is **not** an abbreviated scripture code.
+  - `sourceName` is the verbatim name of an external work **not** in the catalog (e.g. an Upaniṣad); rendered as-is.
 - `tokens` is a **string array** of dot-separated segments. The SQL [`track_references`](../../db/content-db.md#track_references) row keeps the same data **dot-joined as TEXT** to keep rows narrow — that's the only place the two diverge.
+- A `sentence` carries **at most one** reference (a single object, not an array). The vedabase converter splits a sentence that quotes several verses into one fragment per citation, so the wire shape stays a single object.
 
 ## Why transcripts aren't in the SQL DB
 

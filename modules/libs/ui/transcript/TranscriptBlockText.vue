@@ -1,7 +1,9 @@
 <template>
   <span v-if="block.type === 'sentence'" class="tx-sentence" v-html="html(block.text + ' ')" />
   <span v-else-if="block.type === 'verse:text'" class="tx-verse">
+    <span v-for="(line, i) in block.original ?? []" :key="'o' + i" class="tx-verse-original" v-html="html(line)" />
     <span v-for="(line, i) in block.text" :key="i" class="tx-verse-line" v-html="html(line)" />
+    <span v-if="block.translation" class="tx-verse-translation" v-html="html(block.translation)" />
   </span>
   <span v-else-if="block.type === 'verse:translation'" class="tx-translation" v-html="html(block.text + ' ')" />
   <span v-else-if="block.type === 'marker'" class="tx-marker" v-html="'[' + html(block.text) + '] '" />
@@ -28,9 +30,23 @@ const html = (text: string): string => renderInlineMarkdown(text)
   color: var(--ion-color-tertiary);
 }
 
+.tx-verse-original {
+  display: block;
+  line-height: 1.5;
+  font-family: "Sanskrit2003", "Noto Sans Devanagari", var(--font-serif, serif);
+}
+
 .tx-verse-line {
   display: block;
   line-height: 1.6;
+  font-style: italic;
+}
+
+.tx-verse-translation {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  color: var(--ion-color-medium);
 }
 
 .tx-translation {

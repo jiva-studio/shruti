@@ -32,6 +32,10 @@ export interface UiTranscriptVerseTextBlock {
   readonly end: number
   readonly text: readonly string[]
   readonly reference?: string
+  /** Original-script lines (Devanagari / Bengali). */
+  readonly original?: readonly string[]
+  /** Translation in the transcript language. */
+  readonly translation?: string
 }
 
 export interface UiTranscriptVerseTranslationBlock {

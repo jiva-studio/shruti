@@ -202,6 +202,8 @@ export function buildTranscriptViewData(
                   ? formatReferenceFull(block.reference, sourcesById, lang)
                   : formatReference(block.reference, sourcesById, lang)
                 : undefined,
+              original: block.original,
+              translation: block.translation,
             }
           : block.type === "verse:translation"
             ? {
