@@ -329,7 +329,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
           // in place on the subsequent verify (same userId / progress).
           ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, locale: cfg.getLocale?.() ?? "" }),
       })
     } catch {
       throw new EmailOtpError("network")

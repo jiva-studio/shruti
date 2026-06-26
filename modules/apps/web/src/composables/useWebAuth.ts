@@ -325,7 +325,8 @@ async function requestEmailCode(email: string): Promise<void> {
         // browser's anonymous identity in place — same as signinSocial.
         ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
       },
-      body: JSON.stringify({ email }),
+      // locale localizes the code email server-side (English fallback).
+      body: JSON.stringify({ email, locale: cfg?.locale ?? '' }),
     })
   } catch {
     throw new WebEmailOtpError('network')

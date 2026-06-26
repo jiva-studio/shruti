@@ -145,6 +145,9 @@ initShruti({
     request: withNetworkErrorContext((path, init) => authHttp.request(path, init)),
     googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
     googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,
+    // Lets the email-OTP request tell the server which language to send the
+    // code email in (falls back to English server-side for unmapped locales).
+    getLocale: () => String(i18n.global.locale.value),
   }),
   // Wraps Capacitor.Filesystem + HEAD probe — used by the Notes share
   // workflow to look up / download per-note excerpt files. Single
