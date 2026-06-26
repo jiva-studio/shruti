@@ -154,13 +154,26 @@ function parseOutline(raw) {
   return out
 }
 
-function normalizeTranscript(raw) {
+// "{localised short name} {tokens}" — e.g. "BG 5.18". Falls back to the external
+// book name, then bare tokens. The client has no sources dict, so we bake it here.
+function refLabel(ref, sourcesShort, lang) {
+  const tokens = Array.isArray(ref.tokens) ? ref.tokens.join('.') : ''
+  const names = sourcesShort.get(ref.sourceId)
+  const short = names ? (names[lang] ?? Object.values(names)[0]) : undefined
+  const name = short ?? ref.sourceName ?? ''
+  return name ? (tokens ? `${name} ${tokens}` : name) : tokens
+}
+
+function normalizeTranscript(raw, sourcesShort, lang) {
   if (!raw || !Array.isArray(raw.blocks)) return null
   const blocks = []
   for (const b of raw.blocks) {
     if (b == null || typeof b !== 'object') continue
     if (typeof b.type !== 'string') continue
     if (typeof b.start !== 'number' || typeof b.end !== 'number') continue
+    if (b.reference && Array.isArray(b.reference.tokens)) {
+      b.reference.label = refLabel(b.reference, sourcesShort, lang)
+    }
     blocks.push(b)
   }
   return { version: typeof raw.version === 'number' ? raw.version : null, blocks }
@@ -448,7 +461,11 @@ async function main() {
       const audio = audioRow
         ? { url: resolveUrl(audioRow.path), durationMs: typeof audioRow.duration === 'number' ? audioRow.duration : null }
         : null
-      const transcript = normalizeTranscript(await fetchTranscript(track.id, v.language, v.transcript_path))
+      const transcript = normalizeTranscript(
+        await fetchTranscript(track.id, v.language, v.transcript_path),
+        sourcesShort,
+        v.language
+      )
       outVariants[v.language] = {
         title: v.title ?? '',
         description: v.description ?? null,

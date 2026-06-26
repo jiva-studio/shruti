@@ -52,6 +52,7 @@ export function buildTranscriptGroups(
   let current: TranscriptBlock[] = []
   let charsAccum = 0
   let currentHeading: { title: string; startMs: number } | undefined
+  let currentSpeaker: string | undefined
 
   const flush = () => {
     if (current.length > 0) {
@@ -66,6 +67,7 @@ export function buildTranscriptGroups(
     current = []
     charsAccum = 0
     currentHeading = undefined
+    currentSpeaker = undefined
   }
 
   for (const block of blocks) {
@@ -84,6 +86,13 @@ export function buildTranscriptGroups(
       currentHeading = triggered
     }
 
+    // Start a new paragraph whenever the speaker changes, so each turn in a
+    // dialogue stands on its own (with its own timestamp + highlight).
+    const speaker = block.type === 'sentence' ? block.speaker : undefined
+    if (speaker !== undefined && current.length > 0 && speaker !== currentSpeaker) {
+      flush()
+    }
+
     const len = blockText(block).length
     if (paragraphChars > 0 && current.length > 0 && charsAccum + len > paragraphChars) {
       flush()
@@ -91,6 +100,7 @@ export function buildTranscriptGroups(
 
     current.push(block)
     charsAccum += len
+    if (speaker !== undefined) currentSpeaker = speaker
   }
 
   flush()
