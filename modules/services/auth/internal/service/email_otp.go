@@ -66,8 +66,8 @@ func (s *Service) RequestEmailOTP(ctx context.Context, rawEmail, locale string) 
 	if err := s.EmailOTP.Upsert(ctx, addr, hashCode(addr, code), time.Now().Add(otpCodeTTL)); err != nil {
 		return err
 	}
-	subject, body := otpEmailContent(code, locale)
-	if err := s.Emailer.Send(ctx, addr, subject, body); err != nil {
+	subject, text, html := otpEmailContent(code, locale)
+	if err := s.Emailer.Send(ctx, addr, subject, text, html); err != nil {
 		return fmt.Errorf("send otp email: %w", err)
 	}
 	return nil
@@ -162,10 +162,13 @@ func emailSubject(email string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// otpTemplate is a localized email. %s is the code.
+// otpTemplate is a localized email. textFmt's %s is the code; htmlLead and
+// htmlNote are the two localized lines of the branded HTML version.
 type otpTemplate struct {
-	subject string
-	bodyFmt string
+	subject  string
+	textFmt  string
+	htmlLead string
+	htmlNote string
 }
 
 // otpTemplates covers the maintained locale set; everything else (the app's
@@ -174,31 +177,80 @@ var otpTemplates = map[string]otpTemplate{
 	"en": {
 		"Your Shruti sign-in code",
 		"Your sign-in code is %s\n\nIt expires in 10 minutes. If you didn't request it, you can safely ignore this email.",
+		"Use this code to sign in.",
+		"This code expires in 10 minutes. If you didn't request it, you can safely ignore this email.",
 	},
 	"ru": {
 		"Ваш код для входа в Shruti",
 		"Ваш код для входа: %s\n\nКод действителен 10 минут. Если вы не запрашивали его, просто проигнорируйте это письмо.",
+		"Используйте этот код для входа.",
+		"Код действителен 10 минут. Если вы не запрашивали его, просто проигнорируйте это письмо.",
 	},
 	"uk": {
 		"Ваш код для входу в Shruti",
 		"Ваш код для входу: %s\n\nКод дійсний 10 хвилин. Якщо ви не запитували його, просто проігноруйте цей лист.",
+		"Використайте цей код для входу.",
+		"Код дійсний 10 хвилин. Якщо ви не запитували його, просто проігноруйте цей лист.",
 	},
 	"sr-latn": {
 		"Vaš kod za prijavu na Shruti",
 		"Vaš kod za prijavu je %s\n\nVaži 10 minuta. Ako ga niste tražili, slobodno zanemarite ovu poruku.",
+		"Upotrebite ovaj kod za prijavu.",
+		"Kod važi 10 minuta. Ako ga niste tražili, slobodno zanemarite ovu poruku.",
 	},
 	"sr-cyrl": {
 		"Ваш код за пријаву на Shruti",
 		"Ваш код за пријаву је %s\n\nВажи 10 минута. Ако га нисте тражили, слободно занемарите ову поруку.",
+		"Употребите овај код за пријаву.",
+		"Код важи 10 минута. Ако га нисте тражили, слободно занемарите ову поруку.",
 	},
 }
 
-// otpEmailContent renders the code email for the requester's locale. Match is
-// exact lower-case first (so sr-latn/sr-cyrl pick the right script), then the
-// language prefix before "-", then English.
-func otpEmailContent(code, locale string) (subject, body string) {
+// otpEmailContent renders the code email for the requester's locale, returning
+// the subject plus a plain-text body and a branded HTML body (multipart
+// alternative). Match is exact lower-case first (so sr-latn/sr-cyrl pick the
+// right script), then the language prefix before "-", then English.
+func otpEmailContent(code, locale string) (subject, text, html string) {
 	t := resolveOTPTemplate(locale)
-	return t.subject, fmt.Sprintf(t.bodyFmt, code)
+	return t.subject, fmt.Sprintf(t.textFmt, code), renderOTPHTML(t.htmlLead, code, t.htmlNote)
+}
+
+// Brand assets for the email chrome (logo + contacts footer).
+const (
+	otpLogoURL      = "https://shruti.app/app-icon.png"
+	otpWebsiteURL   = "https://shruti.app"
+	otpSupportEmail = "support@akdasa.studio"
+	otpTelegramURL  = "https://t.me/shrutiapp"
+	otpVKURL        = "https://vk.com/shruti"
+	otpFeatherURL   = "https://shruti.app/hero-feather.png"
+)
+
+// renderOTPHTML builds the branded email in the website's palette (cream
+// background #faf5ea, ink #3d2b1f, saffron #cc7a3d, cream-deep code chip
+// #f3ede0, line #e8ddc8; serif title). App logo at the top, a contacts footer
+// at the bottom. Table layout + inline styles for email client compatibility.
+// lead/code/note are trusted (no user input).
+func renderOTPHTML(lead, code, note string) string {
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+		`<style>@import url('https://fonts.googleapis.com/css2?family=Literata:wght@700&family=Manrope:wght@400;600;700&display=swap');</style>` +
+		`</head>` +
+		`<body style="margin:0;padding:0;background-color:#faf5ea;">` +
+		`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf5ea;padding:40px 16px;">` +
+		`<tr><td align="center">` +
+		`<table role="presentation" width="440" cellpadding="0" cellspacing="0" style="max-width:440px;width:100%;background-color:#ffffff;background-image:url('` + otpFeatherURL + `');background-repeat:no-repeat;background-position:bottom -18px right -18px;background-size:130px auto;border:1px solid #e8ddc8;border-radius:16px;padding:36px 32px;">` +
+		`<tr><td align="center" style="padding-bottom:14px;"><img src="` + otpLogoURL + `" width="64" height="64" alt="Shruti" style="display:block;border-radius:14px;"></td></tr>` +
+		`<tr><td align="center" style="font-family:'Literata',Georgia,'Times New Roman',serif;font-size:26px;font-weight:700;color:#3d2b1f;padding-bottom:8px;">Shruti</td></tr>` +
+		`<tr><td align="center" style="font-family:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;color:#806752;padding-bottom:28px;">` + lead + `</td></tr>` +
+		`<tr><td align="center"><div style="display:inline-block;background-color:#f3ede0;border-radius:12px;padding:16px 28px;font-family:'Courier New',Courier,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#cc7a3d;">` + code + `</div></td></tr>` +
+		`<tr><td align="center" style="font-family:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1.5;color:#9b8f7e;padding-top:28px;">` + note + `</td></tr>` +
+		`<tr><td style="padding-top:28px;"><div style="border-top:1px solid #e8ddc8;font-size:0;line-height:0;">&nbsp;</div></td></tr>` +
+		`<tr><td align="center" style="font-family:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:12px;color:#a89e8e;padding-top:16px;line-height:1.7;">` +
+		`<a href="` + otpWebsiteURL + `" style="color:#806752;text-decoration:none;">shruti.app</a>` +
+		` &nbsp;&middot;&nbsp; <a href="mailto:` + otpSupportEmail + `" style="color:#806752;text-decoration:none;">` + otpSupportEmail + `</a>` +
+		` &nbsp;&middot;&nbsp; <a href="` + otpTelegramURL + `" style="color:#806752;text-decoration:none;">Telegram</a>` +
+		` &nbsp;&middot;&nbsp; <a href="` + otpVKURL + `" style="color:#806752;text-decoration:none;">VK</a>` +
+		`</td></tr>` +
+		`</table></td></tr></table></body></html>`
 }
 
 func resolveOTPTemplate(locale string) otpTemplate {
