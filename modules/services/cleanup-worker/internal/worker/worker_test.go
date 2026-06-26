@@ -232,6 +232,45 @@ func TestSweepUnknownEventLeavesRow(t *testing.T) {
 	}
 }
 
+func TestProcessByTypeTerminatesOnPoisonRow(t *testing.T) {
+	dsn := dbDSNFromEnv(t)
+	pool, err := cwdb.NewPool(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	setupSchema(t, pool)
+
+	// Handler always errors → the row never gets stamped processed, so the
+	// claim query would re-select it forever without the zero-progress break.
+	rec := &recordingHandler{err: context.DeadlineExceeded}
+	reg := handlers.NewRegistry()
+	reg.Register("user.deleted", rec.handler())
+
+	id := insertEvent(t, pool, "user.deleted", "poison", 0)
+
+	w := newWorker(t, pool, reg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- w.processByType(ctx, "user.deleted") }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("processByType returned error: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatalf("processByType did not terminate on a poison row (spun until deadline)")
+	}
+
+	if processedAt(t, pool, id) != nil {
+		t.Errorf("poison row must stay unprocessed for the sweep to retry")
+	}
+}
+
 func TestProcessByTypeFiltersByEventType(t *testing.T) {
 	dsn := dbDSNFromEnv(t)
 	pool, err := cwdb.NewPool(context.Background(), dsn)
