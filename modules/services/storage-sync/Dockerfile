@@ -18,13 +18,14 @@ FROM alpine:3.20
 
 # curl for compose healthcheck, ca-certificates for Bunny + Yandex TLS,
 # tini for proper PID-1 signal forwarding.
+# NB: `sync` is a reserved Alpine account (uid 5) — use `app` for the service.
 RUN apk add --no-cache curl ca-certificates tini && \
-    addgroup -g 1000 sync && \
-    adduser -D -u 1000 -G sync sync
+    addgroup -g 1000 app && \
+    adduser -D -u 1000 -G app app
 
 COPY --from=build /out/storage-sync /usr/local/bin/storage-sync
 
-USER sync
+USER app
 
 ARG LECTORIUM_BUILD_SHA=dev
 ARG LECTORIUM_BUILD_TIME=dev
