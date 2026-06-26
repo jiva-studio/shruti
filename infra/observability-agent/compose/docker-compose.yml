@@ -100,11 +100,16 @@ services:
     # container_oom_killed. host cgroupns exposes the full hierarchy.
     cgroup: host
     labels: *no-watchtower
+    # Read via containerd, not docker: Docker's containerd image store has no
+    # /var/lib/docker/image/.../layerdb, so cAdvisor's docker factory fails the
+    # rw-layer lookup and drops every container. Hiding docker.sock (no /var/run
+    # mount) forces the containerd factory, which reads the moby namespace.
     command:
       - --listen_ip=0.0.0.0
       - --port=8090
       - --housekeeping_interval=30s
-      - --docker_only=true
+      - --containerd=/run/containerd/containerd.sock
+      - --containerd-namespace=moby
     # The image's baked HEALTHCHECK wgets $CADVISOR_HEALTHCHECK_URL, which
     # defaults to :8080 — but we run on :8090, so the default probe is refused
     # and the container is perpetually "unhealthy". Point it at the real port.
@@ -114,9 +119,8 @@ services:
       - "${PROD_EU_TS_IP}:8090:8090"
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run:ro
+      - /run/containerd:/run/containerd:ro
       - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
       - /dev/disk:/dev/disk:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     devices:
