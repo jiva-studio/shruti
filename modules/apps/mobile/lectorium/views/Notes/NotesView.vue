@@ -3,6 +3,7 @@
     <!-- Search Query -->
     <SearchInput
       v-if="!isEmpty"
+      class="notes-search"
       :model-value="query"
       :placeholder="$t('app.search')"
       @update:model-value="onQuery"
@@ -68,3 +69,9 @@ const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
 
 const emptyImage = "/notes-empty.png"
 </script>
+
+<style scoped>
+.notes-search {
+  --search-margin: 16px;
+}
+</style>
