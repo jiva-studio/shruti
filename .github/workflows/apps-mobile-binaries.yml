@@ -3,21 +3,18 @@ name: Mobile / Binaries
 # STRICTLY manual native-binary builds — no auto-build on push/PR/release tag.
 # Per-push CI (apps-mobile.yml) stays web-only; native binaries and store
 # uploads happen on demand from here. Delegates to the kit reusable workflow.
+# Every dispatch builds AND deploys — there is intentionally no build-only mode
+# (a build that never ships just burns a build number).
 on:
   workflow_dispatch:
     inputs:
       platform:
-        description: Which platform(s) to build
+        description: Which platform(s) to build + deploy
         type: choice
         options: [both, android, ios]
         default: both
-      action:
-        description: Build artifacts only, or build and upload to the store
-        type: choice
-        options: [build-only, build-and-deploy]
-        default: build-only
       track:
-        description: Play track for android deploy (ignored for build-only)
+        description: Play track for android deploy
         type: choice
         options: [internal, beta, production]
         default: internal
@@ -32,7 +29,7 @@ jobs:
     uses: akdasa-studios/kit/.github/workflows/mobile-binaries.yml@main
     with:
       platform: ${{ inputs.platform }}
-      action: ${{ inputs.action }}
+      action: build-and-deploy
       track: ${{ inputs.track }}
       # In-house Capacitor plugins: built (npm ci && npm run build) before the
       # app's npm ci so vue-tsc resolves their dist/ type declarations.
