@@ -272,6 +272,11 @@ async function performAdd(): Promise<void> {
   transition: opacity 120ms ease;
 }
 
+/* No overscroll stretch: pulling past the top would balloon the boundary-pinned hero. */
+ion-content::part(scroll) {
+  overscroll-behavior-y: none;
+}
+
 .hero {
   position: relative;
   height: 240px;
