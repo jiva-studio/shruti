@@ -56,13 +56,10 @@ onMounted(async () => {
   gap: 16px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  /* Full-bleed: cancel the host's side padding so cards scroll to (and off)
-     the screen edges instead of being clipped 16px in. Hosts pad 16px. */
+  scroll-padding-inline: 16px;
   margin-inline: -16px;
   padding-block: 4px 2px;
-  /* No side inset: the first/last card sits flush against the screen edge
-     (snap-align: start), so the strip runs true edge-to-edge. */
-  padding-inline: 0;
+  padding-inline: 16px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
