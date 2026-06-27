@@ -20,7 +20,7 @@
     </div>
 
     <!-- Translation -->
-    <p v-if="translation" class="translation center">
+    <p v-if="translation" class="translation">
       {{ translation }}
     </p>
   </div>
@@ -64,14 +64,13 @@ defineProps<{
 
 .translation {
   margin: 0.25rem 0 0;
+  align-self: stretch;
+  text-align: left;
   opacity: 0.9;
 }
 
 .reference {
   opacity: 0.5;
-  background-color: white;
-  color: black;
-  border-radius: 3px;
   font-size: 0.75rem;
   padding: 0.25rem;
   white-space: nowrap;
