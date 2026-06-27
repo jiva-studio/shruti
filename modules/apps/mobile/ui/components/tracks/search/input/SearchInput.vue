@@ -50,7 +50,7 @@ const hasLeading = computed(() => !!slots.leading)
 }
 
 .search {
-  margin: var(--search-margin, 10px);
+  margin: 10px;
 }
 
 /* Leading icon sits over the field's left edge; the field gets extra start
