@@ -41,9 +41,11 @@ test(qase(165, caseTitle(165)), { tag: ["@offline", "@onboarding"] }, async ({ p
 
   await step(page, 165, 2, async () => {
     await primary.click() // Daily wisdom → Value moment
-    await primary.click() // Value moment → Paywall
+    await primary.click() // Value moment (last page) → finish → Home
     await expect(primary).toHaveCount(0)
-    await page.getByTestId("onboarding-skip").click()
+    // Paywall screen turned off — onboarding now finishes on Value moment, so
+    // there is no Skip on a paywall page anymore. Kept commented until decided.
+    // await page.getByTestId("onboarding-skip").click()
     await page.waitForURL("**/tabs/home", { timeout: 30_000 })
     await expect(page.locator("ion-tab-bar")).toBeVisible()
     // The matched lectures were auto-added to the playlist during onboarding.

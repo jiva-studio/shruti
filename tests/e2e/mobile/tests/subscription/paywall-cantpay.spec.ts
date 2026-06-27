@@ -6,6 +6,11 @@ import { step, caseTitle } from "../../support/steps.js"
 
 // On the Russian build a non-Pro user sees a "Can't pay" support entry on the
 // paywall (RU has no working IAP). Reach the paywall via a Pro toggle.
+//
+// DISABLED: the "Не могу оплатить" support screen has been turned off for now
+// (the paywall screen that expected payment to appear was removed). Commented
+// out rather than deleted until the screen is decided on.
+/*
 test(
   qase(106, caseTitle(106)),
   { tag: ["@offline", "@subscription"] },
@@ -14,7 +19,7 @@ test(
       try {
         localStorage.setItem("CapacitorStorage.settings.appLanguage", JSON.stringify("ru"))
       } catch {
-        /* non-fatal */
+        // non-fatal
       }
     })
     await boot(page, "ru", { userDb: "clean" })
@@ -34,3 +39,4 @@ test(
     })
   }
 )
+*/
