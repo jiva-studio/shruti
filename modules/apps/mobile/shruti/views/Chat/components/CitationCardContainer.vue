@@ -50,6 +50,7 @@ import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useChatLanguage } from "@shruti/composables/useChatLanguage.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
@@ -81,6 +82,7 @@ const emit = defineEmits<{ activate: [] }>()
 const { t } = useI18n()
 const { shareAudioService, activeServer } = useShruti()
 const appLanguage = useAppLanguage()
+const chatLanguage = useChatLanguage()
 const dictionaries = useDictionariesStore()
 
 // Translation toggle + rendered snippet HTML, lifted out of the now-pure
@@ -119,10 +121,13 @@ const playerRef = computed(() => ({
   timeEnd: props.endMs,
 }))
 
+// The shloka reference follows the chat answer language (chatLanguage ||
+// appLanguage) so it reads consistently with the verse/commentary labels the
+// server bakes in that same language — not the UI language.
 const referenceLabel = computed<string>(() => {
   const first = track.value?.references?.[0]
   if (!first) return ""
-  return formatReference(first, dictionaries.sourcesById, appLanguage.value)
+  return formatReference(first, dictionaries.sourcesById, chatLanguage.value || appLanguage.value)
 })
 
 const trackDate = computed<string>(() => track.value?.date || "")

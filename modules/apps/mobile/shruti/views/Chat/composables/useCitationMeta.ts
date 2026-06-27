@@ -1,6 +1,7 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useChatLanguage } from "@shruti/composables/useChatLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import {
   preferredContentLanguage,
@@ -27,7 +28,7 @@ export interface UseCitationMeta {
   metaLoaded: Ref<boolean>
   /** Resolved lecture title (content language). */
   trackTitle: ComputedRef<string>
-  /** Resolved author name (UI language). */
+  /** Resolved author name (chat answer language). */
   authorName: ComputedRef<string>
 }
 
@@ -41,7 +42,13 @@ export interface UseCitationMeta {
 export function useCitationMeta(coords: () => CitationCoords): UseCitationMeta {
   const app = useShruti()
   const appLanguage = useAppLanguage()
+  const chatLanguage = useChatLanguage()
   const libraryLanguages = useLibraryLanguages()
+
+  // Labels (author / reference) follow the chat ANSWER language so the audio
+  // citation's attribution matches the verse/commentary labels, which the
+  // server bakes in the same answer language. Empty chatLanguage ⇒ UI language.
+  const answerLanguage = computed<string>(() => chatLanguage.value || appLanguage.value)
 
   const track = ref<Track | null>(null)
   const author = ref<Author | null>(null)
@@ -57,7 +64,7 @@ export function useCitationMeta(coords: () => CitationCoords): UseCitationMeta {
     return resolveTrackTitle(track.value, cl) ?? ""
   })
   const authorName = computed<string>(
-    () => resolveLocalizedName(author.value, appLanguage.value) ?? ""
+    () => resolveLocalizedName(author.value, answerLanguage.value) ?? ""
   )
 
   async function loadMetadata(): Promise<void> {

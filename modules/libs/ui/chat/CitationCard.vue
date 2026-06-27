@@ -194,11 +194,10 @@ const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
   text-decoration: underline;
 }
 /* `> …` block quote (a śloka quoted inside the snippet): its own line,
- * italic, with a quiet left rule — no literal `>`. */
+ * italic, no literal `>`. No left rule — the card's own accent bar already
+ * frames it; a second stripe on the nested verse reads as double-nesting. */
 .citation-card :deep(.excerpt-quote) {
   margin: 0.6em 0;
-  padding-left: 12px;
-  border-left: 3px solid rgba(var(--ion-color-primary-rgb), 0.4);
   font-style: italic;
   line-height: 1.4;
 }
