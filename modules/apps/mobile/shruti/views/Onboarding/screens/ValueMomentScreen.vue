@@ -81,9 +81,13 @@ async function trackIdsForTopics(
   const ids: TrackId[] = []
   const seen = new Set<string>()
   for (const topic of seeds) {
-    // Onboarding offers actual lectures only — exclude conversations, morning
-    // walks, interviews and other kind-tagged tracks (untagged == a lecture).
-    const tids = await repos.topics.topTrackIds(topic, langs, 4, { lecturesOnly: true })
+    // Onboarding offers the strongest lectures: untagged (no conversation /
+    // morning walk / interview) AND tied to a scripture verse (a class on a
+    // specific śloka), which tend to be the best first listens.
+    const tids = await repos.topics.topTrackIds(topic, langs, 4, {
+      lecturesOnly: true,
+      withReference: true,
+    })
     for (const id of tids) {
       if (!seen.has(id)) {
         seen.add(id)
