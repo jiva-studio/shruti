@@ -43,19 +43,18 @@ export interface TrackMetaConfig {
 }
 
 /**
- * Default layout = the legacy information: the scripture reference as
- * the inline title chip (where it always sat), everything else on in
- * the line below in reading order.
+ * Default layout = the scripture reference as the inline title chip
+ * (where it always sat) and date · location · duration on the line
+ * below. Author and the bottom-line reference are off by default.
  */
 export const DEFAULT_TRACK_META_CONFIG: TrackMetaConfig = {
   top: "reference",
   bottom: [
     { field: "reference", enabled: true },
-    { field: "author", enabled: true },
-    { field: "location", enabled: true },
+    { field: "author", enabled: false },
     { field: "date", enabled: true },
-    // Off by default — opt-in so the default row keeps its legacy look.
-    { field: "duration", enabled: false },
+    { field: "location", enabled: true },
+    { field: "duration", enabled: true },
   ],
 }
 
