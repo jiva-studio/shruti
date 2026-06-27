@@ -18,11 +18,14 @@ export interface ITopicRepository {
   weightsForTracks(trackIds: readonly TrackId[]): Promise<readonly TrackTopicWeight[]>
   /** Track ids carrying a topic that have a variant in one of `languages`,
    *  highest weight first (the topic shelf / topic page filtered to the user's
-   *  library languages). Empty `languages` = no language filter (all tracks). */
+   *  library languages). Empty `languages` = no language filter (all tracks).
+   *  `lecturesOnly` drops kind-tagged tracks (conversation / morning walk /
+   *  interview …) — a lecture is an untagged track — for the onboarding pick. */
   topTrackIds(
     topicId: TopicId,
     languages: readonly LanguageCode[],
-    limit: number
+    limit: number,
+    opts?: { lecturesOnly?: boolean }
   ): Promise<readonly TrackId[]>
   /** Topic ids that have at least one track with a variant in one of
    *  `languages` — used to drop topics with no lectures in the user's library

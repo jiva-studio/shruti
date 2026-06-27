@@ -81,7 +81,9 @@ async function trackIdsForTopics(
   const ids: TrackId[] = []
   const seen = new Set<string>()
   for (const topic of seeds) {
-    const tids = await repos.topics.topTrackIds(topic, langs, 4)
+    // Onboarding offers actual lectures only — exclude conversations, morning
+    // walks, interviews and other kind-tagged tracks (untagged == a lecture).
+    const tids = await repos.topics.topTrackIds(topic, langs, 4, { lecturesOnly: true })
     for (const id of tids) {
       if (!seen.has(id)) {
         seen.add(id)

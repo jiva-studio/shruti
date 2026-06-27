@@ -60,10 +60,9 @@ onMounted(async () => {
      the screen edges instead of being clipped 16px in. Hosts pad 16px. */
   margin-inline: -16px;
   padding-block: 4px 2px;
-  /* Side inset = half the leftover width, so the FIRST (and last) card can sit
-     dead-centre at the scroll extremes — without it, mandatory snap can't
-     centre the first card and jumps to a middle one. */
-  padding-inline: max(16px, calc((100% - var(--shot-card-w)) / 2));
+  /* No side inset: the first/last card sits flush against the screen edge
+     (snap-align: start), so the strip runs true edge-to-edge. */
+  padding-inline: 0;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -75,7 +74,7 @@ onMounted(async () => {
   flex: 0 0 auto;
   width: var(--shot-card-w);
   margin: 0;
-  scroll-snap-align: center;
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   align-items: center;

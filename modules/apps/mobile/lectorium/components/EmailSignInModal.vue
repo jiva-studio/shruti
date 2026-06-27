@@ -1,5 +1,5 @@
 <template>
-  <IonModal :is-open="open" class="email-signin-modal" @did-dismiss="close">
+  <IonModal :is-open="open" keep-contents-mounted class="email-signin-modal" @did-dismiss="close">
     <Header class="flat-header">
       <IonToolbar>
         <IonTitle>{{ $t("settings.account.email.title") }}</IonTitle>
