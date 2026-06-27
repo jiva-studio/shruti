@@ -55,6 +55,9 @@ defineEmits<{ click: [noteId: string] }>()
   -webkit-tap-highlight-color: transparent;
   --excerpt-body-padding: 8px 12px 10px;
 }
+.note:first-child {
+  margin-top: 0;
+}
 .note :deep(.notes-inline-player) {
   margin-bottom: 0;
   border-radius: 0;
