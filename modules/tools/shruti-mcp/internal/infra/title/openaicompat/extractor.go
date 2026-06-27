@@ -63,6 +63,12 @@ func New(cfg Config) (*Extractor, error) {
 func (e *Extractor) Name() string { return ProviderName }
 
 func (e *Extractor) Extract(ctx context.Context, in titleport.Input) (string, error) {
+	lang := strings.TrimSpace(in.Language)
+	if lang == "" {
+		lang = "en"
+	}
+	sys := strings.ReplaceAll(e.SystemPrompt, "__LANG__", lang)
+
 	user := e.UserPrompt
 	user = strings.ReplaceAll(user, "__KIND__", noneIfEmpty(in.Kind))
 	user = strings.ReplaceAll(user, "__REFERENCES__", noneIfEmpty(in.References))
@@ -74,7 +80,7 @@ func (e *Extractor) Extract(ctx context.Context, in titleport.Input) (string, er
 	res, err := e.Client.Run(ctx, openaicompat.Call{
 		Model:     e.Model,
 		MaxTokens: e.MaxTokens,
-		System:    e.SystemPrompt,
+		System:    sys,
 		User:      user,
 	})
 	if err != nil {

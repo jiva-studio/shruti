@@ -12,6 +12,7 @@ import "context"
 // Input is the bag of fields the extractor templates into the user prompt.
 // Empty strings render as "none" in the prompt.
 type Input struct {
+	Language     string // ISO-639 code of the target title (ru / en / hi)
 	Kind         string // morning_walk / conversation / lecture / ...
 	References   string // comma-joined human-readable refs ("Bhagavad-gītā 8.12, 8.13")
 	Location     string // raw location string
@@ -20,8 +21,8 @@ type Input struct {
 	Transcript   string // post-skip excerpt, ~500 words
 }
 
-// Extractor returns a single short English title (3–7 words, no colons,
-// no quotes). Implementations MUST be safe for concurrent use; the
+// Extractor returns a single short title (3–7 words, no colons, no quotes)
+// in Input.Language. Implementations MUST be safe for concurrent use; the
 // canonical openaicompat client is goroutine-safe out of the box.
 type Extractor interface {
 	Name() string
