@@ -31,7 +31,7 @@ export default {
       title: "Вход по почте",
       emailStep: "Мы отправим одноразовый код на вашу почту — пароль не нужен.",
       emailLabel: "Эл. почта",
-      emailPlaceholder: "you@example.com",
+      emailPlaceholder: "you{'@'}example.com",
       sendCode: "Отправить код",
       codeStep: "Введите 6-значный код, отправленный на {email}.",
       codeLabel: "Код",

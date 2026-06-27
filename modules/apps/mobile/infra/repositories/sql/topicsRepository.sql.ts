@@ -45,19 +45,25 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
       topicId: TopicId,
       languages: readonly LanguageCode[],
       limit: number,
-      opts?: { lecturesOnly?: boolean }
+      opts?: { lecturesOnly?: boolean; withReference?: boolean }
     ): Promise<readonly TrackId[]> {
       // Restrict to tracks that have a variant in one of the user's library
       // languages, so a topic page never surfaces lectures they can't read.
       // EXISTS (not a JOIN) so a track with several matching variants stays one
       // row. Empty `languages` = no filter (show every track on the topic).
-      // `lecturesOnly` additionally drops kind-tagged tracks (a track carries at
-      // most one tag, so "no track_tags row" == a plain lecture) — used by the
-      // onboarding pick to avoid offering conversations / morning walks.
-      const lecturesOnly = opts?.lecturesOnly === true
-      const lectureClause = lecturesOnly
-        ? `AND NOT EXISTS (SELECT 1 FROM track_tags tg WHERE tg.track_id = tt.track_id)`
-        : ``
+      // `lecturesOnly` drops kind-tagged tracks (a track carries at most one tag,
+      // so "no track_tags row" == a plain lecture). `withReference` keeps only
+      // tracks tied to a scripture verse (a class on a specific śloka). Both are
+      // used by the onboarding pick, which wants the strongest lectures.
+      const extra = [
+        opts?.lecturesOnly === true
+          ? `AND NOT EXISTS (SELECT 1 FROM track_tags tg WHERE tg.track_id = tt.track_id)`
+          : ``,
+        opts?.withReference === true
+          ? `AND EXISTS (SELECT 1 FROM track_references tr WHERE tr.track_id = tt.track_id)`
+          : ``,
+      ].join("\n            ")
+      const lectureClause = extra
       if (languages.length === 0) {
         const rows = await contentDb.query<{ track_id: string }>(
           `SELECT tt.track_id

@@ -85,7 +85,11 @@ const defaultBackHref = "/tabs/settings"
 }
 
 .shots {
-  margin: 16px 0 auto;
+  /* Top/bottom only — leave the inline margin to SubscriptionShots' own
+     negative margin-inline (full-bleed). A shorthand here would reset it to 0
+     and re-inset the carousel by the layout's 16px padding. */
+  margin-top: 16px;
+  margin-bottom: auto;
 }
 
 .settings-footer {

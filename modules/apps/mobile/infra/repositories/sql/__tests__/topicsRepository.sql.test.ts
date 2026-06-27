@@ -18,6 +18,9 @@ async function applySchema(db: IDatabase): Promise<void> {
     PRIMARY KEY (track_id, topic_id))`)
   await db.execute(`CREATE TABLE track_tags (
     track_id TEXT NOT NULL, tag_id TEXT NOT NULL, PRIMARY KEY (track_id, tag_id))`)
+  await db.execute(`CREATE TABLE track_references (
+    track_id TEXT NOT NULL, ref_idx INTEGER NOT NULL, source_id TEXT NOT NULL,
+    tokens TEXT NOT NULL, PRIMARY KEY (track_id, ref_idx))`)
 }
 
 async function seed(db: IDatabase): Promise<void> {
@@ -54,6 +57,12 @@ async function seed(db: IDatabase): Promise<void> {
   // tA is a kind-tagged track (e.g. a morning walk); tB/tC are untagged
   // lectures. The onboarding pick (`lecturesOnly`) must drop tA.
   await db.execute(`INSERT INTO track_tags (track_id, tag_id) VALUES ('tA', 'tag_morning_walk')`)
+  // tB and tA are tied to a scripture verse; tC is not. `withReference` keeps
+  // only tB/tA; combined with `lecturesOnly` (drops tA) only tB survives.
+  await db.execute(
+    `INSERT INTO track_references (track_id, ref_idx, source_id, tokens) VALUES
+       ('tA', 0, 'src1', '1.1'), ('tB', 0, 'src1', '2.2')`
+  )
 }
 
 const en: LanguageCode[] = ["en"]
@@ -90,6 +99,18 @@ describe("topicsRepository — library-language filtering", () => {
       "tB",
       "tC",
     ])
+  })
+
+  it("topTrackIds withReference keeps only verse-tied tracks", async () => {
+    // tA + tB have a scripture reference, tC does not.
+    expect(await repo.topTrackIds("T1" as TopicId, [], 10, { withReference: true })).toEqual([
+      "tA",
+      "tB",
+    ])
+    // Combined with lecturesOnly: tA is dropped (tagged) → only tB survives.
+    expect(
+      await repo.topTrackIds("T1" as TopicId, [], 10, { lecturesOnly: true, withReference: true })
+    ).toEqual(["tB"])
   })
 
   it("topTrackIds does not duplicate a track that has several matching variants", async () => {

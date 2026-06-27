@@ -31,7 +31,7 @@ export default {
       title: "Sign in with email",
       emailStep: "We'll email you a one-time code — no password needed.",
       emailLabel: "Email",
-      emailPlaceholder: "you@example.com",
+      emailPlaceholder: "you{'@'}example.com",
       sendCode: "Send code",
       codeStep: "Enter the 6-digit code we sent to {email}.",
       codeLabel: "Code",

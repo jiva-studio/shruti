@@ -20,12 +20,14 @@ export interface ITopicRepository {
    *  highest weight first (the topic shelf / topic page filtered to the user's
    *  library languages). Empty `languages` = no language filter (all tracks).
    *  `lecturesOnly` drops kind-tagged tracks (conversation / morning walk /
-   *  interview …) — a lecture is an untagged track — for the onboarding pick. */
+   *  interview …) — a lecture is an untagged track. `withReference` keeps only
+   *  tracks tied to a scripture verse (a class on a specific śloka) — the
+   *  onboarding pick uses both, those lectures tend to be the strongest. */
   topTrackIds(
     topicId: TopicId,
     languages: readonly LanguageCode[],
     limit: number,
-    opts?: { lecturesOnly?: boolean }
+    opts?: { lecturesOnly?: boolean; withReference?: boolean }
   ): Promise<readonly TrackId[]>
   /** Topic ids that have at least one track with a variant in one of
    *  `languages` — used to drop topics with no lectures in the user's library
