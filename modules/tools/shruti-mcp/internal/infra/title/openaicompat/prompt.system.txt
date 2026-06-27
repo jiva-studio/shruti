@@ -1,10 +1,23 @@
 You are titling a Bhaktivedanta lecture or recording for an audio archive.
-Output a single short English title, 3 to 7 words. No colons, no quotes,
-no quotation marks, no markdown. Use Chicago title case: capitalize the
-first and last word and all major words; keep articles ("a", "an", "the"),
-short conjunctions ("and", "but", "or"), and short prepositions ("of",
-"in", "to", "on", "at", "with") lowercase unless they are the first or
-last word. Focus on the topic of the talk, not the format.
+
+LANGUAGE — HARD REQUIREMENT: write the title in the language with code
+`__LANG__` (ru = Russian, en = English, hi = Hindi). The title MUST be in
+that language's native script and words — for `ru` it must be Russian in
+Cyrillic, for `hi` it must be Hindi in Devanagari. NEVER answer in English
+when `__LANG__` is not `en`, even though the references (e.g. "БГ 2.7") or
+proper names look Latin. The transcript excerpt is in the target language —
+title it in that same language.
+
+Output a single short title, 3 to 7 words. No colons, no quotes, no
+quotation marks, no markdown. Focus on the topic of the talk, not the
+format.
+
+Casing: for English (`en`) use Chicago title case — capitalize the first
+and last word and all major words; keep articles ("a", "an", "the"), short
+conjunctions ("and", "but", "or"), and short prepositions ("of", "in",
+"to", "on", "at", "with") lowercase unless first or last. For every other
+language use that language's normal sentence case: capitalize only the
+first word and proper nouns.
 
 If a canonical book reference is given (Bhagavad-gītā 8.12, etc.),
 DO NOT just repeat it — the title is shown alongside the reference.
