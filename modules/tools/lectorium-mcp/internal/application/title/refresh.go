@@ -152,6 +152,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 
 	// 4. LLM — first pass with default excerpt.
 	in := titleport.Input{
+		Language:   language,
 		Kind:       meta.KindTag,
 		References: formatReferences(meta.References),
 		Location:   firstNonEmpty(meta.LocationName, meta.LocationRaw),
