@@ -30,7 +30,9 @@ const ALL_PAGES: readonly OnboardingPageMeta[] = [
   { id: "topics", enabled: true },
   { id: "dailyWisdom", enabled: true },
   { id: "valueMoment", enabled: true },
-  { id: "paywall", enabled: !__OFFSTORE_BUILD__ },
+  // Paywall temporarily hidden — onboarding now finishes on the last
+  // content page (valueMoment). Was: enabled: !__OFFSTORE_BUILD__
+  { id: "paywall", enabled: false },
 ]
 
 /** The active pages for this build, in order. The view renders by `id`. */
