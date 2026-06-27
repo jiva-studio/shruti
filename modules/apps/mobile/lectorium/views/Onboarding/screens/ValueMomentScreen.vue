@@ -43,7 +43,8 @@ const tracks = ref<readonly Track[]>([])
 // references, duration and a live download/play state indicator.
 const rows = mapper.mapRows(() => tracks.value, { context: "discovery" })
 
-const LIMIT = 8
+const LIMIT = 5
+const POOL_PER_TOPIC = 12
 
 let gen = 0
 async function load(): Promise<void> {
@@ -78,25 +79,28 @@ async function trackIdsForTopics(
   seeds: readonly TopicId[],
   langs: LanguageCode[]
 ): Promise<TrackId[]> {
-  const ids: TrackId[] = []
+  // Gather a pool from the picked topics (untagged lectures tied to a verse —
+  // the strongest first listens), then pick LIMIT at random so the screen
+  // varies instead of always showing the same top-weighted few.
+  const pool: TrackId[] = []
   const seen = new Set<string>()
   for (const topic of seeds) {
-    // Onboarding offers the strongest lectures: untagged (no conversation /
-    // morning walk / interview) AND tied to a scripture verse (a class on a
-    // specific śloka), which tend to be the best first listens.
-    const tids = await repos.topics.topTrackIds(topic, langs, 4, {
+    const tids = await repos.topics.topTrackIds(topic, langs, POOL_PER_TOPIC, {
       lecturesOnly: true,
       withReference: true,
     })
     for (const id of tids) {
       if (!seen.has(id)) {
         seen.add(id)
-        ids.push(id)
+        pool.push(id)
       }
     }
-    if (ids.length >= LIMIT) break
   }
-  return ids.slice(0, LIMIT)
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return pool.slice(0, LIMIT)
 }
 
 // First featured ("for beginners") collection that has tracks, across the
