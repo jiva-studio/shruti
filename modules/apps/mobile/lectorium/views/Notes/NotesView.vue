@@ -24,7 +24,9 @@
               timeEnd: note.timeEnd,
             }"
             :cut="(a) => shareAudioService.cut(a)"
-            :predict-url="(id) => buildServerUrl(activeServer, 'public/shares/audio/' + id + '.mp3')"
+            :predict-url="
+              (id) => buildServerUrl(activeServer, 'public/shares/audio/' + id + '.mp3')
+            "
             @click.stop
           >
             <template #spinner><IonSpinner name="crescent" class="play-btn-spinner" /></template>
