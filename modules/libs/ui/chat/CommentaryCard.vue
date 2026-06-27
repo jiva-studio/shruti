@@ -100,11 +100,10 @@ const body = computed(() => props.body ?? null)
   text-decoration: underline;
 }
 /* `> …` block quote (e.g. a śloka quoted inside the purport): its own line,
- * italic, with a quiet left rule — no literal `>`. */
+ * italic, no literal `>`. No left rule — the card's own accent bar already
+ * frames it; a second stripe on the nested verse reads as double-nesting. */
 .commentary-card :deep(.excerpt-quote) {
   margin: 0.6em 0;
-  padding-left: 12px;
-  border-left: 3px solid rgba(var(--ion-color-primary-rgb), 0.4);
   font-style: italic;
   line-height: 1.4;
 }

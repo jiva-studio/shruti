@@ -136,14 +136,16 @@ const { isKeyboardOpen } = useKeyboardVisibility()
 //    transcript) — the player belongs to a different track and
 //    shouldn't react to taps on the preview surface,
 //  - on the chat tab the floating chrome would cover the sliding
-//    input bar; hide it for the duration of the chat view.
+//    input bar; hide it for the duration of the chat view,
+//  - on the subscription page it would float over the paywall (the
+//    page replaced the old modal that used to cover it).
 const floatingPlayerHidden = computed<boolean>(() => {
   if (!player.open) return true
   if (isKeyboardOpen.value) return true
   if (overlays.actionSheetOpen) return true
   if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
   const routeName = currentRoute.value.name
-  if (routeName === "chat") return true
+  if (routeName === "chat" || routeName === "subscription") return true
   return false
 })
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)

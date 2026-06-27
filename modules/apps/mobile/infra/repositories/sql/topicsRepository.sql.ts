@@ -44,15 +44,28 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
     async topTrackIds(
       topicId: TopicId,
       languages: readonly LanguageCode[],
-      limit: number
+      limit: number,
+      opts?: { lecturesOnly?: boolean }
     ): Promise<readonly TrackId[]> {
       // Restrict to tracks that have a variant in one of the user's library
       // languages, so a topic page never surfaces lectures they can't read.
       // EXISTS (not a JOIN) so a track with several matching variants stays one
       // row. Empty `languages` = no filter (show every track on the topic).
+      // `lecturesOnly` additionally drops kind-tagged tracks (a track carries at
+      // most one tag, so "no track_tags row" == a plain lecture) — used by the
+      // onboarding pick to avoid offering conversations / morning walks.
+      const lecturesOnly = opts?.lecturesOnly === true
+      const lectureClause = lecturesOnly
+        ? `AND NOT EXISTS (SELECT 1 FROM track_tags tg WHERE tg.track_id = tt.track_id)`
+        : ``
       if (languages.length === 0) {
         const rows = await contentDb.query<{ track_id: string }>(
-          `SELECT track_id FROM track_topics WHERE topic_id = ? ORDER BY weight DESC LIMIT ?`,
+          `SELECT tt.track_id
+             FROM track_topics tt
+            WHERE tt.topic_id = ?
+              ${lectureClause}
+            ORDER BY tt.weight DESC
+            LIMIT ?`,
           [topicId, limit]
         )
         return rows.map((r) => r.track_id)
@@ -66,6 +79,7 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
               SELECT 1 FROM track_variants tv
                WHERE tv.track_id = tt.track_id AND tv.language IN (${langPh})
             )
+            ${lectureClause}
           ORDER BY tt.weight DESC
           LIMIT ?`,
         [topicId, ...languages, limit]

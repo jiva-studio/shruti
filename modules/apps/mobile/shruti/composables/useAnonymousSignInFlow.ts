@@ -62,6 +62,11 @@ export function useAnonymousSignInFlow(): UseAnonymousSignInFlowReturn {
   }
 
   async function presentSheet(): Promise<void> {
+    // Opening the email modal from the button handler races the sheet's own
+    // dismissal — the IonModal presents while the sheet's backdrop/focus-trap
+    // is still tearing down and comes up as an empty shell. Record the intent
+    // and open the modal only after the sheet has fully dismissed.
+    let openEmail = false
     const buttons = [
       // iOS convention: Apple first. Android/web don't offer Apple.
       ...(app.platform === "ios"
@@ -83,7 +88,7 @@ export function useAnonymousSignInFlow(): UseAnonymousSignInFlowReturn {
       {
         text: t("settings.account.signInWithEmail"),
         handler: () => {
-          runEmail()
+          openEmail = true
         },
       },
       { text: t("app.cancel"), role: "cancel" },
@@ -92,6 +97,7 @@ export function useAnonymousSignInFlow(): UseAnonymousSignInFlowReturn {
     overlays.actionSheetOpen = true
     void sheet.onDidDismiss().then(() => {
       overlays.actionSheetOpen = false
+      if (openEmail) runEmail()
     })
     await sheet.present()
   }

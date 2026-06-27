@@ -16,6 +16,8 @@ async function applySchema(db: IDatabase): Promise<void> {
   await db.execute(`CREATE TABLE track_topics (
     track_id TEXT NOT NULL, topic_id TEXT NOT NULL, weight REAL NOT NULL,
     PRIMARY KEY (track_id, topic_id))`)
+  await db.execute(`CREATE TABLE track_tags (
+    track_id TEXT NOT NULL, tag_id TEXT NOT NULL, PRIMARY KEY (track_id, tag_id))`)
 }
 
 async function seed(db: IDatabase): Promise<void> {
@@ -49,6 +51,9 @@ async function seed(db: IDatabase): Promise<void> {
       w,
     ])
   }
+  // tA is a kind-tagged track (e.g. a morning walk); tB/tC are untagged
+  // lectures. The onboarding pick (`lecturesOnly`) must drop tA.
+  await db.execute(`INSERT INTO track_tags (track_id, tag_id) VALUES ('tA', 'tag_morning_walk')`)
 }
 
 const en: LanguageCode[] = ["en"]
@@ -73,6 +78,18 @@ describe("topicsRepository — library-language filtering", () => {
 
   it("topTrackIds with no languages returns every track on the topic", async () => {
     expect(await repo.topTrackIds("T1" as TopicId, [], 10)).toEqual(["tA", "tB", "tC"])
+  })
+
+  it("topTrackIds lecturesOnly drops kind-tagged tracks", async () => {
+    // tA is tagged (morning walk) → excluded; tB/tC are untagged lectures.
+    expect(await repo.topTrackIds("T1" as TopicId, [], 10, { lecturesOnly: true })).toEqual([
+      "tB",
+      "tC",
+    ])
+    expect(await repo.topTrackIds("T1" as TopicId, both, 10, { lecturesOnly: true })).toEqual([
+      "tB",
+      "tC",
+    ])
   })
 
   it("topTrackIds does not duplicate a track that has several matching variants", async () => {
