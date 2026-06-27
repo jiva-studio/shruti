@@ -50,7 +50,7 @@ defineEmits<{ click: [noteId: string] }>()
 /* Mirror the chat citation card (CitationCard.vue): body inset + a flush,
    primary-tinted inline player. The AccentFrame supplies the bar + tint. */
 .note {
-  margin: 1rem 10px;
+  margin: 1rem 16px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   --excerpt-body-padding: 8px 12px 10px;
