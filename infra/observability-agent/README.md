@@ -18,7 +18,7 @@ Prometheus / Langfuse stack lives on a separate VPS — see (Stream A's)
 | `shruti-cadvisor` | `gcr.io/cadvisor/cadvisor:v0.49.1` | `${PROD_EU_TS_IP}:8090` | Per-container metrics (port 8090, NOT 8080). |
 | `shruti-postgres-exporter` | `quay.io/prometheuscommunity/postgres-exporter:v0.16.0` | `${PROD_EU_TS_IP}:9187` | Postgres metrics + custom queries (`share_video_queue_depth`, `oldest_pending_seconds`). |
 | `shruti-redis-exporter` | `oliver006/redis_exporter:v1.66.0` | `${PROD_EU_TS_IP}:9121` | Redis hit-rate, memory, evictions. |
-| `shruti-blackbox-exporter` | `prom/blackbox-exporter:v0.25.0` | `${PROD_EU_TS_IP}:9115` | HTTP `/healthz` probes for chat/auth/share-*, TLS expiry check for `*.obs.eu.shruti.akdasa.studio`. |
+| `shruti-blackbox-exporter` | `prom/blackbox-exporter:v0.25.0` | `${PROD_EU_TS_IP}:9115` | HTTP `/healthz` probes for chat/auth/share-*, TLS expiry check for `*.obs.eu.shruti.jiva.studio`. |
 
 All exporters bind on the Tailscale IP — they're invisible from the public
 Cloud Provider interface. Watchtower is told not to auto-update these
@@ -153,7 +153,7 @@ Expected probe targets in Prometheus on obs:
 | `http://auth:8081/healthz` | `http_2xx` | |
 | `http://share-audio:8082/healthz` | `http_2xx` | |
 | `http://share-video:8083/healthz` | `http_2xx` | |
-| `grafana.obs.eu.shruti.akdasa.studio:443` | `tls_connect` | Cert expiry — alert at <14 days remaining. |
+| `grafana.obs.eu.shruti.jiva.studio:443` | `tls_connect` | Cert expiry — alert at <14 days remaining. |
 
 ## Custom Postgres queries
 

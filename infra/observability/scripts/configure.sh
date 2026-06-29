@@ -2,7 +2,7 @@
 # infra/observability/scripts/configure.sh
 #
 # First-time / on-demand configuration of the observability stack:
-#   1. Create wildcard Cloudflare DNS A record.
+#   1. DNS: manual Namecheap wildcard A record (no automated step).
 #   2. Wait for Langfuse, materialise secrets/langfuse-keys.env for the
 #      chat service on prod-EU.
 #   3. Re-apply the 90-day Langfuse ClickHouse TTL.
@@ -22,7 +22,7 @@
 #   infra/observability/scripts/post-deploy/*.sh — so operators no longer
 #   need to remember to re-run configure.sh after a deploy just to keep
 #   TTL drift at bay. This script is preserved for:
-#     - First-time host setup (Cloudflare DNS bootstrap; not idempotent
+#     - First-time host setup (Langfuse keys + smoke checks; DNS is manual,
 #       across regions / not re-asserted on every deploy).
 #     - Materialising secrets/langfuse-keys.env after the initial Langfuse
 #       headless init lands.
@@ -75,17 +75,15 @@ SSH_TARGET="$SSH_USER@$TARGET_IP"
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -i "$SSH_KEY")
 REMOTE_DIR="/opt/shruti-observability"
 
-export REGION TAILNET_DOMAIN OBS_TS_IP CF_API_TOKEN CF_ZONE_ID \
+export REGION TAILNET_DOMAIN OBS_TS_IP \
        TG_BOT_TOKEN TG_CHAT_ID \
        LANGFUSE_INIT_USER_EMAIL LANGFUSE_INIT_USER_PASSWORD \
        REMOTE_DIR
 export SSH_TARGET_STR="$SSH_TARGET"
 export SSH_KEY_PATH="$SSH_KEY"
 
-# 1. Cloudflare DNS
-# shellcheck source=lib/bootstrap-cloudflare-dns.sh
-source "$UNIT/scripts/lib/bootstrap-cloudflare-dns.sh"
-bootstrap_cloudflare_dns
+# 1. DNS: a wildcard A record  *.${TAILNET_DOMAIN} → ${OBS_TS_IP}  is managed
+#    manually in Namecheap (we moved off Cloudflare). No automated DNS step here.
 
 # 2. Langfuse project + keys
 # shellcheck source=lib/bootstrap-langfuse.sh

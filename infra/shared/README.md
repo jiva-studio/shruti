@@ -42,7 +42,7 @@ ensure_secrets "$REMOTE_DIR/secrets" \
   nextauth_secret:'openssl rand -base64 32'
 compose_up "$REMOTE_DIR"
 wait_healthcheck http://localhost:3000/api/health 180 grafana
-report_urls "Deployed" https://grafana.obs.eu.shruti.akdasa.studio
+report_urls "Deployed" https://grafana.obs.eu.shruti.jiva.studio
 ```
 
 ## Conventions

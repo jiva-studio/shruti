@@ -67,7 +67,7 @@ source "$UNIT/config/shared.env"
 set +a
 
 require_vars REGION TAILNET_DOMAIN OBS_TS_IP PROD_HOST_TS_IP \
-             CF_API_TOKEN TG_BOT_TOKEN TG_CHAT_ID GRAFANA_ADMIN_PASSWORD
+             TG_BOT_TOKEN TG_CHAT_ID GRAFANA_ADMIN_PASSWORD
 
 if [ -z "$SSH_KEY" ]; then
   if [ -n "${WORKSPACE_CWD:-}" ] && [ -f "${WORKSPACE_CWD}/../.config/ssh/id_ed25519" ]; then
@@ -127,7 +127,6 @@ REGION=$REGION
 TAILNET_DOMAIN=$TAILNET_DOMAIN
 OBS_TS_IP=$OBS_TS_IP
 PROD_HOST_TS_IP=$PROD_HOST_TS_IP
-CF_API_TOKEN=$CF_API_TOKEN
 TG_BOT_TOKEN=$TG_BOT_TOKEN
 TG_CHAT_ID=$TG_CHAT_ID
 GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
@@ -230,7 +229,7 @@ cat <<NEXT
 
 Next steps:
   1. On a brand-new host: run ./scripts/configure.sh --region $REGION
-     to bootstrap Cloudflare DNS, materialise Langfuse API keys for the
+     to materialise Langfuse API keys for the
      chat service, and run the 10-point smoke verification. Recurring
      config (Langfuse TTL, Grafana contact-point re-check) is now applied
      automatically by post-deploy hooks on every deploy.
