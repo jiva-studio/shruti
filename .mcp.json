@@ -9,7 +9,7 @@
       "url": "http://shruti-prod-eu:8086/mcp"
     },
     "transcriber": {
-      "command": "/home/akd/Projects/jiva-studio/shruti/source/shruti/modules/tools/transcriber-mcp/bin/transcriber-mcp",
+      "command": "modules/tools/transcriber-mcp/bin/transcriber-mcp",
       "args": ["-stdio", "-service-url", "http://192.168.0.17:8080"]
     },
     "denoiser": {
