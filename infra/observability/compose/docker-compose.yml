@@ -36,7 +36,7 @@ services:
   # Caddy — reverse proxy + TLS termination (internal CA)
   # ─────────────────────────────────────────────────────────────────
   caddy:
-    image: ghcr.io/akdasa-studios/shruti-caddy:latest
+    image: ghcr.io/jiva-studio/shruti-caddy:latest
     ports:
       - "${OBS_TS_IP}:443:443"
       - "${OBS_TS_IP}:80:80"
@@ -44,7 +44,6 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
-    environment:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     healthcheck:
