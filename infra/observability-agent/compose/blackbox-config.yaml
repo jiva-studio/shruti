@@ -52,7 +52,7 @@ modules:
     timeout: 5s
 
   # TLS expiry check. Used by Prometheus to alert when the obs Caddy
-  # wildcard cert (*.obs.eu.shruti.akdasa.studio) has <14 days left.
+  # wildcard cert (*.obs.eu.shruti.jiva.studio) has <14 days left.
   # Prometheus rule: `probe_ssl_earliest_cert_expiry - time() < 14*24*3600`.
   tls_connect:
     prober: tcp
