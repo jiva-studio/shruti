@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	cwdb "github.com/akdasa-studios/lectorium/cleanup-worker/internal/db"
+	cwdb "github.com/jiva-studio/lectorium/cleanup-worker/internal/db"
 )
 
 // dbDSNFromEnv mirrors the worker package's helper. Same skip-when-unset

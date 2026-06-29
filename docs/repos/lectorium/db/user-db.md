@@ -89,13 +89,13 @@ erDiagram
 
 <!-- END AUTOGEN -->
 
-There are no foreign-key constraints between user-side rows and the content DB — `track_id` columns reference rows in the **content DB** (a separate file), so SQLite cannot enforce them. Use cases that need to hydrate a user-side row with track data (e.g. [`listActivePlaylistTracks`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/usecases/playlist/listPlaylistTracks.ts)) gracefully drop entries whose `track_id` no longer exists upstream — those are stale pointers, not bugs. The only enforced FKs are the **intra-DB chat relations** (`chat_messages.session_id` → `chat_sessions.id`, `chat_messages_proactive_state.chat_message_id` → `chat_messages.id`), both `ON DELETE CASCADE`.
+There are no foreign-key constraints between user-side rows and the content DB — `track_id` columns reference rows in the **content DB** (a separate file), so SQLite cannot enforce them. Use cases that need to hydrate a user-side row with track data (e.g. [`listActivePlaylistTracks`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/usecases/playlist/listPlaylistTracks.ts)) gracefully drop entries whose `track_id` no longer exists upstream — those are stale pointers, not bugs. The only enforced FKs are the **intra-DB chat relations** (`chat_messages.session_id` → `chat_sessions.id`, `chat_messages_proactive_state.chat_message_id` → `chat_messages.id`), both `ON DELETE CASCADE`.
 
-Row types for every table are declared in [`modules/libs/persistence/user/index.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/libs/persistence/user/index.ts) (`NoteRow`, `PlaylistItemRow`, `ListeningSessionRow`, `MediaItemRow`, `UserConfigRow`, `UserMigrationRow`).
+Row types for every table are declared in [`modules/libs/persistence/user/index.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/persistence/user/index.ts) (`NoteRow`, `PlaylistItemRow`, `ListeningSessionRow`, `MediaItemRow`, `UserConfigRow`, `UserMigrationRow`).
 
 ## Migrations
 
-Migrations are applied on every startup by [`runUserMigrations`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/infra/persistence/migrations/user/runMigrations.ts), which is a thin wrapper that hands the app-owned ordered `userMigrations` list to the generic [`runMigrations`](https://github.com/akdasa-studios/lectorium/blob/main/modules/kit/src/persistence/migrations.ts) engine in `@kit/persistence`. The `migrations` table records what's been applied so already-run migrations are skipped by name.
+Migrations are applied on every startup by [`runUserMigrations`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/infra/persistence/migrations/user/runMigrations.ts), which is a thin wrapper that hands the app-owned ordered `userMigrations` list to the generic [`runMigrations`](https://github.com/jiva-studio/lectorium/blob/main/modules/kit/src/persistence/migrations.ts) engine in `@kit/persistence`. The `migrations` table records what's been applied so already-run migrations are skipped by name.
 
 ```mermaid
 sequenceDiagram
@@ -142,7 +142,7 @@ modules/apps/mobile/infra/persistence/migrations/user/
 └── types.ts                               ← re-exports `Migration` from `@kit/persistence`
 ```
 
-The `ALTER … ADD COLUMN` migrations (`006`, `009`, `011`, `012`) go through [`addColumnIfMissing`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/infra/persistence/migrations/user/columns.ts), which probes `PRAGMA table_info` first and skips the ALTER if the column already exists — so a replay after a process kill between the DDL autocommit and the `migrations` INSERT is a harmless no-op instead of a "duplicate column name" failure.
+The `ALTER … ADD COLUMN` migrations (`006`, `009`, `011`, `012`) go through [`addColumnIfMissing`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/infra/persistence/migrations/user/columns.ts), which probes `PRAGMA table_info` first and skips the ALTER if the column already exists — so a replay after a process kill between the DDL autocommit and the `migrations` INSERT is a harmless no-op instead of a "duplicate column name" failure.
 
 ## Tables in detail
 
@@ -338,4 +338,4 @@ The cascading FK on `chat_message_id` means deleting a chat row also removes its
 3. **Use `IF NOT EXISTS`** for `CREATE TABLE` / `CREATE INDEX` so a partially-applied state can be re-run cleanly.
 4. Test: delete `user.db` from the device and relaunch — the migration should apply from a clean state. Then test re-launching with the migration already applied (it must be a no-op).
 
-There is no rollback story — this is a per-device DB; on a wedged migration the user reinstalls. To change an existing row shape, prefer `ALTER TABLE … ADD COLUMN` (cheap and additive, as `006_notes_meta`, `009_chat_sessions_track_id`, `011_media_items_kind` and `012_playlist_items_collection_id` do) over destructive renames. Go through the [`addColumnIfMissing`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/infra/persistence/migrations/user/columns.ts) helper for those ALTERs so a replay after an interrupted launch is a no-op rather than a "duplicate column name" crash.
+There is no rollback story — this is a per-device DB; on a wedged migration the user reinstalls. To change an existing row shape, prefer `ALTER TABLE … ADD COLUMN` (cheap and additive, as `006_notes_meta`, `009_chat_sessions_track_id`, `011_media_items_kind` and `012_playlist_items_collection_id` do) over destructive renames. Go through the [`addColumnIfMissing`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/infra/persistence/migrations/user/columns.ts) helper for those ALTERs so a replay after an interrupted launch is a no-op rather than a "duplicate column name" crash.

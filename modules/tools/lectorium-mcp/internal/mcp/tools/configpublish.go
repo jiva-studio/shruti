@@ -6,8 +6,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configpublish"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configpublish"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
 // ConfigPublishDeps bundles the config-only publish use case. Shares

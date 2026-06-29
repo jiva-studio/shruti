@@ -3,7 +3,7 @@ package catalogport
 import (
 	"context"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 )
 
 // DictFuzzyIndex narrows the LLM resolver's candidate list down to the

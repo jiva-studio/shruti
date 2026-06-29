@@ -7,7 +7,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 )
 
 // setupCollectionSchema applies just what the collection tests need: the two collection

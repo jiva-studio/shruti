@@ -11,8 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 
-	"github.com/akdasa-studios/lectorium-share-audio/internal/logx"
-	"github.com/akdasa-studios/lectorium-share-audio/internal/pipeline"
+	"github.com/jiva-studio/lectorium-share-audio/internal/logx"
+	"github.com/jiva-studio/lectorium-share-audio/internal/pipeline"
 )
 
 // buildSHA / buildTime — set by the image build (Dockerfile ARG → ENV).

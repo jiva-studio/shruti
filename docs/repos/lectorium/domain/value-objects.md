@@ -68,7 +68,7 @@ export type ChatMessageId = string
 
 All ids are plain strings. The discipline is "every string passing across a layer boundary as an id carries its type in the variable / parameter name, not the value." That is enforced by signatures (`getById(id: TrackId)`) but not by the type system — if you mix up two ids, TypeScript will not catch it.
 
-**Why no branded types?** Branding (`type TrackId = string & { __brand: "track" }`) would force every literal to go through a constructor, complicating fixtures, JSON deserialisation, and query parameter binding. The team accepted the trade-off; if the project ever grows id-bug incidents, branding is a localised refactor. See the comment at the top of [`modules/libs/domain/core.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/libs/domain/core.ts).
+**Why no branded types?** Branding (`type TrackId = string & { __brand: "track" }`) would force every literal to go through a constructor, complicating fixtures, JSON deserialisation, and query parameter binding. The team accepted the trade-off; if the project ever grows id-bug incidents, branding is a localised refactor. See the comment at the top of [`modules/libs/domain/core.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/core.ts).
 
 For how each id is generated, see [Identifiers and ID generation](../db/ids.md).
 
@@ -84,7 +84,7 @@ Time offsets inside entities are plain `number`s carrying **milliseconds**: `Not
 
 ## `Result<T, E>` — `@kit/core`
 
-The result helper is not part of the domain module; it lives in the shared kit package at [`modules/kit/src/core/result.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/kit/src/core/result.ts) and is imported across the codebase as `import { ok, err, type Result } from "@kit/core"`.
+The result helper is not part of the domain module; it lives in the shared kit package at [`modules/kit/src/core/result.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/kit/src/core/result.ts) and is imported across the codebase as `import { ok, err, type Result } from "@kit/core"`.
 
 ```ts
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E }
@@ -143,6 +143,6 @@ export type SortMethod = (typeof SORT_METHODS)[number]
 
 Both unions are derived from their `as const` tables, so the type can never drift from the runtime list. `SortMethod` has three orders — descending date, ascending date, and by scripture reference; tracks with no date (no `tracks.date`) or no shloka in the active locale (no `track_variants.sort_reference`) always sort last (SQL `NULLS LAST`), regardless of direction.
 
-`durationFilterBounds(id)` (in [`durationFilters.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/libs/domain/durationFilters.ts)) converts the chip id into the `{ minMs, maxMs }` pair the track repository's filter expects, so the repository never has to know about UI buckets. The conversion is consumed by the discovery use case at [`modules/apps/mobile/usecases/discovery/searchAndFilterTracks.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/usecases/discovery/searchAndFilterTracks.ts) — there is no separate `application` library; the use cases live under the mobile app.
+`durationFilterBounds(id)` (in [`durationFilters.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/durationFilters.ts)) converts the chip id into the `{ minMs, maxMs }` pair the track repository's filter expects, so the repository never has to know about UI buckets. The conversion is consumed by the discovery use case at [`modules/apps/mobile/usecases/discovery/searchAndFilterTracks.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/usecases/discovery/searchAndFilterTracks.ts) — there is no separate `application` library; the use cases live under the mobile app.
 
 `dateFilters.ts` exposes `DateBound` (a `"YYYY"` / `"YYYY-MM"` string, or `undefined` for an open end) and `dateRangeBounds(from, to)`, which converts the two coarse UI bounds into an inclusive-lower / exclusive-upper `{ gte, lt }` pair of `"YYYY-MM-DD"` strings (`date >= gte AND date < lt`). Day granularity is intentionally not offered.

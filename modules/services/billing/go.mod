@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium/billing
+module github.com/jiva-studio/lectorium/billing
 
 go 1.25.0
 

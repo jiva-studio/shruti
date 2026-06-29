@@ -9,8 +9,8 @@ package selecttracks
 import (
 	"context"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/trackselect"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/trackselect"
 )
 
 type UseCase struct {

@@ -16,11 +16,11 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite/migrations"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
-	lakeport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite/migrations"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
+	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
 )
 
 // Registry implements lakeport.Registry on top of an embedded SQLite (WAL mode).

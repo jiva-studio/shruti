@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review/prompts"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/prompts"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
 )
 
 var defaultSystemPrompt = prompts.System

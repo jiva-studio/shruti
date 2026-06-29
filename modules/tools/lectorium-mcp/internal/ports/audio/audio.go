@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 )
 
 // Version selects which audio version a path refers to.

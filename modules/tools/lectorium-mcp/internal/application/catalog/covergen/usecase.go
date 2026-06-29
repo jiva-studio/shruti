@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/imageutil"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/imagegen"
-	s3port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/imageutil"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/imagegen"
+	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 )
 
 // Subject is one entity's locale-picked seed for the prompt.

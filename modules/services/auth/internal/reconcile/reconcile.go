@@ -35,10 +35,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/metrics"
-	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
-	"github.com/akdasa-studios/lectorium/auth/internal/service"
-	"github.com/akdasa-studios/lectorium/auth/internal/store"
+	"github.com/jiva-studio/lectorium/auth/internal/metrics"
+	"github.com/jiva-studio/lectorium/auth/internal/rcclient"
+	"github.com/jiva-studio/lectorium/auth/internal/service"
+	"github.com/jiva-studio/lectorium/auth/internal/store"
 )
 
 // permanentSkipDuration is how long we stay away from a user whose RC

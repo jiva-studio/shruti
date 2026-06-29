@@ -8,8 +8,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/proactive"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/proactive"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
 // ProactiveDeps bundles the proactive use-case for tool wiring. Lives in

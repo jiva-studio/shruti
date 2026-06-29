@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	s3port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
+	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 )
 
 type Target struct {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	cwdb "github.com/akdasa-studios/lectorium/cleanup-worker/internal/db"
+	cwdb "github.com/jiva-studio/lectorium/cleanup-worker/internal/db"
 )
 
 // dbDSNFromEnv mirrors the helpers in the worker / cron packages: skip the

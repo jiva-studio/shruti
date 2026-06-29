@@ -3,7 +3,7 @@ package catalogport
 import (
 	"context"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 )
 
 // SchemeReader is the narrow surface refresh needs from a freshly-downloaded

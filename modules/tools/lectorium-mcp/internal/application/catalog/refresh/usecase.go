@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	domaincatalog "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	catalogport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/cdn"
+	domaincatalog "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/cdn"
 )
 
 // UseCase downloads the latest scheme-compatible catalog DB and stores it

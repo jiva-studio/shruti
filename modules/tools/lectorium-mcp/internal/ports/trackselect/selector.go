@@ -12,8 +12,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 )
 
 // Selector resolves a track.Selector to a slice of Selected rows. Empty

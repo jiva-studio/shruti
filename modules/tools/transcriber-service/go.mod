@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium/modules/tools/transcriber-service
+module github.com/jiva-studio/lectorium/modules/tools/transcriber-service
 
 go 1.25.5
 

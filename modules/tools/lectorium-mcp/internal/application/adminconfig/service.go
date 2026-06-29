@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"strings"
 
-	domain "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/adminconfig"
-	port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/adminconfig"
+	domain "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/adminconfig"
+	port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/adminconfig"
 )
 
 // Service wires the ports the apply / snapshot operations need. Either

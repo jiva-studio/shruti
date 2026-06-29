@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configdoc"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	s3port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configdoc"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 )
 
 type UseCase struct {

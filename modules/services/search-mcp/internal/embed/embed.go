@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/services/search-mcp/internal/config"
+	"github.com/jiva-studio/lectorium/modules/services/search-mcp/internal/config"
 )
 
 // Client embeds a single query. We only ever embed one string at a time

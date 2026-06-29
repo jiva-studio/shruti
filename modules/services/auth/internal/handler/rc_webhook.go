@@ -17,10 +17,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/metrics"
-	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
-	"github.com/akdasa-studios/lectorium/auth/internal/service"
-	"github.com/akdasa-studios/lectorium/auth/internal/store"
+	"github.com/jiva-studio/lectorium/auth/internal/metrics"
+	"github.com/jiva-studio/lectorium/auth/internal/rcclient"
+	"github.com/jiva-studio/lectorium/auth/internal/service"
+	"github.com/jiva-studio/lectorium/auth/internal/store"
 )
 
 // rcWebhookAuthTotal counts every Bearer check on the RC webhook endpoint,

@@ -26,7 +26,7 @@ RUN cd ./apps/mobile && npm run build
 FROM nginx:latest AS release
 
 LABEL org.opencontainers.image.description="Mobile Web service for Lectorium"
-LABEL org.opencontainers.image.source="https://github.com/akdasa-studios/lectorium"
+LABEL org.opencontainers.image.source="https://github.com/jiva-studio/lectorium"
 LABEL org.opencontainers.image.authors="AKd Studios"
 
 COPY --from=build /akd-stidios/lectorium/apps/mobile/dist /usr/share/nginx/html

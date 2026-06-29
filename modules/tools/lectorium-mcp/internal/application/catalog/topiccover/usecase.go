@@ -7,7 +7,7 @@ package topiccover
 import (
 	"context"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/covergen"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/covergen"
 )
 
 // Catalog is the slice of the topic repository this adapter needs.

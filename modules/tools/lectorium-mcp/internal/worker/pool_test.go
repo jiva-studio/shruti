@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
 )
 
 // fakeRunpipelineRunner is the seam between the pool and the real

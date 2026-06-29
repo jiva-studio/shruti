@@ -8,10 +8,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	librarypublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/publish"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
+	librarypublish "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/library/publish"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
 // LibraryPublishDeps wires the library publish use case.

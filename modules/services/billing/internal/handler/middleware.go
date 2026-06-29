@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	logpkg "github.com/akdasa-studios/lectorium/billing/internal/logging"
+	logpkg "github.com/jiva-studio/lectorium/billing/internal/logging"
 )
 
 func requestLogger(next http.Handler) http.Handler {

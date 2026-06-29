@@ -9,10 +9,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	mediaapp "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/media"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
+	mediaapp "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/library/media"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
 // LibraryImportDeps wires the library media import use case.

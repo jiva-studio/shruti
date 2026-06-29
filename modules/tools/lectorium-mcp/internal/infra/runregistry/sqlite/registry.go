@@ -25,11 +25,11 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/runregistry"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/runregistry"
 )
 
 const schema = `

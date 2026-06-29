@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 )
 
 func TestNewSelectorDefaults(t *testing.T) {

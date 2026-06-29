@@ -11,7 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/denoiseplan"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/denoiseplan"
 )
 
 // Tool shells out to denoise_mp3.py (single-file mode: --in/--out).

@@ -3,7 +3,7 @@ package runpipeline
 import (
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 )
 
 // upstreamOfCommitted is the gate that decides whether per-stage re-run

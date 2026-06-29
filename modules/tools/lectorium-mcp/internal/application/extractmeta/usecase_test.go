@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	catalogport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
 )
 
 // fakeCatalog is the minimum DictRepository surface resolveOne touches:

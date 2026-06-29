@@ -13,8 +13,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/billing/internal/driver"
-	"github.com/akdasa-studios/lectorium/billing/internal/store"
+	"github.com/jiva-studio/lectorium/billing/internal/driver"
+	"github.com/jiva-studio/lectorium/billing/internal/store"
 )
 
 type Worker struct {

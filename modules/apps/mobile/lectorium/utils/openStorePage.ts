@@ -34,7 +34,7 @@ export function openStorePage(): void {
   } else if (platform === "android") {
     url = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`
   } else {
-    url = "https://lectorium.akdasa.studio"
+    url = "https://shruti.app"
   }
   window.open(url, "_blank")
 }

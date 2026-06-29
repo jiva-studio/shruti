@@ -10,8 +10,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	audioport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	audioport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
 )
 
 // Store implements audio.Store on top of the local filesystem rooted at outDir.

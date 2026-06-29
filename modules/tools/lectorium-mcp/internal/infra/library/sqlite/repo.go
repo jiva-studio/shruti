@@ -13,7 +13,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
 )
 
 type Repo struct {

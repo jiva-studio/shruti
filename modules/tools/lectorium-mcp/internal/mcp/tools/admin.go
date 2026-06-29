@@ -9,9 +9,9 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	adminapp "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/adminconfig"
-	admindomain "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/adminconfig"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
+	adminapp "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/adminconfig"
+	admindomain "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/adminconfig"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
 // RegisterAdminConfigGet registers admin_config_get. Thin dispatcher:

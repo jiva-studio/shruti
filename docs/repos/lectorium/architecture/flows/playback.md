@@ -54,7 +54,7 @@ sequenceDiagram
 
 ## Variant selection rules
 
-The pure logic in `pickVariantWithAudio` ([`playTrack.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/usecases/playback/playTrack.ts)):
+The pure logic in `pickVariantWithAudio` ([`playTrack.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/usecases/playback/playTrack.ts)):
 
 ```mermaid
 flowchart TD
@@ -103,7 +103,7 @@ The port surface — a single-track core plus a queue API that powers background
 
 ## Store responsibilities
 
-`usePlayerStore` ([`usePlayerStore.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/lectorium/stores/usePlayerStore.ts)) is an app-singleton holding the reactive shape (`trackId`, `title`, `authorName`, `language`, `playing`, `positionMs`, `durationMs`, `itemId`, `mixPosition`, `playbackSpeed`) and orchestrating `openTrack / togglePause / pause / seek / skipBack / skipForward / playNext / playPrevious / stop`.
+`usePlayerStore` ([`usePlayerStore.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/lectorium/stores/usePlayerStore.ts)) is an app-singleton holding the reactive shape (`trackId`, `title`, `authorName`, `language`, `playing`, `positionMs`, `durationMs`, `itemId`, `mixPosition`, `playbackSpeed`) and orchestrating `openTrack / togglePause / pause / seek / skipBack / skipForward / playNext / playPrevious / stop`.
 
 - **URL resolution** lives here, not in the port: `useDownloadStore().ensureDownloaded(trackId, audio.path)`, falling back to `storagePublicUrl.get(audio.path)` (active CDN URL).
 - **Stale-open race guard:** each `openTrack` captures a generation token (`++openGeneration`) and bails at every `await` boundary if a newer open started, so two concurrent opens (tap A then tap B, or auto-advance racing a tap) can't interleave and leave the FloatingPlayer pointing at one track while another plays.

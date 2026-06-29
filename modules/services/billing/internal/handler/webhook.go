@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/lectorium/billing/internal/orders"
+	"github.com/jiva-studio/lectorium/billing/internal/orders"
 )
 
 // Paymento IPN OrderStatus numeric codes.

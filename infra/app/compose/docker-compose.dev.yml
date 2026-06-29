@@ -3,7 +3,7 @@
 # Restores `build:` blocks for chat/auth (base config pulls from ghcr.io
 # in prod) and pins images to local tags with `pull_policy: never` so a
 # missing-from-disk image fails fast instead of trying to pull
-# `ghcr.io/akdasa-studios/lectorium-chat:latest` from the public
+# `ghcr.io/jiva-studio/lectorium-chat:latest` from the public
 # registry every time you boot.
 #
 # Set these in your shell or via infra/app/.env.dev:
@@ -14,7 +14,7 @@
 #
 # Host ports live in lectorium's reserved 11xxx band (per the workspace
 # port convention — one thousands-block per project; lectorium = 11000-11999,
-# see dotfiles personal/projects/akdasa-studios/lectorium.nix) so a sibling
+# see dotfiles personal/projects/jiva-studio/lectorium.nix) so a sibling
 # project's local stack can't collide. Container ports are unchanged; only
 # the host side is remapped, overridable via the LECTORIUM_*_PORT vars:
 #   chat 11080  auth 11081  postgres 11082  redis 11083

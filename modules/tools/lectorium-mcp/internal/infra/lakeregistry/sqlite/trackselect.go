@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	transcriptport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/trackselect"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/trackselect"
 )
 
 // TrackSelector implements ports/trackselect.Selector on top of the same

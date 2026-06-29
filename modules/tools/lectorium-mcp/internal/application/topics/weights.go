@@ -3,7 +3,7 @@ package topics
 import (
 	"sort"
 
-	outlineport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
+	outlineport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
 )
 
 const (

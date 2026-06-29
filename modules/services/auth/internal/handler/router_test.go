@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
-	"github.com/akdasa-studios/lectorium/auth/internal/service"
+	"github.com/jiva-studio/lectorium/auth/internal/jwt"
+	"github.com/jiva-studio/lectorium/auth/internal/service"
 )
 
 // TestRouter_DeletedRoutesReturn404 — #728 single-region collapse: the

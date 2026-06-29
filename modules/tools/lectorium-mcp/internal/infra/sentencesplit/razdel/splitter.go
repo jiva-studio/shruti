@@ -20,7 +20,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/sentencesplit"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/sentencesplit"
 )
 
 type Splitter struct {

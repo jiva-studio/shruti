@@ -26,7 +26,7 @@ concurrency:
 jobs:
   binaries:
     # Pin: kit reusable workflow. Bump to a tag/SHA once kit is released.
-    uses: akdasa-studios/kit/.github/workflows/mobile-binaries.yml@main
+    uses: jiva-studio/kit/.github/workflows/mobile-binaries.yml@main
     with:
       platform: ${{ inputs.platform }}
       action: build-and-deploy

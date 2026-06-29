@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	reviewport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	reviewport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
 )
 
 // chunkAttempt is the outcome of one chunk's review across all retry attempts.

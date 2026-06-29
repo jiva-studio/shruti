@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
 )
 
 // SetTrackTopics replaces a track's full topic set in one shot: the

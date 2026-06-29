@@ -21,8 +21,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/denoiser-mcp/internal/client"
-	"github.com/akdasa-studios/lectorium/modules/tools/denoiser-mcp/internal/tools"
+	"github.com/jiva-studio/lectorium/modules/tools/denoiser-mcp/internal/client"
+	"github.com/jiva-studio/lectorium/modules/tools/denoiser-mcp/internal/tools"
 )
 
 // dynamicProvider implements tools.Provider with a swappable upstream URL and

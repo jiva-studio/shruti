@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
-	metaport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/metadata"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	metaport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/metadata"
 )
 
 //go:embed prompt.system.txt

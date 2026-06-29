@@ -108,7 +108,7 @@ Three wall-clock loops run alongside the outbox consumer:
 
 ## Deployment
 
-Multi-stage Go 1.25-alpine → `FROM scratch` (~10 MB), CA roots copied in for Langfuse TLS, `ENTRYPOINT ["/cleanup-worker"]`. Image `ghcr.io/akdasa-studios/lectorium-cleanup-worker:${TAG:-latest}`, profile `[origin]` (it consumes events only auth+chat emit). `depends_on`: `postgres` healthy + `migrator` completed. Scratch image → the healthcheck self-GETs via `["CMD", "/cleanup-worker", "healthz"]`. There is **no inbound API** beyond `/healthz` + `/metrics`. Graceful shutdown drains in-flight handlers/crons (10 s bound).
+Multi-stage Go 1.25-alpine → `FROM scratch` (~10 MB), CA roots copied in for Langfuse TLS, `ENTRYPOINT ["/cleanup-worker"]`. Image `ghcr.io/jiva-studio/lectorium-cleanup-worker:${TAG:-latest}`, profile `[origin]` (it consumes events only auth+chat emit). `depends_on`: `postgres` healthy + `migrator` completed. Scratch image → the healthcheck self-GETs via `["CMD", "/cleanup-worker", "healthz"]`. There is **no inbound API** beyond `/healthz` + `/metrics`. Graceful shutdown drains in-flight handlers/crons (10 s bound).
 
 ## Constraints worth remembering
 

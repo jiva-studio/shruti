@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akdasa-studios/lectorium-share-video/internal/logx"
+	"github.com/jiva-studio/lectorium-share-video/internal/logx"
 )
 
 type statusRecorder struct {

@@ -13,11 +13,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/lectorium/billing/internal/authclient"
-	"github.com/akdasa-studios/lectorium/billing/internal/driver"
-	"github.com/akdasa-studios/lectorium/billing/internal/orders"
-	"github.com/akdasa-studios/lectorium/billing/internal/paymento"
-	"github.com/akdasa-studios/lectorium/billing/internal/store"
+	"github.com/jiva-studio/lectorium/billing/internal/authclient"
+	"github.com/jiva-studio/lectorium/billing/internal/driver"
+	"github.com/jiva-studio/lectorium/billing/internal/orders"
+	"github.com/jiva-studio/lectorium/billing/internal/paymento"
+	"github.com/jiva-studio/lectorium/billing/internal/store"
 )
 
 const schemaDDL = `

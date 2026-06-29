@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/server"
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/store"
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/worker"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/server"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/store"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/worker"
 )
 
 func main() {

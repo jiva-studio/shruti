@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp
+module github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp
 
 go 1.26.2
 

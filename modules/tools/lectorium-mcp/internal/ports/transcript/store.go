@@ -3,8 +3,8 @@ package transcriptport
 import (
 	"context"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
 )
 
 // Store owns the on-disk paths for transcript artifacts under out/.

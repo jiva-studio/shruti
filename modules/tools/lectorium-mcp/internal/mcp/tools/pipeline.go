@@ -11,12 +11,12 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/worker"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/worker"
 )
 
 // pipeline_run is the single async dispatcher for selector-driven work.

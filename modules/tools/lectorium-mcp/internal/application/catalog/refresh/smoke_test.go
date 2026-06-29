@@ -8,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
-	catalogrefresh "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/refresh"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	sqlitecatalog "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite"
-	httpcdn "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/cdn/http"
+	catalogrefresh "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/refresh"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	sqlitecatalog "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite"
+	httpcdn "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/cdn/http"
 )
 
 // TestRefreshFromCDN actually hits production CDN. Run with:

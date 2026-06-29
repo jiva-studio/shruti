@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium/modules/tools/denoiser-mcp
+module github.com/jiva-studio/lectorium/modules/tools/denoiser-mcp
 
 go 1.25.5
 

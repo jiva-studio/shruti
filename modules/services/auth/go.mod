@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium/auth
+module github.com/jiva-studio/lectorium/auth
 
 go 1.25.0
 

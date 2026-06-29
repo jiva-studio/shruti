@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
 )
 
 // SetAuthorImage records the avatar S3 key on every locale row of an author.

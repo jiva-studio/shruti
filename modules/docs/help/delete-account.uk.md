@@ -28,4 +28,4 @@ LLM-постачальника (OpenRouter / Google Gemini). Ці сервіси
 можемо видалити.
 
 Усі подробиці — у [політиці
-конфіденційності](https://akdasa-studios.github.io/lectorium/).
+конфіденційності](https://jiva-studio.github.io/lectorium/).

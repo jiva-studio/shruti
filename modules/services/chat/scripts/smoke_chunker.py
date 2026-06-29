@@ -19,8 +19,9 @@ from lectorium_chat.indexer.chunker import chunk_reviewed  # noqa: E402
 
 
 def main() -> None:
-    raw = Path(
-        "/home/akd/Projects/akdasa-studios/lectorium/resources/lake-out/"
+    # Project root sits two levels above the repo: <…>/lectorium/source/lectorium.
+    raw = HERE.parents[5] / (
+        "resources/lake-out/"
         "artifacts/tracks/track_01OfAcZgK1wX/transcripts/ru/raw.json"
     )
     data = json.loads(raw.read_text(encoding="utf-8"))

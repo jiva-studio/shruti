@@ -16,7 +16,7 @@ import (
 
 	gjwt "github.com/golang-jwt/jwt/v5"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/providers"
+	"github.com/jiva-studio/lectorium/auth/internal/providers"
 )
 
 const (

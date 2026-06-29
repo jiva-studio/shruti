@@ -16,8 +16,8 @@ import (
 	gjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/lectorium/billing/internal/jwtverify"
-	"github.com/akdasa-studios/lectorium/billing/internal/paymento"
+	"github.com/jiva-studio/lectorium/billing/internal/jwtverify"
+	"github.com/jiva-studio/lectorium/billing/internal/paymento"
 )
 
 // testKeys generates an RS256 keypair, writes the public key to a temp PEM, and

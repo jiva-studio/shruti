@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
-	titleport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/title"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	titleport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/title"
 )
 
 //go:embed prompt.system.txt

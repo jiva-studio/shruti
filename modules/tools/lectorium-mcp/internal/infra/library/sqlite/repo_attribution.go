@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
 )
 
 // ---------- ATTRIBUTION ----------

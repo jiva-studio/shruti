@@ -8,8 +8,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	attributionapp "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/attribution"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
+	attributionapp "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/library/attribution"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
 // registerAttributionImport wires library.attribution.import — bulk-create

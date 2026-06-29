@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/config"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/config"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcriber"
 )
 
 // Endpointer is implemented by transcribe-providers whose upstream URL

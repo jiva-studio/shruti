@@ -3,7 +3,7 @@ package sqlitecatalog
 import (
 	"context"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 )
 
 func (l *Lazy) GetSetting(ctx context.Context, key string) (string, bool, error) {

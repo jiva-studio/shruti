@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/glossary"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/glossary"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
 )
 
 // openRaw opens the sqlite file directly (no migrations) so a test can seed a

@@ -16,9 +16,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	fsartifact "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
-	outlineport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	fsartifact "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
+	outlineport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
 )
 
 type Store struct{ art *fsartifact.Writer }

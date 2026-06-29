@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/ids"
-	libraryport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/library"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/ids"
+	libraryport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/library"
 )
 
 const idPrefix = "attribution_"

@@ -21,9 +21,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
-	"github.com/akdasa-studios/lectorium/auth/internal/service"
-	"github.com/akdasa-studios/lectorium/auth/internal/store"
+	"github.com/jiva-studio/lectorium/auth/internal/rcclient"
+	"github.com/jiva-studio/lectorium/auth/internal/service"
+	"github.com/jiva-studio/lectorium/auth/internal/store"
 )
 
 const migrationsDir = "../../../../../infra/app/db/migrations"

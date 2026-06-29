@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akdasa-studios/lectorium-share-audio/internal/logx"
+	"github.com/jiva-studio/lectorium-share-audio/internal/logx"
 )
 
 // Dispatcher coalesces background work by key. The first call for a key

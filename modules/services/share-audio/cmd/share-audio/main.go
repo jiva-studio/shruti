@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/akdasa-studios/lectorium-share-audio/internal/config"
-	"github.com/akdasa-studios/lectorium-share-audio/internal/httpx"
-	"github.com/akdasa-studios/lectorium-share-audio/internal/logx"
-	"github.com/akdasa-studios/lectorium-share-audio/internal/pipeline"
-	"github.com/akdasa-studios/lectorium-share-audio/internal/storage"
+	"github.com/jiva-studio/lectorium-share-audio/internal/config"
+	"github.com/jiva-studio/lectorium-share-audio/internal/httpx"
+	"github.com/jiva-studio/lectorium-share-audio/internal/logx"
+	"github.com/jiva-studio/lectorium-share-audio/internal/pipeline"
+	"github.com/jiva-studio/lectorium-share-audio/internal/storage"
 )
 
 func main() {

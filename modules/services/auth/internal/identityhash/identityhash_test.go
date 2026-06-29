@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/store"
+	"github.com/jiva-studio/lectorium/auth/internal/store"
 )
 
 func id(provider, subject string, createdAt time.Time) store.Identity {

@@ -26,4 +26,4 @@ Os registros de compra da assinatura ficam com a Apple ou o Google — também n
 podemos remover esses.
 
 Para todos os detalhes, veja a [política de
-privacidade](https://akdasa-studios.github.io/lectorium/).
+privacidade](https://jiva-studio.github.io/lectorium/).

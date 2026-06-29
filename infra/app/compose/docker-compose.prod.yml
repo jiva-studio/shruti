@@ -17,7 +17,7 @@ services:
     # route change reaches prod the same way any code change does:
     # CI rebuilds the image, Watchtower pulls it, container restarts
     # with the new file. No out-of-band rsync. See issue #577.
-    image: ${LECTORIUM_REGISTRY:-ghcr.io/akdasa-studios}/lectorium-caddy:${LECTORIUM_CADDY_TAG:-latest}
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/jiva-studio}/lectorium-caddy:${LECTORIUM_CADDY_TAG:-latest}
     restart: unless-stopped
     logging: &default-logging
       driver: json-file

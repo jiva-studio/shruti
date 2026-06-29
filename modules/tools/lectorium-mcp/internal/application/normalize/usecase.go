@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/stagefail"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	audioport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
-	lakeport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/loudness"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/stagefail"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	audioport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
+	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/loudness"
 )
 
 type UseCase struct {

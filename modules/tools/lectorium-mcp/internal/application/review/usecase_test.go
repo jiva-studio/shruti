@@ -7,14 +7,14 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
-	fsartifact "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
-	sqliteregistry "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
-	reviewreg "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
-	fstranscript "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcriptstore/fs"
-	reviewport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	fsartifact "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
+	sqliteregistry "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
+	reviewreg "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
+	fstranscript "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/transcriptstore/fs"
+	reviewport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
 )
 
 // fakeReviewer just upper-cases the text. Crucially, it never sees timestamps

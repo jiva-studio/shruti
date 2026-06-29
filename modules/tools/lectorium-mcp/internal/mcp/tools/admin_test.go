@@ -3,7 +3,7 @@ package tools
 import (
 	"testing"
 
-	admindomain "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/adminconfig"
+	admindomain "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/adminconfig"
 )
 
 // TestWritablePathsMatchers pins the canonical allowlist + the wildcard

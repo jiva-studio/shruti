@@ -11,9 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
 )
 
 //go:embed prompt.system.txt

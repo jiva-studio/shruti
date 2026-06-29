@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/denoiser-mcp/internal/client"
+	"github.com/jiva-studio/lectorium/modules/tools/denoiser-mcp/internal/client"
 )
 
 // --- mock JobClient ---

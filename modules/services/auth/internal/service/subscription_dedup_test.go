@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/store"
+	"github.com/jiva-studio/lectorium/auth/internal/store"
 )
 
 // TestApplyRCSubscriberState_DedupSilencesDuplicateEventID verifies the

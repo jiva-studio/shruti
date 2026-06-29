@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
-	"github.com/akdasa-studios/lectorium/auth/internal/service"
+	"github.com/jiva-studio/lectorium/auth/internal/jwt"
+	"github.com/jiva-studio/lectorium/auth/internal/service"
 )
 
 // deleteAccountWindow is the cooldown between two /auth/account/delete

@@ -10,12 +10,12 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	reviewuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/review"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/transcribe"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
+	reviewuc "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/review"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/transcribe"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
 func RegisterTranscriptCreate(s *server.MCPServer, deps Deps) {

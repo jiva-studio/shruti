@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium-share-video/internal/types"
+	"github.com/jiva-studio/lectorium-share-video/internal/types"
 )
 
 const (

@@ -7,10 +7,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/akdasa-studios/lectorium/billing/internal/driver"
-	"github.com/akdasa-studios/lectorium/billing/internal/jwtverify"
-	"github.com/akdasa-studios/lectorium/billing/internal/paymento"
-	"github.com/akdasa-studios/lectorium/billing/internal/store"
+	"github.com/jiva-studio/lectorium/billing/internal/driver"
+	"github.com/jiva-studio/lectorium/billing/internal/jwtverify"
+	"github.com/jiva-studio/lectorium/billing/internal/paymento"
+	"github.com/jiva-studio/lectorium/billing/internal/store"
 )
 
 // BillingHandler holds the dependencies every billing route needs. HMACSecret

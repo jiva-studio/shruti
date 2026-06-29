@@ -16,9 +16,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/job"
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/store"
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/worker"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/job"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/store"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/worker"
 )
 
 // Config wires server dependencies.

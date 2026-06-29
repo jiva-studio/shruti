@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	domaintopics "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/topics"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	domaintopics "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/topics"
 )
 
 const (

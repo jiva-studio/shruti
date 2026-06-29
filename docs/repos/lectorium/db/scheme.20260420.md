@@ -13,10 +13,10 @@ dated record of the prior shape and intentionally does not reflect those later
 changes.
 
 The publisher owns the schema: the catalog writer in the Go MCP
-([`modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/migrate.go`](https://github.com/akdasa-studios/lectorium/blob/main/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/migrate.go))
+([`modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/migrate.go`](https://github.com/jiva-studio/lectorium/blob/main/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/migrate.go))
 seeds canonical kind-tags, records a `migrations` row, and ensures the FTS
 index. The scheme number the client is built against lives in
-[`modules/db-scheme.json`](https://github.com/akdasa-studios/lectorium/blob/main/modules/db-scheme.json).
+[`modules/db-scheme.json`](https://github.com/jiva-studio/lectorium/blob/main/modules/db-scheme.json).
 
 The database is **read-only** at runtime. The client never writes to it — it only validates the scheme by reading the last row of the `migrations` table.
 
@@ -142,7 +142,7 @@ CREATE TABLE track_tags (
 ### Migrations
 
 The `migrations` table records the applied scheme. The catalog publisher
-([`catalog/sqlite/migrate.go`](https://github.com/akdasa-studios/lectorium/blob/main/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/migrate.go))
+([`catalog/sqlite/migrate.go`](https://github.com/jiva-studio/lectorium/blob/main/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/migrate.go))
 inserts a row on publish; the mobile scheme-validator reads the top row
 (`ORDER BY name DESC LIMIT 1`) to accept or reject the DB.
 
@@ -161,7 +161,7 @@ reference display strings. The publisher emits one `kind='combined'` row
 per track — concatenating titles plus localised reference strings across
 languages — so a single `MATCH` over `kind='combined'` rows searches
 everything in any language. `backfillCombinedFtsRows` in
-[`catalog/sqlite/migrate.go`](https://github.com/akdasa-studios/lectorium/blob/main/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/migrate.go)
+[`catalog/sqlite/migrate.go`](https://github.com/jiva-studio/lectorium/blob/main/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/migrate.go)
 rebuilds these rows when missing.
 
 ```sql

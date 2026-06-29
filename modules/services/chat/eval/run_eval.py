@@ -44,8 +44,9 @@ BG_SOURCE_ID = "source_dsicuBsFvinZ"
 # `run_chat_worktree_locally`).
 CHAT_URL = "http://localhost:11080/chat"
 CHAT_CONTAINER = "lectorium-chat-1"
-JWT_KEY = "/home/akd/Projects/akdasa-studios/lectorium/.config/lectorium/jwt/private.pem"
 HERE = Path(__file__).resolve().parent
+# Project root sits two levels above the repo: <…>/lectorium/source/lectorium.
+JWT_KEY = HERE.parents[5] / ".config/lectorium/jwt/private.pem"
 
 
 def mint_token() -> str:

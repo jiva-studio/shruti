@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 )
 
 // Kind labels the operation a Run represents. Open enum: new long-running

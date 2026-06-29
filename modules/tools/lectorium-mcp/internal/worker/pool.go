@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
 )
 
 // ErrQueueFull is returned by Submit when the pool's queue buffer is at

@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/ingest"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/normalize"
-	fsaudio "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/audiostore/fs"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
-	sqliteregistry "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/loudness/ffmpeg"
-	audioport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/ingest"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/normalize"
+	fsaudio "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/audiostore/fs"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
+	sqliteregistry "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/loudness/ffmpeg"
+	audioport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
 )
 
 // TestIngestThenNormalize ingests /tmp/lake/in/test.mp3 and verifies that the

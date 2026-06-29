@@ -266,7 +266,7 @@ async function onCopyLogs(): Promise<void> {
 function onOpenPrivacyPolicy(): void {
   // Same site / per-locale split as the subscription "Privacy Policy" link
   // (see useSubscriptionBinding.ts) — GitHub Pages from modules/web/policy/.
-  const base = "https://akdasa-studios.github.io/lectorium"
+  const base = "https://jiva-studio.github.io/lectorium"
   const url = (i18n.locale.value as string) === "ru" ? `${base}/ru.html` : `${base}/`
   // Capacitor's webview opens external schemes in the system browser.
   window.open(url, "_blank")
@@ -327,7 +327,7 @@ async function onOpenEmail(): Promise<void> {
   ]
   const subject = encodeURIComponent(t("settings.contacts.email.emailSubject"))
   const body = encodeURIComponent(lines.join("\n"))
-  window.open(`mailto:support@akdasa.studio?subject=${subject}&body=${body}`, "_system")
+  window.open(`mailto:support@jiva.studio?subject=${subject}&body=${body}`, "_system")
 }
 
 function onOpenVk(): void {

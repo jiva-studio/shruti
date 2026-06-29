@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
 )
 
 // fakeReviewer is a programmable inner reviewer for hybrid tests. It

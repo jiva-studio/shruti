@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 )
 
 // TrackOptions selects one track + language for the per-track audit.

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 )
 
 // AssignUseCase assigns weighted topics to one track by matching its outline

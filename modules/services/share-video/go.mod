@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium-share-video
+module github.com/jiva-studio/lectorium-share-video
 
 go 1.25.0
 

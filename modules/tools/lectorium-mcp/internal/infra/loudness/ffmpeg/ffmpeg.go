@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	audioport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/loudness"
+	audioport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/loudness"
 )
 
 // Tool wraps ffmpeg+ffprobe binaries. Implements both loudness.Normalizer and audio.Probe.

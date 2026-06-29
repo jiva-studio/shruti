@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
+	"github.com/jiva-studio/lectorium/auth/internal/jwt"
 )
 
 func sampleIdents() []jwt.ClaimIdentity {

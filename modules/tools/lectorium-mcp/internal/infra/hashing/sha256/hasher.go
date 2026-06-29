@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/hashing"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/hashing"
 )
 
 type Hasher struct{}

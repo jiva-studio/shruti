@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	metaport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/metadata"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	metaport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/metadata"
 )
 
 // ChainExtractor parses dedup-canonical filenames without calling the LLM

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
 )
 
 // fakeSlowReviewer counts in-flight ReviewChunk calls; while a call is

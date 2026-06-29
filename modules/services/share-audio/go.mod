@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium-share-audio
+module github.com/jiva-studio/lectorium-share-audio
 
 go 1.24
 

@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
-	outlineport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	outlineport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
 )
 
 //go:embed prompt.outline.txt

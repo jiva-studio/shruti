@@ -8,7 +8,7 @@ import (
 	"io/fs"
 	"os"
 
-	fsport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/fs"
+	fsport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/fs"
 )
 
 type FS struct{}

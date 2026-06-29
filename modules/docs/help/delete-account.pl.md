@@ -26,4 +26,4 @@ Zapisy o zakupach subskrypcji pozostają u Apple lub Google — tych również n
 możemy usunąć.
 
 Szczegóły znajdziesz w [polityce
-prywatności](https://akdasa-studios.github.io/lectorium/).
+prywatności](https://jiva-studio.github.io/lectorium/).

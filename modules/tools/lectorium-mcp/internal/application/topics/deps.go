@@ -7,10 +7,10 @@ package topics
 import (
 	"context"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	domaintopics "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/topics"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	outlineport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	domaintopics "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/topics"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	outlineport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
 )
 
 // Embedder turns texts into dense vectors (one per text, same order). Model

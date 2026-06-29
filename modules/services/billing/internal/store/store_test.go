@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/billing/internal/orders"
+	"github.com/jiva-studio/lectorium/billing/internal/orders"
 	"github.com/google/uuid"
 )
 

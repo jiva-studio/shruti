@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
-	"github.com/akdasa-studios/lectorium/auth/internal/service"
+	"github.com/jiva-studio/lectorium/auth/internal/jwt"
+	"github.com/jiva-studio/lectorium/auth/internal/service"
 )
 
 type authHandler struct {

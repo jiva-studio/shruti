@@ -24,15 +24,15 @@ import (
 	"os"
 	"strings"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/alignpdf"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/commit"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
-	alignpdfport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
-	lakeport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
-	titleport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/title"
-	transcriptport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/alignpdf"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/commit"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	alignpdfport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
+	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
+	titleport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/title"
+	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 )
 
 const (

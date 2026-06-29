@@ -26,4 +26,4 @@ Subscription purchase records stay with Apple or Google — we can't remove
 those either.
 
 For the full details, see the [privacy
-policy](https://akdasa-studios.github.io/lectorium/).
+policy](https://jiva-studio.github.io/lectorium/).

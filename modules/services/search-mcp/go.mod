@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium/modules/services/search-mcp
+module github.com/jiva-studio/lectorium/modules/services/search-mcp
 
 go 1.25.5
 

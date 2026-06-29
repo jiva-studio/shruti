@@ -2,7 +2,7 @@
 
 `@lectorium/plugin-audio-player` is an in-house **Capacitor plugin** that owns audio playback on Android, iOS and the web. It exposes the same JavaScript API on every platform; only the platform implementation differs. The native sides drive a system media session (lock-screen controls, headset buttons, background playback); the web side is a self-contained `HTMLAudioElement` fallback bundled inside the plugin, so app code never needs a separate web adapter.
 
-Source: [`modules/plugins/audio-player/`](https://github.com/akdasa-studios/lectorium/tree/main/modules/plugins/audio-player).
+Source: [`modules/plugins/audio-player/`](https://github.com/jiva-studio/lectorium/tree/main/modules/plugins/audio-player).
 
 ## Why a custom plugin?
 

@@ -15,17 +15,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/stagefail"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	fsartifact "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
-	audioport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
-	catalogport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/ids"
-	lakeport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
-	metaport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/metadata"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/stagefail"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+	fsartifact "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
+	audioport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
+	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/ids"
+	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
+	metaport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/metadata"
 )
 
 type UseCase struct {

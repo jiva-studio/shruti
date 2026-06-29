@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	logpkg "github.com/akdasa-studios/lectorium/billing/internal/logging"
-	"github.com/akdasa-studios/lectorium/billing/internal/orders"
-	"github.com/akdasa-studios/lectorium/billing/internal/paymento"
+	logpkg "github.com/jiva-studio/lectorium/billing/internal/logging"
+	"github.com/jiva-studio/lectorium/billing/internal/orders"
+	"github.com/jiva-studio/lectorium/billing/internal/paymento"
 )
 
 type checkoutRequest struct {

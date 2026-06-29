@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/providers"
-	"github.com/akdasa-studios/lectorium/auth/internal/store"
+	"github.com/jiva-studio/lectorium/auth/internal/providers"
+	"github.com/jiva-studio/lectorium/auth/internal/store"
 )
 
 func TestOtpEmailContent_Localized(t *testing.T) {

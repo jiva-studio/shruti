@@ -15,8 +15,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/job"
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/store"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/job"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/store"
 )
 
 // Config wires the worker to its environment.

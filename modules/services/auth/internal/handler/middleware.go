@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
-	logpkg "github.com/akdasa-studios/lectorium/auth/internal/logging"
+	"github.com/jiva-studio/lectorium/auth/internal/jwt"
+	logpkg "github.com/jiva-studio/lectorium/auth/internal/logging"
 )
 
 type ctxKey int

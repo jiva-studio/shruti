@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 )
 
 // SelectorSource controls where the resolver looks for candidate mp3 files.

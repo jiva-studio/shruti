@@ -16,10 +16,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/lectorium-share-video/internal/db"
-	"github.com/akdasa-studios/lectorium-share-video/internal/logx"
-	"github.com/akdasa-studios/lectorium-share-video/internal/pipeline"
-	"github.com/akdasa-studios/lectorium-share-video/internal/types"
+	"github.com/jiva-studio/lectorium-share-video/internal/db"
+	"github.com/jiva-studio/lectorium-share-video/internal/logx"
+	"github.com/jiva-studio/lectorium-share-video/internal/pipeline"
+	"github.com/jiva-studio/lectorium-share-video/internal/types"
 )
 
 const (

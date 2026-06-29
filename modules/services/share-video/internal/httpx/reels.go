@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/akdasa-studios/lectorium-share-video/internal/db"
-	"github.com/akdasa-studios/lectorium-share-video/internal/logx"
-	"github.com/akdasa-studios/lectorium-share-video/internal/redislimit"
-	"github.com/akdasa-studios/lectorium-share-video/internal/types"
+	"github.com/jiva-studio/lectorium-share-video/internal/db"
+	"github.com/jiva-studio/lectorium-share-video/internal/logx"
+	"github.com/jiva-studio/lectorium-share-video/internal/redislimit"
+	"github.com/jiva-studio/lectorium-share-video/internal/types"
 )
 
 // Server holds the dependencies the reels endpoints need.

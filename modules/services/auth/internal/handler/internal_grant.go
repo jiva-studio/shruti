@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
-	"github.com/akdasa-studios/lectorium/auth/internal/service"
+	"github.com/jiva-studio/lectorium/auth/internal/rcclient"
+	"github.com/jiva-studio/lectorium/auth/internal/service"
 )
 
 // InternalGrantHandler serves POST /internal/subscription/grant — a

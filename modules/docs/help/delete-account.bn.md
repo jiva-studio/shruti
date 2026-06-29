@@ -26,4 +26,4 @@
 পারি না।
 
 বিস্তারিত জানতে [গোপনীয়তা
-নীতি](https://akdasa-studios.github.io/lectorium/) দেখুন।
+নীতি](https://jiva-studio.github.io/lectorium/) দেখুন।

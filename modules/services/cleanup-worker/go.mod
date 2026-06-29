@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium/cleanup-worker
+module github.com/jiva-studio/lectorium/cleanup-worker
 
 go 1.25.0
 

@@ -9,9 +9,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/runregistry"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/runregistry"
 )
 
 // Registry is the in-memory store. Safe for concurrent use.

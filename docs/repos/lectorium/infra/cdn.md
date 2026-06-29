@@ -15,7 +15,7 @@ These entries seed the registry on the very first launch (and are the fallback w
 
 <!-- END AUTOGEN -->
 
-`CdnServer` extends kit's generic [`CdnServer`](https://github.com/akdasa-studios/lectorium/blob/main/modules/kit/src/servers/cdnServer.ts) (`{ id, name, urlTemplate }`) with the app-specific per-region service endpoints. `buildServerUrl` is re-exported from `@kit/servers` — kit owns both the generic shape and the probe/failover machinery; app code only adds the extra fields.
+`CdnServer` extends kit's generic [`CdnServer`](https://github.com/jiva-studio/lectorium/blob/main/modules/kit/src/servers/cdnServer.ts) (`{ id, name, urlTemplate }`) with the app-specific per-region service endpoints. `buildServerUrl` is re-exported from `@kit/servers` — kit owns both the generic shape and the probe/failover machinery; app code only adds the extra fields.
 
 ```ts
 // modules/libs/domain/servers.ts
@@ -78,7 +78,7 @@ There is **no** first-launch home-region heuristic (no timezone / device-languag
 
 ## Probe algorithm — `infra/servers/useHttpServerProber.ts`
 
-`useHttpServerProber(getServers, timeoutMs = 8000)` returns an `IServerProber` (port: `ports/app/serverProber.ts`) whose `probe(configPath, preferredServerId)` resolves to a `ServerProbeResult` `{ serverId, config }`. `getServers` is injected by the composition root (`() => getRegions()`) so the registry's current list is read at probe time, and the actual race/pick-first-responder mechanism is delegated to kit's generic [`probeServers`](https://github.com/akdasa-studios/lectorium/blob/main/modules/kit/src/servers/prober.ts).
+`useHttpServerProber(getServers, timeoutMs = 8000)` returns an `IServerProber` (port: `ports/app/serverProber.ts`) whose `probe(configPath, preferredServerId)` resolves to a `ServerProbeResult` `{ serverId, config }`. `getServers` is injected by the composition root (`() => getRegions()`) so the registry's current list is read at probe time, and the actual race/pick-first-responder mechanism is delegated to kit's generic [`probeServers`](https://github.com/jiva-studio/lectorium/blob/main/modules/kit/src/servers/prober.ts).
 
 ```mermaid
 sequenceDiagram
@@ -152,7 +152,7 @@ stateDiagram-v2
 
 ## Selecting a database version — `findLatestCompatibleVersion`
 
-After a successful probe the parsed `config.json` (`RemoteAppConfig` from `@lib/domain/config.ts`) is filtered for scheme-compatible databases. The resolve/probe/scheme-retry/background-refresh logic now lives in kit's generic Stale-While-Revalidate orchestrator ([`@kit/bootstrap/contentDatabaseResolver.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/kit/src/bootstrap/contentDatabaseResolver.ts)); the Lectorium `WelcomeView.controller.ts` only injects the app-specific ports (composition root, region registry, preferences) into `createBootstrapController` and handles navigation:
+After a successful probe the parsed `config.json` (`RemoteAppConfig` from `@lib/domain/config.ts`) is filtered for scheme-compatible databases. The resolve/probe/scheme-retry/background-refresh logic now lives in kit's generic Stale-While-Revalidate orchestrator ([`@kit/bootstrap/contentDatabaseResolver.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/kit/src/bootstrap/contentDatabaseResolver.ts)); the Lectorium `WelcomeView.controller.ts` only injects the app-specific ports (composition root, region registry, preferences) into `createBootstrapController` and handles navigation:
 
 ```ts
 // modules/kit/src/bootstrap/contentDatabaseResolver.ts
@@ -180,7 +180,7 @@ flowchart LR
     L --> K
 ```
 
-The `(db.scheme ?? 1) === supportedScheme` line treats a missing `scheme` field as `1` for the very first published configs. `supportedScheme` is `SUPPORTED_DB_SCHEME`, injected at build time (`__DB_SCHEME__` via Vite `define`) from [`modules/db-scheme.json`](https://github.com/akdasa-studios/lectorium/blob/main/modules/db-scheme.json). `resolveContentDatabase` scans the local DB directory first (offline-first), validating each candidate newest-first via `store.exists()` (drops corrupt/truncated files), and only probes the CDN (`downloadFromCdn`) when no usable cached DB exists. When the resolved config advertises no scheme-compatible DB it throws the typed `NoCompatibleDatabaseError`; the controller treats that as a likely-stale cached config, invalidates it (`invalidateConfigCache`), and re-probes once before giving up.
+The `(db.scheme ?? 1) === supportedScheme` line treats a missing `scheme` field as `1` for the very first published configs. `supportedScheme` is `SUPPORTED_DB_SCHEME`, injected at build time (`__DB_SCHEME__` via Vite `define`) from [`modules/db-scheme.json`](https://github.com/jiva-studio/lectorium/blob/main/modules/db-scheme.json). `resolveContentDatabase` scans the local DB directory first (offline-first), validating each candidate newest-first via `store.exists()` (drops corrupt/truncated files), and only probes the CDN (`downloadFromCdn`) when no usable cached DB exists. When the resolved config advertises no scheme-compatible DB it throws the typed `NoCompatibleDatabaseError`; the controller treats that as a likely-stale cached config, invalidates it (`invalidateConfigCache`), and re-probes once before giving up.
 
 ## Caching strategy
 

@@ -17,15 +17,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/billing/internal/authclient"
-	"github.com/akdasa-studios/lectorium/billing/internal/config"
-	"github.com/akdasa-studios/lectorium/billing/internal/driver"
-	"github.com/akdasa-studios/lectorium/billing/internal/handler"
-	"github.com/akdasa-studios/lectorium/billing/internal/jwtverify"
-	logpkg "github.com/akdasa-studios/lectorium/billing/internal/logging"
-	"github.com/akdasa-studios/lectorium/billing/internal/paymento"
-	"github.com/akdasa-studios/lectorium/billing/internal/reconcile"
-	"github.com/akdasa-studios/lectorium/billing/internal/store"
+	"github.com/jiva-studio/lectorium/billing/internal/authclient"
+	"github.com/jiva-studio/lectorium/billing/internal/config"
+	"github.com/jiva-studio/lectorium/billing/internal/driver"
+	"github.com/jiva-studio/lectorium/billing/internal/handler"
+	"github.com/jiva-studio/lectorium/billing/internal/jwtverify"
+	logpkg "github.com/jiva-studio/lectorium/billing/internal/logging"
+	"github.com/jiva-studio/lectorium/billing/internal/paymento"
+	"github.com/jiva-studio/lectorium/billing/internal/reconcile"
+	"github.com/jiva-studio/lectorium/billing/internal/store"
 )
 
 func main() {

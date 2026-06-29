@@ -6,7 +6,7 @@ package chain
 import (
 	"context"
 
-	catalogport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
+	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
 )
 
 // Chain runs resolvers in order. The first one that returns confidence

@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	domaintopics "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/topics"
-	fsartifact "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
+	domaintopics "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/topics"
+	fsartifact "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
 )
 
 const centroidsKey = "artifacts/topics/centroids.json"

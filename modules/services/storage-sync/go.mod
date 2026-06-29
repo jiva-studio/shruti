@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/lectorium-storage-sync
+module github.com/jiva-studio/lectorium-storage-sync
 
 go 1.24
 

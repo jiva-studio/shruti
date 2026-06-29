@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
-	"github.com/akdasa-studios/lectorium/auth/internal/service"
+	"github.com/jiva-studio/lectorium/auth/internal/rcclient"
+	"github.com/jiva-studio/lectorium/auth/internal/service"
 )
 
 // These tests cross the rcclient → service boundary on purpose: the

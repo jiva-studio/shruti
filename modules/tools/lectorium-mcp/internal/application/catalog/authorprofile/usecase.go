@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/imageutil"
-	s3port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/imageutil"
+	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 )
 
 // Catalog is the slice of the catalog repository this use case needs.

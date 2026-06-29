@@ -19,13 +19,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/email"
-	"github.com/akdasa-studios/lectorium/auth/internal/identityhash"
-	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
-	"github.com/akdasa-studios/lectorium/auth/internal/profile"
-	"github.com/akdasa-studios/lectorium/auth/internal/providers"
-	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
-	"github.com/akdasa-studios/lectorium/auth/internal/store"
+	"github.com/jiva-studio/lectorium/auth/internal/email"
+	"github.com/jiva-studio/lectorium/auth/internal/identityhash"
+	"github.com/jiva-studio/lectorium/auth/internal/jwt"
+	"github.com/jiva-studio/lectorium/auth/internal/profile"
+	"github.com/jiva-studio/lectorium/auth/internal/providers"
+	"github.com/jiva-studio/lectorium/auth/internal/rcclient"
+	"github.com/jiva-studio/lectorium/auth/internal/store"
 )
 
 const (

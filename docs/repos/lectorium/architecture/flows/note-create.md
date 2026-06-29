@@ -2,7 +2,7 @@
 
 While reading a track's transcript the user drag-selects a span of text and taps **Bookmark** in the selection popover. The selected sentence range — already in milliseconds, read from the `data-time-start` / `data-time-end` attributes on the dragged blocks — plus its text flow through `createNote()`, which validates via the domain entity and hands a fresh `note_<nanoid12>` row to the user DB, anchored to the current `trackId`.
 
-There is no separate note-editor dialog or seconds-based range picker: a note IS the selected transcript span. A second entry point — saving a chat citation chip — reuses the same `createNote()` use case through [`saveCitationAsNote`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/usecases/chat/saveCitationAsNote.ts).
+There is no separate note-editor dialog or seconds-based range picker: a note IS the selected transcript span. A second entry point — saving a chat citation chip — reuses the same `createNote()` use case through [`saveCitationAsNote`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/usecases/chat/saveCitationAsNote.ts).
 
 ## Sequence
 
@@ -140,4 +140,4 @@ A note row carries an optional `meta` column — JSON-serialised `Record<string,
 
 ## Editing and deleting
 
-`updateNote` re-runs `validateNoteFields` on the *merged* existing+patch values inside a unit-of-work wrapper so the read-then-write is atomic. Deletes go through `deleteNote` (also unit-of-work wrapped) and, from the transcript, are triggered by tap-on-highlight (the `delete` branch of `useTranscriptSelectionActions`). See [`updateNote.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/usecases/notes/updateNote.ts) and [Use cases reference](../../api/use-cases.md#updatenote).
+`updateNote` re-runs `validateNoteFields` on the *merged* existing+patch values inside a unit-of-work wrapper so the read-then-write is atomic. Deletes go through `deleteNote` (also unit-of-work wrapped) and, from the transcript, are triggered by tap-on-highlight (the `delete` branch of `useTranscriptSelectionActions`). See [`updateNote.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/usecases/notes/updateNote.ts) and [Use cases reference](../../api/use-cases.md#updatenote).

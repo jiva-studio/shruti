@@ -1770,7 +1770,7 @@
     "suite_id": 14,
     "automation": 2,
     "title": "Paywall renders legal links",
-    "description": "Verifies the paywall renders at least one legal link (Terms is iOS-only and absent on the web build). Reaches the paywall as a free user via the Autoplay toggle, then asserts at least one .legal anchor points to akdasa-studios.github.io and every href is a valid http(s) URL. Does not tap the links. Offline.",
+    "description": "Verifies the paywall renders at least one legal link (Terms is iOS-only and absent on the web build). Reaches the paywall as a free user via the Autoplay toggle, then asserts at least one .legal anchor points to jiva-studio.github.io and every href is a valid http(s) URL. Does not tap the links. Offline.",
     "preconditions": "Offline build booted non-Pro; Settings tab.",
     "steps": [
       {
@@ -1779,7 +1779,7 @@
       },
       {
         "action": "Inspect the legal links on the paywall.",
-        "expected": "At least one .legal anchor is visible; one href points to akdasa-studios.github.io and every href is a valid http(s) URL."
+        "expected": "At least one .legal anchor is visible; one href points to jiva-studio.github.io and every href is a valid http(s) URL."
       }
     ],
     "tags": [

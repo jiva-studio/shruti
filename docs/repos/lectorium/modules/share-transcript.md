@@ -167,7 +167,7 @@ graph LR
     class S3 store;
 ```
 
-Image `ghcr.io/akdasa-studios/lectorium-share-transcript:${LECTORIUM_SHARE_TRANSCRIPT_TAG:-latest}`, declared in `infra/app/compose/docker-compose.yml` under both the `origin` and `proxy` profiles — it runs on **both** roles so the RU proxy renders close to the Yandex bucket the PDF lands in. It runs under the shared `app-hardening` anchor with a `curl /healthz` healthcheck and the Watchtower label. Caddy routes `/share/transcripts/*` to `share-transcript:8084` (`handle_path`, `request_body max_size 100KB`, a `share_transcript` 60/min/IP rate-limit zone, `response_header_timeout 30s`). CORS is anonymous (`*` origins, `POST`/`OPTIONS`, `Content-Type` only — no `Authorization`).
+Image `ghcr.io/jiva-studio/lectorium-share-transcript:${LECTORIUM_SHARE_TRANSCRIPT_TAG:-latest}`, declared in `infra/app/compose/docker-compose.yml` under both the `origin` and `proxy` profiles — it runs on **both** roles so the RU proxy renders close to the Yandex bucket the PDF lands in. It runs under the shared `app-hardening` anchor with a `curl /healthz` healthcheck and the Watchtower label. Caddy routes `/share/transcripts/*` to `share-transcript:8084` (`handle_path`, `request_body max_size 100KB`, a `share_transcript` 60/min/IP rate-limit zone, `response_header_timeout 30s`). CORS is anonymous (`*` origins, `POST`/`OPTIONS`, `Content-Type` only — no `Authorization`).
 
 ## Why Python (vs share-audio/share-video in Go)
 

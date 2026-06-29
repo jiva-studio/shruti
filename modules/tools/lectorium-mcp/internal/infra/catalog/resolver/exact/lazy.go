@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	catalogport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
+	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
 )
 
 // LazyResolver checks current.db is on disk, then delegates to a stateless

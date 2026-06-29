@@ -12,7 +12,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/denoiser-mcp/internal/client"
+	"github.com/jiva-studio/lectorium/modules/tools/denoiser-mcp/internal/client"
 )
 
 // JobClient is the slice of *client.Client the tools depend on. An interface so

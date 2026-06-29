@@ -60,7 +60,7 @@ sequenceDiagram
 
 - **Idempotent caching.** Second call for the same URL hits the cache without any extra logic in the use case.
 - **Platform parity.** Web and native both expose `get(url) → localUrl` even though their underlying mechanisms differ.
-- **Invalidation knobs.** `delete(url)` busts a single entry — used by Welcome (`invalidateConfigCache` in [`WelcomeView.controller.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/lectorium/views/Welcome/WelcomeView.controller.ts)) to drop the cached remote `config.json` when it advertises no compatible DB — and `clearAll()` wipes the whole cache.
+- **Invalidation knobs.** `delete(url)` busts a single entry — used by Welcome (`invalidateConfigCache` in [`WelcomeView.controller.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/lectorium/views/Welcome/WelcomeView.controller.ts)) to drop the cached remote `config.json` when it advertises no compatible DB — and `clearAll()` wipes the whole cache.
 
 ## Block rendering
 
@@ -114,11 +114,11 @@ classDiagram
 - **`verse:text`** — `text[]` is the transliteration (IAST). When the verse resolves in the library, `original[]` (Devanagari / Bengali) and `translation` are baked in, and the component renders all three (original → transliteration → translation), mirroring the chat `VerseCard`.
 - **Inline markdown** — `sentence` / `verse` text may contain `*italic*` / `**bold**`; the client renders it inline via `marked.parseInline` (shared `libs/ui/transcript/renderInlineMarkdown.ts`). Producers must emit balanced markdown.
 
-Definitions live in [`transcript.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/libs/domain/transcript.ts).
+Definitions live in [`transcript.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/transcript.ts).
 
 ## Transcript JSON wire format
 
-The on-disk JSON mirrors the TS [`Transcript`](https://github.com/akdasa-studios/lectorium/blob/main/modules/libs/domain/transcript.ts) value object exactly — no transform layer. The MCP server's Go wire struct (`internal/domain/transcript/block.go`) carries the same field names and types. Producers that emit inline `reference` blocks: the PDF aligner (`scripts/pdf_align/align_fast.py`) and the vedabase converter (`resources/vedabase-convert/`, which converts human-verified vedabase lectures to v2 blocks and aligns timings against `raw.json`).
+The on-disk JSON mirrors the TS [`Transcript`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/transcript.ts) value object exactly — no transform layer. The MCP server's Go wire struct (`internal/domain/transcript/block.go`) carries the same field names and types. Producers that emit inline `reference` blocks: the PDF aligner (`scripts/pdf_align/align_fast.py`) and the vedabase converter (`resources/vedabase-convert/`, which converts human-verified vedabase lectures to v2 blocks and aligns timings against `raw.json`).
 
 A typical sentence block with an attached scripture reference:
 

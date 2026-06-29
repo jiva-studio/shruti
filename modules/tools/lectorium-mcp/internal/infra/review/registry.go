@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	hybridreview "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review/hybrid"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	hybridreview "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/hybrid"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
 )
 
 // Registry implements review.Registry.

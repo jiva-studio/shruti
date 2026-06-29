@@ -3,7 +3,7 @@ package profile
 import (
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
+	"github.com/jiva-studio/lectorium/auth/internal/jwt"
 )
 
 // BuildClaims composes a jwt.IssueInput from a user's current state

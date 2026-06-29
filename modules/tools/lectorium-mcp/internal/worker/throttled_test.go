@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcriber"
 )
 
 type fakeTranscriber struct {

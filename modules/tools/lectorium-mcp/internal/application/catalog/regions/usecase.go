@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configdoc"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configdoc"
 )
 
 const sectionKey = "regions"

@@ -13,15 +13,15 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/akdasa-studios/lectorium-share-video/internal/config"
-	"github.com/akdasa-studios/lectorium-share-video/internal/db"
-	"github.com/akdasa-studios/lectorium-share-video/internal/httpx"
-	"github.com/akdasa-studios/lectorium-share-video/internal/logx"
-	"github.com/akdasa-studios/lectorium-share-video/internal/pipeline"
-	"github.com/akdasa-studios/lectorium-share-video/internal/pipeline/reel"
-	"github.com/akdasa-studios/lectorium-share-video/internal/pipeline/transcript"
-	"github.com/akdasa-studios/lectorium-share-video/internal/storage"
-	"github.com/akdasa-studios/lectorium-share-video/internal/worker"
+	"github.com/jiva-studio/lectorium-share-video/internal/config"
+	"github.com/jiva-studio/lectorium-share-video/internal/db"
+	"github.com/jiva-studio/lectorium-share-video/internal/httpx"
+	"github.com/jiva-studio/lectorium-share-video/internal/logx"
+	"github.com/jiva-studio/lectorium-share-video/internal/pipeline"
+	"github.com/jiva-studio/lectorium-share-video/internal/pipeline/reel"
+	"github.com/jiva-studio/lectorium-share-video/internal/pipeline/transcript"
+	"github.com/jiva-studio/lectorium-share-video/internal/storage"
+	"github.com/jiva-studio/lectorium-share-video/internal/worker"
 )
 
 func main() {

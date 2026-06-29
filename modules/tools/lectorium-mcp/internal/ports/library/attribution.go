@@ -6,7 +6,7 @@ package libraryport
 import (
 	"context"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
 )
 
 // AttributionRepository covers CRUD for the library_attribution* tables.

@@ -10,10 +10,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/lectorium/modules/services/search-mcp/internal/config"
-	"github.com/akdasa-studios/lectorium/modules/services/search-mcp/internal/embed"
-	"github.com/akdasa-studios/lectorium/modules/services/search-mcp/internal/envelope"
-	"github.com/akdasa-studios/lectorium/modules/services/search-mcp/internal/search"
+	"github.com/jiva-studio/lectorium/modules/services/search-mcp/internal/config"
+	"github.com/jiva-studio/lectorium/modules/services/search-mcp/internal/embed"
+	"github.com/jiva-studio/lectorium/modules/services/search-mcp/internal/envelope"
+	"github.com/jiva-studio/lectorium/modules/services/search-mcp/internal/search"
 )
 
 const (

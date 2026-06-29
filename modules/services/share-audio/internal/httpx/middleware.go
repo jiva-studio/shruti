@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/lectorium-share-audio/internal/logx"
+	"github.com/jiva-studio/lectorium-share-audio/internal/logx"
 )
 
 // statusRecorder wraps ResponseWriter so the access log can read the

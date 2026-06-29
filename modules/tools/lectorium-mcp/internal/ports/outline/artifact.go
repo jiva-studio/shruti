@@ -1,6 +1,6 @@
 package outlineport
 
-import "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
+import "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 
 // GranularRef identifies one granular outline artifact (one track, one
 // language). Listed by the topic build to walk every track that has a granular

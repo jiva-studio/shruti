@@ -37,7 +37,7 @@ won't change behaviour for these four prompts.
 
 Usage::
 
-    LANGFUSE_HOST=https://langfuse.obs.eu.lectorium.akdasa.studio \\
+    LANGFUSE_HOST=https://langfuse.obs.eu.lectorium.jiva.studio \\
     LANGFUSE_PUBLIC_KEY=pk-... \\
     LANGFUSE_SECRET_KEY=sk-... \\
     python scripts/bootstrap_langfuse_prompts.py push

@@ -13,9 +13,9 @@ import (
 	"log"
 	"os"
 
-	configregistry "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/config/registry"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	sqlitecatalog "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite"
+	configregistry "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/config/registry"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	sqlitecatalog "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite"
 )
 
 func main() {

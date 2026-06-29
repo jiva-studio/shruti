@@ -8,7 +8,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/transcriber-service/internal/job"
+	"github.com/jiva-studio/lectorium/modules/tools/transcriber-service/internal/job"
 )
 
 const schema = `

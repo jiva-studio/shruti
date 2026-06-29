@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
 )
 
 // Reviewer composes a chain into a hybrid pass. Reviewers[0] runs on

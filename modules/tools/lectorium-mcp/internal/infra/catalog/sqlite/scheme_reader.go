@@ -3,7 +3,7 @@ package sqlitecatalog
 import (
 	"context"
 
-	catalogport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
+	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
 )
 
 // SchemeReader implements catalogport.SchemeReader on top of an Open+Close

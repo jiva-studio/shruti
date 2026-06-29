@@ -18,8 +18,8 @@ import (
 	"os/exec"
 	"sync"
 
-	alignpdfport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	alignpdfport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
 )
 
 type Aligner struct {

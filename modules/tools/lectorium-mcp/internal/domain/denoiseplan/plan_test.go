@@ -3,7 +3,7 @@ package denoiseplan
 import (
 	"testing"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
 )
 
 // speechSegs returns n confident-English segments starting at startMs, 3s each.

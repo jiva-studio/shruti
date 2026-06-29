@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/akdasa-studios/lectorium-share-video/internal/types"
+	"github.com/jiva-studio/lectorium-share-video/internal/types"
 )
 
 // Smoke: render a real frame from the bundled font and verify the PNG

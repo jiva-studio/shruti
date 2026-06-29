@@ -3,7 +3,7 @@
 Single-host stack on a VPS: postgres + redis + migrator + auth + chat +
 share-audio + share-video + Caddy + Watchtower. All app images are built
 by GitHub Actions (`.github/workflows/services-ghcr.yml`), pushed to
-`ghcr.io/akdasa-studios/lectorium-*`, and pulled to the box by
+`ghcr.io/jiva-studio/lectorium-*`, and pulled to the box by
 Watchtower (`com.centurylinklabs.watchtower.enable=true` label).
 
 The same compose files deploy two host **roles**, selected at deploy
@@ -102,11 +102,11 @@ the scripts don't touch them.
 ### 1. Image registry — make ghcr packages public  *(operator)*
 
 After the first push from CI lands the images in
-`ghcr.io/akdasa-studios/lectorium-{auth,chat,share-audio,share-video,caddy}`,
+`ghcr.io/jiva-studio/lectorium-{auth,chat,share-audio,share-video,caddy}`,
 they're created **PRIVATE** by default. Watchtower runs without
 credentials, so flip each to public:
 
-- GitHub → org `akdasa-studios` → **Packages** → pick the package
+- GitHub → org `jiva-studio` → **Packages** → pick the package
 - **Package settings** → **Change visibility** → Public
 
 Repeat for each of the five packages. One-time per package.
@@ -420,7 +420,7 @@ otherwise tokens issued on one box wouldn't verify on another, and a
 regen would force every user to re-login.
 
 Canonical store: the `akdasa/dotfiles` repo at
-`personal/projects/akdasa-studios/credentials/lectorium-auth-jwt-{private.key,public.pem}`.
+`personal/projects/jiva-studio/credentials/lectorium-auth-jwt-{private.key,public.pem}`.
 - `*.key` is encrypted at-rest by git-crypt.
 - `*.pem` (public) is plaintext — that's the point of a public key.
 
@@ -437,7 +437,7 @@ on subsequent runs it just refreshes the symlinks.
 
 ### Provider OAuth IDs
 
-Set in dotfiles `personal/projects/akdasa-studios/lectorium.secret`:
+Set in dotfiles `personal/projects/jiva-studio/lectorium.secret`:
 
 ```
 LECTORIUM_GOOGLE_CLIENT_IDS=<web-id>,<ios-id>[,<android-id>]

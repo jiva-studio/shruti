@@ -12,7 +12,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/run"
 )
 
 // ErrNotFound is returned by Get / Update / Cancel when no run with the

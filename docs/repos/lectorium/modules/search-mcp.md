@@ -113,7 +113,7 @@ There is no token auth on the MCP itself — the security boundary is the tailne
 
 ## Deployment
 
-Multi-stage `golang:1.25-alpine` → `FROM scratch` (~15 MB), static `CGO_ENABLED=0`, CA roots copied in for TLS to the embeddings provider, build SHA/time injected via `-ldflags`. Image `ghcr.io/akdasa-studios/lectorium-search-mcp:${LECTORIUM_SEARCH_MCP_TAG:-latest}`, profile `[origin]`, on the `lectorium` docker network so it can reach `postgres:5432`. Because the scratch image has no shell, the healthcheck self-probes: `["CMD", "/search-mcp", "-healthcheck"]`. Watchtower-enabled.
+Multi-stage `golang:1.25-alpine` → `FROM scratch` (~15 MB), static `CGO_ENABLED=0`, CA roots copied in for TLS to the embeddings provider, build SHA/time injected via `-ldflags`. Image `ghcr.io/jiva-studio/lectorium-search-mcp:${LECTORIUM_SEARCH_MCP_TAG:-latest}`, profile `[origin]`, on the `lectorium` docker network so it can reach `postgres:5432`. Because the scratch image has no shell, the healthcheck self-probes: `["CMD", "/search-mcp", "-healthcheck"]`. Watchtower-enabled.
 
 ## Constraints worth remembering
 

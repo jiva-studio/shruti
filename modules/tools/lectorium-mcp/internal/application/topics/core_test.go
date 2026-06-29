@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	outlineport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
+	outlineport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
 )
 
 // three well-separated directions in 4-d space.

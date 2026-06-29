@@ -2,7 +2,7 @@
 
 `@lectorium/plugin-media-downloader` is an in-house **Capacitor plugin** that owns long-running media downloads on Android, iOS and the web. It exposes one JavaScript API (`MediaDownloader`) on every platform; the platform implementation differs, and `registerPlugin` selects the right backend at runtime.
 
-Source: [`modules/plugins/media-downloader/`](https://github.com/akdasa-studios/lectorium/tree/main/modules/plugins/media-downloader). Mobile-side adapter: [`modules/apps/mobile/infra/mediaDownloader/plugin/`](https://github.com/akdasa-studios/lectorium/tree/main/modules/apps/mobile/infra/mediaDownloader/plugin).
+Source: [`modules/plugins/media-downloader/`](https://github.com/jiva-studio/lectorium/tree/main/modules/plugins/media-downloader). Mobile-side adapter: [`modules/apps/mobile/infra/mediaDownloader/plugin/`](https://github.com/jiva-studio/lectorium/tree/main/modules/apps/mobile/infra/mediaDownloader/plugin).
 
 ## Why a custom plugin?
 
@@ -117,7 +117,7 @@ export interface IMediaDownloader {
 
 `ProgressCallback` (`modules/apps/mobile/ports/app/persistence.ts`) is `(receivedLength, totalLength, isDownloading) => void`.
 
-The adapter ([`useMediaDownloaderAdapter.ts`](https://github.com/akdasa-studios/lectorium/blob/main/modules/apps/mobile/infra/mediaDownloader/plugin/useMediaDownloaderAdapter.ts)) bridges the plugin's task-id model to this URL-keyed port:
+The adapter ([`useMediaDownloaderAdapter.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/infra/mediaDownloader/plugin/useMediaDownloaderAdapter.ts)) bridges the plugin's task-id model to this URL-keyed port:
 
 | Concern | What the adapter does |
 |---|---|

@@ -11,7 +11,7 @@ package handlers
 import (
 	"context"
 
-	cwdb "github.com/akdasa-studios/lectorium/cleanup-worker/internal/db"
+	cwdb "github.com/jiva-studio/lectorium/cleanup-worker/internal/db"
 )
 
 // Event is re-exported so handler files don't need to import the db
