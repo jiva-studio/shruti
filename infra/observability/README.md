@@ -83,9 +83,9 @@ ssh root@<obs.public.ip> 'tailscale ip -4'    # → 100.x.x.B
 ./scripts/configure.sh --region eu
 
 # 6. URLs (only reachable from inside the Tailnet):
-#    https://grafana.obs.eu.lectorium.akdasa.studio
-#    https://langfuse.obs.eu.lectorium.akdasa.studio
-#    https://prometheus.obs.eu.lectorium.akdasa.studio
+#    https://grafana.obs.eu.lectorium.jiva.studio
+#    https://langfuse.obs.eu.lectorium.jiva.studio
+#    https://prometheus.obs.eu.lectorium.jiva.studio
 ```
 
 The deploy script is idempotent — re-run any time to push config /
@@ -136,7 +136,7 @@ deploy where Langfuse hasn't ingested any data yet**.
 ```bash
 ssh obs 'docker compose -f .../docker-compose.yml logs caddy | grep -i acme'
 ```
-Check that `CF_API_TOKEN` has `Zone:DNS:Edit` scope on `akdasa.studio`.
+Check that `CF_API_TOKEN` has `Zone:DNS:Edit` scope on `jiva.studio`.
 The token from `https://dash.cloudflare.com/profile/api-tokens` must be
 the one in `config/shared.env`.
 
@@ -158,10 +158,10 @@ See `/home/akd/.claude/plans/distributed-stirring-riddle.md` →
 ```bash
 cat > config/ru.env <<EOF
 REGION=ru
-TAILNET_DOMAIN=obs.ru.lectorium.akdasa.studio
+TAILNET_DOMAIN=obs.ru.lectorium.jiva.studio
 OBS_TS_IP=100.x.x.X
 PROD_HOST_TS_IP=100.x.x.Y
-LANGFUSE_INIT_USER_EMAIL=admin@akdasa.studio
+LANGFUSE_INIT_USER_EMAIL=admin@jiva.studio
 LANGFUSE_INIT_USER_NAME=admin
 EOF
 

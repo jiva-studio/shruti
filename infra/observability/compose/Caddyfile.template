@@ -3,13 +3,13 @@
 # Rendered by infra/shared/lib/render-templates.sh — ${VARS} substituted at
 # deploy time. The rendered file (Caddyfile) is what Caddy actually reads.
 #
-# Wildcard cert is obtained via Cloudflare DNS-01 (no port 80 required to
-# reach the public internet). Caddy listens only on the Tailscale IP, so
+# Wildcard cert is issued by Caddy's internal CA (`tls internal`) � trust
+# that CA on the client once. Caddy listens only on the Tailscale IP, so
 # the wildcard hostnames are only reachable from inside the Tailnet — DNS
 # resolves publicly, the IP itself isn't routable from the internet.
 
 {
-    email admin@akdasa.studio
+    email admin@jiva.studio
     log {
         output stdout
         format json
@@ -17,10 +17,7 @@
 }
 
 *.${TAILNET_DOMAIN} {
-    tls {
-        dns cloudflare {env.CF_API_TOKEN}
-        resolvers 1.1.1.1
-    }
+    tls internal
 
     @grafana host grafana.${TAILNET_DOMAIN}
     handle @grafana {
