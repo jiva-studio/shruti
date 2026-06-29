@@ -44,7 +44,6 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
-    environment:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     healthcheck:
