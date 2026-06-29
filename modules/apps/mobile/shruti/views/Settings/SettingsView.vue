@@ -327,7 +327,7 @@ async function onOpenEmail(): Promise<void> {
   ]
   const subject = encodeURIComponent(t("settings.contacts.email.emailSubject"))
   const body = encodeURIComponent(lines.join("\n"))
-  window.open(`mailto:support@akdasa.studio?subject=${subject}&body=${body}`, "_system")
+  window.open(`mailto:support@jiva.studio?subject=${subject}&body=${body}`, "_system")
 }
 
 function onOpenVk(): void {

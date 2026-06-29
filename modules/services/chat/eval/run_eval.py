@@ -44,8 +44,9 @@ BG_SOURCE_ID = "source_dsicuBsFvinZ"
 # `run_chat_worktree_locally`).
 CHAT_URL = "http://localhost:11080/chat"
 CHAT_CONTAINER = "shruti-chat-1"
-JWT_KEY = "/home/akd/Projects/jiva-studio/shruti/.config/shruti/jwt/private.pem"
 HERE = Path(__file__).resolve().parent
+# Project root sits two levels above the repo: <…>/shruti/source/shruti.
+JWT_KEY = HERE.parents[5] / ".config/shruti/jwt/private.pem"
 
 
 def mint_token() -> str:

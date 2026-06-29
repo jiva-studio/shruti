@@ -89,8 +89,8 @@ modules/
 | --- | --- |
 | [Qase](https://app.qase.io/project/SHRUTI) | Test management & release runs |
 | [Sentry](https://jiva-studio.sentry.io/issues/?project=4511584811220992) | Error & crash tracking |
-| [Langfuse](https://langfuse.obs.eu.shruti.akdasa.studio/) | LLM/chat observability & prompt management |
-| [Grafana](https://grafana.obs.eu.shruti.akdasa.studio/) | Metrics & infrastructure dashboards |
+| [Langfuse](https://langfuse.obs.eu.shruti.jiva.studio/) | LLM/chat observability & prompt management |
+| [Grafana](https://grafana.obs.eu.shruti.jiva.studio/) | Metrics & infrastructure dashboards |
 
 # Get involved
 

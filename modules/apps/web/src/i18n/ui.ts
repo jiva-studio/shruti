@@ -13,7 +13,7 @@ export const STORE = {
   apkDownload: 'https://cdn.shruti.local/public/app/shruti.apk',
   vk: 'https://vk.com/shruti',
   telegram: 'https://t.me/shrutiapp',
-  email: 'support@akdasa.studio',
+  email: 'support@jiva.studio',
 }
 
 import ru from './strings/ru.json'

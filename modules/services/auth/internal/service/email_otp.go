@@ -219,7 +219,7 @@ func otpEmailContent(code, locale string) (subject, text, html string) {
 const (
 	otpLogoURL      = "https://shruti.app/app-icon.png"
 	otpWebsiteURL   = "https://shruti.app"
-	otpSupportEmail = "support@akdasa.studio"
+	otpSupportEmail = "support@jiva.studio"
 	otpTelegramURL  = "https://t.me/shrutiapp"
 	otpVKURL        = "https://vk.com/shruti"
 	otpFeatherURL   = "https://shruti.app/hero-feather.png"
