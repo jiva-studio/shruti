@@ -17,15 +17,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/akdasa-studios/shruti/billing/internal/authclient"
-	"github.com/akdasa-studios/shruti/billing/internal/config"
-	"github.com/akdasa-studios/shruti/billing/internal/driver"
-	"github.com/akdasa-studios/shruti/billing/internal/handler"
-	"github.com/akdasa-studios/shruti/billing/internal/jwtverify"
-	logpkg "github.com/akdasa-studios/shruti/billing/internal/logging"
-	"github.com/akdasa-studios/shruti/billing/internal/paymento"
-	"github.com/akdasa-studios/shruti/billing/internal/reconcile"
-	"github.com/akdasa-studios/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/authclient"
+	"github.com/jiva-studio/shruti/billing/internal/config"
+	"github.com/jiva-studio/shruti/billing/internal/driver"
+	"github.com/jiva-studio/shruti/billing/internal/handler"
+	"github.com/jiva-studio/shruti/billing/internal/jwtverify"
+	logpkg "github.com/jiva-studio/shruti/billing/internal/logging"
+	"github.com/jiva-studio/shruti/billing/internal/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/reconcile"
+	"github.com/jiva-studio/shruti/billing/internal/store"
 )
 
 func main() {

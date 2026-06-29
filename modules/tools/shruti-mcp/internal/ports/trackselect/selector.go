@@ -12,8 +12,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 )
 
 // Selector resolves a track.Selector to a slice of Selected rows. Empty

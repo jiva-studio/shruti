@@ -7,8 +7,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/regions"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/regions"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
 // RegionsDeps bundles the regions use-case for tool wiring. Wired in main.go

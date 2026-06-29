@@ -14,7 +14,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/shruti/modules/tools/transcriber-mcp/internal/client"
+	"github.com/jiva-studio/shruti/modules/tools/transcriber-mcp/internal/client"
 )
 
 // JobClient is the slice of *client.Client we depend on. Defined as an

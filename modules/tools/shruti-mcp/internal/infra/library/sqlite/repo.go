@@ -13,7 +13,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/library"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
 )
 
 type Repo struct {

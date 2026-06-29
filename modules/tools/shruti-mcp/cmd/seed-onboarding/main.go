@@ -13,9 +13,9 @@ import (
 	"log"
 	"os"
 
-	configregistry "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/config/registry"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	sqlitecatalog "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
+	configregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/config/registry"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	sqlitecatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
 )
 
 func main() {

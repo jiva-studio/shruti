@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/shruti/auth/internal/rcclient"
-	"github.com/akdasa-studios/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/rcclient"
+	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
 func ptr[T any](v T) *T { return &v }

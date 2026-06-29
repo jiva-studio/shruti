@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
 var errCoverNotConfigured = errors.New("image generation is not configured (set images.api_key)")

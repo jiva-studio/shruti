@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
 )
 
 func main() {

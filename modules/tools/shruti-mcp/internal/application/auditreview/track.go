@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 )
 
 // TrackOptions selects one track + language for the per-track audit.

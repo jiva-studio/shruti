@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcriber"
 )
 
 type fakeTranscriber struct {

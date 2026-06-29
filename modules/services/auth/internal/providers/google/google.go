@@ -13,7 +13,7 @@ import (
 
 	"google.golang.org/api/idtoken"
 
-	"github.com/akdasa-studios/shruti/auth/internal/providers"
+	"github.com/jiva-studio/shruti/auth/internal/providers"
 )
 
 // Verifier checks Google id-tokens against a fixed allow-list of client IDs.

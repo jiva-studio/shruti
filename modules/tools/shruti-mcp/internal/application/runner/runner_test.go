@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
-	memruns "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/runregistry/memory"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	memruns "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/runregistry/memory"
 )
 
 // waitForState polls until the run reaches expected (or fails the test

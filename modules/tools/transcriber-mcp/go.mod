@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti/modules/tools/transcriber-mcp
+module github.com/jiva-studio/shruti/modules/tools/transcriber-mcp
 
 go 1.25.5
 

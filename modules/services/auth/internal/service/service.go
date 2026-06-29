@@ -19,13 +19,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/shruti/auth/internal/email"
-	"github.com/akdasa-studios/shruti/auth/internal/identityhash"
-	"github.com/akdasa-studios/shruti/auth/internal/jwt"
-	"github.com/akdasa-studios/shruti/auth/internal/profile"
-	"github.com/akdasa-studios/shruti/auth/internal/providers"
-	"github.com/akdasa-studios/shruti/auth/internal/rcclient"
-	"github.com/akdasa-studios/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/email"
+	"github.com/jiva-studio/shruti/auth/internal/identityhash"
+	"github.com/jiva-studio/shruti/auth/internal/jwt"
+	"github.com/jiva-studio/shruti/auth/internal/profile"
+	"github.com/jiva-studio/shruti/auth/internal/providers"
+	"github.com/jiva-studio/shruti/auth/internal/rcclient"
+	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
 const (

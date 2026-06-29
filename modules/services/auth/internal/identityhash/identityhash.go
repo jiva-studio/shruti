@@ -43,7 +43,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"github.com/akdasa-studios/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
 // providerDevice mirrors service.ProviderDevice. Duplicated here to

@@ -27,4 +27,4 @@ Los registros de compra de la suscripción se quedan en Apple o Google —
 tampoco podemos eliminarlos.
 
 Para todos los detalles, consulta la [política de
-privacidad](https://akdasa-studios.github.io/shruti/).
+privacidad](https://jiva-studio.github.io/shruti/).

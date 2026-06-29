@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akdasa-studios/shruti-share-audio/internal/logx"
+	"github.com/jiva-studio/shruti-share-audio/internal/logx"
 )
 
 // Dispatcher coalesces background work by key. The first call for a key

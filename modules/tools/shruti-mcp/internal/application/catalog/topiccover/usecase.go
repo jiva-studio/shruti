@@ -7,7 +7,7 @@ package topiccover
 import (
 	"context"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
 )
 
 // Catalog is the slice of the topic repository this adapter needs.

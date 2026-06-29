@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
 )
 
 // SelectorSource controls where the resolver looks for candidate mp3 files.

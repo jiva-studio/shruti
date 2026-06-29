@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/transcriber-service/internal/server"
-	"github.com/akdasa-studios/shruti/modules/tools/transcriber-service/internal/store"
-	"github.com/akdasa-studios/shruti/modules/tools/transcriber-service/internal/worker"
+	"github.com/jiva-studio/shruti/modules/tools/transcriber-service/internal/server"
+	"github.com/jiva-studio/shruti/modules/tools/transcriber-service/internal/store"
+	"github.com/jiva-studio/shruti/modules/tools/transcriber-service/internal/worker"
 )
 
 func main() {

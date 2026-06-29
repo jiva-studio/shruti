@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	domaincatalog "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
-	lakeport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/lake"
+	domaincatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
 )
 
 // SetTrackMetadata is a manual override that patches the metadata-extract

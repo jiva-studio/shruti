@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	domaintopics "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/topics"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	domaintopics "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/topics"
 )
 
 const (

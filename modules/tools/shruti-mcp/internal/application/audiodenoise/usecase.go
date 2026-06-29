@@ -9,13 +9,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/denoiseplan"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	audioport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/audio"
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
-	denoiserport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/denoiser"
-	transcriptport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/denoiseplan"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	denoiserport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/denoiser"
+	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
 type UseCase struct {

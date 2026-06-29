@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	audioport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/audio"
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/tagger"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/tagger"
 )
 
 type UseCase struct {

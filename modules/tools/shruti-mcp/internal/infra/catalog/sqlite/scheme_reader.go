@@ -3,7 +3,7 @@ package sqlitecatalog
 import (
 	"context"
 
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 )
 
 // SchemeReader implements catalogport.SchemeReader on top of an Open+Close

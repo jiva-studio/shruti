@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
 // TestApplyRCSubscriberState_DedupSilencesDuplicateEventID verifies the

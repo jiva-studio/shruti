@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/akdasa-studios/shruti/auth/internal/jwt"
-	"github.com/akdasa-studios/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/jwt"
+	"github.com/jiva-studio/shruti/auth/internal/service"
 )
 
 func grantBody(t *testing.T, userID, duration string) *bytes.Buffer {

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
 // CreateDictImpl inserts new dict rows for every locale in entry.Names.

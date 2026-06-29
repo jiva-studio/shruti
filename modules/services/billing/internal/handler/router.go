@@ -7,10 +7,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/akdasa-studios/shruti/billing/internal/driver"
-	"github.com/akdasa-studios/shruti/billing/internal/jwtverify"
-	"github.com/akdasa-studios/shruti/billing/internal/paymento"
-	"github.com/akdasa-studios/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/driver"
+	"github.com/jiva-studio/shruti/billing/internal/jwtverify"
+	"github.com/jiva-studio/shruti/billing/internal/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/store"
 )
 
 // BillingHandler holds the dependencies every billing route needs. HMACSecret

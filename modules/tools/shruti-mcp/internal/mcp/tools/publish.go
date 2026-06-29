@@ -8,10 +8,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runner"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
 // RegisterCatalogPublish wires catalog.publish — starts an async publish

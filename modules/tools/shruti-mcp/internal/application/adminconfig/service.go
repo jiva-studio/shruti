@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"strings"
 
-	domain "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/adminconfig"
-	port "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/adminconfig"
+	domain "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/adminconfig"
+	port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/adminconfig"
 )
 
 // Service wires the ports the apply / snapshot operations need. Either

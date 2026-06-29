@@ -164,7 +164,7 @@ Solid diamond `*--` = composition (variants and references live with the track r
 
 ## Catalog entities (content DB, read-only)
 
-### `Track` — [`track.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/track.ts)
+### `Track` — [`track.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/track.ts)
 
 A single lecture recording. Language-independent metadata only — per-language titles, audio and transcripts live in `TrackVariant`.
 
@@ -184,7 +184,7 @@ A single lecture recording. Language-independent metadata only — per-language 
 
 Authoritative SQL: see [Content DB tables](../db/content-db.md#tracks).
 
-### `TrackVariant` — [`trackVariant.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/trackVariant.ts)
+### `TrackVariant` — [`trackVariant.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/trackVariant.ts)
 
 One row per (track, language). Holds the localised title, the available audio versions plus a transcript pointer, and the optional generated outline / description.
 
@@ -208,11 +208,11 @@ Two kind discriminators live here:
 
 `TrackOutlineChapter` is `{ title, startMs, endMs }` — one heading spanning `[startMs, endMs)` in milliseconds (the last chapter's `endMs` is the track duration).
 
-`TrackAudio.path` and `TrackTranscriptRef.path` are **full bucket keys** including the `public/` prefix (e.g. `public/tracks/abc123/audio/original.mp3`). The client never concatenates prefixes — see [`useStoragePublicUrl.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/storagePublicUrl/useStoragePublicUrl.ts) and [Storage layout](../infra/s3-layout.md).
+`TrackAudio.path` and `TrackTranscriptRef.path` are **full bucket keys** including the `public/` prefix (e.g. `public/tracks/abc123/audio/original.mp3`). The client never concatenates prefixes — see [`useStoragePublicUrl.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/storagePublicUrl/useStoragePublicUrl.ts) and [Storage layout](../infra/s3-layout.md).
 
 `TrackAudio.duration` is in **milliseconds**.
 
-### `Reference` — [`reference.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/reference.ts)
+### `Reference` — [`reference.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/reference.ts)
 
 A scripture citation: `{ sourceId: "source_dsicuBsFvinZ", tokens: ["18", "66"] }` reads as Bhagavad-gītā 18.66. `sourceId` is the catalog `sources.id` primary key — UI composers turn it into a localised "BG"/"Bhagavad-gītā" via the [`sources`](#dictionaries--author--location--source--tag--topic--language) dictionary. `tokens` is kept as an array so the client can range-detect ("10.5–10.7") without re-parsing.
 
@@ -220,7 +220,7 @@ A scripture citation: `{ sourceId: "source_dsicuBsFvinZ", tokens: ["18", "66"] }
 
 The "named id" dictionaries follow the same shape: an id plus a `Map<LanguageCode, string>` of localised names. `Source` differs — its localised value is a `SourceName { fullName, shortName }` per locale, so its names map is `Map<LanguageCode, SourceName>` (e.g. "BG" / "Bhagavad-gītā"). The SQL tables behind them use a composite `(id, language)` primary key — one row per locale — see [content DB tables](../db/content-db.md#dictionaries).
 
-`Topic` — [`topic.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/topic.ts) — is the recommender-theme dictionary (mirrors `Tag`). Beyond `id` + `names` it carries `shortNames` (a `Map<LanguageCode, string>` of tighter chip/shelf labels, possibly absent for a locale) and `cover` (a generated, language-neutral cover-image key, or `null`). A track's membership + weight lives separately in `track_topics` (see `Track.topicIds`, ordered by descending weight).
+`Topic` — [`topic.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/topic.ts) — is the recommender-theme dictionary (mirrors `Tag`). Beyond `id` + `names` it carries `shortNames` (a `Map<LanguageCode, string>` of tighter chip/shelf labels, possibly absent for a locale) and `cover` (a generated, language-neutral cover-image key, or `null`). A track's membership + weight lives separately in `track_topics` (see `Track.topicIds`, ordered by descending weight).
 
 `Language` is the registry of locales itself (English name + optional flag emoji), keyed by `code` rather than `(id, language)`.
 
@@ -228,9 +228,9 @@ The "named id" dictionaries follow the same shape: an id plus a `Map<LanguageCod
 
 ## User entities (user DB, writable)
 
-These entities live in the per-device user DB built by [`runMigrations.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/persistence/migrations/user/runMigrations.ts). They never leave the device — there is no sync.
+These entities live in the per-device user DB built by [`runMigrations.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/persistence/migrations/user/runMigrations.ts). They never leave the device — there is no sync.
 
-### `Note` — [`note.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/note.ts)
+### `Note` — [`note.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/note.ts)
 
 | Field | Type | Notes |
 |---|---|---|
@@ -244,7 +244,7 @@ These entities live in the per-device user DB built by [`runMigrations.ts`](http
 
 Field invariants live on the entity in `validateNoteFields(input)`, called by both the create and update use cases (update validates the *merged* values). It trims `text`, rejects empty / over-length text (`empty-text`, `text-too-long`), non-finite or negative `timeStart` (`invalid-time`, `invalid-range`), and `timeEnd < timeStart` (`invalid-range`), returning the normalised fields on success.
 
-### `PlaylistItem` — [`playlistItem.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/playlistItem.ts)
+### `PlaylistItem` — [`playlistItem.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/playlistItem.ts)
 
 | Field | Type | Notes |
 |---|---|---|
@@ -268,7 +268,7 @@ stateDiagram-v2
 
 The "active" list shown on Home is `archived_at IS NULL`. Completion is a *derived* presentation hint — it does not transition the row; the playlist row stays Active until archived.
 
-### `ListeningSession` — [`listeningSession.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/listeningSession.ts)
+### `ListeningSession` — [`listeningSession.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/listeningSession.ts)
 
 A single play→pause/seek/track-change interval. The journal is what powers resume, completion, the daily heatmap and the streak.
 
@@ -295,7 +295,7 @@ stateDiagram-v2
 
 `tick` is throttled at the application boundary (`useListeningSessionTracker` in `shruti/composables/`) so a 30-minute session writes ~120 rows, not one per audio frame. A user-initiated seek closes the open session and opens a fresh one — the discontinuity is preserved so background listening between two foreground sessions doesn't get back-attributed to a single seek jump.
 
-### `MediaItem` — [`mediaItem.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/mediaItem.ts)
+### `MediaItem` — [`mediaItem.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/mediaItem.ts)
 
 Tracks the offline cache state for one audio version of a track, after an explicit user-initiated download.
 
@@ -325,9 +325,9 @@ stateDiagram-v2
     crash --> failed : on next launch — failStaleDownloads()
 ```
 
-Stale `downloading` rows on app start are flipped to `failed` by [`IMediaItemRepository.failStaleDownloads()`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/mediaItemRepository.ts) so a force-close mid-download doesn't permanently lock the row with `already-in-progress`. See [`downloadMedia.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/usecases/downloads/downloadMedia.ts) and [`removeDownloadedMedia.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/usecases/downloads/removeDownloadedMedia.ts) for the full transition rules.
+Stale `downloading` rows on app start are flipped to `failed` by [`IMediaItemRepository.failStaleDownloads()`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/mediaItemRepository.ts) so a force-close mid-download doesn't permanently lock the row with `already-in-progress`. See [`downloadMedia.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/usecases/downloads/downloadMedia.ts) and [`removeDownloadedMedia.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/usecases/downloads/removeDownloadedMedia.ts) for the full transition rules.
 
-### `ChatSession` — [`chatSession.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/chatSession.ts)
+### `ChatSession` — [`chatSession.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/chatSession.ts)
 
 One Sadhu-tab conversation. Persisted in the user DB (`chat_sessions`), surfaced in the History sheet sorted by `updatedAt` most-recent-first.
 
@@ -339,7 +339,7 @@ One Sadhu-tab conversation. Persisted in the user DB (`chat_sessions`), surfaced
 | `updatedAt` | `UnixMs` | Advances on each new message; drives History-sheet ordering |
 | `trackId` | `TrackId \| null` | Track this session is anchored to (set when started by tapping Sadhu on a transcript selection). `null` for free-form chats opened without a transcript context |
 
-### `ChatMessage` — [`chatMessage.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/chatMessage.ts)
+### `ChatMessage` — [`chatMessage.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/chatMessage.ts)
 
 One row of a chat (`chat_messages`). Assistant `content` is raw markdown carrying inline markers (`[cite:…]`, `[card:…]`, `[action:…|id=…]`, `[outline:…]`, `[media:…]`, `[verse:…]`, `[chapter:…]`, `[commentary:…]`, `[followup:<text>]`) whose card bodies are streamed ahead of the marker on a matching SSE action and stashed in the structured sidecar fields below — so each card renders without re-fetching and survives a reopen.
 
@@ -370,7 +370,7 @@ One row of a chat (`chat_messages`). Assistant `content` is raw markdown carryin
 
 ## Transcripts (fetched, not stored)
 
-`Transcript` — [`transcript.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/transcript.ts) — is downloaded as JSON from S3 on demand and **never written to SQLite**. It is a sequence of typed blocks:
+`Transcript` — [`transcript.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/transcript.ts) — is downloaded as JSON from S3 on demand and **never written to SQLite**. It is a sequence of typed blocks:
 
 ```mermaid
 graph LR

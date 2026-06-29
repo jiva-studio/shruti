@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
-	s3port "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/s3"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
+	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
 const configKey = "public/config.json"

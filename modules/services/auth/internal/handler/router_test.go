@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/akdasa-studios/shruti/auth/internal/jwt"
-	"github.com/akdasa-studios/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/jwt"
+	"github.com/jiva-studio/shruti/auth/internal/service"
 )
 
 // TestRouter_DeletedRoutesReturn404 — #728 single-region collapse: the

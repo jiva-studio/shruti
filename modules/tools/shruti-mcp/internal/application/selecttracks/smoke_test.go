@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
-	sqliteregistry "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
+	sqliteregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
 )
 
 // TestSelectorFixtureLake exercises the selector against a real lake

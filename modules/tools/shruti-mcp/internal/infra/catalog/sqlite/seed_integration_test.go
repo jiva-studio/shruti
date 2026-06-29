@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
 // curatedOnboardingTopics is the seed list for onboarding.topics. Kept here so

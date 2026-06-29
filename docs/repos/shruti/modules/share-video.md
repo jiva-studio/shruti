@@ -156,7 +156,7 @@ graph LR
     class DB,RD,S3 store;
 ```
 
-Ships as `ghcr.io/akdasa-studios/shruti-share-video:${TAG:-latest}`. The two-stage Dockerfile builds a static binary then runs it on `alpine:3.20` with `ffmpeg`, `curl`, `ca-certificates`, `tini`, and the bundled assets (`logo.mp4`, `icon.png`, `NotoSans-Bold.ttf`) as an unprivileged `share` user. Compose deps: `postgres` healthy, `redis` healthy, `migrator` completed; a named volume `share_video_scratch:/tmp/render`; Watchtower-enabled. Caddy caps the request body at 100 KB and the response-header timeout at 30 s.
+Ships as `ghcr.io/jiva-studio/shruti-share-video:${TAG:-latest}`. The two-stage Dockerfile builds a static binary then runs it on `alpine:3.20` with `ffmpeg`, `curl`, `ca-certificates`, `tini`, and the bundled assets (`logo.mp4`, `icon.png`, `NotoSans-Bold.ttf`) as an unprivileged `share` user. Compose deps: `postgres` healthy, `redis` healthy, `migrator` completed; a named volume `share_video_scratch:/tmp/render`; Watchtower-enabled. Caddy caps the request body at 100 KB and the response-header timeout at 30 s.
 
 ## Constraints worth remembering
 

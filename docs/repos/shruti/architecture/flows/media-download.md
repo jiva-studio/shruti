@@ -145,7 +145,7 @@ await repo.failStaleDownloads()
 // UPDATE media_items SET state = 'failed', local_path = NULL WHERE state = 'downloading'
 ```
 
-…which flips every such row to `failed`. From then on the user sees a "retry" indicator instead of a permanent "downloading" lock and the next `downloadMedia` call goes through without the `"already-in-progress"` short-circuit. See [`mediaItemRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/mediaItemRepository.ts) for the port contract.
+…which flips every such row to `failed`. From then on the user sees a "retry" indicator instead of a permanent "downloading" lock and the next `downloadMedia` call goes through without the `"already-in-progress"` short-circuit. See [`mediaItemRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/mediaItemRepository.ts) for the port contract.
 
 ## Why the `transfer` is passed in as a closure
 

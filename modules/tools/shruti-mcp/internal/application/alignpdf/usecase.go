@@ -22,12 +22,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	alignpdfport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/alignpdf"
-	lakeport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/lake"
-	transcriptport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	alignpdfport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/alignpdf"
+	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
+	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
 type UseCase struct {

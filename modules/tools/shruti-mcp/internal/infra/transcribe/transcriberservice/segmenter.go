@@ -3,7 +3,7 @@ package transcriberservice
 import (
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
 )
 
 const (

@@ -9,9 +9,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/runregistry"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/runregistry"
 )
 
 // Registry is the in-memory store. Safe for concurrent use.

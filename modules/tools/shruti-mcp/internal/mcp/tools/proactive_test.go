@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
 func TestRequireInt(t *testing.T) {

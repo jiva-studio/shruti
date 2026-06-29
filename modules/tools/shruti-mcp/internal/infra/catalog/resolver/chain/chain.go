@@ -6,7 +6,7 @@ package chain
 import (
 	"context"
 
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 )
 
 // Chain runs resolvers in order. The first one that returns confidence

@@ -15,12 +15,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/akdasa-studios/shruti-share-video/internal/logx"
-	"github.com/akdasa-studios/shruti-share-video/internal/pipeline/align"
-	"github.com/akdasa-studios/shruti-share-video/internal/pipeline/reel"
-	"github.com/akdasa-studios/shruti-share-video/internal/pipeline/transcript"
-	"github.com/akdasa-studios/shruti-share-video/internal/storage"
-	"github.com/akdasa-studios/shruti-share-video/internal/types"
+	"github.com/jiva-studio/shruti-share-video/internal/logx"
+	"github.com/jiva-studio/shruti-share-video/internal/pipeline/align"
+	"github.com/jiva-studio/shruti-share-video/internal/pipeline/reel"
+	"github.com/jiva-studio/shruti-share-video/internal/pipeline/transcript"
+	"github.com/jiva-studio/shruti-share-video/internal/storage"
+	"github.com/jiva-studio/shruti-share-video/internal/types"
 )
 
 // Renderer is the top-level glue. Hand-assembled at worker boot once.

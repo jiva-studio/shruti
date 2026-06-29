@@ -37,7 +37,7 @@ dependencies = [
   # only — the auth service holds the private half. RS256 forced.
   "PyJWT[crypto]>=2.8",
   # LLM observability + hot-reload prompts. Self-hosted instance lives
-  # at langfuse.obs.eu.shruti.akdasa.studio (see
+  # at langfuse.obs.eu.shruti.jiva.studio (see
   # docs/architecture/observability). Major version must match the
   # server (v3.x); the SDK is wire-compatible across patch releases.
   # When LANGFUSE_HOST is unset or the host is unreachable the

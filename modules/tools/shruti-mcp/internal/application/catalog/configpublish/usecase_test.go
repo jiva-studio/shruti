@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	s3port "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/s3"
+	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
 type fakeUploader struct {

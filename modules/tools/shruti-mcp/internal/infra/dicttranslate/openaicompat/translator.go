@@ -11,9 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/dicttranslate"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/dicttranslate"
 )
 
 //go:embed prompt.system.txt

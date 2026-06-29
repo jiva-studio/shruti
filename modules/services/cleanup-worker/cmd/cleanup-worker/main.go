@@ -26,13 +26,13 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/akdasa-studios/shruti/cleanup-worker/internal/config"
-	"github.com/akdasa-studios/shruti/cleanup-worker/internal/cron"
-	cwdb "github.com/akdasa-studios/shruti/cleanup-worker/internal/db"
-	"github.com/akdasa-studios/shruti/cleanup-worker/internal/handlers"
-	"github.com/akdasa-studios/shruti/cleanup-worker/internal/logging"
-	"github.com/akdasa-studios/shruti/cleanup-worker/internal/observability"
-	"github.com/akdasa-studios/shruti/cleanup-worker/internal/worker"
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/config"
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/cron"
+	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/handlers"
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/logging"
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/observability"
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/worker"
 )
 
 func main() {

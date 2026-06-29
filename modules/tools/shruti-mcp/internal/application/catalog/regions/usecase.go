@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
 )
 
 const sectionKey = "regions"

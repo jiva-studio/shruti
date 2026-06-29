@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/shruti-share-audio/internal/logx"
+	"github.com/jiva-studio/shruti-share-audio/internal/logx"
 )
 
 // statusRecorder wraps ResponseWriter so the access log can read the

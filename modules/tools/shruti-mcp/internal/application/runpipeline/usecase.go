@@ -12,15 +12,15 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/commit"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/ingest"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/normalize"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/review"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/transcribe"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	lakeport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/lake"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/commit"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/ingest"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/normalize"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/review"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/transcribe"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
 )
 
 type UseCase struct {

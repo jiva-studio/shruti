@@ -14,10 +14,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
-	outlineport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/outline"
-	transcriptport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	outlineport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/outline"
+	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
 // CatalogWriter is the slice of the catalog the outline use case writes: a

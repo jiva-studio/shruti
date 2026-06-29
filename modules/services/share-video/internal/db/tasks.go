@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/shruti-share-video/internal/types"
+	"github.com/jiva-studio/shruti-share-video/internal/types"
 )
 
 // TaskKind is the constant used in public.tasks.kind to bucket

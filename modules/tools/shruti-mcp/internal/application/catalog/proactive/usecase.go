@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
 )
 
 // Allowed enum values mirror modules/libs/domain/config.ts:23-92 on the

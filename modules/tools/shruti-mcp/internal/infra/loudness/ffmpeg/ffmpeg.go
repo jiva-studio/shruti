@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	audioport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/audio"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/loudness"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/loudness"
 )
 
 // Tool wraps ffmpeg+ffprobe binaries. Implements both loudness.Normalizer and audio.Probe.

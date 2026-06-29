@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/review/prompts"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/prompts"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
 )
 
 var defaultSystemPrompt = prompts.System

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/shruti/auth/internal/rcclient"
-	"github.com/akdasa-studios/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/rcclient"
+	"github.com/jiva-studio/shruti/auth/internal/service"
 )
 
 // InternalGrantHandler serves POST /internal/subscription/grant — a

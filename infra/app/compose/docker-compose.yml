@@ -106,7 +106,7 @@ services:
     # whenever infra/app/db/migrations/** or the Dockerfile changes.
     # Watchtower re-runs this stopped container when a new image lands
     # (needs --include-stopped + --revive-stopped on Watchtower itself).
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-migrator:${SHRUTI_MIGRATOR_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-migrator:${SHRUTI_MIGRATOR_TAG:-latest}
     restart: "no"
     logging: *default-logging
     labels:
@@ -154,7 +154,7 @@ services:
     # Production: image comes from ghcr.io built by services-ghcr.yml.
     # Dev override (docker-compose.dev.yml) replaces this with a build:
     # block + pull_policy: never so local hacking doesn't try to pull.
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-chat:${SHRUTI_CHAT_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-chat:${SHRUTI_CHAT_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -211,7 +211,7 @@ services:
   auth:
     # origin only — proxy hosts forward /auth/* to global via Caddy.
     profiles: [origin]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-auth:${SHRUTI_AUTH_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-auth:${SHRUTI_AUTH_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -274,7 +274,7 @@ services:
     # origin only — proxy hosts forward /billing/* to global via Caddy.
     # Paymento crypto checkout → grants RC "pro" via auth's internal API.
     profiles: [origin]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-billing:${SHRUTI_BILLING_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-billing:${SHRUTI_BILLING_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -320,7 +320,7 @@ services:
   cleanup-worker:
     # origin only — consumes app.outbox events that only auth+chat emit.
     profiles: [origin]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-cleanup-worker:${SHRUTI_CLEANUP_WORKER_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-cleanup-worker:${SHRUTI_CLEANUP_WORKER_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -363,7 +363,7 @@ services:
     # Both roles — share/* terminates locally on every region so the
     # generated S3 URL belongs to the regional Yandex/AWS bucket.
     profiles: [origin, proxy]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-share-audio:${SHRUTI_SHARE_AUDIO_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-audio:${SHRUTI_SHARE_AUDIO_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -411,7 +411,7 @@ services:
   share-video:
     # Both roles — render renders close to the bucket the file lands in.
     profiles: [origin, proxy]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-share-video:${SHRUTI_SHARE_VIDEO_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-video:${SHRUTI_SHARE_VIDEO_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -474,7 +474,7 @@ services:
     # Both roles — renders close to the bucket the PDF lands in, so the
     # returned URL belongs to the regional bucket (RU → Yandex, global → AWS).
     profiles: [origin, proxy]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-share-transcript:${SHRUTI_SHARE_TRANSCRIPT_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-transcript:${SHRUTI_SHARE_TRANSCRIPT_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -513,7 +513,7 @@ services:
   # reads Bunny (EU) and writes the regional Yandex bucket.
   storage-sync:
     profiles: [origin]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-storage-sync:${SHRUTI_STORAGE_SYNC_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-storage-sync:${SHRUTI_STORAGE_SYNC_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -544,7 +544,7 @@ services:
   search-mcp:
     # origin only — read-only MCP over pgvector, reached over tailscale.
     profiles: [origin]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-search-mcp:${SHRUTI_SEARCH_MCP_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-search-mcp:${SHRUTI_SEARCH_MCP_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening

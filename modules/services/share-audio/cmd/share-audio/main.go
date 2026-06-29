@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/akdasa-studios/shruti-share-audio/internal/config"
-	"github.com/akdasa-studios/shruti-share-audio/internal/httpx"
-	"github.com/akdasa-studios/shruti-share-audio/internal/logx"
-	"github.com/akdasa-studios/shruti-share-audio/internal/pipeline"
-	"github.com/akdasa-studios/shruti-share-audio/internal/storage"
+	"github.com/jiva-studio/shruti-share-audio/internal/config"
+	"github.com/jiva-studio/shruti-share-audio/internal/httpx"
+	"github.com/jiva-studio/shruti-share-audio/internal/logx"
+	"github.com/jiva-studio/shruti-share-audio/internal/pipeline"
+	"github.com/jiva-studio/shruti-share-audio/internal/storage"
 )
 
 func main() {

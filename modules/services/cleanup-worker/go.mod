@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti/cleanup-worker
+module github.com/jiva-studio/shruti/cleanup-worker
 
 go 1.25.0
 

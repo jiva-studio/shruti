@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/library"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
-	libraryport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/library"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	libraryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/library"
 )
 
 //go:embed prompt.pinned.txt

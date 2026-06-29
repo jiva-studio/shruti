@@ -16,9 +16,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/library"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/ids"
-	s3port "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/s3"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/ids"
+	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
 const idPrefix = "media_"

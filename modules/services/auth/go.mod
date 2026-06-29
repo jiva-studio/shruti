@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti/auth
+module github.com/jiva-studio/shruti/auth
 
 go 1.25.0
 

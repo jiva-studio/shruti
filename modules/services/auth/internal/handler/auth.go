@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/akdasa-studios/shruti/auth/internal/jwt"
-	"github.com/akdasa-studios/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/jwt"
+	"github.com/jiva-studio/shruti/auth/internal/service"
 )
 
 type authHandler struct {

@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 )
 
 const (

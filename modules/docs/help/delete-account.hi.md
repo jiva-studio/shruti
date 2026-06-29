@@ -26,4 +26,4 @@
 भी नहीं हटा सकते।
 
 पूरी जानकारी के लिए, [गोपनीयता
-नीति](https://akdasa-studios.github.io/shruti/) देखें।
+नीति](https://jiva-studio.github.io/shruti/) देखें।

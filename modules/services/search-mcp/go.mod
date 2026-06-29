@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti/modules/services/search-mcp
+module github.com/jiva-studio/shruti/modules/services/search-mcp
 
 go 1.25.5
 

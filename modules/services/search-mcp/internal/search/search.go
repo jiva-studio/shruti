@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/config"
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/pgvector"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/config"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/pgvector"
 )
 
 // Hit is one returned chunk. Pointer fields are NULL for chunk kinds that

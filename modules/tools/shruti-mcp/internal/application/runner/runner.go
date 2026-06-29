@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/runregistry"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/runregistry"
 )
 
 // Runner submits work to runregistry.Registry and drives it through

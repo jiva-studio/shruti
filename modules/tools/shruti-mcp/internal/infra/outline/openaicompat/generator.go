@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
-	outlineport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/outline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	outlineport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/outline"
 )
 
 //go:embed prompt.outline.txt

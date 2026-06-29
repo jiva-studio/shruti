@@ -13,15 +13,15 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/akdasa-studios/shruti-share-video/internal/config"
-	"github.com/akdasa-studios/shruti-share-video/internal/db"
-	"github.com/akdasa-studios/shruti-share-video/internal/httpx"
-	"github.com/akdasa-studios/shruti-share-video/internal/logx"
-	"github.com/akdasa-studios/shruti-share-video/internal/pipeline"
-	"github.com/akdasa-studios/shruti-share-video/internal/pipeline/reel"
-	"github.com/akdasa-studios/shruti-share-video/internal/pipeline/transcript"
-	"github.com/akdasa-studios/shruti-share-video/internal/storage"
-	"github.com/akdasa-studios/shruti-share-video/internal/worker"
+	"github.com/jiva-studio/shruti-share-video/internal/config"
+	"github.com/jiva-studio/shruti-share-video/internal/db"
+	"github.com/jiva-studio/shruti-share-video/internal/httpx"
+	"github.com/jiva-studio/shruti-share-video/internal/logx"
+	"github.com/jiva-studio/shruti-share-video/internal/pipeline"
+	"github.com/jiva-studio/shruti-share-video/internal/pipeline/reel"
+	"github.com/jiva-studio/shruti-share-video/internal/pipeline/transcript"
+	"github.com/jiva-studio/shruti-share-video/internal/storage"
+	"github.com/jiva-studio/shruti-share-video/internal/worker"
 )
 
 func main() {

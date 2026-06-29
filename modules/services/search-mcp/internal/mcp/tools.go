@@ -10,10 +10,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/config"
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/embed"
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/envelope"
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/search"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/config"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/embed"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/envelope"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/search"
 )
 
 const (

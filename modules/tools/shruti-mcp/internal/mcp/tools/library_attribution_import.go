@@ -8,8 +8,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	attributionapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	attributionapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
 // registerAttributionImport wires library.attribution.import — bulk-create

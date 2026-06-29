@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
 )
 
 // ErrQueueFull is returned by Submit when the pool's queue buffer is at

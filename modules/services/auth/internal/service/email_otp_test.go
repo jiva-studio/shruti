@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/akdasa-studios/shruti/auth/internal/providers"
-	"github.com/akdasa-studios/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/providers"
+	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
 func TestOtpEmailContent_Localized(t *testing.T) {

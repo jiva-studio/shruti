@@ -3,7 +3,7 @@ package review
 import (
 	"testing"
 
-	reviewport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	reviewport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
 )
 
 func mkSeg(idx int, text string) reviewport.ChunkSegment {

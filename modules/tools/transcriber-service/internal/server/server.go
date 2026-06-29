@@ -16,9 +16,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/akdasa-studios/shruti/modules/tools/transcriber-service/internal/job"
-	"github.com/akdasa-studios/shruti/modules/tools/transcriber-service/internal/store"
-	"github.com/akdasa-studios/shruti/modules/tools/transcriber-service/internal/worker"
+	"github.com/jiva-studio/shruti/modules/tools/transcriber-service/internal/job"
+	"github.com/jiva-studio/shruti/modules/tools/transcriber-service/internal/store"
+	"github.com/jiva-studio/shruti/modules/tools/transcriber-service/internal/worker"
 )
 
 // Config wires server dependencies.

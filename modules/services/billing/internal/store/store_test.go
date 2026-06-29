@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/shruti/billing/internal/orders"
+	"github.com/jiva-studio/shruti/billing/internal/orders"
 	"github.com/google/uuid"
 )
 

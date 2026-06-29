@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
 )
 
 // fakeRunpipelineRunner is the seam between the pool and the real

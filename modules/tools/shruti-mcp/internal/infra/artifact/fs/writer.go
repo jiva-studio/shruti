@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	s3port "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/s3"
+	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
 type Writer struct {

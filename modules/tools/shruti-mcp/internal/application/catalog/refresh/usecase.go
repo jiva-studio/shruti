@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	domaincatalog "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/cdn"
+	domaincatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/cdn"
 )
 
 // UseCase downloads the latest scheme-compatible catalog DB and stores it

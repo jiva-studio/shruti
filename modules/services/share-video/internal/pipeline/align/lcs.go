@@ -15,8 +15,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/akdasa-studios/shruti-share-video/internal/pipeline/transcript"
-	"github.com/akdasa-studios/shruti-share-video/internal/types"
+	"github.com/jiva-studio/shruti-share-video/internal/pipeline/transcript"
+	"github.com/jiva-studio/shruti-share-video/internal/types"
 )
 
 // Min slide gap kept here as a constant so the test data and renderer

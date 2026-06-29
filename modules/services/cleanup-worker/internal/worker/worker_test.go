@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	cwdb "github.com/akdasa-studios/shruti/cleanup-worker/internal/db"
-	"github.com/akdasa-studios/shruti/cleanup-worker/internal/handlers"
+	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/handlers"
 )
 
 // dbDSNFromEnv returns the dev/test DSN. If unset, the test skips with a

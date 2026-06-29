@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 )
 
 // AssignUseCase assigns weighted topics to one track by matching its outline

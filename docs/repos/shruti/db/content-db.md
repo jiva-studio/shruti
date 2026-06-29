@@ -122,7 +122,7 @@ Per-language content for each track. Composite PK `(track_id, language)` — exa
 
 Index: `idx_track_variants_sort_reference (language, sort_reference)` backs the by-reference ordering. The `byReference` ordering reads `sort_reference` through a correlated subquery keyed on the active UI language (see `sortOrderClause()` in `tracksRepository.sql.ts`).
 
-> **Why is the path stored fully-qualified?** Single source of truth. The client substitutes `{path}` in a CDN template (see [`useStoragePublicUrl.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/storagePublicUrl/useStoragePublicUrl.ts)) and never concatenates prefixes. Eliminates a class of bugs around mis-joined paths.
+> **Why is the path stored fully-qualified?** Single source of truth. The client substitutes `{path}` in a CDN template (see [`useStoragePublicUrl.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/storagePublicUrl/useStoragePublicUrl.ts)) and never concatenates prefixes. Eliminates a class of bugs around mis-joined paths.
 
 > The `outline` / `description` columns are additive ALTERs under the same scheme (`ensureTrackVariantOutlineColumns` in `migrate.go`); older binaries ignore them, newer ones read them.
 

@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti/modules/tools/transcriber-service
+module github.com/jiva-studio/shruti/modules/tools/transcriber-service
 
 go 1.25.5
 

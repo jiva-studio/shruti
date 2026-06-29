@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti-storage-sync
+module github.com/jiva-studio/shruti-storage-sync
 
 go 1.24
 

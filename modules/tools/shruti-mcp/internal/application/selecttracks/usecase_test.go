@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/trackselect"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/trackselect"
 )
 
 // fakeSelector implements trackselect.Selector with whatever the test

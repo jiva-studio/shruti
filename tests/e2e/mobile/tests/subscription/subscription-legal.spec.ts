@@ -28,7 +28,7 @@ test(
       expect(await links.count()).toBeGreaterThanOrEqual(1)
 
       const hrefs = await links.evaluateAll((els) => els.map((a) => (a as HTMLAnchorElement).href))
-      expect(hrefs.some((h) => h.includes("akdasa-studios.github.io"))).toBe(true)
+      expect(hrefs.some((h) => h.includes("jiva-studio.github.io"))).toBe(true)
       expect(hrefs.every((h) => /^https?:\/\//.test(h))).toBe(true)
     })
   }

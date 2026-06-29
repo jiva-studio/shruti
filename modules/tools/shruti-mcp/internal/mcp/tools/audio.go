@@ -7,12 +7,12 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/registeraudio"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runner"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
-	audioport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/audio"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/registeraudio"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 )
 
 func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {

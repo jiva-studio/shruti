@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti-share-audio
+module github.com/jiva-studio/shruti-share-audio
 
 go 1.24
 

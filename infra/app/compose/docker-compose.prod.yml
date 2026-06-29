@@ -17,7 +17,7 @@ services:
     # route change reaches prod the same way any code change does:
     # CI rebuilds the image, Watchtower pulls it, container restarts
     # with the new file. No out-of-band rsync. See issue #577.
-    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-caddy:${SHRUTI_CADDY_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-caddy:${SHRUTI_CADDY_TAG:-latest}
     restart: unless-stopped
     logging: &default-logging
       driver: json-file

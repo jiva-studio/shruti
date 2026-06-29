@@ -13,8 +13,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/akdasa-studios/shruti/billing/internal/driver"
-	"github.com/akdasa-studios/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/driver"
+	"github.com/jiva-studio/shruti/billing/internal/store"
 )
 
 type Worker struct {

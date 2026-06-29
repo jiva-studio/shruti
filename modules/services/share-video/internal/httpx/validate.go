@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/akdasa-studios/shruti-share-video/internal/types"
+	"github.com/jiva-studio/shruti-share-video/internal/types"
 )
 
 const (

@@ -63,7 +63,7 @@ WS_KEYS_DIR="${WORKSPACE}/.config/shruti/jwt"
 AUTH_SRC="${ROOT}/modules/services/auth"
 
 # Allow override; default to standard dotfiles layout.
-DOTFILES_CREDS="${SHRUTI_DOTFILES_CREDS_DIR:-${HOME}/Projects/akdasa/dotfiles/source/dotfiles/personal/projects/akdasa-studios/credentials}"
+DOTFILES_CREDS="${SHRUTI_DOTFILES_CREDS_DIR:-${HOME}/Projects/akdasa/dotfiles/source/dotfiles/personal/projects/jiva-studio/credentials}"
 PRIV_FILE="$DOTFILES_CREDS/shruti-auth-jwt-private.key"
 PUB_FILE="$DOTFILES_CREDS/shruti-auth-jwt-public.pem"
 

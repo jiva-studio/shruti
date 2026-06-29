@@ -12,7 +12,7 @@ Three kinds, same shape. `pinned`/`boost` are named after the search-industry pi
 
 Each attribution carries N text variants per language. The same attribution can ref multiple verses (e.g. *"что такое душа"* → BG 2.13, 2.20, 2.22), and the same verse can be referenced by multiple attributions.
 
-> The kinds were renamed from `question`/`topic` to `pinned`/`boost`. Both the MCP `library.db` ([`migrate.go`](https://github.com/akdasa-studios/shruti/blob/main/modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go) `migrateAttributionKindToPinnedBoost`) and the chat-service Postgres mirror (migration [`0033`](https://github.com/akdasa-studios/shruti/blob/main/infra/app/db/migrations/0033_attribution_kind_pinned_boost.up.sql)) carry the new vocabulary.
+> The kinds were renamed from `question`/`topic` to `pinned`/`boost`. Both the MCP `library.db` ([`migrate.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go) `migrateAttributionKindToPinnedBoost`) and the chat-service Postgres mirror (migration [`0033`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0033_attribution_kind_pinned_boost.up.sql)) carry the new vocabulary.
 
 ## End-to-end flow
 
@@ -52,7 +52,7 @@ graph LR
 
 Stages:
 
-1. **Authoring** — curator writes a verse-centric YAML plan listing the topics (→ `boost`) and questions (→ `pinned`) for each verse. The read-only [`shruti-search`](https://github.com/akdasa-studios/shruti/blob/main/modules/services/search-mcp/) MCP (over the prod pgvector corpus) is the curation aid: `search` / `search_get` find and verify the chunks that back a topic/question and return the ref ids to attribute.
+1. **Authoring** — curator writes a verse-centric YAML plan listing the topics (→ `boost`) and questions (→ `pinned`) for each verse. The read-only [`shruti-search`](https://github.com/jiva-studio/shruti/blob/main/modules/services/search-mcp/) MCP (over the prod pgvector corpus) is the curation aid: `search` / `search_get` find and verify the chunks that back a topic/question and return the ref ids to attribute.
 2. **Import** — `library.attribution.import` (an MCP tool, **not** a separate Python CLI) parses the YAML, aggregates it (identical text across verses collapses to one attribution with multiple refs), then runs `Create` + `RefAdd` through the same use cases as the per-row tools. Idempotent: `Create` reuses an existing attribution by text, `RefAdd` is `INSERT OR IGNORE`, so re-running never duplicates — no external checkpoint needed.
 3. **Storage** — MCP writes to a local `library.db` (SQLite) alongside the catalog (`current.db`). Library is its own DB because its publish cadence is independent.
 4. **Publish** — `library.publish` MCP tool versions and uploads `library.db` to S3 (`public/library/library.{ver}.db`), then updates `public/config.json` so consumers can discover the latest version.
@@ -108,9 +108,9 @@ Constraints:
 
 Files referenced:
 
-- Schema DDL: [`modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go`](https://github.com/akdasa-studios/shruti/blob/main/modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go)
-- Domain types: [`modules/tools/shruti-mcp/internal/domain/library/types.go`](https://github.com/akdasa-studios/shruti/blob/main/modules/tools/shruti-mcp/internal/domain/library/types.go) (`Attribution`, `AttributionKind` = `AttrPinned`/`AttrBoost`, `AttributionRef`)
-- Import use case: [`modules/tools/shruti-mcp/internal/application/library/attribution/import_usecase.go`](https://github.com/akdasa-studios/shruti/blob/main/modules/tools/shruti-mcp/internal/application/library/attribution/import_usecase.go) (`ImportPlan`, `Aggregate`, `Import`)
+- Schema DDL: [`modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/infra/library/sqlite/migrate.go)
+- Domain types: [`modules/tools/shruti-mcp/internal/domain/library/types.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/domain/library/types.go) (`Attribution`, `AttributionKind` = `AttrPinned`/`AttrBoost`, `AttributionRef`)
+- Import use case: [`modules/tools/shruti-mcp/internal/application/library/attribution/import_usecase.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/application/library/attribution/import_usecase.go) (`ImportPlan`, `Aggregate`, `Import`)
 
 ## Storage schema — Postgres mirror (chat-service)
 
@@ -161,15 +161,15 @@ Key differences from `library.db`:
 
 Files referenced:
 
-- DDL (central golang-migrate `migrator` service owns chat's schema; chat itself no longer ships `schema.sql`): [`infra/app/db/migrations/0016_chat_attribution_embeddings.up.sql`](https://github.com/akdasa-studios/shruti/blob/main/infra/app/db/migrations/0016_chat_attribution_embeddings.up.sql) and [`infra/app/db/migrations/0030_split_embedding_tables.up.sql`](https://github.com/akdasa-studios/shruti/blob/main/infra/app/db/migrations/0030_split_embedding_tables.up.sql)
-- Boot-time schema probe: [`db/assert_schema.py`](https://github.com/akdasa-studios/shruti/blob/main/modules/services/chat/app/src/shruti_chat/db/assert_schema.py)
-- Per-dim table router: [`infra/repositories/embedding_router.py`](https://github.com/akdasa-studios/shruti/blob/main/modules/services/chat/app/src/shruti_chat/infra/repositories/embedding_router.py)
-- Indexer: [`indexer/library/attribution_indexer.py`](https://github.com/akdasa-studios/shruti/blob/main/modules/services/chat/app/src/shruti_chat/indexer/library/attribution_indexer.py)
-- Lookup: [`research/attribution_lookup.py`](https://github.com/akdasa-studios/shruti/blob/main/modules/services/chat/app/src/shruti_chat/research/attribution_lookup.py)
+- DDL (central golang-migrate `migrator` service owns chat's schema; chat itself no longer ships `schema.sql`): [`infra/app/db/migrations/0016_chat_attribution_embeddings.up.sql`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0016_chat_attribution_embeddings.up.sql) and [`infra/app/db/migrations/0030_split_embedding_tables.up.sql`](https://github.com/jiva-studio/shruti/blob/main/infra/app/db/migrations/0030_split_embedding_tables.up.sql)
+- Boot-time schema probe: [`db/assert_schema.py`](https://github.com/jiva-studio/shruti/blob/main/modules/services/chat/app/src/shruti_chat/db/assert_schema.py)
+- Per-dim table router: [`infra/repositories/embedding_router.py`](https://github.com/jiva-studio/shruti/blob/main/modules/services/chat/app/src/shruti_chat/infra/repositories/embedding_router.py)
+- Indexer: [`indexer/library/attribution_indexer.py`](https://github.com/jiva-studio/shruti/blob/main/modules/services/chat/app/src/shruti_chat/indexer/library/attribution_indexer.py)
+- Lookup: [`research/attribution_lookup.py`](https://github.com/jiva-studio/shruti/blob/main/modules/services/chat/app/src/shruti_chat/research/attribution_lookup.py)
 
 ## Authoring a YAML plan
 
-The plan is **verse-centric**: one entry per verse, listing the topics (→ `boost`) and questions (→ `pinned`) that verse authoritatively answers. The importer aggregates them — identical text across verses collapses to one attribution with multiple refs. The YAML schema is `ImportPlan` / `ImportPlanVerse` in [`import_usecase.go`](https://github.com/akdasa-studios/shruti/blob/main/modules/tools/shruti-mcp/internal/application/library/attribution/import_usecase.go).
+The plan is **verse-centric**: one entry per verse, listing the topics (→ `boost`) and questions (→ `pinned`) that verse authoritatively answers. The importer aggregates them — identical text across verses collapses to one attribution with multiple refs. The YAML schema is `ImportPlan` / `ImportPlanVerse` in [`import_usecase.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/application/library/attribution/import_usecase.go).
 
 ```yaml
 source_id: source_NoY8sAlXF1IT   # catalog source id — picks the book (here: SB)
@@ -232,7 +232,7 @@ Source ids by book:
 
 ## Running the import
 
-Import is a **single MCP tool**, `library.attribution.import` — there is no standalone Python CLI any more. The tool ([`library_attribution_import.go`](https://github.com/akdasa-studios/shruti/blob/main/modules/tools/shruti-mcp/internal/mcp/tools/library_attribution_import.go)) parses, aggregates, and drives `Create` + `RefAdd` through the same use cases as the per-row tools, all inside the daemon. Pass the plan as inline `yaml` **or** `yaml_path` (exactly one):
+Import is a **single MCP tool**, `library.attribution.import` — there is no standalone Python CLI any more. The tool ([`library_attribution_import.go`](https://github.com/jiva-studio/shruti/blob/main/modules/tools/shruti-mcp/internal/mcp/tools/library_attribution_import.go)) parses, aggregates, and drives `Create` + `RefAdd` through the same use cases as the per-row tools, all inside the daemon. Pass the plan as inline `yaml` **or** `yaml_path` (exactly one):
 
 ```
 # Inline content.
@@ -314,7 +314,7 @@ Returned `AttributionMatch` (frozen dataclass) carries the refs, score, kind, an
 
 ## Authoring new plans
 
-Verse-centric YAML plans are authored ad hoc (inline or as a file on the server) and fed straight to `library.attribution.import` — there is no longer a checked-in `resources/attributions/*.yaml` inventory in the repo. Adding a new book / theme: pick the `source_id`, look up each `verse_id` (or `document` id), list topics + questions, and import. Use the read-only [`shruti-search`](https://github.com/akdasa-studios/shruti/blob/main/modules/services/search-mcp/) MCP (`search` / `search_get`) to find and verify the chunks that back each topic/question before attributing them.
+Verse-centric YAML plans are authored ad hoc (inline or as a file on the server) and fed straight to `library.attribution.import` — there is no longer a checked-in `resources/attributions/*.yaml` inventory in the repo. Adding a new book / theme: pick the `source_id`, look up each `verse_id` (or `document` id), list topics + questions, and import. Use the read-only [`shruti-search`](https://github.com/jiva-studio/shruti/blob/main/modules/services/search-mcp/) MCP (`search` / `search_get`) to find and verify the chunks that back each topic/question before attributing them.
 
 ## Operational notes
 

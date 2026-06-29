@@ -3,7 +3,7 @@ package align
 import (
 	"testing"
 
-	"github.com/akdasa-studios/shruti-share-video/internal/pipeline/transcript"
+	"github.com/jiva-studio/shruti-share-video/internal/pipeline/transcript"
 )
 
 // Sanity test: the easy path where caller and whisper agree word-for-word.

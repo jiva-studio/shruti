@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/library"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
 )
 
 // ImportPlan is the verse-centric YAML a curator authors: one entry per verse

@@ -8,12 +8,12 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/auditreview"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runner"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/trackselect"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/auditreview"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/trackselect"
 )
 
 // selectorDomain wraps the parsed selector + a copy retained for the

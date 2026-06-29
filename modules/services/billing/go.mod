@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti/billing
+module github.com/jiva-studio/shruti/billing
 
 go 1.25.0
 

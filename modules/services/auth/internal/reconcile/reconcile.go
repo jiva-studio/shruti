@@ -35,10 +35,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/shruti/auth/internal/metrics"
-	"github.com/akdasa-studios/shruti/auth/internal/rcclient"
-	"github.com/akdasa-studios/shruti/auth/internal/service"
-	"github.com/akdasa-studios/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/metrics"
+	"github.com/jiva-studio/shruti/auth/internal/rcclient"
+	"github.com/jiva-studio/shruti/auth/internal/service"
+	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
 // permanentSkipDuration is how long we stay away from a user whose RC

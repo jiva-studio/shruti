@@ -1,4 +1,4 @@
-module github.com/akdasa-studios/shruti-share-video
+module github.com/jiva-studio/shruti-share-video
 
 go 1.25.0
 

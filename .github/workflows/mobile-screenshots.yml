@@ -134,7 +134,7 @@ jobs:
 
       - name: run fastlane ${{ matrix.platform }} screenshots
         env:
-          # Android: org-level service-account JSON at akdasa-studios/.
+          # Android: org-level service-account JSON at jiva-studio/.
           # Same key the `deploy-android` lane uses to upload AABs.
           GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
           # iOS: App Store Connect API key (issuer, key id, base64-encoded

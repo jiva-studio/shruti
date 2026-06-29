@@ -3,7 +3,7 @@ package commit
 import (
 	"testing"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
 func TestBuildSortReference(t *testing.T) {

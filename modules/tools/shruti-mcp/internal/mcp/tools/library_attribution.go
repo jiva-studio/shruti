@@ -9,10 +9,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	attributionapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/library"
-	sqlitelibrary "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	attributionapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
+	sqlitelibrary "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
 // LibraryAttributionDeps wires the attribution use case for MCP handlers.

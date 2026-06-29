@@ -1,6 +1,6 @@
 package outlineport
 
-import "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
+import "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 
 // GranularRef identifies one granular outline artifact (one track, one
 // language). Listed by the topic build to walk every track that has a granular

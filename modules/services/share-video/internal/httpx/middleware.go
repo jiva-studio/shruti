@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akdasa-studios/shruti-share-video/internal/logx"
+	"github.com/jiva-studio/shruti-share-video/internal/logx"
 )
 
 type statusRecorder struct {

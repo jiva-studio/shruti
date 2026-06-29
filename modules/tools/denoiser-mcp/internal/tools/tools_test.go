@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/denoiser-mcp/internal/client"
+	"github.com/jiva-studio/shruti/modules/tools/denoiser-mcp/internal/client"
 )
 
 // --- mock JobClient ---

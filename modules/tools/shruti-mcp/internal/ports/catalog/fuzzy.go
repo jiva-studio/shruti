@@ -3,7 +3,7 @@ package catalogport
 import (
 	"context"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
 // DictFuzzyIndex narrows the LLM resolver's candidate list down to the

@@ -1,6 +1,6 @@
 # Domain ports
 
-Ports are TypeScript interfaces that the domain depends on but does not implement. Use cases consume them; concrete adapters under `modules/apps/mobile/infra/repositories/` provide them; the composition root in [`shruti.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/shruti/shruti.ts) wires the two together. There are **16 domain ports** under [`modules/libs/domain/ports/`](https://github.com/akdasa-studios/shruti/tree/main/modules/libs/domain/ports) — 15 repositories plus `IUnitOfWork`. The barrel [`ports/index.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/index.ts) re-exports most of them; `ITopicRepository` is imported directly from its module by the discovery use cases. A separate set of **technical ports** (see the layer doc) covers non-domain concerns like the audio player or the file system.
+Ports are TypeScript interfaces that the domain depends on but does not implement. Use cases consume them; concrete adapters under `modules/apps/mobile/infra/repositories/` provide them; the composition root in [`shruti.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/shruti/shruti.ts) wires the two together. There are **16 domain ports** under [`modules/libs/domain/ports/`](https://github.com/jiva-studio/shruti/tree/main/modules/libs/domain/ports) — 15 repositories plus `IUnitOfWork`. The barrel [`ports/index.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/index.ts) re-exports most of them; `ITopicRepository` is imported directly from its module by the discovery use cases. A separate set of **technical ports** (see the layer doc) covers non-domain concerns like the audio player or the file system.
 
 > Note: Shruti has **no REST/GraphQL/tRPC API** — it is a client-only app. These repository ports *are* the API surface from the perspective of use cases.
 
@@ -84,7 +84,7 @@ graph LR
 
 ### `ITrackRepository`
 
-Source: [`ports/trackRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/trackRepository.ts) · Implementation: `modules/apps/mobile/infra/repositories/sql/tracksRepository.sql.ts`
+Source: [`ports/trackRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/trackRepository.ts) · Implementation: `modules/apps/mobile/infra/repositories/sql/tracksRepository.sql.ts`
 
 ```ts
 interface ITrackRepository {
@@ -101,7 +101,7 @@ interface ITrackRepository {
 }
 ```
 
-Both `TrackListQuery` and `TrackSearchQuery` carry an optional `filters: TrackListFilters` (author / location / language / source / tag / **topic** ids, plus `durationMinMs` / `durationMaxMs` and the `dateGte` / `dateLt` `"YYYY-MM-DD"` range), a `sortBy: SortMethod`, and `limit` / `offset`. `TrackSearchQuery` adds a free-text `text` field — the SQL repo tokenises it through the unified `tracks_search` FTS index, so the same query handles titles ("Джентельмен") and references ("bg 10.5"); its `filters` are applied **before** scoring so `limit` / `offset` count narrowed rows, not raw FTS matches. `count(filters)` returns the size of the filter-only result set (after the `hidden = 0` cut) and powers the "search among N lectures" subtitle; `listYears()` returns the distinct calendar years present in the catalog (descending) for the date-range year picker. `getByIds` and `getDurationsMs` are batch reads that avoid N+1 when hydrating a playlist or building the chat `UserContext`. `findByReference` does an exact scripture-reference lookup (`sourceId` + dot-joined tokens) for the [`nextShloka`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/shruti/proactive/rules/nextShloka.ts) proactive rule. `getTranscriptPath` returns the **full bucket key** (e.g. `"public/tracks/abc123/transcripts/ru.json"`) — see [Storage layout](../infra/s3-layout.md).
+Both `TrackListQuery` and `TrackSearchQuery` carry an optional `filters: TrackListFilters` (author / location / language / source / tag / **topic** ids, plus `durationMinMs` / `durationMaxMs` and the `dateGte` / `dateLt` `"YYYY-MM-DD"` range), a `sortBy: SortMethod`, and `limit` / `offset`. `TrackSearchQuery` adds a free-text `text` field — the SQL repo tokenises it through the unified `tracks_search` FTS index, so the same query handles titles ("Джентельмен") and references ("bg 10.5"); its `filters` are applied **before** scoring so `limit` / `offset` count narrowed rows, not raw FTS matches. `count(filters)` returns the size of the filter-only result set (after the `hidden = 0` cut) and powers the "search among N lectures" subtitle; `listYears()` returns the distinct calendar years present in the catalog (descending) for the date-range year picker. `getByIds` and `getDurationsMs` are batch reads that avoid N+1 when hydrating a playlist or building the chat `UserContext`. `findByReference` does an exact scripture-reference lookup (`sourceId` + dot-joined tokens) for the [`nextShloka`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/shruti/proactive/rules/nextShloka.ts) proactive rule. `getTranscriptPath` returns the **full bucket key** (e.g. `"public/tracks/abc123/transcripts/ru.json"`) — see [Storage layout](../infra/s3-layout.md).
 
 ### `IAuthorRepository` / `ILocationRepository` / `ISourceRepository` / `ITagRepository`
 
@@ -113,13 +113,13 @@ interface IDictionaryRepository<TEntity, TId> {
 }
 ```
 
-Sources: [`authorRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/authorRepository.ts), [`locationRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/locationRepository.ts), [`sourceRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/sourceRepository.ts), [`tagRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/tagRepository.ts).
+Sources: [`authorRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/authorRepository.ts), [`locationRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/locationRepository.ts), [`sourceRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/sourceRepository.ts), [`tagRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/tagRepository.ts).
 
 The repository hydrates per-locale rows into the `Map<LanguageCode, …>` shape used by domain entities. The mapping lives in `infra/repositories/sql/contentRowMappers.ts`.
 
 ### `ILanguageRepository`
 
-Source: [`languageRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/languageRepository.ts)
+Source: [`languageRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/languageRepository.ts)
 
 ```ts
 interface ILanguageRepository {
@@ -133,7 +133,7 @@ Backed by the `languages` registry table (PK = `code`). Used by the language sel
 
 ### `ITopicRepository`
 
-Source: [`topicRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/topicRepository.ts) · Implementation: [`topicsRepository.sql.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/topicsRepository.sql.ts)
+Source: [`topicRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/topicRepository.ts) · Implementation: [`topicsRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/topicsRepository.sql.ts)
 
 ```ts
 interface TrackTopicWeight {
@@ -161,7 +161,7 @@ Backs the recommender / discovery surfaces. `weightsForTracks` feeds the on-devi
 
 ### `ITranscriptRepository`
 
-Source: [`transcriptRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/transcriptRepository.ts) · Implementation: HTTP, not SQL.
+Source: [`transcriptRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/transcriptRepository.ts) · Implementation: HTTP, not SQL.
 
 ```ts
 interface ITranscriptRepository {
@@ -179,7 +179,7 @@ The HTTP repo delegates path/availability lookups to `ITrackRepository` (`getTra
 
 ### `INoteRepository`
 
-Source: [`noteRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/noteRepository.ts) · Implementation: [`notesRepository.sql.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/notesRepository.sql.ts)
+Source: [`noteRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/noteRepository.ts) · Implementation: [`notesRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/notesRepository.sql.ts)
 
 ```ts
 interface INoteRepository {
@@ -197,7 +197,7 @@ interface INoteRepository {
 
 ### `IPlaylistItemRepository`
 
-Source: [`playlistItemRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/playlistItemRepository.ts) · Implementation: [`playlistItemsRepository.sql.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/playlistItemsRepository.sql.ts)
+Source: [`playlistItemRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/playlistItemRepository.ts) · Implementation: [`playlistItemsRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/playlistItemsRepository.sql.ts)
 
 ```ts
 interface IPlaylistItemRepository {
@@ -215,7 +215,7 @@ The playlist row itself only holds queue state (`addedAt`, `archivedAt`). Per-it
 
 ### `IListeningSessionRepository`
 
-Source: [`listeningSessionRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/listeningSessionRepository.ts) · Implementation: [`listeningSessionsRepository.sql.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/listeningSessionsRepository.sql.ts)
+Source: [`listeningSessionRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/listeningSessionRepository.ts) · Implementation: [`listeningSessionsRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/listeningSessionsRepository.sql.ts)
 
 ```ts
 interface IListeningSessionRepository {
@@ -269,7 +269,7 @@ The journal holds one row per play→pause/seek/track-change interval. Resume po
 
 ### `IMediaItemRepository`
 
-Source: [`mediaItemRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/mediaItemRepository.ts) · Implementation: [`mediaItemsRepository.sql.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/mediaItemsRepository.sql.ts)
+Source: [`mediaItemRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/mediaItemRepository.ts) · Implementation: [`mediaItemsRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/mediaItemsRepository.sql.ts)
 
 ```ts
 interface IMediaItemRepository {
@@ -302,7 +302,7 @@ These three back the Sadhu chat tab. All live in the user DB.
 
 ### `IChatSessionRepository`
 
-Source: [`chatSessionRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/chatSessionRepository.ts) · Implementation: [`chatSessionsRepository.sql.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/chatSessionsRepository.sql.ts)
+Source: [`chatSessionRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/chatSessionRepository.ts) · Implementation: [`chatSessionsRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/chatSessionsRepository.sql.ts)
 
 ```ts
 interface IChatSessionRepository {
@@ -321,7 +321,7 @@ Methods stay verb-shaped (`create` / `updateTitle` / `touch` / `delete`) rather 
 
 ### `IChatMessageRepository`
 
-Source: [`chatMessageRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/chatMessageRepository.ts) · Implementation: [`chatMessagesRepository.sql.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/chatMessagesRepository.sql.ts)
+Source: [`chatMessageRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/chatMessageRepository.ts) · Implementation: [`chatMessagesRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/chatMessagesRepository.sql.ts)
 
 ```ts
 interface IChatMessageRepository {
@@ -340,7 +340,7 @@ A single `meta` column on `chat_messages` holds a versioned JSON envelope (`{ _v
 
 ### `IProactiveStateRepository`
 
-Source: [`proactiveStateRepository.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/proactiveStateRepository.ts) · Implementation: [`proactiveStateRepository.sql.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/proactiveStateRepository.sql.ts)
+Source: [`proactiveStateRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/proactiveStateRepository.ts) · Implementation: [`proactiveStateRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/proactiveStateRepository.sql.ts)
 
 ```ts
 type ProactivePrepState =
@@ -379,7 +379,7 @@ This is the scheduler's bookkeeping port for agent-initiated (proactive) chat me
 
 ### `IUnitOfWork`
 
-Source: [`unitOfWork.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/ports/unitOfWork.ts) · Implementation: `modules/apps/mobile/infra/repositories/sql/unitOfWork.sql.ts`
+Source: [`unitOfWork.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/unitOfWork.ts) · Implementation: `modules/apps/mobile/infra/repositories/sql/unitOfWork.sql.ts`
 
 ```ts
 interface IUnitOfWork {

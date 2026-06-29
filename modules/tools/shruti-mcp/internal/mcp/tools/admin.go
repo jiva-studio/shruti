@@ -9,9 +9,9 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	adminapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
-	admindomain "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/adminconfig"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	adminapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
+	admindomain "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/adminconfig"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
 // RegisterAdminConfigGet registers admin_config_get. Thin dispatcher:

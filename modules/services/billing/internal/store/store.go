@@ -20,7 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/shruti/billing/internal/orders"
+	"github.com/jiva-studio/shruti/billing/internal/orders"
 )
 
 var ErrOrderNotFound = errors.New("store: order not found")

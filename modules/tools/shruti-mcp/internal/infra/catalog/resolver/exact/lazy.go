@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 )
 
 // LazyResolver checks current.db is on disk, then delegates to a stateless

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
 )
 
 // fakeSlowReviewer counts in-flight ReviewChunk calls; while a call is

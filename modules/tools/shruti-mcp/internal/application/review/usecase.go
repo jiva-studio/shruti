@@ -19,16 +19,16 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
-	glossaryport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/glossary"
-	lakeport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/lake"
-	reviewport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/review"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
-	transcriptport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	glossaryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/glossary"
+	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
+	reviewport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
+	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
 type UseCase struct {

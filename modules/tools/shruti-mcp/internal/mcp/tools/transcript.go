@@ -10,12 +10,12 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	reviewuc "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/review"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runner"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/transcribe"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	reviewuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/review"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/transcribe"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
 func RegisterTranscriptCreate(s *server.MCPServer, deps Deps) {

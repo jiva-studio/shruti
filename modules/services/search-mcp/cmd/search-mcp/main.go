@@ -23,10 +23,10 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/config"
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/embed"
-	mcpsrv "github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/mcp"
-	"github.com/akdasa-studios/shruti/modules/services/search-mcp/internal/store"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/config"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/embed"
+	mcpsrv "github.com/jiva-studio/shruti/modules/services/search-mcp/internal/mcp"
+	"github.com/jiva-studio/shruti/modules/services/search-mcp/internal/store"
 )
 
 // Build stamps injected by CI (-ldflags), surfaced on /healthz.

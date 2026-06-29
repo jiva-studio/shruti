@@ -10,9 +10,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/ids"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/ids"
 )
 
 // GroupIDPattern is the canonical shape: `group_<12 alnum>`.

@@ -9,14 +9,14 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	audioport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/audio"
-	commitport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/commit"
-	fsport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/fs"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/hashing"
-	lakeport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/lake"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
+	commitport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/commit"
+	fsport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/fs"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/hashing"
+	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
 )
 
 // ErrSkipExtra means the path lives under outbox/sorted/<lang>/extra/...

@@ -16,9 +16,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	fsartifact "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
-	outlineport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/outline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	fsartifact "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
+	outlineport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/outline"
 )
 
 type Store struct{ art *fsartifact.Writer }

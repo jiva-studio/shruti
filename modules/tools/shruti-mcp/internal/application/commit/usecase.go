@@ -15,17 +15,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
-	domaincatalog "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	audioport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/audio"
-	catalogport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
-	fsport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/fs"
-	lakeport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/lake"
-	transcriptport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
+	domaincatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
+	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	fsport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/fs"
+	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
+	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
 type UseCase struct {

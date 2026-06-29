@@ -19,10 +19,10 @@ import (
 	gjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/shruti/auth/internal/jwt"
-	"github.com/akdasa-studios/shruti/auth/internal/profile"
-	"github.com/akdasa-studios/shruti/auth/internal/providers"
-	"github.com/akdasa-studios/shruti/auth/internal/store"
+	"github.com/jiva-studio/shruti/auth/internal/jwt"
+	"github.com/jiva-studio/shruti/auth/internal/profile"
+	"github.com/jiva-studio/shruti/auth/internal/providers"
+	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
 // globalPolicy mirrors the default `PROFILE=global` deployment: email,

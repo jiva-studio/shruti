@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	cwdb "github.com/akdasa-studios/shruti/cleanup-worker/internal/db"
+	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
 )
 
 // TestSignedInTTL_DeletesOnlyStaleSignedIn enforces the four cases the

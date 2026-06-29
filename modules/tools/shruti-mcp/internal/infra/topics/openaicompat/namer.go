@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"strings"
 
-	domaintopics "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/topics"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	domaintopics "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/topics"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
 )
 
 //go:embed prompt.name.txt

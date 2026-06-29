@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
-	titleport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/title"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	titleport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/title"
 )
 
 //go:embed prompt.system.txt

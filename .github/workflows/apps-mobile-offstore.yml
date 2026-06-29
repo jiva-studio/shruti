@@ -79,7 +79,7 @@ jobs:
       # modules/apps/mobile/dist (so fastlane's before_all sees dist/index.html
       # and skips a rebuild — which would otherwise lack SHRUTI_OFFSTORE).
       - name: android toolchain + deps (+ web bundle)
-        uses: akdasa-studios/kit/.github/actions/mobile-android-setup@main
+        uses: jiva-studio/kit/.github/actions/mobile-android-setup@main
       - name: build signed release APK
         # before_all: dist/index.html present → no web rebuild; runs
         # `cap sync android` (copies the off-store bundle into the native

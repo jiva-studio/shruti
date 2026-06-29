@@ -3,7 +3,7 @@ package sqlitecatalog
 import (
 	"context"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
 // --- collection methods on Lazy (open-on-demand wrapper) ---

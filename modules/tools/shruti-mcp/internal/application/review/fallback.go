@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	reviewport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	reviewport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
 )
 
 // chunkAttempt is the outcome of one chunk's review across all retry attempts.

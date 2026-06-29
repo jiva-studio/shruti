@@ -5,8 +5,8 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcriber"
 )
 
 // throttledTranscriber wraps a transcriber.Transcriber so the daemon can hold

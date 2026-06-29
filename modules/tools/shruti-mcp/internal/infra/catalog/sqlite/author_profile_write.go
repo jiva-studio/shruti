@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/sqliteutil"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/sqliteutil"
 )
 
 // SetAuthorImage records the avatar S3 key on every locale row of an author.

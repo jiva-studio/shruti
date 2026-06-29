@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	cwdb "github.com/akdasa-studios/shruti/cleanup-worker/internal/db"
+	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
 	"github.com/jackc/pgx/v5/pgxpool"
 	dto "github.com/prometheus/client_model/go"
 )

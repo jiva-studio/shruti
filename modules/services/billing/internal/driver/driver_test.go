@@ -14,10 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/akdasa-studios/shruti/billing/internal/authclient"
-	"github.com/akdasa-studios/shruti/billing/internal/orders"
-	"github.com/akdasa-studios/shruti/billing/internal/paymento"
-	"github.com/akdasa-studios/shruti/billing/internal/store"
+	"github.com/jiva-studio/shruti/billing/internal/authclient"
+	"github.com/jiva-studio/shruti/billing/internal/orders"
+	"github.com/jiva-studio/shruti/billing/internal/paymento"
+	"github.com/jiva-studio/shruti/billing/internal/store"
 )
 
 const schemaDDL = `

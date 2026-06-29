@@ -8,7 +8,7 @@ import (
 	"io/fs"
 	"os"
 
-	fsport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/fs"
+	fsport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/fs"
 )
 
 type FS struct{}

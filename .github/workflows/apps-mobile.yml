@@ -89,7 +89,7 @@ jobs:
   # artifact. `plugins` are built generically by the reusable before npm ci.
   ci:
     needs: [build-web]
-    uses: akdasa-studios/kit/.github/workflows/mobile-ci.yml@main
+    uses: jiva-studio/kit/.github/workflows/mobile-ci.yml@main
     with:
       pages_project: shruti-preview
       plugins: '["audio-player", "media-downloader"]'

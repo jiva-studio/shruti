@@ -3,7 +3,7 @@ package tools
 import (
 	"testing"
 
-	admindomain "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/adminconfig"
+	admindomain "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/adminconfig"
 )
 
 // TestWritablePathsMatchers pins the canonical allowlist + the wildcard

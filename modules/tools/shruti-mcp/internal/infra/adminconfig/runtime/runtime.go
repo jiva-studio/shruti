@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/config"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/config"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcriber"
 )
 
 // Endpointer is implemented by transcribe-providers whose upstream URL

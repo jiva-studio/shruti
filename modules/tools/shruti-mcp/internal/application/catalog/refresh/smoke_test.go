@@ -8,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
-	catalogrefresh "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	sqlitecatalog "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
-	httpcdn "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/cdn/http"
+	catalogrefresh "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	sqlitecatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
+	httpcdn "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/cdn/http"
 )
 
 // TestRefreshFromCDN actually hits production CDN. Run with:

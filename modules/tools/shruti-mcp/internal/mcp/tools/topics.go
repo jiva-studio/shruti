@@ -8,12 +8,12 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runner"
-	topicsapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/topics"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/run"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
+	topicsapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/topics"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
 // TopicsWriter is the slice of the catalog the topic tools mutate: a full

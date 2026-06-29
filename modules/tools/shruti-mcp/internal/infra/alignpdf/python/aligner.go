@@ -18,8 +18,8 @@ import (
 	"os/exec"
 	"sync"
 
-	alignpdfport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/alignpdf"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	alignpdfport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/alignpdf"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
 )
 
 type Aligner struct {

@@ -20,7 +20,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
 )
 
 type Splitter struct {

@@ -28,4 +28,4 @@ Az előfizetés-vásárlási nyilvántartás az Apple-nél vagy a Google-nél ma
 azokat sem tudjuk eltávolítani.
 
 A teljes részletekért lásd az [adatvédelmi
-irányelveket](https://akdasa-studios.github.io/shruti/).
+irányelveket](https://jiva-studio.github.io/shruti/).

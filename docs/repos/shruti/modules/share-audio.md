@@ -16,7 +16,7 @@ modules/services/share-audio/
 ├── internal/storage/s3.go         aws-sdk-go-v2 S3 wrapper: Exists / DownloadTo / Upload / BuildURL
 ├── internal/logx/logx.go          slog JSON envelope, context-carried child loggers
 ├── Dockerfile                     golang:1.24-alpine build → alpine:3.20 runtime (ffmpeg + tini)
-├── go.mod / go.sum                module github.com/akdasa-studios/shruti-share-audio
+├── go.mod / go.sum                module github.com/jiva-studio/shruti-share-audio
 └── README.md
 ```
 
@@ -154,7 +154,7 @@ graph LR
     class S3 store;
 ```
 
-The service ships as the image `ghcr.io/akdasa-studios/shruti-share-audio:${SHRUTI_SHARE_AUDIO_TAG:-latest}` and is declared in `infra/app/compose/docker-compose.yml`. The two-stage Dockerfile builds a static `CGO_ENABLED=0` binary, then runs it on `alpine:3.20` with `ffmpeg`, `curl`, `ca-certificates`, and `tini` (PID-1 signal forwarding) as an unprivileged `share` user. The compose entry sets `BUCKET`, `EXCERPTS_PREFIX`, `AWS_REGION`, `ENV`, `SERVICE_VERSION`, runs under the shared `app-hardening` anchor, and has a `curl /healthz` healthcheck. It carries the `com.centurylinklabs.watchtower.enable: "true"` label, so Watchtower rolls new `:latest` images automatically.
+The service ships as the image `ghcr.io/jiva-studio/shruti-share-audio:${SHRUTI_SHARE_AUDIO_TAG:-latest}` and is declared in `infra/app/compose/docker-compose.yml`. The two-stage Dockerfile builds a static `CGO_ENABLED=0` binary, then runs it on `alpine:3.20` with `ffmpeg`, `curl`, `ca-certificates`, and `tini` (PID-1 signal forwarding) as an unprivileged `share` user. The compose entry sets `BUCKET`, `EXCERPTS_PREFIX`, `AWS_REGION`, `ENV`, `SERVICE_VERSION`, runs under the shared `app-hardening` anchor, and has a `curl /healthz` healthcheck. It carries the `com.centurylinklabs.watchtower.enable: "true"` label, so Watchtower rolls new `:latest` images automatically.
 
 Caddy routes `/share/audio/*` to `share-audio:8082` with `handle_path` (prefix stripped), a `request_body max_size 100KB` cap, and a `share_audio` rate-limit zone of 60 requests/minute per client IP. CORS is set both at the Caddy edge (global `header` block, `Access-Control-Allow-Origin *`) and inside the service itself — `internal/httpx/server.go` mounts chi's `cors.Handler` allowing `*` origins, `POST`/`OPTIONS` methods, and the `Content-Type` header. The service also caps the JSON body at 32 KB (`maxBodyBytes` in `server.go`) independently of the Caddy 100 KB edge cap.
 

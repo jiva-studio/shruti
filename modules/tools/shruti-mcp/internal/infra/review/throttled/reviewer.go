@@ -13,7 +13,7 @@ package throttledreview
 import (
 	"context"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
 )
 
 type Reviewer struct {

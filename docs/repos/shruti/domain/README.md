@@ -28,8 +28,8 @@ The domain knows nothing about Vue, Capacitor, SQLite, S3, the CDN or HTTP. Ever
 
 | Group | Files | Purpose |
 |---|---|---|
-| Identity / scalars | [`core.ts`](https://github.com/akdasa-studios/shruti/blob/main/modules/libs/domain/core.ts) | `TrackId`, `AuthorId`, `NoteId`, `PlaylistItemId`, `MediaItemId`, `ChatSessionId`, `ChatMessageId`, `LanguageCode`, `IsoDate`, `UnixMs`, … |
-| Result helper | [`@kit/core`](https://github.com/akdasa-studios/shruti/blob/main/modules/kit/src/core) (shared kernel) | `Result<T, E>` discriminated union (+ `ok` / `err` constructors) for recoverable errors — one shared type across domain, application, and infra |
+| Identity / scalars | [`core.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/core.ts) | `TrackId`, `AuthorId`, `NoteId`, `PlaylistItemId`, `MediaItemId`, `ChatSessionId`, `ChatMessageId`, `LanguageCode`, `IsoDate`, `UnixMs`, … |
+| Result helper | [`@kit/core`](https://github.com/jiva-studio/shruti/blob/main/modules/kit/src/core) (shared kernel) | `Result<T, E>` discriminated union (+ `ok` / `err` constructors) for recoverable errors — one shared type across domain, application, and infra |
 | Catalog entities | `track.ts`, `trackVariant.ts`, `author.ts`, `location.ts`, `source.ts`, `tag.ts`, `topic.ts`, `language.ts`, `reference.ts` | Library content shipped via the prebuilt content DB |
 | User entities | `note.ts`, `playlistItem.ts`, `listeningSession.ts`, `mediaItem.ts` | User-generated rows stored in the on-device user DB |
 | Chat (Sadhu) entities | `chatSession.ts`, `chatMessage.ts` | Conversations and their messages, including action-card payload shapes |
@@ -50,5 +50,5 @@ The domain knows nothing about Vue, Capacitor, SQLite, S3, the CDN or HTTP. Ever
 
 - **Near-zero deps.** Anything imported by `@lib/domain` is either another `@lib/domain` module, a TypeScript built-in, or the dependency-free **shared kernel** (`@kit/core` for `Result`, `@kit/servers` for `buildServerUrl`; see [layers.md](../architecture/layers.md#layer-reference)). No `vue`, no `@capacitor/*`, no `sql.js`, no ports/infra. Verified by ESLint `no-restricted-imports`.
 - **No I/O.** No `fetch`, no SQL, no filesystem. Side effects belong in adapters.
-- **No exceptions for recoverable failures.** Domain entities throw only on programmer error (impossible state). Recoverable validation flows through `Result<T, E>` — defined in [`@kit/core`](https://github.com/akdasa-studios/shruti/blob/main/modules/kit/src/core) — and the policy in [`../architecture/layers.md`](../architecture/layers.md#error-handling-policy).
+- **No exceptions for recoverable failures.** Domain entities throw only on programmer error (impossible state). Recoverable validation flows through `Result<T, E>` — defined in [`@kit/core`](https://github.com/jiva-studio/shruti/blob/main/modules/kit/src/core) — and the policy in [`../architecture/layers.md`](../architecture/layers.md#error-handling-policy).
 - **Paths are full bucket keys.** `audio_path` and `transcript_path` are stored complete (`public/tracks/.../audio/original.mp3`). The domain never concatenates prefixes — see [Storage layout](../infra/s3-layout.md).

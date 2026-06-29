@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	hybridreview "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/review/hybrid"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	hybridreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/hybrid"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
 )
 
 // Registry implements review.Registry.

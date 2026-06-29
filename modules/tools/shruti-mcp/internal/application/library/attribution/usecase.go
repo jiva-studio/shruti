@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/library"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/ids"
-	libraryport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/library"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/ids"
+	libraryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/library"
 )
 
 const idPrefix = "attribution_"

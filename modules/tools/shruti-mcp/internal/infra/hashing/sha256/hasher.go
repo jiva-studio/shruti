@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/hashing"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/hashing"
 )
 
 type Hasher struct{}

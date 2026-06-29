@@ -67,7 +67,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     // (.github/workflows/pages.yml uploads modules/web/policy/ as the
     // site root). EN is index.html, RU is ru.html — link to the locale
     // the user is currently in.
-    const policyBase = "https://akdasa-studios.github.io/shruti"
+    const policyBase = "https://jiva-studio.github.io/shruti"
     const policyUrl =
       (i18n.locale.value as string) === "ru" ? `${policyBase}/ru.html` : `${policyBase}/`
     const docs: LegalDocument[] = [
