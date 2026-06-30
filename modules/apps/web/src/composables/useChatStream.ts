@@ -256,6 +256,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
         messages: history.length ? history : [{ role: 'user', content: q }],
         lang,
         capabilities: { commentary_card: true },
+        // Web always opts in: there's no per-user toggle here, and the corpus
+        // has native transcripts only for ru/en — so for any other `lang` the
+        // server would otherwise show English-verbatim citations.
+        translate_citations: true,
       }
       if (trackId) body.user_context = { current_track_id: trackId }
 
