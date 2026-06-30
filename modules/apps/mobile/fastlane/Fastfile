@@ -393,6 +393,13 @@ platform :ios do
 
   desc "Build a signed App Store IPA"
   lane :build do
+    # SwiftPM dependency resolution on CI runners (Xcode 26.x) can push
+    # `xcodebuild -showBuildSettings` well past fastlane's 3s default timeout,
+    # flaking the archive ("timed out after 4 retries with a base timeout of 3").
+    # Give it generous headroom; honor any value already set in the environment.
+    ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "120"
+    ENV["FASTLANE_XCODEBUILD_SETTINGS_RETRIES"] ||= "5"
+
     setup_ios_keychain
     import_ios_certificates
     install_ios_provisioning_profiles
