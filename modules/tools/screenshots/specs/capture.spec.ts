@@ -307,8 +307,23 @@ async function boot(page: Page, code: CaptureLocale): Promise<void> {
 async function navigateToRoute(page: Page, route: Scenario["route"]): Promise<void> {
   const url = page.url()
   if (url.endsWith(route) || url.includes(`${route}?`)) return
-  await page.evaluate((t) => window.__lectorium!.debug!.navigateTo(t), route)
-  await page.waitForURL(`**${route}`, { timeout: 10_000 })
+  // On sr* locales the Welcome→home settle re-derives the UI language
+  // (Chromium normalises the standalone `sr-Cyrl` to a bare `sr`, which
+  // `toSupportedLocale` maps to `sr-Latn`) and fires one more navigation just
+  // after /tabs/home lands. If that late redirect hits while this debug
+  // `navigateTo` evaluate is in flight, Playwright aborts it with "Execution
+  // context was destroyed". The bridge call is idempotent, so retry it (and
+  // the URL wait) until the route sticks instead of failing the capture.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await page.evaluate((t) => window.__lectorium!.debug!.navigateTo(t), route)
+      await page.waitForURL(`**${route}`, { timeout: 10_000 })
+      return
+    } catch (err) {
+      if (attempt >= 4 || !/Execution context was destroyed/.test(String(err))) throw err
+      await page.waitForTimeout(300)
+    }
+  }
 }
 
 /* --------------------------- the spec ------------------------------ */
