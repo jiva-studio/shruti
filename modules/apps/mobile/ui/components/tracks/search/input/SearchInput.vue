@@ -50,7 +50,15 @@ const hasLeading = computed(() => !!slots.leading)
 }
 
 .search {
-  margin: 10px;
+  /* Horizontal inset is tokenised so a page can align the field with its list
+     gutter (note cards / track ion-item rows sit at 16px). Default 10px keeps
+     the untoolbarised usages (chat history, filters sheet) unchanged; the
+     toolbar pages (Notes, Tracks) set --search-gutter: 16px AND zero the
+     toolbar's own --padding-start/-end so the field's left edge lands at
+     exactly 16px in both md (toolbar pad 0) and ios (toolbar pad 4) — matching
+     the cards. Do NOT collapse this back to a bare `margin: 10px`: that is the
+     regression that keeps making the search sit ~6px tighter than the cards. */
+  margin: 10px var(--search-gutter, 10px);
 }
 
 /* Leading icon sits over the field's left edge; the field gets extra start

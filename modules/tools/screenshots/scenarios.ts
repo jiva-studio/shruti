@@ -217,11 +217,47 @@ async function openSmartLibrary(page: Page): Promise<void> {
   // The Smart Library entry is Pro-gated (tapping it opens the paywall when
   // not subscribed). Force a subscribed state via the debug bridge so the tap
   // opens the dialog, then tap the row. The dialog is an IonModal.
-  await page.evaluate(() => window.__shruti!.debug!.setSubscription("pro"))
-  await page.locator("[data-testid=settings-smart-library]").click()
+  //
+  // `setSubscription("pro")` re-evaluates Pro gating app-wide; on some locales
+  // that recompute bounces the Ionic router back to /tabs/home and destroys
+  // the execution context mid-`evaluate`. So: set pro FIRST (tolerating a
+  // navigation that kills the evaluate — retry once it settles), then RE-enter
+  // settings explicitly (the bounce may have left us on home) before opening
+  // the dialog.
+  await evaluateThroughNavigation(page, () =>
+    window.__shruti!.debug!.setSubscription("pro")
+  )
+  await page.evaluate(() => window.__shruti!.debug!.navigateTo("/tabs/settings"))
+  await page.waitForURL("**/tabs/settings", { timeout: 10_000 })
+  const row = page.locator("[data-testid=settings-smart-library]")
+  await row.waitFor({ state: "visible", timeout: 10_000 })
+  await row.click()
   await page
     .locator("ion-modal.smart-library-dialog")
     .waitFor({ state: "visible", timeout: 10_000 })
+}
+
+/**
+ * Run a debug-bridge `page.evaluate` that may itself trigger an app navigation
+ * (Ionic route bounce), which Playwright surfaces as "Execution context was
+ * destroyed". The bridge call is fire-and-forget on the app side, so re-running
+ * it after the route settles is safe and idempotent.
+ */
+async function evaluateThroughNavigation(
+  page: Page,
+  fn: () => void
+): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await page.evaluate(fn)
+      return
+    } catch (err) {
+      if (!/Execution context was destroyed/.test(String(err))) throw err
+      await page.waitForTimeout(300)
+    }
+  }
+  // Last attempt: let a genuine failure surface instead of swallowing it.
+  await page.evaluate(fn)
 }
 
 async function scrollToPlaybackSettings(page: Page): Promise<void> {
@@ -230,6 +266,15 @@ async function scrollToPlaybackSettings(page: Page): Promise<void> {
   // appearance section. Pin the first of them (Autoplay) to the top of the
   // viewport so the top-cropped slide shows all three with their PRO badges,
   // not the account rows.
+  //
+  // Wait for the row to mount BEFORE touching it — this hook runs right after
+  // `waitForURL("**/tabs/settings")`, while the route transition / appLanguage
+  // re-seed (skews to fallback locales like sr/uk) can still navigate and
+  // destroy the execution context mid-scroll `evaluate`. `locator.waitFor`
+  // survives that; `page.evaluate` does not.
+  await page
+    .locator("[data-testid=settings-track-info]")
+    .waitFor({ state: "visible", timeout: 10_000 })
   await page.locator("[data-testid=settings-track-info]").scrollIntoViewIfNeeded()
   await page
     .locator("[data-testid=settings-autoplay]")

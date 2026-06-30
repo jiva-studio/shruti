@@ -3,6 +3,7 @@
     <FlatHeader v-if="!isEmpty">
       <IonToolbar>
         <SearchInput
+          class="page-search"
           :model-value="query"
           :placeholder="$t('app.search')"
           @update:model-value="onQuery"
@@ -78,6 +79,18 @@ const emptyImage = "/notes-empty.png"
 </script>
 
 <style scoped>
+/* Align the search field with the note cards (margin: 1rem 16px). Zero the
+   toolbar's own inline padding (md 0 / ios 4px) and let the field carry the
+   full 16px gutter, so the field's left edge matches the cards on every
+   platform. See SearchInput.vue's .search comment. */
+ion-toolbar {
+  --padding-start: 0;
+  --padding-end: 0;
+}
+.page-search {
+  --search-gutter: 16px;
+}
+
 .bottom-reserve {
   width: 100%;
   height: var(--kit-page-reserved-space, 0px);

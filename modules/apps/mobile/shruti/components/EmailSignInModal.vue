@@ -243,6 +243,15 @@ onUnmounted(clearResendTimer)
 </script>
 
 <style scoped>
+/* ion-button keeps a default 2px host margin-inline even with expand="block"
+   (that flag only zeros the inner .button-native), so the block button renders
+   4px narrower than the full-width outline IonInput above it. Zero the inline
+   margin so the submit button matches the field width exactly. Vertical margin
+   (.ion-margin-top) is untouched. */
+ion-button[expand="block"] {
+  margin-inline: 0;
+}
+
 .lead {
   margin: 0 0 16px;
   color: var(--ion-color-medium);

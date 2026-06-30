@@ -103,8 +103,18 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 </script>
 
 <style scoped>
+/* Align the search field with the track list rows (ion-item default inset
+   16px). Zero the toolbar's own inline padding (md 0 / ios 4px) and let the
+   field carry the full 16px gutter so its left edge matches the rows on every
+   platform. See SearchInput.vue's .search comment. */
+ion-toolbar {
+  --padding-start: 0;
+  --padding-end: 0;
+}
+
 .search-row {
   position: relative;
+  --search-gutter: 16px;
 }
 
 .search-row :deep(ion-input) {
@@ -119,7 +129,9 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 
 .search-row-filter-button {
   position: absolute;
-  right: 14px;
+  /* Sit at the field's right gutter (16px) so the icon aligns with the field
+     edge and the list rows below, not 2px proud of them. */
+  right: 16px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 2;
