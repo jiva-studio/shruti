@@ -6,15 +6,15 @@
     },
     "lectorium-search": {
       "type": "http",
-      "url": "http://lectorium-prod-eu:8086/mcp"
+      "url": "http://127.0.0.1:18101/mcp"
     },
     "transcriber": {
       "type": "http",
-      "url": "http://mac-host:8090/mcp"
+      "url": "http://127.0.0.1:18003/mcp"
     },
     "denoiser": {
       "type": "http",
-      "url": "http://mac-host:8092/mcp"
+      "url": "http://127.0.0.1:18004/mcp"
     },
     "claude-context": {
       "command": "npx",
@@ -24,9 +24,9 @@
         "EMBEDDING_MODEL": "code-embed",
         "EMBEDDING_DIMENSION": "768",
         "EMBEDDING_BATCH_SIZE": "64",
-        "OLLAMA_HOST": "http://mac-host:11434",
+        "OLLAMA_HOST": "http://127.0.0.1:18001",
         "OLLAMA_REQUEST_TIMEOUT": "300000",
-        "MILVUS_ADDRESS": "mac-host:19531",
+        "MILVUS_ADDRESS": "127.0.0.1:18002",
         "CODE_CHUNKS_COLLECTION_NAME_OVERRIDE": "lectorium"
       }
     }
