@@ -26,4 +26,4 @@
 भी नहीं हटा सकते।
 
 पूरी जानकारी के लिए, [गोपनीयता
-नीति](https://jiva-studio.github.io/lectorium/) देखें।
+नीति](https://shruti.app/en/privacy) देखें।

@@ -26,4 +26,4 @@ Apple налогом, али ће на нашој страни то бити н�
 можемо да уклонимо.
 
 За све детаље погледајте [политику
-приватности](https://jiva-studio.github.io/lectorium/).
+приватности](https://shruti.app/sr-cyrl/privacy).

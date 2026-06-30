@@ -2,6 +2,7 @@ import { computed, reactive } from "vue"
 import { useI18n } from "vue-i18n"
 import { alertController } from "@ionic/vue"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { privacyPolicyUrl } from "@lectorium/i18n/index.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import {
   PurchaseCancelledError,
@@ -63,13 +64,9 @@ export function useSubscriptionBinding(): SubscriptionBinding {
   const platform = useLectorium().platform
 
   const legalDocuments = computed<LegalDocument[]>(() => {
-    // Privacy policy is served from this repo's GitHub Pages
-    // (.github/workflows/pages.yml uploads modules/web/policy/ as the
-    // site root). EN is index.html, RU is ru.html — link to the locale
-    // the user is currently in.
-    const policyBase = "https://jiva-studio.github.io/lectorium"
-    const policyUrl =
-      (i18n.locale.value as string) === "ru" ? `${policyBase}/ru.html` : `${policyBase}/`
+    // Privacy policy lives on the marketing site (shruti.app),
+    // localized per UI locale (web app src/pages/[lang]/privacy.astro).
+    const policyUrl = privacyPolicyUrl(i18n.locale.value as string)
     const docs: LegalDocument[] = [
       { title: t("settings.subscription.legal.privacy"), link: policyUrl },
     ]

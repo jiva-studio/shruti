@@ -31,4 +31,4 @@ Les enregistrements d'achat d'abonnement restent chez Apple ou Google —
 nous ne pouvons pas non plus les supprimer.
 
 Pour tous les détails, consultez la [politique de
-confidentialité](https://jiva-studio.github.io/lectorium/).
+confidentialité](https://shruti.app/en/privacy).
