@@ -10,7 +10,7 @@ const { slides } = Astro.props
       <figure class="w-[210px] shrink-0 snap-center sm:w-[230px]">
         <div class="overflow-hidden rounded-[1.7rem] border-[3px] border-ink shadow-xl">
           <div class="zone" style={`background:${s.top}`}></div>
-          <img src={s.src} alt={s.title} loading="lazy" class="block w-full" />
+          <img src={s.src} alt={s.title} loading="lazy" draggable={false} class="block w-full" />
           <div class="zone" style={`background:${s.bottom}`}></div>
         </div>
         <figcaption class="mt-4 px-1 text-center">
@@ -22,10 +22,43 @@ const { slides } = Astro.props
   </div>
 </div>
 
+<script>
+  // Desktop: click-and-drag to pan the strip (no wheel hijacking).
+  for (const el of document.querySelectorAll<HTMLElement>('.screens-scroll')) {
+    let down = false
+    let startX = 0
+    let startLeft = 0
+    el.addEventListener('pointerdown', (e) => {
+      down = true
+      startX = e.clientX
+      startLeft = el.scrollLeft
+      el.setPointerCapture(e.pointerId)
+      el.classList.add('dragging')
+    })
+    el.addEventListener('pointermove', (e) => {
+      if (!down) return
+      el.scrollLeft = startLeft - (e.clientX - startX)
+    })
+    const end = () => {
+      down = false
+      el.classList.remove('dragging')
+    }
+    el.addEventListener('pointerup', end)
+    el.addEventListener('pointercancel', end)
+  }
+</script>
+
 <style>
   .screens-scroll {
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
+    cursor: grab;
+  }
+  .screens-scroll.dragging {
+    cursor: grabbing;
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+    user-select: none;
   }
   .screens-scroll::-webkit-scrollbar { display: none; }
   /* Safe-zone bands: height = 4.5% of the frame width (padding-% is
