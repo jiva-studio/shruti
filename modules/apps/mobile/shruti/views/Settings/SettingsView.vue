@@ -88,6 +88,7 @@
       v-if="debugUnlocked"
       :count="logs.count"
       @view-logs="logsOpen = true"
+      @email-diagnostics="onOpenDiagnosticsEmail"
       @clear-cache="onClearCache"
     />
 
@@ -300,10 +301,18 @@ async function supportAppVersion(): Promise<string> {
   }
 }
 
-// Pre-fills the system mail client with the technical diagnostics support
-// needs to reproduce an issue. Mirrors the "Can't pay?" precedent in
-// useSubscriptionBinding.ts.
-async function onOpenEmail(): Promise<void> {
+// Plain support email for users — opens the mail client with just a subject
+// and a short intro. No logs, no system state (that's the Debug variant).
+function onOpenEmail(): void {
+  const subject = encodeURIComponent(t("settings.contacts.email.emailSubject"))
+  const body = encodeURIComponent(t("settings.contacts.email.emailIntro"))
+  window.open(`mailto:support@jiva.studio?subject=${subject}&body=${body}`, "_system")
+}
+
+// Diagnostics email — same mail client, but pre-filled with system state + a
+// tail of the in-app log so support can reproduce an issue. Developer-only;
+// wired from the Debug group.
+async function onOpenDiagnosticsEmail(): Promise<void> {
   // Tail the ring buffer so the mailto URL stays a sane length; the full
   // dump is still available via the debug "copy logs" action.
   const logsText = logs.asText()
@@ -311,7 +320,7 @@ async function onOpenEmail(): Promise<void> {
     logsText.length > SUPPORT_LOG_CHARS ? logsText.slice(-SUPPORT_LOG_CHARS) : logsText
 
   const lines = [
-    t("settings.contacts.email.emailIntro"),
+    t("settings.debug.email.emailIntro"),
     "",
     "—",
     `User ID: ${auth.userId ?? "—"}`,
@@ -326,7 +335,7 @@ async function onOpenEmail(): Promise<void> {
     "— logs —",
     logsTail,
   ]
-  const subject = encodeURIComponent(t("settings.contacts.email.emailSubject"))
+  const subject = encodeURIComponent(t("settings.debug.email.emailSubject"))
   const body = encodeURIComponent(lines.join("\n"))
   window.open(`mailto:support@jiva.studio?subject=${subject}&body=${body}`, "_system")
 }

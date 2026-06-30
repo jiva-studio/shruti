@@ -302,6 +302,19 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return (await res.json()) as TokenResponseBody
   }
 
+  // A thrown request is only a CONNECTIVITY failure when the request never
+  // reached a responding server. `withNetworkErrorContext` (composition root)
+  // renames fetch's `TypeError: Failed to fetch` to a `NetworkError`; match by
+  // name so this adapter needn't import the app-layer class. A raw `TypeError`
+  // is covered too, in case a caller wires an unwrapped request fn. Everything
+  // else — notably the failover client throwing `Error("HTTP 5xx")` when every
+  // server is transiently down — is a SERVER fault, not the user's internet,
+  // and must NOT surface as "check your connection".
+  function isConnectivityError(e: unknown): boolean {
+    if ((e as { name?: unknown } | null)?.name === "NetworkError") return true
+    return e instanceof TypeError
+  }
+
   function emailOtpErrorFromResponse(res: Response): EmailOtpError {
     const retryAfter = Number(res.headers.get("Retry-After")) || undefined
     switch (res.status) {
@@ -331,8 +344,8 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
         },
         body: JSON.stringify({ email, locale: cfg.getLocale?.() ?? "" }),
       })
-    } catch {
-      throw new EmailOtpError("network")
+    } catch (e) {
+      throw new EmailOtpError(isConnectivityError(e) ? "network" : "server")
     }
     if (res.ok) return
     throw emailOtpErrorFromResponse(res)
@@ -350,8 +363,8 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
         },
         body: JSON.stringify({ email, code, deviceId }),
       })
-    } catch {
-      throw new EmailOtpError("network")
+    } catch (e) {
+      throw new EmailOtpError(isConnectivityError(e) ? "network" : "server")
     }
     if (!res.ok) throw emailOtpErrorFromResponse(res)
     return commitTokenResponse((await res.json()) as TokenResponseBody)

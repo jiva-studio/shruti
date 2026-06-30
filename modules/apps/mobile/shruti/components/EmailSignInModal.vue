@@ -28,13 +28,15 @@
         <p v-if="error" class="error">{{ error }}</p>
         <IonButton
           expand="block"
-          class="ion-margin-top"
+          class="ion-margin-top submit-btn"
           style="--box-shadow: none"
           :disabled="busy || !email.trim()"
           @click="onSendCode"
         >
-          <IonSpinner v-if="busy" name="crescent" />
-          <span v-else>{{ $t("settings.account.email.sendCode") }}</span>
+          <!-- Label stays in flow (just hidden) so the button keeps its text
+               height while the spinner overlays centered — no height jump. -->
+          <span :class="{ 'label-hidden': busy }">{{ $t("settings.account.email.sendCode") }}</span>
+          <IonSpinner v-if="busy" name="crescent" class="submit-spinner" />
         </IonButton>
       </template>
 
@@ -57,13 +59,13 @@
         <p v-if="error" class="error">{{ error }}</p>
         <IonButton
           expand="block"
-          class="ion-margin-top"
+          class="ion-margin-top submit-btn"
           style="--box-shadow: none"
           :disabled="busy || code.trim().length < 6"
           @click="onVerify"
         >
-          <IonSpinner v-if="busy" name="crescent" />
-          <span v-else>{{ $t("settings.account.email.verify") }}</span>
+          <span :class="{ 'label-hidden': busy }">{{ $t("settings.account.email.verify") }}</span>
+          <IonSpinner v-if="busy" name="crescent" class="submit-spinner" />
         </IonButton>
 
         <div class="actions">
@@ -170,6 +172,8 @@ function messageFor(e: unknown): string {
         return t("settings.account.email.errors.disabled")
       case "network":
         return t("settings.account.email.errors.network")
+      case "server":
+        return t("settings.account.email.errors.server")
       default:
         return t("settings.account.email.errors.generic")
     }
@@ -250,6 +254,22 @@ onUnmounted(clearResendTimer)
    (.ion-margin-top) is untouched. */
 ion-button[expand="block"] {
   margin-inline: 0;
+}
+
+/* Busy state must not resize the submit button. The label stays in flow
+   (hidden) to hold the button's text height, and the spinner is overlaid
+   dead-center over it. ::part(native) is `position: relative` in Ionic, so
+   the absolutely-positioned spinner centers within the button. */
+.submit-btn .label-hidden {
+  visibility: hidden;
+}
+.submit-btn .submit-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .lead {

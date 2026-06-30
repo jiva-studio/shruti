@@ -3,6 +3,9 @@
     <IonLabel>{{ $t("settings.groups.contacts") }}</IonLabel>
   </IonListHeader>
 
+  <!-- Plain support email, available in every locale. Opens a bare mailto
+       (subject + intro only) — NO logs / system state. The diagnostics email
+       that attaches logs lives in the Debug group, not here. -->
   <SettingsActionItem
     :title="$t('settings.contacts.email.title')"
     :subtitle="$t('settings.contacts.email.description')"
@@ -13,8 +16,8 @@
     </template>
   </SettingsActionItem>
 
-  <!-- VK and Telegram groups are Russian-audience communities; only surface
-       them when the app is in Russian. -->
+  <!-- VK and Telegram are Russian-audience communities; only surface them in
+       the ru locale. -->
   <template v-if="isRussian">
     <SettingsActionItem
       :title="$t('settings.contacts.vk.title')"
