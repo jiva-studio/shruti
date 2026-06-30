@@ -13,6 +13,19 @@
     </template>
   </SettingsActionItem>
 
+  <!-- Diagnostics email: opens the mail client pre-filled with system state +
+       a tail of the in-app log. Developer affordance — only reachable here, in
+       the unlocked Debug group, never in the user-facing Contacts group. -->
+  <SettingsActionItem
+    :title="$t('settings.debug.email.title')"
+    :subtitle="$t('settings.debug.email.description')"
+    @activate="emit('emailDiagnostics')"
+  >
+    <template #icon>
+      <IconChip><MailIcon /></IconChip>
+    </template>
+  </SettingsActionItem>
+
   <SettingsActionItem
     danger
     :title="$t('settings.danger.clearCache.title')"
@@ -28,7 +41,7 @@
 <script setup lang="ts">
 import { IonLabel, IonListHeader } from "@ionic/vue"
 import { SettingsActionItem } from "@kit/ui"
-import { ArchiveIcon, TranscriptIcon } from "@ui/icons/index.js"
+import { ArchiveIcon, MailIcon, TranscriptIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 
 defineProps<{
@@ -38,6 +51,7 @@ defineProps<{
 
 const emit = defineEmits<{
   viewLogs: []
+  emailDiagnostics: []
   clearCache: []
 }>()
 </script>
