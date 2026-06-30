@@ -42,6 +42,13 @@ const nav = [
     </div>
   </div>
   <div class="border-t border-line">
-    <p class="mx-auto max-w-6xl px-5 py-5 text-xs text-medium">© {year} AKd Studio. {t('footer.rights')}</p>
+    <div class="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-5 text-xs text-medium sm:flex-row sm:items-center sm:justify-between">
+      <p>© {year} Jiva Studio. {t('footer.rights')}</p>
+      <ul class="flex flex-wrap gap-x-5 gap-y-2">
+        <li><a href={`${base}/privacy`} class="hover:text-saffron">{t('legal.privacy.title')}</a></li>
+        <li><a href={`${base}/delete-account`} class="hover:text-saffron">{t('legal.delete.title')}</a></li>
+        <li><a href={`${base}/support`} class="hover:text-saffron">{t('legal.support.title')}</a></li>
+      </ul>
+    </div>
   </div>
 </footer>

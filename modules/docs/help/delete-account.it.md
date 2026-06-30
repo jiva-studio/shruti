@@ -27,4 +27,4 @@ I dati degli acquisti dell'abbonamento restano presso Apple o Google — non
 possiamo rimuovere nemmeno quelli.
 
 Per tutti i dettagli, consulta l'[informativa sulla
-privacy](https://jiva-studio.github.io/shruti/).
+privacy](https://shruti.app/en/privacy).

@@ -28,4 +28,4 @@ LLM-постачальника (OpenRouter / Google Gemini). Ці сервіси
 можемо видалити.
 
 Усі подробиці — у [політиці
-конфіденційності](https://jiva-studio.github.io/shruti/).
+конфіденційності](https://shruti.app/uk/privacy).

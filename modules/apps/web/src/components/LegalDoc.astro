@@ -1,0 +1,87 @@
+---
+import { marked } from 'marked'
+import type { Lang } from '../i18n/ui'
+
+interface Props {
+  /** Which legal document to render — matches src/legal/<doc>.<lang>.md */
+  doc: 'privacy' | 'delete-account' | 'support'
+  lang: Lang
+}
+const { doc, lang } = Astro.props
+
+// All localized legal markdown, loaded as raw strings at build time.
+const sources = import.meta.glob('../legal/*.md', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>
+
+const raw = sources[`../legal/${doc}.${lang}.md`] ?? sources[`../legal/${doc}.en.md`]
+const html = marked.parse(raw, { async: false }) as string
+---
+<section class="mx-auto max-w-3xl px-5 py-12 sm:py-16">
+  <article class="legal" set:html={html} />
+</section>
+
+<style>
+  .legal :global(h1) {
+    font-family: var(--font-serif);
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 0.4rem;
+    color: var(--color-ink);
+  }
+  .legal :global(h1 + p) {
+    color: var(--color-medium);
+    font-size: 0.95rem;
+    margin-top: 0;
+    margin-bottom: 2rem;
+  }
+  .legal :global(h2) {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-top: 2.25rem;
+    margin-bottom: 0.5rem;
+    color: var(--color-ink);
+  }
+  .legal :global(p) {
+    margin: 0.75rem 0;
+    line-height: 1.7;
+    color: var(--color-ink-soft);
+  }
+  .legal :global(ul),
+  .legal :global(ol) {
+    margin: 0.75rem 0;
+    padding-left: 1.4rem;
+    line-height: 1.7;
+    color: var(--color-ink-soft);
+  }
+  .legal :global(li) {
+    margin: 0.35rem 0;
+  }
+  .legal :global(li > ul) {
+    margin: 0.35rem 0;
+  }
+  .legal :global(strong) {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+  .legal :global(em) {
+    font-style: italic;
+  }
+  .legal :global(a) {
+    color: var(--color-saffron);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .legal :global(a:hover) {
+    color: var(--color-saffron-shade);
+  }
+  .legal :global(code) {
+    background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+</style>

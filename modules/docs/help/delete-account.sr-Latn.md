@@ -26,4 +26,4 @@ Zapisi o kupovini pretplate ostaju kod Apple-a ili Google-a — ni njih ne
 možemo da uklonimo.
 
 Za sve detalje pogledajte [politiku
-privatnosti](https://jiva-studio.github.io/shruti/).
+privatnosti](https://shruti.app/sr-latn/privacy).
