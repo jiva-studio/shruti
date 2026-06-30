@@ -1,0 +1,21 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import LegalDoc from '../../components/LegalDoc.astro'
+import { useT, type Lang } from '../../i18n/ui'
+import { UI_LOCALE_CODES } from '../../i18n/locales.data.mjs'
+
+export function getStaticPaths() {
+  return UI_LOCALE_CODES.map((lang) => ({ params: { lang } }))
+}
+
+const lang = Astro.params.lang as Lang
+const t = useT(lang)
+---
+<BaseLayout
+  lang={lang}
+  path="/privacy"
+  title={`${t('legal.privacy.title')} — ${t('site.name')}`}
+  description={t('legal.privacy.desc')}
+>
+  <LegalDoc doc="privacy" lang={lang} />
+</BaseLayout>

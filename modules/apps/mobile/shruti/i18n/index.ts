@@ -270,6 +270,23 @@ export const SUPPORTED_LOCALES = [
 ] as const
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
+/** Marketing-site (shruti.app) locales that have their own localized
+ *  legal pages. App locales outside this set fall back to English. */
+const POLICY_SITE_LOCALES: Partial<Record<SupportedLocale, string>> = {
+  ru: "ru",
+  uk: "uk",
+  "sr-Latn": "sr-latn",
+  "sr-Cyrl": "sr-cyrl",
+}
+
+/** URL of the privacy policy on the marketing site for `locale`
+ *  (web app src/pages/[lang]/privacy.astro). Single source of truth for the
+ *  in-app Privacy Policy links (Settings + subscription paywall). */
+export function privacyPolicyUrl(locale: string): string {
+  const seg = POLICY_SITE_LOCALES[locale as SupportedLocale] ?? "en"
+  return `https://shruti.app/${seg}/privacy`
+}
+
 const en = {
   activity: enActivity,
   app: enApp,

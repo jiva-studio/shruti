@@ -28,4 +28,4 @@ LLM-провайдера (OpenRouter / Google Gemini). Они хранятся �
 возможности их стереть.
 
 Подробности — в [политике
-конфиденциальности](https://jiva-studio.github.io/shruti/ru.html).
+конфиденциальности](https://shruti.app/ru/privacy).

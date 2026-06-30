@@ -135,6 +135,7 @@ import {
 import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import { useShruti } from "@shruti/shruti.js"
+import { privacyPolicyUrl } from "@shruti/i18n/index.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
@@ -264,10 +265,10 @@ async function onCopyLogs(): Promise<void> {
 }
 
 function onOpenPrivacyPolicy(): void {
-  // Same site / per-locale split as the subscription "Privacy Policy" link
-  // (see useSubscriptionBinding.ts) — GitHub Pages from modules/web/policy/.
-  const base = "https://jiva-studio.github.io/shruti"
-  const url = (i18n.locale.value as string) === "ru" ? `${base}/ru.html` : `${base}/`
+  // Privacy policy lives on the marketing site (shruti.app), localized
+  // per UI locale. `privacyPolicyUrl` is the shared source of truth (also used
+  // by the subscription paywall — see useSubscriptionBinding.ts).
+  const url = privacyPolicyUrl(i18n.locale.value as string)
   // Capacitor's webview opens external schemes in the system browser.
   window.open(url, "_blank")
 }

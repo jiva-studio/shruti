@@ -28,4 +28,4 @@ Kaufunterlagen zu Abonnements verbleiben bei Apple oder Google — auch diese
 können wir nicht entfernen.
 
 Alle Einzelheiten findest du in der
-[Datenschutzrichtlinie](https://jiva-studio.github.io/shruti/).
+[Datenschutzrichtlinie](https://shruti.app/en/privacy).
