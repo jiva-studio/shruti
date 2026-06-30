@@ -51,6 +51,21 @@ BOOST_MAX_MATCHES_PER_TOPIC = 3
 MEMORY_ACCEPT_SCORE_NATIVE = 0.75
 MEMORY_ACCEPT_SCORE_CROSS = 0.70
 MEMORY_MAX_MATCHES = 1
+# Judge-gated memory (MEMORY_GATE). A matched memory note is AUTHORITATIVE — it
+# anchors the whole outline — so cosine alone must not seat it. With the gate on,
+# the cosine bars above are bypassed: every candidate above MEMORY_RECALL_FLOOR
+# is routed through the cross-encoder/LLM judge ("does this curated note actually
+# answer THIS question?"). Recall via a low cosine floor, precision via the
+# judge — this scales as the curated-memory corpus grows (no per-note threshold
+# tuning) and recovers genuine borderline / cross-lingual matches that a high
+# cosine bar would drop. Set MEMORY_GATE=False to fall back to cosine thresholds.
+MEMORY_RECALL_FLOOR = 0.55
+MEMORY_GATE = True
+# Cross-encoder accept bar for the judge-gated memory path. Higher than the
+# pinned bar (PINNED_RERANK_ACCEPT=0.50): measured on the live "structure of the
+# Gita" note, off-topic queries it half-matches ("who is God?") rerank at ~0.55
+# while genuine structure questions hit 0.80-0.85 — 0.65 sits in that gap.
+MEMORY_RERANK_ACCEPT = 0.65
 
 # A matched memory whose curator refs RESOLVE to at least this many citable
 # envelopes is a sufficient (CORRECT) answer on its own: the sufficiency gate
