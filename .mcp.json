@@ -9,12 +9,12 @@
       "url": "http://shruti-prod-eu:8086/mcp"
     },
     "transcriber": {
-      "command": "modules/tools/transcriber-mcp/bin/transcriber-mcp",
-      "args": ["-stdio", "-service-url", "http://192.168.0.17:8080"]
+      "type": "http",
+      "url": "http://mac-host:8090/mcp"
     },
     "denoiser": {
-      "command": "/home/akd/.local/bin/denoiser-mcp",
-      "args": ["-stdio", "-service-url", "http://192.168.0.17:8091"]
+      "type": "http",
+      "url": "http://mac-host:8092/mcp"
     },
     "claude-context": {
       "command": "npx",
@@ -24,9 +24,9 @@
         "EMBEDDING_MODEL": "code-embed",
         "EMBEDDING_DIMENSION": "768",
         "EMBEDDING_BATCH_SIZE": "64",
-        "OLLAMA_HOST": "http://192.168.0.17:11434",
+        "OLLAMA_HOST": "http://mac-host:11434",
         "OLLAMA_REQUEST_TIMEOUT": "300000",
-        "MILVUS_ADDRESS": "192.168.0.17:19531",
+        "MILVUS_ADDRESS": "mac-host:19531",
         "CODE_CHUNKS_COLLECTION_NAME_OVERRIDE": "shruti"
       }
     }
