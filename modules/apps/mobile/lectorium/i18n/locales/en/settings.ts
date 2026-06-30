@@ -46,6 +46,7 @@ export default {
         throttled: "Please wait a moment before requesting another code.",
         disabled: "Email sign-in is unavailable right now.",
         network: "No connection. Check your internet and try again.",
+        server: "Something went wrong on our end. Please try again in a moment.",
         generic: "Something went wrong. Please try again.",
       },
     },
@@ -342,6 +343,12 @@ export default {
     viewLogs: {
       title: "View logs",
       description: "In-app event log · {count} entries",
+    },
+    email: {
+      title: "Email diagnostics",
+      description: "Send logs and system state to support",
+      emailSubject: "Diagnostics report",
+      emailIntro: "Please describe your question or problem above this line.",
     },
   },
 

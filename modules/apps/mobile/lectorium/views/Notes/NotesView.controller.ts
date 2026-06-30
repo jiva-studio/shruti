@@ -19,6 +19,7 @@ import {
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { escapeHtml } from "@lib/chat/utils/escapeHtml.js"
+import { renderExcerptHtml } from "@lib/chat/chatMarkers.js"
 import { resolveShareArtifact } from "@lectorium/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
@@ -134,9 +135,15 @@ export function useNotesController(): NotesControllerReturn {
     return store.filtered.map((n) => {
       const { track, author, location } = trackContextFor(n.trackId as TrackId)
       const audioVariant = track ? pickPlayableVariant(track) : null
+      // Render the snippet's inline markdown (`*em*`, `**bold**`, `> śloka`)
+      // the SAME way the chat citation card does (renderExcerptHtml), so a
+      // saved note reads identically to its chat origin instead of printing
+      // literal asterisks. Search highlighting then injects `<mark>` into the
+      // rendered HTML's text runs only (never inside the generated tags).
+      const html = renderExcerptHtml(n.text)
       return {
         id: n.id,
-        text: wrap ? highlightMatches(n.text, q) : escapeHtml(n.text),
+        text: wrap ? highlightHtml(html, q) : html,
         trackId: n.trackId,
         language: "",
         timeStart: n.timeStart,
@@ -489,21 +496,30 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * Returns `text` with every case-insensitive occurrence of `query`
- * wrapped in `<mark>`. The mark expands to the whole word that
+ * Returns rendered-snippet `html` with every case-insensitive occurrence of
+ * `query` wrapped in `<mark>`. The mark expands to the whole word that
  * contains the match (so a search for "поль" highlights the entire
  * "польза", not just the prefix). Word boundaries are computed against
  * Unicode letter / digit / underscore — punctuation and whitespace end
- * the word. The text is HTML-escaped first so user-supplied characters
- * can't break the `v-html` render in HighlightText.
+ * the word.
+ *
+ * `html` is already escaped/rendered markdown (renderExcerptHtml output), so
+ * we must NOT re-escape it. Instead split on tags and inject `<mark>` into
+ * the text runs ONLY — never inside a generated tag (`<em>`, `<blockquote …>`,
+ * `<br>`), which would corrupt the markup. The query is HTML-escaped so it
+ * matches the escaped text and can't break the `v-html` render.
  */
-function highlightMatches(text: string, query: string): string {
-  const escaped = escapeHtml(text)
+function highlightHtml(html: string, query: string): string {
   const needle = escapeHtml(query)
-  if (needle.length === 0) return escaped
+  if (needle.length === 0) return html
   // Greedy word match: walk back to the start of the surrounding word
   // and forward to its end, then wrap the whole word. \p{L} keeps
   // Cyrillic/Latin/Greek letters etc. together with digits + `_`.
   const pattern = new RegExp(`[\\p{L}\\p{N}_]*${escapeRegExp(needle)}[\\p{L}\\p{N}_]*`, "giu")
-  return escaped.replace(pattern, (match) => `<mark>${match}</mark>`)
+  // Capturing split → odd segments are tags (left untouched), even segments
+  // are visible text where the highlight is safe to inject.
+  return html
+    .split(/(<[^>]+>)/)
+    .map((seg, i) => (i % 2 === 1 ? seg : seg.replace(pattern, (match) => `<mark>${match}</mark>`)))
+    .join("")
 }
