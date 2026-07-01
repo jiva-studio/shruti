@@ -14,8 +14,14 @@ const errorMsg = ref("");
 // Device selection (dropdowns): system = a sink (we capture its monitor),
 // mic = a source. Populated from the Go backend on mount.
 const sinks = ref([]);
+const apps = ref([]);
 const sources = ref([]);
 const systemDevice = ref("");
+
+// "Система (они)" options: live app streams first (a direct tap — works even
+// when the output sink's monitor is silent, as on AMD HDMI), then sinks (their
+// monitor) as a fallback.
+const systemOptions = computed(() => [...apps.value, ...sinks.value]);
 const micDevice = ref("");
 const lang = ref("ru");
 const providerName = ref("parakeet");
@@ -27,15 +33,15 @@ async function loadDevices() {
   try {
     const devs = (await go.ListAudioDevices()) || [];
     sinks.value = devs.filter((d) => d.kind === "sink");
+    apps.value = devs.filter((d) => d.kind === "app");
     sources.value = devs.filter((d) => d.kind === "source");
-    // Prefer the sink that is CURRENTLY playing audio (state=running) — that's
-    // where the meeting/video sound actually goes, regardless of the OS default.
-    const activeSink = sinks.value.find((d) => d.active);
-    if (activeSink) systemDevice.value = activeSink.id;
-    else if (!systemDevice.value && sinks.value.length)
-      systemDevice.value = sinks.value[0].id;
-    if (!micDevice.value && sources.value.length)
-      micDevice.value = sources.value[0].id;
+    // Default to the DEFAULT sink's monitor — it captures everything you hear on
+    // your main output, targeted by object.serial so it never aliases onto the
+    // mic. Live app streams (▶) are offered too, for tapping one app directly.
+    const defSink = sinks.value.find((d) => d.default);
+    systemDevice.value = defSink ? defSink.id : sinks.value[0]?.id || "";
+    const defSrc = sources.value.find((d) => d.default);
+    micDevice.value = defSrc ? defSrc.id : sources.value[0]?.id || "";
   } catch (e) {
     errorMsg.value = "Не удалось получить список устройств: " + String(e);
   }
@@ -86,10 +92,6 @@ async function toggle() {
       transcript.finals = [];
       transcript.partial = "";
       summary.value = "";
-      // Re-scan devices at the moment of Record so «Система» locks onto the
-      // sink that is ACTUALLY playing now (▶) — the audio output only reveals
-      // itself as "running" while sound flows, so a pick made at launch is stale.
-      await loadDevices();
       const err = await go.StartRecording(
         providerName.value,
         systemDevice.value,
@@ -167,7 +169,9 @@ onMounted(() => {
       <label>
         Система (они)
         <select v-model="systemDevice" :disabled="recording">
-          <option v-for="d in sinks" :key="d.id" :value="d.id">{{ (d.active ? "▶ " : "") + d.label }}</option>
+          <option v-for="d in systemOptions" :key="d.id" :value="d.id">
+            {{ (d.kind === "app" ? "▶ " : d.default ? "★ " : "") + d.label }}
+          </option>
         </select>
       </label>
     </div>

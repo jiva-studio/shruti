@@ -30,9 +30,9 @@ const frameBytes = v1.SampleRate * v1.BytesPerFrame / 10
 type Source struct {
 	// Channel labels the stream, e.g. v1.ChannelSystem / v1.ChannelMic.
 	Channel string
-	// Target is the capture argument: the numeric PipeWire node id for
-	// pw-record (name-based targets race when two instances run concurrently —
-	// both bind the same node), or the device name for parec.
+	// Target is the capture argument: the PipeWire object.serial for pw-record
+	// (the pw-dump object id is NOT accepted by --target and causes concurrent
+	// captures to alias onto one node), or the device name for parec.
 	Target string
 	// Name is the human-readable node name, for logging.
 	Name string
@@ -61,11 +61,11 @@ func (c *Capture) Frames(channel string) <-chan []byte { return c.out[channel] }
 
 // Device is a selectable audio endpoint for the UI dropdowns.
 type Device struct {
-	ID     string `json:"id"`     // numeric PipeWire node id (pw-record --target)
-	Name   string `json:"name"`   // node.name (stable-ish identifier)
-	Label  string `json:"label"`  // human description for the dropdown
-	Kind   string `json:"kind"`   // "sink" (system output → capture its monitor) | "source" (mic)
-	Active bool   `json:"active"` // sink is currently playing audio (state=running)
+	ID      string `json:"id"`      // PipeWire object.serial (pw-record --target)
+	Name    string `json:"name"`    // node.name (stable-ish identifier)
+	Label   string `json:"label"`   // human description for the dropdown
+	Kind    string `json:"kind"`    // "sink" (system output → capture its monitor) | "source" (mic)
+	Default bool   `json:"default"` // this is the current default sink/source
 }
 
 // ListDevices enumerates audio sinks (system-output options — captured via their
@@ -92,6 +92,11 @@ func ListDevices(ctx context.Context) ([]Device, error) {
 			if json.Unmarshal(raw, &s) == nil {
 				return s
 			}
+			// object.serial and similar come through as JSON numbers.
+			var n json.Number
+			if json.Unmarshal(raw, &n) == nil {
+				return n.String()
+			}
 		}
 		return ""
 	}
@@ -108,6 +113,12 @@ func ListDevices(ctx context.Context) ([]Device, error) {
 			kind = "sink"
 		case "Audio/Source":
 			kind = "source"
+		case "Stream/Output/Audio":
+			// A live application playback stream (Firefox, Zoom, a video). We can
+			// tap it directly with `pw-record --target <object.serial>` — a fan-out
+			// link off the app's output — as an alternative to the sink monitor,
+			// without touching the user's default output or the app's routing.
+			kind = "app"
 		default:
 			continue
 		}
@@ -119,13 +130,48 @@ func ListDevices(ctx context.Context) ([]Device, error) {
 		if label == "" {
 			label = str(p, "node.nick")
 		}
+		if kind == "app" {
+			// For app taps the useful label is the program name; add the stream's
+			// media title when present so multiple streams are distinguishable.
+			appName := str(p, "application.name")
+			media := str(p, "media.name")
+			switch {
+			case appName != "" && media != "" && media != appName:
+				label = appName + " — " + media
+			case appName != "":
+				label = appName
+			case media != "":
+				label = media
+			}
+		}
 		if label == "" {
 			label = name
 		}
+		// Target pw-record by object.serial — NOT the pw-dump object id. `pw-record
+		// --target` accepts object.serial or node.name only; passing the object id
+		// is silently ignored, so every concurrent capture auto-falls-back to the
+		// same default node and all channels record identical audio. object.serial
+		// binds each stream to exactly the chosen node.
+		serial := str(p, "object.serial")
+		if serial == "" {
+			serial = strconv.Itoa(o.ID) // fall back; better than nothing
+		}
 		devs = append(devs, Device{
-			ID: strconv.Itoa(o.ID), Name: name, Label: label, Kind: kind,
-			Active: kind == "sink" && o.Info.State == "running",
+			ID: serial, Name: name, Label: label, Kind: kind,
 		})
+	}
+	// Mark the default output/input so the UI defaults to "your main output" —
+	// the standard place system audio goes. Set your OS default output to where
+	// you actually listen and this captures everything from there.
+	if meta, err := runTrim(ctx, "pw-metadata", "-n", "default"); err == nil {
+		defSink := extractMetaName(meta, "default.audio.sink")
+		defSrc := extractMetaName(meta, "default.audio.source")
+		for i := range devs {
+			if (devs[i].Kind == "sink" && devs[i].Name == defSink) ||
+				(devs[i].Kind == "source" && devs[i].Name == defSrc) {
+				devs[i].Default = true
+			}
+		}
 	}
 	return devs, nil
 }
@@ -280,7 +326,9 @@ func detectPipeWire(ctx context.Context) ([]Source, error) {
 	}, nil
 }
 
-// listNodes maps node.name → numeric node id from `pw-dump`.
+// listNodes maps node.name → object.serial from `pw-dump`. object.serial (not
+// the pw-dump object id) is what `pw-record --target` accepts; using the object
+// id causes concurrent captures to alias onto one node (see ListDevices).
 func listNodes(ctx context.Context) (map[string]string, error) {
 	out, err := exec.CommandContext(ctx, "pw-dump").Output()
 	if err != nil {
@@ -301,14 +349,23 @@ func listNodes(ctx context.Context) (map[string]string, error) {
 		if o.Type != "PipeWire:Interface:Node" {
 			continue
 		}
-		raw, ok := o.Info.Props["node.name"]
-		if !ok {
+		var name string
+		if raw, ok := o.Info.Props["node.name"]; !ok || json.Unmarshal(raw, &name) != nil || name == "" {
 			continue
 		}
-		var name string
-		if json.Unmarshal(raw, &name) == nil && name != "" {
-			names[name] = strconv.Itoa(o.ID)
+		serial := strconv.Itoa(o.ID)
+		if raw, ok := o.Info.Props["object.serial"]; ok {
+			var s string
+			if json.Unmarshal(raw, &s) == nil && s != "" {
+				serial = s
+			} else {
+				var n json.Number
+				if json.Unmarshal(raw, &n) == nil {
+					serial = n.String()
+				}
+			}
 		}
+		names[name] = serial
 	}
 	return names, nil
 }

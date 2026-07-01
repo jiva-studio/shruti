@@ -5,7 +5,7 @@ export namespace capture {
 	    name: string;
 	    label: string;
 	    kind: string;
-	    active: boolean;
+	    default: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Device(source);
@@ -17,7 +17,7 @@ export namespace capture {
 	        this.name = source["name"];
 	        this.label = source["label"];
 	        this.kind = source["kind"];
-	        this.active = source["active"];
+	        this.default = source["default"];
 	    }
 	}
 
