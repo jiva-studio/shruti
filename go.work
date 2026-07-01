@@ -1,7 +1,7 @@
 go 1.23
 
-// client/ is added by `go work use ./client` once the Wails module is scaffolded.
 use (
 	./proto
 	./host/streamd
+	./client
 )

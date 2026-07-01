@@ -1,0 +1,28 @@
+:root {
+  --bg: #141418;
+  --panel: #1e1e24;
+  --panel-2: #26262e;
+  --text: #e8e8ec;
+  --muted: #8a8a96;
+  --accent: #6c8cff;
+  --mic: #4caf82;
+  --sys: #c78bff;
+  --rec: #ff5a5a;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
