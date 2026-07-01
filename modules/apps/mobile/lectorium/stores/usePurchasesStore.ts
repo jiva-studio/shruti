@@ -19,7 +19,9 @@ const CACHE_KEY = "purchases.lastState"
  * warning level (not silence, not page) so the trend stays visible.
  */
 function isEmptyOfferingsError(e: unknown): boolean {
-  return typeof (e as { code?: unknown })?.code === "string" && (e as { code: string }).code === "23"
+  return (
+    typeof (e as { code?: unknown })?.code === "string" && (e as { code: string }).code === "23"
+  )
 }
 
 /** Sample packages for dev/preview builds where RevenueCat has no offerings

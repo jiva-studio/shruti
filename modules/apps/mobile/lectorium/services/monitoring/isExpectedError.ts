@@ -71,7 +71,9 @@ export function isExpectedError(error: unknown): boolean {
       ? error.message
       : typeof error === "string"
         ? error
-        : error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string"
+        : error &&
+            typeof error === "object" &&
+            typeof (error as { message?: unknown }).message === "string"
           ? (error as { message: string }).message
           : ""
   return EXPECTED_MESSAGE.test(message)

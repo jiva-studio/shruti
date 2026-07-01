@@ -32,10 +32,13 @@ describe("isExpectedError", () => {
       isExpectedError({
         code: "OS-PLUG-FILE-0010",
         message: "Directory at '/…/databases/' already exists, cannot be overwritten.",
-      }),
+      })
     ).toBe(true)
     expect(
-      isExpectedError({ code: "OS-PLUG-FILE-0008", message: "'stat' failed because file … does not exist." }),
+      isExpectedError({
+        code: "OS-PLUG-FILE-0008",
+        message: "'stat' failed because file … does not exist.",
+      })
     ).toBe(true)
     // Auto-download loop racing the content-DB open on startup (LETORIUM-6).
     expect(isExpectedError({ message: "repositories(): content DB is not open yet" })).toBe(true)
@@ -53,18 +56,23 @@ describe("isExpectedError", () => {
     expect(
       isExpectedError({
         code: "23",
-        message: "There is an issue with your configuration. … None of the products … could be fetched",
-      }),
+        message:
+          "There is an issue with your configuration. … None of the products … could be fetched",
+      })
     ).toBe(false)
     // A non-listed RC code (e.g. an unexpected backend fault) still pages.
     expect(isExpectedError({ code: "99", message: "unexpected purchase fault" })).toBe(false)
   })
 
   it("drops expected connectivity errors on flaky mobile networks", () => {
-    expect(isExpectedError({ name: "NetworkError", message: "POST /anonymous — network unreachable" })).toBe(true)
+    expect(
+      isExpectedError({ name: "NetworkError", message: "POST /anonymous — network unreachable" })
+    ).toBe(true)
     expect(isExpectedError(new TypeError("Failed to fetch"))).toBe(true)
     expect(isExpectedError(new Error("All servers are unreachable"))).toBe(true)
-    expect(isExpectedError(new Error("A network error has occurred. Сетевое соединение потеряно."))).toBe(true)
+    expect(
+      isExpectedError(new Error("A network error has occurred. Сетевое соединение потеряно."))
+    ).toBe(true)
     expect(isExpectedError(new Error("The Internet connection appears to be offline."))).toBe(true)
     // iOS AVPlayer seek superseded/interrupted — benign.
     expect(isExpectedError(new Error("Seek operation failed"))).toBe(true)
