@@ -57,5 +57,14 @@ async def test_language_name_native(repo: SqliteCatalogRepository) -> None:
 
 
 @pytest.mark.asyncio
+async def test_language_name_case_insensitive(repo: SqliteCatalogRepository) -> None:
+    # Clients spell the script subtag inconsistently (`sr-cyrl` vs `sr-Latn`).
+    # A case-sensitive miss returns None → bare-code directive → Russian drift.
+    assert await repo.language_name("sr-latn") == "Srpski"
+    assert await repo.language_name("SR-LATN") == "Srpski"
+    assert await repo.language_name("RU") == "Русский"
+
+
+@pytest.mark.asyncio
 async def test_language_name_unknown_is_none(repo: SqliteCatalogRepository) -> None:
     assert await repo.language_name("zz") is None
