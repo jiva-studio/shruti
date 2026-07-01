@@ -9,11 +9,12 @@
  * respectively. The reverse-proxy strips the prefix before the request
  * reaches the FastAPI / Express handlers.
  *
- * `urlTemplate` stays per-region — that's the public S3 bucket the
- * mobile client streams lecture audio from directly (AWS S3 us-east-1
- * for `global`, Yandex Object Storage for `russia`). Until a Russia VPS
- * exists, both regions' share-* URLs share the same Cloud Provider box; the
- * Russia entry will get its own host name once that lands.
+ * `urlTemplate` stays per-region — that's the public bucket/CDN the
+ * mobile client streams lecture audio from and pulls the content DB from.
+ * `global` now resolves to Bunny CDN (`cdn.shruti.local`), the
+ * primary origin catalog publishes reach; `russia` to Yandex Object
+ * Storage; the old AWS S3 bucket is kept only as the `legacy` region so
+ * installs still pinned to it can read a config.json and migrate off.
  */
 
 import type { CdnServer as KitCdnServer } from "@kit/servers"
@@ -79,7 +80,7 @@ export const SERVERS: readonly CdnServer[] = [
   {
     id: "global",
     name: "Global",
-    urlTemplate: "https://cdn-s3.shruti.local/{path}",
+    urlTemplate: "https://cdn.shruti.local/{path}",
     shareAudioUrl: `${HOST}/share/audio/excerpts`,
     shareVideoUrl: `${HOST}/share/video/reels`,
     shareTranscriptUrl: `${HOST}/share/transcripts`,
@@ -102,5 +103,20 @@ export const SERVERS: readonly CdnServer[] = [
     shareTranscriptUrl: `${HOST_RU}/share/transcripts`,
     authBaseUrl: `${HOST_RU}/auth`,
     chatBaseUrl: HOST_RU,
+  },
+  {
+    // The former `global` origin — the AWS S3 bucket. Retired as the
+    // primary (global now points at Bunny) but kept so installs still
+    // pinned to S3 can fetch a config.json, learn the new region list,
+    // and migrate off. Its service endpoints stay on the same host as
+    // global — only the storage `urlTemplate` differs.
+    id: "legacy",
+    name: "Legacy",
+    urlTemplate: "https://cdn-s3.shruti.local/{path}",
+    shareAudioUrl: `${HOST}/share/audio/excerpts`,
+    shareVideoUrl: `${HOST}/share/video/reels`,
+    shareTranscriptUrl: `${HOST}/share/transcripts`,
+    authBaseUrl: `${HOST}/auth`,
+    chatBaseUrl: HOST,
   },
 ]
