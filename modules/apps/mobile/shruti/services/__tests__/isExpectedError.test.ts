@@ -38,6 +38,8 @@ describe("isExpectedError", () => {
     expect(
       isExpectedError({ code: "OS-PLUG-FILE-0008", message: "'stat' failed because file … does not exist." }),
     ).toBe(true)
+    // Auto-download loop racing the content-DB open on startup (SHRUTI-6).
+    expect(isExpectedError({ message: "repositories(): content DB is not open yet" })).toBe(true)
   })
 
   it("drops transient/environmental RevenueCat errors by numeric-string code", () => {

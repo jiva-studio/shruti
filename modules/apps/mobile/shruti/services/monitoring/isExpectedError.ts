@@ -20,7 +20,7 @@
 // call site has failover + retry, and a genuine backend fault surfaces as a
 // distinct `HTTP 5xx` message, so real outages are NOT hidden by these.
 const EXPECTED_MESSAGE =
-  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|Load failed|not allowed in read-only mode/i
+  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|Load failed|not allowed in read-only mode|not open yet/i
 
 // Error class names that are control-flow, not faults: request cancellation,
 // user-cancelled IAP, a store-refused purchase (IAP disabled on this build /
