@@ -1,4 +1,4 @@
-export namespace capture {
+export namespace domain {
 	
 	export class Device {
 	    id: string;
