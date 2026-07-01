@@ -57,6 +57,16 @@ describe("isExpectedError", () => {
     expect(isExpectedError({ code: "99", message: "unexpected purchase fault" })).toBe(false)
   })
 
+  it("drops expected connectivity errors on flaky mobile networks", () => {
+    expect(isExpectedError({ name: "NetworkError", message: "POST /anonymous — network unreachable" })).toBe(true)
+    expect(isExpectedError(new TypeError("Failed to fetch"))).toBe(true)
+    expect(isExpectedError(new Error("All servers are unreachable"))).toBe(true)
+    expect(isExpectedError(new Error("A network error has occurred. Сетевое соединение потеряно."))).toBe(true)
+    expect(isExpectedError(new Error("The Internet connection appears to be offline."))).toBe(true)
+    // A concrete backend fault is a distinct signature and still pages.
+    expect(isExpectedError(new Error("HTTP 500 Internal Server Error"))).toBe(false)
+  })
+
   it("keeps real failures", () => {
     expect(isExpectedError(new Error("RevenueCat configure failed"))).toBe(false)
     expect(isExpectedError(new TypeError("x is not a function"))).toBe(false)
