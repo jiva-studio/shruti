@@ -12,6 +12,7 @@ describe("isExpectedError", () => {
       "no transaction is active",
       "The operation was aborted",
       "The device or user is not allowed to make the purchase.",
+      "not allowed in read-only mode",
     ]) {
       expect(isExpectedError(new Error(msg)), msg).toBe(true)
     }
