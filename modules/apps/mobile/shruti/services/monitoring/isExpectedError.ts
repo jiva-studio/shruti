@@ -15,8 +15,12 @@
  */
 
 // Message signatures that are always expected/benign across the app's adapters.
+// The network signatures (`Failed to fetch`, `unreachable`, iOS "connection
+// lost/offline/Load failed") are expected on flaky mobile networks — every HTTP
+// call site has failover + retry, and a genuine backend fault surfaces as a
+// distinct `HTTP 5xx` message, so real outages are NOT hidden by these.
 const EXPECTED_MESSAGE =
-  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase/i
+  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|Load failed/i
 
 // Error class names that are control-flow, not faults: request cancellation,
 // user-cancelled IAP, a store-refused purchase (IAP disabled on this build /
@@ -29,6 +33,10 @@ const EXPECTED_NAMES = new Set([
   "PurchaseCancelledError",
   "PurchaseNotAllowedError",
   "SyntaxError",
+  // Our own connectivity wrapper (services/http/networkError.ts) — thrown when
+  // a request can't reach any server. Every call site has failover + retry; a
+  // real backend fault surfaces as a distinct `HTTP 5xx`, not a NetworkError.
+  "NetworkError",
 ])
 
 // RevenueCat error codes (the Capacitor bridge attaches PURCHASES_ERROR_CODE as
