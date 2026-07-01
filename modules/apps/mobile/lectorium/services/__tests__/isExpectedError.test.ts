@@ -12,7 +12,6 @@ describe("isExpectedError", () => {
       "no transaction is active",
       "The operation was aborted",
       "The device or user is not allowed to make the purchase.",
-      "not allowed in read-only mode",
     ]) {
       expect(isExpectedError(new Error(msg)), msg).toBe(true)
     }
@@ -75,6 +74,14 @@ describe("isExpectedError", () => {
   it("keeps real failures", () => {
     expect(isExpectedError(new Error("RevenueCat configure failed"))).toBe(false)
     expect(isExpectedError(new TypeError("x is not a function"))).toBe(false)
+    // "Load failed" is NOT deny-listed: a failed dynamic import (broken deploy)
+    // surfaces as `TypeError: Load failed` on iOS WebKit and must stay visible;
+    // "download failed" must not be swallowed as a substring of it either.
+    expect(isExpectedError(new TypeError("Load failed"))).toBe(false)
+    expect(isExpectedError(new Error("[studio] download failed"))).toBe(false)
+    // A read-only write failure (disk full / permissions) means nothing persists
+    // — a real fault, not benign control flow.
+    expect(isExpectedError(new Error("attempt to write a readonly database"))).toBe(false)
     expect(isExpectedError("network request failed")).toBe(false)
   })
 
