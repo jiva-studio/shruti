@@ -1,0 +1,37 @@
+// Command shruti is the Linux client for the Shruti meeting recorder: a Wails v2
+// desktop app that captures system + microphone audio, streams it to the Mac
+// host for live transcription, and produces a summary.
+package main
+
+import (
+	"embed"
+	"log"
+
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+)
+
+//go:embed all:frontend/dist
+var assets embed.FS
+
+func main() {
+	app := NewApp()
+
+	err := wails.Run(&options.App{
+		Title:  "Shruti",
+		Width:  900,
+		Height: 700,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
+		},
+		BackgroundColour: &options.RGBA{R: 20, G: 20, B: 24, A: 1},
+		OnStartup:        app.startup,
+		Bind: []interface{}{
+			app,
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}

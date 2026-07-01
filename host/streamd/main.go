@@ -21,6 +21,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/jiva-studio/shruti/host/streamd/internal/ws"
 	v1 "github.com/jiva-studio/shruti/proto/v1"
 )
 
@@ -34,9 +35,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
-	// TODO(task #3): mux.HandleFunc(v1.StreamPath, ws.Handler(*fluidPath))
-	_ = fluidPath
-	_ = v1.StreamPath
+	mux.HandleFunc(v1.StreamPath, ws.Handler(*fluidPath))
 
 	log.Printf("streamd listening on %s (fluidstreamd=%s)", *addr, *fluidPath)
 	log.Fatal(http.ListenAndServe(*addr, mux))
