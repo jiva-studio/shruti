@@ -44,10 +44,11 @@ func (a *App) ListAudioDevices() []capture.Device {
 }
 
 // StartRecording begins a meeting: capture + transcription, streaming updates to
-// the frontend via the "shruti:update" event. systemDevice/micDevice are chosen
-// PipeWire node ids ("" = auto-detect); lang is the ASR language ("" = "ru").
-// Returns an error string (empty on success) so the frontend can surface failures.
-func (a *App) StartRecording(systemDevice, micDevice, lang string) string {
+// the frontend via the "shruti:update" event. providerName selects the engine
+// ("parakeet" = local Mac host, "deepgram" = cloud; "" = parakeet).
+// systemDevice/micDevice are chosen PipeWire node ids ("" = auto-detect); lang is
+// the ASR language ("" = "ru"). Returns an error string (empty on success).
+func (a *App) StartRecording(providerName, systemDevice, micDevice, lang string) string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -65,7 +66,7 @@ func (a *App) StartRecording(systemDevice, micDevice, lang string) string {
 	}
 
 	sess, err := session.Start(a.ctx, session.Config{
-		Provider:     "parakeet",
+		Provider:     providerName,
 		Lang:         lang,
 		SystemDevice: systemDevice,
 		MicDevice:    micDevice,

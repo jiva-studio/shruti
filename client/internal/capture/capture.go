@@ -61,10 +61,11 @@ func (c *Capture) Frames(channel string) <-chan []byte { return c.out[channel] }
 
 // Device is a selectable audio endpoint for the UI dropdowns.
 type Device struct {
-	ID    string `json:"id"`    // numeric PipeWire node id (pw-record --target)
-	Name  string `json:"name"`  // node.name (stable-ish identifier)
-	Label string `json:"label"` // human description for the dropdown
-	Kind  string `json:"kind"`  // "sink" (system output → capture its monitor) | "source" (mic)
+	ID     string `json:"id"`     // numeric PipeWire node id (pw-record --target)
+	Name   string `json:"name"`   // node.name (stable-ish identifier)
+	Label  string `json:"label"`  // human description for the dropdown
+	Kind   string `json:"kind"`   // "sink" (system output → capture its monitor) | "source" (mic)
+	Active bool   `json:"active"` // sink is currently playing audio (state=running)
 }
 
 // ListDevices enumerates audio sinks (system-output options — captured via their
@@ -78,6 +79,7 @@ func ListDevices(ctx context.Context) ([]Device, error) {
 		ID   int    `json:"id"`
 		Type string `json:"type"`
 		Info struct {
+			State string                     `json:"state"`
 			Props map[string]json.RawMessage `json:"props"`
 		} `json:"info"`
 	}
@@ -120,7 +122,10 @@ func ListDevices(ctx context.Context) ([]Device, error) {
 		if label == "" {
 			label = name
 		}
-		devs = append(devs, Device{ID: strconv.Itoa(o.ID), Name: name, Label: label, Kind: kind})
+		devs = append(devs, Device{
+			ID: strconv.Itoa(o.ID), Name: name, Label: label, Kind: kind,
+			Active: kind == "sink" && o.Info.State == "running",
+		})
 	}
 	return devs, nil
 }

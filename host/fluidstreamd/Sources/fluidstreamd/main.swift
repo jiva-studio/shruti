@@ -2,47 +2,42 @@
 //
 // CONTRACT (frozen — see repo README §protocol):
 //   stdin  : raw PCM, signed 16-bit little-endian, mono, 16 kHz — a LIVE stream,
-//            written by the client as audio is spoken (NOT a pre-recorded file
-//            handed over at the end). Read in small chunks and fed immediately.
+//            written by the client as audio is spoken. Read in chunks, fed at once.
 //   stdout : NDJSON, one object per line, flushed as soon as it is produced:
 //              {"type":"partial","text":"...","ts_ms":1234}              ← running hypothesis
-//              {"type":"final","text":"...","ts_ms":5678,"speaker":"…"}  ← committed segment(s) at EOF
+//              {"type":"final","text":"...","ts_ms":5678,"speaker":"…"}  ← committed speaker turn
 //   stderr : human logs only.
-//   EOF on stdin → flush the tail via finish(), emit final(s), exit 0.
+//   EOF on stdin → flush the tail, emit final(s), exit 0.
 //
-// ENGINE: FluidAudio `StreamingNemotronMultilingualAsrManager` — the CoreML build
-// of NVIDIA Nemotron 3.5 ASR Streaming Multilingual 0.6B (FastConformer-RNNT,
-// cache-aware TRUE streaming on the Apple Neural Engine). We always load the
-// full-vocab `multilingual/` variant (NOT `latin/`, which prunes Cyrillic and
-// cannot do Russian). Language is selected per-process via `--lang` → the encoder
-// `prompt_id`. Chunk/latency tier default: 2240 ms.
+// ENGINE: FluidAudio `StreamingNemotronMultilingualAsrManager` — CoreML NVIDIA
+// Nemotron 3.5 Streaming Multilingual 0.6B (FastConformer-RNNT, cache-aware TRUE
+// streaming on the ANE). We load the full-vocab `multilingual/` variant (Russian +
+// English). Language via `--lang` → encoder prompt_id. Chunk tier via `--chunk-ms`.
 //
-// SPEAKER DIARIZATION (added): FluidAudio's `SortformerDiarizer` (NVIDIA Streaming
-// Sortformer, 4 fixed speaker slots, ANE, ~480 ms updates) runs CONCURRENTLY on
-// the SAME PCM samples. It maintains a frame-level "who spoke when" timeline in
-// audio time. Finals stream INCREMENTALLY: each time a speaker segment finalizes
-// mid-stream (`process()` → `update.finalizedSegments`), we immediately emit one
-// `final` tagged with a stable `"speaker":"Спикер N"` label, whose text is the
-// slice of the running ASR hypothesis over that segment's [startTime, endTime]
-// window. A commit cursor guarantees each word is emitted once. The last still-open
-// turn is flushed at EOF. So during a live meeting a speaker's labelled final
-// appears ~1-2 s after they stop talking, NOT all at once at the end.
+// SPEAKER DIARIZATION: FluidAudio `SortformerDiarizer` (NVIDIA Streaming Sortformer,
+// 4 fixed speaker slots, ANE, ~480 ms updates) runs CONCURRENTLY on the SAME PCM.
+// It yields a frame-level "who spoke when" timeline. Finals stream INCREMENTALLY:
+// as each speaker turn closes mid-stream it is emitted as a `final` tagged with a
+// stable `"speaker":"Спикер N"` label. So during a live meeting a speaker's labelled
+// final appears shortly after they stop talking, NOT all at once at EOF.
 //
-// CLOCK NOTE: `ts_ms` is AUDIO-STREAM time — milliseconds of PCM fed so far
-// (samplesFed / 16). For a genuine live capture this equals wall-clock ms since
-// start; for a file piped faster than real time it is the true audio position.
-// Using audio time (not wall clock) is what lets the ASR hypothesis timeline and
-// the Sortformer segment timeline share ONE clock so they can be correlated.
+// WORD-LEVEL ALIGNMENT (the crux): the ASR transcript LAGS the audio (Nemotron only
+// decodes a chunk after it is fully fed, and can fall further behind under load), so
+// we must NOT attribute text by "wall/feed time". Instead we use the ASR's own
+// per-token timestamps: `getTokenTimings()` returns every decoded token with a
+// `startTime` in ABSOLUTE audio-content seconds (encoder-frame index × frame secs)
+// — the SAME clock as the diarizer's segment [startTime,endTime]. A finalized
+// diarizer segment is BUFFERED until the ASR has decoded a token past its end (so
+// its words exist and are stable), then its text is exactly the tokens whose
+// timestamp falls in the segment's window. This makes attribution correct at the
+// word boundary and immune to however far the ASR lags — a long turn's tail can no
+// longer leak into the next speaker.
 //
-// NOTE ON FINALS: Nemotron has no end-of-utterance token, so the ASR itself never
-// segments — it streams partials continuously and yields the full committed
-// transcript only at EOF. The DIARIZER is therefore the segmenter: each closed
-// speaker turn commits the hypothesis grown since the previous commit as one
-// labelled `final`, live. If diarization is disabled or finds no speech, behaviour
-// degrades to the old single unlabelled final at EOF.
+// `ts_ms` on partials is audio-stream (fed) time; on finals it is the diarizer
+// segment's start (audio-content time). Both are ms from stream start.
 //
-// Reference: Sources/FluidAudio/ASR/Parakeet/Streaming/Nemotron/… and
-//   Sources/FluidAudio/Diarizer/Sortformer/… in the FluidAudio 0.15.4 checkout.
+// Reference: Sources/FluidAudio/ASR/Parakeet/Streaming/Nemotron/ (getTokenTimings,
+//   finishWithTokenTimings, TokenTiming) and Sources/FluidAudio/Diarizer/Sortformer/.
 
 import FluidAudio
 import Foundation
@@ -78,8 +73,7 @@ func log(_ msg: String) {
     FileHandle.standardError.write(Data("fluidstreamd: \(msg)\n".utf8))
 }
 
-/// Map a short `--lang` code to a full Nemotron locale. Full locales pass
-/// through unchanged; `promptId(forLanguage:)` in FluidAudio normalizes casing.
+/// Map a short `--lang` code to a full Nemotron locale.
 func nemotronLocale(_ code: String) -> String {
     let c = code.lowercased()
     switch c {
@@ -92,12 +86,10 @@ func nemotronLocale(_ code: String) -> String {
 
 // MARK: - NDJSON emitter (thread-safe, unbuffered, ordered)
 
-/// Serializes NDJSON lines to stdout and records the running-hypothesis timeline.
-///
-/// The partial callback fires on the ASR actor's executor while the read loop runs
-/// on the main task, so every mutation is guarded by a lock. `ts_ms` is derived
-/// from `samplesFed` (audio-stream time) rather than wall clock so that the ASR
-/// hypothesis timeline shares one clock with the Sortformer diarizer timeline.
+/// Serializes NDJSON lines to stdout. The partial callback fires on the ASR actor's
+/// executor while the read loop runs on the main task, so every write is lock-guarded
+/// and flushed immediately. `ts_ms` on partials is derived from `samplesFed`
+/// (audio-stream time), keeping one clock across the pipeline.
 final class Emitter: @unchecked Sendable {
     private struct Line: Encodable {
         let type: String
@@ -106,14 +98,10 @@ final class Emitter: @unchecked Sendable {
         let speaker: String?  // omitted from JSON when nil (synthesized encodeIfPresent)
     }
 
-    /// A snapshot of the cumulative ASR hypothesis at a given audio-stream time.
-    struct PartialSnapshot { let ms: Int64; let text: String }
-
     private let lock = NSLock()
     private let encoder = JSONEncoder()
     private var lastPartial = ""
     private var samplesFed: Int64 = 0
-    private var log_: [PartialSnapshot] = []
 
     private func msLocked() -> Int64 { samplesFed * 1000 / 16000 }
 
@@ -129,26 +117,23 @@ final class Emitter: @unchecked Sendable {
         samplesFed += Int64(nSamples)
     }
 
-    /// Current audio-stream time in ms.
+    /// Current audio-stream (fed) time in ms.
     func currentMs() -> Int64 {
         lock.lock(); defer { lock.unlock() }
         return msLocked()
     }
 
-    /// Running hypothesis. Consecutive duplicates are suppressed to cut noise.
-    /// Each distinct hypothesis is timestamped and recorded for later attribution.
+    /// Running hypothesis → NDJSON partial. Consecutive duplicates suppressed.
     func partial(_ text: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
         lock.lock(); defer { lock.unlock() }
         guard t != lastPartial else { return }
         lastPartial = t
-        let ms = msLocked()
-        log_.append(PartialSnapshot(ms: ms, text: t))
-        write(Line(type: "partial", text: t, ts_ms: ms, speaker: nil))
+        write(Line(type: "partial", text: t, ts_ms: msLocked(), speaker: nil))
     }
 
-    /// Committed segment. `speaker` is emitted only when non-nil.
+    /// Committed speaker turn. `speaker` is emitted only when non-nil.
     func final(_ text: String, tsMs: Int64, speaker: String? = nil) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
@@ -156,15 +141,29 @@ final class Emitter: @unchecked Sendable {
         lastPartial = ""
         write(Line(type: "final", text: t, ts_ms: tsMs, speaker: speaker))
     }
-
-    /// The recorded running-hypothesis timeline (cumulative snapshots, time-ordered).
-    func partialLog() -> [PartialSnapshot] {
-        lock.lock(); defer { lock.unlock() }
-        return log_
-    }
 }
 
 let emitter = Emitter()
+
+// MARK: - Token-timing → text
+
+/// SentencePiece word-boundary marker ("▁", U+2581); `getTokenTimings()` returns
+/// raw pieces so word boundaries can be reconstructed.
+let wordMark = "\u{2581}"
+
+/// Reconstruct transcript text from a run of raw SentencePiece tokens: a leading
+/// word-mark becomes a space, continuation pieces attach to the previous word.
+func joinTokens(_ toks: ArraySlice<TokenTiming>) -> String {
+    var s = ""
+    for t in toks {
+        if t.token.hasPrefix(wordMark) {
+            s += " " + t.token.dropFirst()
+        } else {
+            s += t.token
+        }
+    }
+    return s.trimmingCharacters(in: .whitespacesAndNewlines)
+}
 
 // MARK: - PCM helpers
 
@@ -197,48 +196,6 @@ func readStdin(max: Int) -> [UInt8]? {
     return Array(buffer.prefix(n))
 }
 
-// MARK: - Diarization → speaker turns
-
-/// A merged run of consecutive same-speaker diarizer segments (a speaker "turn").
-struct SpeakerTurn { let speakerIndex: Int; var startMs: Int64; var endMs: Int64 }
-
-/// Merge time-ordered confirmed diarizer segments into coalesced speaker turns.
-/// Adjacent segments assigned to the same speaker slot are joined; a different
-/// speaker slot starts a new turn (so A,A,B → [A],[B]; A,B,A → [A],[B],[A]).
-func mergeTurns(_ segments: [DiarizerSegment]) -> [SpeakerTurn] {
-    let sorted = segments.sorted { $0.startFrame < $1.startFrame }
-    var turns: [SpeakerTurn] = []
-    for seg in sorted {
-        let s = Int64(seg.startTime * 1000)
-        let e = Int64(seg.endTime * 1000)
-        if turns.count > 0, turns[turns.count - 1].speakerIndex == seg.speakerIndex {
-            turns[turns.count - 1].endMs = max(turns[turns.count - 1].endMs, e)
-        } else {
-            turns.append(SpeakerTurn(speakerIndex: seg.speakerIndex, startMs: s, endMs: e))
-        }
-    }
-    return turns
-}
-
-/// Cumulative ASR hypothesis text at (or just before) audio-stream time `ms`.
-func cumulativeText(at ms: Int64, log: [Emitter.PartialSnapshot]) -> String {
-    var t = ""
-    for snap in log where snap.ms <= ms { t = snap.text }
-    return t
-}
-
-/// Strip the `prefix` hypothesis off the front of the `whole` hypothesis, yielding
-/// the words added between the two snapshots. Cache-aware RNNT partials are largely
-/// append-only, so a prefix strip approximates "text spoken during this window".
-func deltaText(_ whole: String, strippingPrefix prefix: String) -> String {
-    let w = whole.trimmingCharacters(in: .whitespacesAndNewlines)
-    let p = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !p.isEmpty, w.hasPrefix(p) {
-        return String(w.dropFirst(p.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    return w
-}
-
 // MARK: - Main
 
 let locale = nemotronLocale(lang)
@@ -254,7 +211,7 @@ do {
     try await manager.loadModels(from: variantDir)
     await manager.setLanguage(locale)
     let effMs = await manager.config.chunkMs
-    log("ASR models loaded; effective chunk tier = \(effMs)ms (~\(effMs)ms partial latency)")
+    log("ASR models loaded; effective chunk tier = \(effMs)ms")
 } catch {
     log("failed to load ASR models: \(error)")
     exit(1)
@@ -266,7 +223,17 @@ var diarizer: SortformerDiarizer? = nil
 if diarize {
     do {
         let cfg = SortformerConfig.default  // fastV2.1 variant, 4 speakers, ~1.04s latency, ANE
-        let d = SortformerDiarizer(config: cfg, timelineConfig: .sortformerDefault)
+        // sortformerDefault leaves minFramesOn/Off = 0, so single-frame speaker
+        // flips become spurious tiny "turns". Require ≥0.25s of speech and bridge
+        // ≤0.25s gaps so brief instability doesn't spawn phantom speakers or split a
+        // turn; the diarizer drops those frames and their tokens fall to the
+        // adjacent turn.
+        let tl = DiarizerTimelineConfig(
+            numSpeakers: cfg.numSpeakers, frameDurationSeconds: 0.08,
+            onsetThreshold: 0.5, offsetThreshold: 0.5,
+            onsetPadSeconds: 0, offsetPadSeconds: 0,
+            minDurationOn: 0.25, minDurationOff: 0.25)
+        let d = SortformerDiarizer(config: cfg, timelineConfig: tl)
         log("resolving Sortformer models (downloads diar-streaming-sortformer-coreml on first run)…")
         let models = try await SortformerModels.loadFromHuggingFace(config: cfg, computeUnits: .all)
         d.initialize(models: models)
@@ -276,30 +243,32 @@ if diarize {
         // load a reference WAV and prime the diarizer so the user's slot is known:
         //     let ref = try AudioConverter().resampleAudioFile("/path/enroll.wav")
         //     _ = try d.enrollSpeaker(withAudio: ref, named: "Я")
-        // Then map that speaker's `index` to the label "Я" in `labelFor(...)`
-        // instead of "Спикер N". Wire via a `--enroll <wav>` flag. Not required for
-        // this task — generic "Спикер N" labels are the deliverable.
+        // Then map that speaker's `index` to "Я" in labelFor(...). Wire via a
+        // `--enroll <wav>` flag. Optional — generic "Спикер N" labels are the goal.
     } catch {
         log("Sortformer diarization unavailable (\(error)); continuing ASR-only")
         diarizer = nil
     }
 }
 
-// Running hypothesis → NDJSON partials (recorded for per-turn attribution).
+// Running hypothesis → NDJSON partials (unlabelled, streamed live for the UI).
 await manager.setPartialCallback { text in
     emitter.partial(text)
 }
 
-// Incremental commit state. As each diarizer speaker segment finalizes mid-stream
-// we emit one `final` immediately, slicing the running ASR hypothesis to the
-// segment's window. `committedPrefix` is the hypothesis text already emitted (the
-// commit cursor); each word is emitted exactly once.
-var committedPrefix = ""
-var emittedSegmentIds = Set<UUID>()
+// MARK: Attribution state
+//
+// Finalized diarizer segments are buffered in `pendingSegments` and committed by
+// drainPending() once the ASR has decoded a token past a segment's end. Attribution
+// walks the ASR token stream once, in order: `committedTokenIdx` is the cursor of
+// tokens already emitted; each segment claims the tokens up to its end time.
 var labelForSlot: [Int: String] = [:]
 var nextLabel = 1
 var finalsEmitted = 0
 var lastCommittedSlot: Int? = nil
+var emittedSegmentIds = Set<UUID>()
+var pendingSegments: [DiarizerSegment] = []  // finalized turns awaiting ASR catch-up (time order)
+var committedTokenIdx = 0                     // tokens already emitted in a final
 
 /// Stable 1-based label for a Sortformer speaker slot, assigned on first sight.
 @MainActor
@@ -311,24 +280,48 @@ func labelFor(_ slot: Int) -> String {
     return l
 }
 
-/// Emit one `final` for a completed speaker segment. Its text is the slice of the
-/// running hypothesis between the already-committed prefix and `endText` (the
-/// cumulative hypothesis at the segment's end). Advances the commit cursor so the
-/// same words are never re-emitted. No-op when the slice is empty.
+/// Emit one `final` for a speaker segment: the uncommitted tokens whose timestamp
+/// falls before `endLimitSeconds` (or all remaining tokens when `takeAll`). Advances
+/// the token cursor so each word is emitted once. No-op on an empty slice.
 @MainActor
-func commitSegment(speakerIndex: Int, startMs: Int64, endText: String) {
-    let delta = deltaText(endText, strippingPrefix: committedPrefix)
-    guard !delta.isEmpty else { return }
-    emitter.final(delta, tsMs: startMs, speaker: labelFor(speakerIndex))
-    committedPrefix = endText
-    lastCommittedSlot = speakerIndex
+func commitSegment(_ seg: DiarizerSegment, tokens: [TokenTiming], endLimitSeconds: Double, takeAll: Bool) {
+    var upto = committedTokenIdx
+    if takeAll {
+        upto = tokens.count
+    } else {
+        while upto < tokens.count, Double(tokens[upto].startTime) < endLimitSeconds { upto += 1 }
+    }
+    guard upto > committedTokenIdx else { return }
+    let text = joinTokens(tokens[committedTokenIdx..<upto])
+    committedTokenIdx = upto
+    guard !text.isEmpty else { return }
+    emitter.final(text, tsMs: Int64(seg.startTime * 1000), speaker: labelFor(seg.speakerIndex))
+    lastCommittedSlot = seg.speakerIndex
     finalsEmitted += 1
 }
 
-// Read live PCM in ~100 ms slices (3200 bytes = 1600 samples s16le) and feed
-// immediately to BOTH engines. A stray trailing odd byte is carried to the next
-// read so int16 samples never straddle a boundary.
-let chunkBytes = 3200
+/// Commit any buffered segment whose words are now fully decoded — i.e. the ASR has
+/// produced a token at/after the segment's end (`lastTokenSec >= end`), so the tokens
+/// in [prev end, this end) are stable. Slices exactly at the segment's audio-content
+/// end, so the boundary word lands in the correct speaker regardless of ASR lag.
+@MainActor
+func drainPending(tokens: [TokenTiming]) {
+    let lastTokenSec = tokens.last.map { Double($0.startTime) } ?? -1
+    while let seg = pendingSegments.first {
+        guard lastTokenSec >= Double(seg.endTime) else { break }  // ASR not past this end yet
+        commitSegment(seg, tokens: tokens, endLimitSeconds: Double(seg.endTime), takeAll: false)
+        pendingSegments.removeFirst()
+    }
+}
+
+// Read live PCM and feed immediately to BOTH engines. `read()` on the input pipe
+// returns as much as is buffered (up to this max), so a live stream trickling at
+// ~100 ms granularity yields small reads (low latency) while any BACKLOG is coalesced
+// into one big read → one `process()` call. That auto-batching keeps the per-call
+// ANE/async dispatch cost from letting the pipeline fall behind under load. A stray
+// trailing odd byte is carried to the next read so int16 samples never straddle a
+// boundary.
+let chunkBytes = 32000  // up to ~1 s of s16le@16k per read (coalesces backlog)
 var leftover: [UInt8] = []
 
 while let bytes = readStdin(max: chunkBytes) {
@@ -351,28 +344,29 @@ while let bytes = readStdin(max: chunkBytes) {
     if let d = diarizer {
         do {
             // Each returned `finalizedSegments` entry is a speaker turn that JUST
-            // closed (Sortformer holds a growing segment in per-speaker scratch and
-            // only emits it here once it ends). Emit a labelled `final` right away.
+            // closed. Buffer it; drainPending() commits it once the ASR text for its
+            // window has been decoded (may be this iteration or a later one).
             if let update = try d.process(samples: samples, sourceSampleRate: 16000) {
-                let plog = emitter.partialLog()
                 for seg in update.finalizedSegments.sorted(by: { $0.startFrame < $1.startFrame }) {
                     guard emittedSegmentIds.insert(seg.id).inserted else { continue }
-                    commitSegment(
-                        speakerIndex: seg.speakerIndex,
-                        startMs: Int64(seg.startTime * 1000),
-                        endText: cumulativeText(at: Int64(seg.endTime * 1000), log: plog))
+                    pendingSegments.append(seg)
                 }
             }
         } catch {
             log("diarization processing error: \(error)")
         }
+        if !pendingSegments.isEmpty {
+            drainPending(tokens: await manager.getTokenTimings())
+        }
     }
 }
 
-// EOF → flush the ASR tail (single committed transcript) and finalize diarization.
+// EOF → flush the ASR tail. finishWithTokenTimings() returns the full transcript and
+// the complete per-token timing stream (getTokenTimings() is cleared by finish()).
 let finalText: String
+let finalTokens: [TokenTiming]
 do {
-    finalText = try await manager.finish()
+    (finalText, finalTokens) = try await manager.finishWithTokenTimings()
     if let detected = await manager.detectedLanguage() {
         log("EOF — ASR finished (model-detected language tag: \(detected))")
     } else {
@@ -385,41 +379,52 @@ do {
 
 let trimmedFinal = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-// EOF flush: the last speaker turn(s) may still be tentative (never closed by a
-// following speaker). finalizeSession() promotes them into the timeline; emit any
-// segment not already committed mid-stream (deduped by id — see the documented
-// finalizeSession bug: its returned update omits these promoted segments).
 if let d = diarizer {
+    // All tokens now exist, so every buffered turn can be committed.
+    drainPending(tokens: finalTokens)
     do {
-        _ = try d.finalizeSession()
+        _ = try d.finalizeSession()  // promotes the last still-open turn(s) into the timeline
     } catch {
         log("diarization finalize error: \(error)")
     }
+    // Any turn not yet committed: segments still buffered (rare after the drain
+    // above) plus the last still-open turn(s) finalizeSession() promoted into the
+    // timeline (its returned update omits them — documented quirk). Emit in time
+    // order; the final segment takes all remaining tokens.
     let tail = d.timeline.speakers.values
         .flatMap { $0.finalizedSegments }
         .filter { !emittedSegmentIds.contains($0.id) }
-    let tailTurns = mergeTurns(tail)
-    let plog = emitter.partialLog()
-    for (i, turn) in tailTurns.enumerated() {
-        // Fuller EOF transcript as the end text of the very last turn.
-        let endText = (i == tailTurns.count - 1) ? trimmedFinal
-            : cumulativeText(at: turn.endMs, log: plog)
-        commitSegment(speakerIndex: turn.speakerIndex, startMs: turn.startMs, endText: endText)
+    let remaining = (pendingSegments + tail).sorted { $0.startFrame < $1.startFrame }
+    pendingSegments.removeAll()
+    for (i, seg) in remaining.enumerated() {
+        let isLast = (i == remaining.count - 1)
+        commitSegment(seg, tokens: finalTokens,
+            endLimitSeconds: Double(seg.endTime), takeAll: isLast)
     }
 }
 
-// Whatever hypothesis remains uncommitted after all speaker segments: trailing
-// words after the last turn go to the most recent speaker; if diarization found
-// nothing at all, emit one unlabelled final (old behaviour).
-let remainder = deltaText(trimmedFinal, strippingPrefix: committedPrefix)
-if !remainder.isEmpty {
-    if let slot = lastCommittedSlot {
-        emitter.final(remainder, tsMs: emitter.currentMs(), speaker: labelFor(slot))
-    } else {
-        emitter.final(remainder, tsMs: emitter.currentMs(), speaker: nil)
+// Any tokens still uncommitted (trailing words after the last turn, or no diarization
+// at all): attribute to the most recent speaker, else emit one unlabelled final.
+if committedTokenIdx < finalTokens.count {
+    let text = joinTokens(finalTokens[committedTokenIdx..<finalTokens.count])
+    if !text.isEmpty {
+        emitter.final(text, tsMs: emitter.currentMs(), speaker: lastCommittedSlot.map(labelFor))
+        committedTokenIdx = finalTokens.count
+        finalsEmitted += 1
     }
-    committedPrefix = trimmedFinal
+} else if finalsEmitted == 0, !trimmedFinal.isEmpty {
+    emitter.final(trimmedFinal, tsMs: emitter.currentMs(), speaker: nil)
     finalsEmitted += 1
+}
+
+if ProcessInfo.processInfo.environment["FSD_DUMP"] != nil, let d = diarizer {
+    for s in d.timeline.speakers.values.flatMap({ $0.finalizedSegments })
+        .sorted(by: { $0.startFrame < $1.startFrame }) {
+        log(String(format: "SEG spk=%d %.2f–%.2fs", s.speakerIndex, s.startTime, s.endTime))
+    }
+    var line = ""
+    for t in finalTokens { line += String(format: "[%.2f]%@ ", t.startTime, t.token) }
+    log("TOKENS: \(line)")
 }
 
 log("EOF — \(finalsEmitted) final(s) total, \(labelForSlot.count) distinct speaker(s)")

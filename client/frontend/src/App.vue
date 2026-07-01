@@ -18,6 +18,7 @@ const sources = ref([]);
 const systemDevice = ref("");
 const micDevice = ref("");
 const lang = ref("ru");
+const providerName = ref("parakeet");
 const showDevices = ref(false);
 
 async function loadDevices() {
@@ -27,7 +28,11 @@ async function loadDevices() {
     const devs = (await go.ListAudioDevices()) || [];
     sinks.value = devs.filter((d) => d.kind === "sink");
     sources.value = devs.filter((d) => d.kind === "source");
-    if (!systemDevice.value && sinks.value.length)
+    // Prefer the sink that is CURRENTLY playing audio (state=running) — that's
+    // where the meeting/video sound actually goes, regardless of the OS default.
+    const activeSink = sinks.value.find((d) => d.active);
+    if (activeSink) systemDevice.value = activeSink.id;
+    else if (!systemDevice.value && sinks.value.length)
       systemDevice.value = sinks.value[0].id;
     if (!micDevice.value && sources.value.length)
       micDevice.value = sources.value[0].id;
@@ -81,7 +86,12 @@ async function toggle() {
       transcript.finals = [];
       transcript.partial = "";
       summary.value = "";
+      // Re-scan devices at the moment of Record so «Система» locks onto the
+      // sink that is ACTUALLY playing now (▶) — the audio output only reveals
+      // itself as "running" while sound flows, so a pick made at launch is stale.
+      await loadDevices();
       const err = await go.StartRecording(
+        providerName.value,
         systemDevice.value,
         micDevice.value,
         lang.value,
@@ -124,6 +134,10 @@ onMounted(() => {
         Shruti
       </div>
       <div class="topctl">
+        <select v-model="providerName" :disabled="recording" title="Движок распознавания">
+          <option value="parakeet">Локально</option>
+          <option value="deepgram">Deepgram</option>
+        </select>
         <button class="refresh" :disabled="recording" @click="showDevices = !showDevices" title="Выбор устройств">⚙</button>
         <select v-model="lang" :disabled="recording" title="Язык распознавания">
           <option value="ru">Русский</option>
@@ -153,7 +167,7 @@ onMounted(() => {
       <label>
         Система (они)
         <select v-model="systemDevice" :disabled="recording">
-          <option v-for="d in sinks" :key="d.id" :value="d.id">{{ d.label }}</option>
+          <option v-for="d in sinks" :key="d.id" :value="d.id">{{ (d.active ? "▶ " : "") + d.label }}</option>
         </select>
       </label>
     </div>

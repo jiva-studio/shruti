@@ -98,11 +98,50 @@ func Start(ctx context.Context, cfg Config, summarizer summary.Summarizer, emit 
 		startedAt:  time.Now(),
 	}
 
-	mixed := mixStreams(cap.Frames(v1.ChannelSystem), cap.Frames(v1.ChannelMic))
-	s.pump(mixed, sess)
+	// Deepgram transcribes per-channel, so send STEREO (mic=ch0="Я",
+	// system=ch1="Они"); everyone else gets the mono mix.
+	var audio <-chan []byte
+	if cfg.Provider == "deepgram" {
+		audio = interleaveStereo(cap.Frames(v1.ChannelMic), cap.Frames(v1.ChannelSystem))
+	} else {
+		audio = mixStreams(cap.Frames(v1.ChannelSystem), cap.Frames(v1.ChannelMic))
+	}
+	s.pump(audio, sess)
 	s.fanIn(sess)
 
 	return s, nil
+}
+
+// interleaveStereo weaves two mono s16le streams into one interleaved stereo
+// stream: a → left (channel 0), b → right (channel 1).
+func interleaveStereo(a, b <-chan []byte) <-chan []byte {
+	out := make(chan []byte, 32)
+	go func() {
+		defer close(out)
+		for {
+			fa, oka := <-a
+			fb, okb := <-b
+			if !oka && !okb {
+				return
+			}
+			out <- interleavePCM(fa, fb)
+		}
+	}()
+	return out
+}
+
+func interleavePCM(a, b []byte) []byte {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	n -= n % 2
+	out := make([]byte, n*2)
+	for i, j := 0, 0; i < n; i, j = i+2, j+4 {
+		out[j], out[j+1] = a[i], a[i+1] // left = a (ch0)
+		out[j+2], out[j+3] = b[i], b[i+1] // right = b (ch1)
+	}
+	return out
 }
 
 // mixStreams sums two continuous PCM frame streams (s16le) into one. Both

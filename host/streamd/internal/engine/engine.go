@@ -31,6 +31,13 @@ type Child struct {
 // (~1–2 s, amortized over a meeting), so callers should keep a Child alive for
 // the whole connection.
 func Spawn(ctx context.Context, fluidPath, lang string) (*Child, error) {
+	// Serialize: kill any lingering fluidstreamd before spawning a new one. Two
+	// fluidstreamd loading Sortformer on the ANE at once DEADLOCK on model load
+	// (and a stuck child is slow to SIGKILL while blocked in the CoreML call), so
+	// a stray from a previous Start/Stop would hang the new session. The app is
+	// single-stream (one connection at a time), so this is safe.
+	_ = exec.Command("/usr/bin/pkill", "-9", "-f", "host/bin/fluidstreamd").Run()
+
 	// --chunk-ms 1120: the lower-latency ASR tier, recommended when diarization
 	// is on (the 2240 default is ~1.1x realtime; 1120 keeps live labels snappy).
 	cmd := exec.CommandContext(ctx, fluidPath, "--lang", lang, "--chunk-ms", "1120")
