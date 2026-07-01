@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/jiva-studio/shruti/client/internal/capture"
 	"github.com/jiva-studio/shruti/client/internal/session"
 	"github.com/jiva-studio/shruti/client/internal/summary"
 	v1 "github.com/jiva-studio/shruti/proto/v1"
@@ -31,15 +32,30 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// ListAudioDevices returns the selectable sinks (system output) and sources
+// (microphones) for the UI dropdowns.
+func (a *App) ListAudioDevices() []capture.Device {
+	devs, err := capture.ListDevices(context.Background())
+	if err != nil {
+		log.Printf("ListAudioDevices: %v", err)
+		return []capture.Device{}
+	}
+	return devs
+}
+
 // StartRecording begins a meeting: capture + transcription, streaming updates to
-// the frontend via the "shruti:update" event. Returns an error string (empty on
-// success) so the frontend can surface failures.
-func (a *App) StartRecording() string {
+// the frontend via the "shruti:update" event. systemDevice/micDevice are chosen
+// PipeWire node ids ("" = auto-detect); lang is the ASR language ("" = "ru").
+// Returns an error string (empty on success) so the frontend can surface failures.
+func (a *App) StartRecording(systemDevice, micDevice, lang string) string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if a.session != nil {
 		return "recording already in progress"
+	}
+	if lang == "" {
+		lang = "ru"
 	}
 
 	emit := func(up v1.Update) {
@@ -49,8 +65,10 @@ func (a *App) StartRecording() string {
 	}
 
 	sess, err := session.Start(a.ctx, session.Config{
-		Provider: "parakeet",
-		Lang:     "ru",
+		Provider:     "parakeet",
+		Lang:         lang,
+		SystemDevice: systemDevice,
+		MicDevice:    micDevice,
 	}, summary.NewClaude(), emit)
 	if err != nil {
 		log.Printf("StartRecording: %v", err)

@@ -1,12 +1,18 @@
-// Package session orchestrates a live meeting: it captures the two audio
-// streams, opens one transcription session per channel, pumps PCM into each,
-// fans-in the Update streams to the UI, and on stop builds the transcript,
-// summarizes it, and persists everything.
+// Package session orchestrates a live meeting: it captures system + microphone,
+// MIXES them into a single stream, opens one transcription session, pumps the
+// mixed PCM in, fans-in the Update stream to the UI, and on stop builds the
+// transcript, summarizes it, and persists everything.
+//
+// Single stream (not one-per-channel) avoids two concurrent Nemotron inferences
+// contending on the ANE (which starved one channel). Speaker separation comes
+// from diarization on this one stream (added on top of ASR).
 package session
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -25,6 +31,11 @@ type Config struct {
 	URL string
 	// Lang is the ASR language hint (e.g. "ru").
 	Lang string
+	// SystemDevice / MicDevice are PipeWire node ids chosen in the UI (system =
+	// a sink whose monitor we capture; mic = a source). Both are captured and
+	// mixed into one stream. Empty → auto-detect the defaults.
+	SystemDevice string
+	MicDevice    string
 }
 
 // Session is a running meeting orchestration.
@@ -33,8 +44,7 @@ type Session struct {
 	emit func(v1.Update)
 
 	cap        *capture.Capture
-	sysSession provider.Session
-	micSession provider.Session
+	sess       provider.Session
 	summarizer summary.Summarizer
 
 	startedAt time.Time
@@ -56,65 +66,120 @@ func Start(ctx context.Context, cfg Config, summarizer summary.Summarizer, emit 
 		return nil, err
 	}
 
-	cap, err := capture.Start(ctx)
+	var cap *capture.Capture
+	if cfg.SystemDevice != "" && cfg.MicDevice != "" {
+		cap, err = capture.StartOn(ctx, []capture.Source{
+			{Channel: v1.ChannelSystem, Target: cfg.SystemDevice, Name: cfg.SystemDevice},
+			{Channel: v1.ChannelMic, Target: cfg.MicDevice, Name: cfg.MicDevice},
+		}, "pipewire")
+	} else {
+		cap, err = capture.Start(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
-
-	sysSess, err := trans.Open(ctx, provider.SessionConfig{URL: cfg.URL, Channel: v1.ChannelSystem, Lang: cfg.Lang})
-	if err != nil {
-		cap.Stop()
-		return nil, fmt.Errorf("session: open system stream: %w", err)
+	for _, src := range cap.Sources() {
+		log.Printf("capture source: channel=%s target=%s name=%s", src.Channel, src.Target, src.Name)
 	}
-	micSess, err := trans.Open(ctx, provider.SessionConfig{URL: cfg.URL, Channel: v1.ChannelMic, Lang: cfg.Lang})
+
+	// One transcription session over the mixed stream.
+	sess, err := trans.Open(ctx, provider.SessionConfig{URL: cfg.URL, Channel: v1.ChannelMix, Lang: cfg.Lang})
 	if err != nil {
-		_ = sysSess.Close()
 		cap.Stop()
-		return nil, fmt.Errorf("session: open mic stream: %w", err)
+		return nil, fmt.Errorf("session: open stream: %w", err)
 	}
 
 	s := &Session{
 		cfg:        cfg,
 		emit:       emit,
 		cap:        cap,
-		sysSession: sysSess,
-		micSession: micSess,
+		sess:       sess,
 		summarizer: summarizer,
 		startedAt:  time.Now(),
 	}
 
-	// Pump captured PCM into each provider session.
-	s.pump(cap.Frames(v1.ChannelSystem), sysSess)
-	s.pump(cap.Frames(v1.ChannelMic), micSess)
-
-	// Fan-in Updates from both sessions.
-	s.fanIn(sysSess)
-	s.fanIn(micSess)
+	mixed := mixStreams(cap.Frames(v1.ChannelSystem), cap.Frames(v1.ChannelMic))
+	s.pump(mixed, sess)
+	s.fanIn(sess)
 
 	return s, nil
 }
 
-// pump forwards PCM frames from a capture channel into a provider session until
-// the channel is drained.
+// mixStreams sums two continuous PCM frame streams (s16le) into one. Both
+// pw-record sources produce frames at the same rate, so pairing them 1:1 keeps
+// them roughly time-aligned; samples are summed with clipping.
+func mixStreams(a, b <-chan []byte) <-chan []byte {
+	out := make(chan []byte, 32)
+	go func() {
+		defer close(out)
+		for {
+			fa, oka := <-a
+			fb, okb := <-b
+			if !oka && !okb {
+				return
+			}
+			out <- mixPCM(fa, fb)
+		}
+	}()
+	return out
+}
+
+func mixPCM(a, b []byte) []byte {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	n -= n % 2
+	if n == 0 {
+		if len(a) >= len(b) {
+			return a
+		}
+		return b
+	}
+	out := make([]byte, n)
+	for i := 0; i < n; i += 2 {
+		sa := int32(int16(binary.LittleEndian.Uint16(a[i:])))
+		sb := int32(int16(binary.LittleEndian.Uint16(b[i:])))
+		s := sa + sb
+		if s > 32767 {
+			s = 32767
+		} else if s < -32768 {
+			s = -32768
+		}
+		binary.LittleEndian.PutUint16(out[i:], uint16(int16(s)))
+	}
+	return out
+}
+
+// pump forwards mixed PCM frames into the provider session until drained.
 func (s *Session) pump(frames <-chan []byte, sess provider.Session) {
 	s.pumpWG.Add(1)
 	go func() {
 		defer s.pumpWG.Done()
+		var total, logged int64
 		for pcm := range frames {
+			total += int64(len(pcm))
+			if total-logged >= 64000 { // ~2 s of 16 kHz audio
+				log.Printf("capture[mix]: %d KB streamed", total/1000)
+				logged = total
+			}
 			if err := sess.Write(pcm); err != nil {
-				return // session closed / socket error
+				log.Printf("capture[mix]: write error after %d B: %v", total, err)
+				return
 			}
 		}
+		log.Printf("capture[mix]: ended, %d B total", total)
 	}()
 }
 
-// fanIn consumes a session's Updates, emitting each to the UI and recording
+// fanIn consumes the session's Updates, emitting each to the UI and recording
 // finals into the in-memory transcript.
 func (s *Session) fanIn(sess provider.Session) {
 	s.fanWG.Add(1)
 	go func() {
 		defer s.fanWG.Done()
 		for up := range sess.Updates() {
+			log.Printf("update: type=%s speaker=%s textlen=%d", up.Type, up.Speaker, len(up.Text))
 			if up.Type == v1.TypeFinal {
 				s.mu.Lock()
 				s.finals = append(s.finals, up)
@@ -128,8 +193,7 @@ func (s *Session) fanIn(sess provider.Session) {
 }
 
 // Stop ends capture and transcription, builds the transcript, summarizes it,
-// persists transcript + summary, and returns the summary. It is safe to call
-// once; subsequent calls are no-ops returning "".
+// persists transcript + summary, and returns the summary. Safe to call once.
 func (s *Session) Stop(ctx context.Context) (string, error) {
 	s.mu.Lock()
 	if s.stopped {
@@ -139,15 +203,9 @@ func (s *Session) Stop(ctx context.Context) (string, error) {
 	s.stopped = true
 	s.mu.Unlock()
 
-	// Stop capture first so the pumps drain and stop writing.
 	s.cap.Stop()
 	s.pumpWG.Wait()
-
-	// Close provider sessions: sends Control{close}, flushes a last final.
-	_ = s.sysSession.Close()
-	_ = s.micSession.Close()
-
-	// Wait for the fan-in goroutines to drain remaining Updates.
+	_ = s.sess.Close()
 	s.fanWG.Wait()
 
 	s.mu.Lock()
@@ -157,7 +215,6 @@ func (s *Session) Stop(ctx context.Context) (string, error) {
 
 	transcript := BuildTranscript(finals)
 
-	// Persist transcript + (later) summary.
 	meeting, err := store.NewMeeting(s.startedAt)
 	if err != nil {
 		return "", fmt.Errorf("session: open meeting store: %w", err)
@@ -170,7 +227,6 @@ func (s *Session) Stop(ctx context.Context) (string, error) {
 	if s.summarizer != nil && transcript != "" {
 		summaryText, err = s.summarizer.Summarize(ctx, transcript)
 		if err != nil {
-			// Persist what we have; surface the summarization error.
 			_ = meeting.WriteSummary("(резюме не сгенерировано: " + err.Error() + ")")
 			return "", err
 		}
@@ -182,16 +238,15 @@ func (s *Session) Stop(ctx context.Context) (string, error) {
 	return summaryText, nil
 }
 
-// BuildTranscript renders finals into a readable, speaker-labelled transcript.
+// BuildTranscript renders finals into a readable transcript, prefixing each line
+// with its speaker label when diarization provides one.
 func BuildTranscript(finals []v1.Update) string {
 	var b []byte
 	for _, u := range finals {
-		speaker := "Они"
-		if u.Channel == v1.ChannelMic {
-			speaker = "Я"
+		if u.Speaker != "" {
+			b = append(b, u.Speaker...)
+			b = append(b, ": "...)
 		}
-		b = append(b, speaker...)
-		b = append(b, ": "...)
 		b = append(b, u.Text...)
 		b = append(b, '\n')
 	}

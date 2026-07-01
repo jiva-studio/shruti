@@ -59,6 +59,72 @@ func (c *Capture) Backend() string { return c.backend }
 // absent). The channel is closed when capture stops.
 func (c *Capture) Frames(channel string) <-chan []byte { return c.out[channel] }
 
+// Device is a selectable audio endpoint for the UI dropdowns.
+type Device struct {
+	ID    string `json:"id"`    // numeric PipeWire node id (pw-record --target)
+	Name  string `json:"name"`  // node.name (stable-ish identifier)
+	Label string `json:"label"` // human description for the dropdown
+	Kind  string `json:"kind"`  // "sink" (system output → capture its monitor) | "source" (mic)
+}
+
+// ListDevices enumerates audio sinks (system-output options — captured via their
+// monitor) and sources (microphones) so the UI can offer explicit choices.
+func ListDevices(ctx context.Context) ([]Device, error) {
+	out, err := exec.CommandContext(ctx, "pw-dump").Output()
+	if err != nil {
+		return nil, fmt.Errorf("pw-dump: %w", err)
+	}
+	var objs []struct {
+		ID   int    `json:"id"`
+		Type string `json:"type"`
+		Info struct {
+			Props map[string]json.RawMessage `json:"props"`
+		} `json:"info"`
+	}
+	if err := json.Unmarshal(out, &objs); err != nil {
+		return nil, fmt.Errorf("pw-dump parse: %w", err)
+	}
+	str := func(m map[string]json.RawMessage, k string) string {
+		if raw, ok := m[k]; ok {
+			var s string
+			if json.Unmarshal(raw, &s) == nil {
+				return s
+			}
+		}
+		return ""
+	}
+	var devs []Device
+	for _, o := range objs {
+		if o.Type != "PipeWire:Interface:Node" {
+			continue
+		}
+		p := o.Info.Props
+		class := str(p, "media.class")
+		var kind string
+		switch class {
+		case "Audio/Sink":
+			kind = "sink"
+		case "Audio/Source":
+			kind = "source"
+		default:
+			continue
+		}
+		name := str(p, "node.name")
+		if name == "" {
+			continue
+		}
+		label := str(p, "node.description")
+		if label == "" {
+			label = str(p, "node.nick")
+		}
+		if label == "" {
+			label = name
+		}
+		devs = append(devs, Device{ID: strconv.Itoa(o.ID), Name: name, Label: label, Kind: kind})
+	}
+	return devs, nil
+}
+
 // Start resolves the default sources, spawns one subprocess each, and streams
 // frames. Call Stop to release resources.
 func Start(ctx context.Context) (*Capture, error) {
@@ -66,6 +132,11 @@ func Start(ctx context.Context) (*Capture, error) {
 	if err != nil {
 		return nil, fmt.Errorf("capture: detect sources: %w", err)
 	}
+	return StartOn(ctx, sources, backend)
+}
+
+// StartOn streams from an explicit set of sources (e.g. user-chosen devices).
+func StartOn(ctx context.Context, sources []Source, backend string) (*Capture, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	c := &Capture{
 		sources: sources,

@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/jiva-studio/shruti/host/streamd/internal/engine"
@@ -33,8 +34,8 @@ const readLimit = 1 << 20
 func Handler(fluidPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		channel := r.URL.Query().Get("channel")
-		if channel != v1.ChannelSystem && channel != v1.ChannelMic {
-			http.Error(w, "query param 'channel' must be 'system' or 'mic'", http.StatusBadRequest)
+		if channel != v1.ChannelSystem && channel != v1.ChannelMic && channel != v1.ChannelMix {
+			http.Error(w, "query param 'channel' must be 'system', 'mic' or 'mix'", http.StatusBadRequest)
 			return
 		}
 		lang := r.URL.Query().Get("lang")
@@ -89,10 +90,20 @@ func Handler(fluidPath string) http.HandlerFunc {
 		// Pump 1: WebSocket → child stdin. Runs in this goroutine.
 		pumpToChild(ctx, conn, child, channel)
 
-		// Teardown: stop everything, reap, then close the socket gracefully.
+		// Teardown: SIGKILL the child up-front (don't wait for ctx propagation —
+		// a child stuck loading a CoreML model on the ANE would otherwise block
+		// child.Wait() forever and the handler would never return, so children
+		// pile up and contend on the ANE). Then reap with a bound.
 		cancel()
+		child.Kill()
 		wg.Wait()
-		_ = child.Wait()
+		reaped := make(chan struct{})
+		go func() { _ = child.Wait(); close(reaped) }()
+		select {
+		case <-reaped:
+		case <-time.After(3 * time.Second):
+			log.Printf("streamd: child reap timed out (channel=%s)", channel)
+		}
 		conn.Close(websocket.StatusNormalClosure, "")
 	}
 }

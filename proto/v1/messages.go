@@ -27,9 +27,10 @@ const (
 //   - streamd stamps Channel and relays it to the client as a WebSocket text frame.
 type Update struct {
 	Type    string `json:"type"`              // TypePartial | TypeFinal
-	Channel string `json:"channel,omitempty"` // ChannelSystem | ChannelMic (set by streamd)
+	Channel string `json:"channel,omitempty"` // ChannelSystem | ChannelMic | ChannelMix
 	Text    string `json:"text"`
-	TsMs    int64  `json:"ts_ms"` // milliseconds since session start
+	TsMs    int64  `json:"ts_ms"`             // milliseconds since session start
+	Speaker string `json:"speaker,omitempty"` // diarization label (e.g. "Я", "Спикер 2"); empty if none
 }
 
 // Update.Type values.
@@ -41,10 +42,11 @@ const (
 	TypeFinal = "final"
 )
 
-// Update.Channel values — the two independently-captured audio sources.
+// Update.Channel values — the captured audio sources.
 const (
 	ChannelSystem = "system" // everything the apps play (Zoom/browser/...): "они"
 	ChannelMic    = "mic"     // the local microphone: "я"
+	ChannelMix    = "mix"     // system + mic mixed into one stream (single ASR)
 )
 
 // Control is a client→streamd text-frame message that steers a live session.

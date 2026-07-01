@@ -58,6 +58,7 @@ func (parakeet) Open(ctx context.Context, cfg SessionConfig) (Session, error) {
 		cancel:  cancel,
 		channel: cfg.Channel,
 		updates: make(chan v1.Update, 64),
+		done:    make(chan struct{}),
 	}
 	go s.readLoop()
 	return s, nil
@@ -69,6 +70,7 @@ type parakeetSession struct {
 	cancel  context.CancelFunc
 	channel string
 	updates chan v1.Update
+	done    chan struct{} // closed when readLoop exits
 
 	closeOnce sync.Once
 }
@@ -83,6 +85,7 @@ func (s *parakeetSession) Updates() <-chan v1.Update { return s.updates }
 // readLoop reads server text frames (v1.Update JSON) and fans them onto the
 // updates channel until the connection ends.
 func (s *parakeetSession) readLoop() {
+	defer close(s.done)
 	defer close(s.updates)
 	for {
 		typ, data, err := s.conn.Read(s.ctx)
@@ -117,6 +120,15 @@ func (s *parakeetSession) Close() error {
 		_ = s.conn.Write(writeCtx, websocket.MessageText, ctrl)
 		cancel()
 
+		// Wait for the server to flush its final(s) (diarization emits them after
+		// it gets EOF) and close the connection — readLoop then exits. Without
+		// this the socket was torn down before the finals arrived (broken pipe),
+		// so no speaker-labelled lines ever reached the UI. Bounded so Stop can't
+		// hang.
+		select {
+		case <-s.done:
+		case <-time.After(12 * time.Second):
+		}
 		err = s.conn.Close(websocket.StatusNormalClosure, "client closing")
 		s.cancel()
 	})
