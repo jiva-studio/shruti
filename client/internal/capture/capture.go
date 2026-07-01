@@ -11,9 +11,11 @@ package capture
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -27,12 +29,17 @@ const frameBytes = v1.SampleRate * v1.BytesPerFrame / 10
 
 // Devices are the resolved capture endpoints for the two streams.
 type Devices struct {
-	// SystemTarget is the node/device to read the system audio from.
-	// For pw-record this is the sink node name; for parec it is
-	// "<sink>.monitor".
+	// SystemTarget is the pw-record/parec target for the system audio.
+	// For pw-record this is the sink's NUMERIC NODE ID (name-based targets race
+	// when two pw-record run concurrently — both bind the same node); for parec
+	// it is "<sink>.monitor".
 	SystemTarget string
-	// MicTarget is the default source node/device name.
+	// MicTarget is the target for the microphone: the numeric node id for
+	// pw-record, or the source device name for parec.
 	MicTarget string
+	// SystemName / MicName are the human-readable node names (for logging).
+	SystemName string
+	MicName    string
 	// Backend is "pipewire" (pw-record) or "pulse" (parec).
 	Backend string
 }
@@ -183,6 +190,8 @@ func detectPulse(ctx context.Context) (Devices, error) {
 	return Devices{
 		SystemTarget: sink + ".monitor",
 		MicTarget:    src,
+		SystemName:   sink + ".monitor",
+		MicName:      src,
 		Backend:      "pulse",
 	}, nil
 }
@@ -197,12 +206,62 @@ func detectPipeWire(ctx context.Context) (Devices, error) {
 	if sink == "" || src == "" {
 		return Devices{}, fmt.Errorf("could not resolve default sink/source from pw-metadata")
 	}
-	// pw-record captures a sink's monitor when targeted by the sink node name.
+	// Resolve names to NUMERIC node IDs. pw-record --target by NAME races when
+	// two instances run concurrently (both end up bound to the same node —
+	// system and mic capture identical audio); targeting by node id is stable.
+	// pw-record on a sink's id captures that sink's monitor (the system audio).
+	nodes, err := listNodes(ctx)
+	if err != nil {
+		return Devices{}, err
+	}
+	sinkID, ok := nodes[sink]
+	if !ok {
+		return Devices{}, fmt.Errorf("sink node %q not found in pw-dump", sink)
+	}
+	srcID, ok := nodes[src]
+	if !ok {
+		return Devices{}, fmt.Errorf("source node %q not found in pw-dump", src)
+	}
 	return Devices{
-		SystemTarget: sink,
-		MicTarget:    src,
+		SystemTarget: sinkID,
+		MicTarget:    srcID,
+		SystemName:   sink,
+		MicName:      src,
 		Backend:      "pipewire",
 	}, nil
+}
+
+// listNodes returns a map of node.name → numeric node id from `pw-dump`.
+func listNodes(ctx context.Context) (map[string]string, error) {
+	out, err := exec.CommandContext(ctx, "pw-dump").Output()
+	if err != nil {
+		return nil, fmt.Errorf("pw-dump: %w", err)
+	}
+	var objs []struct {
+		ID   int    `json:"id"`
+		Type string `json:"type"`
+		Info struct {
+			Props map[string]json.RawMessage `json:"props"`
+		} `json:"info"`
+	}
+	if err := json.Unmarshal(out, &objs); err != nil {
+		return nil, fmt.Errorf("pw-dump parse: %w", err)
+	}
+	names := make(map[string]string)
+	for _, o := range objs {
+		if o.Type != "PipeWire:Interface:Node" {
+			continue
+		}
+		raw, ok := o.Info.Props["node.name"]
+		if !ok {
+			continue
+		}
+		var name string
+		if json.Unmarshal(raw, &name) == nil && name != "" {
+			names[name] = strconv.Itoa(o.ID)
+		}
+	}
+	return names, nil
 }
 
 // extractMetaName pulls the node name for a pw-metadata key. Lines look like:
