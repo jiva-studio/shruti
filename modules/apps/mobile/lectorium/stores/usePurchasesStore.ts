@@ -205,6 +205,18 @@ export const usePurchasesStore = defineStore("purchases", () => {
   async function refresh(): Promise<void> {
     const purchases = useLectorium().purchases
     if (!purchases.available) return
+    // Self-heal an empty paywall: if a transient failure during init() left the
+    // package list empty, re-fetch it here so it recovers without an app
+    // restart (refresh runs on every appStateChange resume). A genuinely empty
+    // offering set just re-fetches empty — harmless.
+    if (packages.value.length === 0) {
+      await purchases
+        .listPackages()
+        .then((p) => {
+          packages.value = p
+        })
+        .catch(() => {})
+    }
     try {
       const state = await purchases.getCustomerState()
       applyState(state)
