@@ -451,18 +451,20 @@ platform :ios do
 
     setup_app_store_connect_api_key
 
+    # Pure upload — finish as soon as the binary is on App Store Connect.
+    # `changelog` / `beta_app_review_info` can only be applied to a PROCESSED
+    # build, so passing them makes pilot IGNORE `skip_waiting_for_build_processing`
+    # and poll ASC for Apple's processing queue (~10-30 min) before returning —
+    # the exact 18-minute hang we hit on build 2053. We don't need either here:
+    # the "What to Test" changelog isn't settable pre-processing anyway, and
+    # `beta_app_review_info` only applies to EXTERNAL beta review submission,
+    # which is off (`distribute_external: false`). Dropping them lets pilot
+    # early-return right after the upload; internal testers get the build once
+    # Apple finishes processing it server-side.
     pilot(
       ipa: ipa,
       skip_waiting_for_build_processing: true,
       distribute_external: false,
-      changelog: ReleaseNotes.generate(locales: %w[en-US]).fetch("en-US"),
-      beta_app_review_info: {
-        contact_email: ENV["BETA_FEEDBACK_EMAIL"].to_s,
-        contact_first_name: ENV["BETA_CONTACT_FIRST_NAME"].to_s,
-        contact_last_name: ENV["BETA_CONTACT_LAST_NAME"].to_s,
-        contact_phone: ENV["BETA_CONTACT_PHONE_NUMBER"].to_s,
-        notes: "Automated TestFlight build",
-      },
     )
   end
 
