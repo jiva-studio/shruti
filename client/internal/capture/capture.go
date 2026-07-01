@@ -1,11 +1,11 @@
-// Package capture records two independent live audio streams as raw
-// s16le / 16 kHz / mono PCM using PipeWire (pw-record) or PulseAudio (parec):
+// Package capture records independent live audio streams as raw s16le / 16 kHz
+// / mono PCM using PipeWire (pw-record) or PulseAudio (parec).
 //
-//   - system: the default sink's monitor — everything the apps play ("они").
-//   - mic:    the default source — the local microphone ("я").
-//
-// Each stream is exposed as a <-chan []byte carrying raw PCM frames exactly as
-// captured; call Stop to tear both subprocesses down.
+// It resolves a list of Sources — by default the system output (the default
+// sink's monitor, "они") and the microphone (the default source, "я") — and
+// runs one capture subprocess per source. Each source's frames are exposed on
+// its own channel keyed by Source.Channel. Add more sources (a second mic, a
+// specific app's output) by extending DetectSources; nothing else changes.
 package capture
 
 import (
@@ -22,94 +22,84 @@ import (
 	v1 "github.com/jiva-studio/shruti/proto/v1"
 )
 
-// frameBytes is the read chunk size: 100 ms of audio at the frozen format
-// (16000 Hz * 2 bytes * 0.1 s = 3200 bytes). Small enough for low latency,
-// large enough to avoid excessive syscalls/channel traffic.
+// frameBytes is the read chunk size: 100 ms at the frozen format
+// (16000 Hz * 2 bytes * 0.1 s = 3200 bytes).
 const frameBytes = v1.SampleRate * v1.BytesPerFrame / 10
 
-// Devices are the resolved capture endpoints for the two streams.
-type Devices struct {
-	// SystemTarget is the pw-record/parec target for the system audio.
-	// For pw-record this is the sink's NUMERIC NODE ID (name-based targets race
-	// when two pw-record run concurrently — both bind the same node); for parec
-	// it is "<sink>.monitor".
-	SystemTarget string
-	// MicTarget is the target for the microphone: the numeric node id for
-	// pw-record, or the source device name for parec.
-	MicTarget string
-	// SystemName / MicName are the human-readable node names (for logging).
-	SystemName string
-	MicName    string
-	// Backend is "pipewire" (pw-record) or "pulse" (parec).
-	Backend string
+// Source is one resolved capture endpoint.
+type Source struct {
+	// Channel labels the stream, e.g. v1.ChannelSystem / v1.ChannelMic.
+	Channel string
+	// Target is the capture argument: the numeric PipeWire node id for
+	// pw-record (name-based targets race when two instances run concurrently —
+	// both bind the same node), or the device name for parec.
+	Target string
+	// Name is the human-readable node name, for logging.
+	Name string
 }
 
-// Capture is a pair of running capture subprocesses.
+// Capture runs one subprocess per Source, each streaming PCM frames on its own
+// channel.
 type Capture struct {
-	system chan []byte
-	mic    chan []byte
+	sources []Source
+	backend string // "pipewire" (pw-record) or "pulse" (parec)
+	out     map[string]chan []byte
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-
-	devices Devices
 }
 
-// System returns the channel of raw PCM frames from the system audio (sink
-// monitor). It is closed when the capture stops.
-func (c *Capture) System() <-chan []byte { return c.system }
+// Sources reports the resolved sources (for logging/verification).
+func (c *Capture) Sources() []Source { return c.sources }
 
-// Mic returns the channel of raw PCM frames from the microphone. It is closed
-// when the capture stops.
-func (c *Capture) Mic() <-chan []byte { return c.mic }
+// Backend reports the capture backend in use.
+func (c *Capture) Backend() string { return c.backend }
 
-// Devices reports the resolved devices/backend, for logging and verification.
-func (c *Capture) Devices() Devices { return c.devices }
+// Frames returns the PCM frame channel for a source's Channel label (nil if
+// absent). The channel is closed when capture stops.
+func (c *Capture) Frames(channel string) <-chan []byte { return c.out[channel] }
 
-// Start detects the default devices, spawns one capture subprocess per channel,
-// and begins streaming PCM frames. Call Stop to release resources.
+// Start resolves the default sources, spawns one subprocess each, and streams
+// frames. Call Stop to release resources.
 func Start(ctx context.Context) (*Capture, error) {
-	devs, err := DetectDevices(ctx)
+	sources, backend, err := DetectSources(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("capture: detect devices: %w", err)
+		return nil, fmt.Errorf("capture: detect sources: %w", err)
 	}
-
 	ctx, cancel := context.WithCancel(ctx)
 	c := &Capture{
-		system:  make(chan []byte, 32),
-		mic:     make(chan []byte, 32),
+		sources: sources,
+		backend: backend,
+		out:     make(map[string]chan []byte, len(sources)),
 		cancel:  cancel,
-		devices: devs,
 	}
-
-	if err := c.spawn(ctx, devs.SystemTarget, v1.ChannelSystem, c.system); err != nil {
-		cancel()
-		return nil, fmt.Errorf("capture: start system stream: %w", err)
-	}
-	if err := c.spawn(ctx, devs.MicTarget, v1.ChannelMic, c.mic); err != nil {
-		cancel()
-		return nil, fmt.Errorf("capture: start mic stream: %w", err)
+	for _, s := range sources {
+		ch := make(chan []byte, 32)
+		c.out[s.Channel] = ch
+		if err := c.spawn(ctx, s, ch); err != nil {
+			cancel()
+			return nil, fmt.Errorf("capture: start %s stream: %w", s.Channel, err)
+		}
 	}
 	return c, nil
 }
 
-// Stop terminates both subprocesses and closes the two channels.
+// Stop terminates all subprocesses and closes every frame channel.
 func (c *Capture) Stop() {
 	c.cancel()
 	c.wg.Wait()
 }
 
-// spawn launches a single capture subprocess reading raw PCM from its stdout
-// and forwards fixed-size frames onto out. out is closed when the process exits.
-func (c *Capture) spawn(ctx context.Context, target, label string, out chan<- []byte) error {
-	name, args := c.devices.command(target)
+// spawn launches one capture subprocess and forwards fixed-size frames onto out,
+// which is closed when the process exits.
+func (c *Capture) spawn(ctx context.Context, s Source, out chan<- []byte) error {
+	name, args := command(c.backend, s.Target)
 	cmd := exec.CommandContext(ctx, name, args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
-	// Drop stderr; the subprocess is chatty on start-up.
-	cmd.Stderr = io.Discard
+	cmd.Stderr = io.Discard // the subprocess is chatty on start-up
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -132,7 +122,6 @@ func (c *Capture) spawn(ctx context.Context, target, label string, out chan<- []
 				}
 			}
 			if err != nil {
-				// EOF / short read on shutdown, or process killed.
 				return
 			}
 		}
@@ -140,98 +129,82 @@ func (c *Capture) spawn(ctx context.Context, target, label string, out chan<- []
 	return nil
 }
 
-// command builds the subprocess argv for a capture target, depending on the
-// detected backend. Both back-ends emit raw s16le/16k/mono PCM to stdout ("-").
-func (d Devices) command(target string) (string, []string) {
-	switch d.Backend {
+// command builds the subprocess argv for a target on a backend. Both back-ends
+// emit raw s16le/16k/mono PCM to stdout ("-").
+func command(backend, target string) (string, []string) {
+	switch backend {
 	case "pulse":
 		return "parec", []string{
-			"--device=" + target,
-			"--rate=16000",
-			"--channels=1",
-			"--format=s16le",
+			"--device=" + target, "--rate=16000", "--channels=1", "--format=s16le",
 		}
 	default: // pipewire
 		return "pw-record", []string{
-			"--target", target,
-			"--rate", "16000",
-			"--channels", "1",
-			"--format", "s16",
-			"-",
+			"--target", target, "--rate", "16000", "--channels", "1", "--format", "s16", "-",
 		}
 	}
 }
 
-// DetectDevices resolves the default sink monitor and default source. It prefers
-// PulseAudio's pactl when available (deriving "<sink>.monitor"), and otherwise
-// falls back to PipeWire's pw-metadata (using the sink node name as the
-// pw-record monitor target).
-func DetectDevices(ctx context.Context) (Devices, error) {
+// DetectSources resolves the default system-output and microphone sources and
+// the backend. Prefers PulseAudio's pactl (deriving "<sink>.monitor") and
+// otherwise uses PipeWire (numeric node ids via pw-dump).
+func DetectSources(ctx context.Context) ([]Source, string, error) {
 	if _, err := exec.LookPath("pactl"); err == nil {
-		if d, err := detectPulse(ctx); err == nil {
-			return d, nil
+		if s, err := detectPulse(ctx); err == nil {
+			return s, "pulse", nil
 		}
 	}
-	return detectPipeWire(ctx)
+	s, err := detectPipeWire(ctx)
+	return s, "pipewire", err
 }
 
-func detectPulse(ctx context.Context) (Devices, error) {
+func detectPulse(ctx context.Context) ([]Source, error) {
 	sink, err := runTrim(ctx, "pactl", "get-default-sink")
 	if err != nil {
-		return Devices{}, err
+		return nil, err
 	}
 	src, err := runTrim(ctx, "pactl", "get-default-source")
 	if err != nil {
-		return Devices{}, err
+		return nil, err
 	}
 	if sink == "" || src == "" {
-		return Devices{}, fmt.Errorf("pactl returned empty default device")
+		return nil, fmt.Errorf("pactl returned empty default device")
 	}
-	return Devices{
-		SystemTarget: sink + ".monitor",
-		MicTarget:    src,
-		SystemName:   sink + ".monitor",
-		MicName:      src,
-		Backend:      "pulse",
+	return []Source{
+		{Channel: v1.ChannelSystem, Target: sink + ".monitor", Name: sink + ".monitor"},
+		{Channel: v1.ChannelMic, Target: src, Name: src},
 	}, nil
 }
 
-func detectPipeWire(ctx context.Context) (Devices, error) {
+func detectPipeWire(ctx context.Context) ([]Source, error) {
 	out, err := runTrim(ctx, "pw-metadata", "-n", "default")
 	if err != nil {
-		return Devices{}, fmt.Errorf("pw-metadata: %w", err)
+		return nil, fmt.Errorf("pw-metadata: %w", err)
 	}
 	sink := extractMetaName(out, "default.audio.sink")
 	src := extractMetaName(out, "default.audio.source")
 	if sink == "" || src == "" {
-		return Devices{}, fmt.Errorf("could not resolve default sink/source from pw-metadata")
+		return nil, fmt.Errorf("could not resolve default sink/source from pw-metadata")
 	}
-	// Resolve names to NUMERIC node IDs. pw-record --target by NAME races when
-	// two instances run concurrently (both end up bound to the same node —
-	// system and mic capture identical audio); targeting by node id is stable.
-	// pw-record on a sink's id captures that sink's monitor (the system audio).
+	// pw-record captures a sink's monitor when targeted by the sink's id.
 	nodes, err := listNodes(ctx)
 	if err != nil {
-		return Devices{}, err
+		return nil, err
 	}
 	sinkID, ok := nodes[sink]
 	if !ok {
-		return Devices{}, fmt.Errorf("sink node %q not found in pw-dump", sink)
+		return nil, fmt.Errorf("sink node %q not found in pw-dump", sink)
 	}
 	srcID, ok := nodes[src]
 	if !ok {
-		return Devices{}, fmt.Errorf("source node %q not found in pw-dump", src)
+		return nil, fmt.Errorf("source node %q not found in pw-dump", src)
 	}
-	return Devices{
-		SystemTarget: sinkID,
-		MicTarget:    srcID,
-		SystemName:   sink,
-		MicName:      src,
-		Backend:      "pipewire",
+	return []Source{
+		{Channel: v1.ChannelSystem, Target: sinkID, Name: sink},
+		{Channel: v1.ChannelMic, Target: srcID, Name: src},
 	}, nil
 }
 
-// listNodes returns a map of node.name → numeric node id from `pw-dump`.
+// listNodes maps node.name → numeric node id from `pw-dump`.
 func listNodes(ctx context.Context) (map[string]string, error) {
 	out, err := exec.CommandContext(ctx, "pw-dump").Output()
 	if err != nil {

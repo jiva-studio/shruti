@@ -84,8 +84,8 @@ func Start(ctx context.Context, cfg Config, summarizer summary.Summarizer, emit 
 	}
 
 	// Pump captured PCM into each provider session.
-	s.pump(cap.System(), sysSess)
-	s.pump(cap.Mic(), micSess)
+	s.pump(cap.Frames(v1.ChannelSystem), sysSess)
+	s.pump(cap.Frames(v1.ChannelMic), micSess)
 
 	// Fan-in Updates from both sessions.
 	s.fanIn(sysSess)
