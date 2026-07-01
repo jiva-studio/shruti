@@ -66,6 +66,8 @@ describe("isExpectedError", () => {
     expect(isExpectedError(new Error("All servers are unreachable"))).toBe(true)
     expect(isExpectedError(new Error("A network error has occurred. Сетевое соединение потеряно."))).toBe(true)
     expect(isExpectedError(new Error("The Internet connection appears to be offline."))).toBe(true)
+    // iOS AVPlayer seek superseded/interrupted — benign.
+    expect(isExpectedError(new Error("Seek operation failed"))).toBe(true)
     // A concrete backend fault is a distinct signature and still pages.
     expect(isExpectedError(new Error("HTTP 500 Internal Server Error"))).toBe(false)
   })
