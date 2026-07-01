@@ -25,6 +25,20 @@ describe("isExpectedError", () => {
     expect(isExpectedError(new SyntaxError("Unexpected token < in JSON"))).toBe(true)
   })
 
+  it("drops expected errors from plain-object rejections (Capacitor plugins, console.error(obj))", () => {
+    // Capacitor plugin errors + `console.error(obj)` arrive as plain
+    // `{code, message}` objects, not Error instances.
+    expect(
+      isExpectedError({
+        code: "OS-PLUG-FILE-0010",
+        message: "Directory at '/…/databases/' already exists, cannot be overwritten.",
+      }),
+    ).toBe(true)
+    expect(
+      isExpectedError({ code: "OS-PLUG-FILE-0008", message: "'stat' failed because file … does not exist." }),
+    ).toBe(true)
+  })
+
   it("keeps real failures", () => {
     expect(isExpectedError(new Error("RevenueCat configure failed"))).toBe(false)
     expect(isExpectedError(new TypeError("x is not a function"))).toBe(false)

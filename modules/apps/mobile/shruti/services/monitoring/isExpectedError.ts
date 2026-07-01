@@ -36,6 +36,17 @@ export function isExpectedError(error: unknown): boolean {
     const name = (error as { name?: unknown }).name
     if (typeof name === "string" && EXPECTED_NAMES.has(name)) return true
   }
-  const message = error instanceof Error ? error.message : typeof error === "string" ? error : ""
+  // Read the message off Errors, raw strings, AND plain objects. Capacitor
+  // plugin rejections and `console.error(obj)` calls arrive as `{code, message}`
+  // objects (not Error instances), so an `instanceof Error`-only check let their
+  // benign "already exists" / "does not exist" signatures through to Sentry.
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string"
+          ? (error as { message: string }).message
+          : ""
   return EXPECTED_MESSAGE.test(message)
 }
