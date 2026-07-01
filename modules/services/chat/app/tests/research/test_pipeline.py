@@ -196,19 +196,26 @@ class FakeLLM:
 
 
 class FakePool:
-    """asyncpg-shaped fake. Stores rows keyed by (kind, lang)."""
+    """asyncpg-shaped fake. Stores attribution rows keyed by (kind, lang), plus
+    optional curated variant phrasings keyed by attribution_id (what the
+    border-judge gate reranks / LLM-confirms against)."""
 
-    def __init__(self, rows: dict[tuple, list[dict]] | None = None) -> None:
+    def __init__(
+        self,
+        rows: dict[tuple, list[dict]] | None = None,
+        variant_texts: dict[str, list[str]] | None = None,
+    ) -> None:
         self.rows = rows or {}
+        self.variant_texts = variant_texts or {}
 
     def acquire(self):
-        return _Acq(self.rows)
+        return _Acq(self.rows, self.variant_texts)
 
 
 class _Acq:
-    def __init__(self, rows: dict[tuple, list[dict]]):
+    def __init__(self, rows: dict[tuple, list[dict]], variant_texts: dict[str, list[str]]):
         self.rows = rows
-        self.conn = _FakeConn(rows)
+        self.conn = _FakeConn(rows, variant_texts)
 
     async def __aenter__(self):
         return self.conn
@@ -218,10 +225,17 @@ class _Acq:
 
 
 class _FakeConn:
-    def __init__(self, rows: dict[tuple, list[dict]]):
+    def __init__(self, rows: dict[tuple, list[dict]], variant_texts: dict[str, list[str]]):
         self.rows = rows
+        self.variant_texts = variant_texts
 
     async def fetch(self, sql, *args):
+        # Border-judge gate: _fetch_variant_texts issues two shapes of this query
+        # (with/without a language filter → 3 or 2 positional args). Keyed on the
+        # attribution_id ($1) in both, so match on the projection, not arg count.
+        if "DISTINCT text" in sql:
+            aid = args[0]
+            return [{"text": t} for t in self.variant_texts.get(aid, [])]
         if "WHERE e.language" in sql:
             lang, _embed_model, kind = args[1], args[2], args[3]
             return [dict(r) for r in self.rows.get((lang, kind), [])]
@@ -1120,7 +1134,14 @@ async def test_memory_only_takes_lean_path(monkeypatch) -> None:
     """A strong memory match with NO pinned attribution → the sufficiency gate
     returns CORRECT and run_research takes the LEAN path: the memory's shlokas
     ride as authoritative_refs, the note is set, and the WIDE topic lookup never
-    runs. This is the new branch the sufficiency gate added (#1068)."""
+    runs. This is the new branch the sufficiency gate added (#1068).
+
+    Memory is judge-gated (#1141): cosine alone never seats an authoritative note,
+    so the strong cosine here still has to clear the border judge. With no reranker
+    wired, that judge is the LLM confirm — scripted YES below (fed the curated
+    variant phrasing this fake serves for `attribution_mem`)."""
+    import types
+
     import lectorium_chat.research.pipeline as pl
 
     async def fake_note(pool, aid, lang):
@@ -1128,20 +1149,28 @@ async def test_memory_only_takes_lean_path(monkeypatch) -> None:
 
     monkeypatch.setattr(pl, "_fetch_memory_note", fake_note)
 
-    pool = FakePool({
-        # memory match clears MEMORY_CORRECT_SCORE_NATIVE (0.70); no pinned/boost.
-        ("ru", "memory"): [_row("attribution_mem", 0.90, [
-            {"ref_kind": "verse", "target_id": "verse_BG_6_47"},
-            {"ref_kind": "verse", "target_id": "verse_BG_7_7"},
-            {"ref_kind": "verse", "target_id": "verse_BG_9_22"},
-        ])],
-    })
+    pool = FakePool(
+        rows={
+            # memory match clears the recall floor; no pinned/boost.
+            ("ru", "memory"): [_row("attribution_mem", 0.90, [
+                {"ref_kind": "verse", "target_id": "verse_BG_6_47"},
+                {"ref_kind": "verse", "target_id": "verse_BG_7_7"},
+                {"ref_kind": "verse", "target_id": "verse_BG_9_22"},
+            ])],
+        },
+        # Curated phrasing the border judge reads to confirm the match.
+        variant_texts={"attribution_mem": ["структура Бхагавад-гиты"]},
+    )
     chunk_repo = FakeChunkRepo(by_target={
         ("verse", "verse_BG_6_47"): [_LibChunk("verse_BG_6_47", "verse", "6.47", "ru", source_id="src", tokens="6.47", addr_label="БГ 6.47")],
         ("verse", "verse_BG_7_7"): [_LibChunk("verse_BG_7_7", "verse", "7.7", "ru", source_id="src", tokens="7.7", addr_label="БГ 7.7")],
         ("verse", "verse_BG_9_22"): [_LibChunk("verse_BG_9_22", "verse", "9.22", "ru", source_id="src", tokens="9.22", addr_label="БГ 9.22")],
     })
-    llm = FakeLLM(by_schema={"QueryPlan": _plan("структура Бхагавад-гиты")})
+    llm = FakeLLM(by_schema={
+        "QueryPlan": _plan("структура Бхагавад-гиты"),
+        # Border judge confirms the memory match.
+        "Confirm": types.SimpleNamespace(yes=True),
+    })
 
     result = await run_research(
         question="структура Бхагавад-гиты", lang="ru", router_args={},
