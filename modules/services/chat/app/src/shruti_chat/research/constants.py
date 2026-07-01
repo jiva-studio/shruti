@@ -37,16 +37,35 @@ BOOST_ACCEPT_SCORE_CROSS = 0.65
 BOOST_MAX_MATCHES_PER_TOPIC = 3
 
 # memory-attribution (curator note → non-citable background context).
-# Matched by trigger phrases AND note chunks against the user query. No
-# LLM-confirm gate (the note is advisory, not an authoritative source claim),
-# so the bar sits LOW — measured on prod data, structure-paraphrases of one
-# trigger cluster at 0.62-0.69 while unrelated same-book queries top out at
-# ~0.49, so 0.60 catches paraphrases without a trigger per phrasing and keeps a
-# clean margin. The note being non-citable makes a loose match cheap (the
-# synthesizer just ignores an off-topic briefing). One memory per turn.
-MEMORY_ACCEPT_SCORE_NATIVE = 0.60
-MEMORY_ACCEPT_SCORE_CROSS = 0.55
+# Matched by trigger phrases AND note chunks against the user query. The bar
+# sits HIGH because a matched memory note is no longer advisory: the synthesis
+# planner treats it as AUTHORITATIVE framing and anchors the whole outline to
+# its steps (note step → thesis). A loose match therefore HIJACKS unrelated
+# answers rather than being quietly ignored. Measured on the live corpus: the
+# single broad "structure of the Gita" note false-matched existential queries
+# at 0.58-0.61 ("who is God", "what is the soul") while genuine structure
+# paraphrases score 0.78-1.0 — including the cross-lingual sr-cyrl phrasing at
+# 0.78. 0.75 native / 0.70 cross sits cleanly between the two bands, killing the
+# false hijacks while keeping the curated note (and its non-ru/en reach via the
+# cross stage). One memory per turn.
+MEMORY_ACCEPT_SCORE_NATIVE = 0.75
+MEMORY_ACCEPT_SCORE_CROSS = 0.70
 MEMORY_MAX_MATCHES = 1
+# Judge-gated memory (MEMORY_GATE). A matched memory note is AUTHORITATIVE — it
+# anchors the whole outline — so cosine alone must not seat it. With the gate on,
+# the cosine bars above are bypassed: every candidate above MEMORY_RECALL_FLOOR
+# is routed through the cross-encoder/LLM judge ("does this curated note actually
+# answer THIS question?"). Recall via a low cosine floor, precision via the
+# judge — this scales as the curated-memory corpus grows (no per-note threshold
+# tuning) and recovers genuine borderline / cross-lingual matches that a high
+# cosine bar would drop. Set MEMORY_GATE=False to fall back to cosine thresholds.
+MEMORY_RECALL_FLOOR = 0.55
+MEMORY_GATE = True
+# Cross-encoder accept bar for the judge-gated memory path. Higher than the
+# pinned bar (PINNED_RERANK_ACCEPT=0.50): measured on the live "structure of the
+# Gita" note, off-topic queries it half-matches ("who is God?") rerank at ~0.55
+# while genuine structure questions hit 0.80-0.85 — 0.65 sits in that gap.
+MEMORY_RERANK_ACCEPT = 0.65
 
 # A matched memory whose curator refs RESOLVE to at least this many citable
 # envelopes is a sufficient (CORRECT) answer on its own: the sufficiency gate
