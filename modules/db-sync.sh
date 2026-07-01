@@ -17,7 +17,11 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export APP_NAME="shruti"
-export CDN_URL="https://cdn-s3.shruti.local"
+# Bunny is the primary origin catalog publishes reach; the old AWS S3 bucket
+# is abandoned and frozen (its config.json/DB no longer receive new versions),
+# so baking from it shipped a stale catalog in the app assets. Match the
+# runtime `global` region (see modules/libs/domain/servers.ts).
+export CDN_URL="https://cdn.shruti.local"
 export CONFIG_PATH="public/config.json"
 export DB_PATH_PREFIX="public/db"
 export SCHEME_FILE="${HERE}/db-scheme.json"
