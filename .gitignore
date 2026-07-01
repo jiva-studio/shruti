@@ -1,0 +1,24 @@
+# Go
+/**/bin/
+*.exe
+*.test
+*.out
+
+# Swift / SwiftPM
+/host/fluidstreamd/.build/
+/host/fluidstreamd/Package.resolved
+
+# Wails / node
+/client/frontend/node_modules/
+/client/frontend/dist/
+/client/build/bin/
+
+# Local artifacts
+*.pcm
+*.wav
+*.log
+.DS_Store
+
+# Secrets (keys live in ../.config or 1Password, never committed)
+*.key
+*.secret
