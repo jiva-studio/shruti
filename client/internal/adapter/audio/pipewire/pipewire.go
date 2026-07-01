@@ -117,8 +117,8 @@ type capture struct {
 	wg      sync.WaitGroup
 }
 
-func (c *capture) Sources() []domain.Source     { return c.sources }
-func (c *capture) Frames(ch int) <-chan []byte  { return c.out[ch] }
+func (c *capture) Sources() []domain.Source    { return c.sources }
+func (c *capture) Frames(ch int) <-chan []byte { return c.out[ch] }
 
 func (c *capture) Stop() {
 	c.cancel()

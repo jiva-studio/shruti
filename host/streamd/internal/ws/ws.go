@@ -2,11 +2,16 @@
 // connection on v1.StreamPath, spawns one fluidstreamd child for it, and pumps
 // bytes between the two:
 //
-//	client ──binary frame──▶ child stdin   (live PCM)
-//	client ──text frame────▶ v1.Control    (finalize / close)
-//	child stdout ──NDJSON──▶ v1.Update ──text frame──▶ client (Channel stamped)
+//	client ──config frame──▶ session plan   (channels + per-channel speakers)
+//	client ──binary frame──▶ mix ──▶ child stdin   (interleaved N-ch PCM → mono)
+//	client ──text frame────▶ v1.Control     (finalize / close)
+//	child stdout ──NDJSON──▶ v1.Update ──text frame──▶ client (Channel stamped,
+//	                                        mixed finals attributed to a source)
 //
-// One WebSocket connection == one channel == one fluidstreamd process.
+// The host is authoritative: it mixes the N channels down to the one mono
+// stream the ANE can sustain, reports the mode via v1.Status, and re-attributes
+// mixed finals to the loudest source channel (per-channel speakers without N
+// concurrent model instances).
 package ws
 
 import (
@@ -15,18 +20,21 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/jiva-studio/shruti/host/streamd/internal/engine"
+	"github.com/jiva-studio/shruti/host/streamd/internal/mix"
 	v1 "github.com/jiva-studio/shruti/proto/v1"
 )
 
 // defaultLang is used when the client omits the `lang` query param.
 const defaultLang = "ru"
 
-// readLimit caps a single inbound WebSocket message. PCM chunks are small (a
-// 160 ms mono s16le@16k frame is ~5 KiB); 1 MiB is comfortably above any frame.
+// readLimit caps a single inbound WebSocket message. Interleaved N-channel PCM
+// chunks are still small (a 100 ms stereo s16le@16k frame is ~6.4 KiB); 1 MiB is
+// comfortably above any frame.
 const readLimit = 1 << 20
 
 // Handler returns an http.HandlerFunc for v1.StreamPath. fluidPath is the
@@ -49,12 +57,8 @@ func Handler(fluidPath string) http.HandlerFunc {
 			return
 		}
 		conn.SetReadLimit(readLimit)
-		// CloseNow is the backstop: it hard-closes the TCP conn on any exit path
-		// (a graceful Close below is a no-op if we already closed).
 		defer conn.CloseNow()
 
-		// Own the lifetime: cancelling tears the child down (CommandContext) and
-		// unblocks conn.Read.
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -66,34 +70,48 @@ func Handler(fluidPath string) http.HandlerFunc {
 		}
 		defer child.Kill()
 
-		// Pump 2: child stdout → WebSocket. Ends when the child's stdout closes
-		// (EOU/close flush done, process exited), then cancels ctx so pump 1
-		// (below) unblocks.
+		// Shared session state. attrib is published by the config frame (pump 1)
+		// and read on finals (pump 2); writeMu serializes the two writers to conn.
+		var attrib atomic.Pointer[mix.Attributor]
+		var writeMu sync.Mutex
+		write := func(b []byte) error {
+			writeMu.Lock()
+			defer writeMu.Unlock()
+			return conn.Write(ctx, websocket.MessageText, b)
+		}
+
+		// Pump 2: child stdout → WebSocket. Mixed finals are re-attributed to the
+		// loudest source channel when that channel has a fixed speaker.
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer cancel()
 			err := child.Emit(func(u v1.Update) error {
-				u.Channel = channel // fluidstreamd doesn't know its channel; we do.
+				u.Channel = channel
+				if u.Type == v1.TypeFinal {
+					if a := attrib.Load(); a != nil {
+						if label, ok := a.DominantSpeaker(); ok {
+							u.Speaker = label
+						}
+					}
+				}
 				b, err := json.Marshal(u)
 				if err != nil {
 					return err
 				}
-				return conn.Write(ctx, websocket.MessageText, b)
+				return write(b)
 			})
 			if err != nil && ctx.Err() == nil {
 				log.Printf("streamd: child stream (channel=%s): %v", channel, err)
 			}
 		}()
 
-		// Pump 1: WebSocket → child stdin. Runs in this goroutine.
-		pumpToChild(ctx, conn, child, channel)
+		// Pump 1: WebSocket → child stdin (this goroutine).
+		pumpToChild(ctx, conn, child, channel, &attrib, write)
 
-		// Teardown: SIGKILL the child up-front (don't wait for ctx propagation —
-		// a child stuck loading a CoreML model on the ANE would otherwise block
-		// child.Wait() forever and the handler would never return, so children
-		// pile up and contend on the ANE). Then reap with a bound.
+		// Teardown: SIGKILL the child up-front, then reap with a bound (a child
+		// stuck loading a CoreML model on the ANE would otherwise block Wait).
 		cancel()
 		child.Kill()
 		wg.Wait()
@@ -108,40 +126,76 @@ func Handler(fluidPath string) http.HandlerFunc {
 	}
 }
 
-// pumpToChild reads client frames until the connection or ctx ends: binary →
-// child stdin (live PCM); text → v1.Control.
-func pumpToChild(ctx context.Context, conn *websocket.Conn, child *engine.Child, channel string) {
+// pumpToChild reads client frames until the connection or ctx ends. The first
+// text frame is expected to be a v1.SessionConfig; binary frames are interleaved
+// N-channel PCM, de-interleaved + mixed to mono before reaching the child.
+func pumpToChild(ctx context.Context, conn *websocket.Conn, child *engine.Child, channel string, attrib *atomic.Pointer[mix.Attributor], write func([]byte) error) {
+	channels := 1 // until a config frame says otherwise (legacy clients send mono)
 	for {
 		typ, data, err := conn.Read(ctx)
 		if err != nil {
-			return // client closed, ctx cancelled, or read error — all mean "done".
+			return
 		}
 		switch typ {
 		case websocket.MessageBinary:
-			if _, err := child.Write(data); err != nil {
+			frame := data
+			if channels > 1 {
+				chans := mix.Deinterleave(data, channels)
+				if a := attrib.Load(); a != nil {
+					a.Observe(chans)
+				}
+				frame = mix.MixMono(chans)
+			}
+			if _, err := child.Write(frame); err != nil {
 				log.Printf("streamd: write PCM to child (channel=%s): %v", channel, err)
 				return
 			}
 		case websocket.MessageText:
-			var ctrl v1.Control
-			if err := json.Unmarshal(data, &ctrl); err != nil {
-				log.Printf("streamd: bad control frame (channel=%s): %v", channel, err)
+			var probe struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(data, &probe); err != nil {
+				log.Printf("streamd: bad text frame (channel=%s): %v", channel, err)
 				continue
 			}
-			switch ctrl.Type {
+			switch probe.Type {
+			case v1.TypeConfig:
+				var cfg v1.SessionConfig
+				if err := json.Unmarshal(data, &cfg); err != nil {
+					log.Printf("streamd: bad config frame (channel=%s): %v", channel, err)
+					continue
+				}
+				channels = configure(cfg, attrib)
+				st, _ := json.Marshal(v1.Status{
+					Type: v1.TypeStatus, Mode: v1.ModeMixed, Reason: "ane_capacity", Channels: channels,
+				})
+				_ = write(st)
+				log.Printf("streamd: session config: channels=%d mode=mixed", channels)
 			case v1.CtrlClose:
-				// Close stdin → child flushes the final and exits. We keep
-				// reading; the child's exit ends pump 2, which cancels ctx and
-				// unblocks this loop.
 				if err := child.CloseStdin(); err != nil {
 					log.Printf("streamd: close child stdin (channel=%s): %v", channel, err)
 				}
 			case v1.CtrlFinalize:
-				// No-op for now: the EOU manager auto-flushes utterances.
 				log.Printf("streamd: finalize (channel=%s) — no-op; EOU auto-flushes", channel)
 			default:
-				log.Printf("streamd: unknown control type %q (channel=%s)", ctrl.Type, channel)
+				log.Printf("streamd: unknown text type %q (channel=%s)", probe.Type, channel)
 			}
 		}
 	}
+}
+
+// configure installs an attributor for the plan and returns the channel count.
+func configure(cfg v1.SessionConfig, attrib *atomic.Pointer[mix.Attributor]) int {
+	channels := cfg.Channels
+	if channels < 1 {
+		channels = 1
+	}
+	speakers := make([]string, channels)
+	for i, s := range cfg.Sources {
+		if i < channels {
+			speakers[i] = s.Speaker
+		}
+	}
+	attrib.Store(mix.NewAttributor(speakers))
+	return channels
 }

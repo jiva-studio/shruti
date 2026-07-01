@@ -34,9 +34,10 @@ type Transcriber struct{}
 // New returns the parakeet transcriber.
 func New() port.Transcriber { return Transcriber{} }
 
-// Layout: parakeet takes one mono mix (a single ANE inference; two concurrent
-// ones contend).
-func (Transcriber) Layout() domain.AudioLayout { return domain.LayoutMixed }
+// Layout: the client sends all N source channels interleaved; the HOST decides
+// whether to run them independently or mix them down (and reports which via a
+// Status frame), so the mix/attribution policy lives on the compute box.
+func (Transcriber) Layout() domain.AudioLayout { return domain.LayoutMultiChannel }
 
 func (Transcriber) Open(ctx context.Context, plan domain.CapturePlan) (port.TranscriptionStream, error) {
 	base := DefaultURL
@@ -65,6 +66,14 @@ func (Transcriber) Open(ctx context.Context, plan domain.CapturePlan) (port.Tran
 	}
 	conn.SetReadLimit(1 << 20)
 
+	// Declare the channel plan as the first frame so the host can de-interleave,
+	// mix, and attribute mixed finals to the right source.
+	if err := sendConfig(connCtx, conn, plan); err != nil {
+		cancel()
+		conn.CloseNow()
+		return nil, fmt.Errorf("parakeet: send config: %w", err)
+	}
+
 	s := &stream{
 		conn:   conn,
 		ctx:    connCtx,
@@ -74,6 +83,28 @@ func (Transcriber) Open(ctx context.Context, plan domain.CapturePlan) (port.Tran
 	}
 	go s.readLoop()
 	return s, nil
+}
+
+// sendConfig transmits the session's channel plan (per-channel origin + fixed
+// speaker labels) as the first text frame.
+func sendConfig(ctx context.Context, conn *websocket.Conn, plan domain.CapturePlan) error {
+	sources := make([]v1.ChannelInfo, len(plan.Sources))
+	for i, src := range plan.Sources {
+		sources[i] = v1.ChannelInfo{Origin: string(src.Origin), Speaker: src.Speaker}
+	}
+	langs := make([]string, 0, len(plan.Languages))
+	for _, l := range plan.Languages {
+		langs = append(langs, string(l))
+	}
+	cfg, err := json.Marshal(v1.SessionConfig{
+		Type: v1.TypeConfig, Channels: plan.Channels(), Sources: sources, Languages: langs,
+	})
+	if err != nil {
+		return err
+	}
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return conn.Write(writeCtx, websocket.MessageText, cfg)
 }
 
 type stream struct {
@@ -103,16 +134,32 @@ func (s *stream) readLoop() {
 		if typ != websocket.MessageText {
 			continue
 		}
-		var up v1.Update
-		if err := json.Unmarshal(data, &up); err != nil {
+		// Server text frames are either a Status or an Update; both carry "type".
+		var probe struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(data, &probe) != nil {
 			continue
 		}
-		ev := domain.TranscriptEvent{
-			Kind:    kindOf(up.Type),
-			Speaker: up.Speaker,
-			Text:    up.Text,
-			Channel: -1, // mixed stream: no distinct source channel
-			TsMs:    up.TsMs,
+		var ev domain.TranscriptEvent
+		if probe.Type == v1.TypeStatus {
+			var st v1.Status
+			if json.Unmarshal(data, &st) != nil {
+				continue
+			}
+			ev = domain.TranscriptEvent{Kind: domain.EventStatus, Mode: st.Mode, Reason: st.Reason, Channel: st.Channels}
+		} else {
+			var up v1.Update
+			if json.Unmarshal(data, &up) != nil {
+				continue
+			}
+			ev = domain.TranscriptEvent{
+				Kind:    kindOf(up.Type),
+				Speaker: up.Speaker,
+				Text:    up.Text,
+				Channel: -1, // mixed stream: no distinct source channel
+				TsMs:    up.TsMs,
+			}
 		}
 		select {
 		case s.events <- ev:

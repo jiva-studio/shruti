@@ -1,7 +1,8 @@
 // Command fakefluid is a test double for fluidstreamd (which only builds on
 // macOS). It honours the frozen stdio contract just enough for streamd tests:
-// it accepts `--lang`, reads PCM from stdin, emits NDJSON partials as bytes
-// arrive, and on EOF emits a last partial + a final, then exits 0.
+// it accepts `--lang` and `--chunk-ms`, reads PCM from stdin, emits NDJSON
+// partials as bytes arrive, and on EOF emits a last partial + a final, then
+// exits 0.
 package main
 
 import (
@@ -13,6 +14,7 @@ import (
 
 func main() {
 	flag.String("lang", "ru", "ASR language hint (ignored by the fake)")
+	flag.Int("chunk-ms", 2240, "ASR chunk size in ms (ignored by the fake)")
 	flag.Parse()
 
 	out := bufio.NewWriter(os.Stdout)

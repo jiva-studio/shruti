@@ -17,7 +17,7 @@ type TimeRange struct {
 // Utterance is one committed, speaker-attributed segment of a meeting. It is the
 // provider-agnostic unit of a transcript: any engine's finals map onto this.
 type Utterance struct {
-	Speaker    string     `json:"speaker"`              // label ("Я", "Спикер 2", "Алиса"); "" if unattributed
+	Speaker    string     `json:"speaker"` // label ("Я", "Спикер 2", "Алиса"); "" if unattributed
 	Text       string     `json:"text"`
 	Span       TimeRange  `json:"span"`
 	Channel    int        `json:"channel"`              // source channel index

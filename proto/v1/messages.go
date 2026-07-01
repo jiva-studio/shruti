@@ -45,8 +45,45 @@ const (
 // Update.Channel values — the captured audio sources.
 const (
 	ChannelSystem = "system" // everything the apps play (Zoom/browser/...): "они"
-	ChannelMic    = "mic"     // the local microphone: "я"
-	ChannelMix    = "mix"     // system + mic mixed into one stream (single ASR)
+	ChannelMic    = "mic"    // the local microphone: "я"
+	ChannelMix    = "mix"    // system + mic mixed into one stream (single ASR)
+)
+
+// SessionConfig is the FIRST client→streamd text frame. It declares the channel
+// plan so the host can decide whether to run channels independently or mix them
+// down (and attribute mixed segments to the loudest source). Binary frames that
+// follow are interleaved N-channel s16le PCM in Sources order.
+type SessionConfig struct {
+	Type      string        `json:"type"`                // TypeConfig
+	Channels  int           `json:"channels"`            // number of interleaved channels (== len(Sources))
+	Sources   []ChannelInfo `json:"sources"`             // per-channel metadata, index = interleave position
+	Languages []string      `json:"languages,omitempty"` // ASR language hints ("" / empty = auto)
+}
+
+// ChannelInfo describes one interleaved source channel.
+type ChannelInfo struct {
+	Origin  string `json:"origin"`            // "mic" | "system" | "line"
+	Speaker string `json:"speaker,omitempty"` // fixed label for this channel (a dedicated mic); "" = diarize
+}
+
+// TypeConfig is the SessionConfig discriminator (in the shared "type" field).
+const TypeConfig = "config"
+
+// Status is a streamd→client text frame reporting how the host is handling the
+// session — in particular whether it degraded to a single mixed stream because
+// the compute (ANE) can't run the channels independently.
+type Status struct {
+	Type     string `json:"type"`             // TypeStatus
+	Mode     string `json:"mode"`             // ModeMixed | ModeMultichannel
+	Reason   string `json:"reason,omitempty"` // e.g. "ane_capacity"
+	Channels int    `json:"channels,omitempty"`
+}
+
+// Status.Type value and Status.Mode values.
+const (
+	TypeStatus       = "status"
+	ModeMixed        = "mixed"        // channels summed to one stream (+ per-source energy attribution)
+	ModeMultichannel = "multichannel" // channels transcribed independently
 )
 
 // Control is a client→streamd text-frame message that steers a live session.

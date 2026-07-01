@@ -194,11 +194,11 @@ type scanner interface {
 
 func scanMeeting(s scanner) (*domain.Meeting, error) {
 	var (
-		m                           domain.Meeting
-		id, provider                string
-		startedAt                   string
-		endedAt, summary, sumModel  sql.NullString
-		langsJSON, metaJSON         sql.NullString
+		m                          domain.Meeting
+		id, provider               string
+		startedAt                  string
+		endedAt, summary, sumModel sql.NullString
+		langsJSON, metaJSON        sql.NullString
 	)
 	if err := s.Scan(&id, &startedAt, &endedAt, &provider, &langsJSON, &summary, &sumModel, &metaJSON); err != nil {
 		if err == sql.ErrNoRows {

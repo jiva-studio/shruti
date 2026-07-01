@@ -47,6 +47,18 @@ async function loadDevices() {
   }
 }
 
+// Host-reported session mode ("mixed" = degraded to one stream on the ANE,
+// "multichannel" = channels transcribed independently). Empty until the host
+// (or cloud engine) reports it.
+const mode = ref("");
+const modeReason = ref("");
+const modeLabel = computed(() => {
+  if (!mode.value) return "";
+  if (mode.value === "mixed") return "микс" + (modeReason.value === "ane_capacity" ? " · ANE" : "");
+  if (mode.value === "multichannel") return "мультиканал";
+  return mode.value;
+});
+
 // Single mixed transcript: committed lines + the live (partial) tail.
 const transcript = reactive({ finals: [], partial: "" });
 
@@ -58,6 +70,11 @@ const partialTail = computed(() => {
 });
 
 function applyUpdate(up) {
+  if (up.type === "status") {
+    mode.value = up.mode || "";
+    modeReason.value = up.reason || "";
+    return;
+  }
   if (up.type === "partial") {
     transcript.partial = up.text;
   } else if (up.type === "final") {
@@ -92,6 +109,8 @@ async function toggle() {
       transcript.finals = [];
       transcript.partial = "";
       summary.value = "";
+      mode.value = "";
+      modeReason.value = "";
       const err = await go.StartRecording(
         providerName.value,
         systemDevice.value,
@@ -134,6 +153,7 @@ onMounted(() => {
       <div class="brand">
         <span class="dot" :class="{ live: recording }"></span>
         Shruti
+        <span v-if="modeLabel" class="mode" :title="'Режим обработки на сервере: ' + modeLabel">{{ modeLabel }}</span>
       </div>
       <div class="topctl">
         <select v-model="providerName" :disabled="recording" title="Движок распознавания">
@@ -237,6 +257,16 @@ onMounted(() => {
   50% {
     opacity: 0.4;
   }
+}
+
+.mode {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px solid #33333d;
+  border-radius: 10px;
+  padding: 1px 8px;
+  margin-left: 4px;
 }
 
 .record {

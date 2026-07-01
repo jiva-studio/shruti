@@ -39,11 +39,13 @@ func (a *App) ListAudioDevices() []domain.Device {
 // uiUpdate is the frontend event payload. Field names are the stable UI contract
 // consumed by App.vue — do not rename without updating the frontend.
 type uiUpdate struct {
-	Type    string `json:"type"` // "partial" | "final"
+	Type    string `json:"type"` // "partial" | "final" | "status"
 	Channel int    `json:"channel"`
 	Speaker string `json:"speaker,omitempty"`
 	Text    string `json:"text"`
 	TsMs    int64  `json:"ts_ms"`
+	Mode    string `json:"mode,omitempty"`   // set for "status": "mixed" | "multichannel"
+	Reason  string `json:"reason,omitempty"` // set for "status"
 }
 
 // StartRecording begins a meeting. providerName selects the engine ("" =
@@ -75,7 +77,8 @@ func (a *App) StartRecording(providerName, systemDevice, micDevice, lang string)
 			return
 		}
 		wailsruntime.EventsEmit(a.ctx, EventUpdate, uiUpdate{
-			Type: string(ev.Kind), Channel: ev.Channel, Speaker: ev.Speaker, Text: ev.Text, TsMs: ev.TsMs,
+			Type: string(ev.Kind), Channel: ev.Channel, Speaker: ev.Speaker, Text: ev.Text,
+			TsMs: ev.TsMs, Mode: ev.Mode, Reason: ev.Reason,
 		})
 	}
 

@@ -6,7 +6,7 @@ import "encoding/binary"
 // mono, 16 kHz per source channel. Capture and ASR both assume exactly this.
 const (
 	SampleRate    = 16000 // Hz
-	BytesPerFrame = 2      // int16, one mono sample
+	BytesPerFrame = 2     // int16, one mono sample
 )
 
 // Origin is where a captured audio channel comes from. It is provider-agnostic
