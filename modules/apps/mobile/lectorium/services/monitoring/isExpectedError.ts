@@ -31,10 +31,25 @@ const EXPECTED_NAMES = new Set([
   "SyntaxError",
 ])
 
+// RevenueCat error codes (the Capacitor bridge attaches PURCHASES_ERROR_CODE as
+// a numeric-string `.code`). These are transient/environmental, not app faults,
+// and must not page Sentry:
+//   "2"  STORE_PROBLEM_ERROR
+//   "10" NETWORK_ERROR              ("Error performing request." on flaky/offline networks)
+//   "23" CONFIGURATION_ERROR        (empty offerings — App reviewers / sandbox / Mac Catalyst
+//                                     with no provisioned StoreKit products; the app still works
+//                                     in free mode). NOTE: this also hides a genuine store-wide
+//                                     misconfiguration — see the breadcrumb mitigation in the store.
+//   "32" PRODUCT_REQUEST_TIMED_OUT_ERROR
+//   "35" OFFLINE_CONNECTION_ERROR
+const EXPECTED_RC_CODES = new Set(["2", "10", "23", "32", "35"])
+
 export function isExpectedError(error: unknown): boolean {
   if (error && typeof error === "object") {
     const name = (error as { name?: unknown }).name
     if (typeof name === "string" && EXPECTED_NAMES.has(name)) return true
+    const code = (error as { code?: unknown }).code
+    if (typeof code === "string" && EXPECTED_RC_CODES.has(code)) return true
   }
   // Read the message off Errors, raw strings, AND plain objects. Capacitor
   // plugin rejections and `console.error(obj)` calls arrive as `{code, message}`
