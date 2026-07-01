@@ -71,7 +71,11 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       await AudioPlayer.togglePause()
     },
     async seek(positionMs: number): Promise<void> {
-      await AudioPlayer.seek({ position: positionMs / 1000 })
+      // A seek can be superseded by a newer seek or an item replacement before
+      // its native AVPlayer completion fires (finished:false → plugin rejects
+      // with "Seek operation failed"). That's benign — every caller tolerates
+      // position drift — so swallow it instead of leaking an unhandledrejection.
+      await AudioPlayer.seek({ position: positionMs / 1000 }).catch(() => {})
     },
     async stop(): Promise<void> {
       await AudioPlayer.stop()
@@ -80,7 +84,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       const safe = Number.isFinite(deltaMs) ? deltaMs : 0
       // Plugin surface speaks seconds (same as `seek`). The IAudioPlayer
       // contract is in milliseconds; this is the boundary that converts.
-      await AudioPlayer.seekBy({ delta: safe / 1000 })
+      await AudioPlayer.seekBy({ delta: safe / 1000 }).catch(() => {})
     },
     async setMix(params: AudioMixParams): Promise<void> {
       const ratio = clamp01(params.ratio)
