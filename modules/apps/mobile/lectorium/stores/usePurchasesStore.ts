@@ -6,8 +6,21 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import type { CustomerState, PurchasePackage } from "@ports/app/purchases.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { devSubscriptionOverride, isDevBuild } from "@lectorium/services/devSubscription.js"
+import { reportWarning } from "@lectorium/services/monitoring/reportError.js"
 
 const CACHE_KEY = "purchases.lastState"
+
+/**
+ * RevenueCat CONFIGURATION_ERROR (code "23"): none of the dashboard products
+ * could be fetched from the store, i.e. empty offerings. Benign for the user
+ * (the app runs in free mode) and normal for App/Play reviewers, sandbox
+ * accounts, and Mac Catalyst builds without provisioned StoreKit products — but
+ * a store-wide product outage if it starts happening broadly. We report it at
+ * warning level (not silence, not page) so the trend stays visible.
+ */
+function isEmptyOfferingsError(e: unknown): boolean {
+  return typeof (e as { code?: unknown })?.code === "string" && (e as { code: string }).code === "23"
+}
 
 /** Sample packages for dev/preview builds where RevenueCat has no offerings
  *  (web). Uses the standard Rc package ids so the footer resolves localized
@@ -215,7 +228,9 @@ export const usePurchasesStore = defineStore("purchases", () => {
         .then((p) => {
           packages.value = p
         })
-        .catch(() => {})
+        .catch((e) => {
+          if (isEmptyOfferingsError(e)) reportWarning("purchases", e, { at: "refresh" })
+        })
     }
     try {
       const state = await purchases.getCustomerState()
@@ -276,7 +291,10 @@ export const usePurchasesStore = defineStore("purchases", () => {
       // place (applyState only runs on a SUCCESSFUL fetch, per the
       // "downgrade only on success" invariant above).
       const [pkgs, state] = await Promise.all([
-        purchases.listPackages().catch(() => [] as PurchasePackage[]),
+        purchases.listPackages().catch((e) => {
+          if (isEmptyOfferingsError(e)) reportWarning("purchases", e, { at: "init" })
+          return [] as PurchasePackage[]
+        }),
         purchases.getCustomerState().catch(() => undefined),
       ])
       packages.value = pkgs

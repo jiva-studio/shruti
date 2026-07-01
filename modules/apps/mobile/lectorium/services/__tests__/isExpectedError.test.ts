@@ -44,17 +44,18 @@ describe("isExpectedError", () => {
   it("drops transient/environmental RevenueCat errors by numeric-string code", () => {
     // NETWORK_ERROR — "Error performing request." on flaky mobile networks.
     expect(isExpectedError({ code: "10", message: "Error performing request." })).toBe(true)
-    // CONFIGURATION_ERROR — empty offerings (App reviewers / sandbox / Mac Catalyst).
+    // STORE_PROBLEM / PRODUCT_REQUEST_TIMED_OUT / OFFLINE_CONNECTION
+    expect(isExpectedError({ code: "2" })).toBe(true)
+    expect(isExpectedError({ code: "32" })).toBe(true)
+    expect(isExpectedError({ code: "35" })).toBe(true)
+    // CONFIGURATION_ERROR ("23", empty offerings) is NOT silenced — the store
+    // reports it at warning level so a real store-wide outage stays visible.
     expect(
       isExpectedError({
         code: "23",
         message: "There is an issue with your configuration. … None of the products … could be fetched",
       }),
-    ).toBe(true)
-    // STORE_PROBLEM / PRODUCT_REQUEST_TIMED_OUT / OFFLINE_CONNECTION
-    expect(isExpectedError({ code: "2" })).toBe(true)
-    expect(isExpectedError({ code: "32" })).toBe(true)
-    expect(isExpectedError({ code: "35" })).toBe(true)
+    ).toBe(false)
     // A non-listed RC code (e.g. an unexpected backend fault) still pages.
     expect(isExpectedError({ code: "99", message: "unexpected purchase fault" })).toBe(false)
   })
