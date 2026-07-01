@@ -39,6 +39,24 @@ describe("isExpectedError", () => {
     ).toBe(true)
   })
 
+  it("drops transient/environmental RevenueCat errors by numeric-string code", () => {
+    // NETWORK_ERROR — "Error performing request." on flaky mobile networks.
+    expect(isExpectedError({ code: "10", message: "Error performing request." })).toBe(true)
+    // CONFIGURATION_ERROR — empty offerings (App reviewers / sandbox / Mac Catalyst).
+    expect(
+      isExpectedError({
+        code: "23",
+        message: "There is an issue with your configuration. … None of the products … could be fetched",
+      }),
+    ).toBe(true)
+    // STORE_PROBLEM / PRODUCT_REQUEST_TIMED_OUT / OFFLINE_CONNECTION
+    expect(isExpectedError({ code: "2" })).toBe(true)
+    expect(isExpectedError({ code: "32" })).toBe(true)
+    expect(isExpectedError({ code: "35" })).toBe(true)
+    // A non-listed RC code (e.g. an unexpected backend fault) still pages.
+    expect(isExpectedError({ code: "99", message: "unexpected purchase fault" })).toBe(false)
+  })
+
   it("keeps real failures", () => {
     expect(isExpectedError(new Error("RevenueCat configure failed"))).toBe(false)
     expect(isExpectedError(new TypeError("x is not a function"))).toBe(false)
