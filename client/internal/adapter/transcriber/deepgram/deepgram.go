@@ -51,10 +51,13 @@ func (Transcriber) Open(ctx context.Context, plan domain.CapturePlan) (port.Tran
 	// channel without a fixed speaker (e.g. shared system audio) is still split.
 	u := "wss://api.deepgram.com/v1/listen" +
 		"?model=" + model +
-		"&language=" + string(plan.PrimaryLanguage()) +
 		"&multichannel=true&channels=" + strconv.Itoa(channels) +
 		"&diarize=true&punctuate=true&smart_format=true&interim_results=true" +
 		"&encoding=linear16&sample_rate=16000"
+	// Language is optional: omit it to let Deepgram auto-detect (no imposed default).
+	if lang := plan.PrimaryLanguage(); lang != "" {
+		u += "&language=" + string(lang)
+	}
 
 	connCtx, cancel := context.WithCancel(context.Background())
 	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)

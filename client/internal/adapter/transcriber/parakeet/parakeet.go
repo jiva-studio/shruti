@@ -49,7 +49,9 @@ func (Transcriber) Open(ctx context.Context, plan domain.CapturePlan) (port.Tran
 	}
 	q := u.Query()
 	q.Set("channel", string(v1.ChannelMix))
-	q.Set("lang", string(plan.PrimaryLanguage()))
+	if lang := plan.PrimaryLanguage(); lang != "" {
+		q.Set("lang", string(lang))
+	}
 	u.RawQuery = q.Encode()
 
 	connCtx, cancel := context.WithCancel(context.Background())

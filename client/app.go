@@ -52,8 +52,10 @@ type uiUpdate struct {
 // N-source request (here mic + system); more sources would just be appended.
 // Returns an error string (empty on success).
 func (a *App) StartRecording(providerName, systemDevice, micDevice, lang string) string {
-	if lang == "" {
-		lang = string(domain.DefaultLanguage)
+	// lang comes from the UI dropdown; empty is passed through as "auto-detect".
+	var langs []domain.Language
+	if lang != "" {
+		langs = []domain.Language{domain.Language(lang)}
 	}
 	var sources []domain.Source
 	// Mic first (channel 0) so its fixed "Я" label lands on interleave channel 0.
@@ -79,7 +81,7 @@ func (a *App) StartRecording(providerName, systemDevice, micDevice, lang string)
 
 	err := a.service.Start(context.Background(), port.StartRequest{
 		Provider:  domain.ProviderID(providerName),
-		Languages: []domain.Language{domain.Language(lang)},
+		Languages: langs,
 		Sources:   sources,
 	}, emit)
 	if err != nil {

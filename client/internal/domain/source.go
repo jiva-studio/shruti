@@ -42,10 +42,11 @@ type CapturePlan struct {
 // Channels reports how many source channels the plan carries.
 func (p CapturePlan) Channels() int { return len(p.Sources) }
 
-// PrimaryLanguage returns the first configured language, or DefaultLanguage.
+// PrimaryLanguage returns the first configured language, or "" when none is set
+// (meaning "let the engine auto-detect" — no imposed default).
 func (p CapturePlan) PrimaryLanguage() Language {
-	if len(p.Languages) > 0 && p.Languages[0] != "" {
+	if len(p.Languages) > 0 {
 		return p.Languages[0]
 	}
-	return DefaultLanguage
+	return ""
 }
