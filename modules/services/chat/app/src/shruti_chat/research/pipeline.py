@@ -383,6 +383,10 @@ async def _resolve_memory(
     library_db: Any | None,
     catalog_repo: Any | None,
     on_event: OnEvent | None,
+    user_query: str = "",
+    reranker: Any = None,
+    llm: Any = None,
+    confirm_model: str | None = None,
 ) -> MemoryResolution:
     """Find the best-matching memory for this turn and resolve it.
 
@@ -413,6 +417,8 @@ async def _resolve_memory(
         matches = await find_attributions(
             kind="memory", user_q_embedding=emb, lang=retrieval_lang,
             embed_model=embed_model, embed_dim=embed_dim, pool=pool,
+            reranker=reranker, user_query=user_query,
+            llm=llm, confirm_model=confirm_model,
         )
         if matches and (top is None or matches[0].score > top.score):
             top = matches[0]
@@ -799,6 +805,7 @@ async def run_research(
             answer_lang=lang, embed_model=embed_model, embed_dim=embed_dim,
             pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
             library_db=library_db, catalog_repo=catalog_repo, on_event=on_event,
+            user_query=question, reranker=reranker, llm=llm, confirm_model=confirm_model,
         ),
         default=MemoryResolution(),
         timeout=TIMEOUT_MEMORY_LOOKUP_S,

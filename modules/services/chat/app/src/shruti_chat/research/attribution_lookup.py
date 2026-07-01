@@ -33,7 +33,10 @@ from shruti_chat.research.constants import (
     BOOST_MAX_MATCHES_PER_TOPIC,
     MEMORY_ACCEPT_SCORE_CROSS,
     MEMORY_ACCEPT_SCORE_NATIVE,
+    MEMORY_GATE,
     MEMORY_MAX_MATCHES,
+    MEMORY_RECALL_FLOOR,
+    MEMORY_RERANK_ACCEPT,
 )
 from shruti_chat.research.models import AttributionMatch, AttributionRef
 
@@ -72,12 +75,19 @@ async def find_attributions(
         bs = None  # topic does not use LLM-confirm
         mm = max_matches if max_matches is not None else BOOST_MAX_MATCHES_PER_TOPIC
     elif kind == "memory":
-        # Same boost-style path (native → cross, no LLM-confirm). The note is
-        # advisory background context, so a sub-threshold cosine just means "no
-        # memory this turn" — no need to second-guess with a judge.
-        an = accept_native if accept_native is not None else MEMORY_ACCEPT_SCORE_NATIVE
-        ac = accept_cross if accept_cross is not None else MEMORY_ACCEPT_SCORE_CROSS
-        bs = None
+        # Judge-gated memory. A matched memory note is AUTHORITATIVE (it anchors
+        # the whole outline), so cosine alone must not seat it. Set the
+        # auto-accept bar unreachable and the border floor to a LOW recall value:
+        # every match in `[floor, ∞)` is routed through the cross-encoder/LLM
+        # gate below (the pinned border path), which actually reads the query ×
+        # the note's phrasings and rejects off-topic false matches.
+        if MEMORY_GATE:
+            an = ac = 1.01
+            bs = MEMORY_RECALL_FLOOR
+        else:
+            an = accept_native if accept_native is not None else MEMORY_ACCEPT_SCORE_NATIVE
+            ac = accept_cross if accept_cross is not None else MEMORY_ACCEPT_SCORE_CROSS
+            bs = None
         mm = max_matches if max_matches is not None else MEMORY_MAX_MATCHES
     else:
         return []
@@ -105,13 +115,14 @@ async def find_attributions(
     # Border-zone (pinned only) — the TRUE uncertain band `[bs, ac)`. Cosine
     # alone can't assert a curated attribution here; re-judge top1 with the
     # cross-encoder gate (LLM fallback inside). No confirmation ⇒ reject.
-    if kind == "pinned" and bs is not None and native and native[0].score >= bs:
+    if kind in ("pinned", "memory") and bs is not None and native and native[0].score >= bs:
         top = native[0]
         if await _gate_border(
             native, top, lang,
             reranker=reranker, user_query=user_query, pool=pool,
             emb_table=router.attribution_table, embed_model=embed_model,
             llm=llm, model=confirm_model,
+            rerank_accept=MEMORY_RERANK_ACCEPT if kind == "memory" else PINNED_RERANK_ACCEPT,
         ):
             return [_with_stage(top, "native")]
         # Explicit no — fall through, do NOT try cross stage (the closest
@@ -125,13 +136,14 @@ async def find_attributions(
         return _take(accepted_cross, mm, stage="cross")
 
     # Cross-stage border-zone also goes through the cross-encoder gate.
-    if kind == "pinned" and bs is not None and cross and cross[0].score >= bs:
+    if kind in ("pinned", "memory") and bs is not None and cross and cross[0].score >= bs:
         top = cross[0]
         if await _gate_border(
             cross, top, lang,
             reranker=reranker, user_query=user_query, pool=pool,
             emb_table=router.attribution_table, embed_model=embed_model,
             llm=llm, model=confirm_model,
+            rerank_accept=MEMORY_RERANK_ACCEPT if kind == "memory" else PINNED_RERANK_ACCEPT,
         ):
             return [_with_stage(top, "cross")]
 
@@ -227,6 +239,7 @@ async def _gate_border(
     embed_model: str,
     llm: Any | None,
     model: str | None,
+    rerank_accept: float = PINNED_RERANK_ACCEPT,
 ) -> bool:
     """Decide whether a border-zone (0.70..accept) pinned match is real.
 
@@ -252,6 +265,7 @@ async def _gate_border(
     if reranker is not None and user_query:
         decided = await _rerank_gate(
             reranker, pool, emb_table, embed_model, user_query, candidates, top, lang,
+            accept=rerank_accept,
         )
         if decided is not None:
             return decided
@@ -278,6 +292,8 @@ async def _rerank_gate(
     candidates: list[AttributionMatch],
     top: AttributionMatch,
     lang: str,
+    *,
+    accept: float = PINNED_RERANK_ACCEPT,
 ) -> bool | None:
     """Cross-encoder accept/reject for the top border candidate. Returns the
     decision, or None when it can't be made (no usable texts / Voyage no-ops on
@@ -309,13 +325,13 @@ async def _rerank_gate(
     if best < 0:
         return None  # top had no scored doc — shouldn't happen, but be safe.
 
-    accepted = best >= PINNED_RERANK_ACCEPT
+    accepted = best >= accept
     log.info(
         "attribution_rerank_gate",
         attribution_id=top.attribution_id,
         cosine=round(top.score, 3),
         rerank=round(best, 3),
-        threshold=PINNED_RERANK_ACCEPT,
+        threshold=accept,
         accepted=accepted,
     )
     return accepted
