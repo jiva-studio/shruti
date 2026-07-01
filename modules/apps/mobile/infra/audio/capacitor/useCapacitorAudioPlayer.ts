@@ -71,7 +71,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       await AudioPlayer.togglePause()
     },
     async seek(positionMs: number): Promise<void> {
-      await AudioPlayer.seek({ position: positionMs / 1000 })
+      await AudioPlayer.seek({ position: positionMs / 1000 }).catch(ignoreSupersededSeek)
     },
     async stop(): Promise<void> {
       await AudioPlayer.stop()
@@ -80,7 +80,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       const safe = Number.isFinite(deltaMs) ? deltaMs : 0
       // Plugin surface speaks seconds (same as `seek`). The IAudioPlayer
       // contract is in milliseconds; this is the boundary that converts.
-      await AudioPlayer.seekBy({ delta: safe / 1000 })
+      await AudioPlayer.seekBy({ delta: safe / 1000 }).catch(ignoreSupersededSeek)
     },
     async setMix(params: AudioMixParams): Promise<void> {
       const ratio = clamp01(params.ratio)
@@ -171,6 +171,18 @@ function toMsTransition(t: QueueTransition) {
     at: t.at,
     seq: t.seq,
   }
+}
+
+// A seek can be superseded by a newer seek or an item replacement before its
+// native AVPlayer completion fires (finished:false → the plugin rejects with
+// "Seek operation failed"). That case is benign — callers set position
+// optimistically and the native progress tick reconciles — so swallow ONLY it,
+// avoiding a leaked unhandledrejection (SHRUTI-8). A genuinely different seek
+// fault (bad args, plugin unavailable) still throws so it stays visible and the
+// awaiting caller (e.g. openTrack's resume) can react.
+function ignoreSupersededSeek(e: unknown): void {
+  const msg = e instanceof Error ? e.message : String((e as { message?: unknown })?.message ?? e)
+  if (!/Seek operation failed/i.test(msg)) throw e
 }
 
 function clamp01(x: number): number {
