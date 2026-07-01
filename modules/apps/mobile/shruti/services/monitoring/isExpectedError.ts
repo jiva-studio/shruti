@@ -16,11 +16,14 @@
 
 // Message signatures that are always expected/benign across the app's adapters.
 // The network signatures (`Failed to fetch`, `unreachable`, iOS "connection
-// lost/offline/Load failed") are expected on flaky mobile networks — every HTTP
-// call site has failover + retry, and a genuine backend fault surfaces as a
-// distinct `HTTP 5xx` message, so real outages are NOT hidden by these.
+// lost / offline") are expected on flaky mobile networks — every HTTP call site
+// has failover + retry, and a genuine backend fault surfaces as a distinct
+// `HTTP 5xx` message, so real outages are NOT hidden by these. We deliberately
+// do NOT list the bare WebKit "Load failed": our own fetches already rewrap to
+// NetworkError, and "Load failed" would also mask a failed dynamic-import (a
+// broken deploy white-screening iOS users) — which must stay visible.
 const EXPECTED_MESSAGE =
-  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|Load failed|not allowed in read-only mode|not open yet|Seek operation failed/i
+  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|not open yet|Seek operation failed/i
 
 // Error class names that are control-flow, not faults: request cancellation,
 // user-cancelled IAP, a store-refused purchase (IAP disabled on this build /
