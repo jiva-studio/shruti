@@ -164,7 +164,10 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
         }
       }
     } catch (err) {
-      console.error("[auto-download] refill failed:", err)
+      // Best-effort loop: log-and-continue (the next iteration just tries the
+      // next candidate). Use warn, not error, so a transient refill failure
+      // isn't escalated to Sentry via captureConsole.
+      console.warn("[auto-download] refill failed:", err)
     } finally {
       running = false
     }
