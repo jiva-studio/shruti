@@ -255,12 +255,20 @@ export const usePurchasesStore = defineStore("purchases", () => {
         appUserId.value = cached.appUserId
       }
       await purchases.configure()
+      // Tolerate a transient failure of either fetch so the listeners below
+      // still register and `ready` still flips. A thrown Promise.all here used
+      // to abort the entire init — leaving purchases non-functional for the
+      // whole session (no onCustomerInfoChanged / appStateChange listeners) and
+      // paging Sentry. A failed listPackages() just yields no plan cards; a
+      // failed getCustomerState() leaves the optimistic cached entitlement in
+      // place (applyState only runs on a SUCCESSFUL fetch, per the
+      // "downgrade only on success" invariant above).
       const [pkgs, state] = await Promise.all([
-        purchases.listPackages(),
-        purchases.getCustomerState(),
+        purchases.listPackages().catch(() => [] as PurchasePackage[]),
+        purchases.getCustomerState().catch(() => undefined),
       ])
       packages.value = pkgs
-      applyState(state)
+      if (state) applyState(state)
       unsubscribe = purchases.onCustomerInfoChanged((s) => {
         applyState(s)
         // RC SDK push channel — fires when its backend learns the
