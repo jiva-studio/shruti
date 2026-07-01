@@ -10,6 +10,14 @@ const config: CapacitorConfig = {
     androidScheme: "http",
   },
   plugins: {
+    // We never use encrypted SQLite (all connections open "no-encryption",
+    // no setEncryptionSecret call exists). The plugin defaults isEncryption to
+    // true, which forces a synchronous Tink MasterKey / EncryptedSharedPreferences
+    // init on the main thread at plugin load — the cause of the startup ANRs in
+    // MainActivity.onCreate / AudioPlayerService.onCreate on low-end Android.
+    CapacitorSQLite: {
+      androidIsEncryption: false,
+    },
     // `@capgo/capacitor-social-login` reads provider toggles from this
     // block in `scripts/configure-dependencies.js` (runs during
     // `cap sync`). We only wire Google + Apple in `useCapacitorAuth.ts`
