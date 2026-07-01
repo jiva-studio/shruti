@@ -44,16 +44,16 @@ const EXPECTED_NAMES = new Set([
 
 // RevenueCat error codes (the Capacitor bridge attaches PURCHASES_ERROR_CODE as
 // a numeric-string `.code`). These are transient/environmental, not app faults,
-// and must not page Sentry:
+// and must be silenced entirely:
 //   "2"  STORE_PROBLEM_ERROR
 //   "10" NETWORK_ERROR              ("Error performing request." on flaky/offline networks)
-//   "23" CONFIGURATION_ERROR        (empty offerings — App reviewers / sandbox / Mac Catalyst
-//                                     with no provisioned StoreKit products; the app still works
-//                                     in free mode). NOTE: this also hides a genuine store-wide
-//                                     misconfiguration — see the breadcrumb mitigation in the store.
 //   "32" PRODUCT_REQUEST_TIMED_OUT_ERROR
 //   "35" OFFLINE_CONNECTION_ERROR
-const EXPECTED_RC_CODES = new Set(["2", "10", "23", "32", "35"])
+// NOTE: CONFIGURATION_ERROR ("23", empty offerings) is deliberately NOT here.
+// It's benign for the user (free mode) but is the ONLY signal of a genuine
+// store-wide product outage, so usePurchasesStore reports it at WARNING level
+// instead of silencing it — visible as a trend without paging like a crash.
+const EXPECTED_RC_CODES = new Set(["2", "10", "32", "35"])
 
 export function isExpectedError(error: unknown): boolean {
   if (error && typeof error === "object") {

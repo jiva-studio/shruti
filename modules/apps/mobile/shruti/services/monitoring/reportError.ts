@@ -34,3 +34,26 @@ export function reportError(
     ...(context ? { extra: context } : {}),
   })
 }
+
+/**
+ * Report a KNOWN-benign-but-worth-watching condition at WARNING level.
+ *
+ * Unlike {@link reportError}, this is for signals that are not faults on their
+ * own (so they must not page like a crash) yet whose TREND matters — e.g. an
+ * empty RevenueCat offering set, which is normal for reviewers/sandbox but a
+ * store-wide product outage if it spikes. Surfaces in the debug buffer and as a
+ * warning-level Sentry event that trends in the dashboard without alerting.
+ */
+export function reportWarning(
+  scope: string,
+  error: unknown,
+  context?: Record<string, unknown>
+): void {
+  recordError(`[${scope}]`, error)
+  if (isExpectedError(error)) return
+  Sentry.captureException(error, {
+    level: "warning",
+    tags: { scope },
+    ...(context ? { extra: context } : {}),
+  })
+}
