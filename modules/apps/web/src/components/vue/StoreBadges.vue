@@ -1,0 +1,42 @@
+<script setup lang="ts">
+import { STORE } from '../../i18n/ui'
+</script>
+
+<template>
+  <div class="flex flex-wrap justify-center gap-3">
+    <a
+      :href="STORE.appStore"
+      target="_blank"
+      rel="noopener"
+      aria-label="Download on the App Store"
+      class="inline-flex items-center gap-3 rounded-xl bg-ink px-5 py-3 text-cream transition hover:bg-coffee"
+    >
+      <svg viewBox="0 0 384 512" class="h-7 w-auto" fill="currentColor" aria-hidden="true">
+        <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z" />
+      </svg>
+      <span class="text-left leading-tight">
+        <span class="block text-[0.65rem] uppercase tracking-wide opacity-80">Download on the</span>
+        <span class="block text-base font-semibold">App Store</span>
+      </span>
+    </a>
+
+    <a
+      :href="STORE.googlePlay"
+      target="_blank"
+      rel="noopener"
+      aria-label="Get it on Google Play"
+      class="inline-flex items-center gap-3 rounded-xl bg-ink px-5 py-3 text-cream transition hover:bg-coffee"
+    >
+      <svg viewBox="0 0 512 512" class="h-7 w-7" aria-hidden="true">
+        <path fill="#00d3ff" d="M48 59.49c0-9.7 5.78-18.06 14.1-21.79L289.94 256 62.1 474.3C53.78 470.56 48 462.2 48 452.5z" />
+        <path fill="#00f076" d="M62.1 37.7A23.9 23.9 0 0 1 84.6 38l266.3 149.1-60.96 68.9z" />
+        <path fill="#ffce00" d="M412.9 218.1c15.4 8.6 15.4 30.8 0 39.4l-62 34.7-60.96-36.2 60.96-68.9z" />
+        <path fill="#ff3d44" d="M84.6 474a23.9 23.9 0 0 1-22.5.3L289.94 256l60.96 36.2z" />
+      </svg>
+      <span class="text-left leading-tight">
+        <span class="block text-[0.65rem] uppercase tracking-wide opacity-80">Get it on</span>
+        <span class="block text-base font-semibold">Google Play</span>
+      </span>
+    </a>
+  </div>
+</template>

@@ -20,8 +20,11 @@ interface Props {
   /** Page exists only in CONTENT_LOCALES (lecture/topic/collection detail);
    *  other UI locales collapse onto their content language for alternates. */
   contentOnly?: boolean
+  /** Render the global site header. Off for app-like shells that carry their
+   *  own chrome (e.g. the /ai chat, whose sidebar holds the logo). */
+  nav?: boolean
 }
-const { title, description, lang = defaultLang, path = '/', fullscreen = false, image, noindex = false, contentOnly = false } = Astro.props
+const { title, description, lang = defaultLang, path = '/', fullscreen = false, image, noindex = false, contentOnly = false, nav = true } = Astro.props
 
 const site = Astro.site?.toString().replace(/\/$/, '') ?? ''
 // Locales this path actually exists in → hreflang alternates + switcher.
@@ -78,7 +81,7 @@ const ogLocale = current?.og ?? 'en_US'
     <link rel="apple-touch-icon" href="/app-icon.png" />
   </head>
   <body class={fullscreen ? 'h-screen overflow-hidden' : 'flex min-h-screen flex-col'}>
-    <SiteNav lang={lang} path={path} contentOnly={contentOnly} />
+    {nav && <SiteNav lang={lang} path={path} contentOnly={contentOnly} />}
     <main class={fullscreen ? '' : 'flex-1'}>
       <slot />
     </main>

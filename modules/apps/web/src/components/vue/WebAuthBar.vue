@@ -5,8 +5,25 @@ import { contentLangFor } from '../../i18n/locales'
 import { useWebAuth } from '../../composables/useWebAuth'
 import { useEmailOtpForm } from '../../composables/useEmailOtpForm'
 
-const props = defineProps<{ lang: Lang }>()
+const props = defineProps<{ lang: Lang; placement?: 'down' | 'up' }>()
 const t = useT(props.lang)
+
+// Popover anchor. Default drops down from a top-bar trigger; `up` opens above a
+// bottom-of-sidebar trigger (ChatGPT-style left rail on the /ai page).
+const menuPos = computed(() =>
+  props.placement === 'up' ? 'bottom-full left-0 mb-1' : 'top-full right-0 mt-1'
+)
+// In the sidebar rail the trigger spans the full column (ChatGPT-style),
+// vs. the compact hug-content pill used in the top nav bar.
+const isRail = computed(() => props.placement === 'up')
+
+// The rail sits on the cream sidebar, so an outline+cream "Sign in" button
+// would vanish into it — use a solid saffron fill there instead.
+const signInClass = computed(() =>
+  isRail.value
+    ? 'flex h-10 w-full items-center justify-center rounded-lg bg-saffron px-4 text-sm font-semibold text-cream transition hover:bg-saffron-shade'
+    : 'flex h-9 items-center rounded-lg border border-line bg-cream px-4 text-sm font-semibold text-ink-soft transition hover:border-saffron hover:text-saffron'
+)
 
 const BACKEND_FALLBACK = 'https://api.shruti.local'
 const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
@@ -94,11 +111,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="auth.ready.value" ref="root" class="relative flex items-center">
+  <div v-if="auth.ready.value" ref="root" class="relative flex items-center" :class="isRail && 'w-full'">
     <template v-if="auth.signedIn.value">
       <button
         type="button"
         class="flex h-9 items-center gap-2 rounded-lg border border-saffron/30 bg-saffron/10 px-3 text-sm text-ink-soft transition hover:border-saffron hover:bg-saffron/15"
+        :class="isRail && 'w-full'"
         @click="toggle"
       >
         <span class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-saffron/20 text-xs font-semibold text-saffron">
@@ -115,7 +133,8 @@ onBeforeUnmount(() => {
 
       <div
         v-if="open"
-        class="absolute right-0 top-full z-50 mt-1 w-48 rounded-2xl border border-line bg-cream p-2 shadow-lg"
+        class="absolute z-50 w-48 rounded-2xl border border-line bg-cream p-2 shadow-lg"
+        :class="menuPos"
       >
         <a
           :href="`/${props.lang}/subscribe`"
@@ -130,17 +149,14 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else>
-      <button
-        type="button"
-        class="flex h-9 items-center rounded-lg border border-line bg-cream px-4 text-sm font-semibold text-ink-soft transition hover:border-saffron hover:text-saffron"
-        @click="toggle"
-      >
+      <button type="button" :class="signInClass" @click="toggle">
         {{ t('auth.signIn') }}
       </button>
 
       <div
         v-if="open"
-        class="absolute right-0 top-full z-50 mt-1 w-72 rounded-2xl border border-line bg-cream p-4 shadow-lg"
+        class="absolute z-50 w-72 rounded-2xl border border-line bg-cream p-4 shadow-lg"
+        :class="menuPos"
       >
         <p class="mb-3 text-center text-xs text-medium">{{ t('auth.cta') }}</p>
         <div v-if="googleEnabled" ref="googleSlot" class="flex justify-center overflow-hidden"></div>

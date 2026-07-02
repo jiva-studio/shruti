@@ -1,0 +1,34 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import GitaAiChat from '../../components/vue/GitaAiChat.vue'
+import { type Lang } from '../../i18n/ui'
+import { UI_LOCALE_CODES } from '../../i18n/locales.data.mjs'
+import { contentLangFor } from '../../i18n/locales'
+
+export function getStaticPaths() {
+  return UI_LOCALE_CODES.map((lang) => ({ params: { lang } }))
+}
+
+const lang = Astro.params.lang as Lang
+const cl = contentLangFor(lang)
+
+// Discovery page — this surface is meant to be indexed (unlike the /app shell),
+// so give it keyword-bearing copy per content language. Enrichment (crawlable
+// answers) is a later phase; v1 ships the chat.
+const META = {
+  ru: {
+    title: 'Гита ИИ — духовный чат по Бхагавад-гите | Слушай Садху',
+    description:
+      'Задайте вопрос о душе, карме и смысле жизни. ИИ отвечает по лекциям и писаниям с указанием источников и аудио. Без регистрации.',
+  },
+  en: {
+    title: 'Gita AI — Bhagavad Gita AI Chat with Sources | Shruti',
+    description:
+      'Ask about the soul, karma or the meaning of life. Grounded in real lectures and scripture, with citations and audio sources. No sign-up.',
+  },
+} as const
+const { title, description } = META[cl]
+---
+<BaseLayout lang={lang} path="/ai" fullscreen nav={false} title={title} description={description}>
+  <GitaAiChat client:load lang={lang} />
+</BaseLayout>
