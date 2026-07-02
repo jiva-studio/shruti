@@ -26,4 +26,5 @@ export {
   IconMailFilled as MailIcon,
   IconBrandVk as VkIcon,
   IconBrandTelegram as TelegramIcon,
+  IconWorldWww as StudioIcon,
 } from "@tabler/icons-vue"
