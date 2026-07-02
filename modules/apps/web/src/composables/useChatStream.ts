@@ -247,23 +247,29 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
 
     try {
       if (!chatBase) throw new Error('chat_unconfigured')
-      const history = messages.value
-        .filter((m) => m.text)
-        .map((m) => (m.role === 'assistant' && m.aliases
-          ? { role: m.role, content: m.text, aliases: m.aliases }
-          : { role: m.role, content: m.text }))
-      const body: Record<string, unknown> = {
-        messages: history.length ? history : [{ role: 'user', content: q }],
-        lang,
-        capabilities: { commentary_card: true },
-        // Web always opts in: there's no per-user toggle here, and the corpus
-        // has native transcripts only for ru/en — so for any other `lang` the
-        // server would otherwise show English-verbatim citations.
-        translate_citations: true,
+      // `withAliases=false` drops the server-minted alias maps from history —
+      // the resilience path for a chat backend whose request schema predates
+      // the verse/commentary alias shapes and 422s on them (see below).
+      const buildBody = (withAliases: boolean): Record<string, unknown> => {
+        const history = messages.value
+          .filter((m) => m.text)
+          .map((m) => (withAliases && m.role === 'assistant' && m.aliases
+            ? { role: m.role, content: m.text, aliases: m.aliases }
+            : { role: m.role, content: m.text }))
+        const b: Record<string, unknown> = {
+          messages: history.length ? history : [{ role: 'user', content: q }],
+          lang,
+          capabilities: { commentary_card: true },
+          // Web always opts in: there's no per-user toggle here, and the corpus
+          // has native transcripts only for ru/en — so for any other `lang` the
+          // server would otherwise show English-verbatim citations.
+          translate_citations: true,
+        }
+        if (trackId) b.user_context = { current_track_id: trackId }
+        return b
       }
-      if (trackId) body.user_context = { current_track_id: trackId }
 
-      const post = (jwt: string) =>
+      const post = (jwt: string, bodyObj: Record<string, unknown>) =>
         fetch(`${chatBase}/chat`, {
           method: 'POST',
           headers: {
@@ -273,17 +279,23 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
             'X-Trace-Id': traceId,
             'Idempotency-Key': idem,
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify(bodyObj),
           signal: controller.signal,
         })
 
       let jwt = await auth.ensureToken()
-      let res = await post(jwt)
+      let res = await post(jwt, buildBody(true))
       if (res.status === 401) {
         auth.resetToken()
         jwt = await auth.ensureToken()
-        res = await post(jwt)
+        res = await post(jwt, buildBody(true))
       }
+      // Older backend rejects the rich alias shape (verse/commentary/…) with a
+      // 422 schema error. Retry once without aliases so the turn still goes
+      // through — prior-turn chip markers degrade to placeholders rather than
+      // the whole conversation failing. A backend with the widened schema never
+      // hits this and keeps the full alias fidelity.
+      if (res.status === 422) res = await post(jwt, buildBody(false))
       if (res.status === 429) { turns.value = freeTurns; throw new Error('rate_limited') }
       if (!res.ok || !res.body) throw new Error('chat_failed')
 
