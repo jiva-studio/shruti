@@ -203,8 +203,18 @@ groups:
     execErrState: OK
   # Watchdog: catches a degraded/broken cAdvisor directly. On cgroup v2 a
   # private cgroupns made it emit only container_last_seen{id="/"} (no name=
-  # series), silently blinding the two rules above. absent() fires when there
-  # are zero per-container series at all.
+  # series), silently blinding the two rules above. Fires when there are zero
+  # per-container series at all.
+  #
+  # NB: do NOT use absent(container_last_seen{name!=""}) here. When the series
+  # DO exist absent() returns an empty vector, which Grafana's unified alerting
+  # reads as No Data — and with noDataState:Alerting that made this watchdog
+  # page continuously on a HEALTHY host (grafana_state_reason=NoData,
+  # Value:[no value]). Instead count the series and coalesce to 0 with
+  # `or vector(0)`, so refId A always yields a number: >0 healthy, 0 when the
+  # metrics are genuinely gone (or the scrape target is down). NoData is now
+  # reserved for the datasource itself being unreachable — execErrState catches
+  # that, noDataState stays OK so a transient eval gap doesn't page.
   - uid: cadvisor_metrics_missing
     title: cadvisor_metrics_missing
     condition: B
@@ -221,7 +231,7 @@ groups:
         to: 0
       model:
         refId: A
-        expr: absent(container_last_seen{name!=""})
+        expr: count(container_last_seen{name!=""}) or vector(0)
         instant: true
     - refId: B
       datasourceUid: __expr__
@@ -231,10 +241,10 @@ groups:
         expression: A
         conditions:
         - evaluator:
-            type: gt
+            type: lt
             params:
-            - 0
-    noDataState: Alerting
+            - 1
+    noDataState: OK
     execErrState: Alerting
 - orgId: 1
   name: app-health
