@@ -3,6 +3,18 @@
     <IonLabel>{{ $t("settings.groups.contacts") }}</IonLabel>
   </IonListHeader>
 
+  <!-- Studio website — first in the group. Opens jiva.studio in the system
+       browser so listeners can discover our other apps. -->
+  <SettingsActionItem
+    :title="$t('settings.contacts.studio.title')"
+    :subtitle="$t('settings.contacts.studio.description')"
+    @activate="emit('openStudio')"
+  >
+    <template #icon>
+      <IconChip><StudioIcon /></IconChip>
+    </template>
+  </SettingsActionItem>
+
   <!-- Plain support email, available in every locale. Opens a bare mailto
        (subject + intro only) — NO logs / system state. The diagnostics email
        that attaches logs lives in the Debug group, not here. -->
@@ -46,13 +58,14 @@ import { computed } from "vue"
 import { IonLabel, IonListHeader } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { SettingsActionItem } from "@kit/ui"
-import { MailIcon, TelegramIcon, VkIcon } from "@ui/icons/index.js"
+import { MailIcon, StudioIcon, TelegramIcon, VkIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 
 const { locale } = useI18n()
 const isRussian = computed(() => (locale.value as string) === "ru")
 
 const emit = defineEmits<{
+  openStudio: []
   openEmail: []
   openVk: []
   openTelegram: []

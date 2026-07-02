@@ -79,6 +79,7 @@
     <SettingsHelpGroup @open-help="helpOpen = true" @open-privacy-policy="onOpenPrivacyPolicy" />
 
     <SettingsContactsGroup
+      @open-studio="onOpenStudio"
       @open-email="onOpenEmail"
       @open-vk="onOpenVk"
       @open-telegram="onOpenTelegram"
@@ -338,6 +339,12 @@ async function onOpenDiagnosticsEmail(): Promise<void> {
   const subject = encodeURIComponent(t("settings.debug.email.emailSubject"))
   const body = encodeURIComponent(lines.join("\n"))
   window.open(`mailto:support@jiva.studio?subject=${subject}&body=${body}`, "_system")
+}
+
+// Studio website — opens jiva.studio in the system browser so listeners can
+// discover our other apps. `_system` keeps the in-app webview from navigating.
+function onOpenStudio(): void {
+  window.open("https://jiva.studio", "_system")
 }
 
 function onOpenVk(): void {
