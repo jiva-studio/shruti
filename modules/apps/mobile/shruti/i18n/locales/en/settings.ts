@@ -298,6 +298,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "Visit our studio and explore our other apps",
+    },
     email: {
       title: "Send us an email",
       description: "Have questions or suggestions?",
