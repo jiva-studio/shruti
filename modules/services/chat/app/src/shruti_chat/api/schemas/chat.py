@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from shruti_chat.domain.user_context import (
     FocusFragment,
@@ -73,9 +73,23 @@ class ChunkAliasDto(BaseModel):
     the next turn's history. The server uses it to re-substitute
     `[cite:track_X@start-end|caption]` markers in that message's prose
     back into `[^N]` form so the LLM sees one consistent
-    numbered-ref format throughout the history."""
+    numbered-ref format throughout the history.
 
-    track_id: str
+    `TurnAliasMap.serialize()` emits SEVERAL shapes discriminated by an
+    optional `kind`: the default track/chunk row (carries `track_id`),
+    plus `verse` / `chapter` / `media` / `commentary` rows that carry
+    their own ids (`source_id`, `item_id`, …) and **no** `track_id`. We
+    accept all of them permissively — extra per-kind fields ride through
+    via `extra="allow"` and `TurnAliasMap.load_external` re-validates each
+    entry by kind. The DTO's only jobs are to bound the map size and
+    confirm each value is an object. (Before this was widened, replaying a
+    turn that cited a verse or commentary 422'd on the missing
+    `track_id`.)"""
+
+    model_config = ConfigDict(extra="allow")
+
+    kind: str | None = None
+    track_id: str | None = None
     start_ms: int | None = None
     end_ms: int | None = None
 
