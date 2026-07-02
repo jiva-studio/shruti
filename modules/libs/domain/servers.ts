@@ -74,7 +74,7 @@ export interface CdnServer extends KitCdnServer {
 // owning a domain. Lets Caddy auto-provision Let's Encrypt certs on
 // both Cloud Provider (global) and Dedicated Host (russia) with zero DNS work.
 const HOST = "https://api.shruti.local"
-const HOST_RU = "https://62-109-31-177.sslip.io"
+const HOST_RU = "https://77-246-158-235.sslip.io"
 
 export const SERVERS: readonly CdnServer[] = [
   {
