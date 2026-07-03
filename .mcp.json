@@ -15,20 +15,6 @@
     "denoiser": {
       "type": "http",
       "url": "http://127.0.0.1:18004/mcp"
-    },
-    "claude-context": {
-      "command": "npx",
-      "args": ["-y", "-p", "@zilliz/claude-context-mcp@latest", "-p", "ajv", "-p", "ajv-formats", "claude-context-mcp"],
-      "env": {
-        "EMBEDDING_PROVIDER": "Ollama",
-        "EMBEDDING_MODEL": "code-embed",
-        "EMBEDDING_DIMENSION": "768",
-        "EMBEDDING_BATCH_SIZE": "64",
-        "OLLAMA_HOST": "http://127.0.0.1:18001",
-        "OLLAMA_REQUEST_TIMEOUT": "300000",
-        "MILVUS_ADDRESS": "127.0.0.1:18002",
-        "CODE_CHUNKS_COLLECTION_NAME_OVERRIDE": "shruti"
-      }
     }
   }
 }
