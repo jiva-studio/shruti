@@ -1,0 +1,136 @@
+---
+// Full-bleed horizontal strip. Two kinds of slide:
+//  - screenshot (default): phone-framed image with top/bottom safe-zone bands.
+//  - video (has `video`): landscape 4:3 poster with a play button; the <video>
+//    is mounted lazily on tap and starting one clip pauses any other.
+interface Slide {
+  src: string
+  title: string
+  desc: string
+  top?: string
+  bottom?: string
+  video?: string
+}
+interface Props { slides: Slide[] }
+const { slides } = Astro.props
+---
+<div class="screens-scroll overflow-x-auto px-1 pb-8 pt-3">
+  <div class="mx-auto flex w-max gap-7 px-5 md:px-8">
+    {slides.map((s) => (
+      s.video ? (
+        <figure class="w-[380px] shrink-0 snap-center sm:w-[600px]">
+          <div
+            class="media-card group relative aspect-[4/3] overflow-hidden rounded-2xl border border-line bg-ink shadow-xl"
+            data-src={s.video}
+          >
+            <img src={s.src} alt={s.title} loading="lazy" draggable={false} class="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />
+            <span class="media-overlay pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/25 to-transparent"></span>
+            <button type="button" class="media-play absolute inset-0 grid place-items-center" aria-label={s.title}>
+              <span class="grid h-16 w-16 place-items-center rounded-full bg-saffron/95 text-ink shadow-lg transition duration-300 group-hover:scale-110">
+                <svg viewBox="0 0 24 24" class="h-7 w-7 translate-x-[1px]" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+              </span>
+            </button>
+            <figcaption class="media-overlay pointer-events-none absolute inset-x-0 bottom-0 p-5 sm:p-6">
+              <p class="font-serif text-lg font-semibold text-cream sm:text-2xl">{s.title}</p>
+              <p class="mt-1 max-w-[38ch] text-sm leading-snug text-cream/80 sm:text-base">{s.desc}</p>
+            </figcaption>
+          </div>
+        </figure>
+      ) : (
+        <figure class="w-[210px] shrink-0 snap-center sm:w-[230px]">
+          <div class="overflow-hidden rounded-[1.7rem] border-[3px] border-ink shadow-xl">
+            <div class="zone" style={`background:${s.top}`}></div>
+            <img src={s.src} alt={s.title} loading="lazy" draggable={false} class="block w-full" />
+            <div class="zone" style={`background:${s.bottom}`}></div>
+          </div>
+          <figcaption class="mt-4 px-1 text-center">
+            <p class="font-serif text-base font-semibold text-ink">{s.title}</p>
+            <p class="mt-1 text-sm leading-snug text-medium">{s.desc}</p>
+          </figcaption>
+        </figure>
+      )
+    ))}
+  </div>
+</div>
+
+<script>
+  // Desktop: click-and-drag to pan the strip (no wheel hijacking). A drag past
+  // a few px is not treated as a click, so it won't fire a video card.
+  for (const el of document.querySelectorAll<HTMLElement>('.screens-scroll')) {
+    let down = false
+    let moved = false
+    let startX = 0
+    let startLeft = 0
+    el.addEventListener('pointerdown', (e) => {
+      down = true
+      moved = false
+      startX = e.clientX
+      startLeft = el.scrollLeft
+      el.classList.add('dragging')
+    })
+    el.addEventListener('pointermove', (e) => {
+      if (!down) return
+      if (Math.abs(e.clientX - startX) > 4) moved = true
+      el.scrollLeft = startLeft - (e.clientX - startX)
+    })
+    const end = () => {
+      down = false
+      el.classList.remove('dragging')
+    }
+    el.addEventListener('pointerup', end)
+    el.addEventListener('pointercancel', end)
+
+    // Video cards: play inline. No native controls (they'd swallow drag
+    // gestures — the strip must stay pannable over a playing clip). The play
+    // button + caption overlay hide while playing and reappear on pause, so a
+    // paused clip always shows its Play button again. The button spans the whole
+    // card, so while paused a tap anywhere resumes; while playing a tap pauses.
+    el.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.media-play')
+      if (!btn || moved) return
+      const card = btn.closest('.media-card') as HTMLElement | null
+      const src = card?.dataset.src
+      if (!card || !src) return
+      let v = card.querySelector('video') as HTMLVideoElement | null
+      if (!v) {
+        v = document.createElement('video')
+        v.src = src
+        v.playsInline = true
+        v.className = 'absolute inset-0 h-full w-full bg-ink object-contain'
+        v.addEventListener('play', () => card.classList.add('is-playing'))
+        v.addEventListener('pause', () => card.classList.remove('is-playing'))
+        v.addEventListener('click', () => { if (!moved) v!.pause() })
+        card.insertBefore(v, card.querySelector('.media-overlay'))
+      }
+      for (const other of document.querySelectorAll<HTMLVideoElement>('.media-card video')) {
+        if (other !== v) other.pause()
+      }
+      v.play().catch(() => {})
+    })
+  }
+</script>
+
+<style>
+  .screens-scroll {
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    cursor: grab;
+  }
+  .screens-scroll.dragging {
+    cursor: grabbing;
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+    user-select: none;
+  }
+  .screens-scroll::-webkit-scrollbar { display: none; }
+  /* While a clip plays, hide its play button + caption overlay; they return
+     on pause (the `is-playing` class is toggled from the video's play/pause). */
+  .media-card.is-playing .media-play,
+  .media-card.is-playing .media-overlay { display: none; }
+  /* Safe-zone bands: height = 4.5% of the frame width (padding-% is
+     width-relative), colour set per-screenshot from the config below. */
+  .zone {
+    height: 0;
+    padding-bottom: 4.5%;
+  }
+</style>

@@ -1,0 +1,353 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro'
+import AnswerVerse from '../../../components/AnswerVerse.astro'
+import WebCommentaryCard from '../../../components/vue/WebCommentaryCard.vue'
+import WebCitationCard from '../../../components/vue/WebCitationCard.vue'
+import { type Lang } from '../../../i18n/ui'
+import { UI_LOCALE_CODES } from '../../../i18n/locales.data.mjs'
+import { contentLangFor } from '../../../i18n/locales'
+
+export function getStaticPaths() {
+  return UI_LOCALE_CODES.map((lang) => ({ params: { lang } }))
+}
+
+const lang = Astro.params.lang as Lang
+const cl = contentLangFor(lang)
+
+// --- Corpus data (real, from shruti-mcp) --------------------------------
+// Shloka BG 2.47.
+const VERSE = {
+  sourceId: 'source_dsicuBsFvinZ',
+  tokens: '2.47',
+  sanskrit:
+    'कर्मण्येवाधिकारस्ते मा फलेषु कदाचन ।\nमा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि ॥',
+  transliteration:
+    'karmaṇy evādhikāras te mā phaleṣu kadācana\nmā karma-phala-hetur bhūr mā te saṅgo ’stv akarmaṇi',
+  addrLabel: { ru: 'Бхагавад-гита 2.47', en: 'Bhagavad-gita 2.47' },
+  translation: {
+    ru: 'Ты можешь выполнять предписанные тебе обязанности, но у тебя нет права наслаждаться плодами своего труда. Никогда не считай, что результаты твоих действий зависят от тебя, но при этом и не отказывайся от выполнения своих обязанностей.',
+    en: 'You have a right to perform your prescribed duty, but you are not entitled to the fruits of action. Never consider yourself the cause of the results of your activities, and never be attached to not doing your duty.',
+  },
+}
+
+// Prabhupada purport to BG 2.47 (commentary document from the corpus).
+const PURPORT = {
+  authorName: {
+    ru: 'А. Ч. Бхактиведанта Свами Прабхупада',
+    en: 'A. C. Bhaktivedanta Swami Prabhupada',
+  },
+  text: {
+    ru: 'Господь советует Арджуне не оставаться бездеятельным, но выполнять предписанные обязанности, не привязываясь к результатам своих действий. Тот, кто привязан к плодам своего труда, становится причиной действий и потому либо наслаждается их последствиями, либо страдает от них. У каждого есть право выполнять предписанные ему обязанности, однако при этом надо действовать без привязанности к результату; такое бесстрастное выполнение своих обязанностей, несомненно, выведет человека на путь к освобождению.',
+    en: 'The Lord advised that Arjuna not be inactive, but that he perform his prescribed duty without being attached to the result. One who is attached to the result of his work is also the cause of the action, and is thus the enjoyer or sufferer of the result of such actions. Everyone has his proprietary right in regard to prescribed duties, but should act without attachment to the result; such disinterested obligatory duties doubtlessly lead one to the path of liberation.',
+  },
+}
+
+// Prabhupada reads & explains 2.47 — Los Angeles, 16 Dec 1968. Same lecture
+// exists as an English and a Russian track in the corpus; each locale plays
+// its own audio. Real transcript excerpt + waveform player.
+const LECTURE = {
+  en: {
+    trackId: 'track_Bds24XLBakaP',
+    startMs: 1808400,
+    endMs: 1901680,
+    trackTitle: 'The Purpose Behind the Vedas',
+    authorName: 'A. C. Bhaktivedanta Swami Prabhupada',
+    trackDate: '1968-12-16',
+    refLabel: 'BG 2.47',
+    text: 'So one becomes the enjoyer or the sufferer of the result of his actions. Everyone has his proprietary right in regard to his prescribed duties, but should act without attachment to the result — such disinterested obligatory work leads one to the path of liberation. Arjuna was therefore advised by the Lord to fight as a matter of duty, without attachment to the result. Any attachment, positive or negative, is a cause for bondage.',
+  },
+  ru: {
+    trackId: 'track_5FirOhAsUg20',
+    startMs: 512159,
+    endMs: 695440,
+    trackTitle: 'Каждый человек должен принять сознание Кришны',
+    authorName: 'А. Ч. Бхактиведанта Свами Прабхупада',
+    trackDate: '1968-12-16',
+    refLabel: 'БГ 2.47',
+    text: 'Стих 47: «Ты имеешь право только исполнять свой долг, но плоды твоих действий не принадлежат тебе. Никогда не считай себя причиной результатов своей деятельности и не пытайся уклоняться от исполнения долга». Каждый человек имеет право на исполнение предписанных обязанностей, но ему следует действовать, не беспокоясь о результатах. Такое бескорыстное исполнение своих обязанностей, несомненно, выводит человека на путь освобождения. Бездействие греховно — поэтому единственным путём спасения для Арджуны было просто сражаться, как это предписывает долг.',
+  },
+}
+const lec = LECTURE[cl]
+
+// --- Page copy -------------------------------------------------------------
+const C = {
+  ru: {
+    title: 'Как перестать тревожиться о будущем — Бхагавад-гита 2.47 | Слушай Садху',
+    description:
+      'Тревога о будущем и страх не справиться с результатом. Ответ Бхагавад-гиты: шлока 2.47, перевод, аудио Прабхупады и практический совет.',
+    eyebrow: 'Тревога и беспокойство',
+    h1: 'Как перестать тревожиться о будущем и результатах',
+    lede:
+      'Мы снова и снова прокручиваем в голове, что будет завтра, боимся не справиться и зависим от исхода — и теряем покой уже сейчас. Бхагавад-гита предлагает неожиданный разворот: перенести внимание с плодов на само действие.',
+    answerTag: 'Короткий ответ',
+    answer:
+      'Кришна говорит Арджуне: делай то, что должен, честно и с полной отдачей, — но отпусти право распоряжаться результатом. Тревога рождается из привязанности к плодам. Когда действие становится приношением, а не сделкой ради результата, ум обретает равновесие.',
+    verseKicker: 'Шлока',
+    lectureKicker: 'Слушать',
+    lectureH: 'Прабхупада объясняет этот стих',
+    meanKicker: 'Что это значит',
+    meanH: 'Тревога живёт в результате, а не в деле',
+    meanBody: [
+      'Присмотрись к своей тревоге — она почти всегда о плоде: получится или нет, оценят или осудят, хватит ли. Ум убегает в воображаемое будущее, которое ему не подвластно, и застревает там.',
+      'Гита не говорит «будь безразличен». Она говорит: твоя территория — это качество твоего действия здесь и сейчас. Результат складывается из множества причин, большинство которых вне тебя. Пытаясь контролировать неконтролируемое, ты и покупаешь тревогу.',
+      'Отпустить право на плод — не значит перестать стараться. Наоборот: освободив внимание от страха за исход, ты вкладываешь его полностью в само дело. Это и есть равновесие ума, которое в следующем стихе Кришна называет йогой.',
+    ],
+    purportKicker: 'Комментарий',
+    purportH: 'Пояснение Шрилы Прабхупады',
+    stepsKicker: 'Практика',
+    stepsH: 'Три шага, когда накрывает тревога',
+    steps: [
+      ['Отдели действие от плода', 'Спроси себя: что из этого действительно в моих руках прямо сейчас? Сделай именно этот шаг — остальное отпусти как то, что тебе не принадлежит.'],
+      ['Преврати дело в приношение', 'Выполни задачу как можно лучше — не ради оценки, а как подношение. Мотив смещается с «что я получу» на «как я сделаю», и страх исхода теряет опору.'],
+      ['Верни ум в настоящее', 'Тревога живёт в будущем. Замечай, когда ум убегает туда, и мягко возвращай его к текущему действию — к дыханию, к строке, к шагу. Здесь тревоги нет.'],
+    ],
+    faqKicker: 'Частые вопросы',
+    faqH: 'Что обычно спрашивают',
+    faq: [
+      ['Значит ли это, что не нужно ставить цели?', 'Нет. Цель и намерение уместны — они задают направление действию. Гита говорит об отношении к плоду: ставь цель, действуй ради неё изо всех сил, но не привязывай к результату свой внутренний покой и чувство собственной ценности.'],
+      ['Разве «не думать о результате» — не безответственно?', 'Наоборот. Именно страх за исход часто парализует или толкает к спешке и обману. Человек, свободный от привязанности к плодам, действует чище, спокойнее и ответственнее — как Арджуна, которого Кришна призвал исполнить долг, а не бежать от него.'],
+      ['С чего начать, если тревога очень сильная?', 'Начни с малого и телесного: одно дыхание, одно посильное действие прямо сейчас. Затем перечитай стих 2.47 вслух и послушай аудио. Смысл входит не сразу через понимание, а через повторение и практику.'],
+    ],
+    relKicker: 'Смежные вопросы',
+    relH: 'Другие вопросы — ответы Гиты',
+    rel: [
+      ['Бхагавад-гита 2.20', 'Как справиться со страхом смерти?'],
+      ['Бхагавад-гита 2.13', 'Как пережить потерю близкого человека?'],
+      ['Бхагавад-гита 2.63', 'Как совладать с гневом и раздражением?'],
+      ['Бхагавад-гита 6.5', 'Как успокоить беспокойный ум?'],
+    ],
+    ctaH: 'Расскажи о своей ситуации',
+    ctaP: 'Гита-ИИ выслушает твой вопрос и ответит стихом, комментарием и практикой — как эта страница, но именно про тебя.',
+    ctaB1: 'Спросить Гита-ИИ',
+    ctaB2: 'Скачать приложение',
+  },
+  en: {
+    title: 'How to stop worrying about the future — Bhagavad-gita 2.47 | Shruti',
+    description:
+      'Anxiety about the future and fear of falling short. The Bhagavad-gita’s answer: verse 2.47, translation, Prabhupada audio and a practical step.',
+    eyebrow: 'Anxiety & worry',
+    h1: 'How to stop worrying about the future and outcomes',
+    lede:
+      'We replay tomorrow in our heads, fear falling short, hang on the outcome — and lose our peace right now. The Bhagavad-gita offers an unexpected turn: move your attention off the fruit and onto the action itself.',
+    answerTag: 'Short answer',
+    answer:
+      'Krishna tells Arjuna: do what you must, honestly and wholeheartedly — but let go of your claim to the result. Anxiety is born from attachment to fruits. When action becomes an offering rather than a bargain for outcomes, the mind settles into balance.',
+    verseKicker: 'The verse',
+    lectureKicker: 'Listen',
+    lectureH: 'Prabhupada explains this verse',
+    meanKicker: 'What it means',
+    meanH: 'Anxiety lives in the result, not in the work',
+    meanBody: [
+      'Look closely at your anxiety — it is almost always about the fruit: will it work out, will they approve or judge, will it be enough. The mind runs off into an imagined future it cannot control, and gets stuck there.',
+      'The Gita does not say “be indifferent.” It says: your territory is the quality of your action, here and now. The result is shaped by many causes, most of them outside you. Trying to control the uncontrollable is exactly what buys the anxiety.',
+      'Releasing your claim on the fruit does not mean you stop trying. Just the opposite: freed from fear of the outcome, you pour your whole attention into the work. That is the balance of mind Krishna calls linux-client in the very next verse.',
+    ],
+    purportKicker: 'Commentary',
+    purportH: 'Srila Prabhupada’s explanation',
+    stepsKicker: 'Practice',
+    stepsH: 'Three steps when anxiety hits',
+    steps: [
+      ['Separate action from fruit', 'Ask: what part of this is actually in my hands right now? Take that one step — and release the rest as something that was never yours to hold.'],
+      ['Turn the task into an offering', 'Do the work as well as you can — not for approval, but as an offering. The motive shifts from “what will I get” to “how will I do it,” and fear of the outcome loses its foothold.'],
+      ['Bring the mind back to now', 'Anxiety lives in the future. Notice when the mind runs there, and gently return it to the present action — to the breath, the line, the step. There is no anxiety here.'],
+    ],
+    faqKicker: 'Common questions',
+    faqH: 'What people usually ask',
+    faq: [
+      ['Does this mean I shouldn’t set goals?', 'No. Goals and intentions are fine — they give action its direction. The Gita speaks about your relationship to the fruit: set the goal, act for it with full effort, but don’t tie your inner peace and self-worth to the result.'],
+      ['Isn’t “not thinking about the result” irresponsible?', 'Quite the opposite. It’s fear of the outcome that so often paralyzes us or pushes us toward haste and shortcuts. Someone free of attachment to fruits acts more cleanly and responsibly — like Arjuna, whom Krishna urged to do his duty, not flee it.'],
+      ['Where do I start if the anxiety is very strong?', 'Start small and bodily: one breath, one doable action right now. Then read verse 2.47 aloud and listen to the audio. The meaning enters not all at once through understanding, but through repetition and practice.'],
+    ],
+    relKicker: 'Related questions',
+    relH: 'More questions — the Gita’s answers',
+    rel: [
+      ['Bhagavad-gita 2.20', 'How to overcome the fear of death?'],
+      ['Bhagavad-gita 2.13', 'How to cope with the loss of a loved one?'],
+      ['Bhagavad-gita 2.63', 'How to master anger and irritation?'],
+      ['Bhagavad-gita 6.5', 'How to calm a restless mind?'],
+    ],
+    ctaH: 'Tell us your situation',
+    ctaP: 'Gita AI will hear your question and answer with a verse, a commentary and a practice — like this page, but about you.',
+    ctaB1: 'Ask Gita AI',
+    ctaB2: 'Get the app',
+  },
+} as const
+
+const t = C[cl]
+
+const purportBody = {
+  text: PURPORT.text[cl],
+  authorName: PURPORT.authorName[cl],
+  addrLabel: VERSE.addrLabel[cl],
+  commentaryKind: 'commentary',
+}
+const citeBody = {
+  text: lec.text,
+  trackTitle: lec.trackTitle,
+  authorName: lec.authorName,
+  trackDate: lec.trackDate,
+  references: [{ sourceId: VERSE.sourceId, tokens: VERSE.tokens, label: lec.refLabel }],
+}
+
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: t.faq.map(([q, a]) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+}
+---
+<BaseLayout lang={lang} path="/answers/anxiety" title={t.title} description={t.description}>
+  <script type="application/ld+json" set:html={JSON.stringify(faqLd)} is:inline />
+
+  <article class="mx-auto max-w-[680px] px-5 pb-4">
+
+    <!-- hero -->
+    <header class="pt-12">
+      <span class="eyebrow">{t.eyebrow}</span>
+      <h1 class="mt-4 t-h1 text-ink [text-wrap:balance]">{t.h1}</h1>
+      <p class="mt-5 t-body text-coffee">{t.lede}</p>
+    </header>
+
+    <!-- One flowing answer: prose interleaved with the verse, audio and
+         commentary widgets. No per-block headings — each widget labels
+         itself (audio shows speaker/date, commentary shows author/ref). -->
+    <div class="answer mt-8 flex flex-col gap-7">
+      <p class="t-body text-ink">{t.answer}</p>
+
+      <AnswerVerse
+        addrLabel={VERSE.addrLabel[cl]}
+        original={VERSE.sanskrit}
+        transliteration={VERSE.transliteration}
+        translation={VERSE.translation[cl]}
+      />
+
+      <WebCitationCard
+        client:visible
+        trackId={lec.trackId}
+        startMs={lec.startMs}
+        endMs={lec.endMs}
+        body={citeBody}
+        language={cl}
+      />
+
+      {t.meanBody.map((p) => <p class="t-body text-ink">{p}</p>)}
+
+      <WebCommentaryCard body={purportBody} />
+    </div>
+
+    <!-- practice -->
+    <section class="mt-11">
+      <h2 class="t-h2 text-ink [text-wrap:balance]">{t.stepsH}</h2>
+      <div class="mt-4 grid gap-3">
+        {t.steps.map(([h, p], i) => (
+          <div class="accent-card">
+            <span class="accent-bar" aria-hidden="true"></span>
+            <span class="step-bg" aria-hidden="true">{i + 1}</span>
+            <div class="accent-body">
+              <h3 class="t-h3 text-ink">{h}</h3>
+              <p class="mt-1.5 t-body text-coffee">{p}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- faq -->
+    <section class="mt-11">
+      <h2 class="t-h2 text-ink [text-wrap:balance]">{t.faqH}</h2>
+      <div class="mt-4 flex flex-col">
+        {t.faq.map(([q, a]) => (
+          <div class="faq-item py-6">
+            <h3 class="t-h3 text-ink">{q}</h3>
+            <p class="mt-2 t-body text-coffee">{a}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- related -->
+    <section class="mt-11">
+      <h2 class="t-h2 text-ink [text-wrap:balance]">{t.relH}</h2>
+      <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {t.rel.map(([ref, q]) => (
+          <a href="#" class="accent-card">
+            <span class="accent-bar" aria-hidden="true"></span>
+            <span class="accent-body">
+              <span class="block t-eyebrow leading-none text-saffron-shade">{ref}</span>
+              <span class="mt-2 block t-h3 text-ink">{q}</span>
+            </span>
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <!-- cta -->
+    <div class="cta mt-12">
+      <h2 class="t-h2 text-white">{t.ctaH}</h2>
+      <p class="mt-2.5 t-body text-[#f4e3cf]">{t.ctaP}</p>
+      <div class="mt-5 flex flex-wrap justify-center gap-3">
+        <a href={`/${lang}/ai`} class="btn-solid">{t.ctaB1}</a>
+        <a href={`/${lang}/app`} class="btn-ghost">{t.ctaB2}</a>
+      </div>
+    </div>
+
+  </article>
+</BaseLayout>
+
+<style>
+  /* ---- One type scale for the whole page ----
+     Every text element uses one of these — no more ad-hoc px sizes. Body
+     runs at a single 17px / 1.7; headings step up in serif; labels at 13px. */
+  .t-h1 { font-family: var(--font-serif); font-weight: 600; font-size: clamp(30px, 5vw, 40px); line-height: 1.15; letter-spacing: -0.01em; }
+  .t-h2 { font-family: var(--font-serif); font-weight: 600; font-size: clamp(22px, 4vw, 26px); line-height: 1.25; letter-spacing: -0.01em; }
+  .t-h3 { font-family: var(--font-serif); font-weight: 600; font-size: 19px; line-height: 1.4; }
+  .t-body { font-size: 17px; line-height: 1.7; }
+  .t-eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 0.03em; }
+
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--ion-color-primary-shade);
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1.5px; background: var(--ion-color-primary); border-radius: 2px; }
+
+  /* Fading divider between FAQ items — same treatment as the site's
+     FAQSection: gradient line via ::before, hidden on the first item, so
+     there is no rule above the first or below the last. */
+  .faq-item { position: relative; }
+  .faq-item::before {
+    content: "";
+    position: absolute; inset: 0 0 auto 0; height: 1px;
+    background: linear-gradient(to right, transparent, var(--shruti-divider, rgba(61, 43, 31, 0.12)), transparent);
+  }
+  .faq-item:first-child::before { display: none; }
+
+  /* Shared accent frame — mirrors the chat AccentFrame (audio/commentary
+     widgets): faint saffron tint + a 3px saffron bar on the left, same tokens
+     so it tracks the theme. Used by the practice steps and related cards. */
+  .accent-card {
+    position: relative; display: flex; overflow: hidden; border-radius: 4px;
+    background: rgba(var(--ion-color-primary-rgb), 0.06);
+  }
+  .accent-bar { flex: 0 0 3px; background: var(--ion-color-primary); }
+  .accent-body { flex: 1; min-width: 0; position: relative; z-index: 1; padding: 14px 20px 16px; }
+  a.accent-card { text-decoration: none; transition: background 0.16s ease; }
+  a.accent-card:hover { background: rgba(var(--ion-color-primary-rgb), 0.11); }
+  /* Big faint index digit as a background watermark, bottom-right. */
+  .step-bg {
+    position: absolute; right: 14px; bottom: -18px; z-index: 0;
+    font-family: var(--font-serif); font-weight: 700; font-size: 108px; line-height: 1;
+    color: var(--ion-color-primary); opacity: 0.12;
+    pointer-events: none; user-select: none;
+  }
+
+  .cta {
+    background: linear-gradient(135deg, #6f4e37, #8a5a34 60%, #cc7a3d);
+    border-radius: 20px; padding: 34px 30px; text-align: center;
+  }
+  .btn-solid { font-weight: 700; font-size: 15px; padding: 12px 22px; border-radius: 12px; text-decoration: none; background: #fff7ec; color: var(--ion-color-tertiary); }
+  .btn-ghost { font-weight: 700; font-size: 15px; padding: 12px 22px; border-radius: 12px; text-decoration: none; color: #fff7ec; border: 1px solid rgba(255, 255, 255, 0.4); }
+</style>

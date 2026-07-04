@@ -1,5 +1,5 @@
 ---
-import ScreenshotGallery from './ScreenshotGallery.astro'
+import MediaCarousel from './MediaCarousel.astro'
 import SHOT_BG from '../data/screenshots.json'
 import { useT, type Lang, type UiKey } from '../i18n/ui'
 interface Props { lang: Lang }
@@ -36,6 +36,6 @@ const slides = shots.map(([file, title, desc]) => ({
     <div class="mx-auto mb-10 max-w-2xl px-5 text-center">
       <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('gallery.heading' as UiKey)}</h2>
     </div>
-    <ScreenshotGallery slides={slides} />
+    <MediaCarousel slides={slides} />
   </div>
 </section>

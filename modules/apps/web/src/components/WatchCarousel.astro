@@ -1,0 +1,25 @@
+---
+import MediaCarousel from './MediaCarousel.astro'
+import { contentLangFor, type Lang } from '../i18n/locales'
+import { useT } from '../i18n/ui'
+import { resolveMediaUrl } from '../lib/media'
+import { WATCH_CLIPS } from '../data/watchClips'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = useT(lang)
+const media = (id: string, ext: string) => resolveMediaUrl(`public/media/${id}.${ext}`)
+const slides = WATCH_CLIPS[contentLangFor(lang)].map((c) => ({
+  src: media(c.id, 'jpg'),
+  video: media(c.id, 'mp4'),
+  title: c.title,
+  desc: c.blurb,
+}))
+---
+<section id="watch" class="py-8">
+  <div class="mx-auto mb-7 max-w-6xl px-5">
+    <h2 class="text-3xl font-bold text-ink sm:text-4xl">{t('watch.band.title')}</h2>
+    <p class="mt-3 max-w-3xl text-ink-soft">{t('watch.band.lead')}</p>
+  </div>
+  <MediaCarousel slides={slides} />
+</section>
