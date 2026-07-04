@@ -20,12 +20,12 @@ Addressing: a reference is a book code plus a position, e.g. "BG 2.13", "SB 5.5.
 
 How to use the tools:
 - search: semantic + lexical search over verses, documents, tracks and titles.
-- source.get/list/resolve, author.list/resolve, location.list/resolve: turn a ` +
+- source_get/list/resolve, author_list/resolve, location_list/resolve: turn a ` +
 	`name into an id used by the filters.
-- verse.get/list, document.get/list: read scripture. A verse's purport is ` +
-	`document.list(source, tokens, kind:"commentary").
-- track.get/list, transcript.window: read lectures. Find the spoken moment of a ` +
-	`verse with search(types:["track"]) then transcript.window.`
+- verse_get/list, document_get/list: read scripture. A verse's purport is ` +
+	`document_list(source, tokens, kind:"commentary").
+- track_get/list, transcript_window: read lectures. Find the spoken moment of a ` +
+	`verse with search(types:["track"]) then transcript_window.`
 
 // New builds the MCP server with public metadata for the initialize handshake.
 func New(version string) *server.MCPServer {

@@ -85,24 +85,24 @@ func main() {
 		go bootstrap.Run(ctx, cfg.RefreshInterval)
 	}
 
-	// ── Postgres/pgvector + embedder for search / transcript.window (optional).
+	// ── Postgres/pgvector + embedder for search / transcript_window (optional).
 	var searchRepo *search.Repo
 	var embedder *embed.Client
 	if cfg.DatabaseURL != "" {
 		pool, perr := store.Connect(ctx, cfg.DatabaseURL)
 		if perr != nil {
-			log.Printf("WARN postgres unavailable, search/transcript.window disabled: %v", perr)
+			log.Printf("WARN postgres unavailable, search/transcript_window disabled: %v", perr)
 		} else {
 			defer pool.Close()
 			searchRepo = search.NewRepo(pool, cfg)
 			if cfg.EmbedConfigured() {
 				embedder = embed.New(cfg)
 			} else {
-				log.Printf("WARN embedding not configured, `search` disabled (transcript.window still works)")
+				log.Printf("WARN embedding not configured, `search` disabled (transcript_window still works)")
 			}
 		}
 	} else {
-		log.Printf("WARN DATABASE_URL empty, search/transcript.window disabled")
+		log.Printf("WARN DATABASE_URL empty, search/transcript_window disabled")
 	}
 
 	deps := &mcpsrv.Deps{
