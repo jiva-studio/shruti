@@ -8,14 +8,14 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "sync:all": "SYNC_LIMIT=100000 node scripts/sync-catalog.mjs",
-    "deploy": "wrangler pages deploy dist --project-name=listen-to-sadhu"
+    "sync:all": "SYNC_LIMIT=100000 node scripts/sync-catalog.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.2.1",
     "@astrojs/vue": "^7.0.0",
     "@fontsource/literata": "^5.1.0",
     "@fontsource/manrope": "^5.1.0",
+    "@fontsource/noto-sans-devanagari": "^5.2.8",
     "@tailwindcss/vite": "^4.0.6",
     "astro": "^7.0.2",
     "marked": "^18.0.5",
