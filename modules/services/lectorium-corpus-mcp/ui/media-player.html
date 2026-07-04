@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Corpus video player</title>
+  </head>
+  <body>
+    <div id="card">
+      <div id="title"></div>
+      <div id="text"></div>
+      <video id="v" controls playsinline preload="metadata"></video>
+      <a id="open" target="_blank" rel="noopener" style="display: none"></a>
+      <div id="err"></div>
+    </div>
+    <script type="module" src="/src/media-player.ts"></script>
+  </body>
+</html>

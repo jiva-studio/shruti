@@ -1,7 +1,10 @@
 package mcpsrv
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -13,28 +16,69 @@ import (
 	"github.com/jiva-studio/lectorium/modules/services/lectorium-corpus-mcp/internal/envelope"
 )
 
+var excerptHTTP = &http.Client{Timeout: 8 * time.Second}
+
+// triggerExcerpt POSTs to share-audio to generate a passage clip. ok=false on
+// failure; on success returns the clip url and its ready flag.
+func triggerExcerpt(ctx context.Context, endpoint, sourceKey string, startMs, endMs int, excerptID string) (url string, ready, ok bool) {
+	body, _ := json.Marshal(map[string]any{
+		"source_key": sourceKey,
+		"start_ms":   startMs,
+		"end_ms":     endMs,
+		"excerpt_id": excerptID,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", false, false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := excerptHTTP.Do(req)
+	if err != nil {
+		return "", false, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return "", false, false
+	}
+	var out struct {
+		URL   string `json:"url"`
+		Ready bool   `json:"ready"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", false, false
+	}
+	return out.URL, out.Ready, true
+}
+
 // ── MCP Apps (interactive UI players) ────────────────────────────────────────
 //
-// Two render-tools declare an inline UI via _meta.ui.resourceUri; each points
-// at an HTML resource served with mimeType text/html;profile=mcp-app. The tool
-// RESULT ships the flat player data on CallToolResult.StructuredContent (the UI
-// channel) plus a short human `content` text. The served HTML loads the
-// @modelcontextprotocol/ext-apps App from esm.sh, reads result.structuredContent
-// in app.ontoolresult, and renders. The App auto-resizes the host iframe to its
-// content (autoResize defaults true → a ResizeObserver drives sendSizeChanged),
-// so the players size to their real content, not a fixed square.
+// Two render-tools point at singlefile ext-apps bundles (apps_html.go + ui/).
+// Audio is generated lazily: lecture_excerpt shows a Play button, whose click
+// calls excerpt_prepare via callServerTool to cut the clip on demand.
 
 const (
 	mediaPlayerURI   = "ui://corpus/media-player.html"
 	excerptPlayerURI = "ui://corpus/excerpt-player.html"
 )
 
-// registerApps wires the two render-tools and their two UI resources.
+// registerApps wires the two render-tools, the excerpt-prepare helper tool, and
+// the two UI resources.
 func registerApps(srv *server.MCPServer, d *Deps) {
 	registerMediaGet(srv, d)
 	registerLectureExcerpt(srv, d)
+	registerExcerptPrepare(srv, d)
 	registerMediaPlayerResource(srv, d)
 	registerExcerptPlayerResource(srv, d)
+}
+
+// excerptKeys derives the deterministic share-audio identifiers for a passage.
+// The excerpt_id matches the mobile/chat citation scheme so clips are shared.
+func (d *Deps) excerptKeys(trackID string, startMs, endMs int) (sourceKey, excerptID, predictedURL, endpoint string) {
+	sourceKey = "public/tracks/" + trackID + "/audio/original.mp3"
+	excerptID = "chat-cite-" + trackID + "-" + strconv.Itoa(startMs) + "-" + strconv.Itoa(endMs)
+	predictedURL = d.Cfg.MediaBase() + "/public/shares/audio/" + excerptID + ".mp3"
+	endpoint = strings.TrimRight(d.Cfg.ShareAudioBase, "/") + "/excerpts"
+	return
 }
 
 // originOf returns the scheme://host origin of a URL, or "" if unparseable.
@@ -214,31 +258,20 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 			}
 		}
 
-		startStr := strconv.Itoa(startMs)
-		endStr := strconv.Itoa(endMs)
-		sourceKey := "public/tracks/" + trackID + "/audio/original.mp3"
-		excerptID := "chat-cite-" + trackID + "-" + startStr + "-" + endStr
-		predictedURL := d.Cfg.MediaBase() + "/public/shares/audio/" + excerptID + ".mp3"
-		endpoint := strings.TrimRight(d.Cfg.ShareAudioBase, "/") + "/excerpts"
+		_, _, predictedURL, _ := d.excerptKeys(trackID, startMs, endMs)
 
+		// No generation here — the player calls excerpt_prepare on Play.
 		data := map[string]any{
-			"track_id":   trackID,
-			"title":      title,
-			"author":     author,
-			"date":       tr.Date,
-			"track_url":  trackURL(trackID, lang),
-			"start_ms":   startMs,
-			"end_ms":     endMs,
-			"text":       text,
-			"excerpt_id": excerptID,
-			"audio": map[string]any{
-				"endpoint":      endpoint,
-				"source_key":    sourceKey,
-				"start_ms":      startMs,
-				"end_ms":        endMs,
-				"excerpt_id":    excerptID,
-				"predicted_url": predictedURL,
-			},
+			"track_id":      trackID,
+			"title":         title,
+			"author":        author,
+			"date":          tr.Date,
+			"track_url":     trackURL(trackID, lang),
+			"start_ms":      startMs,
+			"end_ms":        endMs,
+			"lang":          lang,
+			"text":          text,
+			"predicted_url": predictedURL,
 		}
 		human := "Audio excerpt from " + title
 		if author != "" {
@@ -250,6 +283,63 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 
 		logQuery(ctx, kind, trackID, map[string]any{"start_ms": startMs, "end_ms": endMs}, nil, 1, lang, start)
 		res := mcp.NewToolResultText(human)
+		res.StructuredContent = data
+		return res, nil
+	})
+}
+
+// ── excerpt_prepare: lazily generate the clip on Play ────────────────────────
+
+func registerExcerptPrepare(srv *server.MCPServer, d *Deps) {
+	const kind = "excerpt_prepare"
+	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithDescription(
+			"Generate (or fetch, if cached) the audio clip for a lecture passage and return its "+
+				"playable URL. This is the excerpt player's Play action — it is called for you by the "+
+				"player UI on demand. Agents should use lecture_excerpt to show the player, not call this "+
+				"directly. Idempotent: same track+window returns the same cached clip."),
+		mcp.WithString("track_id", mcp.Required(), mcp.Description("track_id.")),
+		mcp.WithNumber("start_ms", mcp.Required(), mcp.Description("Passage start (ms).")),
+		mcp.WithNumber("end_ms", mcp.Required(), mcp.Description("Passage end (ms), > start_ms; span <= 600000.")),
+	)
+	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		start := time.Now()
+		trackID, err := req.RequireString("track_id")
+		if err != nil || strings.TrimSpace(trackID) == "" {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, "track_id is required", nil), nil
+		}
+		trackID = strings.TrimSpace(trackID)
+		startMs := req.GetInt("start_ms", -1)
+		endMs := req.GetInt("end_ms", -1)
+		if startMs < 0 || endMs <= startMs {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, "end_ms > start_ms >= 0 required", nil), nil
+		}
+		if endMs-startMs > excerptMaxMs {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, "excerpt span exceeds 10 minutes (600000 ms)", nil), nil
+		}
+
+		sourceKey, excerptID, predictedURL, endpoint := d.excerptKeys(trackID, startMs, endMs)
+
+		// On failure fall back to the predicted URL; the player retries the GET.
+		audioURL, ready := predictedURL, false
+		if u, rdy, ok := triggerExcerpt(ctx, endpoint, sourceKey, startMs, endMs, excerptID); ok {
+			if u != "" {
+				audioURL = u
+			}
+			ready = rdy
+		}
+
+		data := map[string]any{
+			"url":        audioURL,
+			"ready":      ready,
+			"excerpt_id": excerptID,
+		}
+		logQuery(ctx, kind, trackID, map[string]any{"start_ms": startMs, "end_ms": endMs}, nil, 1, "", start)
+		res := mcp.NewToolResultText("Prepared audio excerpt: " + audioURL)
 		res.StructuredContent = data
 		return res, nil
 	})
@@ -286,8 +376,7 @@ func uiContents(uri, html string, ui map[string]any) []mcp.ResourceContents {
 
 func registerMediaPlayerResource(srv *server.MCPServer, d *Deps) {
 	mediaOrigin := originOf(d.Cfg.MediaBase())
-	// Vanilla self-contained client: no external script. Only the <video> loads
-	// from the media CDN, so that's the sole CSP allowance.
+	// Only the <video> GETs from the media CDN — sole CSP allowance.
 	connectDomains := []string{}
 	resourceDomains := []string{mediaOrigin}
 	csp := map[string]any{
@@ -306,10 +395,8 @@ func registerMediaPlayerResource(srv *server.MCPServer, d *Deps) {
 
 func registerExcerptPlayerResource(srv *server.MCPServer, d *Deps) {
 	mediaOrigin := originOf(d.Cfg.MediaBase())
-	// Derive the share-audio connect host from the configured ShareAudioBase so
-	// the CSP stays in sync with the endpoint the player POSTs to.
-	shareOrigin := originOf(d.Cfg.ShareAudioBase)
-	connectDomains := []string{shareOrigin, mediaOrigin}
+	// Only the <audio> GETs the clip from the media CDN — sole CSP allowance.
+	connectDomains := []string{}
 	resourceDomains := []string{mediaOrigin}
 	csp := map[string]any{
 		"connectDomains":  connectDomains,
