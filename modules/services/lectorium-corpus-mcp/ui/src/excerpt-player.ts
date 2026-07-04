@@ -4,14 +4,25 @@ let D: Record<string, unknown> = {};
 let au: HTMLAudioElement;
 let wave: Waveform | null = null;
 let prepared = false;
-let preparing = false;
+let loading = false;
 let retries = 0;
 
+function playBtn(): HTMLButtonElement {
+  return el("play") as HTMLButtonElement;
+}
+
 function icon(state: "play" | "pause" | "busy"): void {
-  // NOTE: SVG elements don't reflect the `.hidden` IDL property — toggle display.
+  // SVG elements don't reflect the `.hidden` IDL property — toggle display.
   el("i-play").style.display = state === "play" ? "" : "none";
   el("i-pause").style.display = state === "pause" ? "" : "none";
   el("i-spin").style.display = state === "busy" ? "" : "none";
+}
+
+// While loading, always show the spinner — the button's play/pause only reflects
+// real playback state. This keeps the spinner up until the clip actually plays,
+// not just until excerpt_prepare acks (share-audio replies before the mp3 exists).
+function refreshIcon(): void {
+  icon(loading ? "busy" : au.paused ? "play" : "pause");
 }
 
 function fallbackDur(): number {
@@ -34,7 +45,7 @@ function render(d: Record<string, unknown>): void {
   setText("sub", sub.join(" · "));
 
   prepared = false;
-  preparing = false;
+  loading = false;
   retries = 0;
   au.removeAttribute("src");
   au.load();
@@ -43,16 +54,12 @@ function render(d: Record<string, unknown>): void {
   el("wave").textContent = "";
   wave = makeWaveform(el("wave"), seed);
   wave.onSeek((f) => { if (isFinite(au.duration) && au.duration > 0) au.currentTime = f * au.duration; });
-  icon("play");
+  playBtn().disabled = false;
+  refreshIcon();
   updateProgress();
 }
 
-async function ensurePrepared(): Promise<boolean> {
-  if (prepared) return true;
-  if (preparing) return false;
-  preparing = true;
-  icon("busy");
-  (el("play") as HTMLButtonElement).disabled = true;
+async function prepare(): Promise<boolean> {
   try {
     const res = await app.callServerTool({
       name: "excerpt_prepare",
@@ -70,9 +77,6 @@ async function ensurePrepared(): Promise<boolean> {
   } catch (e) {
     showErr("prepare: " + String(e));
     return false;
-  } finally {
-    preparing = false;
-    (el("play") as HTMLButtonElement).disabled = false;
   }
 }
 
@@ -81,9 +85,17 @@ async function onPlay(): Promise<void> {
     au.pause();
     return;
   }
-  if (!D.track_id) return;
-  if (!(await ensurePrepared())) {
-    icon("play");
+  if (loading || !D.track_id) return;
+
+  loading = true;
+  retries = 0;
+  playBtn().disabled = true;
+  refreshIcon();
+
+  if (!prepared && !(await prepare())) {
+    loading = false;
+    playBtn().disabled = false;
+    refreshIcon();
     return;
   }
   try {
@@ -97,21 +109,27 @@ const app = boot("corpus-excerpt-player", render);
 au = el("au") as HTMLAudioElement;
 
 el("play").addEventListener("click", () => void onPlay());
-au.addEventListener("play", () => icon("pause"));
-au.addEventListener("pause", () => { if (!preparing) icon("play"); });
-au.addEventListener("ended", () => icon("play"));
+au.addEventListener("playing", () => {
+  loading = false;
+  playBtn().disabled = false;
+  refreshIcon();
+});
+au.addEventListener("pause", refreshIcon);
+au.addEventListener("ended", refreshIcon);
 au.addEventListener("timeupdate", updateProgress);
 au.addEventListener("loadedmetadata", updateProgress);
 au.addEventListener("error", () => {
-  if (prepared && retries < 8) {
+  if (!loading) return;
+  if (retries < 12) {
     retries++;
-    icon("busy");
     setTimeout(() => {
       au.load();
       void au.play().catch(() => {});
     }, 1500);
-  } else if (prepared) {
+  } else {
+    loading = false;
+    playBtn().disabled = false;
+    refreshIcon();
     showErr("audio load failed: " + (au.currentSrc || "?"));
-    icon("play");
   }
 });
