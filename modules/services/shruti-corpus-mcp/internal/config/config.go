@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -49,7 +50,17 @@ type Config struct {
 	// namespace). Optional: on any connect/ping failure the embedder degrades
 	// gracefully to no cache. Default points at the in-stack redis.
 	RedisURL string
+
+	// ShareAudioBase is the PUBLIC, no-auth share-audio app-API base the mobile
+	// chat-citation flow uses to generate lecture-excerpt clips. The excerpt
+	// player POSTs to <ShareAudioBase>/excerpts. Env SHARE_AUDIO_BASE.
+	ShareAudioBase string
 }
+
+// defaultMediaBase is the Bunny pull-zone origin used when MEDIA_BASE_URL is
+// unset (local dev). Media clips and generated share-audio clips both live
+// under it, and it is the CSP resource host for both UI players.
+const defaultMediaBase = "https://cdn.shruti.local"
 
 var supportedDims = map[int]bool{256: true, 768: true, 1024: true, 1536: true}
 
@@ -66,6 +77,7 @@ func Load() (Config, error) {
 		MediaBaseURL:     os.Getenv("MEDIA_BASE_URL"),
 		CatalogDir:       env("CATALOG_DIR", "/var/lib/corpus-mcp"),
 		RedisURL:         env("REDIS_URL", "redis://redis:6379/0"),
+		ShareAudioBase:   env("SHARE_AUDIO_BASE", "https://api.shruti.local/share/audio"),
 	}
 
 	dim, err := strconv.Atoi(env("EMBED_DIM", "1536"))
@@ -115,6 +127,18 @@ func (c Config) SearchEnabled() bool {
 // ChunkTable is the per-dim embedding table for the active dimension.
 func (c Config) ChunkTable() string {
 	return fmt.Sprintf("chunk_embeddings_d%d", c.EmbedDim)
+}
+
+// MediaBase returns the Bunny pull-zone base for building public asset URLs
+// (media clips, generated share-audio clips), stripped of any trailing slash.
+// Falls back to the well-known default when MEDIA_BASE_URL is unset so the UI
+// players still produce valid URLs in local dev.
+func (c Config) MediaBase() string {
+	b := c.MediaBaseURL
+	if b == "" {
+		b = defaultMediaBase
+	}
+	return strings.TrimRight(b, "/")
 }
 
 func env(key, def string) string {
