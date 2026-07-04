@@ -541,10 +541,18 @@ services:
       SERVICE_VERSION: ${SHRUTI_STORAGE_SYNC_TAG:-latest}
     networks: [shruti]
 
-  search-mcp:
-    # origin only — read-only MCP over pgvector, reached over tailscale.
+  # corpus-mcp: PUBLIC read-only MCP over the canonical corpus — shlokas
+  # (original + transliteration + translation + purports) and lectures
+  # (semantic/lexical transcript search + metadata). Absorbs the pgvector
+  # search half of the retired search-mcp and adds structured reads from the
+  # two published SQLite artifacts (current.db catalog + library.db), which it
+  # self-fetches from the Bunny CDN into a writable volume (chat's indexer
+  # pattern). Unlike search-mcp it is PUBLIC and does NOT publish a host port —
+  # Caddy terminates TLS and reverse-proxies /corpus/* to :8087 (see
+  # caddy/role-origin.conf). See resources/corpus-mcp-design.md.
+  corpus-mcp:
     profiles: [origin]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-search-mcp:${SHRUTI_SEARCH_MCP_TAG:-latest}
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-corpus-mcp:${SHRUTI_CORPUS_MCP_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
     <<: *app-hardening
@@ -554,8 +562,6 @@ services:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
       DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
-      ENV: ${SHRUTI_ENV:-dev}
-      SERVICE_VERSION: ${SHRUTI_SEARCH_MCP_TAG:-latest}
       # Mirror chat's embedder so query vectors land in the corpus's space.
       # Unset here = the same defaults chat runs on (text-embedding-3-small,
       # dim 1536); override only if chat's EMBED_* are overridden too.
@@ -565,16 +571,26 @@ services:
       EMBED_QUERY_PREFIX: ${EMBED_QUERY_PREFIX:-}
       EMBED_BASE_URL: ${EMBED_BASE_URL:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      SEARCH_MCP_ADDR: 0.0.0.0:8086
-    # Published ONLY on the host's tailscale IP — the curator's machine reaches
-    # it over the tailnet (no public exposure; ufw denies the public NIC).
-    ports:
-      - "${SHRUTI_TS_IP:?set SHRUTI_TS_IP to the host tailscale IP}:8086:8086"
+      # Bunny pull-zone base — the service reads public/config.json here and
+      # downloads the current catalog (current.db) + library (library.db)
+      # SQLite artifacts. Same CDN base chat/share-* use.
+      MEDIA_BASE_URL: ${SHRUTI_MEDIA_BASE_URL:-https://cdn.shruti.local}
+      # Writable data dir the SQLite artifacts land in (download → verify →
+      # atomic swap → periodic refresh). Backed by the corpusdata volume.
+      CATALOG_DIR: /var/lib/corpus
+      CORPUS_MCP_ADDR: 0.0.0.0:8087
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_CORPUS_MCP_TAG:-latest}
+    # No ports: — internal to the shruti network only; Caddy exposes the
+    # public /corpus/* route. This is the key difference from search-mcp's
+    # tailscale-IP-only host publish.
+    volumes:
+      - corpusdata:/var/lib/corpus
     networks: [shruti]
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "/search-mcp", "-healthcheck"]
+      test: ["CMD", "/corpus-mcp", "-healthcheck"]
       interval: 15s
       timeout: 3s
       retries: 40
@@ -588,3 +604,4 @@ volumes:
   chatdata:
   redisdata:
   share_video_scratch:
+  corpusdata:
