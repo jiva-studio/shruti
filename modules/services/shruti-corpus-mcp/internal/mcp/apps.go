@@ -157,19 +157,25 @@ func registerMediaGet(srv *server.MCPServer, d *Deps) {
 			title = firstLineShort(text, 80)
 		}
 
+		// Poster = the clip URL with its extension swapped to .jpg (same rule as
+		// the app's MediaCard). The transcript goes to the LLM (content), not the
+		// widget — the player renders only the video.
+		poster := strings.TrimSuffix(mediaURL, ".mp4") + ".jpg"
 		data := map[string]any{
-			"id":    id,
-			"type":  "video",
-			"url":   mediaURL,
-			"title": title,
-			"text":  text,
-			"lang":  effLang,
+			"id":     id,
+			"type":   "video",
+			"url":    mediaURL,
+			"poster": poster,
+			"title":  title,
 		}
 		human := "Video clip " + id
-		if s := snippet(text); s != "" {
-			human += ": " + s
+		if title != "" {
+			human += " — " + title
 		}
-		human += ". " + mediaURL
+		if text != "" {
+			human += ".\nTranscript: " + text
+		}
+		human += "\n" + mediaURL
 
 		logQuery(ctx, kind, id, nil, nil, 1, effLang, start)
 		res := mcp.NewToolResultText(human)
@@ -258,27 +264,26 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 			}
 		}
 
-		_, _, predictedURL, _ := d.excerptKeys(trackID, startMs, endMs)
+		_, excerptID, _, _ := d.excerptKeys(trackID, startMs, endMs)
 
-		// No generation here — the player calls excerpt_prepare on Play.
+		// No generation here — the player calls excerpt_prepare on Play. excerpt_id
+		// seeds the waveform. The transcript goes to the LLM (content), not the
+		// widget — the player renders only title/meta + waveform.
 		data := map[string]any{
-			"track_id":      trackID,
-			"title":         title,
-			"author":        author,
-			"date":          tr.Date,
-			"track_url":     trackURL(trackID, lang),
-			"start_ms":      startMs,
-			"end_ms":        endMs,
-			"lang":          lang,
-			"text":          text,
-			"predicted_url": predictedURL,
+			"track_id":   trackID,
+			"title":      title,
+			"author":     author,
+			"date":       tr.Date,
+			"start_ms":   startMs,
+			"end_ms":     endMs,
+			"excerpt_id": excerptID,
 		}
 		human := "Audio excerpt from " + title
 		if author != "" {
 			human += " (" + author + ")"
 		}
 		if text != "" {
-			human += ": " + snippet(text)
+			human += ".\nTranscript: " + text
 		}
 
 		logQuery(ctx, kind, trackID, map[string]any{"start_ms": startMs, "end_ms": endMs}, nil, 1, lang, start)
