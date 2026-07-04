@@ -11,15 +11,14 @@ func boot(appName string) string {
 // Both player pages are SELF-CONTAINED: they speak the MCP Apps postMessage
 // protocol (SEP-1865) in vanilla JS with NO external script imports. The host
 // renders them in a deny-by-default sandboxed iframe, which blocks loading any
-// external module (an esm.sh import silently fails there), so the client is
-// inlined. NOTE: this is a Go raw string literal (backtick-delimited) — the JS
-// MUST NOT use backticks/template literals.
+// external module, so the client is inlined. NOTE: this is a Go raw string
+// literal (backtick-delimited) — the JS MUST NOT use backticks/template literals.
+//
+// The pages surface errors IN the card (a #err line): CSP violations
+// (securitypolicyviolation gives the exact directive + blocked URI), media
+// load errors, and unhandled JS errors — plus an "open in new tab" fallback
+// link so the media is reachable even if inline playback is CSP-blocked.
 
-// mcpAppClientJS is the shared MCP Apps handshake + message loop. Each page
-// defines a top-level render(structuredContent) function that this loop calls
-// when the host pushes ui/notifications/tool-result. window.__reportSize()
-// notifies the host of the content size so the iframe fits the content (no
-// fixed square). appName is substituted per page.
 const mcpAppClientHead = `
   function __reportSize() {
     try {
@@ -34,6 +33,22 @@ const mcpAppClientHead = `
     } catch (e) {}
   }
   window.__reportSize = __reportSize;
+
+  function __showErr(msg) {
+    var e = document.getElementById("err");
+    if (e) { e.textContent += (e.textContent ? "\n" : "") + msg; e.style.display = ""; }
+    __reportSize();
+  }
+  window.__showErr = __showErr;
+  document.addEventListener("securitypolicyviolation", function (ev) {
+    __showErr("CSP blocked [" + ev.violatedDirective + "] " + ev.blockedURI);
+  });
+  window.addEventListener("error", function (ev) {
+    __showErr("JS error: " + (ev.message || ev.type));
+  });
+  window.addEventListener("unhandledrejection", function (ev) {
+    __showErr("Promise rejected: " + ((ev.reason && ev.reason.message) || ev.reason));
+  });
 `
 
 const mcpAppClientBoot = `
@@ -42,7 +57,6 @@ const mcpAppClientBoot = `
     var d = event.data;
     if (!d || typeof d !== "object" || d.jsonrpc !== "2.0") return;
     if (d.id !== undefined && d.result) {
-      // Response to our ui/initialize — apply theme, ack, we're connected.
       var hc = d.result.hostContext || {};
       if (hc.theme) document.documentElement.setAttribute("data-theme", hc.theme);
       try {
@@ -50,10 +64,9 @@ const mcpAppClientBoot = `
       } catch (e) {}
       __reportSize();
     } else if (d.method === "ui/notifications/tool-result") {
-      try { render((d.params || {}).structuredContent); } catch (e) {}
+      try { render((d.params || {}).structuredContent); } catch (e) { __showErr("render: " + e); }
     }
   });
-  // Kick off the handshake; the host pushes the tool result after it responds.
   try {
     window.parent.postMessage({
       jsonrpc: "2.0", id: 1, method: "ui/initialize",
@@ -64,28 +77,38 @@ const mcpAppClientBoot = `
   __reportSize();
 `
 
-// mediaPlayerHTML — ui://corpus/media-player.html. Binds a native
-// <video controls> to structuredContent.url; width:100%/height:auto so the
-// video's intrinsic aspect drives the iframe height (16:9 or 9:16).
-var mediaPlayerHTML = `<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
+const playerStyle = `
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: transparent; }
   body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; }
-  #card { max-width: 560px; margin: 0 auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-  #title { font-size: 15px; font-weight: 600; line-height: 1.3; }
-  #text { font-size: 13px; line-height: 1.45; opacity: .8; white-space: pre-wrap; }
+  #card { max-width: 560px; margin: 0 auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  #title, #meta { font-size: 15px; font-weight: 600; line-height: 1.3; }
+  #sub { font-size: 12px; opacity: .7; }
+  #text { font-size: 13px; line-height: 1.45; opacity: .82; white-space: pre-wrap; }
   video { width: 100%; height: auto; display: block; border-radius: 10px; background: #000; }
-  @media (prefers-color-scheme: dark) { body { color: #ececec; } }
+  audio { width: 100%; margin-top: 4px; }
+  #bar { display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+  button#play { border: 0; border-radius: 999px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; background: #3a7d5c; color: #fff; }
+  button#play:disabled { opacity: .55; cursor: default; }
+  #status { font-size: 12px; opacity: .75; }
+  a#open { font-size: 13px; color: #3a7d5c; }
+  #err { display: none; font-size: 11px; color: #c0392b; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; }
+  @media (prefers-color-scheme: dark) { body { color: #ececec; } a#open { color: #6fcf97; } }
   :root[data-theme="dark"] body { color: #ececec; }
   :root[data-theme="light"] body { color: #1a1a1a; }
-</style>
+`
+
+// mediaPlayerHTML — ui://corpus/media-player.html.
+var mediaPlayerHTML = `<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>` + playerStyle + `</style>
 <div id="card">
   <div id="title"></div>
   <div id="text"></div>
   <video id="v" controls playsinline preload="metadata"></video>
+  <a id="open" target="_blank" rel="noopener" style="display:none"></a>
+  <div id="err"></div>
 </div>
 <script>
 ` + mcpAppClientHead + `
@@ -94,45 +117,35 @@ var mediaPlayerHTML = `<meta charset="utf-8">
     var t = document.getElementById("title");
     var x = document.getElementById("text");
     var v = document.getElementById("v");
+    var o = document.getElementById("open");
     t.textContent = data.title || "";
     t.style.display = data.title ? "" : "none";
     x.textContent = data.text || "";
     x.style.display = data.text ? "" : "none";
-    if (data.url) { v.src = data.url; v.style.display = ""; } else { v.style.display = "none"; }
+    if (data.url) {
+      v.src = data.url; v.style.display = "";
+      o.href = data.url; o.textContent = "↗ Open video in a new tab"; o.style.display = "";
+    } else {
+      v.style.display = "none";
+    }
     __reportSize();
   }
   (function () {
     var v = document.getElementById("v");
     v.addEventListener("loadedmetadata", __reportSize);
     v.addEventListener("loadeddata", __reportSize);
+    v.addEventListener("error", function () {
+      __showErr("video load failed (code " + (v.error && v.error.code) + ") src=" + (v.currentSrc || "?"));
+    });
   })();
 ` + boot("corpus-media-player") + `
 </script>
 `
 
-// excerptPlayerHTML — ui://corpus/excerpt-player.html. Compact wide card. On
-// Play it mirrors the mobile chat-citation flow against the public share-audio
-// service: HEAD predicted -> POST -> HEAD-poll predicted -> play.
+// excerptPlayerHTML — ui://corpus/excerpt-player.html.
 var excerptPlayerHTML = `<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: transparent; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; }
-  #card { max-width: 520px; margin: 0 auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
-  #meta { font-size: 14px; font-weight: 600; line-height: 1.3; }
-  #sub { font-size: 12px; opacity: .7; }
-  #text { font-size: 13px; line-height: 1.4; opacity: .85; }
-  #bar { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-  button#play { border: 0; border-radius: 999px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; background: #3a7d5c; color: #fff; }
-  button#play:disabled { opacity: .55; cursor: default; }
-  #status { font-size: 12px; opacity: .75; }
-  audio { width: 100%; margin-top: 4px; }
-  @media (prefers-color-scheme: dark) { body { color: #ececec; } }
-  :root[data-theme="dark"] body { color: #ececec; }
-  :root[data-theme="light"] body { color: #1a1a1a; }
-</style>
+<style>` + playerStyle + `</style>
 <div id="card">
   <div id="meta"></div>
   <div id="sub"></div>
@@ -140,8 +153,10 @@ var excerptPlayerHTML = `<meta charset="utf-8">
   <div id="bar">
     <button id="play" type="button">&#9654; Play excerpt</button>
     <span id="status"></span>
+    <a id="open" target="_blank" rel="noopener" style="display:none"></a>
   </div>
   <audio id="au" controls preload="none" style="display:none"></audio>
+  <div id="err"></div>
 </div>
 <script>
 ` + mcpAppClientHead + `
@@ -164,17 +179,19 @@ var excerptPlayerHTML = `<meta charset="utf-8">
     $("sub").style.display = sub.length ? "" : "none";
     $("text").textContent = D.text || "";
     $("text").style.display = D.text ? "" : "none";
+    var pu = D.audio && D.audio.predicted_url;
+    if (pu) { var o = $("open"); o.href = pu; o.textContent = "↗ Open audio"; o.style.display = ""; }
     __reportSize();
   }
   function head(url) {
-    return fetch(url, { method: "HEAD" }).then(function (r) { return r.ok; }).catch(function () { return false; });
+    return fetch(url, { method: "HEAD" }).then(function (r) { return r.ok; }).catch(function (e) { __showErr("HEAD " + url + " -> " + e); return false; });
   }
   function startPlay(url) {
     var au = $("au");
     au.src = url; au.style.display = "";
     $("play").style.display = "none";
     setStatus("");
-    au.play().catch(function () {});
+    au.play().catch(function (e) { __showErr("audio.play() -> " + e); });
     __reportSize();
   }
   function play() {
@@ -191,22 +208,25 @@ var excerptPlayerHTML = `<meta charset="utf-8">
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source_key: a.source_key, start_ms: a.start_ms, end_ms: a.end_ms, excerpt_id: a.excerpt_id })
       }).then(function (resp) {
-        if (!resp.ok) return null;
+        if (!resp.ok) { __showErr("POST " + a.endpoint + " -> HTTP " + resp.status); return null; }
         return resp.json().catch(function () { return {}; });
       }).then(function (j) {
         if (j && j.ready === true && j.url) { startPlay(j.url); return; }
         if (j && j.url) url = j.url;
         var deadline = Date.now() + 45000;
         (function pollLoop() {
-          if (Date.now() >= deadline) { setStatus("Could not prepare audio — try again."); $("play").disabled = false; return; }
+          if (Date.now() >= deadline) { setStatus("Could not prepare audio — try Open audio."); $("play").disabled = false; return; }
           sleep(2000).then(function () { return head(url); }).then(function (ok2) {
             if (ok2) { startPlay(url); } else { pollLoop(); }
           });
         })();
-      }).catch(function () { setStatus("Could not prepare audio — try again."); $("play").disabled = false; });
+      }).catch(function (e) { __showErr("POST " + a.endpoint + " -> " + e); setStatus("Could not prepare audio — try Open audio."); $("play").disabled = false; });
     });
   }
-  (function () { $("play").addEventListener("click", play); })();
+  (function () {
+    $("play").addEventListener("click", play);
+    $("au").addEventListener("error", function () { var au = $("au"); __showErr("audio load failed (code " + (au.error && au.error.code) + ") src=" + (au.currentSrc || "?")); });
+  })();
 ` + boot("corpus-excerpt-player") + `
 </script>
 `
