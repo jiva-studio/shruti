@@ -4,7 +4,7 @@
       "type": "http",
       "url": "http://127.0.0.1:8081/mcp"
     },
-    "_comment_corpus": "Public read-only corpus MCP. Prod is the /corpus route behind Caddy (https://<domain>/corpus/mcp); this local entry hits the container's :8087 directly.",
+    "_comment_corpus": "Public read-only corpus MCP. Prod is its own subdomain behind Caddy (https://mcp.shruti.app/mcp); this local entry hits the container's :8087 directly.",
     "shruti-corpus-mcp": {
       "type": "http",
       "url": "http://127.0.0.1:8087/mcp"

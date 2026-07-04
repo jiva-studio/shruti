@@ -60,6 +60,12 @@ services:
       # ":8088" so hosts that don't serve the site (RU proxy) parse the
       # web block without attempting ACME for a real name.
       SHRUTI_WEB_DOMAIN: ${SHRUTI_WEB_DOMAIN:-:8088}
+      # Public hostname for the corpus-mcp MCP endpoint (own subdomain,
+      # serves /mcp at root; Caddy auto-issues Let's Encrypt). Set on origin
+      # (e.g. mcp.shruti.app). Defaults to an internal-only ":8089"
+      # so hosts that don't serve it (RU proxy) parse the block without
+      # attempting ACME for a real name — same pattern as the web domain.
+      SHRUTI_MCP_DOMAIN: ${SHRUTI_MCP_DOMAIN:-:8089}
     volumes:
       - caddydata:/data
       - caddyconfig:/config
