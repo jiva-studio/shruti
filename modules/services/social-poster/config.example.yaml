@@ -1,0 +1,85 @@
+# social-poster config. Structure lives here; secrets are pulled from the
+# env vars named by the *_env fields, so this file is safe to commit.
+
+service:
+  env: prod
+  log_level: info
+  port: "8090"
+
+catalog:
+  scheme: 20260621                     # must match modules/db-scheme.json
+  cache_dir: /var/lib/social-poster/catalog
+  refresh: "0 */6 * * *"               # re-pull the catalog every 6h
+  regions:
+    global:
+      cdn_base: https://cdn.shruti.local
+      share_audio_base: https://<global-host>/share/audio
+    ru:
+      cdn_base: https://<ru-cdn-base>
+      share_audio_base: https://<ru-host>/share/audio
+
+state:
+  db_path: /var/lib/social-poster/state.db
+
+targets:
+  telegram_en:
+    platform: telegram
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id: "@your_en_channel"        # or numeric -100…; bot must be admin
+
+  telegram_ru:
+    platform: telegram
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id: "@your_ru_channel"
+
+  vk_ru:                               # VK is Russian-only (community: shruti)
+    platform: vk
+    vk_token_env: VK_COMMUNITY_TOKEN   # scopes: wall, photos (+audio if attach)
+    group_id: "123456789"              # numeric id of vk.com/shruti (upload_vk_audio.py prints it)
+    attach_audio: true                 # attach pre-mapped audio by id (see VK-AUDIO-SETUP.md)
+    poster:
+      mode: prebuilt                   # prebuilt | brand_static | none
+      images:                          # ready-made posters hosted on Bunny
+        - https://cdn.shruti.local/public/posters/wisdom/1.jpg
+        - https://cdn.shruti.local/public/posters/wisdom/2.jpg
+
+  fb_en:
+    platform: facebook
+    page_id: "1234567890"
+    page_token_env: FB_PAGE_TOKEN      # long-lived Page token, pages_manage_posts
+    poster:
+      mode: brand_static
+      image: https://cdn.shruti.local/public/posters/brand.jpg
+
+campaigns:
+  - name: daily-wisdom-ru
+    schedule: "0 9 * * *"              # every day 09:00 (server tz)
+    region: ru
+    content: daily_wisdom
+    filters:
+      language: ru
+      pick: random
+      not_posted_days: 60
+    targets: [telegram_ru, vk_ru]
+
+  - name: daily-wisdom-en
+    schedule: "0 12 * * *"
+    region: global
+    content: daily_wisdom
+    filters:
+      language: en
+      pick: random
+      not_posted_days: 60
+    targets: [telegram_en, fb_en]
+
+  - name: on-this-day-en
+    schedule: "30 15 * * *"
+    region: global
+    content: lecture
+    filters:
+      language: en
+      day: on_this_day                 # tracks recorded on today's MM-DD
+      order: topic_weight              # "trending" ordering
+      pick: top1
+      excerpt_ms: 120000               # 2-min excerpt for the audio
+    targets: [telegram_en]
