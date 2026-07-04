@@ -1,19 +1,123 @@
-:root { color-scheme: light dark; }
+/* Brand tokens ported from the app (modules/apps/web/src/styles/tokens.css).
+   Primary is saffron #cc7a3d; light = player-card background. */
+:root {
+  color-scheme: light dark;
+  --primary: #cc7a3d;
+  --primary-rgb: 204, 122, 61;
+  --primary-contrast: #faf5ea;
+  --primary-shade: #b36b36;
+  --light: #f0e6d5;
+  --medium: #806752;
+  --medium-rgb: 128, 103, 82;
+  --text: #3d2b1f;
+  --border: #e8ddc8;
+  --waveform-base: rgba(128, 103, 82, 0.3);
+  --waveform-played: #cc7a3d;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #f0a55c;
+    --primary-contrast: #3d2b1f;
+    --primary-shade: #d49150;
+    --light: #261c13;
+    --medium: #a88c70;
+    --medium-rgb: 168, 140, 112;
+    --text: #c0b8a8;
+    --border: #2e2218;
+    --waveform-base: rgba(168, 140, 112, 0.3);
+    --waveform-played: #f0a55c;
+  }
+}
+:root[data-theme="light"] {
+  --primary: #cc7a3d; --primary-contrast: #faf5ea; --primary-shade: #b36b36;
+  --light: #f0e6d5; --medium: #806752; --medium-rgb: 128, 103, 82;
+  --text: #3d2b1f; --border: #e8ddc8;
+  --waveform-base: rgba(128, 103, 82, 0.3); --waveform-played: #cc7a3d;
+}
+:root[data-theme="dark"] {
+  --primary: #f0a55c; --primary-contrast: #3d2b1f; --primary-shade: #d49150;
+  --light: #261c13; --medium: #a88c70; --medium-rgb: 168, 140, 112;
+  --text: #c0b8a8; --border: #2e2218;
+  --waveform-base: rgba(168, 140, 112, 0.3); --waveform-played: #f0a55c;
+}
+
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: transparent; }
-body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1a1a1a; }
-#card { max-width: 560px; margin: 0 auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
-#title, #meta { font-size: 15px; font-weight: 600; line-height: 1.3; }
-#sub { font-size: 12px; opacity: .7; }
-#text { font-size: 13px; line-height: 1.45; opacity: .82; white-space: pre-wrap; }
-video { width: 100%; height: auto; display: block; border-radius: 10px; background: #000; }
-audio { width: 100%; margin-top: 4px; }
-#bar { display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
-button#play { border: 0; border-radius: 999px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; background: #3a7d5c; color: #fff; }
-button#play:disabled { opacity: .55; cursor: default; }
-#status { font-size: 12px; opacity: .75; }
-a#open { font-size: 13px; color: #3a7d5c; }
-#err { display: none; font-size: 11px; color: #c0392b; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; }
-@media (prefers-color-scheme: dark) { body { color: #ececec; } a#open { color: #6fcf97; } }
-:root[data-theme="dark"] body { color: #ececec; }
-:root[data-theme="light"] body { color: #1a1a1a; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────── */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--light);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+.subtitle { font-size: 0.85rem; color: var(--medium); margin-top: 2px; }
+.err {
+  display: none; font-size: 11px; color: #c0392b; white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ── Audio player (ported from AudioPlayerBar.vue + Waveform.vue) ──────── */
+.player-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 4px;
+}
+.player-left { grid-column: 1; grid-row: 1 / span 2; }
+.player-center { grid-column: 2; grid-row: 1; min-width: 0; display: flex; }
+.player-below { grid-column: 2; grid-row: 2; min-width: 0; }
+
+.play-btn {
+  flex-shrink: 0;
+  width: 46px; height: 46px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; border: none; border-radius: 50%;
+  background: var(--primary); color: var(--primary-contrast);
+  cursor: pointer; transition: background 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.play-btn:hover:not(:disabled) { background: var(--primary-shade); }
+.play-btn:disabled { opacity: 0.6; cursor: default; }
+.play-btn svg { width: 22px; height: 22px; fill: currentColor; }
+.spin {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(var(--primary-rgb), 0); border-top-color: var(--primary-contrast);
+  border-right-color: var(--primary-contrast);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.waveform {
+  position: relative; flex: 1;
+  height: 40px; display: flex; align-items: center;
+  justify-content: space-between; min-width: 0; cursor: pointer;
+}
+.bar {
+  display: inline-block; flex: 0 0 2px; width: 2px; min-height: 2px;
+  background: var(--waveform-base); border-radius: 2px;
+  transition: background-color 300ms ease, height 350ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.bar.played { background: var(--waveform-played); }
+.player-time { font-size: 0.72rem; color: var(--medium); font-variant-numeric: tabular-nums; }
+
+/* ── Video (ported from MediaCard.vue stage) ──────────────────────────── */
+.stage {
+  position: relative; width: 100%;
+  background: #000; border-radius: 10px; overflow: hidden; line-height: 0;
+}
+video { width: 100%; height: auto; display: block; }
