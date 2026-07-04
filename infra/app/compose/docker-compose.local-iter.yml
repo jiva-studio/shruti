@@ -1,0 +1,5 @@
+# throwaway dev override: bind-mount chat source for hot iteration (no rebuild).
+services:
+  chat:
+    volumes:
+      - ../../../modules/services/chat/app/src/lectorium_chat:/app/src/lectorium_chat
