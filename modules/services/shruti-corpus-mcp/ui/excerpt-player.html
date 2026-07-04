@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Corpus excerpt player</title>
+  </head>
+  <body>
+    <div id="card">
+      <div id="meta"></div>
+      <div id="sub"></div>
+      <div id="text"></div>
+      <div id="bar">
+        <button id="play" type="button">&#9654; Play excerpt</button>
+        <span id="status"></span>
+      </div>
+      <audio id="au" controls preload="none" style="display: none"></audio>
+      <a id="open" target="_blank" rel="noopener" style="display: none"></a>
+      <div id="err"></div>
+    </div>
+    <script type="module" src="/src/excerpt-player.ts"></script>
+  </body>
+</html>

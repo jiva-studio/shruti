@@ -37,6 +37,7 @@ var toolTitles = map[string]string{
 	"transcript_window": "Read transcript",
 	"media_get":         "Play video",
 	"lecture_excerpt":   "Play excerpt",
+	"excerpt_prepare":   "Prepare excerpt audio",
 }
 
 // RegisterTools wires the 15 read-only tools plus the two MCP-App render-tools
