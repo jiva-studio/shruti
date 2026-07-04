@@ -16,6 +16,26 @@ import (
 
 const trgmMinSim = 0.3
 
+// toolTitles are the human-readable display names (MCP `title` annotation)
+// clients show instead of the raw underscore tool name.
+var toolTitles = map[string]string{
+	"search":            "Search",
+	"source_get":        "Get book",
+	"source_list":       "List books",
+	"source_resolve":    "Find book",
+	"author_list":       "List authors",
+	"author_resolve":    "Find author",
+	"location_list":     "List locations",
+	"location_resolve":  "Find location",
+	"verse_get":         "Get verse",
+	"verse_list":        "List verses",
+	"document_get":      "Get document",
+	"document_list":     "List documents",
+	"track_get":         "Get lecture",
+	"track_list":        "List lectures",
+	"transcript_window": "Read transcript",
+}
+
 // RegisterTools wires all 15 read-only tools onto srv.
 func RegisterTools(srv *server.MCPServer, d *Deps) {
 	registerSearch(srv, d)
@@ -77,11 +97,13 @@ func (e *badType) Error() string { return "invalid type: " + e.t }
 func registerSearch(srv *server.MCPServer, d *Deps) {
 	const kind = "search"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription(
 			"Semantic + lexical search over the corpus. Returns verses, documents, "+
 				"track passages and titles matching a natural-language query, each with the "+
-				"id needed to fetch the full record (verse_id→verse.get, document_id→document.get, "+
-				"track_id+start_ms/end_ms→transcript.window). Every filter is optional."),
+				"id needed to fetch the full record (verse_id→verse_get, document_id→document_get, "+
+				"track_id+start_ms/end_ms→transcript_window). Every filter is optional."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Natural-language query.")),
 		mcp.WithArray("types", mcp.Description("Subset of verse|document|track|title (default all)."), mcp.WithStringItems()),
 		mcp.WithString("source", mcp.Description("Restrict to a book (\"BG\" / source_id).")),
@@ -328,7 +350,7 @@ func (d *Deps) buildSearchHit(ctx context.Context, sd *catalog.SourceDict, ad, l
 	return nil, false, nil
 }
 
-// ── source.get / list / resolve ─────────────────────────────────────────────
+// ── source_get / list / resolve ─────────────────────────────────────────────
 
 func (d *Deps) sourceObject(ctx context.Context, sd *catalog.SourceDict, id, lang string) (map[string]any, error) {
 	obj := sourceRefFull(sd, id, lang)
@@ -343,8 +365,10 @@ func (d *Deps) sourceObject(ctx context.Context, sd *catalog.SourceDict, id, lan
 }
 
 func registerSourceGet(srv *server.MCPServer, d *Deps) {
-	const kind = "source.get"
+	const kind = "source_get"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("Get one book by id or code (\"source_…\" or \"BG\"/\"БГ\")."),
 		mcp.WithString("id", mcp.Description("source_id.")),
 		mcp.WithString("code", mcp.Description("Book code, e.g. \"BG\" / \"БГ\".")),
@@ -383,8 +407,10 @@ func registerSourceGet(srv *server.MCPServer, d *Deps) {
 }
 
 func registerSourceList(srv *server.MCPServer, d *Deps) {
-	const kind = "source.list"
+	const kind = "source_list"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("List all books (Caitanya-caritāmṛta is three sources)."),
 		mcp.WithString("lang", mcp.Description("Slim code/name to this locale.")),
 		mcp.WithString("cursor", mcp.Description("Pagination cursor (last source id).")),
@@ -428,8 +454,10 @@ func registerSourceList(srv *server.MCPServer, d *Deps) {
 }
 
 func registerSourceResolve(srv *server.MCPServer, d *Deps) {
-	const kind = "source.resolve"
+	const kind = "source_resolve"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("Find a book by name (fuzzy): \"gita\", \"бхагаватам\", \"CC Madhya\"."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Book name or code fragment.")),
 		mcp.WithString("lang", mcp.Description("Result language.")),
@@ -461,7 +489,9 @@ func registerSourceResolve(srv *server.MCPServer, d *Deps) {
 
 func registerEntityList(srv *server.MCPServer, d *Deps, kind string, load func(context.Context) (*catalog.EntityDict, error)) {
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("List all "+strings.TrimSuffix(kind, ".list")+"s."),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithDescription("List all "+strings.TrimSuffix(kind, "_list")+"s."),
 		mcp.WithString("lang", mcp.Description("Slim name to this locale.")),
 		mcp.WithString("cursor", mcp.Description("Pagination cursor (last id).")),
 		mcp.WithNumber("limit", mcp.Description("Max items (default 100, max 500).")),
@@ -502,7 +532,9 @@ func registerEntityList(srv *server.MCPServer, d *Deps, kind string, load func(c
 
 func registerEntityResolve(srv *server.MCPServer, d *Deps, kind string, load func(context.Context) (*catalog.EntityDict, error)) {
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("Find a "+strings.TrimSuffix(kind, ".resolve")+" by name (fuzzy)."),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithDescription("Find a "+strings.TrimSuffix(kind, "_resolve")+" by name (fuzzy)."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Name fragment.")),
 		mcp.WithString("lang", mcp.Description("Result language.")),
 		mcp.WithNumber("limit", mcp.Description("Max matches (default 5, max 20).")),
@@ -530,23 +562,25 @@ func registerEntityResolve(srv *server.MCPServer, d *Deps, kind string, load fun
 }
 
 func registerAuthorList(srv *server.MCPServer, d *Deps) {
-	registerEntityList(srv, d, "author.list", d.Catalog.LoadAuthors)
+	registerEntityList(srv, d, "author_list", d.Catalog.LoadAuthors)
 }
 func registerAuthorResolve(srv *server.MCPServer, d *Deps) {
-	registerEntityResolve(srv, d, "author.resolve", d.Catalog.LoadAuthors)
+	registerEntityResolve(srv, d, "author_resolve", d.Catalog.LoadAuthors)
 }
 func registerLocationList(srv *server.MCPServer, d *Deps) {
-	registerEntityList(srv, d, "location.list", d.Catalog.LoadLocations)
+	registerEntityList(srv, d, "location_list", d.Catalog.LoadLocations)
 }
 func registerLocationResolve(srv *server.MCPServer, d *Deps) {
-	registerEntityResolve(srv, d, "location.resolve", d.Catalog.LoadLocations)
+	registerEntityResolve(srv, d, "location_resolve", d.Catalog.LoadLocations)
 }
 
-// ── verse.get / verse.list ──────────────────────────────────────────────────
+// ── verse_get / verse_list ──────────────────────────────────────────────────
 
 func registerVerseGet(srv *server.MCPServer, d *Deps) {
-	const kind = "verse.get"
+	const kind = "verse_get"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("Get a verse: original (Devanagari/Bengali) + stored IAST transliteration + translation. "+
 			"Address by ref (\"BG 2.13\"), source+tokens, or verse id."),
 		mcp.WithString("ref", mcp.Description("Reference string, e.g. \"BG 2.13\".")),
@@ -600,8 +634,10 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 }
 
 func registerVerseList(srv *server.MCPServer, d *Deps) {
-	const kind = "verse.list"
+	const kind = "verse_list"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("List the verses of a book / chapter. Skips .0 chapter summaries; "+
 			"collapses merged verses into one item with a covers span."),
 		mcp.WithString("source", mcp.Required(), mcp.Description("Book code / source_id.")),
@@ -669,11 +705,13 @@ func registerVerseList(srv *server.MCPServer, d *Deps) {
 	})
 }
 
-// ── document.get / document.list ────────────────────────────────────────────
+// ── document_get / document_list ────────────────────────────────────────────
 
 func registerDocumentGet(srv *server.MCPServer, d *Deps) {
-	const kind = "document.get"
+	const kind = "document_get"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("Get a document (commentary/prose_chapter/letter) by id."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("doc_id.")),
 		mcp.WithString("lang", mcp.Description("Slim bodies to this locale.")),
@@ -702,10 +740,12 @@ func registerDocumentGet(srv *server.MCPServer, d *Deps) {
 }
 
 func registerDocumentList(srv *server.MCPServer, d *Deps) {
-	const kind = "document.list"
+	const kind = "document_list"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("List documents at a reference / in a book. A verse's purport = "+
-			"document.list(source, tokens, kind:\"commentary\")."),
+			"document_list(source, tokens, kind:\"commentary\")."),
 		mcp.WithString("source", mcp.Required(), mcp.Description("Book code / source_id.")),
 		mcp.WithString("tokens", mcp.Description("A specific reference; omit for the whole book.")),
 		mcp.WithString("kind", mcp.Description(docKinds+".")),
@@ -757,11 +797,13 @@ func registerDocumentList(srv *server.MCPServer, d *Deps) {
 	})
 }
 
-// ── track.get / track.list / transcript.window ──────────────────────────────
+// ── track_get / track_list / transcript_window ──────────────────────────────
 
 func registerTrackGet(srv *server.MCPServer, d *Deps) {
-	const kind = "track.get"
+	const kind = "track_get"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("Get a track (lecture/conversation): metadata, cited references, transcript/pdf availability."),
 		mcp.WithString("track_id", mcp.Required(), mcp.Description("track_id.")),
 		mcp.WithString("lang", mcp.Description("Metadata language.")),
@@ -799,8 +841,10 @@ func registerTrackGet(srv *server.MCPServer, d *Deps) {
 }
 
 func registerTrackList(srv *server.MCPServer, d *Deps) {
-	const kind = "track.list"
+	const kind = "track_list"
 	t := mcp.NewTool(kind,
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithDescription("List tracks, filterable by reference (source[+tokens] = tracks citing it), "+
 			"author/location/kind/date/lang. No filter ⇒ recent tracks (date desc)."),
 		mcp.WithString("source", mcp.Description("Book code / source_id — tracks citing this book.")),
@@ -876,9 +920,11 @@ func registerTrackList(srv *server.MCPServer, d *Deps) {
 }
 
 func registerTranscriptWindow(srv *server.MCPServer, d *Deps) {
-	const kind = "transcript.window"
+	const kind = "transcript_window"
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("Read a track's transcript around a time window (from a search track hit or track.list). "+
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithDescription("Read a track's transcript around a time window (from a search track hit or track_list). "+
 			"Widen with pad_ms."),
 		mcp.WithString("track_id", mcp.Required(), mcp.Description("track_id.")),
 		mcp.WithNumber("start_ms", mcp.Required(), mcp.Description("Window start (ms).")),
