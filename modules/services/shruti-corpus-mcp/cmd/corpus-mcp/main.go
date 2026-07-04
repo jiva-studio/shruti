@@ -11,12 +11,15 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"flag"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -150,10 +153,21 @@ func main() {
 	)
 
 	mux := http.NewServeMux()
-	mux.Handle(streamableHTTPPath, streamable)
-	mux.Handle(streamableHTTPPath+"/", streamable)
+	// Browser GETs (Accept: text/html) to an MCP path get the human landing
+	// page; POST JSON-RPC and SSE (Accept: text/event-stream) pass through.
+	mux.Handle(streamableHTTPPath, landingGate(streamable))
+	mux.Handle(streamableHTTPPath+"/", landingGate(streamable))
 	mux.Handle(ssePath, sse)
 	mux.Handle("/message", sse)
+	// Root serves the landing page; the MCP endpoint lives at /mcp.
+	mux.HandleFunc("/", rootHandler)
+	mux.HandleFunc("/privacy", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		writeHTML(w, policyHTML)
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -185,6 +199,52 @@ func main() {
 		log.Fatalf("listen: %v", err)
 	}
 	log.Printf("shruti-corpus-mcp stopped cleanly")
+}
+
+//go:embed landing.html
+var landingHTML string
+
+//go:embed policy.html
+var policyHTML string
+
+// wantsHTML is true for a browser navigation (GET, Accept: text/html) — as
+// opposed to an MCP client (POST JSON-RPC, or GET with Accept: text/event-stream
+// for the SSE stream).
+func wantsHTML(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	a := r.Header.Get("Accept")
+	return strings.Contains(a, "text/html") && !strings.Contains(a, "text/event-stream")
+}
+
+func writeHTML(w http.ResponseWriter, html string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = io.WriteString(w, html)
+}
+
+func serveLanding(w http.ResponseWriter, _ *http.Request) { writeHTML(w, landingHTML) }
+
+// landingGate serves the human landing page for browser GETs to an MCP path and
+// passes real MCP traffic (POST / SSE) through to next.
+func landingGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if wantsHTML(r) {
+			serveLanding(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// rootHandler serves the landing page at "/"; every other unmatched path 404s.
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" || r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	serveLanding(w, r)
 }
 
 // corsMiddleware sets permissive CORS so browser-based MCP clients (e.g. a
