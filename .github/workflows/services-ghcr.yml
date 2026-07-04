@@ -29,7 +29,7 @@ on:
       - 'modules/services/share-video/**'
       - 'modules/services/share-transcript/**'
       - 'modules/services/storage-sync/**'
-      - 'modules/services/search-mcp/**'
+      - 'modules/services/shruti-corpus-mcp/**'
       - 'modules/docs/help/**'              # chat COPYs the help corpus
       - 'modules/.dockerignore'             # affects every service build
       - 'infra/app/compose/caddy/**'            # shared Caddy image (used by app + obs)
@@ -40,7 +40,7 @@ on:
       services:
         description: 'Which images to build'
         type: choice
-        options: [all, auth, billing, chat, cleanup-worker, share-audio, share-video, share-transcript, storage-sync, search-mcp, caddy, migrator]
+        options: [all, auth, billing, chat, cleanup-worker, share-audio, share-video, share-transcript, storage-sync, corpus-mcp, caddy, migrator]
         default: all
 
 concurrency:
@@ -114,8 +114,8 @@ jobs:
               - 'modules/services/storage-sync/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
-            search-mcp:
-              - 'modules/services/search-mcp/**'
+            corpus-mcp:
+              - 'modules/services/shruti-corpus-mcp/**'
               - 'modules/.dockerignore'
               - '.github/workflows/services-ghcr.yml'
             caddy:
@@ -140,7 +140,7 @@ jobs:
           F_SHARE_VIDEO: ${{ steps.filter.outputs.share-video }}
           F_SHARE_TRANSCRIPT: ${{ steps.filter.outputs.share-transcript }}
           F_STORAGE_SYNC: ${{ steps.filter.outputs.storage-sync }}
-          F_SEARCH_MCP: ${{ steps.filter.outputs.search-mcp }}
+          F_CORPUS_MCP: ${{ steps.filter.outputs.corpus-mcp }}
           F_CADDY: ${{ steps.filter.outputs.caddy }}
           F_MIGRATOR: ${{ steps.filter.outputs.migrator }}
         run: |
@@ -154,7 +154,7 @@ jobs:
             [share-video]=./modules
             [share-transcript]=./modules
             [storage-sync]=./modules
-            [search-mcp]=./modules
+            [corpus-mcp]=./modules
             [caddy]=./infra/app/compose/caddy
             [migrator]=./infra/app/db
           )
@@ -167,7 +167,7 @@ jobs:
             [share-video]=./modules/services/share-video/Dockerfile
             [share-transcript]=./modules/services/share-transcript/Dockerfile
             [storage-sync]=./modules/services/storage-sync/Dockerfile
-            [search-mcp]=./modules/services/search-mcp/Dockerfile
+            [corpus-mcp]=./modules/services/shruti-corpus-mcp/Dockerfile
             [caddy]=./infra/app/compose/caddy/Dockerfile
             [migrator]=./infra/app/db/Dockerfile
           )
@@ -191,7 +191,7 @@ jobs:
           }
 
           entries=()
-          for svc in auth billing chat cleanup-worker share-audio share-video share-transcript storage-sync search-mcp caddy migrator; do
+          for svc in auth billing chat cleanup-worker share-audio share-video share-transcript storage-sync corpus-mcp caddy migrator; do
             if wants "$svc"; then
               entries+=("$(jq -nc --arg s "$svc" --arg c "${CTX[$svc]}" --arg d "${DOCKERFILE[$svc]}" \
                 '{service:$s, context:$c, dockerfile:$d}')")
