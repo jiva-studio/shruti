@@ -7,20 +7,17 @@
   </head>
   <body>
     <div class="card">
-      <div>
+      <div class="meta">
         <div id="title" class="title"></div>
         <div id="sub" class="subtitle"></div>
       </div>
-      <div class="player-main">
-        <div class="player-left">
-          <button id="play" class="play-btn" type="button" aria-label="Play">
-            <svg id="i-play" viewBox="0 0 24 24"><path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" /></svg>
-            <svg id="i-pause" viewBox="0 0 24 24" hidden><path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" /><path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" /></svg>
-            <span id="i-spin" class="spin" hidden></span>
-          </button>
-        </div>
-        <div class="player-center"><div id="wave" class="waveform"></div></div>
-        <div class="player-below"><span id="time" class="player-time"></span></div>
+      <div class="player-row">
+        <button id="play" class="play-btn" type="button" aria-label="Play">
+          <svg id="i-play" viewBox="0 0 24 24"><path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" /></svg>
+          <svg id="i-pause" viewBox="0 0 24 24" hidden><path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" /><path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" /></svg>
+          <span id="i-spin" class="spin" hidden></span>
+        </button>
+        <div id="wave" class="waveform"></div>
       </div>
       <audio id="au" preload="none"></audio>
       <div id="err" class="err"></div>

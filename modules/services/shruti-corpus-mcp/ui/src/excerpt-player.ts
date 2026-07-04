@@ -1,4 +1,4 @@
-import { boot, el, setText, fmtMs, fmtTime, showErr, makeWaveform, type Waveform } from "./common";
+import { boot, el, setText, fmtMs, showErr, makeWaveform, type Waveform } from "./common";
 
 let D: Record<string, unknown> = {};
 let au: HTMLAudioElement;
@@ -8,9 +8,10 @@ let preparing = false;
 let retries = 0;
 
 function icon(state: "play" | "pause" | "busy"): void {
-  el("i-play").hidden = state !== "play";
-  el("i-pause").hidden = state !== "pause";
-  el("i-spin").hidden = state !== "busy";
+  // NOTE: SVG elements don't reflect the `.hidden` IDL property — toggle display.
+  el("i-play").style.display = state === "play" ? "" : "none";
+  el("i-pause").style.display = state === "pause" ? "" : "none";
+  el("i-spin").style.display = state === "busy" ? "" : "none";
 }
 
 function fallbackDur(): number {
@@ -18,11 +19,9 @@ function fallbackDur(): number {
   return 0;
 }
 
-function updateTime(): void {
-  const cur = au.currentTime || 0;
+function updateProgress(): void {
   const dur = isFinite(au.duration) && au.duration > 0 ? au.duration : fallbackDur();
-  setText("time", fmtTime(cur) + " / " + fmtTime(dur));
-  if (dur > 0 && wave) wave.setProgress(cur / dur);
+  if (dur > 0 && wave) wave.setProgress((au.currentTime || 0) / dur);
 }
 
 function render(d: Record<string, unknown>): void {
@@ -45,7 +44,7 @@ function render(d: Record<string, unknown>): void {
   wave = makeWaveform(el("wave"), seed);
   wave.onSeek((f) => { if (isFinite(au.duration) && au.duration > 0) au.currentTime = f * au.duration; });
   icon("play");
-  updateTime();
+  updateProgress();
 }
 
 async function ensurePrepared(): Promise<boolean> {
@@ -101,10 +100,9 @@ el("play").addEventListener("click", () => void onPlay());
 au.addEventListener("play", () => icon("pause"));
 au.addEventListener("pause", () => { if (!preparing) icon("play"); });
 au.addEventListener("ended", () => icon("play"));
-au.addEventListener("timeupdate", updateTime);
-au.addEventListener("loadedmetadata", updateTime);
+au.addEventListener("timeupdate", updateProgress);
+au.addEventListener("loadedmetadata", updateProgress);
 au.addEventListener("error", () => {
-  // share-audio clip may still be encoding (~4s) — retry the GET a few times.
   if (prepared && retries < 8) {
     retries++;
     icon("busy");
