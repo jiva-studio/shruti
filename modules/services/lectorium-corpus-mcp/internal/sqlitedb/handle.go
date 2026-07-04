@@ -27,7 +27,7 @@ func Open(path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %s: %w", path, err)
 	}
-	db.SetMaxOpenConns(4)
+	db.SetMaxOpenConns(8)
 	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping sqlite %s: %w", path, err)

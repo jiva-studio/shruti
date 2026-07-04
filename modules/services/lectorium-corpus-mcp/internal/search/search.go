@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -65,8 +66,9 @@ func scanHits(rows pgx.Rows) ([]Hit, error) {
 	return out, rows.Err()
 }
 
-// Vector runs pure ANN cosine search.
-func (r *Repo) Vector(ctx context.Context, vec []float32, kinds []string, lang string, limit int) ([]Hit, error) {
+// Vector runs pure ANN cosine search. trackIDs, when non-empty, restricts to
+// those chunks (c.track_id = ANY) — the caller pre-resolved a reference filter.
+func (r *Repo) Vector(ctx context.Context, vec []float32, kinds []string, lang string, limit int, trackIDs []string) ([]Hit, error) {
 	where := []string{"c.embed_model = $1"}
 	args := []any{r.embedName}
 	if len(kinds) > 0 {
@@ -76,6 +78,10 @@ func (r *Repo) Vector(ctx context.Context, vec []float32, kinds []string, lang s
 	if lang != "" {
 		where = append(where, fmt.Sprintf("c.lang = $%d", len(args)+1))
 		args = append(args, lang)
+	}
+	if len(trackIDs) > 0 {
+		where = append(where, fmt.Sprintf("c.track_id = ANY($%d::text[])", len(args)+1))
+		args = append(args, trackIDs)
 	}
 	vecLit := pgvector.Literal(vec)
 	args = append(args, vecLit)
@@ -110,8 +116,9 @@ func (r *Repo) Vector(ctx context.Context, vec []float32, kinds []string, lang s
 	return scanHits(rows)
 }
 
-// Lexical runs FTS (russian + simple) OR trigram-address recall.
-func (r *Repo) Lexical(ctx context.Context, query string, vec []float32, kinds []string, lang string, limit int, trgmMinSim float64) ([]Hit, error) {
+// Lexical runs FTS (russian + simple) OR trigram-address recall. trackIDs,
+// when non-empty, restricts to those chunks (c.track_id = ANY).
+func (r *Repo) Lexical(ctx context.Context, query string, vec []float32, kinds []string, lang string, limit int, trgmMinSim float64, trackIDs []string) ([]Hit, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, nil
 	}
@@ -131,6 +138,10 @@ func (r *Repo) Lexical(ctx context.Context, query string, vec []float32, kinds [
 	if lang != "" {
 		where = append(where, fmt.Sprintf("c.lang = $%d", len(args)+1))
 		args = append(args, lang)
+	}
+	if len(trackIDs) > 0 {
+		where = append(where, fmt.Sprintf("c.track_id = ANY($%d::text[])", len(args)+1))
+		args = append(args, trackIDs)
 	}
 	vecLit := pgvector.Literal(vec)
 	args = append(args, vecLit)
@@ -169,16 +180,34 @@ func (r *Repo) Lexical(ctx context.Context, query string, vec []float32, kinds [
 	return scanHits(rows)
 }
 
-// Hybrid fuses Vector + Lexical by Reciprocal Rank Fusion.
-func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []string, lang string, limit int, trgmMinSim float64) ([]Hit, error) {
+// Hybrid fuses Vector + Lexical by Reciprocal Rank Fusion. trackIDs, when
+// non-empty, restricts both lanes to those chunks (a pre-resolved reference
+// filter, e.g. track-only search under a source/tokens).
+func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []string, lang string, limit int, trgmMinSim float64, trackIDs []string) ([]Hit, error) {
 	const rrfK = 60
-	vres, err := r.Vector(ctx, vec, kinds, lang, limit)
-	if err != nil {
-		return nil, fmt.Errorf("vector lane: %w", err)
+	// Run the two independent lanes concurrently — each is a separate DB
+	// round-trip, so this roughly halves Hybrid latency. Error semantics are
+	// preserved: if either lane fails, return that (wrapped) error.
+	var (
+		wg         sync.WaitGroup
+		vres, lres []Hit
+		verr, lerr error
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		vres, verr = r.Vector(ctx, vec, kinds, lang, limit, trackIDs)
+	}()
+	go func() {
+		defer wg.Done()
+		lres, lerr = r.Lexical(ctx, query, vec, kinds, lang, limit, trgmMinSim, trackIDs)
+	}()
+	wg.Wait()
+	if verr != nil {
+		return nil, fmt.Errorf("vector lane: %w", verr)
 	}
-	lres, err := r.Lexical(ctx, query, vec, kinds, lang, limit, trgmMinSim)
-	if err != nil {
-		return nil, fmt.Errorf("lexical lane: %w", err)
+	if lerr != nil {
+		return nil, fmt.Errorf("lexical lane: %w", lerr)
 	}
 	type agg struct {
 		hit Hit

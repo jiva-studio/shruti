@@ -44,6 +44,11 @@ type Config struct {
 	LibraryDBPath   string
 	CatalogDBPath   string
 	RefreshInterval time.Duration
+
+	// RedisURL — reused shared Redis for the query-embedding cache (own key
+	// namespace). Optional: on any connect/ping failure the embedder degrades
+	// gracefully to no cache. Default points at the in-stack redis.
+	RedisURL string
 }
 
 var supportedDims = map[int]bool{256: true, 768: true, 1024: true, 1536: true}
@@ -60,6 +65,7 @@ func Load() (Config, error) {
 		OpenAIAPIKey:     os.Getenv("OPENAI_API_KEY"),
 		MediaBaseURL:     os.Getenv("MEDIA_BASE_URL"),
 		CatalogDir:       env("CATALOG_DIR", "/var/lib/corpus-mcp"),
+		RedisURL:         env("REDIS_URL", "redis://redis:6379/0"),
 	}
 
 	dim, err := strconv.Atoi(env("EMBED_DIM", "1536"))

@@ -88,6 +88,41 @@ func (r *Repo) getVerse(ctx context.Context, q string, args ...any) (*Verse, err
 	return &v, nil
 }
 
+// VerseCovers returns the merged-verse span a verse belongs to, e.g.
+// "1.16-1.18", or "" for a normal (non-merged) verse. A merged verse is stored
+// as one row per member token, each holding the identical text; this uses the
+// same rule ListVerses uses to collapse such runs (a contiguous run of rows in
+// the same source sharing the same non-empty text). Empty-text rows (chapter
+// summaries) never merge.
+func (r *Repo) VerseCovers(ctx context.Context, v *Verse) (string, error) {
+	if v == nil || v.Text == "" {
+		return "", nil
+	}
+	rows, err := r.db().QueryContext(ctx,
+		`SELECT tokens FROM library_verses WHERE source_id = ? AND text = ?`,
+		v.SourceID, v.Text)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var toks []string
+	for rows.Next() {
+		var tok string
+		if err := rows.Scan(&tok); err != nil {
+			return "", err
+		}
+		toks = append(toks, tok)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if len(toks) < 2 {
+		return "", nil
+	}
+	sort.Slice(toks, func(i, j int) bool { return refs.CompareTokens(toks[i], toks[j]) < 0 })
+	return toks[0] + "-" + toks[len(toks)-1], nil
+}
+
 // VerseListItem is one entry from ListVerses (merged rows collapsed).
 type VerseListItem struct {
 	ID           string
