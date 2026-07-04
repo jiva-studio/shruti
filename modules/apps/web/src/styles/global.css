@@ -5,6 +5,12 @@
 @import "@fontsource/manrope/500.css";
 @import "@fontsource/manrope/600.css";
 @import "@fontsource/manrope/700.css";
+/* Devanagari for shloka rendering — the chat VerseCard declares
+ * "Noto Sans Devanagari" but the web build shipped no Devanagari face, so
+ * sanskrit fell back to whatever the OS had. Load the family under its
+ * declared name so the verse card picks it up with no component change. */
+@import "@fontsource/noto-sans-devanagari/400.css";
+@import "@fontsource/noto-sans-devanagari/600.css";
 
 @import "tailwindcss";
 @import "./tokens.css";
