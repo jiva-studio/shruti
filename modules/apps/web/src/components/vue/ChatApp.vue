@@ -2,6 +2,8 @@
 import { ref, nextTick, watch } from 'vue'
 import { STORE, useT } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
+import ChatMessageActions from './ChatMessageActions.vue'
+import ChatDots from './icons/ChatDots.vue'
 // REAL reused component (decoupled: status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
 import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
@@ -123,8 +125,9 @@ function statusLabelFor(m: Msg): string {
             :research-questions="m.researchQuestions"
             :research-sources="m.researchSources"
           >
-            <template #spinner><span class="dots-spinner" /></template>
+            <template #spinner><ChatDots /></template>
           </StatusPill>
+          <ChatMessageActions v-if="m.text && !m.streaming" :msg="m" :lang="cl" :chat-base="CHAT" />
         </div>
       </div>
 
@@ -150,7 +153,7 @@ function statusLabelFor(m: Msg): string {
         @send="send"
         @cancel="stop"
       >
-        <template #spinner><span class="dots-spinner" /></template>
+        <template #spinner><ChatDots /></template>
       </ChatComposer>
     </footer>
   </div>
