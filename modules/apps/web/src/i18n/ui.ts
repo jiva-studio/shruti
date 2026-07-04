@@ -40,13 +40,22 @@ export function useT(lang: Lang) {
   return (key: UiKey): string => primary[key] ?? collapsed[key] ?? ui.en[key] ?? key
 }
 
-type FaqList = readonly (readonly [string, string])[]
+export interface FaqEntry {
+  q: string
+  a: string
+  /** Optional call-to-action rendered under the answer (label + href).
+   *  Used for the "Ask Sadhu" question so readers can try the chat. */
+  cta?: { label: string; href: string }
+}
 /** FAQ entries for `lang`, built from the per-locale `faq.N.q` / `faq.N.a`
- *  string keys (8 pairs). */
-export function faqFor(lang: Lang): FaqList {
+ *  string keys (8 pairs). The chat question (#8) also carries a "try it
+ *  online" CTA that deep-links to the AI chat page. */
+export function faqFor(lang: Lang): FaqEntry[] {
   const t = useT(lang)
-  return Array.from(
-    { length: 8 },
-    (_, i) => [t(`faq.${i + 1}.q` as UiKey), t(`faq.${i + 1}.a` as UiKey)] as const,
-  )
+  return Array.from({ length: 8 }, (_, i): FaqEntry => {
+    const n = i + 1
+    const entry: FaqEntry = { q: t(`faq.${n}.q` as UiKey), a: t(`faq.${n}.a` as UiKey) }
+    if (n === 8) entry.cta = { label: t('faq.tryOnline' as UiKey), href: `/${lang}/ai` }
+    return entry
+  })
 }
