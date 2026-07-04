@@ -14,6 +14,9 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
+	// Headroom for concurrent searches, each of which now fires two DB lanes
+	// (vector + lexical) in parallel.
+	cfg.MaxConns = 10
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)

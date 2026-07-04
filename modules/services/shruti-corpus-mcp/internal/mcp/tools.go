@@ -10,6 +10,7 @@ import (
 
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/catalog"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/envelope"
+	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/library"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/refs"
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/search"
 )
@@ -103,7 +104,8 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 			"Semantic + lexical search over the corpus. Returns verses, documents, "+
 				"track passages and titles matching a natural-language query, each with the "+
 				"id needed to fetch the full record (verse_id→verse_get, document_id→document_get, "+
-				"track_id+start_ms/end_ms→transcript_window). Every filter is optional."),
+				"track_id+start_ms/end_ms→transcript_window). Every filter is optional. "+
+				"Use min_score to drop weak matches."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Natural-language query.")),
 		mcp.WithArray("types", mcp.Description("Subset of verse|document|track|title (default all)."), mcp.WithStringItems()),
 		mcp.WithString("source", mcp.Description("Restrict to a book (\"BG\" / source_id).")),
@@ -115,6 +117,7 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 		mcp.WithString("date_to", mcp.Description("Track date upper bound YYYY-MM-DD.")),
 		mcp.WithString("lang", mcp.Description("Result language (ISO-639-1).")),
 		mcp.WithNumber("limit", mcp.Description("Max results (default 10, max 50).")),
+		mcp.WithNumber("min_score", mcp.Description("Drop hits scoring below this cosine floor (0..1, default 0 = no floor).")),
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
@@ -137,6 +140,7 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 		dateFrom := req.GetString("date_from", "")
 		dateTo := req.GetString("date_to", "")
 		limit := clamp(req.GetInt("limit", 10), 10, 50)
+		minScore := req.GetFloat("min_score", 0)
 
 		sd, ad, ld, err := d.loadDicts(ctx)
 		if err != nil {
@@ -163,11 +167,34 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 			kinds = filterDocKinds(kinds, kindFilter)
 		}
 
-		// Over-fetch when any post-retrieval attribute filter is active.
+		// Track-only search under a reference filter: resolve the citing
+		// track_ids up front and push them into the SQL as a c.track_id filter,
+		// so the vector/lexical lanes only ever touch relevant chunks. This
+		// replaces the expensive over-fetch-then-filter path (which pulled
+		// limit×8 hits through HNSW and enriched each before dropping ~all).
+		trackOnly := len(kinds) == 1 && kinds[0] == "track_transcript"
+		refPrefiltered := trackOnly && sourceID != ""
+		var trackIDs []string
+		if refPrefiltered {
+			ids, terr := d.Catalog.TrackIDsByRef(ctx, sourceID, tokens)
+			if terr != nil {
+				return envelope.Err(kind, envelope.CodeInternal, terr.Error(), nil), nil
+			}
+			if len(ids) == 0 {
+				// Nothing cites this reference — no DB/embedder work needed.
+				filters := searchFilters(sourceParam, tokens, kindFilter, authorID, locationID, dateFrom, dateTo)
+				logQuery(ctx, kind, query, filters, types, 0, lang, start)
+				return envelope.Result(kind, map[string]any{"count": 0, "hits": []map[string]any{}}), nil
+			}
+			trackIDs = ids
+		}
+
+		// Over-fetch when a post-retrieval attribute filter is active — except
+		// the ref-prefiltered path, where the SQL filter already narrows recall.
 		hasPostFilter := sourceID != "" || tokens != "" || kindFilter != "" ||
 			authorID != "" || locationID != "" || dateFrom != "" || dateTo != ""
 		retrieve := limit
-		if hasPostFilter {
+		if hasPostFilter && !refPrefiltered {
 			retrieve = limit * 8
 			if retrieve > 200 {
 				retrieve = 200
@@ -181,7 +208,7 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 		if eerr != nil {
 			return envelope.Err(kind, envelope.CodeDependencyFailed, "embed query: "+eerr.Error(), nil), nil
 		}
-		hits, serr := d.Search.Hybrid(ctx, query, vec, kinds, lang, retrieve, trgmMinSim)
+		hits, serr := d.Search.Hybrid(ctx, query, vec, kinds, lang, retrieve, trgmMinSim, trackIDs)
 		if serr != nil {
 			return envelope.Err(kind, envelope.CodeDependencyFailed, serr.Error(), nil), nil
 		}
@@ -201,8 +228,11 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 			if len(out) >= limit {
 				break
 			}
+			if h.Score < minScore {
+				continue
+			}
 			obj, keep, herr := d.buildSearchHit(ctx, sd, ad, ld, getTrack, h, lang,
-				sourceID, tokens, kindFilter, authorID, locationID, dateFrom, dateTo)
+				sourceID, tokens, kindFilter, authorID, locationID, dateFrom, dateTo, refPrefiltered)
 			if herr != nil {
 				return envelope.Err(kind, envelope.CodeInternal, herr.Error(), nil), nil
 			}
@@ -211,17 +241,23 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 			}
 		}
 
-		filters := map[string]any{}
-		putIf(filters, "source", sourceParam)
-		putIf(filters, "tokens", tokens)
-		putIf(filters, "kind", kindFilter)
-		putIf(filters, "author_id", authorID)
-		putIf(filters, "location_id", locationID)
-		putIf(filters, "date_from", dateFrom)
-		putIf(filters, "date_to", dateTo)
+		filters := searchFilters(sourceParam, tokens, kindFilter, authorID, locationID, dateFrom, dateTo)
 		logQuery(ctx, kind, query, filters, types, len(out), lang, start)
 		return envelope.Result(kind, map[string]any{"count": len(out), "hits": out}), nil
 	})
+}
+
+// searchFilters builds the analytics `filters` map for a search call.
+func searchFilters(source, tokens, kindFilter, authorID, locationID, dateFrom, dateTo string) map[string]any {
+	filters := map[string]any{}
+	putIf(filters, "source", source)
+	putIf(filters, "tokens", tokens)
+	putIf(filters, "kind", kindFilter)
+	putIf(filters, "author_id", authorID)
+	putIf(filters, "location_id", locationID)
+	putIf(filters, "date_from", dateFrom)
+	putIf(filters, "date_to", dateTo)
+	return filters
 }
 
 func filterDocKinds(kinds []string, keep string) []string {
@@ -239,7 +275,7 @@ func filterDocKinds(kinds []string, keep string) []string {
 // filters. keep=false drops the hit.
 func (d *Deps) buildSearchHit(ctx context.Context, sd *catalog.SourceDict, ad, ld *catalog.EntityDict,
 	getTrack func(string) (*catalog.Track, error), h search.Hit, lang string,
-	sourceID, tokens, kindFilter, authorID, locationID, dateFrom, dateTo string,
+	sourceID, tokens, kindFilter, authorID, locationID, dateFrom, dateTo string, refPrefiltered bool,
 ) (map[string]any, bool, error) {
 
 	effLang := lang
@@ -322,7 +358,10 @@ func (d *Deps) buildSearchHit(ctx context.Context, sd *catalog.SourceDict, ad, l
 		if kindFilter != "" && tr.Kind() != kindFilter {
 			return nil, false, nil
 		}
-		if sourceID != "" {
+		// When the recall was already pre-filtered to citing tracks (via
+		// TrackIDsByRef with the chapter-prefix rule), skip the exact-match
+		// TrackHasRef check — it would wrongly drop chapter-prefix hits.
+		if sourceID != "" && !refPrefiltered {
 			ok, err := d.Catalog.TrackHasRef(ctx, tid, sourceID, tokens)
 			if err != nil {
 				return nil, false, err
@@ -610,8 +649,12 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 			if v == nil {
 				return envelope.Err(kind, envelope.CodeNotFound, "no such verse", map[string]any{"id": id, "stage": "verse"}), nil
 			}
+			obj, err := d.verseObjectWithCovers(ctx, sd, v, lang)
+			if err != nil {
+				return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
+			}
 			logQuery(ctx, kind, ref, nil, nil, 1, lang, start)
-			return envelope.Result(kind, verseObject(sd, v, lang)), nil
+			return envelope.Result(kind, obj), nil
 		}
 
 		if ref == "" && source == "" {
@@ -628,9 +671,27 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 		if v == nil {
 			return envelope.Err(kind, envelope.CodeNotFound, "no such verse", map[string]any{"ref": humanRef(ref, source, tokens), "stage": "verse"}), nil
 		}
+		obj, err := d.verseObjectWithCovers(ctx, sd, v, lang)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
+		}
 		logQuery(ctx, kind, ref, nil, nil, 1, lang, start)
-		return envelope.Result(kind, verseObject(sd, v, lang)), nil
+		return envelope.Result(kind, obj), nil
 	})
+}
+
+// verseObjectWithCovers builds the verse_get payload and, for a merged verse,
+// adds a `covers` span (e.g. "1.16-1.18"); absent for normal verses.
+func (d *Deps) verseObjectWithCovers(ctx context.Context, sd *catalog.SourceDict, v *library.Verse, lang string) (map[string]any, error) {
+	obj := verseObject(sd, v, lang)
+	covers, err := d.Library.VerseCovers(ctx, v)
+	if err != nil {
+		return nil, err
+	}
+	if covers != "" {
+		obj["covers"] = covers
+	}
+	return obj, nil
 }
 
 func registerVerseList(srv *server.MCPServer, d *Deps) {

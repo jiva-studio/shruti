@@ -386,6 +386,34 @@ func (r *Repo) TrackHasRef(ctx context.Context, trackID, sourceID, tokens string
 	return true, nil
 }
 
+// TrackIDsByRef returns the distinct track_ids that cite (sourceID[, tokens]),
+// using the same chapter-prefix rule as ListTracks (exact tokens OR any token
+// under "<tokens>."). Backed by idx_track_references_source — cheap, so search
+// can pre-filter the vector/lexical lanes to just these tracks instead of
+// over-fetching and enriching hundreds of hits.
+func (r *Repo) TrackIDsByRef(ctx context.Context, sourceID, tokens string) ([]string, error) {
+	q := `SELECT DISTINCT track_id FROM track_references WHERE source_id = ?`
+	args := []any{sourceID}
+	if tokens != "" {
+		q += ` AND (tokens = ? OR tokens LIKE ?)`
+		args = append(args, tokens, tokens+".%")
+	}
+	rows, err := r.db().QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // ListTracks returns tracks matching the filters, ordered date desc / id desc,
 // paginated by cursor (opaque "date|id"). A returned nextCursor is "" when the
 // page is the last.
@@ -404,17 +432,24 @@ type ListFilter struct {
 }
 
 func (r *Repo) ListTracks(ctx context.Context, f ListFilter) ([]*Track, error) {
+	// When a source filter is present, START from track_references (indexed by
+	// idx_track_references_source) and JOIN into tracks, so we only sort the
+	// small referencing set — not all 5470 tracks by date. Without a source
+	// filter this is a plain recent-tracks scan (unchanged): ORDER BY date has
+	// no index, but that path is the bare "list recent" case.
 	where := []string{"t.hidden = 0"}
 	var args []any
+	var joinSQL string
 	if f.SourceID != "" {
-		sub := `EXISTS (SELECT 1 FROM track_references tr WHERE tr.track_id = t.id AND tr.source_id = ?`
+		joinSQL = ` JOIN (SELECT DISTINCT track_id FROM track_references WHERE source_id = ?`
 		args = append(args, f.SourceID)
 		if f.Tokens != "" {
-			sub += ` AND tr.tokens = ?`
-			args = append(args, f.Tokens)
+			// Chapter-prefix match: exact tokens OR any token under it
+			// ("2" matches "2.13"/"2.20"; "5.5" matches "5.5.3").
+			joinSQL += ` AND (tokens = ? OR tokens LIKE ?)`
+			args = append(args, f.Tokens, f.Tokens+".%")
 		}
-		sub += `)`
-		where = append(where, sub)
+		joinSQL += `) r ON r.track_id = t.id`
 	}
 	if f.AuthorID != "" {
 		where = append(where, "t.author_id = ?")
@@ -447,7 +482,8 @@ func (r *Repo) ListTracks(ctx context.Context, f ListFilter) ([]*Track, error) {
 		where = append(where, `(t.date < ? OR (t.date = ? AND t.id < ?))`)
 		args = append(args, f.CursorDate, f.CursorDate, f.CursorID)
 	}
-	q := `SELECT t.id, t.author_id, t.location_id, t.date FROM tracks t WHERE ` +
+	q := `SELECT t.id, t.author_id, t.location_id, t.date FROM tracks t` +
+		joinSQL + ` WHERE ` +
 		strings.Join(where, " AND ") +
 		` ORDER BY t.date DESC, t.id DESC LIMIT ?`
 	args = append(args, f.Limit)
