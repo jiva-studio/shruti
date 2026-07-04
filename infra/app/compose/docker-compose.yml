@@ -580,6 +580,9 @@ services:
       # atomic swap → periodic refresh). Backed by the corpusdata volume.
       CATALOG_DIR: /var/lib/corpus
       CORPUS_MCP_ADDR: 0.0.0.0:8087
+      # Shared Redis (own key namespace) fronts the query-embedding HTTP call.
+      # Optional — a broken/absent Redis degrades to no cache.
+      REDIS_URL: ${SHRUTI_REDIS_URL:-redis://redis:6379/0}
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_CORPUS_MCP_TAG:-latest}
     # No ports: — internal to the shruti network only; Caddy exposes it
