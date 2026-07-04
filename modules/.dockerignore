@@ -45,6 +45,11 @@ services/*/layers/
 **/.next
 **/target/
 
+# corpus-mcp go:embed's these bundled MCP-App player HTMLs at compile time, so
+# they must survive the blanket **/dist/ exclusion above (last match wins).
+!services/shruti-corpus-mcp/internal/mcp/dist/
+!services/shruti-corpus-mcp/internal/mcp/dist/*.html
+
 # Git + IDE.
 .git
 .gitignore
