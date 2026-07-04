@@ -19,6 +19,10 @@ export interface Msg {
   text: string
   streaming?: boolean
   statusKey?: string
+  /** Per-turn Langfuse trace id (hyphenless uuid4). Set on the assistant
+   *  message once the turn is dispatched; used as the feedback POST id so
+   *  thumbs up/down attach to the same trace (mirrors the mobile client). */
+  traceId?: string
   researchQuestions?: string[]
   researchSources?: Map<string, ResearchSource>
   verses?: Map<string, VersePayload>
@@ -201,6 +205,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
     const traceId = crypto.randomUUID().replace(/-/g, '')
     const idem = crypto.randomUUID()
     activeTraceId = traceId
+    a.traceId = traceId
     const controller = new AbortController()
     activeController = controller
     let gotDone = false
