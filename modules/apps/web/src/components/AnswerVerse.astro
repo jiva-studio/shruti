@@ -1,0 +1,59 @@
+---
+// Presentational shloka block for the article ("answers") pages. The chat
+// VerseCard bakes chat-bubble sizes (13/16px, sans translation) into its
+// scoped styles, which read too small and mismatched at article scale — so
+// these pages get their own editorial-scale block: larger type, serif
+// translation, Devanagari for the original. Pure display: the caller passes
+// the already-picked-locale strings; no audio / MT toggle here.
+interface Props {
+  addrLabel: string
+  /** Devanagari (or Bengali) original; newlines separate half-verses. */
+  original: string
+  /** IAST / transliteration; newlines separate lines. */
+  transliteration: string
+  /** Translation in the active locale. */
+  translation: string
+}
+const { addrLabel, original, transliteration, translation } = Astro.props
+const br = (s: string) => s.replace(/\n+/g, '<br/>')
+---
+<div class="answer-verse">
+  <div class="av-addr">{addrLabel}</div>
+  <p class="av-original" set:html={br(original)} />
+  <p class="av-iast" set:html={br(transliteration)} />
+  <p class="av-translation">{translation}</p>
+</div>
+
+<style>
+  .answer-verse {
+    text-align: center;
+    padding: 8px;
+  }
+
+  /* One line-height (1.7) and one size scale across every line, so the
+     block reads as a single set of type, not four different treatments.
+     IAST and translation share the same size; the original is one step up
+     as the headline; the address is the small eyebrow. Equal 14px gaps. */
+  .answer-verse > * { line-height: 1.7; margin: 14px 0 0; }
+  .av-addr {
+    margin: 0;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.03em;
+    color: var(--ion-color-primary);
+  }
+  .av-original {
+    font-family: "Noto Sans Devanagari", "Sanskrit2003", serif;
+    font-size: 23px;
+    color: var(--ion-color-tertiary);
+  }
+  .av-iast {
+    font-family: var(--font-serif); font-style: italic;
+    font-size: 17px; letter-spacing: 0.01em;
+    color: var(--ion-color-primary-shade);
+  }
+  .av-translation {
+    margin-inline: auto; max-width: 34em;
+    font-family: var(--font-sans);
+    font-size: 17px;
+    color: var(--ion-text-color);
+  }
+</style>

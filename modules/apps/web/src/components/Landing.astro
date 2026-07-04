@@ -5,6 +5,8 @@ import ScreenshotShowcase from './ScreenshotShowcase.astro'
 import FeatureList from './FeatureList.astro'
 import WisdomSection from './WisdomSection.astro'
 import CTABand from './CTABand.astro'
+import AIAgentFeatures from './AIAgentFeatures.astro'
+import WatchCarousel from './WatchCarousel.astro'
 import FAQSection from './FAQSection.astro'
 import { useT, STORE, type Lang } from '../i18n/ui'
 interface Props { lang: Lang }
@@ -63,7 +65,13 @@ const homeLd = {
       {t('chat.band.cta')} →
     </a>
   </CTABand>
+</div>
 
+<WatchCarousel lang={lang} />
+
+<AIAgentFeatures lang={lang} />
+
+<div class="hidden md:block">
   <CTABand id="ai" bg="/cta-ai-bg.jpg" title={t('ai.band.title')} lead={t('ai.band.lead')} sectionClass="pb-10 pt-5">
     <div class="flex flex-wrap gap-3">
       <a href={aiHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">

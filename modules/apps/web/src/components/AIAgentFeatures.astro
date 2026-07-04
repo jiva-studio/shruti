@@ -1,0 +1,56 @@
+---
+import { useT, type Lang } from '../i18n/ui'
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = useT(lang)
+
+const features = [
+  'aiAgent.f1',
+  'aiAgent.f2',
+  'aiAgent.f3',
+  'aiAgent.f4',
+  'aiAgent.f5',
+  'aiAgent.f6',
+] as const
+---
+<section id="ai-agent" class="mx-auto max-w-6xl px-5 py-16">
+  <div class="max-w-2xl">
+    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-saffron/80">{t('aiAgent.eyebrow')}</p>
+    <h2 class="mt-3 text-3xl font-bold text-ink sm:text-4xl">{t('aiAgent.title')}</h2>
+    <p class="mt-3 text-medium">{t('aiAgent.lead')}</p>
+  </div>
+  <div class="mt-12 grid gap-x-14 gap-y-10 sm:grid-cols-2">
+    {features.map((key, i) => (
+      <div class="feat-item flex gap-5 pt-7">
+        <span class="shrink-0 font-serif text-2xl font-bold tabular-nums text-saffron/55">
+          {String(i + 1).padStart(2, '0')}
+        </span>
+        <div>
+          <h3 class="font-serif text-xl font-semibold leading-snug text-ink">{t(`${key}.t` as any)}</h3>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-medium">{t(`${key}.d` as any)}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+<style>
+  .feat-item {
+    position: relative;
+  }
+  .feat-item::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--lectorium-divider, rgba(61, 43, 31, 0.12)), transparent);
+  }
+  .feat-item:first-child::before {
+    display: none;
+  }
+  @media (min-width: 640px) {
+    .feat-item:nth-child(2)::before {
+      display: none;
+    }
+  }
+</style>
