@@ -27,7 +27,14 @@ How to use the tools:
 - verse_get/list, document_get/list: read scripture. A verse's purport is ` +
 	`document_list(source, tokens, kind:"commentary").
 - track_get/list, transcript_window: read lectures. Find the spoken moment of a ` +
-	`verse with search(types:["track"]) then transcript_window.`
+	`verse with search(types:["track"]) then transcript_window.
+
+Inline players (render an interactive UI, not just text):
+- To SHOW a video clip the user wants to WATCH — from a search(types:["media"]) ` +
+	`hit — call media_get(id) with the hit's media_id. It renders an inline video player.
+- To let the user HEAR a lecture passage — from a search(types:["track"]) hit — call ` +
+	`lecture_excerpt(track_id, start_ms, end_ms). It renders an inline audio player that ` +
+	`generates and plays that exact passage (max 10 minutes).`
 
 // New builds the MCP server with public metadata for the initialize handshake.
 func New(version string) *server.MCPServer {

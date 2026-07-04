@@ -35,9 +35,12 @@ var toolTitles = map[string]string{
 	"track_get":         "Get lecture",
 	"track_list":        "List lectures",
 	"transcript_window": "Read transcript",
+	"media_get":         "Play video",
+	"lecture_excerpt":   "Play excerpt",
 }
 
-// RegisterTools wires all 15 read-only tools onto srv.
+// RegisterTools wires the 15 read-only tools plus the two MCP-App render-tools
+// (media_get, lecture_excerpt) and their UI resources onto srv.
 func RegisterTools(srv *server.MCPServer, d *Deps) {
 	registerSearch(srv, d)
 	registerSourceGet(srv, d)
@@ -54,13 +57,15 @@ func RegisterTools(srv *server.MCPServer, d *Deps) {
 	registerTrackGet(srv, d)
 	registerTrackList(srv, d)
 	registerTranscriptWindow(srv, d)
+	// MCP Apps: the two interactive UI render-tools + their UI resources.
+	registerApps(srv, d)
 }
 
 // ── search ─────────────────────────────────────────────────────────────────
 
 func chunkKindsForTypes(types []string) ([]string, error) {
 	if len(types) == 0 {
-		return []string{"verse", "commentary", "prose_chapter", "letter", "track_transcript", "title"}, nil
+		return []string{"verse", "commentary", "prose_chapter", "letter", "track_transcript", "title", "media"}, nil
 	}
 	seen := map[string]bool{}
 	var out []string
@@ -82,6 +87,8 @@ func chunkKindsForTypes(types []string) ([]string, error) {
 			add("track_transcript")
 		case "title":
 			add("title")
+		case "media":
+			add("media")
 		case "":
 			// ignore
 		default:
@@ -104,10 +111,10 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 			"Semantic + lexical search over the corpus. Returns verses, documents, "+
 				"track passages and titles matching a natural-language query, each with the "+
 				"id needed to fetch the full record (verse_id→verse_get, document_id→document_get, "+
-				"track_id+start_ms/end_ms→transcript_window). Every filter is optional. "+
-				"Use min_score to drop weak matches."),
+				"track_id+start_ms/end_ms→transcript_window; media_id→media_get to play the clip). "+
+				"Every filter is optional. Use min_score to drop weak matches."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Natural-language query.")),
-		mcp.WithArray("types", mcp.Description("Subset of verse|document|track|title (default all)."), mcp.WithStringItems()),
+		mcp.WithArray("types", mcp.Description("Subset of verse|document|track|title|media (default all). A `media` hit is a short video clip playable via media_get."), mcp.WithStringItems()),
 		mcp.WithString("source", mcp.Description("Restrict to a book (\"BG\" / source_id).")),
 		mcp.WithString("tokens", mcp.Description("With source, restrict to a reference. A bare chapter number covers the WHOLE chapter (\"7\" = all of BG ch 7; \"5.5\" = SB canto 5 ch 5); add the verse for one verse (\"7.1\"). For tracks it means tracks citing that chapter/verse.")),
 		mcp.WithString("kind", mcp.Description("Document ("+docKinds+") or track (lecture|conversation) subtype.")),
@@ -383,6 +390,27 @@ func (d *Deps) buildSearchHit(ctx context.Context, sd *catalog.SourceDict, ad, l
 		}
 		if h.EndMs != nil {
 			obj["end_ms"] = *h.EndMs
+		}
+		return obj, true, nil
+
+	case "media":
+		// Standalone media clip. It carries none of the library/track
+		// attributes, so any of those filters excludes it.
+		if sourceID != "" || tokens != "" || kindFilter != "" ||
+			authorID != "" || locationID != "" || dateFrom != "" || dateTo != "" {
+			return nil, false, nil
+		}
+		mediaID := strOr(h.ItemID)
+		if mediaID == "" {
+			return nil, false, nil
+		}
+		obj := map[string]any{
+			"type":     "media",
+			"score":    round2f(h.Score),
+			"media_id": mediaID,
+			"url":      d.Cfg.MediaBase() + "/public/media/" + mediaID + ".mp4",
+			"lang":     h.Lang,
+			"snippet":  snippet(h.Text),
 		}
 		return obj, true, nil
 	}
