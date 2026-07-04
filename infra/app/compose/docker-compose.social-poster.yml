@@ -1,0 +1,49 @@
+# social-poster overlay — a single scheduler service that posts daily wisdom
+# / lectures to Telegram, VK and Facebook. Layered on top of the base file so
+# the prod compose stays untouched until you opt in:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                  -f docker-compose.social-poster.yml up -d social-poster
+#
+# It's a single service (not per-region): it runs on the global origin and
+# reaches each region's share-audio by the URL in its config.yaml.
+#
+# Anchors from the base file don't cross files, so logging/hardening are
+# inlined here to match the base conventions.
+
+services:
+  social-poster:
+    profiles: [origin]
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/jiva-studio}/lectorium-social-poster:${LECTORIUM_SOCIAL_POSTER_TAG:-latest}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
+    environment:
+      CONFIG_PATH: /etc/social-poster/config.yaml
+      LECTORIUM_ENV: ${LECTORIUM_ENV:-prod}
+      LECTORIUM_BUILD_SHA: ${LECTORIUM_SOCIAL_POSTER_TAG:-latest}
+      # Translate the LECTORIUM_*-namespaced .env secrets into the plain names
+      # the config.yaml *_env fields point at. Empty defaults so an unset
+      # credential surfaces as the service's own "env X is empty" boot error.
+      TELEGRAM_BOT_TOKEN: ${LECTORIUM_TELEGRAM_BOT_TOKEN:-}
+      VK_COMMUNITY_TOKEN: ${LECTORIUM_VK_COMMUNITY_TOKEN:-}
+      FB_PAGE_TOKEN: ${LECTORIUM_FB_PAGE_TOKEN:-}
+    volumes:
+      # Config file (structure + campaigns); provisioned on the host, RO mount.
+      - ${LECTORIUM_SOCIAL_POSTER_CONFIG:-/opt/lectorium/social-poster/config.yaml}:/etc/social-poster/config.yaml:ro
+      # Persistent state.db + catalog cache.
+      - social_poster_data:/var/lib/social-poster
+    networks: [lectorium]
+
+volumes:
+  social_poster_data:
