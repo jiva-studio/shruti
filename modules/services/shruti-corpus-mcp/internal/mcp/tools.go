@@ -108,6 +108,7 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription(
 			"Semantic + lexical search over the corpus. Returns verses, documents, "+
 				"track passages and titles matching a natural-language query, each with the "+
@@ -437,6 +438,7 @@ func registerSourceGet(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("Get one book by id or code (\"source_…\" or \"BG\"/\"БГ\")."),
 		mcp.WithString("id", mcp.Description("source_id.")),
 		mcp.WithString("code", mcp.Description("Book code, e.g. \"BG\" / \"БГ\".")),
@@ -479,6 +481,7 @@ func registerSourceList(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("List all books (Caitanya-caritāmṛta is three sources)."),
 		mcp.WithString("lang", mcp.Description("Slim code/name to this locale.")),
 		mcp.WithString("cursor", mcp.Description("Pagination cursor (last source id).")),
@@ -526,6 +529,7 @@ func registerSourceResolve(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("Find a book by name (fuzzy): \"gita\", \"бхагаватам\", \"CC Madhya\"."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Book name or code fragment.")),
 		mcp.WithString("lang", mcp.Description("Result language.")),
@@ -559,6 +563,7 @@ func registerEntityList(srv *server.MCPServer, d *Deps, kind string, load func(c
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("List all "+strings.TrimSuffix(kind, "_list")+"s."),
 		mcp.WithString("lang", mcp.Description("Slim name to this locale.")),
 		mcp.WithString("cursor", mcp.Description("Pagination cursor (last id).")),
@@ -602,6 +607,7 @@ func registerEntityResolve(srv *server.MCPServer, d *Deps, kind string, load fun
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("Find a "+strings.TrimSuffix(kind, "_resolve")+" by name (fuzzy)."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Name fragment.")),
 		mcp.WithString("lang", mcp.Description("Result language.")),
@@ -649,6 +655,7 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("Get a verse: original (Devanagari/Bengali) + stored IAST transliteration + translation. "+
 			"Address by ref (\"BG 2.13\"), source+tokens, or verse id."),
 		mcp.WithString("ref", mcp.Description("Reference string, e.g. \"BG 2.13\".")),
@@ -728,6 +735,7 @@ func registerVerseList(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("List the verses of a book / chapter. Skips .0 chapter summaries; "+
 			"collapses merged verses into one item with a covers span."),
 		mcp.WithString("source", mcp.Required(), mcp.Description("Book code / source_id.")),
@@ -802,6 +810,7 @@ func registerDocumentGet(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("Get a document (commentary/prose_chapter/letter) by id."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("doc_id.")),
 		mcp.WithString("lang", mcp.Description("Slim bodies to this locale.")),
@@ -834,6 +843,7 @@ func registerDocumentList(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("List documents at a reference / in a book. A verse's purport = "+
 			"document_list(source, tokens, kind:\"commentary\")."),
 		mcp.WithString("source", mcp.Required(), mcp.Description("Book code / source_id.")),
@@ -894,6 +904,7 @@ func registerTrackGet(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("Get a track (lecture/conversation): metadata, cited references, transcript/pdf availability."),
 		mcp.WithString("track_id", mcp.Required(), mcp.Description("track_id.")),
 		mcp.WithString("lang", mcp.Description("Metadata language.")),
@@ -935,6 +946,7 @@ func registerTrackList(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("List tracks, filterable by reference (source[+tokens] = tracks citing it), "+
 			"author/location/kind/date/lang. No filter ⇒ recent tracks (date desc)."),
 		mcp.WithString("source", mcp.Description("Book code / source_id — tracks citing this book.")),
@@ -1014,6 +1026,7 @@ func registerTranscriptWindow(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription("Read a track's transcript around a time window (from a search track hit or track_list). "+
 			"Widen with pad_ms."),
 		mcp.WithString("track_id", mcp.Required(), mcp.Description("track_id.")),

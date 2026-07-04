@@ -1,0 +1,11 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "app.shruti/corpus",
+  "title": "Shruti",
+  "description": "Read-only semantic search over Vedic scripture verses, commentaries, and recorded lectures.",
+  "version": "1.0.1",
+  "websiteUrl": "https://shruti.app",
+  "remotes": [
+    { "type": "streamable-http", "url": "https://mcp.shruti.app/mcp" }
+  ]
+}
