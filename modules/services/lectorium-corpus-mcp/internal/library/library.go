@@ -288,7 +288,7 @@ func (r *Repo) ListDocuments(ctx context.Context, f DocFilter) ([]*Document, err
 
 // ── Source stats ───────────────────────────────────────────────────────────
 
-// SourceStats holds the derived per-source fields for source.get / source.list.
+// SourceStats holds the derived per-source fields for source_get / source_list.
 type SourceStats struct {
 	TokenScheme   string
 	VerseCount    int
@@ -345,7 +345,7 @@ func (r *Repo) maxDepth(ctx context.Context, sourceID string) (int, error) {
 
 // countVerses counts verses by token row, excluding ".0" chapter summaries.
 // This is the traditional per-token count (a merged verse like BG 1.16-18
-// counts as its 3 member rows) — unlike verse.list, which collapses merged
+// counts as its 3 member rows) — unlike verse_list, which collapses merged
 // runs for display.
 func (r *Repo) countVerses(ctx context.Context, sourceID string) (int, error) {
 	rows, err := r.db().QueryContext(ctx,

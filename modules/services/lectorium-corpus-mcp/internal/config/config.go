@@ -5,7 +5,7 @@
 // space and retrieval silently degrades. Defaults mirror search-mcp (and thus
 // chat's config.py). Postgres + embedding are OPTIONAL — the SQLite-backed
 // read tools (verse/document/track/source/author/location) work without them;
-// only `search` and `transcript.window` need Postgres.
+// only `search` and `transcript_window` need Postgres.
 package config
 
 import (
@@ -21,7 +21,7 @@ type Config struct {
 	// so it is reachable from the published mapping / reverse proxy.
 	Addr string
 
-	// DatabaseURL — Postgres/pgvector for `search` + `transcript.window`.
+	// DatabaseURL — Postgres/pgvector for `search` + `transcript_window`.
 	// Optional: if empty those two tools return dependency_failed and the
 	// rest of the surface still serves.
 	DatabaseURL string
@@ -101,7 +101,7 @@ func (c Config) EmbedConfigured() bool {
 	return false
 }
 
-// SearchEnabled reports whether semantic search / transcript.window can run.
+// SearchEnabled reports whether semantic search / transcript_window can run.
 func (c Config) SearchEnabled() bool {
 	return c.DatabaseURL != "" && c.EmbedConfigured()
 }

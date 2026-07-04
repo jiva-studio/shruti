@@ -231,7 +231,7 @@ func resolveReference(sd *catalog.SourceDict, ref, source, tokens string) (sourc
 	return "", "", "source", false
 }
 
-// encodeTrackCursor / decodeTrackCursor carry (date,id) across track.list pages.
+// encodeTrackCursor / decodeTrackCursor carry (date,id) across track_list pages.
 func encodeTrackCursor(date, id string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(date + "\x00" + id))
 }

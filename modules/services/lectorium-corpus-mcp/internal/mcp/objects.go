@@ -7,7 +7,7 @@ import (
 	"github.com/jiva-studio/lectorium/modules/services/lectorium-corpus-mcp/internal/library"
 )
 
-// verseObject builds the verse.get payload. With lang: a single translation
+// verseObject builds the verse_get payload. With lang: a single translation
 // string; without: a translations map.
 func verseObject(sd *catalog.SourceDict, v *library.Verse, lang string) map[string]any {
 	human := sd.RefString(v.SourceID, v.Tokens, lang)
@@ -31,7 +31,7 @@ func verseObject(sd *catalog.SourceDict, v *library.Verse, lang string) map[stri
 	return obj
 }
 
-// documentObject builds the document.get payload (bodies slimmed to lang if set).
+// documentObject builds the document_get payload (bodies slimmed to lang if set).
 func documentObject(sd *catalog.SourceDict, ad *catalog.EntityDict, doc *library.Document, lang string) map[string]any {
 	bodies := map[string]library.DocBody{}
 	if lang != "" {

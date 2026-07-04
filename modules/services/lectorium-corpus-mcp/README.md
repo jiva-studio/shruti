@@ -9,14 +9,14 @@ no writes, no auth, no new store.
 
 It replaces `search-mcp`: it absorbs that service's `search`/`embed`/`pgvector`
 code and reproduces its `search`/`search_get`/`search_window` behaviour as the
-unified `search` (with a `title` type), `verse.get`/`document.get`, and
-`transcript.window`.
+unified `search` (with a `title` type), `verse_get`/`document_get`, and
+`transcript_window`.
 
 ## Data sources
 
 | Source | Access | Backs |
 |---|---|---|
-| Postgres + pgvector (`chunks` + `chunk_embeddings_d1536`) | `pgx`, read-only | `search`, `transcript.window` |
+| Postgres + pgvector (`chunks` + `chunk_embeddings_d1536`) | `pgx`, read-only | `search`, `transcript_window` |
 | `library.db` (SQLite artifact) | `modernc.org/sqlite`, read-only | `verse.*`, `document.*`, source stats |
 | `current.db` catalog (SQLite artifact) | `modernc.org/sqlite`, read-only | source/author/location dicts, reference resolution, `track.*` |
 | Embedding API (OpenAI-compatible) | outbound HTTP | embed the `search` / `*.resolve` query |
@@ -31,9 +31,9 @@ refresh on boot + on a periodic ticker.
 
 ## Tools (15)
 
-`search` · `source.get`/`.list`/`.resolve` · `author.list`/`.resolve` ·
-`location.list`/`.resolve` · `verse.get`/`.list` · `document.get`/`.list` ·
-`track.get`/`.list` · `transcript.window`.
+`search` · `source_get`/`.list`/`.resolve` · `author_list`/`.resolve` ·
+`location_list`/`.resolve` · `verse_get`/`.list` · `document_get`/`.list` ·
+`track_get`/`.list` · `transcript_window`.
 
 Response envelope (trimmed, read-only — no async `run`):
 
@@ -53,7 +53,7 @@ References are addressed as `"BG 2.13"` / `"ШБ 5.5.3"` / `"CC Madhya 8.128"`
 | var | default | purpose |
 |---|---|---|
 | `CORPUS_MCP_ADDR` | `0.0.0.0:8087` | listen address |
-| `DATABASE_URL` | — | Postgres/pgvector DSN (optional; `search` + `transcript.window` disabled if empty) |
+| `DATABASE_URL` | — | Postgres/pgvector DSN (optional; `search` + `transcript_window` disabled if empty) |
 | `EMBED_PROVIDER` | `openrouter` | `openrouter` \| `openai` |
 | `EMBED_MODEL` | `openai/text-embedding-3-small` | must match the indexed corpus |
 | `EMBED_DIM` | `1536` | selects `chunk_embeddings_d<dim>` |
@@ -67,7 +67,7 @@ References are addressed as `"BG 2.13"` / `"ШБ 5.5.3"` / `"CC Madhya 8.128"`
 | `CORPUS_REFRESH_INTERVAL` | `15m` | artifact re-check cadence |
 
 Postgres/embedding are optional: with them absent the SQLite-backed read tools
-still serve, and `search`/`transcript.window` return `dependency_failed`. For
+still serve, and `search`/`transcript_window` return `dependency_failed`. For
 local dev, point `LIBRARY_DB_PATH`/`CATALOG_DB_PATH` at existing artifacts and
 leave `MEDIA_BASE_URL` empty.
 
