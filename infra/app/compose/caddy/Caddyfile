@@ -58,11 +58,16 @@ import role-proxy.conf
         # methods our backends serve. share-audio's FastAPI used to add
         # these itself; auth (Go) and the share-video Express server
         # don't, so put them on the edge once and for all.
+        # DELETE + the Mcp-* / Last-Event-ID headers are for the public
+        # /corpus/* MCP route (streamable-HTTP + SSE); browser MCP clients
+        # (e.g. a claude.ai connector) send these on preflight. The global
+        # `respond @options 204` below answers preflight for every path, so
+        # the MCP allowlist has to live here for the /corpus preflight to pass.
         Access-Control-Allow-Origin "*"
-        Access-Control-Allow-Methods "GET, POST, OPTIONS"
-        Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, Accept"
+        Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, Accept, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID"
         Access-Control-Max-Age "600"
-        Access-Control-Expose-Headers "Retry-After, X-Request-Id"
+        Access-Control-Expose-Headers "Retry-After, X-Request-Id, Mcp-Session-Id"
     }
 
     # Per-IP rate limits. Each zone has its own matcher; a request that
@@ -134,13 +139,27 @@ import role-proxy.conf
         # The real auth-aware policing lives in the chat service's
         # rate_limiter (per-user 200/day Pro, plus a per-IP cap that
         # only applies to anonymous JWTs). Edge stays a dumb fence.
+        # /corpus/* — public no-auth corpus-mcp (origin only; the handle
+        # lives in role-origin.conf). Each search/*.resolve call spends one
+        # embedding request, so cap per-IP to fence DoS / embedding-budget
+        # abuse. 60/min is generous for an interactive MCP client. Declared
+        # before the chat catch-all's negative match below so /corpus/* is
+        # governed by THIS zone, not the loose chat fence.
+        zone corpus {
+            match {
+                path /corpus/*
+            }
+            key {client_ip}
+            events 60
+            window 1m
+        }
         zone chat {
             match {
                 # Negative match so this fires on the root catch-all but
-                # NOT on /auth/* or /share/*. Order matters: more specific
-                # zones above were already checked.
+                # NOT on /auth/*, /share/* or /corpus/*. Order matters: more
+                # specific zones above were already checked.
                 not {
-                    path /auth/* /share/*
+                    path /auth/* /share/* /corpus/*
                 }
             }
             key {client_ip}
@@ -229,9 +248,9 @@ import role-proxy.conf
     handle_errors {
         header {
             Access-Control-Allow-Origin "*"
-            Access-Control-Allow-Methods "GET, POST, OPTIONS"
-            Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, Accept"
-            Access-Control-Expose-Headers "Retry-After, X-Request-Id"
+            Access-Control-Allow-Methods "GET, POST, OPTIONS, DELETE"
+            Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, Accept, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID"
+            Access-Control-Expose-Headers "Retry-After, X-Request-Id, Mcp-Session-Id"
         }
         respond {err.status_code}
     }
