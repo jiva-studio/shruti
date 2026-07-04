@@ -59,30 +59,26 @@ const homeLd = {
 
 <WisdomSection lang={lang} />
 
-<div class="hidden md:block">
-  <CTABand id="listen" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')} sectionClass="pb-5 pt-10">
-    <a href={chatHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
-      {t('chat.band.cta')} →
-    </a>
-  </CTABand>
-</div>
+<CTABand id="listen" bg="/cta-bg.jpg" title={t('chat.band.title')} lead={t('chat.band.lead')} sectionClass="pb-5 pt-10">
+  <a href={chatHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
+    {t('chat.band.cta')} →
+  </a>
+</CTABand>
 
 <WatchCarousel lang={lang} />
 
 <AIAgentFeatures lang={lang} />
 
-<div class="hidden md:block">
-  <CTABand id="ai" bg="/cta-ai-bg.jpg" title={t('ai.band.title')} lead={t('ai.band.lead')} sectionClass="pb-10 pt-5">
-    <div class="flex flex-wrap gap-3">
-      <a href={aiHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
-        {t('ai.band.chat')} →
-      </a>
-      <a href="https://mcp.shruti.app" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl border border-cream/25 bg-cream/10 px-6 py-3 font-semibold text-cream backdrop-blur transition hover:bg-cream/20">
-        {t('ai.band.connect')} →
-      </a>
-    </div>
-  </CTABand>
-</div>
+<CTABand id="ai" bg="/cta-ai-bg.jpg" title={t('ai.band.title')} lead={t('ai.band.lead')} sectionClass="pb-10 pt-5">
+  <div class="flex flex-wrap gap-3">
+    <a href={aiHref} class="inline-flex items-center gap-2 rounded-xl bg-saffron px-6 py-3 font-semibold text-ink transition hover:bg-saffron-tint">
+      {t('ai.band.chat')} →
+    </a>
+    <a href="https://mcp.shruti.app" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl border border-cream/25 bg-cream/10 px-6 py-3 font-semibold text-cream backdrop-blur transition hover:bg-cream/20">
+      {t('ai.band.connect')} →
+    </a>
+  </div>
+</CTABand>
 
 <FAQSection lang={lang} />
 
