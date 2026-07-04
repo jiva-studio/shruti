@@ -221,7 +221,7 @@ function statusLabelFor(m: Msg): string {
     </aside>
 
     <!-- Chat column -->
-    <div class="flex min-w-0 flex-1 flex-col">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <!-- Empty state: centered greeting + composer + prompt chips -->
       <div v-if="!started" class="flex flex-1 flex-col items-center justify-center px-4">
         <div class="w-full max-w-2xl">
@@ -251,7 +251,7 @@ function statusLabelFor(m: Msg): string {
 
       <!-- Conversation: transcript scrolls, composer migrates to the bottom -->
       <template v-else>
-        <div ref="scroller" class="app-scroll flex-1 space-y-5 overflow-y-auto px-4 py-6">
+        <div ref="scroller" class="app-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-6">
           <div class="mx-auto max-w-2xl space-y-5">
             <div v-for="(m, idx) in messages" :key="idx">
               <!-- user: right-aligned bubble -->
