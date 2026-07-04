@@ -1,94 +1,79 @@
 :root {
   color-scheme: light dark;
-  --primary: #cc7a3d;
-  --primary-rgb: 204, 122, 61;
-  --primary-contrast: #faf5ea;
-  --primary-shade: #b36b36;
-  --light: #f0e6d5;
-  --medium: #806752;
-  --medium-rgb: 128, 103, 82;
-  --text: #3d2b1f;
-  --border: #e8ddc8;
-  --waveform-base: rgba(128, 103, 82, 0.3);
-  --waveform-played: #cc7a3d;
+  /* Brand accent — the host token set has no accent colour, so this stays ours. */
+  --accent: #cc7a3d;
+  --accent-fg: #faf5ea;
+  --accent-shade: #b36b36;
+  /* Brand neutral fallbacks — used only when the host provides no style tokens. */
+  --brand-surface: #f0e6d5;
+  --brand-fg: #3d2b1f;
+  --brand-muted: #806752;
+  --brand-wave: rgba(128, 103, 82, 0.3);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --primary: #f0a55c;
-    --primary-contrast: #3d2b1f;
-    --primary-shade: #d49150;
-    --light: #261c13;
-    --medium: #a88c70;
-    --medium-rgb: 168, 140, 112;
-    --text: #c0b8a8;
-    --border: #2e2218;
-    --waveform-base: rgba(168, 140, 112, 0.3);
-    --waveform-played: #f0a55c;
+    --accent: #f0a55c; --accent-fg: #3d2b1f; --accent-shade: #d49150;
+    --brand-surface: #261c13; --brand-fg: #c0b8a8; --brand-muted: #a88c70;
+    --brand-wave: rgba(168, 140, 112, 0.3);
   }
 }
 :root[data-theme="light"] {
-  --primary: #cc7a3d; --primary-contrast: #faf5ea; --primary-shade: #b36b36;
-  --light: #f0e6d5; --medium: #806752; --medium-rgb: 128, 103, 82;
-  --text: #3d2b1f; --border: #e8ddc8;
-  --waveform-base: rgba(128, 103, 82, 0.3); --waveform-played: #cc7a3d;
+  --accent: #cc7a3d; --accent-fg: #faf5ea; --accent-shade: #b36b36;
+  --brand-surface: #f0e6d5; --brand-fg: #3d2b1f; --brand-muted: #806752;
+  --brand-wave: rgba(128, 103, 82, 0.3);
 }
 :root[data-theme="dark"] {
-  --primary: #f0a55c; --primary-contrast: #3d2b1f; --primary-shade: #d49150;
-  --light: #261c13; --medium: #a88c70; --medium-rgb: 168, 140, 112;
-  --text: #c0b8a8; --border: #2e2218;
-  --waveform-base: rgba(168, 140, 112, 0.3); --waveform-played: #f0a55c;
+  --accent: #f0a55c; --accent-fg: #3d2b1f; --accent-shade: #d49150;
+  --brand-surface: #261c13; --brand-fg: #c0b8a8; --brand-muted: #a88c70;
+  --brand-wave: rgba(168, 140, 112, 0.3);
+}
+
+/* Effective tokens: prefer the host's (applied by applyHostStyleVariables via
+   the standard MCP-UI keys), fall back to brand. Host tokens carry the host's
+   theme + platform-appropriate sizing, so the widget matches web vs mobile. */
+:root {
+  --surface: var(--color-background-primary, var(--brand-surface));
+  --fg: var(--color-text-primary, var(--brand-fg));
+  --fg-muted: var(--color-text-secondary, var(--brand-muted));
+  --wave-base: var(--color-text-tertiary, var(--brand-wave));
+  --ui-font: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  --title-size: var(--font-heading-sm-size, 1.05rem);
+  --title-line: var(--font-heading-sm-line-height, 1.35);
+  --title-weight: var(--font-weight-semibold, 600);
+  --body-size: var(--font-text-sm-size, 0.86rem);
+  --body-line: var(--font-text-sm-line-height, 1.4);
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: transparent; }
-body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  color: var(--text);
-}
+body { font-family: var(--ui-font); color: var(--fg); }
 
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: var(--light);
-}
+.card { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); }
 .meta { display: flex; flex-direction: column; gap: 4px; }
-.title {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.1rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--text);
-}
-.subtitle { font-size: 0.86rem; line-height: 1.4; color: var(--medium); }
+.title { font-size: var(--title-size); font-weight: var(--title-weight); line-height: var(--title-line); color: var(--fg); }
+.subtitle { font-size: var(--body-size); line-height: var(--body-line); color: var(--fg-muted); }
 .err {
-  display: none; font-size: 11px; color: #c0392b; white-space: pre-wrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  display: none; font-size: 11px; color: var(--color-text-danger, #c0392b); white-space: pre-wrap;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
 
-.player-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
+.player-row { display: flex; align-items: center; gap: 14px; }
 .play-btn {
   flex-shrink: 0;
   width: 46px; height: 46px;
   display: flex; align-items: center; justify-content: center;
   padding: 0; border: none; border-radius: 50%;
-  background: var(--primary); color: var(--primary-contrast);
+  background: var(--accent); color: var(--accent-fg);
   cursor: pointer; transition: background 150ms ease;
   -webkit-tap-highlight-color: transparent;
 }
-.play-btn:hover:not(:disabled) { background: var(--primary-shade); }
+.play-btn:hover:not(:disabled) { background: var(--accent-shade); }
 .play-btn:disabled { opacity: 0.6; cursor: default; }
 .play-btn svg { width: 22px; height: 22px; fill: currentColor; }
 .spin {
   width: 18px; height: 18px; border-radius: 50%;
-  border: 2px solid rgba(var(--primary-rgb), 0); border-top-color: var(--primary-contrast);
-  border-right-color: var(--primary-contrast);
-  animation: spin 0.7s linear infinite;
+  border: 2px solid transparent; border-top-color: var(--accent-fg);
+  border-right-color: var(--accent-fg); animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -99,9 +84,9 @@ body {
 }
 .bar {
   display: inline-block; flex: 0 0 2px; width: 2px; min-height: 2px;
-  background: var(--waveform-base); border-radius: 2px;
+  background: var(--wave-base); border-radius: 2px;
   transition: background-color 300ms ease, height 350ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.bar.played { background: var(--waveform-played); }
+.bar.played { background: var(--accent); }
 
 video { display: block; width: 100%; height: auto; background: #000; object-fit: cover; }

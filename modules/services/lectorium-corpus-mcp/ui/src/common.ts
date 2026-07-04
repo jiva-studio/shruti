@@ -1,5 +1,16 @@
-import { App } from "@modelcontextprotocol/ext-apps";
+import { App, applyHostStyleVariables, applyHostFonts, applyDocumentTheme } from "@modelcontextprotocol/ext-apps";
 import "./style.css";
+
+// Adopt the host's theme, CSS variables and fonts so the widget matches whatever
+// agent renders it. Our brand values stay as CSS fallbacks when a host provides
+// none. App doesn't apply these automatically (only autoResize is auto).
+function applyHost(ctx: { theme?: unknown; styles?: { variables?: unknown; css?: { fonts?: unknown } } } | undefined): void {
+  if (!ctx) return;
+  if (ctx.theme) applyDocumentTheme(ctx.theme as never);
+  const styles = ctx.styles;
+  if (styles?.variables) applyHostStyleVariables(styles.variables as never);
+  if (styles?.css?.fonts) applyHostFonts(styles.css.fonts as string);
+}
 
 export function boot(name: string, render: (data: Record<string, unknown>) => void): App {
   const app = new App({ name, version: "1.0.0" });
@@ -10,7 +21,11 @@ export function boot(name: string, render: (data: Record<string, unknown>) => vo
       showErr("render: " + String(e));
     }
   };
-  app.connect().catch((e) => showErr("connect: " + String(e)));
+  app.addEventListener("hostcontextchanged", (ctx) => applyHost(ctx as never));
+  app
+    .connect()
+    .then(() => applyHost(app.getHostContext() as never))
+    .catch((e) => showErr("connect: " + String(e)));
   return app;
 }
 
