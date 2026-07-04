@@ -350,6 +350,20 @@ import role-proxy.conf
 
     log {
         output stdout
-        format json
+        # Anonymise the client IP in access logs: the public MCP is read-only and
+        # has no accounts, so we keep only a coarse network prefix (/24 · /48) and
+        # never retain a raw IP. Rate-limiting still keys on the full {client_ip};
+        # only the logged value is masked.
+        format filter {
+            wrap json
+            request>client_ip ip_mask {
+                ipv4 24
+                ipv6 48
+            }
+            request>remote_ip ip_mask {
+                ipv4 24
+                ipv6 48
+            }
+        }
     }
 }
