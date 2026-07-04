@@ -27,7 +27,6 @@ import (
 const (
 	mediaPlayerURI   = "ui://corpus/media-player.html"
 	excerptPlayerURI = "ui://corpus/excerpt-player.html"
-	esmOrigin        = "https://esm.sh"
 )
 
 // registerApps wires the two render-tools and their two UI resources.
@@ -287,15 +286,19 @@ func uiContents(uri, html string, ui map[string]any) []mcp.ResourceContents {
 
 func registerMediaPlayerResource(srv *server.MCPServer, d *Deps) {
 	mediaOrigin := originOf(d.Cfg.MediaBase())
+	// Vanilla self-contained client: no external script. Only the <video> loads
+	// from the media CDN, so that's the sole CSP allowance.
+	connectDomains := []string{}
+	resourceDomains := []string{mediaOrigin}
 	csp := map[string]any{
-		"connectDomains":  []string{esmOrigin},
-		"resourceDomains": []string{mediaOrigin, esmOrigin},
+		"connectDomains":  connectDomains,
+		"resourceDomains": resourceDomains,
 	}
 	res := mcp.NewResource(mediaPlayerURI, "Corpus video player",
 		mcp.WithResourceDescription("Inline video player for a corpus media clip."),
 		mcp.WithMIMEType("text/html;profile=mcp-app"),
 	)
-	res.Meta = resourceUIMeta([]string{esmOrigin}, []string{mediaOrigin, esmOrigin})
+	res.Meta = resourceUIMeta(connectDomains, resourceDomains)
 	srv.AddResource(res, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		return uiContents(mediaPlayerURI, mediaPlayerHTML, map[string]any{"csp": csp}), nil
 	})
@@ -306,8 +309,8 @@ func registerExcerptPlayerResource(srv *server.MCPServer, d *Deps) {
 	// Derive the share-audio connect host from the configured ShareAudioBase so
 	// the CSP stays in sync with the endpoint the player POSTs to.
 	shareOrigin := originOf(d.Cfg.ShareAudioBase)
-	connectDomains := []string{shareOrigin, mediaOrigin, esmOrigin}
-	resourceDomains := []string{mediaOrigin, esmOrigin}
+	connectDomains := []string{shareOrigin, mediaOrigin}
+	resourceDomains := []string{mediaOrigin}
 	csp := map[string]any{
 		"connectDomains":  connectDomains,
 		"resourceDomains": resourceDomains,
