@@ -16,7 +16,9 @@ Scripture: verses (original Devanagari/Bengali + IAST transliteration + ` +
 
 Addressing: a reference is a book code plus a position, e.g. "BG 2.13", "SB 5.5.3", ` +
 	`"CC Madhya 8.128" (Cyrillic codes like "ШБ 5.5.3" also work). Tools that take a ` +
-	`reference accept either the "ref" string or a resolved source id + tokens.
+	`reference accept either the "ref" string or a resolved source id + tokens. In the ` +
+	`tokens filter (search / track_list / verse_list), a BARE CHAPTER number covers the ` +
+	`whole chapter — use "7" for all of chapter 7, "7.1" only for that one verse.
 
 How to use the tools:
 - search: semantic + lexical search over verses, documents, tracks and titles.
