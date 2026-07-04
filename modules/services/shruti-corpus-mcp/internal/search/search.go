@@ -261,6 +261,32 @@ func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []
 	return out, lt, nil
 }
 
+// Media returns the transcript chunks of a media clip (kind='media') by
+// item_id, ordered by start time (chunk id as a stable tiebreaker). lang
+// optional. Used by media_get to enrich the clip with a title/transcript.
+func (r *Repo) Media(ctx context.Context, itemID, lang string, max int) ([]Hit, error) {
+	where := []string{"c.embed_model = $1", "c.kind = 'media'", "c.item_id = $2"}
+	args := []any{r.embedName, itemID}
+	if lang != "" {
+		where = append(where, fmt.Sprintf("c.lang = $%d", len(args)+1))
+		args = append(args, lang)
+	}
+	args = append(args, max)
+	limPos := len(args)
+	sql := fmt.Sprintf(`
+		SELECT %s, 0::float8 AS score
+		FROM chunks c
+		WHERE %s
+		ORDER BY c.start_ms NULLS FIRST, c.id
+		LIMIT $%d`,
+		selectCols, strings.Join(where, " AND "), limPos)
+	rows, err := r.pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanHits(rows)
+}
+
 // Window returns transcript chunks of a track overlapping [lo, hi].
 func (r *Repo) Window(ctx context.Context, trackID string, lo, hi int, lang string, max int) ([]Hit, error) {
 	where := []string{"c.embed_model = $1", "c.track_id = $2", "c.end_ms >= $3", "c.start_ms <= $4"}
