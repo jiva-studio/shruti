@@ -6,13 +6,8 @@
     <title>Corpus video player</title>
   </head>
   <body>
-    <div class="card">
-      <div id="title" class="title"></div>
-      <div class="stage">
-        <video id="v" controls playsinline preload="metadata"></video>
-      </div>
-      <div id="err" class="err"></div>
-    </div>
+    <video id="v" controls playsinline preload="metadata"></video>
+    <div id="err" class="err"></div>
     <script type="module" src="/src/media-player.ts"></script>
   </body>
 </html>
