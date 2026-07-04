@@ -116,6 +116,26 @@ func main() {
 	srv := mcpsrv.New(buildSHA)
 	mcpsrv.RegisterTools(srv, deps)
 
+	// Warm the search path in the background so the FIRST real query after a
+	// deploy doesn't eat the cold-start cost (pgxpool spin-up + paging the HNSW
+	// index into Postgres cache + the initial embedding TLS handshake) — we saw
+	// ~16s on a cold first hit. Async: never blocks startup or /healthz.
+	if searchRepo != nil && embedder != nil {
+		go func() {
+			t := time.Now()
+			vec, err := embedder.Query(context.Background(), "krishna")
+			if err != nil {
+				log.Printf("WARN warmup embed failed: %v", err)
+				return
+			}
+			if _, _, err := searchRepo.Hybrid(context.Background(), "krishna", vec, nil, "", 1, 0.3, nil); err != nil {
+				log.Printf("WARN warmup search failed: %v", err)
+				return
+			}
+			log.Printf("search warmup done in %s (pool + HNSW + embed primed)", time.Since(t).Round(time.Millisecond))
+		}()
+	}
+
 	const streamableHTTPPath = "/mcp"
 	const ssePath = "/sse"
 	streamable := server.NewStreamableHTTPServer(srv,

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -183,7 +184,14 @@ func (r *Repo) Lexical(ctx context.Context, query string, vec []float32, kinds [
 // Hybrid fuses Vector + Lexical by Reciprocal Rank Fusion. trackIDs, when
 // non-empty, restricts both lanes to those chunks (a pre-resolved reference
 // filter, e.g. track-only search under a source/tokens).
-func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []string, lang string, limit int, trgmMinSim float64, trackIDs []string) ([]Hit, error) {
+// LaneTimings reports how long each Hybrid lane took (ms) — logged per search
+// so we can tell whether the vector or the lexical lane dominates latency.
+type LaneTimings struct {
+	VectorMs  int64
+	LexicalMs int64
+}
+
+func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []string, lang string, limit int, trgmMinSim float64, trackIDs []string) ([]Hit, LaneTimings, error) {
 	const rrfK = 60
 	// Run the two independent lanes concurrently — each is a separate DB
 	// round-trip, so this roughly halves Hybrid latency. Error semantics are
@@ -192,22 +200,27 @@ func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []
 		wg         sync.WaitGroup
 		vres, lres []Hit
 		verr, lerr error
+		lt         LaneTimings
 	)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
+		t := time.Now()
 		vres, verr = r.Vector(ctx, vec, kinds, lang, limit, trackIDs)
+		lt.VectorMs = time.Since(t).Milliseconds()
 	}()
 	go func() {
 		defer wg.Done()
+		t := time.Now()
 		lres, lerr = r.Lexical(ctx, query, vec, kinds, lang, limit, trgmMinSim, trackIDs)
+		lt.LexicalMs = time.Since(t).Milliseconds()
 	}()
 	wg.Wait()
 	if verr != nil {
-		return nil, fmt.Errorf("vector lane: %w", verr)
+		return nil, lt, fmt.Errorf("vector lane: %w", verr)
 	}
 	if lerr != nil {
-		return nil, fmt.Errorf("lexical lane: %w", lerr)
+		return nil, lt, fmt.Errorf("lexical lane: %w", lerr)
 	}
 	type agg struct {
 		hit Hit
@@ -245,7 +258,7 @@ func (r *Repo) Hybrid(ctx context.Context, query string, vec []float32, kinds []
 		}
 		out = append(out, a.hit)
 	}
-	return out, nil
+	return out, lt, nil
 }
 
 // Window returns transcript chunks of a track overlapping [lo, hi].

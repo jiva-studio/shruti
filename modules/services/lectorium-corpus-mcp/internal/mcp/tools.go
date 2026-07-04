@@ -109,7 +109,7 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 		mcp.WithString("query", mcp.Required(), mcp.Description("Natural-language query.")),
 		mcp.WithArray("types", mcp.Description("Subset of verse|document|track|title (default all)."), mcp.WithStringItems()),
 		mcp.WithString("source", mcp.Description("Restrict to a book (\"BG\" / source_id).")),
-		mcp.WithString("tokens", mcp.Description("With source: restrict to a reference (verse tokens; for tracks, tracks citing it).")),
+		mcp.WithString("tokens", mcp.Description("With source, restrict to a reference. A bare chapter number covers the WHOLE chapter (\"7\" = all of BG ch 7; \"5.5\" = SB canto 5 ch 5); add the verse for one verse (\"7.1\"). For tracks it means tracks citing that chapter/verse.")),
 		mcp.WithString("kind", mcp.Description("Document ("+docKinds+") or track (lecture|conversation) subtype.")),
 		mcp.WithString("author_id", mcp.Description("Commentator (document) / speaker (track).")),
 		mcp.WithString("location_id", mcp.Description("Track location.")),
@@ -208,7 +208,7 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 		if eerr != nil {
 			return envelope.Err(kind, envelope.CodeDependencyFailed, "embed query: "+eerr.Error(), nil), nil
 		}
-		hits, serr := d.Search.Hybrid(ctx, query, vec, kinds, lang, retrieve, trgmMinSim, trackIDs)
+		hits, lanes, serr := d.Search.Hybrid(ctx, query, vec, kinds, lang, retrieve, trgmMinSim, trackIDs)
 		if serr != nil {
 			return envelope.Err(kind, envelope.CodeDependencyFailed, serr.Error(), nil), nil
 		}
@@ -242,7 +242,7 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 		}
 
 		filters := searchFilters(sourceParam, tokens, kindFilter, authorID, locationID, dateFrom, dateTo)
-		logQuery(ctx, kind, query, filters, types, len(out), lang, start)
+		logQueryLanes(ctx, kind, query, filters, types, len(out), lang, start, &lanes.VectorMs, &lanes.LexicalMs)
 		return envelope.Result(kind, map[string]any{"count": len(out), "hits": out}), nil
 	})
 }
@@ -909,7 +909,7 @@ func registerTrackList(srv *server.MCPServer, d *Deps) {
 		mcp.WithDescription("List tracks, filterable by reference (source[+tokens] = tracks citing it), "+
 			"author/location/kind/date/lang. No filter ⇒ recent tracks (date desc)."),
 		mcp.WithString("source", mcp.Description("Book code / source_id — tracks citing this book.")),
-		mcp.WithString("tokens", mcp.Description("With source: tracks citing that exact verse.")),
+		mcp.WithString("tokens", mcp.Description("With source, filter to tracks citing this reference. A bare chapter number covers the WHOLE chapter (\"7\" = any BG 7.x lecture); add the verse for one verse (\"7.1\").")),
 		mcp.WithString("author_id", mcp.Description("Speaker.")),
 		mcp.WithString("location_id", mcp.Description("Location.")),
 		mcp.WithString("kind", mcp.Description("lecture|conversation.")),
