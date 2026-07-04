@@ -2,12 +2,14 @@
 import { ref, nextTick, watch, provide, computed } from 'vue'
 import { useT } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
+import ChatMessageActions from './ChatMessageActions.vue'
 import WebAuthBar from './WebAuthBar.vue'
 import StoreBadges from './StoreBadges.vue'
 import SparkleIcon from './icons/SparkleIcon.vue'
 import RetryIcon from './icons/RetryIcon.vue'
 import NewChatIcon from './icons/NewChatIcon.vue'
 import CloseIcon from './icons/CloseIcon.vue'
+import ChatDots from './icons/ChatDots.vue'
 import { OPEN_TRACK } from './injection'
 // Real reused chat primitives (status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
@@ -51,6 +53,7 @@ const L = {
   brand: t('ai.brand'),
   title: t('ai.brand'),
   sub: t('ai.sub'),
+  getApp: t('ai.getApp'),
   placeholder: t('chat.widget.placeholder'),
   send: t('chat.widget.send'),
   stop: t('chat.widget.stop'),
@@ -163,6 +166,16 @@ function statusLabelFor(m: Msg): string {
         <span>{{ L.brand }}</span>
       </a>
       <div class="flex items-center gap-2">
+        <a
+          :href="`/${props.lang}/#download`"
+          class="flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-cream text-ink-soft transition hover:border-saffron hover:text-saffron"
+          :aria-label="L.getApp"
+          :title="L.getApp"
+        >
+          <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+          </svg>
+        </a>
         <button
           type="button"
           class="flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-cream text-ink-soft transition hover:border-saffron hover:text-saffron"
@@ -215,13 +228,22 @@ function statusLabelFor(m: Msg): string {
           </li>
         </ul>
       </div>
-      <div class="p-3">
+      <div class="space-y-1 p-3">
+        <a
+          :href="`/${props.lang}/#download`"
+          class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-ink-soft transition hover:bg-cream hover:text-saffron"
+        >
+          <svg viewBox="0 0 24 24" class="h-[18px] w-[18px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+          </svg>
+          {{ L.getApp }}
+        </a>
         <WebAuthBar :lang="props.lang" placement="up" />
       </div>
     </aside>
 
     <!-- Chat column -->
-    <div class="flex min-w-0 flex-1 flex-col">
+    <div class="relative flex min-w-0 flex-1 flex-col">
       <!-- Empty state: centered greeting + composer + prompt chips -->
       <div v-if="!started" class="flex flex-1 flex-col items-center justify-center px-4">
         <div class="w-full max-w-2xl">
@@ -235,7 +257,7 @@ function statusLabelFor(m: Msg): string {
               @send="send"
               @cancel="stop"
             >
-              <template #spinner><span class="dots-spinner" /></template>
+              <template #spinner><ChatDots /></template>
             </ChatComposer>
           </div>
           <div class="mt-5 flex flex-wrap justify-center gap-2">
@@ -251,7 +273,7 @@ function statusLabelFor(m: Msg): string {
 
       <!-- Conversation: transcript scrolls, composer migrates to the bottom -->
       <template v-else>
-        <div ref="scroller" class="app-scroll flex-1 space-y-5 overflow-y-auto px-4 py-6">
+        <div ref="scroller" class="app-scroll flex-1 space-y-5 overflow-y-auto px-4 pb-32 pt-6">
           <div class="mx-auto max-w-2xl space-y-5">
             <div v-for="(m, idx) in messages" :key="idx">
               <!-- user: right-aligned bubble -->
@@ -268,8 +290,9 @@ function statusLabelFor(m: Msg): string {
                   :research-questions="m.researchQuestions"
                   :research-sources="m.researchSources"
                 >
-                  <template #spinner><span class="dots-spinner" /></template>
+                  <template #spinner><ChatDots /></template>
                 </StatusPill>
+                <ChatMessageActions v-if="m.text && !m.streaming" :msg="m" :lang="cl" :chat-base="CHAT" />
               </div>
             </div>
 
@@ -312,8 +335,10 @@ function statusLabelFor(m: Msg): string {
           </div>
         </div>
 
-        <footer class="bg-cream px-3 pb-4 pt-3">
-          <div class="mx-auto max-w-2xl">
+        <!-- Floating composer: overlays the transcript (which scrolls behind it)
+             with a cream gradient fade, mirroring the app's floating input bar. -->
+        <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-cream via-cream/95 to-transparent px-3 pb-4 pt-10">
+          <div class="pointer-events-auto mx-auto max-w-2xl">
             <p v-if="!capped && (srvLimit !== null || turns > 0)" class="mb-2 text-center text-xs text-medium">{{ L.left(left) }}</p>
             <ChatComposer
               :sending="busy"
@@ -323,10 +348,10 @@ function statusLabelFor(m: Msg): string {
               @send="send"
               @cancel="stop"
             >
-              <template #spinner><span class="dots-spinner" /></template>
+              <template #spinner><ChatDots /></template>
             </ChatComposer>
           </div>
-        </footer>
+        </div>
       </template>
     </div>
   </div>
