@@ -305,10 +305,21 @@ import role-proxy.conf
         Access-Control-Max-Age "600"
     }
 
+    # Per-IP edge fence against a single pathological flood. Deliberately
+    # GENEROUS, not a usage cap: a hosted MCP connector (claude.ai, etc.) sends
+    # ALL of its users' traffic from a small set of the vendor's egress IPs, so
+    # they share ONE bucket here — a tight per-IP cap would throttle the whole
+    # connector user-base, not protect anything. Real backend/cost control lives
+    # downstream and sheds gracefully instead of 429-ing legit users: the
+    # corpus-mcp pgxpool (≈10 concurrent searches) queues excess, the Redis
+    # embed cache kills repeat-query cost, and each tool has a hard result cap.
+    # Browse/read calls are cheap in-process SQLite; only `search` is costly and
+    # is already bounded by the pool. If a genuine per-user limit is ever needed
+    # it belongs in the service (keyed by the request client_hash), not here.
     rate_limit {
         zone mcp {
             key {client_ip}
-            events 60
+            events 1200
             window 1m
         }
     }
