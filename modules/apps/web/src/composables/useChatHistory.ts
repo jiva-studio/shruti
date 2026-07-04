@@ -32,6 +32,7 @@ const MAP_FIELDS = [
 function serializeMsg(m: Msg): SerializedMsg {
   const o: SerializedMsg = { role: m.role, text: m.text }
   if (m.statusKey) o.statusKey = m.statusKey
+  if (m.traceId) o.traceId = m.traceId
   if (m.aliases) o.aliases = m.aliases
   if (m.researchQuestions?.length) o.researchQuestions = m.researchQuestions
   const src = m as unknown as Record<string, Map<string, unknown> | undefined>
@@ -45,6 +46,7 @@ function serializeMsg(m: Msg): SerializedMsg {
 function deserializeMsg(o: SerializedMsg): Msg {
   const m: Record<string, unknown> = { role: o.role, text: o.text, streaming: false }
   if (o.statusKey) m.statusKey = o.statusKey
+  if (o.traceId) m.traceId = o.traceId
   if (o.aliases) m.aliases = o.aliases
   m.researchQuestions = o.researchQuestions ?? []
   for (const f of MAP_FIELDS) {
