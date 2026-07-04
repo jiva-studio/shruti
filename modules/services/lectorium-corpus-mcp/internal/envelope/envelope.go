@@ -68,5 +68,8 @@ func marshal(v any) *mcp.CallToolResult {
 	if err != nil {
 		return mcp.NewToolResultText(`{"ok":false,"kind":"envelope","error":{"code":"internal","message":"envelope marshal failed","details":{}}}`)
 	}
-	return mcp.NewToolResultText(string(body))
+	// Emit both the JSON text (backward-compatible fallback for text-only
+	// clients) and structuredContent, so every tool that declares an
+	// outputSchema returns a result conforming to it.
+	return mcp.NewToolResultStructured(v, string(body))
 }

@@ -118,6 +118,7 @@ func registerMediaGet(srv *server.MCPServer, d *Deps) {
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription(
 			"Show/play an existing corpus VIDEO clip inline. Call this when the user wants to "+
 				"WATCH a clip found via search(types:[\"media\"]) — pass the hit's media_id. "+
@@ -199,6 +200,7 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription(
 			"Let the user HEAR a lecture passage inline. Call this when the user wants to LISTEN "+
 				"to a specific moment in a track — e.g. from a search(types:[\"track\"]) hit, pass its "+
@@ -302,6 +304,7 @@ func registerExcerptPrepare(srv *server.MCPServer, d *Deps) {
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
+		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription(
 			"Generate (or fetch, if cached) the audio clip for a lecture passage and return its "+
 				"playable URL. This is the excerpt player's Play action — it is called for you by the "+
