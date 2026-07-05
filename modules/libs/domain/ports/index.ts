@@ -33,3 +33,7 @@ export type {
   ProactiveStateEntry,
   CreateProactiveMessageInput,
 } from "./proactiveStateRepository.js"
+export type { IOutboxRepository, OutboxEntry, NewOutboxEntry } from "./outboxRepository.js"
+export type { ISyncStateRepository } from "./syncStateRepository.js"
+export type { ISyncApplyRepository } from "./syncApplyRepository.js"
+export type { ISyncBackfillRepository, BackfillCandidate } from "./syncBackfillRepository.js"

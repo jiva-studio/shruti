@@ -25,6 +25,7 @@ on:
       - 'modules/services/billing/**'
       - 'modules/services/chat/**'
       - 'modules/services/cleanup-worker/**'
+      - 'modules/services/profile/**'
       - 'modules/services/share-audio/**'
       - 'modules/services/share-video/**'
       - 'modules/services/share-transcript/**'
@@ -40,7 +41,7 @@ on:
       services:
         description: 'Which images to build'
         type: choice
-        options: [all, auth, billing, chat, cleanup-worker, share-audio, share-video, share-transcript, storage-sync, corpus-mcp, caddy, migrator]
+        options: [all, auth, billing, chat, cleanup-worker, profile, share-audio, share-video, share-transcript, storage-sync, corpus-mcp, caddy, migrator]
         default: all
 
 concurrency:
@@ -97,6 +98,12 @@ jobs:
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
+            profile:
+              # profile carries its OWN embedded migrations (go:embed), so it
+              # does NOT depend on infra/app/db/migrations/**.
+              - 'modules/services/profile/**'
+              - 'modules/.dockerignore'
+              - '.github/workflows/services-ghcr.yml'
             share-audio:
               - 'modules/services/share-audio/**'
               - 'modules/.dockerignore'
@@ -136,6 +143,7 @@ jobs:
           F_BILLING: ${{ steps.filter.outputs.billing }}
           F_CHAT: ${{ steps.filter.outputs.chat }}
           F_CLEANUP_WORKER: ${{ steps.filter.outputs.cleanup-worker }}
+          F_PROFILE: ${{ steps.filter.outputs.profile }}
           F_SHARE_AUDIO: ${{ steps.filter.outputs.share-audio }}
           F_SHARE_VIDEO: ${{ steps.filter.outputs.share-video }}
           F_SHARE_TRANSCRIPT: ${{ steps.filter.outputs.share-transcript }}
@@ -150,6 +158,7 @@ jobs:
             [billing]=./modules
             [chat]=./modules
             [cleanup-worker]=./modules
+            [profile]=./modules
             [share-audio]=./modules
             [share-video]=./modules
             [share-transcript]=./modules
@@ -163,6 +172,7 @@ jobs:
             [billing]=./modules/services/billing/Dockerfile
             [chat]=./modules/services/chat/Dockerfile
             [cleanup-worker]=./modules/services/cleanup-worker/Dockerfile
+            [profile]=./modules/services/profile/Dockerfile
             [share-audio]=./modules/services/share-audio/Dockerfile
             [share-video]=./modules/services/share-video/Dockerfile
             [share-transcript]=./modules/services/share-transcript/Dockerfile
@@ -191,7 +201,7 @@ jobs:
           }
 
           entries=()
-          for svc in auth billing chat cleanup-worker share-audio share-video share-transcript storage-sync corpus-mcp caddy migrator; do
+          for svc in auth billing chat cleanup-worker profile share-audio share-video share-transcript storage-sync corpus-mcp caddy migrator; do
             if wants "$svc"; then
               entries+=("$(jq -nc --arg s "$svc" --arg c "${CTX[$svc]}" --arg d "${DOCKERFILE[$svc]}" \
                 '{service:$s, context:$c, dockerfile:$d}')")

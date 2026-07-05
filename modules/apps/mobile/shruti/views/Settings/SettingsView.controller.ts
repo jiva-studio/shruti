@@ -10,6 +10,7 @@ import {
   useChatLanguage,
   useChatTranslateCitations,
 } from "@shruti/composables/useChatLanguage.js"
+import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useAutoPlayNext } from "@shruti/composables/useAutoPlayNext.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
@@ -47,6 +48,8 @@ export interface SettingsControllerReturn {
   /** Chat answer language; empty ⇒ follow appLanguage at the read site. */
   chatLanguage: Ref<string>
   chatTranslateCitations: Ref<boolean>
+  /** Device-local "Sync chats" toggle (default on); never itself synced. */
+  syncChats: Ref<boolean>
   trackMetaConfig: Ref<TrackMetaConfig>
   showPlayerProgress: Ref<boolean>
   showPlayerOnNotes: Ref<boolean>
@@ -102,6 +105,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const appLanguage = useAppLanguage()
   const chatLanguage = useChatLanguage()
   const chatTranslateCitations = useChatTranslateCitations()
+  const syncChats = useSyncChatsEnabled()
   const { raw: trackMetaConfig } = useTrackMetadataFields()
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
   const autoScroll = useConfig<boolean>("settings.autoScroll", false)
@@ -177,6 +181,7 @@ export function useSettingsController(): SettingsControllerReturn {
     appLanguage,
     chatLanguage,
     chatTranslateCitations,
+    syncChats,
     trackMetaConfig,
     showPlayerProgress,
     showPlayerOnNotes,

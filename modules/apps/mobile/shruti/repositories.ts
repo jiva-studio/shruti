@@ -25,6 +25,18 @@ export interface CreateAppRepositoriesDeps {
    * switch reflects on the next query without re-creating repos.
    */
   readonly getActiveLanguage: () => LanguageCode
+  /**
+   * Resolves this device's stable id. When provided, the synced user
+   * repositories are journaled to the outbox and the sync-engine repositories
+   * (`syncOutbox` / `syncState` / `syncApply`) are built. Omit to disable sync.
+   */
+  readonly getDeviceId?: () => Promise<string>
+  /**
+   * Device-local "Sync chats" gate (default ON). Gates chat journaling only.
+   * Wired from `useSyncChatsEnabled` at the composition root so a runtime
+   * toggle flip is reflected on the next chat write without rebuilding repos.
+   */
+  readonly isChatSyncEnabled?: () => boolean
 }
 
 export function createAppRepositories(deps: CreateAppRepositoriesDeps): AppRepositories {
@@ -32,6 +44,8 @@ export function createAppRepositories(deps: CreateAppRepositoriesDeps): AppRepos
     contentDb: deps.contentDb,
     userDb: deps.userDb,
     getActiveLanguage: deps.getActiveLanguage,
+    getDeviceId: deps.getDeviceId,
+    isChatSyncEnabled: deps.isChatSyncEnabled,
   })
   return {
     ...sql,

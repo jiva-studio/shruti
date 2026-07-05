@@ -173,6 +173,11 @@ export default {
     description: "उद्धरणों को चैट की भाषा में अनुवाद करें।",
   },
 
+  syncChats: {
+    title: "चैट सिंक करें",
+    description: "अपनी Ask Sadhu बातचीत को अपने सभी डिवाइस पर सिंक रखें।",
+  },
+
   smartLibrary: {
     title: "स्मार्ट लाइब्रेरी",
     description: "ताज़ा प्रवचन तैयार रखें और सुनने के बाद सफ़ाई करें",

@@ -1,0 +1,76 @@
+import type { IOutboxRepository } from "@lib/domain/ports/outboxRepository.js"
+import type { ISyncBackfillRepository } from "@lib/domain/ports/syncBackfillRepository.js"
+import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import { hlcNow, hlcToString, parseHlc, type Hlc } from "@lib/domain"
+
+export interface BackfillLocalDeps {
+  /** Reader over the un-journaled rows in the synced collections. */
+  readonly backfill: ISyncBackfillRepository
+  /** The local journal the backfilled rows are enqueued into. */
+  readonly outbox: IOutboxRepository
+  /** Source of this device's stable id (the HLC tiebreak). */
+  readonly syncState: ISyncStateRepository
+  /** Reentrant unit-of-work — enumeration + enqueue run in one transaction. */
+  readonly unitOfWork: IUnitOfWork
+}
+
+export interface BackfillLocalResult {
+  /** Number of rows enqueued into the outbox this run (0 on a re-run). */
+  readonly enqueued: number
+  /** Distinct collections that had at least one row backfilled. */
+  readonly collections: readonly string[]
+}
+
+/**
+ * First-sync backfill (Lane E2b).
+ *
+ * Sync is off while a user is anonymous, so rows created before that point have
+ * **no** outbox entry and **no** `sync_doc_hlc` — the journal decorator never
+ * saw them, so they would never upload. When a real account signs in, this use
+ * case enumerates exactly those rows (via {@link ISyncBackfillRepository}) and
+ * enqueues each into the outbox as an `upsert` with `base_hlc = ""` (a new doc)
+ * and a freshly stamped, monotonic HLC. The `data` snapshot is produced by the
+ * adapter in the **same wire shape the journal decorator writes**, so a
+ * backfilled row is byte-identical to a journaled one; the normal push path
+ * (`pushLocal`) then uploads them under the signed-in account.
+ *
+ * **Idempotent.** The reader only returns rows with neither an outbox row nor a
+ * `sync_doc_hlc` record, so once this pass enqueues a row it drops out of the
+ * candidate set — a second run finds nothing and enqueues nothing. The whole
+ * pass runs inside the reentrant unit-of-work, so the enqueue is atomic.
+ *
+ * The engine's anonymous/`profileBaseUrl` gating is the caller's job (the
+ * `useSyncEngine` composable): this use case just moves rows into the outbox.
+ */
+export async function backfillLocal(deps: BackfillLocalDeps): Promise<BackfillLocalResult> {
+  return deps.unitOfWork.run(async () => {
+    const candidates = await deps.backfill.listUnsynced()
+    if (candidates.length === 0) return { enqueued: 0, collections: [] }
+
+    const deviceId = await deps.syncState.getDeviceId()
+    // Seed the HLC chain from the newest journaled stamp so backfilled clocks
+    // are strictly monotonic with any prior local writes.
+    const tail = await deps.outbox.latestHlc()
+    let lastSeen: Hlc | null = tail === null ? null : parseHlc(tail)
+
+    const collections = new Set<string>()
+    for (const c of candidates) {
+      const stamp = hlcNow(deviceId, lastSeen)
+      lastSeen = stamp
+      await deps.outbox.append({
+        collection: c.collection,
+        docId: c.docId,
+        op: "upsert",
+        data: c.data,
+        hlc: hlcToString(stamp),
+        // "" ⇒ new doc. push recomputes the real base from `sync_doc_hlc`
+        // (absent here), so this simply records "no server ancestor yet".
+        baseHlc: "",
+      })
+      collections.add(c.collection)
+    }
+
+    return { enqueued: candidates.length, collections: [...collections] }
+  })
+}

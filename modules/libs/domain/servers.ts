@@ -68,6 +68,17 @@ export interface CdnServer extends KitCdnServer {
    *  per-region lazy-resolution pattern as `authBaseUrl` — the chat
    *  HTTP client reads it through a getter, not at module import time. */
   readonly chatBaseUrl: string
+  /** Base URL of the shruti `profile` device↔server sync service for
+   *  this region. The sync HTTP client appends `/profile/sync/{pull,push,
+   *  cursor}` to it. `profile` is origin-only, reached over the same Caddy
+   *  edge as chat but on its own `/profile/*` routes — a distinct service,
+   *  not chat. Read through a getter at call time, like `chatBaseUrl`, so a
+   *  region flip routes sync traffic to the new backend without a restart.
+   *
+   *  Optional so a `config.json` predating the `profile` service stays valid.
+   *  When absent the sync engine stays off — a published config carries this
+   *  field before sync is enabled for the region. */
+  readonly profileBaseUrl?: string
 }
 
 // sslip.io resolves <ip-dashed>.sslip.io → the literal IP without us
@@ -86,6 +97,7 @@ export const SERVERS: readonly CdnServer[] = [
     shareTranscriptUrl: `${HOST}/share/transcripts`,
     authBaseUrl: `${HOST}/auth`,
     chatBaseUrl: HOST,
+    profileBaseUrl: HOST,
   },
   {
     id: "russia",
@@ -103,6 +115,7 @@ export const SERVERS: readonly CdnServer[] = [
     shareTranscriptUrl: `${HOST_RU}/share/transcripts`,
     authBaseUrl: `${HOST_RU}/auth`,
     chatBaseUrl: HOST_RU,
+    profileBaseUrl: HOST_RU,
   },
   {
     // The former `global` origin — the AWS S3 bucket. Retired as the
@@ -118,5 +131,6 @@ export const SERVERS: readonly CdnServer[] = [
     shareTranscriptUrl: `${HOST}/share/transcripts`,
     authBaseUrl: `${HOST}/auth`,
     chatBaseUrl: HOST,
+    profileBaseUrl: HOST,
   },
 ]

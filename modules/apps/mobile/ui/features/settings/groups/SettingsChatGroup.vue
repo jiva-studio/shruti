@@ -16,12 +16,24 @@
       <IconChip><IconLanguageHiragana :size="22" /></IconChip>
     </template>
   </SettingsToggleItem>
+
+  <!-- Sync chats across devices. Device-local, default on; gates whether
+       Ask Sadhu conversations are synced to the profile service. -->
+  <SettingsToggleItem
+    v-model:checked="syncChats"
+    :title="$t('settings.syncChats.title')"
+    :subtitle="$t('settings.syncChats.description')"
+  >
+    <template #icon>
+      <IconChip><IconRefresh :size="22" /></IconChip>
+    </template>
+  </SettingsToggleItem>
 </template>
 
 <script setup lang="ts">
 import { IonLabel, IonListHeader } from "@ionic/vue"
 import { SettingsToggleItem } from "@kit/ui"
-import { IconLanguageHiragana } from "@tabler/icons-vue"
+import { IconLanguageHiragana, IconRefresh } from "@tabler/icons-vue"
 import { IconChip } from "@ui/primitives/index.js"
 import ChatLanguageSettingsItem from "../ChatLanguageSettingsItem.vue"
 
@@ -36,4 +48,5 @@ defineProps<{
 
 const chatLanguage = defineModel<string>("chatLanguage", { required: true })
 const chatTranslateCitations = defineModel<boolean>("chatTranslateCitations", { required: true })
+const syncChats = defineModel<boolean>("syncChats", { required: true })
 </script>

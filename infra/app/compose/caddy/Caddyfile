@@ -120,6 +120,18 @@ import role-proxy.conf
             events 60
             window 1m
         }
+        # /profile/* — device↔server sync (push/pull change batches).
+        # Cheap JSON, not the LLM cost surface, so keep it generous: a
+        # sync-heavy client (multiple devices on a CGNAT-shared IP) can
+        # burst freely; this only fences a pathological flood.
+        zone profile {
+            match {
+                path /profile/*
+            }
+            key {client_ip}
+            events 300
+            window 1m
+        }
         # /chat/* root — main LLM cost surface. Loose DoS shield: this
         # cap is for catching obvious botnet-scale abuse from one IP,
         # not for governing legitimate user behaviour. The 200/h cap we
@@ -136,10 +148,10 @@ import role-proxy.conf
         zone chat {
             match {
                 # Negative match so this fires on the root catch-all but
-                # NOT on /auth/* or /share/*. Order matters: more specific
-                # zones above were already checked.
+                # NOT on /auth/*, /share/* or /profile/*. Order matters:
+                # more specific zones above were already checked.
                 not {
-                    path /auth/* /share/*
+                    path /auth/* /share/* /profile/*
                 }
             }
             key {client_ip}

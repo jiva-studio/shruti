@@ -19,6 +19,7 @@ import { buildServerUrl } from "@lib/domain/servers.js"
 import type { Result } from "@kit/core"
 import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
 import { useShruti } from "@shruti/shruti.js"
+import { requestSync } from "@shruti/services/syncEvents.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { usePlaylistDerivedData } from "./playlist/usePlaylistDerivedData.js"
 import { usePlaylistPrefetch } from "./playlist/usePlaylistPrefetch.js"
@@ -173,6 +174,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
       // gets around to setting the download flag. `markStartingDownload`
       // self-skips when the track is already cached.
       useDownloadStore().markStartingDownload(trackId)
+      requestSync()
       await refresh()
       void prefetch.prefetchTrack(trackId)
     }
@@ -192,7 +194,10 @@ export const usePlaylistStore = defineStore("playlist", () => {
       { itemId },
       { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
     )
-    if (result.ok || result.error === "already-archived") await refresh()
+    if (result.ok || result.error === "already-archived") {
+      requestSync()
+      await refresh()
+    }
     return result
   }
 

@@ -24,6 +24,7 @@
   * [Subscriptions & RevenueCat](repos/shruti/architecture/subscriptions.md)
   * [Background playlist (Pro)](repos/shruti/architecture/background-playlist.md)
   * [Observability (Langfuse)](repos/shruti/architecture/observability.md)
+  * [Profile sync](repos/shruti/architecture/profile-sync.md)
   * **Chat**
     * [Pipeline](repos/shruti/architecture/chat-pipeline.md)
     * [Intents & routing](repos/shruti/architecture/chat-intents.md)

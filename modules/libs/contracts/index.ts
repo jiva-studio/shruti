@@ -58,3 +58,25 @@ export type {
   SubmitChatFeedbackOptions,
 } from "./chat/chatFeedbackService.js"
 export type { IChatResumeService, ResumedTurn, ResumedTurnState } from "./chat/chatResumeService.js"
+
+/* -------------------------------------------------------------------------- */
+/*  Profile-sync wire protocol (POST /profile/sync/{pull,push,cursor}).       */
+/*  Transport contract mirrored from the `profile` Go service structs, plus   */
+/*  the `ISyncClient` transport port — shared kernel, like the chat contracts */
+/*  above, because it is both consumed by the sync engine (@usecases) and     */
+/*  implemented by an @infra HTTP adapter.                                     */
+/* -------------------------------------------------------------------------- */
+export type {
+  Hlc,
+  SyncOp,
+  Change,
+  PullRequest,
+  PullResponse,
+  PushItem,
+  PushRequest,
+  Ref,
+  Conflict,
+  PushResponse,
+  CursorRequest,
+  ISyncClient,
+} from "./sync/syncClient.js"
