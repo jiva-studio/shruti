@@ -64,19 +64,20 @@ func (r *ChangesRepo) Append(ctx context.Context, q querier, userID uuid.UUID, d
 	return err
 }
 
-// Pull returns changes for the user with global_seq > cursor, excluding the
-// caller's own device (echo suppression when excludeDevice != ""), ordered by
-// global_seq, up to limit rows.
-func (r *ChangesRepo) Pull(ctx context.Context, userID uuid.UUID, cursor int64, excludeDevice string, limit int) ([]wire.Change, error) {
+// Pull returns changes for the user with global_seq > cursor, ordered by
+// global_seq, up to limit rows. A device receives its OWN writes back too:
+// re-applying them is idempotent (LWW on the same HLC is a no-op), and it is
+// the only way a device that lost its local copy (reinstall/wipe) can recover
+// its own data — echo-suppression here would make that loss permanent.
+func (r *ChangesRepo) Pull(ctx context.Context, userID uuid.UUID, cursor int64, limit int) ([]wire.Change, error) {
 	rows, err := r.Pool.Query(ctx,
 		`SELECT global_seq, collection, doc_id, op, data, hlc
 		   FROM profile.changes
 		  WHERE user_id = $1
 		    AND global_seq > $2
-		    AND ($3 = '' OR device_id <> $3)
 		  ORDER BY global_seq
-		  LIMIT $4`,
-		userID, cursor, excludeDevice, limit,
+		  LIMIT $3`,
+		userID, cursor, limit,
 	)
 	if err != nil {
 		return nil, err

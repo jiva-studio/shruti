@@ -120,12 +120,12 @@ func (s *Service) Push(ctx context.Context, userID uuid.UUID, req wire.PushReque
 // Pull returns changes for the user with global_seq > cursor, excluding the
 // caller's own device (echo suppression), paginated. limit is clamped to the
 // hard maximum so a client cannot demand an unbounded page.
-func (s *Service) Pull(ctx context.Context, userID uuid.UUID, excludeDevice string, req wire.PullRequest) (wire.PullResponse, error) {
+func (s *Service) Pull(ctx context.Context, userID uuid.UUID, req wire.PullRequest) (wire.PullResponse, error) {
 	limit := req.Limit
 	if limit <= 0 || limit > s.PullMaxLimit {
 		limit = s.PullMaxLimit
 	}
-	changes, err := s.Changes.Pull(ctx, userID, req.Cursor, excludeDevice, limit)
+	changes, err := s.Changes.Pull(ctx, userID, req.Cursor, limit)
 	if err != nil {
 		return wire.PullResponse{}, err
 	}

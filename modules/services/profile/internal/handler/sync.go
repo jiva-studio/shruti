@@ -35,8 +35,9 @@ func (h *syncHandler) push(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// pull — POST /profile/sync/pull. Echo suppression uses the optional
-// X-Device-Id header (the wire PullRequest carries no device id).
+// pull — POST /profile/sync/pull. Returns every change since the request
+// cursor, including the caller's own writes (re-apply is an idempotent no-op),
+// so a device that lost its local copy recovers its own data from cursor 0.
 func (h *syncHandler) pull(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userFromContext(r.Context())
 	if !ok {
@@ -47,8 +48,7 @@ func (h *syncHandler) pull(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	excludeDevice := r.Header.Get("X-Device-Id")
-	resp, err := h.svc.Pull(r.Context(), userID, excludeDevice, req)
+	resp, err := h.svc.Pull(r.Context(), userID, req)
 	if err != nil {
 		writeServiceErr(w, r, "pull_failed", err)
 		return
