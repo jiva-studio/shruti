@@ -158,15 +158,17 @@ func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
 		return Result{}, newServiceError("mktemp: %s", err)
 	}
 	defer os.RemoveAll(tmp)
-	src := filepath.Join(tmp, "source.mp3")
 	dst := filepath.Join(tmp, "excerpt.mp3")
 
-	log.Info("excerpt_download_start", "bucket", c.Bucket, "source_key", req.SourceKey, "excerpt_id", prep.ExcerptID)
-	if err := c.Storage.DownloadTo(ctx, req.SourceKey, src); err != nil {
-		return Result{}, newServiceError("download failed: %s", err)
-	}
-
-	if err := c.FFmpeg.Cut(ctx, src, dst, req.StartMs, req.EndMs); err != nil {
+	// Cut straight from the source's public URL: ffmpeg Range-reads only the
+	// bytes around [start,end] rather than downloading the whole track to
+	// disk first. Sources live under the public/tracks/ prefix and are served
+	// by the same pull zone as excerpts, so BuildURL yields a fetchable URL.
+	// (The old download-whole-file path timed out on long lectures — a 176 MB
+	// source for a 50 s clip — which was ~40% of prod failures.)
+	srcURL := c.Storage.BuildURL(req.SourceKey)
+	log.Info("excerpt_cut_start", "source_key", req.SourceKey, "source_url", srcURL, "excerpt_id", prep.ExcerptID)
+	if err := c.FFmpeg.Cut(ctx, srcURL, dst, req.StartMs, req.EndMs); err != nil {
 		return Result{}, newServiceError("ffmpeg failed: %s", err)
 	}
 
