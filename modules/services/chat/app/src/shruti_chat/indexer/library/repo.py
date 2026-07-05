@@ -76,20 +76,41 @@ def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> Ver
             "WHERE verse_id = ?",
             (verse_id,),
         ).fetchall()
+        # Per-language transliteration is materialised in the DB (computed once at
+        # import). Prefer it — it's the single source of truth. Guard the table's
+        # existence so an older published artifact that predates it doesn't raise
+        # and drop the whole payload.
+        has_translit = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='library_verse_transliterations'"
+        ).fetchone() is not None
+        stored_translit = {}
+        if has_translit:
+            stored_translit = {
+                lang: text or ""
+                for lang, text in conn.execute(
+                    "SELECT language, text FROM library_verse_transliterations "
+                    "WHERE verse_id = ?",
+                    (verse_id,),
+                ).fetchall()
+            }
     iast = transliteration or ""
-    return VerseBody(
-        sanskrit=sanskrit or "",
-        # `en`/`sr-Latn` = the as-is Latin IAST; `ru`/`uk`/`sr-Cyrl` =
-        # derived per-language Cyrillic. Empty IAST yields an empty map
-        # (no spurious card content). Sanskrit is transliterated, never
-        # LLM-translated — these are deterministic script conversions.
-        transliteration={
+    # Fallback derivation only when the DB has no stored transliteration (old
+    # artifact / missing row); `en`/`sr-Latn` = raw IAST, `ru`/`uk`/`sr-Cyrl` derived.
+    translit_map = stored_translit or (
+        {
             "en": iast,
             "ru": iast_to_ru(iast),
             "uk": iast_to_uk(iast),
             "sr-Latn": iast,
             "sr-Cyrl": iast_to_sr(iast),
-        } if iast else {},
+        }
+        if iast
+        else {}
+    )
+    return VerseBody(
+        sanskrit=sanskrit or "",
+        transliteration=translit_map,
         translation={lang: text or "" for lang, text in translations_rows},
         audio_path=audio_path or "",
     )
