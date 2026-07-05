@@ -1,0 +1,198 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro'
+import AnswerVerse from '../../../components/AnswerVerse.astro'
+import WebCitationCard from '../../../components/vue/WebCitationCard.vue'
+import WebCommentaryCard from '../../../components/vue/WebCommentaryCard.vue'
+import { type Lang } from '../../../i18n/ui'
+import content from '../../../data/gita-content.json'
+
+// Practical Gita SEO pages. English-first: one static page per content item,
+// rendered from src/data/gita-content.json. Add items to add pages.
+export function getStaticPaths() {
+  const items = content.items as any[]
+  return items.map((item) => ({
+    params: { lang: 'en', slug: item.slug },
+    props: { item, all: items },
+  }))
+}
+
+const lang = Astro.params.lang as Lang
+const { item, all } = Astro.props as { item: any; all: any[] }
+
+// Related: prefer same-cluster siblings, then pad from other clusters. Only
+// links to pages that actually exist in the dataset (no broken links).
+const related = [
+  ...all.filter((x) => x.cluster === item.cluster && x.slug !== item.slug),
+  ...all.filter((x) => x.cluster !== item.cluster),
+].slice(0, 4)
+
+const citeBody = item.audio
+  ? {
+      text: item.audio.text,
+      trackTitle: item.audio.trackTitle,
+      authorName: item.audio.authorName,
+      trackDate: item.audio.trackDate,
+      references: [{ sourceId: item.verse.sourceId, tokens: item.verse.tokens, label: item.audio.refLabel }],
+    }
+  : null
+const purportBody = item.purport
+  ? {
+      text: item.purport.text,
+      authorName: item.purport.authorName,
+      addrLabel: item.purport.addrLabel,
+      commentaryKind: 'commentary',
+    }
+  : null
+
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: (item.faq as [string, string][]).map(([q, a]) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+}
+---
+<BaseLayout lang={lang} path={`/gita/${item.slug}`} title={item.seoTitle} description={item.seoDescription}>
+  <script type="application/ld+json" set:html={JSON.stringify(faqLd)} is:inline />
+
+  <article class="mx-auto max-w-[680px] px-5 pb-4">
+
+    <header class="pt-12">
+      <a href={`/${lang}/gita`} class="eyebrow-link">{item.eyebrow}</a>
+      <h1 class="mt-4 t-h1 text-ink [text-wrap:balance]">{item.h1}</h1>
+      <p class="mt-5 t-body text-coffee">{item.lede}</p>
+    </header>
+
+    <!-- One flowing answer: prose + verse + audio + commentary widgets. -->
+    <div class="answer mt-8 flex flex-col gap-7">
+      <p class="t-body text-ink">{item.shortAnswer}</p>
+
+      <AnswerVerse
+        addrLabel={item.verse.addrLabel}
+        original={item.verse.sanskrit}
+        transliteration={item.verse.transliteration}
+        translation={item.verse.translation}
+      />
+
+      {item.audio && (
+        <WebCitationCard
+          client:visible
+          trackId={item.audio.trackId}
+          startMs={item.audio.startMs}
+          endMs={item.audio.endMs}
+          body={citeBody}
+          language="en"
+        />
+      )}
+
+      {item.meaning.map((p: string) => <p class="t-body text-ink">{p}</p>)}
+
+      {item.purport && <WebCommentaryCard body={purportBody} />}
+    </div>
+
+    <section class="mt-11">
+      <h2 class="t-h2 text-ink [text-wrap:balance]">What to do when it hits</h2>
+      <div class="mt-4 grid gap-3">
+        {(item.steps as [string, string][]).map(([h, p], i) => (
+          <div class="accent-card">
+            <span class="accent-bar" aria-hidden="true"></span>
+            <span class="step-bg" aria-hidden="true">{i + 1}</span>
+            <div class="accent-body">
+              <h3 class="t-h3 text-ink">{h}</h3>
+              <p class="mt-1.5 t-body text-coffee">{p}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <section class="mt-11">
+      <h2 class="t-h2 text-ink [text-wrap:balance]">Common questions</h2>
+      <div class="mt-4 flex flex-col">
+        {(item.faq as [string, string][]).map(([q, a]) => (
+          <div class="faq-item py-6">
+            <h3 class="t-h3 text-ink">{q}</h3>
+            <p class="mt-2 t-body text-coffee">{a}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    {related.length > 0 && (
+      <section class="mt-11">
+        <h2 class="t-h2 text-ink [text-wrap:balance]">More questions — the Gita’s answers</h2>
+        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {related.map((r) => (
+            <a href={`/${lang}/gita/${r.slug}`} class="accent-card">
+              <span class="accent-bar" aria-hidden="true"></span>
+              <span class="accent-body">
+                <span class="block t-eyebrow leading-none text-saffron-shade">{r.verse.ref}</span>
+                <span class="mt-2 block t-h3 text-ink">{r.h1}</span>
+              </span>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    <div class="cta mt-12">
+      <h2 class="t-h2 text-white">Tell us your situation</h2>
+      <p class="mt-2.5 t-body text-[#f4e3cf]">Gita AI will hear your question and answer with a verse, a commentary and a practice — like this page, but about you.</p>
+      <div class="mt-5 flex flex-wrap justify-center gap-3">
+        <a href={`/${lang}/ai`} class="btn-solid">Ask Gita AI</a>
+        <a href={`/${lang}/app`} class="btn-ghost">Get the app</a>
+      </div>
+    </div>
+
+  </article>
+</BaseLayout>
+
+<style>
+  /* ---- One type scale for the whole page ---- */
+  .t-h1 { font-family: var(--font-serif); font-weight: 600; font-size: clamp(30px, 5vw, 40px); line-height: 1.15; letter-spacing: -0.01em; }
+  .t-h2 { font-family: var(--font-serif); font-weight: 600; font-size: clamp(22px, 4vw, 26px); line-height: 1.25; letter-spacing: -0.01em; }
+  .t-h3 { font-family: var(--font-serif); font-weight: 600; font-size: 19px; line-height: 1.4; }
+  .t-body { font-size: 17px; line-height: 1.7; }
+  .t-eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 0.03em; }
+
+  .eyebrow-link {
+    display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--ion-color-primary-shade);
+  }
+  .eyebrow-link::before { content: ""; width: 22px; height: 1.5px; background: var(--ion-color-primary); border-radius: 2px; }
+  .eyebrow-link:hover { color: var(--ion-color-primary); }
+
+  .faq-item { position: relative; }
+  .faq-item::before {
+    content: "";
+    position: absolute; inset: 0 0 auto 0; height: 1px;
+    background: linear-gradient(to right, transparent, var(--lectorium-divider, rgba(61, 43, 31, 0.12)), transparent);
+  }
+  .faq-item:first-child::before { display: none; }
+
+  /* Shared accent frame — mirrors the chat AccentFrame (audio/commentary). */
+  .accent-card {
+    position: relative; display: flex; overflow: hidden; border-radius: 4px;
+    background: rgba(var(--ion-color-primary-rgb), 0.06);
+  }
+  .accent-bar { flex: 0 0 3px; background: var(--ion-color-primary); }
+  .accent-body { flex: 1; min-width: 0; position: relative; z-index: 1; padding: 14px 20px 16px; }
+  a.accent-card { text-decoration: none; transition: background 0.16s ease; }
+  a.accent-card:hover { background: rgba(var(--ion-color-primary-rgb), 0.11); }
+  .step-bg {
+    position: absolute; right: 14px; bottom: -18px; z-index: 0;
+    font-family: var(--font-serif); font-weight: 700; font-size: 108px; line-height: 1;
+    color: var(--ion-color-primary); opacity: 0.12;
+    pointer-events: none; user-select: none;
+  }
+
+  .cta {
+    background: linear-gradient(135deg, #6f4e37, #8a5a34 60%, #cc7a3d);
+    border-radius: 20px; padding: 34px 30px; text-align: center;
+  }
+  .btn-solid { font-weight: 700; font-size: 15px; padding: 12px 22px; border-radius: 12px; text-decoration: none; background: #fff7ec; color: var(--ion-color-tertiary); }
+  .btn-ghost { font-weight: 700; font-size: 15px; padding: 12px 22px; border-radius: 12px; text-decoration: none; color: #fff7ec; border: 1px solid rgba(255, 255, 255, 0.4); }
+</style>
