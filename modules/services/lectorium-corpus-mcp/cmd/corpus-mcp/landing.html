@@ -47,10 +47,11 @@
     background:rgba(250,245,234,.85); backdrop-filter:blur(10px); }
   .nav-in { max-width:960px; margin:0 auto; height:64px; padding:0 20px;
     display:flex; align-items:center; justify-content:space-between; }
-  .brand { display:flex; align-items:center; gap:10px; font-family:var(--serif); font-weight:700; font-size:18px; }
-  .brand img { width:32px; height:32px; border-radius:8px; display:block; }
-  .nav a.right { font-size:14px; color:var(--medium); text-decoration:none; }
+  .brand { display:flex; align-items:center; gap:10px; font-family:var(--serif); font-weight:700; font-size:18px; white-space:nowrap; }
+  .brand img { width:32px; height:32px; border-radius:8px; display:block; flex:none; }
+  .nav a.right { font-size:14px; color:var(--medium); text-decoration:none; white-space:nowrap; }
   .nav a.right:hover { color:var(--saffron); }
+  @media (max-width:480px){ .nav a.right { display:none; } }
 
   .wrap { max-width:960px; margin:0 auto; padding:0 20px; }
   .hero { position:relative; overflow:hidden; }
