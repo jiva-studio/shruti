@@ -53,7 +53,7 @@ func triggerExcerpt(ctx context.Context, endpoint, sourceKey string, startMs, en
 // ── MCP Apps (interactive UI players) ────────────────────────────────────────
 //
 // Two render-tools point at singlefile ext-apps bundles (apps_html.go + ui/).
-// Audio is generated lazily: lecture_excerpt shows a Play button, whose click
+// Audio is generated lazily: excerpt_render shows a Play button, whose click
 // calls excerpt_prepare via callServerTool to cut the clip on demand.
 
 const (
@@ -64,6 +64,8 @@ const (
 // registerApps wires the two render-tools, the excerpt-prepare helper tool, and
 // the two UI resources.
 func registerApps(srv *server.MCPServer, d *Deps) {
+	registerVerseRender(srv, d)
+	registerVerseCardResource(srv, d)
 	registerMediaGet(srv, d)
 	registerLectureExcerpt(srv, d)
 	registerExcerptPrepare(srv, d)
@@ -111,10 +113,10 @@ func firstLineShort(text string, maxRunes int) string {
 	return preview(strings.TrimSpace(line), maxRunes)
 }
 
-// ── media_get: play an existing video clip ───────────────────────────────────
+// ── media_render: play an existing video clip ───────────────────────────────────
 
 func registerMediaGet(srv *server.MCPServer, d *Deps) {
-	const kind = "media_get"
+	const kind = "media_render"
 	t := mcp.NewTool(kind,
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
@@ -185,12 +187,12 @@ func registerMediaGet(srv *server.MCPServer, d *Deps) {
 	})
 }
 
-// ── lecture_excerpt: generate + play an audio passage ────────────────────────
+// ── excerpt_render: generate + play an audio passage ────────────────────────
 
 const excerptMaxMs = 600000 // share-audio 10-minute cap
 
 func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
-	const kind = "lecture_excerpt"
+	const kind = "excerpt_render"
 	t := mcp.NewTool(kind,
 		// Not marked read-only: the rendered player lets the user TRIGGER
 		// generation of the clip (a side effect) via the public share-audio
@@ -308,7 +310,7 @@ func registerExcerptPrepare(srv *server.MCPServer, d *Deps) {
 		mcp.WithDescription(
 			"Generate (or fetch, if cached) the audio clip for a lecture passage and return its "+
 				"playable URL. This is the excerpt player's Play action — it is called for you by the "+
-				"player UI on demand. Agents should use lecture_excerpt to show the player, not call this "+
+				"player UI on demand. Agents should use excerpt_render to show the player, not call this "+
 				"directly. Idempotent: same track+window returns the same cached clip."),
 		mcp.WithString("track_id", mcp.Required(), mcp.Description("track_id.")),
 		mcp.WithNumber("start_ms", mcp.Required(), mcp.Description("Passage start (ms).")),

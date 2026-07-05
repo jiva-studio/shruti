@@ -13,7 +13,7 @@ var allKinds = []string{
 	"author_list", "author_resolve", "location_list", "location_resolve",
 	"verse_get", "verse_translation", "verse_synonyms", "verse_list", "document_get", "document_list",
 	"track_get", "track_list", "transcript_window",
-	"media_get", "lecture_excerpt", "excerpt_prepare",
+	"verse_render", "media_render", "excerpt_render", "excerpt_prepare",
 }
 
 // TestOutputSchemaForAllTools checks every tool declares a valid object
@@ -39,8 +39,9 @@ func TestOutputSchemaForAllTools(t *testing.T) {
 		if m["type"] != "object" {
 			t.Errorf("%s: top-level type=%v, want object", k, m["type"])
 		}
-		// Envelope tools must carry the {ok, kind, result} shape.
-		if k != "media_get" && k != "lecture_excerpt" && k != "excerpt_prepare" {
+		// Envelope tools must carry the {ok, kind, result} shape. App/render
+		// tools emit a flat structuredContent object instead.
+		if k != "verse_render" && k != "media_render" && k != "excerpt_render" && k != "excerpt_prepare" {
 			props, _ := m["properties"].(map[string]any)
 			for _, want := range []string{"ok", "kind", "result"} {
 				if _, ok := props[want]; !ok {
