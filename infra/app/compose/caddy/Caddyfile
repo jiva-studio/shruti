@@ -60,7 +60,7 @@ import role-proxy.conf
         # don't, so put them on the edge once and for all.
         Access-Control-Allow-Origin "*"
         Access-Control-Allow-Methods "GET, POST, OPTIONS"
-        Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, Accept"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, X-Device-Id, Accept"
         Access-Control-Max-Age "600"
     }
 
@@ -241,7 +241,7 @@ import role-proxy.conf
         header {
             Access-Control-Allow-Origin "*"
             Access-Control-Allow-Methods "GET, POST, OPTIONS"
-            Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, Accept"
+            Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, X-Device-Id, Accept"
             Access-Control-Expose-Headers "Retry-After, X-Request-Id"
         }
         respond {err.status_code}
