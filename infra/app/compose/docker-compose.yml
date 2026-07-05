@@ -629,27 +629,6 @@ services:
       timeout: 3s
       retries: 30
 
-  # profile-migrate: one-shot embedded-migration apply for profile's own DB,
-  # mirroring the shared `migrator`. Same image as `profile` with a different
-  # arg — `profile migrate` applies the go:embed'd migrations (advisory-locked)
-  # then exits 0; `profile` (serve) refuses traffic until the schema is current.
-  # Watchtower re-runs this stopped container when a new image lands.
-  profile-migrate:
-    profiles: [origin]
-    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-profile:${SHRUTI_PROFILE_TAG:-latest}
-    restart: "no"
-    logging: *default-logging
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
-    command: ["migrate"]
-    env_file:
-      - ${SHRUTI_ENV_FILE:-../../../.env}
-    environment:
-      DATABASE_URL: postgresql://profile:${SHRUTI_PROFILE_POSTGRES_PASSWORD:?}@profile-postgres:5432/profile?sslmode=disable
-    networks: [shruti]
-    depends_on:
-      profile-postgres: { condition: service_healthy }
-
   # profile: device<->server user-data sync service (library, listening
   # history, notes, chat). chi+pgx, RS256-verifies the aud="chat" access
   # token against the shared public.pem, talks ONLY to profile-postgres.
@@ -682,9 +661,10 @@ services:
     volumes:
       - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}:/secrets:ro
     networks: [shruti]
+    # serve applies the embedded migrations on boot (advisory-locked +
+    # idempotent), so no separate one-shot migrate container is needed.
     depends_on:
       profile-postgres: { condition: service_healthy }
-      profile-migrate: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "/profile", "healthz"]
       interval: 15s
