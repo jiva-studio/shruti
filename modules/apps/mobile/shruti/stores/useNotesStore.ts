@@ -7,6 +7,7 @@ import type { NoteId } from "@lib/domain/core.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
 import type { Result } from "@kit/core"
 import { useShruti } from "@shruti/shruti.js"
+import { requestSync } from "@shruti/services/syncEvents.js"
 
 /**
  * Reactive cache of notes. NotesView reads `filtered` and `isLoading`;
@@ -49,7 +50,10 @@ export const useNotesStore = defineStore("notes", () => {
   async function remove(id: NoteId): Promise<Result<void, DeleteNoteError>> {
     const repos = app.repositories()
     const result = await deleteNote({ id }, { notes: repos.notes, unitOfWork: repos.unitOfWork })
-    if (result.ok) await refresh()
+    if (result.ok) {
+      requestSync()
+      await refresh()
+    }
     return result
   }
 
@@ -62,7 +66,10 @@ export const useNotesStore = defineStore("notes", () => {
   }): Promise<Result<Note, UpdateNoteError>> {
     const repos = app.repositories()
     const result = await updateNote(input, { notes: repos.notes, unitOfWork: repos.unitOfWork })
-    if (result.ok) await refresh()
+    if (result.ok) {
+      requestSync()
+      await refresh()
+    }
     return result
   }
 

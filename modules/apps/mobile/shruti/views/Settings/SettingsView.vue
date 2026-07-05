@@ -39,6 +39,7 @@
     <SettingsChatGroup
       v-model:chat-language="chatLanguage"
       v-model:chat-translate-citations="chatTranslateCitations"
+      v-model:sync-chats="syncChats"
       :language-items="languageItems"
     />
 
@@ -164,6 +165,7 @@ const {
   appLanguage,
   chatLanguage,
   chatTranslateCitations,
+  syncChats,
   trackMetaConfig,
   showPlayerProgress,
   showPlayerOnNotes,

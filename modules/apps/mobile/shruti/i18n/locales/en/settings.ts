@@ -198,6 +198,11 @@ export default {
     description: "Translate quotes into the chat language.",
   },
 
+  syncChats: {
+    title: "Sync chats",
+    description: "Keep your Ask Sadhu conversations in sync across your devices.",
+  },
+
   smartLibrary: {
     title: "Smart library",
     description: "Keep fresh lectures ready and clean up after listening",

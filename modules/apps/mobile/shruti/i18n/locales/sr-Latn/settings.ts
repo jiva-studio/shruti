@@ -29,6 +29,11 @@ export default {
     description: "Prevedi citate na jezik ćaskanja.",
   },
 
+  syncChats: {
+    title: "Sinhronizuj četove",
+    description: "Držite svoje Ask Sadhu razgovore usklađene na svim uređajima.",
+  },
+
   account: {
     signInCta: {
       title: "Prijavite se",

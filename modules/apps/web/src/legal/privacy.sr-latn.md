@@ -1,6 +1,6 @@
 # Politika privatnosti
 
-_Datum stupanja na snagu: 18. jun 2026._
+_Datum stupanja na snagu: 5. jul 2026._
 
 Ova politika privatnosti odnosi se na aplikaciju Shruti (u daljem tekstu „Aplikacija") za mobilne uređaje koju je kreirao Aleksei Leontev (u daljem tekstu „Pružalac usluge") kao besplatnu uslugu. Aplikacija uključuje opcionu plaćenu pretplatu i opcioni korisnički nalog. Ova usluga je namenjena za korišćenje „TAKVA KAKVA JESTE".
 
@@ -64,6 +64,21 @@ Da bismo održali rad usluge i poboljšali kvalitet odgovora, bekend Aplikacije 
 
 Oboje se nalazi na infrastrukturi kojom sami upravljamo — ne dele se ni sa jednom trećom stranom za analitiku ili posmatranje. Servisni zapisi se čuvaju do 30 dana; evidencija četa do 90 dana. Kada izbrišete svoj nalog, vaša evidencija četa se odmah uklanja — pogledajte odeljak _Brisanje naloga_ ispod.
 
+## Sinhronizacija podataka između vaših uređaja
+
+Ako ste **prijavljeni** putem Apple ili Google naloga, Aplikacija čuva kopiju vaših sopstvenih podataka na našim serverima kako bi oni ostali sinhronizovani na svim uređajima prijavljenim na isti nalog i kako bi se mogli povratiti ako ponovo instalirate Aplikaciju ili promenite uređaj. Za prijavljen nalog čuvamo i sinhronizujemo:
+
+- **Vašu biblioteku** — snimke i plejliste koje ste dodali ili sačuvali.
+- **Istoriju slušanja** — koja ste predavanja slušali i dokle ste stigli u reprodukciji.
+- **Beleške** — vremenski označene beleške koje pišete uz predavanja.
+- **Istoriju četa** — razgovore „Ask Sadhu" koje započnete (vaše poruke i odgovore modela), kako biste ih mogli nastaviti na drugom uređaju.
+
+Ovi podaci su vezani za vaš nalog i čuvaju se na infrastrukturi kojom sami upravljamo; ne dele se ni sa jednom trećom stranom za analitiku ili oglašavanje. Preuzeti audio fajlovi i podešavanja uređaja se **ne** sinhronizuju — preuzimanja ostaju na uređaju na kom su napravljena. Ove sinhronizovane podatke čuvamo dok ih ne izbrišete ili ne izbrišete svoj nalog (pogledajte odeljak _Brisanje naloga_ ispod). Ova sinhronizovana istorija četa odvojena je od dijagnostičke **evidencije četa** opisane u odeljku _Dijagnostički zapisi i evidencija četa_ iznad: ti dijagnostički zapisi postoje samo radi otklanjanja grešaka u kvalitetu odgovora i automatski se brišu po otprilike 90-dnevnom rasporedu, dok su vaši sinhronizovani razgovori vaši sopstveni i čuvaju se radi neprekidnog rada na više uređaja sve dok ih ne izbrišete ili ne izbrišete svoj nalog. Ako ste takođe prijavljeni na našem veb-sajtu **shruti.app**, vaši sinhronizovani razgovori mogu se dodatno prikazivati i u veb „Ask Sadhu" četu tamo — u režimu samo za čitanje.
+
+**Sinhronizacija četa je opciona.** Sinhronizacija istorije četa je podrazumevano uključena, ali je možete isključiti u bilo kom trenutku u podešavanjima četa u Aplikaciji („Sinhronizuj četove"). Sinhronizuju se samo razgovori koje ste sami započeli; automatske i sistemski generisane poruke se nikada ne šalju na naše servere radi sinhronizacije.
+
+**Anonimno korišćenje ostaje na vašem uređaju.** Ako koristite Aplikaciju bez prijave, nijedan od ovih podataka se ne šalje na naše servere — vaša biblioteka, istorija slušanja, beleške i četovi žive samo na vašem uređaju dok ne odlučite da se prijavite. Upravo prijava uključuje sinhronizaciju.
+
 ## Prijavljivanje padova i grešaka
 
 Da bismo otkrili i ispravili padove i greške, Aplikacija šalje automatske izveštaje o padovima i greškama sa vašeg uređaja u **Sentry**, uslugu za praćenje grešaka kojom upravlja Functional Software, Inc. (poslujući kao Sentry). Izveštaj se generiše samo kada se aplikacija sruši ili naiđe na neočekivanu grešku i sadrži:
@@ -101,6 +116,7 @@ Ako ste se prijavili putem Apple ili Google naloga, možete izbrisati svoj nalog
 - Apple i Google veze za prijavu povezane sa tim nalogom.
 - Sve aktivne sesije — svaki uređaj prijavljen na nalog se odjavljuje.
 - Vašu istoriju četa sa našom uslugom (vaše poruke, odlomke koje smo pronašli, odgovore modela) i sve povezane brojače.
+- Sve što smo sinhronizovali između vaših uređaja — vašu biblioteku, istoriju slušanja, beleške i sve četove koje ste izabrali da sinhronizujete. Sve to se briše sa naših servera, bez ikakvog perioda čuvanja.
 
 Šta ostaje na vašem uređaju — i o čemu vi odlučujete tokom toka brisanja — jesu lokalni podaci koje je Aplikacija keširala za vas: četovi, beleške, plejliste, preuzeti audio i istorija slušanja. Možete obrisati ove lokalne podatke kao deo brisanja naloga, ili ih zadržati i nastaviti da koristite Aplikaciju anonimno.
 
@@ -128,7 +144,7 @@ Pružalac usluge je posvećen zaštiti poverljivosti vaših informacija. Svi pod
 
 Ova Politika privatnosti može se s vremena na vreme ažurirati iz bilo kog razloga. Pružalac usluge će vas obavestiti o svim izmenama svoje Politike privatnosti ažuriranjem ove stranice novom Politikom privatnosti. Savetuje vam se da redovno proveravate ovu Politiku privatnosti zbog eventualnih izmena, jer se nastavak korišćenja smatra prihvatanjem svih izmena.
 
-Ova politika privatnosti stupa na snagu 18. juna 2026.
+Ova politika privatnosti stupa na snagu 5. jula 2026.
 
 ## Vaša saglasnost
 

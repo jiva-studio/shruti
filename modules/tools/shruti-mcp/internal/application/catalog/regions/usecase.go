@@ -33,6 +33,11 @@ type Region struct {
 	ShareVideoURL string `json:"shareVideoUrl"`
 	AuthBaseURL   string `json:"authBaseUrl"`
 	ChatBaseURL   string `json:"chatBaseUrl"`
+	// ProfileBaseURL is OPTIONAL (omitempty): a region without it keeps the
+	// profile-sync engine OFF on the client (no fallback to chatBaseUrl), and a
+	// config.json predating this field stays valid — mirrors the app's optional
+	// `profileBaseUrl?` in servers.ts / isValidRegion. Present ⇒ turns sync on.
+	ProfileBaseURL string `json:"profileBaseUrl,omitempty"`
 }
 
 // ValidationError carries the offending field so the MCP layer can surface it
@@ -67,6 +72,7 @@ func validate(r Region) (Region, error) {
 	r.ShareVideoURL = strings.TrimSpace(r.ShareVideoURL)
 	r.AuthBaseURL = strings.TrimSpace(r.AuthBaseURL)
 	r.ChatBaseURL = strings.TrimSpace(r.ChatBaseURL)
+	r.ProfileBaseURL = strings.TrimSpace(r.ProfileBaseURL)
 
 	if !idRe.MatchString(r.ID) {
 		return Region{}, &ValidationError{Field: "id", Message: "must be non-empty and match [a-z0-9-]+"}
@@ -88,6 +94,12 @@ func validate(r Region) (Region, error) {
 	} {
 		if err := requireHTTPS(val); err != nil {
 			return Region{}, &ValidationError{Field: field, Message: err.Error()}
+		}
+	}
+	// profileBaseUrl is optional; validate only when supplied.
+	if r.ProfileBaseURL != "" {
+		if err := requireHTTPS(r.ProfileBaseURL); err != nil {
+			return Region{}, &ValidationError{Field: "profileBaseUrl", Message: err.Error()}
 		}
 	}
 	return r, nil

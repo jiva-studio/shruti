@@ -29,6 +29,11 @@ export default {
     description: "Перекладати цитати мовою чату.",
   },
 
+  syncChats: {
+    title: "Синхронізувати чати",
+    description: "Синхронізуйте розмови з Ask Sadhu між усіма вашими пристроями.",
+  },
+
   account: {
     signInCta: {
       title: "Увійти",

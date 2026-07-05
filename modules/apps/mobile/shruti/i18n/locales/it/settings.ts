@@ -175,6 +175,12 @@ export default {
     description: "Traduci le citazioni nella lingua della chat.",
   },
 
+  syncChats: {
+    title: "Sincronizza le chat",
+    description:
+      "Mantieni le tue conversazioni di Ask Sadhu sincronizzate su tutti i tuoi dispositivi.",
+  },
+
   smartLibrary: {
     title: "Biblioteca intelligente",
     description: "Tieni pronte nuove lezioni e fai pulizia dopo l'ascolto",
