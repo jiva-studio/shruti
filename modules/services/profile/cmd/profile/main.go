@@ -83,7 +83,7 @@ func runServe() {
 	}
 	logpkg.Setup("shruti-profile", cfg.Env, cfg.ServiceVersion)
 
-	bootCtx, bootCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	bootCtx, bootCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer bootCancel()
 
 	pool, err := store.Connect(bootCtx, cfg.DatabaseURL)
@@ -93,8 +93,15 @@ func runServe() {
 	}
 	defer pool.Close()
 
-	// Migrations run one-shot via `profile migrate` before serve; confirm the
-	// schema is current or crash with a clear hint.
+	// Apply embedded migrations on boot. Migrate holds a session advisory lock
+	// and is idempotent, so it is safe to run on every start and across
+	// concurrent replicas — the service is self-contained and needs no separate
+	// one-shot migrate container. `profile migrate` stays available for manual
+	// ops. SchemaReady is a final guard against a partial apply.
+	if err := store.Migrate(bootCtx, pool); err != nil {
+		slog.ErrorContext(bootCtx, "migrate_failed", "err", err.Error())
+		os.Exit(1)
+	}
 	if err := store.SchemaReady(bootCtx, pool); err != nil {
 		slog.ErrorContext(bootCtx, "schema_not_ready", "err", err.Error())
 		os.Exit(1)
