@@ -85,6 +85,15 @@ func main() {
 
 	if bootstrap != nil {
 		bootstrap.SetHandles(libHandle, catHandle)
+		// Version-check once, synchronously, BEFORE serving: EnsureBoot only
+		// downloads when the artifact is absent, so a freshly-deployed binary
+		// that finds a STALE DB already on the volume would otherwise serve it
+		// until the first ticker tick (up to CORPUS_REFRESH_INTERVAL). This swaps
+		// a stale artifact to the latest up front; it's a no-op (one manifest
+		// read) when the on-disk version — tracked via a sidecar — is current.
+		if err := bootstrap.RefreshOnce(ctx); err != nil {
+			log.Printf("bootstrap: initial refresh: %v", err)
+		}
 		go bootstrap.Run(ctx, cfg.RefreshInterval)
 	}
 

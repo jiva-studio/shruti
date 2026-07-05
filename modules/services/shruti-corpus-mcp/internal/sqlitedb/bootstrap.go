@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -58,6 +59,33 @@ func NewBootstrap(mediaBase, libPath, catPath string, libHandle, catHandle *Hand
 		libHandle: libHandle,
 		catHandle: catHandle,
 		http:      &http.Client{Timeout: 5 * time.Minute},
+		// Seed the in-memory versions from sidecar files written on the last
+		// download, so a restart that keeps the on-disk artifacts (volume) knows
+		// their real version — otherwise RefreshOnce would treat any present file
+		// as version "" and either needlessly re-download or, worse, never notice
+		// a newer published version until the ticker's first tick.
+		libVersion: readVersionSidecar(libPath),
+		catVersion: readVersionSidecar(catPath),
+	}
+}
+
+// versionSidecar is the tiny companion file next to a DB recording the version
+// currently on disk (e.g. library.db.version).
+func versionSidecar(dbPath string) string { return dbPath + ".version" }
+
+func readVersionSidecar(dbPath string) string {
+	data, err := os.ReadFile(versionSidecar(dbPath))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// writeVersionSidecar records the on-disk version. Best-effort: a write failure
+// only costs a redundant re-download on the next start, never correctness.
+func writeVersionSidecar(dbPath, version string) {
+	if err := os.WriteFile(versionSidecar(dbPath), []byte(version), 0o644); err != nil {
+		log.Printf("bootstrap: write version sidecar %s: %v", versionSidecar(dbPath), err)
 	}
 }
 
@@ -93,6 +121,7 @@ func (b *Bootstrap) RefreshOnce(ctx context.Context) error {
 		}
 		log.Printf("bootstrap: catalog swapped %s -> %s", b.catVersion, catLatest)
 		b.catVersion = catLatest
+		writeVersionSidecar(b.catPath, catLatest)
 	}
 
 	libLatest := latest(libVersionsOf(m))
@@ -104,6 +133,7 @@ func (b *Bootstrap) RefreshOnce(ctx context.Context) error {
 		}
 		log.Printf("bootstrap: library swapped %s -> %s", b.libVersion, libLatest)
 		b.libVersion = libLatest
+		writeVersionSidecar(b.libPath, libLatest)
 	}
 	return nil
 }
@@ -125,6 +155,7 @@ func (b *Bootstrap) EnsureBoot(ctx context.Context) error {
 		return err
 	}
 	b.catVersion = catLatest
+	writeVersionSidecar(b.catPath, catLatest)
 
 	libLatest := latest(libVersionsOf(m))
 	if libLatest != "" {
@@ -133,6 +164,7 @@ func (b *Bootstrap) EnsureBoot(ctx context.Context) error {
 			return err
 		}
 		b.libVersion = libLatest
+		writeVersionSidecar(b.libPath, libLatest)
 	}
 	return nil
 }
