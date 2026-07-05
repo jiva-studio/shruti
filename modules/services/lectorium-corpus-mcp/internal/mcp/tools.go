@@ -37,8 +37,9 @@ var toolTitles = map[string]string{
 	"track_get":         "Get lecture",
 	"track_list":        "List lectures",
 	"transcript_window": "Read transcript",
-	"media_get":         "Play video",
-	"lecture_excerpt":   "Play excerpt",
+	"verse_render":      "Show verse",
+	"media_render":      "Play video",
+	"excerpt_render":    "Play excerpt",
 	"excerpt_prepare":   "Prepare excerpt audio",
 }
 
@@ -742,6 +743,9 @@ func (d *Deps) verseObjectWithCovers(ctx context.Context, sd *catalog.SourceDict
 	if lang == "" {
 		return obj, nil
 	}
+	// Transliteration in the requested language's script (Cyrillic for ru/uk/…),
+	// materialised at import; falls back to the stored Latin IAST.
+	obj["transliteration"] = splitLines(d.Library.Transliteration(ctx, v.ID, lang, v.Transliteration))
 	metas, err := d.Library.TranslationMetas(ctx, v.ID, lang)
 	if err != nil {
 		return nil, err

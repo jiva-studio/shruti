@@ -157,6 +157,25 @@ func (r *Repo) GetTranslation(ctx context.Context, verseID, lang, kind string) (
 	return &t, nil
 }
 
+// Transliteration returns the verse transliteration in `lang`'s script from
+// library_verse_transliterations (materialised at import for ru/uk/sr-Cyrl and
+// the Latin IAST for en/sr-Latn). Falls back to iastFallback (the raw IAST in
+// library_verses.transliteration) for any language not stored — the app's other
+// locales (pl, de, …) — or when the table predates this feature.
+func (r *Repo) Transliteration(ctx context.Context, verseID, lang, iastFallback string) string {
+	if lang == "" {
+		return iastFallback
+	}
+	var text string
+	err := r.db().QueryRowContext(ctx,
+		`SELECT text FROM library_verse_transliterations WHERE verse_id = ? AND language = ?`,
+		verseID, lang).Scan(&text)
+	if err != nil || text == "" {
+		return iastFallback
+	}
+	return text
+}
+
 // Words returns the word-by-word breakdown for (verse, lang, kind), ordered.
 func (r *Repo) Words(ctx context.Context, verseID, lang, kind string) ([]Word, error) {
 	rows, err := r.db().QueryContext(ctx,

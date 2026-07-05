@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Corpus verse card</title>
+  </head>
+  <body>
+    <div class="shloka" role="group">
+      <div class="ref" id="ref"></div>
+      <div class="scripture">
+        <div class="original" id="original"></div>
+        <div class="translit" id="translit"></div>
+      </div>
+      <hr class="hr" />
+      <div id="synonyms-block">
+        <div class="label">Пословный перевод</div>
+        <div class="synonyms" id="synonyms"></div>
+      </div>
+      <hr class="hr" />
+      <div class="translation" id="translation"></div>
+    </div>
+    <div id="err" class="err"></div>
+    <script type="module" src="/src/verse-card.ts"></script>
+  </body>
+</html>

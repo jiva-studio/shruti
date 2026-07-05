@@ -32,11 +32,13 @@ How to use the tools:
 - track_get/list, transcript_window: read lectures. Find the spoken moment of a ` +
 	`verse with search(types:["track"]) then transcript_window.
 
-Inline players (render an interactive UI, not just text):
+Inline components (render an interactive UI, not just text):
+- To SHOW a scripture verse as a card — call verse_render(ref/source+tokens/id, lang). It ` +
+	`renders the original script, transliteration (in that language), word-by-word and translation inline.
 - To SHOW a video clip the user wants to WATCH — from a search(types:["media"]) ` +
-	`hit — call media_get(id) with the hit's media_id. It renders an inline video player.
+	`hit — call media_render(id) with the hit's media_id. It renders an inline video player.
 - To let the user HEAR a lecture passage — from a search(types:["track"]) hit — call ` +
-	`lecture_excerpt(track_id, start_ms, end_ms). It renders an inline audio player that ` +
+	`excerpt_render(track_id, start_ms, end_ms). It renders an inline audio player that ` +
 	`generates and plays that exact passage (max 10 minutes).`
 
 // New builds the MCP server with public metadata for the initialize handshake.

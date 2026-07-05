@@ -104,6 +104,15 @@ func synonymsObj() map[string]any {
 	}, "synonyms")
 }
 
+// verseCardObj is the flat structuredContent the verse_render App renders.
+func verseCardObj() map[string]any {
+	syn := obj(map[string]any{"word": strS, "meaning": strS}, "word", "meaning")
+	return obj(map[string]any{
+		"id": strS, "ref": strS, "source": sourceRef(), "tokens": strS, "lang": strS, "kind": strS,
+		"original": arr(strS), "transliteration": arr(strS), "synonyms": arr(syn), "translation": strS,
+	})
+}
+
 func verseListItem() map[string]any {
 	return obj(map[string]any{
 		"id": strS, "ref": strS, "source": sourceRef(), "tokens": strS,
@@ -209,9 +218,11 @@ func outputSchemaFor(kind string) json.RawMessage {
 		return envSchema(listResult(trackObj()))
 	case "transcript_window":
 		return envSchema(transcriptWindowResult())
-	case "media_get":
+	case "verse_render":
+		return rawSchema(verseCardObj())
+	case "media_render":
 		return rawSchema(mediaGetObj())
-	case "lecture_excerpt":
+	case "excerpt_render":
 		return rawSchema(lectureExcerptObj())
 	case "excerpt_prepare":
 		return rawSchema(excerptPrepareObj())
