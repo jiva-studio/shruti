@@ -449,9 +449,9 @@ func TestConcurrentPushDifferentUsersDoNotBlock(t *testing.T) {
 	}
 }
 
-// ─── 6. Pull: cursor, limit clamp, echo suppression, paging ───────────────
+// ─── 6. Pull: cursor, limit clamp, own-writes returned, paging ────────────
 
-func TestPullEchoSuppressionAndPaging(t *testing.T) {
+func TestPullOwnWritesAndPaging(t *testing.T) {
 	// PullMaxLimit deliberately small to exercise the clamp + paging.
 	svc := newService(t, 2)
 	uid := uuid.New()
@@ -464,9 +464,10 @@ func TestPullEchoSuppressionAndPaging(t *testing.T) {
 	push(t, svc, uid, "devB", item("notes", "b2", "upsert", "b2", "", `{"body":"b2"}`))
 	push(t, svc, uid, "devB", item("notes", "b3", "upsert", "b3", "", `{"body":"b3"}`))
 
-	// devA pulls: echo-suppressed → sees only devB's three rows, but clamped
-	// to the max limit of 2 despite asking for 100.
-	page1, err := svc.Pull(ctx, uid, "devA", wire.PullRequest{Cursor: 0, Limit: 100})
+	// devA pulls from 0: sees ALL rows (its own devA writes included — the
+	// only way it recovers them after a local wipe), clamped to the max
+	// limit of 2 despite asking for 100.
+	page1, err := svc.Pull(ctx, uid, wire.PullRequest{Cursor: 0, Limit: 100})
 	if err != nil {
 		t.Fatalf("pull p1: %v", err)
 	}
@@ -477,9 +478,6 @@ func TestPullEchoSuppressionAndPaging(t *testing.T) {
 		t.Errorf("has_more should be true after a full page")
 	}
 	for _, c := range page1.Changes {
-		if c.DocID[:1] != "b" {
-			t.Errorf("echo suppression leaked devA row: %+v", c)
-		}
 		if c.ServerSeq == 0 {
 			t.Errorf("pull must populate server_seq")
 		}
@@ -488,39 +486,30 @@ func TestPullEchoSuppressionAndPaging(t *testing.T) {
 		t.Errorf("cursor must equal last row seq: %d vs %d", page1.Cursor, page1.Changes[1].ServerSeq)
 	}
 
-	// Next page from the advanced cursor → the remaining single devB row.
-	page2, err := svc.Pull(ctx, uid, "devA", wire.PullRequest{Cursor: page1.Cursor, Limit: 100})
-	if err != nil {
-		t.Fatalf("pull p2: %v", err)
-	}
-	if len(page2.Changes) != 1 {
-		t.Fatalf("second page: want 1 row, got %d", len(page2.Changes))
-	}
-	if page2.HasMore {
-		t.Errorf("has_more should be false on the final short page")
-	}
-	// All three devB docs seen across the two pages, none from devA.
+	// Page through the rest from the advancing cursor until drained.
 	seen := map[string]bool{}
-	for _, c := range append(page1.Changes, page2.Changes...) {
+	for _, c := range page1.Changes {
 		seen[c.DocID] = true
 	}
-	for _, want := range []string{"b1", "b2", "b3"} {
-		if !seen[want] {
-			t.Errorf("missing %s across pages", want)
+	cursor := page1.Cursor
+	for {
+		pg, err := svc.Pull(ctx, uid, wire.PullRequest{Cursor: cursor, Limit: 100})
+		if err != nil {
+			t.Fatalf("pull page: %v", err)
+		}
+		for _, c := range pg.Changes {
+			seen[c.DocID] = true
+		}
+		cursor = pg.Cursor
+		if !pg.HasMore {
+			break
 		}
 	}
-	if seen["a1"] || seen["a2"] {
-		t.Errorf("devA rows must never appear for devA puller")
-	}
 
-	// A devB puller is echo-suppressed the other way: sees only devA's rows.
-	bPull, err := svc.Pull(ctx, uid, "devB", wire.PullRequest{Cursor: 0, Limit: 100})
-	if err != nil {
-		t.Fatalf("pull devB: %v", err)
-	}
-	for _, c := range bPull.Changes {
-		if c.DocID[:1] != "a" {
-			t.Errorf("devB puller should only see devA rows, got %+v", c)
+	// All five docs seen across the pages — including devA's own writes.
+	for _, want := range []string{"a1", "a2", "b1", "b2", "b3"} {
+		if !seen[want] {
+			t.Errorf("missing %s across pages", want)
 		}
 	}
 }
