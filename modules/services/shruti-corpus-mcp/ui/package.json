@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rm -f ../internal/mcp/dist/*.html && INPUT=media-player.html vite build && INPUT=excerpt-player.html vite build"
+    "build": "rm -f ../internal/mcp/dist/*.html && INPUT=verse-card.html vite build && INPUT=media-player.html vite build && INPUT=excerpt-player.html vite build"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.4",

@@ -90,3 +90,22 @@ body { font-family: var(--ui-font); color: var(--fg); }
 .bar.played { background: var(--accent); }
 
 video { display: block; width: 100%; height: auto; background: #000; object-fit: cover; }
+
+/* ── verse card (verse_render) ─────────────────────────────────────────────────
+   No chrome: transparent, no border/radius — the host bubble is the container.
+   One font (host --ui-font); transliteration italic; word-by-word wraps. */
+.shloka { display: flex; flex-direction: column; gap: 14px; }
+.ref { text-align: center; font-size: 12.5px; color: var(--fg-muted); }
+.ref .num { color: var(--accent); font-weight: 600; }
+.scripture { text-align: center; display: flex; flex-direction: column; gap: 8px; }
+.scripture .line { display: block; }
+.original { font-size: 1.3rem; line-height: 1.7; color: var(--fg); }
+.translit { font-size: 1rem; line-height: 1.65; color: var(--fg-muted); font-style: italic; }
+.hr { height: 1px; background: var(--wave-base); border: 0; margin: 0; }
+.label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-muted); margin-bottom: 8px; }
+.synonyms { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.pair { white-space: nowrap; font-size: 0.92rem; }
+.pair .w { font-weight: 600; color: var(--fg); }
+.pair .g { color: var(--fg-muted); }
+.pair .dash { color: var(--fg-muted); padding: 0 0.3em; }
+.translation { font-size: 0.97rem; line-height: 1.6; color: var(--fg); }
