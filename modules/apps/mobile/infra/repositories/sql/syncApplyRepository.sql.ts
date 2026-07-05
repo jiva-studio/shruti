@@ -254,9 +254,21 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
   }
 
   async function upsertChatSession(wire: ChatSessionWire): Promise<void> {
+    // In-place UPSERT, NOT `INSERT OR REPLACE`: the latter is a DELETE+INSERT,
+    // and `chat_messages` has `ON DELETE CASCADE` on `session_id` with
+    // `foreign_keys = ON`, so replacing a session would wipe its messages.
+    // A session's title/updated_at change is ordered AFTER its messages under
+    // the single pull cursor, so a REPLACE here cascade-deletes the messages
+    // that were just applied — the session then fails the "has a visible
+    // message" gate and vanishes from history. DO UPDATE keeps the row alive.
     await db.execute(
-      `INSERT OR REPLACE INTO chat_sessions (id, title, created_at, updated_at, track_id)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO chat_sessions (id, title, created_at, updated_at, track_id)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         title      = excluded.title,
+         created_at = excluded.created_at,
+         updated_at = excluded.updated_at,
+         track_id   = excluded.track_id`,
       [wire.id, wire.title, wire.created_at, wire.updated_at, wire.track_id]
     )
   }
@@ -272,15 +284,27 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
       [wire.session_id]
     )
     if (!parent[0]) return
+    // `meta` is NOT NULL DEFAULT '{"_v":1,"data":{}}'. `INSERT OR REPLACE`
+    // used to substitute that default on a NULL; a plain UPSERT aborts on the
+    // NOT NULL violation instead, so coalesce an absent meta to the default.
     const meta =
       wire.meta === null || wire.meta === undefined
-        ? null
+        ? '{"_v":1,"data":{}}'
         : typeof wire.meta === "string"
           ? wire.meta
           : JSON.stringify(wire.meta)
+    // In-place UPSERT, not `INSERT OR REPLACE` (DELETE+INSERT): the message's
+    // proactive sidecar cascades on delete, and re-applying a message must not
+    // churn rows other tables reference.
     await db.execute(
-      `INSERT OR REPLACE INTO chat_messages (id, session_id, role, content, created_at, meta)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO chat_messages (id, session_id, role, content, created_at, meta)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         session_id = excluded.session_id,
+         role       = excluded.role,
+         content    = excluded.content,
+         created_at = excluded.created_at,
+         meta       = excluded.meta`,
       [wire.id, wire.session_id, wire.role, wire.content, wire.created_at, meta]
     )
     void docId
