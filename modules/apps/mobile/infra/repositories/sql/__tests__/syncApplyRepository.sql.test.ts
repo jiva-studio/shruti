@@ -14,6 +14,10 @@ const HLC_A = "000000001000000:00001:dev-A"
 const HLC_B = "000000002000000:00001:dev-B"
 
 async function applySchema(db: IDatabase): Promise<void> {
+  // Mirror the real user.db: foreign_keys ON + the chat FK cascade (migration
+  // 007). Without these the harness silently diverged from production and hid
+  // the INSERT-OR-REPLACE-cascades-messages bug.
+  await db.execute("PRAGMA foreign_keys = ON")
   await db.execute(`CREATE TABLE chat_sessions (
     id TEXT PRIMARY KEY, title TEXT, created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL, track_id TEXT
@@ -22,7 +26,8 @@ async function applySchema(db: IDatabase): Promise<void> {
     id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('user','assistant')),
     content TEXT NOT NULL, created_at INTEGER NOT NULL,
-    meta TEXT NOT NULL DEFAULT '{"_v":1,"data":{}}'
+    meta TEXT NOT NULL DEFAULT '{"_v":1,"data":{}}',
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
   )`)
   await db.execute(`CREATE TABLE playlist_items (
     id TEXT PRIMARY KEY, track_id TEXT NOT NULL, added_at INTEGER NOT NULL,
@@ -92,6 +97,45 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
 
     expect(await db.query("SELECT id FROM chat_sessions WHERE id = 's1'")).toHaveLength(0)
     expect(await db.query("SELECT id FROM chat_messages WHERE session_id = 's1'")).toHaveLength(0)
+  })
+
+  it("keeps messages when a later session upsert re-applies over them", async () => {
+    // The real pull interleaving: a session's title/updated_at change is
+    // ordered AFTER its messages under the single cursor. Re-applying the
+    // session must NOT wipe the messages (INSERT OR REPLACE would DELETE the
+    // row and the FK cascade would take the messages with it).
+    await apply.applyRemote(
+      "chat_sessions",
+      upsertDoc("s1", HLC_A, { id: "s1", title: "T", created_at: 1, updated_at: 1, track_id: null }),
+      HLC_A
+    )
+    for (const mid of ["m1", "m2"]) {
+      await apply.applyRemote(
+        "chat_messages",
+        upsertDoc(mid, HLC_A, {
+          id: mid,
+          session_id: "s1",
+          role: "user",
+          content: "x",
+          created_at: 1,
+          meta: null,
+        }),
+        HLC_A
+      )
+    }
+    expect(await db.query("SELECT id FROM chat_messages WHERE session_id = 's1'")).toHaveLength(2)
+
+    // Session re-applied (title + updated_at bumped) — the ordering that killed
+    // the chats after a from-scratch sync.
+    await apply.applyRemote(
+      "chat_sessions",
+      upsertDoc("s1", HLC_B, { id: "s1", title: "T2", created_at: 1, updated_at: 2, track_id: null }),
+      HLC_B
+    )
+
+    expect(await db.query("SELECT id FROM chat_messages WHERE session_id = 's1'")).toHaveLength(2)
+    const [row] = await db.query<{ title: string }>("SELECT title FROM chat_sessions WHERE id = 's1'")
+    expect(row?.title).toBe("T2")
   })
 
   it("drops an orphan message whose session is absent / tombstoned", async () => {
