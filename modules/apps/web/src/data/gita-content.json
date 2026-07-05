@@ -1,0 +1,246 @@
+{
+  "_meta": {
+    "purpose": "Content dataset for the Practical Gita SEO pages (/en/gita/<slug>). English-first. Each item is one fully-rendered page: written copy + corpus data (verse, purport, Prabhupada audio) pulled from the Shruti corpus. The [slug].astro template renders these; add items to add pages.",
+    "brand": "Practical Gita",
+    "pathBase": "/gita"
+  },
+  "items": [
+    {
+      "slug": "how-to-stop-worrying",
+      "cluster": "Anxiety & worry",
+      "eyebrow": "Anxiety & worry",
+      "h1": "How to stop worrying about the future and outcomes",
+      "seoTitle": "Bhagavad Gita on Anxiety: How to Stop Worrying (Verse 2.47) | Shruti",
+      "seoDescription": "Anxious about the future and outcomes? The Bhagavad-gita's answer in verse 2.47 — with Prabhupada's audio, his purport, and a practical step you can take now.",
+      "lede": "We replay tomorrow in our heads, fear falling short, hang on the outcome — and lose our peace right now. The Bhagavad-gita offers an unexpected turn: move your attention off the fruit and onto the action itself.",
+      "shortAnswer": "Krishna tells Arjuna: do what you must, honestly and wholeheartedly — but let go of your claim to the result. Anxiety is born from attachment to fruits. When action becomes an offering rather than a bargain for outcomes, the mind settles into balance.",
+      "verse": {
+        "ref": "BG 2.47",
+        "sourceId": "source_dsicuBsFvinZ",
+        "tokens": "2.47",
+        "addrLabel": "Bhagavad-gita 2.47",
+        "sanskrit": "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन ।\nमा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि ॥",
+        "transliteration": "karmaṇy evādhikāras te mā phaleṣu kadācana\nmā karma-phala-hetur bhūr mā te saṅgo ’stv akarmaṇi",
+        "translation": "You have a right to perform your prescribed duty, but you are not entitled to the fruits of action. Never consider yourself the cause of the results of your activities, and never be attached to not doing your duty."
+      },
+      "audio": {
+        "trackId": "track_Bds24XLBakaP",
+        "startMs": 1808400,
+        "endMs": 1901680,
+        "trackTitle": "The Purpose Behind the Vedas",
+        "authorName": "A. C. Bhaktivedanta Swami Prabhupada",
+        "trackDate": "1968-12-16",
+        "refLabel": "BG 2.47",
+        "text": "So one becomes the enjoyer or the sufferer of the result of his actions. Everyone has his proprietary right in regard to his prescribed duties, but should act without attachment to the result — such disinterested obligatory work leads one to the path of liberation. Arjuna was therefore advised by the Lord to fight as a matter of duty, without attachment to the result. Any attachment, positive or negative, is a cause for bondage."
+      },
+      "purport": {
+        "authorName": "A. C. Bhaktivedanta Swami Prabhupada",
+        "addrLabel": "Bhagavad-gita 2.47",
+        "text": "The Lord advised that Arjuna not be inactive, but that he perform his prescribed duty without being attached to the result. One who is attached to the result of his work is also the cause of the action, and is thus the enjoyer or sufferer of the result of such actions. Everyone has his proprietary right in regard to prescribed duties, but should act without attachment to the result; such disinterested obligatory duties doubtlessly lead one to the path of liberation."
+      },
+      "meaning": [
+        "Look closely at your anxiety — it is almost always about the fruit: will it work out, will they approve or judge, will it be enough. The mind runs off into an imagined future it cannot control, and gets stuck there.",
+        "The Gita does not say “be indifferent.” It says: your territory is the quality of your action, here and now. The result is shaped by many causes, most of them outside you. Trying to control the uncontrollable is exactly what buys the anxiety.",
+        "Releasing your claim on the fruit does not mean you stop trying. Just the opposite: freed from fear of the outcome, you pour your whole attention into the work. That is the balance of mind Krishna calls linux-client in the very next verse."
+      ],
+      "steps": [
+        ["Separate action from fruit", "Ask: what part of this is actually in my hands right now? Take that one step — and release the rest as something that was never yours to hold."],
+        ["Turn the task into an offering", "Do the work as well as you can — not for approval, but as an offering. The motive shifts from “what will I get” to “how will I do it,” and fear of the outcome loses its foothold."],
+        ["Bring the mind back to now", "Anxiety lives in the future. Notice when the mind runs there, and gently return it to the present action — to the breath, the line, the step. There is no anxiety here."]
+      ],
+      "faq": [
+        ["Does this mean I shouldn’t set goals?", "No. Goals and intentions are fine — they give action its direction. The Gita speaks about your relationship to the fruit: set the goal, act for it with full effort, but don’t tie your inner peace and self-worth to the result."],
+        ["Isn’t “not thinking about the result” irresponsible?", "Quite the opposite. It’s fear of the outcome that so often paralyzes us or pushes us toward haste and shortcuts. Someone free of attachment to fruits acts more cleanly and responsibly — like Arjuna, whom Krishna urged to do his duty, not flee it."],
+        ["Where do I start if the anxiety is very strong?", "Start small and bodily: one breath, one doable action right now. Then read verse 2.47 aloud and listen to the audio. The meaning enters not all at once through understanding, but through repetition and practice."]
+      ]
+    },
+    {
+      "slug": "how-to-control-anger",
+      "cluster": "Anger",
+      "eyebrow": "Anger",
+      "h1": "How to control anger — and why it clouds your judgment",
+      "seoTitle": "Bhagavad Gita on Anger: How to Control It (Verse 2.63) | Shruti",
+      "seoDescription": "How to control anger, from the Bhagavad-gita. Verse 2.63 traces exactly what anger does to the mind — and how to catch it at the root.",
+      "lede": "Anger feels like power, but it leaves wreckage — words you can’t unsay, choices you’d never make when calm. The Gita doesn’t just say “don’t be angry”; it shows the exact chain reaction anger sets off inside you.",
+      "shortAnswer": "In verse 2.63 Krishna maps the fall: from anger comes delusion, from delusion the loss of memory of what matters, and without that memory intelligence collapses. You control anger not by clenching your teeth, but by catching it at its root — the frustrated desire beneath it — before the chain begins.",
+      "verse": { "ref": "BG 2.63", "sourceId": "source_dsicuBsFvinZ", "tokens": "2.63", "addrLabel": "Bhagavad-gita 2.63", "sanskrit": "क्रोधाद्भवति संमोहः संमोहात्स्मृतिविभ्रमः ।\nस्मृतिभ्रंशाद्बुद्धिनाशो बुद्धिनाशात्प्रणश्यति ॥", "transliteration": "krodhād bhavati sammohaḥ sammohāt smṛti-vibhramaḥ\nsmṛti-bhraṁśād buddhi-nāśo buddhi-nāśāt praṇaśyati", "translation": "From anger, complete delusion arises, and from delusion bewilderment of memory. When memory is bewildered, intelligence is lost, and when intelligence is lost one falls down again into the material pool." },
+      "audio": { "trackId": "track_inHnf9AgWk73", "startMs": 1199200, "endMs": 1287840, "trackTitle": "Attachment, Lust and Anger", "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "trackDate": "1968-12-19", "refLabel": "BG 2.63", "text": "So how do we become victim of this māyā? It is described here: from anger, delusion arises, and from delusion, bewilderment of memory. As soon as I forget that I am spirit soul, I identify myself with this material world — with illusion. And when memory is bewildered, intelligence is lost." },
+      "meaning": [
+        "Notice the sequence Krishna describes — it’s not moral scolding, it’s mechanics. Anger doesn’t stay one feeling; it triggers delusion, delusion erases your sense of what actually matters, and with that gone your good judgment simply switches off. Every regretted outburst runs this exact circuit.",
+        "So the practical target isn’t the anger you already feel — by then the chain is moving. It’s the step before: the blocked desire or expectation underneath it. Anger is almost always a frustrated want. See the want clearly, and the anger loses its fuel."
+      ],
+      "steps": [
+        ["Name the desire under it", "In the heat, ask: what did I want that I’m not getting? Anger is a symptom; the frustrated wish is the cause. Naming it drains half the charge."],
+        ["Break the chain with a pause", "Krishna’s sequence needs momentum. One slow breath, one step back, before you speak or act — that gap is where delusion loses its grip and intelligence stays online."],
+        ["Redirect the energy", "Anger is power, not poison, until it’s misused. Put the same intensity into the honest next action — fixing the thing, walking away, speaking plainly — instead of the reaction."]
+      ],
+      "faq": [
+        ["Is it wrong to feel angry at all?", "Feeling isn’t the problem — the chain reaction is. The Gita targets what anger does when it runs unchecked (delusion, lost judgment), not the first spark. Caught early and redirected, that energy can even serve a right cause."],
+        ["Isn’t suppressing anger unhealthy?", "Yes — and the Gita doesn’t ask you to suppress it. Suppression just delays the chain. The point is to dissolve it at the root by seeing the frustrated desire beneath, and to redirect the energy rather than bottle it."],
+        ["What if I only notice after I’ve exploded?", "That’s normal at first. Replay it calmly afterward and find the desire that got blocked — that rehearsal trains you to catch it earlier next time. It’s repetition, not willpower."]
+      ]
+    },
+    {
+      "slug": "how-to-cope-with-loss",
+      "cluster": "Grief & loss",
+      "eyebrow": "Grief & loss",
+      "h1": "How to cope with the loss of a loved one",
+      "seoTitle": "Bhagavad Gita on the Death of a Loved One (Verse 2.13) | Shruti",
+      "seoDescription": "Grieving someone you lost? The Bhagavad-gita’s first answer to grief — verse 2.13 — with Prabhupada’s commentary and a gentle practice.",
+      "lede": "When someone you love dies, the loss is total — and no philosophy erases the ache. Yet the Bhagavad-gita begins its entire teaching here, with a grieving man on a battlefield, and its first words to him are about exactly this.",
+      "shortAnswer": "Krishna’s opening teaching to the grieving Arjuna is verse 2.13: just as the soul passes through childhood, youth and old age within one body, at death it moves on to another body. The one you love is the soul — not the body left behind — and the soul does not die.",
+      "verse": { "ref": "BG 2.13", "sourceId": "source_dsicuBsFvinZ", "tokens": "2.13", "addrLabel": "Bhagavad-gita 2.13", "sanskrit": "देहिनोऽस्मिन्यथा देहे कौमारं यौवनं जरा ।\nतथा देहान्तरप्राप्तिर्धीरस्तत्र न मुह्यति ॥", "transliteration": "dehino ’smin yathā dehe kaumāraṁ yauvanaṁ jarā\ntathā dehāntara-prāptir dhīras tatra na muhyati", "translation": "As the embodied soul continuously passes, in this body, from boyhood to youth to old age, the soul similarly passes into another body at death. A sober person is not bewildered by such a change." },
+      "audio": { "trackId": "track_uCY4LxPtYsFT", "startMs": 1227520, "endMs": 1307840, "trackTitle": "The Nectar of Devotion", "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "trackDate": "1968-11-29", "refLabel": "BG 2.13", "text": "The self-realized soul is not bewildered by such a change. Since every living entity is an individual soul, each is changing his body at every moment — manifesting sometimes as a child, sometimes as a youth, sometimes as an old man. And since the soul is sure to have another body in the next birth, there was no cause for lamentation by Arjuna on account of death." },
+      "purport": { "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "addrLabel": "Bhagavad-gita 2.13", "text": "Since every living entity is an individual soul, each is changing his body every moment, manifesting sometimes as a child, sometimes as a youth and sometimes as an old man. Yet the same spirit soul is there and does not undergo any change. This individual soul finally changes the body at death and transmigrates to another body. Any man who has perfect knowledge of the constitution of the individual soul is called a dhīra, or a most sober man. Such a man is never deluded by the change of bodies." },
+      "meaning": [
+        "The Gita doesn’t tell you not to grieve — it tells you what you’re grieving. The body that remained is not the person; it’s the garment they wore. The person is the conscious self that lived in it, and that self hasn’t been destroyed, only moved beyond your sight.",
+        "This isn’t meant to rush you past the pain. It’s meant to change its shape — from “they are gone forever” to “they have gone onward.” The love was never for the flesh; it was for the soul that met yours. That bond isn’t erased by a change of body."
+      ],
+      "steps": [
+        ["Let yourself grieve", "Grief is love with nowhere to go — not weakness. The teaching isn’t a command to stop feeling; it’s a wider frame to feel within. Cry, remember, ache. Then read on."],
+        ["Separate the person from the body", "Sit with the distinction the verse draws: the body is here or gone, but the one you loved was the soul. Hold your memory of them as of a living soul, not a lost object."],
+        ["Do something in their honor", "Grief eases when love becomes action. Do a kindness, a prayer, an offering in their name. It turns helpless sorrow into a living link that death didn’t sever."]
+      ],
+      "faq": [
+        ["Does this mean I shouldn’t be sad?", "No. The Gita meets Arjuna in his grief; it doesn’t forbid it. It offers a truth to grieve within — that the soul continues — so sorrow doesn’t harden into despair."],
+        ["How does knowing the soul survives actually help?", "It changes the story from final erasure to continuation. You’re not clinging to nothing; the bond of love was with the soul, which endures. That reframing, held over time, softens the sharpest edge of loss."],
+        ["What can I do right now, in the acute pain?", "Something small and bodily: one breath, a walk, a glass of water. Then read verse 2.13 aloud and listen. Meaning enters through repetition, not force — a little each day."]
+      ]
+    },
+    {
+      "slug": "what-happens-after-death",
+      "cluster": "Death & the soul",
+      "eyebrow": "Death & the soul",
+      "h1": "What happens after death, according to the Gita",
+      "seoTitle": "Bhagavad Gita on Life After Death (Verse 2.22) | Shruti",
+      "seoDescription": "What happens to us after death? The Bhagavad-gita’s most famous image — verse 2.22 — with Prabhupada’s commentary and a practical reflection.",
+      "lede": "Few questions press on us like this one — and few get vaguer answers. The Bhagavad-gita gives a strikingly concrete one, in an image so plain a child can hold it: changing clothes.",
+      "shortAnswer": "Verse 2.22 is the Gita’s definitive picture of death: as a person takes off worn-out clothes and puts on new ones, the soul lays aside a worn-out body and takes on a new one. Death isn’t the end of the wearer — only a change of dress.",
+      "verse": { "ref": "BG 2.22", "sourceId": "source_dsicuBsFvinZ", "tokens": "2.22", "addrLabel": "Bhagavad-gita 2.22", "sanskrit": "वासांसि जीर्णानि यथा विहाय\nनवानि गृह्णाति नरोऽपराणि ।\nतथा शरीराणि विहाय जीर्णा-\nन्यन्यानि संयाति नवानि देही ॥", "transliteration": "vāsāṁsi jīrṇāni yathā vihāya navāni gṛhṇāti naro ’parāṇi\ntathā śarīrāṇi vihāya jīrṇāny anyāni saṁyāti navāni dehī", "translation": "As a person puts on new garments, giving up old ones, the soul similarly accepts new material bodies, giving up the old and useless ones." },
+      "audio": { "trackId": "track_rLgKxkLza2AO", "startMs": 278480, "endMs": 406800, "trackTitle": "Chanting the Bhagavad-gītā Verses", "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "trackDate": "1973-08-26", "refLabel": "BG 2.22", "text": "As a person puts on new garments, giving up old ones, similarly the soul accepts new material bodies, giving up the old and useless ones. As our garments — coats and shirts — when they are old and no longer usable, we throw them away and get new ones; similarly the soul is changing its garment, from babyhood to childhood, from one body to another." },
+      "purport": { "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "addrLabel": "Bhagavad-gita 2.22", "text": "Change of body by the atomic individual soul is an accepted fact. The body shifts from childhood to boyhood, from boyhood to youth, and from youth to old age; and from old age, the change is transferred to another body. Transference of the individual soul to another body is made possible by the grace of the Supersoul. Forgetfulness of this relationship is the cause of one’s changing from one body to another; but as soon as the soul turns toward the Lord, it becomes free from all lamentation." },
+      "meaning": [
+        "The image is deliberately ordinary. You’ve already changed bodies many times — the child you were is gone, the youth is gone — and “you” never stopped being present through all of it. Death, the Gita says, is one more such change, not a different kind of event.",
+        "That reframes the fear. If the self persists through every change of body within one life, there’s little reason to assume it vanishes at the last change. What continues is the conscious soul; what’s set aside is the “old and useless” garment. Where it goes next, the Gita says, follows the life you lived."
+      ],
+      "steps": [
+        ["Look back at your own changes", "You are not the body you had at five. Notice that the witness — the “I” that remembers — was continuous through every bodily change. That continuity is what the verse points to."],
+        ["Loosen the grip of fear", "Fear of death is fear of the wearer ending. The Gita says only the garment ends. Sit with that until the fear has a little less to hold onto."],
+        ["Live for what continues", "If the soul carries onward, then your character and consciousness are what travel — not your possessions. Invest where it lasts."]
+      ],
+      "faq": [
+        ["Is this just a comforting metaphor?", "The Gita presents it as fact, not consolation: the soul is never born and never dies (2.20), and merely changes bodies (2.13, 2.22). The clothing image makes a literal claim vivid, not a nice story."],
+        ["What decides the next body?", "The Gita ties it to consciousness and action — “whatever state of being one remembers when he quits his body, that state he will attain” (8.6). The life you cultivate shapes what comes next."],
+        ["Does this remove the fear of death?", "Not instantly — but it moves the ground. Held and revisited, the understanding that you are the continuing soul, not the discarded body, is what loosens the fear over time."]
+      ]
+    },
+    {
+      "slug": "what-is-karma-linux-client",
+      "cluster": "Work & karma",
+      "eyebrow": "Work & karma",
+      "h1": "What is karma linux-client — working without being bound",
+      "seoTitle": "Bhagavad Gita on Karma Yoga (Verse 3.19): Work Without Attachment | Shruti",
+      "seoDescription": "What is karma linux-client? The Bhagavad-gita’s answer in verse 3.19 — do your duty without attachment to results — with Prabhupada’s commentary.",
+      "lede": "We’re taught that work is a means to a reward, and the reward is the point. The Bhagavad-gita quietly inverts this: the way you work can either bind you or free you — and the difference isn’t the work, it’s the attachment.",
+      "shortAnswer": "Karma linux-client, in verse 3.19, is simple to state and hard to live: do your duty fully, but without attachment to its fruit. Work done this way — as an offering, not a transaction — doesn’t entangle you; it carries you toward the Supreme.",
+      "verse": { "ref": "BG 3.19", "sourceId": "source_dsicuBsFvinZ", "tokens": "3.19", "addrLabel": "Bhagavad-gita 3.19", "sanskrit": "तस्मादसक्तः सततं कार्यं कर्म समाचर ।\nअसक्तो ह्याचरन्कर्म परमाप्नोति पूरुषः ॥", "transliteration": "tasmād asaktaḥ satataṁ kāryaṁ karma samācara\nasakto hy ācaran karma param āpnoti pūruṣaḥ", "translation": "Therefore, without being attached to the fruits of activities, one should act as a matter of duty, for by working without attachment one attains the Supreme." },
+      "audio": { "trackId": "track_2FtiUELTT4oU", "startMs": 2121120, "endMs": 2207520, "trackTitle": "Sacrifice and Prosperity for All", "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "trackDate": "1968-12-27", "refLabel": "BG 3.19", "text": "Therefore, without being attached to the fruits of activities, one should act as a matter of duty; for by working without attachment one attains the Supreme. Such a Kṛṣṇa conscious person is no longer interested in the reactions of material activities — he engages in all kinds of work, but remains completely unattached." },
+      "purport": { "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "addrLabel": "Bhagavad-gita 3.19", "text": "A person acting for Kṛṣṇa, or in Kṛṣṇa consciousness, under proper guidance and without attachment to the result of the work, is certainly making progress toward the supreme goal of life. To be a good man is a personal attachment, but to act on behalf of the Supreme is to act without attachment for the result. That is perfect action of the highest degree. A Kṛṣṇa conscious person has no attachment for the result but acts on behalf of Kṛṣṇa alone. He engages in all kinds of activities, but is completely nonattached." },
+      "meaning": [
+        "Karma linux-client isn’t doing less or caring less. It’s a shift in ownership: you own the effort, not the outcome. You give the work everything, and then release your grip on how it lands — because the result depends on countless causes beyond you.",
+        "That release is what un-binds you. Attachment to the fruit is the string that ties every action to anxiety, pride, and reaction. Cut the string — act as duty, as offering — and you can be fully engaged and completely free at the same time."
+      ],
+      "steps": [
+        ["Separate effort from outcome", "Before a task, name the one thing in your control: the quality of your effort. Pour in fully there. Consciously hand the result over — it was never fully yours to command."],
+        ["Reframe the work as an offering", "Do it as if given to something larger than your own gain. The motive shifts from “what will I get” to “how will I serve,” and the anxiety of results loses its footing."],
+        ["Check your grip, not your ambition", "Karma linux-client doesn’t kill ambition — it loosens attachment. Keep the goal; drop the clenched need for it. Notice when you’re gripping the outcome, and let the hand open."]
+      ],
+      "faq": [
+        ["Doesn’t not caring about results make me lazy or passive?", "The opposite. Krishna urges Arjuna to act, not withdraw. Karma linux-client means full effort minus attachment — you work harder and cleaner because fear of the outcome no longer drains or distorts you."],
+        ["How can I work hard for a goal and be unattached to it at once?", "Attachment isn’t the goal — it’s the clenched dependence on it for your peace and worth. Keep the goal and the effort; release the grip. That’s the whole art, and it’s learned by practice."],
+        ["What does “offering the result” actually mean day to day?", "Doing the work as service rather than as a bargain, then genuinely letting go of controlling how it turns out — trusting the result to the many causes (and the Supreme) beyond your hand."]
+      ]
+    },
+    {
+      "slug": "how-to-control-the-mind",
+      "cluster": "The restless mind",
+      "eyebrow": "The restless mind",
+      "h1": "How to control the restless mind",
+      "seoTitle": "Bhagavad Gita on How to Control the Mind (Verse 6.35) | Shruti",
+      "seoDescription": "How to control the restless mind, from the Bhagavad-gita. Verse 6.35 gives Krishna’s two-word method — practice and detachment — with Prabhupada’s commentary.",
+      "lede": "Anyone who has tried to sit quietly knows the truth Arjuna blurts out: the mind is restless, stubborn, and stronger than we are. What’s remarkable is Krishna’s reply — he doesn’t deny it.",
+      "shortAnswer": "When Arjuna says the mind is harder to control than the wind, Krishna agrees — verse 6.35 admits it is “very difficult to curb the restless mind, but it is possible by practice (abhyāsa) and detachment (vairāgya).” Not force. Repetition, and letting go.",
+      "verse": { "ref": "BG 6.35", "sourceId": "source_dsicuBsFvinZ", "tokens": "6.35", "addrLabel": "Bhagavad-gita 6.35", "sanskrit": "असंशयं महाबाहो मनो दुर्निग्रहं चलम् ।\nअभ्यासेन तु कौन्तेय वैराग्येण च गृह्यते ॥", "transliteration": "asaṁśayaṁ mahā-bāho mano durnigrahaṁ calam\nabhyāsena tu kaunteya vairāgyeṇa ca gṛhyate", "translation": "It is undoubtedly very difficult to curb the restless mind, but it is possible by suitable practice and by detachment." },
+      "audio": { "trackId": "track_TvOxQ8lmqEE9", "startMs": 1346080, "endMs": 1440000, "trackTitle": "The Perfect Yoga System Explained", "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "trackDate": "1966-09-16", "refLabel": "BG 6.35", "text": "Arjuna says the mind is very difficult to control, and Kṛṣṇa admits it: “Yes, My dear Arjuna, it is very difficult.” Asaṁśayaṁ mahā-bāho — without doubt the mind is restless and hard to curb. But, He says, it is possible — by practice and by detachment." },
+      "purport": { "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "addrLabel": "Bhagavad-gita 6.35", "text": "The difficulty of controlling the obstinate mind is accepted by the Personality of Godhead. But at the same time He suggests that by practice and detachment it is possible. The more one hears about Kṛṣṇa, the more one becomes enlightened and detached from everything that draws the mind away from Kṛṣṇa. By detaching the mind from activities not devoted to the Lord, one can very easily learn vairāgya — detachment from matter and engagement of the mind in spirit." },
+      "meaning": [
+        "Notice what Krishna doesn’t say: he doesn’t say “force the mind still.” Fighting the mind head-on is how most people fail — the struggle itself agitates it more. His two tools are gentler and slower: abhyāsa, steady repeated practice, and vairāgya, releasing the pull of what distracts.",
+        "And the two work together. A mind isn’t stilled by emptying it, but by giving it something better to rest on. Detachment isn’t willpower against desire; it’s the natural loosening that happens when a higher engagement quietly out-competes the lower one."
+      ],
+      "steps": [
+        ["Stop fighting — redirect", "You can’t win a wrestling match with your own mind. Instead of forcing it blank, gently turn it toward something worthier whenever it wanders. Redirection, not suppression."],
+        ["Give it something higher to hold", "The mind quiets when it’s absorbed, not when it’s starved. Feed it a steady practice — reading, hearing, chanting, meditation — that it can rest in. Emptiness invites the wandering back."],
+        ["Repeat daily (abhyāsa)", "Krishna’s first word is practice. Ten steady minutes every day beats an hour once a week. Control of the mind is a trained habit, built by repetition, not a battle won once."]
+      ],
+      "faq": [
+        ["Why is my mind so impossible to control?", "Because you’re fighting it. Krishna concedes the mind is “restless, turbulent, obstinate” — controlling it by force is nearly impossible. It yields not to force but to steady practice and to detachment from what pulls it."],
+        ["What is the “practice” Krishna means?", "Any steady, repeated engagement that absorbs the mind in something higher — in the Gita’s own recommendation, hearing about and remembering Kṛṣṇa. The key isn’t intensity; it’s daily repetition (abhyāsa)."],
+        ["How long until the mind actually settles?", "It’s gradual, like fitness. Small daily practice compounds; the mind grows steadier over weeks and months, not in a single sitting. Consistency is the whole secret."]
+      ]
+    },
+    {
+      "slug": "what-does-the-gita-say-about-death",
+      "cluster": "Death & the soul",
+      "eyebrow": "Death & the soul",
+      "h1": "What does the Bhagavad Gita say about death?",
+      "seoTitle": "What the Bhagavad Gita Says About Death (Verse 2.27) | Shruti",
+      "seoDescription": "What does the Bhagavad-gita say about death? Verse 2.27 states it plainly — the born are sure to die, the dead sure to be reborn — with Prabhupada’s commentary.",
+      "lede": "Most of us handle death by not looking at it. The Bhagavad-gita does the opposite: it looks straight at it, states it without flinching, and finds in that honesty a strange kind of peace.",
+      "shortAnswer": "Verse 2.27 puts it plainly: “One who is born is sure to die, and one who dies is sure to be born again.” Because this cycle is unavoidable, Krishna tells Arjuna there is no reason to grieve over what no one can escape — the wise meet it without lament.",
+      "verse": { "ref": "BG 2.27", "sourceId": "source_dsicuBsFvinZ", "tokens": "2.27", "addrLabel": "Bhagavad-gita 2.27", "sanskrit": "जातस्य हि ध्रुवो मृत्युर्ध्रुवं जन्म मृतस्य च ।\nतस्मादपरिहार्येऽर्थे न त्वं शोचितुमर्हसि ॥", "transliteration": "jātasya hi dhruvo mṛtyur dhruvaṁ janma mṛtasya ca\ntasmād aparihārye ’rthe na tvaṁ śocitum arhasi", "translation": "One who has taken his birth is sure to die, and after death one is sure to take birth again. Therefore, in the unavoidable discharge of your duty, you should not lament." },
+      "audio": { "trackId": "track_GA7HOAtARbiS", "startMs": 96320, "endMs": 180000, "trackTitle": "Possessing a Copy of the Bhagavad-gītā", "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "trackDate": "1968-12-11", "refLabel": "BG 2.27", "text": "“For one who has taken his birth, death is certain; and for one who is dead, birth is certain. Therefore, in the unavoidable discharge of your duty, you should not lament.” Our real problem is not this or that immediate trouble — the ultimate problem is the repetition of birth and death." },
+      "purport": { "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "addrLabel": "Bhagavad-gita 2.27", "text": "One has to take birth according to one’s activities of life. And after finishing one term of activities, one has to die to take birth for the next. In this way one is going through one cycle of birth and death after another without liberation." },
+      "meaning": [
+        "The verse isn’t grim; it’s clarifying. Death is the one certainty every living thing shares, and pretending otherwise costs us the present. Krishna’s logic is almost bracing: since it’s unavoidable, grief over the fact itself is wasted — it changes nothing and steals now.",
+        "But there’s a second half he points to. The cycle repeats “without liberation” — birth, death, again — until something changes. So the Gita’s answer to death isn’t only acceptance; it’s an invitation to ask what lies beyond the wheel, and to live for that."
+      ],
+      "steps": [
+        ["Face it instead of avoiding it", "Naming your mortality plainly, as the verse does, drains some of its dread. What we refuse to look at grows larger in the dark. Look at it — steadily, without drama."],
+        ["Let certainty sharpen the present", "If the end is sure, this day is precious. Let the fact of death make you more awake now, not more anxious — a reason to live deliberately rather than to worry."],
+        ["Ask what lies beyond the cycle", "The Gita treats death as a door, not a wall, and the cycle as something to be transcended. Let the question — what continues, and how — orient how you live."]
+      ],
+      "faq": [
+        ["Isn’t it morbid to dwell on death?", "The Gita would say the opposite — avoiding it is what distorts life. Facing death honestly (2.27) removes its power to ambush you and makes the present more vivid, not more bleak."],
+        ["Does the Gita say what happens after death?", "Yes — the soul is eternal (2.20) and simply takes a new body (2.22), and the state of mind at death shapes the next life (8.6). Death is a transition, not annihilation."],
+        ["How does accepting death give peace?", "By ending the exhausting pretense. What’s certain and unavoidable isn’t worth grieving as if it were a surprise. Acceptance frees the energy that denial and dread consume."]
+      ]
+    },
+    {
+      "slug": "how-to-overcome-fear",
+      "cluster": "Fear",
+      "eyebrow": "Fear",
+      "h1": "How to overcome fear, according to the Gita",
+      "seoTitle": "Bhagavad Gita on Overcoming Fear (Verse 4.10) | Shruti",
+      "seoDescription": "How to overcome fear, from the Bhagavad-gita. Verse 4.10 names fear alongside attachment and anger — and gives one cure: refuge. With Prabhupada’s commentary.",
+      "lede": "Fear rarely announces itself as fear. It hides as overthinking, control, avoidance, anger. The Bhagavad-gita names it directly — and, tellingly, in the same breath as attachment and anger, as if they were one knot.",
+      "shortAnswer": "Verse 4.10 lists fear beside attachment and anger and offers a single cure for all three: refuge. “Freed from attachment, fear and anger, fully absorbed in Me and taking shelter in Me,” many have been purified. Fear loosens its grip when you stop standing alone.",
+      "verse": { "ref": "BG 4.10", "sourceId": "source_dsicuBsFvinZ", "tokens": "4.10", "addrLabel": "Bhagavad-gita 4.10", "sanskrit": "वीतरागभयक्रोधा मन्मया मामुपाश्रिताः ।\nबहवो ज्ञानतपसा पूता मद्भावमागताः ॥", "transliteration": "vīta-rāga-bhaya-krodhā man-mayā mām upāśritāḥ\nbahavo jñāna-tapasā pūtā mad-bhāvam āgatāḥ", "translation": "Being freed from attachment, fear and anger, being fully absorbed in Me and taking refuge in Me, many, many persons in the past became purified by knowledge of Me — and thus they all attained transcendental love for Me." },
+      "audio": { "trackId": "track_ZL5jMnQf338L", "startMs": 2036160, "endMs": 2130000, "trackTitle": "The Divine Birth and Activities", "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "trackDate": "1966-07-20", "refLabel": "BG 4.10", "text": "“Being freed from attachment, fear and anger, being fully absorbed in Me and taking refuge in Me, many persons in the past became purified by knowledge of Me — and thus they all attained transcendental love for Me.” By taking shelter of Kṛṣṇa, one becomes free from attachment, fear and anger." },
+      "purport": { "authorName": "A. C. Bhaktivedanta Swami Prabhupada", "addrLabel": "Bhagavad-gita 4.10", "text": "One has to get rid of three stages of material consciousness: attachment to material life, fear, and the conception of void that arises from frustration in life. To get free from these, one has to take complete shelter of the Lord, guided by the bona fide spiritual master, and follow the disciplines of devotional life. The last stage of the devotional life is called bhāva, or transcendental love of Godhead." },
+      "meaning": [
+        "The Gita groups fear with attachment and anger for a reason: all three come from clinging to what we can’t control and standing as if alone against it. Fear is the felt edge of that isolation — the sense that everything rests on you, and it might not hold.",
+        "So its cure isn’t bravado; it’s refuge. Not “face your fear alone and harder,” but taking shelter in something larger than yourself — the Supreme, absorbed in whom fear, attachment and anger fall away together. You’re not asked to be fearless by force, but to be held."
+      ],
+      "steps": [
+        ["Name what you’re actually afraid of", "Fear thrives vague. Put it into words — the specific loss or outcome you dread. Named, it shrinks to something you can face rather than a fog that runs everything."],
+        ["Stop facing it alone", "The verse’s cure is taking refuge. Whatever form that shelter takes for you — prayer, surrender, remembrance of God — the point is you’re no longer the sole load-bearer. Fear eases when the weight is shared."],
+        ["Act anyway", "Courage isn’t the absence of fear; it’s doing the duty with the fear present, as Arjuna did. Take the next right action without waiting for the fear to vanish first."]
+      ],
+      "faq": [
+        ["How can I be “fearless” if I still feel afraid?", "The Gita’s fearlessness isn’t the absence of the feeling — it’s no longer being ruled by it. Freed from attachment and taking refuge, you act rightly while the fear loses its authority over you."],
+        ["What does “taking refuge” practically mean?", "Shifting from “it all depends on me alone” to trust in and shelter under the Supreme — through prayer, surrender, and remembrance. It’s the opposite of the isolation that fear feeds on."],
+        ["Where do I start when the fear is overwhelming?", "Start small: name the fear in one sentence, take one breath, take one shelter — a prayer, a remembrance — and one doable action. Refuge and action, repeated, loosen fear more than analysis does."]
+      ]
+    }
+  ]
+}
