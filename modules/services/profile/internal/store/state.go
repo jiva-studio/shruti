@@ -4,12 +4,52 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/jiva-studio/shruti/profile/internal/wire"
 )
+
+// epochTime decodes a timestamp from either an epoch NUMBER (the mobile
+// user.db stores `Date.now()` milliseconds; seconds are tolerated when the
+// value is small) or an RFC3339 STRING. The client wire ships numbers, so a
+// plain `time.Time` (which only accepts a quoted RFC3339 string) fails with
+// "input is not a JSON string". Use *epochTime for every timestamp field and
+// bind it to pgx via tsArg.
+type epochTime struct{ time.Time }
+
+func (t *epochTime) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	if s == "" || s == "null" {
+		return nil
+	}
+	if s[0] == '"' { // RFC3339 string
+		return t.Time.UnmarshalJSON(b)
+	}
+	f, err := strconv.ParseFloat(s, 64) // epoch number (ms or s)
+	if err != nil {
+		return fmt.Errorf("timestamp %q: %w", s, err)
+	}
+	n := int64(f)
+	if n >= 1_000_000_000_000 { // >= ~2001 in ms → milliseconds
+		t.Time = time.UnixMilli(n).UTC()
+	} else {
+		t.Time = time.Unix(n, 0).UTC()
+	}
+	return nil
+}
+
+// tsArg binds an optional timestamp to a pgx arg — time.Time, or nil for SQL
+// NULL when the field was absent/null.
+func tsArg(t *epochTime) any {
+	if t == nil {
+		return nil
+	}
+	return t.Time
+}
 
 // Collections is the whitelist of syncable collections. Each maps 1:1 to a
 // typed state table. A push for any other collection is rejected.
@@ -73,16 +113,16 @@ var stateTable = map[string]string{
 
 type playlistItemRow struct {
 	TrackID      string     `json:"track_id"`
-	AddedAt      *time.Time `json:"added_at"`
-	ArchivedAt   *time.Time `json:"archived_at"`
+	AddedAt      *epochTime `json:"added_at"`
+	ArchivedAt   *epochTime `json:"archived_at"`
 	CollectionID *string    `json:"collection_id"`
 }
 
 type listeningSessionRow struct {
 	ItemID        *string    `json:"item_id"`
 	TrackID       *string    `json:"track_id"`
-	StartedAt     *time.Time `json:"started_at"`
-	EndedAt       *time.Time `json:"ended_at"`
+	StartedAt     *epochTime `json:"started_at"`
+	EndedAt       *epochTime `json:"ended_at"`
 	FromPositionS *int       `json:"from_position_s"`
 	ToPositionS   *int       `json:"to_position_s"`
 }
@@ -92,16 +132,16 @@ type noteRow struct {
 	Body       *string         `json:"body"`
 	TimeStartS *int            `json:"time_start_s"`
 	TimeEndS   *int            `json:"time_end_s"`
-	CreatedAt  *time.Time      `json:"created_at"`
-	UpdatedAt  *time.Time      `json:"updated_at"`
+	CreatedAt  *epochTime      `json:"created_at"`
+	UpdatedAt  *epochTime      `json:"updated_at"`
 	Meta       json.RawMessage `json:"meta"`
 }
 
 type chatSessionRow struct {
 	Title     *string    `json:"title"`
 	TrackID   *string    `json:"track_id"`
-	CreatedAt *time.Time `json:"created_at"`
-	UpdatedAt *time.Time `json:"updated_at"`
+	CreatedAt *epochTime `json:"created_at"`
+	UpdatedAt *epochTime `json:"updated_at"`
 }
 
 type chatMessageRow struct {
@@ -109,7 +149,7 @@ type chatMessageRow struct {
 	Role      *string         `json:"role"`
 	Content   *string         `json:"content"`
 	Meta      json.RawMessage `json:"meta"`
-	CreatedAt *time.Time      `json:"created_at"`
+	CreatedAt *epochTime      `json:"created_at"`
 }
 
 func decode(it wire.PushItem, dst any) error {
@@ -141,7 +181,7 @@ func upsertPlaylistItem(ctx context.Context, q querier, userID uuid.UUID, it wir
 		     added_at      = EXCLUDED.added_at,
 		     archived_at   = EXCLUDED.archived_at,
 		     collection_id = EXCLUDED.collection_id`,
-		userID, it.DocID, trackID, row.AddedAt, row.ArchivedAt, row.CollectionID,
+		userID, it.DocID, trackID, tsArg(row.AddedAt), tsArg(row.ArchivedAt), row.CollectionID,
 	)
 	return err
 }
@@ -162,7 +202,7 @@ func upsertListeningSession(ctx context.Context, q querier, userID uuid.UUID, it
 		     ended_at        = EXCLUDED.ended_at,
 		     from_position_s = EXCLUDED.from_position_s,
 		     to_position_s   = EXCLUDED.to_position_s`,
-		userID, it.DocID, row.ItemID, row.TrackID, row.StartedAt, row.EndedAt, row.FromPositionS, row.ToPositionS,
+		userID, it.DocID, row.ItemID, row.TrackID, tsArg(row.StartedAt), tsArg(row.EndedAt), row.FromPositionS, row.ToPositionS,
 	)
 	return err
 }
@@ -185,7 +225,7 @@ func upsertNote(ctx context.Context, q querier, userID uuid.UUID, it wire.PushIt
 		     updated_at   = EXCLUDED.updated_at,
 		     meta         = EXCLUDED.meta`,
 		userID, it.DocID, row.TrackID, row.Body, row.TimeStartS, row.TimeEndS,
-		row.CreatedAt, row.UpdatedAt, jsonbArg(row.Meta),
+		tsArg(row.CreatedAt), tsArg(row.UpdatedAt), jsonbArg(row.Meta),
 	)
 	return err
 }
@@ -203,7 +243,7 @@ func upsertChatSession(ctx context.Context, q querier, userID uuid.UUID, it wire
 		     track_id   = EXCLUDED.track_id,
 		     created_at = EXCLUDED.created_at,
 		     updated_at = EXCLUDED.updated_at`,
-		userID, it.DocID, row.Title, row.TrackID, row.CreatedAt, row.UpdatedAt,
+		userID, it.DocID, row.Title, row.TrackID, tsArg(row.CreatedAt), tsArg(row.UpdatedAt),
 	)
 	return err
 }
@@ -227,7 +267,7 @@ func upsertChatMessage(ctx context.Context, q querier, userID uuid.UUID, it wire
 		     content    = EXCLUDED.content,
 		     meta       = EXCLUDED.meta,
 		     created_at = EXCLUDED.created_at`,
-		userID, it.DocID, row.SessionID, row.Role, row.Content, jsonbArg(row.Meta), row.CreatedAt,
+		userID, it.DocID, row.SessionID, row.Role, row.Content, jsonbArg(row.Meta), tsArg(row.CreatedAt),
 	)
 	return err
 }
