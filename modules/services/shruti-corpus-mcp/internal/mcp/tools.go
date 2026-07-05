@@ -44,7 +44,7 @@ var toolTitles = map[string]string{
 }
 
 // RegisterTools wires the 15 read-only tools plus the two MCP-App render-tools
-// (media_get, lecture_excerpt) and their UI resources onto srv.
+// (verse_render, media_render, excerpt_render) and their UI resources onto srv.
 func RegisterTools(srv *server.MCPServer, d *Deps) {
 	registerSearch(srv, d)
 	registerSourceGet(srv, d)
@@ -118,10 +118,10 @@ func registerSearch(srv *server.MCPServer, d *Deps) {
 			"Semantic + lexical search over the corpus. Returns verses, documents, "+
 				"track passages and titles matching a natural-language query, each with the "+
 				"id needed to fetch the full record (verse_id→verse_get, document_id→document_get, "+
-				"track_id+start_ms/end_ms→transcript_window; media_id→media_get to play the clip). "+
+				"track_id+start_ms/end_ms→transcript_window; media_id→media_render to play the clip). "+
 				"Every filter is optional. Use min_score to drop weak matches."),
 		mcp.WithString("query", mcp.Required(), mcp.Description("Natural-language query.")),
-		mcp.WithArray("types", mcp.Description("Subset of verse|document|track|title|media (default all). A `media` hit is a short video clip playable via media_get."), mcp.WithStringItems()),
+		mcp.WithArray("types", mcp.Description("Subset of verse|document|track|title|media (default all). A `media` hit is a short video clip playable via media_render."), mcp.WithStringItems()),
 		mcp.WithString("source", mcp.Description("Restrict to a book (\"BG\" / source_id).")),
 		mcp.WithString("tokens", mcp.Description("With source, restrict to a reference. A bare chapter number covers the WHOLE chapter (\"7\" = all of BG ch 7; \"5.5\" = SB canto 5 ch 5); add the verse for one verse (\"7.1\"). For tracks it means tracks citing that chapter/verse.")),
 		mcp.WithString("kind", mcp.Description("Document ("+docKinds+") or track (lecture|conversation) subtype.")),
