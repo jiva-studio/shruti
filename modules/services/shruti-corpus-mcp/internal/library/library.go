@@ -89,6 +89,97 @@ func (r *Repo) getVerse(ctx context.Context, q string, args ...any) (*Verse, err
 }
 
 // VerseCovers returns the merged-verse span a verse belongs to, e.g.
+// ── Translations & word-by-word ──────────────────────────────────────────────
+
+// TranslationMeta describes an available translation of a verse in one language
+// without its text (kind is the addressing key; canonical is the default).
+type TranslationMeta struct {
+	Kind     string
+	AuthorID string
+	Note     string
+}
+
+// Translation is one translation record with its full text.
+type Translation struct {
+	Kind     string
+	AuthorID string
+	Note     string
+	Text     string
+}
+
+// Word is one pada gloss within a verse's word-by-word breakdown.
+type Word struct {
+	Surface string
+	Gloss   string
+}
+
+// TranslationMetas returns every translation variant of a verse in `lang` as
+// metadata (no text), canonical first. Reads library_verse_translations
+// directly (the compat view exposes only the canonical text).
+func (r *Repo) TranslationMetas(ctx context.Context, verseID, lang string) ([]TranslationMeta, error) {
+	rows, err := r.db().QueryContext(ctx,
+		`SELECT kind, COALESCE(author_id,''), COALESCE(note,'')
+		   FROM library_verse_translations
+		  WHERE verse_id = ? AND language = ?
+		  ORDER BY (kind='canonical') DESC, kind`, verseID, lang)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TranslationMeta
+	for rows.Next() {
+		var m TranslationMeta
+		if err := rows.Scan(&m.Kind, &m.AuthorID, &m.Note); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// GetTranslation returns one translation (verse, lang, kind), or (nil,nil) if absent.
+func (r *Repo) GetTranslation(ctx context.Context, verseID, lang, kind string) (*Translation, error) {
+	var t Translation
+	var author, note sql.NullString
+	err := r.db().QueryRowContext(ctx,
+		`SELECT kind, author_id, note, translation
+		   FROM library_verse_translations
+		  WHERE verse_id = ? AND language = ? AND kind = ?`, verseID, lang, kind).
+		Scan(&t.Kind, &author, &note, &t.Text)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.AuthorID = author.String
+	t.Note = note.String
+	return &t, nil
+}
+
+// Words returns the word-by-word breakdown for (verse, lang, kind), ordered.
+func (r *Repo) Words(ctx context.Context, verseID, lang, kind string) ([]Word, error) {
+	rows, err := r.db().QueryContext(ctx,
+		`SELECT w.surface_form, w.surface_translation
+		   FROM library_verse_translations t
+		   JOIN library_verse_words w ON w.translation_id = t.id
+		  WHERE t.verse_id = ? AND t.language = ? AND t.kind = ?
+		  ORDER BY w.sort_order`, verseID, lang, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Word
+	for rows.Next() {
+		var w Word
+		if err := rows.Scan(&w.Surface, &w.Gloss); err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
 // "1.16-1.18", or "" for a normal (non-merged) verse. A merged verse is stored
 // as one row per member token, each holding the identical text; this uses the
 // same rule ListVerses uses to collapse such runs (a contiguous run of rows in

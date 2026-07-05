@@ -11,7 +11,7 @@ import (
 var allKinds = []string{
 	"search", "source_get", "source_list", "source_resolve",
 	"author_list", "author_resolve", "location_list", "location_resolve",
-	"verse_get", "verse_list", "document_get", "document_list",
+	"verse_get", "verse_translation", "verse_synonyms", "verse_list", "document_get", "document_list",
 	"track_get", "track_list", "transcript_window",
 	"media_get", "lecture_excerpt", "excerpt_prepare",
 }
