@@ -29,6 +29,8 @@ var toolTitles = map[string]string{
 	"location_list":     "List locations",
 	"location_resolve":  "Find location",
 	"verse_get":         "Get verse",
+	"verse_translation": "Get translation",
+	"verse_synonyms":    "Word-by-word",
 	"verse_list":        "List verses",
 	"document_get":      "Get document",
 	"document_list":     "List documents",
@@ -52,6 +54,8 @@ func RegisterTools(srv *server.MCPServer, d *Deps) {
 	registerLocationList(srv, d)
 	registerLocationResolve(srv, d)
 	registerVerseGet(srv, d)
+	registerVerseTranslation(srv, d)
+	registerVerseSynonyms(srv, d)
 	registerVerseList(srv, d)
 	registerDocumentGet(srv, d)
 	registerDocumentList(srv, d)
@@ -656,13 +660,15 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
-		mcp.WithDescription("Get a verse: original (Devanagari/Bengali) + stored IAST transliteration + translation. "+
+		mcp.WithDescription("Get a verse: original script (Devanagari/Bengali) + IAST transliteration, both as line arrays. "+
+			"With lang, also returns the canonical translation inline plus an `alternatives` manifest of other "+
+			"translation kinds in that language (fetch their text with verse_translation, word-by-word with verse_synonyms). "+
 			"Address by ref (\"BG 2.13\"), source+tokens, or verse id."),
 		mcp.WithString("ref", mcp.Description("Reference string, e.g. \"BG 2.13\".")),
 		mcp.WithString("source", mcp.Description("Book code / source_id (with tokens).")),
 		mcp.WithString("tokens", mcp.Description("Position within the book (with source).")),
 		mcp.WithString("id", mcp.Description("verse_id.")),
-		mcp.WithString("lang", mcp.Description("If set: single translation; else a translations map.")),
+		mcp.WithString("lang", mcp.Description("Answer language. Set it to get the canonical translation + alternatives manifest.")),
 	)
 	srv.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		start := time.Now()
@@ -676,6 +682,10 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
+		ad, err := d.Catalog.LoadAuthors(ctx)
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
+		}
 
 		if id != "" {
 			v, err := d.Library.GetByID(ctx, id)
@@ -685,7 +695,7 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 			if v == nil {
 				return envelope.Err(kind, envelope.CodeNotFound, "no such verse", map[string]any{"id": id, "stage": "verse"}), nil
 			}
-			obj, err := d.verseObjectWithCovers(ctx, sd, v, lang)
+			obj, err := d.verseObjectWithCovers(ctx, sd, ad, v, lang)
 			if err != nil {
 				return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 			}
@@ -707,7 +717,7 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 		if v == nil {
 			return envelope.Err(kind, envelope.CodeNotFound, "no such verse", map[string]any{"ref": humanRef(ref, source, tokens), "stage": "verse"}), nil
 		}
-		obj, err := d.verseObjectWithCovers(ctx, sd, v, lang)
+		obj, err := d.verseObjectWithCovers(ctx, sd, ad, v, lang)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
@@ -716,9 +726,11 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 	})
 }
 
-// verseObjectWithCovers builds the verse_get payload and, for a merged verse,
-// adds a `covers` span (e.g. "1.16-1.18"); absent for normal verses.
-func (d *Deps) verseObjectWithCovers(ctx context.Context, sd *catalog.SourceDict, v *library.Verse, lang string) (map[string]any, error) {
+// verseObjectWithCovers builds the verse_get payload: the language-independent
+// skeleton, a `covers` span for merged verses, and — when lang is set — the
+// canonical translation inline plus an `alternatives` manifest (other kinds in
+// that language, metadata only; fetch their text via verse_translation).
+func (d *Deps) verseObjectWithCovers(ctx context.Context, sd *catalog.SourceDict, ad *catalog.EntityDict, v *library.Verse, lang string) (map[string]any, error) {
 	obj := verseObject(sd, v, lang)
 	covers, err := d.Library.VerseCovers(ctx, v)
 	if err != nil {
@@ -727,6 +739,39 @@ func (d *Deps) verseObjectWithCovers(ctx context.Context, sd *catalog.SourceDict
 	if covers != "" {
 		obj["covers"] = covers
 	}
+	if lang == "" {
+		return obj, nil
+	}
+	metas, err := d.Library.TranslationMetas(ctx, v.ID, lang)
+	if err != nil {
+		return nil, err
+	}
+	alternatives := []map[string]any{}
+	for _, m := range metas {
+		if m.Kind == "canonical" {
+			t, err := d.Library.GetTranslation(ctx, v.ID, lang, "canonical")
+			if err != nil {
+				return nil, err
+			}
+			if t != nil {
+				obj["kind"] = "canonical"
+				obj["translation"] = t.Text
+				if a := authorRef(ad, t.AuthorID, lang); a != nil {
+					obj["author"] = a
+				}
+			}
+			continue
+		}
+		alt := map[string]any{"kind": m.Kind}
+		if a := authorRef(ad, m.AuthorID, lang); a != nil {
+			alt["author"] = a
+		}
+		if m.Note != "" {
+			alt["note"] = m.Note
+		}
+		alternatives = append(alternatives, alt)
+	}
+	obj["alternatives"] = alternatives
 	return obj, nil
 }
 

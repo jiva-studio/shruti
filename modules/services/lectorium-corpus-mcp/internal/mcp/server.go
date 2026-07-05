@@ -24,8 +24,11 @@ How to use the tools:
 - search: semantic + lexical search over verses, documents, tracks and titles.
 - source_get/list/resolve, author_list/resolve, location_list/resolve: turn a ` +
 	`name into an id used by the filters.
-- verse_get/list, document_get/list: read scripture. A verse's purport is ` +
-	`document_list(source, tokens, kind:"commentary").
+- verse_get/list, document_get/list: read scripture. verse_get(lang) returns the ` +
+	`original + IAST (line arrays) + the canonical translation inline, plus an ` +
+	`alternatives manifest of other translation kinds. verse_translation(lang, kind) ` +
+	`fetches a specific translation; verse_synonyms(lang, kind) gives the word-by-word ` +
+	`("Synonyms") array. A verse's purport is document_list(source, tokens, kind:"commentary").
 - track_get/list, transcript_window: read lectures. Find the spoken moment of a ` +
 	`verse with search(types:["track"]) then transcript_window.
 
