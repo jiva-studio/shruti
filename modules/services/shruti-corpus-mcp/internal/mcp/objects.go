@@ -7,28 +7,42 @@ import (
 	"github.com/jiva-studio/shruti/modules/services/shruti-corpus-mcp/internal/library"
 )
 
-// verseObject builds the verse_get payload. With lang: a single translation
-// string; without: a translations map.
+// splitLines splits a stored multi-line verse field (original / transliteration)
+// into an array of lines. Empty input yields an empty array (not [""]).
+func splitLines(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	return strings.Split(s, "\n")
+}
+
+// verseObject builds the language-independent verse skeleton (script +
+// transliteration as line arrays). Translation text and the alternatives
+// manifest are added by the verse_get handler, which needs the repo + catalog.
 func verseObject(sd *catalog.SourceDict, v *library.Verse, lang string) map[string]any {
-	human := sd.RefString(v.SourceID, v.Tokens, lang)
-	obj := map[string]any{
+	return map[string]any{
 		"id":              v.ID,
-		"ref":             human,
+		"ref":             sd.RefString(v.SourceID, v.Tokens, lang),
 		"source":          sourceRefFull(sd, v.SourceID, lang),
 		"tokens":          v.Tokens,
-		"original":        v.Text,
-		"transliteration": v.Transliteration,
+		"original":        splitLines(v.Text),
+		"transliteration": splitLines(v.Transliteration),
 	}
-	if lang != "" {
-		obj["translation"] = v.Translations[lang]
-	} else {
-		trs := make(map[string]string, len(v.Translations))
-		for k, val := range v.Translations {
-			trs[k] = val
-		}
-		obj["translations"] = trs
+}
+
+// synonymsObject builds the verse_synonyms payload: an ordered {word, meaning} array.
+func synonymsObject(sd *catalog.SourceDict, v *library.Verse, lang, kind string, words []library.Word) map[string]any {
+	syn := make([]map[string]any, 0, len(words))
+	for _, w := range words {
+		syn = append(syn, map[string]any{"word": w.Surface, "meaning": w.Gloss})
 	}
-	return obj
+	return map[string]any{
+		"ref":      sd.RefString(v.SourceID, v.Tokens, lang),
+		"id":       v.ID,
+		"lang":     lang,
+		"kind":     kind,
+		"synonyms": syn,
+	}
 }
 
 // documentObject builds the document_get payload (bodies slimmed to lang if set).

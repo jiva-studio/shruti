@@ -82,9 +82,26 @@ func searchResult() map[string]any {
 }
 
 func verseObj() map[string]any {
+	alt := obj(map[string]any{"kind": strS, "author": entityRef(), "note": strS}, "kind")
 	return obj(map[string]any{
 		"id": strS, "ref": strS, "source": sourceRef(), "tokens": strS, "covers": strS,
+		"original": arr(strS), "transliteration": arr(strS),
+		"kind": strS, "translation": strS, "author": entityRef(), "alternatives": arr(alt),
 	}, "id")
+}
+
+func translationObj() map[string]any {
+	return obj(map[string]any{
+		"ref": strS, "id": strS, "lang": strS, "kind": strS,
+		"translation": strS, "author": entityRef(), "note": strS,
+	}, "translation")
+}
+
+func synonymsObj() map[string]any {
+	syn := obj(map[string]any{"word": strS, "meaning": strS}, "word", "meaning")
+	return obj(map[string]any{
+		"ref": strS, "id": strS, "lang": strS, "kind": strS, "synonyms": arr(syn),
+	}, "synonyms")
 }
 
 func verseListItem() map[string]any {
@@ -176,6 +193,10 @@ func outputSchemaFor(kind string) json.RawMessage {
 		return envSchema(matchesResult(entityMatch()))
 	case "verse_get":
 		return envSchema(verseObj())
+	case "verse_translation":
+		return envSchema(translationObj())
+	case "verse_synonyms":
+		return envSchema(synonymsObj())
 	case "verse_list":
 		return envSchema(listResult(verseListItem()))
 	case "document_get":
