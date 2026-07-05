@@ -661,9 +661,10 @@ func registerVerseGet(srv *server.MCPServer, d *Deps) {
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
-		mcp.WithDescription("Get a verse: original script (Devanagari/Bengali) + IAST transliteration, both as line arrays. "+
-			"With lang, also returns the canonical translation inline plus an `alternatives` manifest of other "+
-			"translation kinds in that language (fetch their text with verse_translation, word-by-word with verse_synonyms). "+
+		mcp.WithDescription("Fetch a verse's raw fields for your own reasoning (NOT for display — to show a verse "+
+			"to the user, use verse_render). Returns original script + transliteration as line arrays; with lang, also "+
+			"the canonical translation inline plus an `alternatives` manifest of other translation kinds in that "+
+			"language (fetch their text with verse_translation, word-by-word with verse_synonyms). "+
 			"Address by ref (\"BG 2.13\"), source+tokens, or verse id."),
 		mcp.WithString("ref", mcp.Description("Reference string, e.g. \"BG 2.13\".")),
 		mcp.WithString("source", mcp.Description("Book code / source_id (with tokens).")),

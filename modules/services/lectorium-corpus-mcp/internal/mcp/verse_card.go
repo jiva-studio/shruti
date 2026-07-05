@@ -24,9 +24,12 @@ func registerVerseRender(srv *server.MCPServer, d *Deps) {
 		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
 		mcp.WithDescription(
-			"Render a verse as an inline card: original script (centered), transliteration in the "+
-				"requested language, the word-by-word breakdown, and the translation. Call this when the "+
-				"user wants to SEE/read a specific verse. Address by ref (\"BG 2.13\"), source+tokens, or id."),
+			"Show a verse to the user. THE DEFAULT way to display/read a scripture verse: renders an "+
+				"inline card with the original script (centered), transliteration in the requested language, "+
+				"the word-by-word, and the translation — all at once. Use this whenever the user asks to see, "+
+				"read, open, or quote a specific verse (\"покажи БГ 2.13\", \"read Bhagavad-gita 2.13\"). "+
+				"The other verse_* tools are for fetching raw data; for DISPLAY prefer this one. "+
+				"Address by ref (\"BG 2.13\"), source+tokens, or id; lang sets the script + translation language."),
 		mcp.WithString("ref", mcp.Description("Reference string, e.g. \"BG 2.13\".")),
 		mcp.WithString("source", mcp.Description("Book code / source_id (with tokens).")),
 		mcp.WithString("tokens", mcp.Description("Position within the book (with source).")),

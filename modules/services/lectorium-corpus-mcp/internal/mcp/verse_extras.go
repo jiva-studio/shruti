@@ -50,8 +50,9 @@ func registerVerseTranslation(srv *server.MCPServer, d *Deps) {
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
-		mcp.WithDescription("Get one translation of a verse in a language. Defaults to the canonical (kind=canonical); "+
-			"pass a `kind` from verse_get's `alternatives` manifest to fetch a specific rendering."),
+		mcp.WithDescription("Fetch the text of ONE translation of a verse (data, not a card — to display a verse use "+
+			"verse_render). Defaults to the canonical (kind=canonical); pass a `kind` from verse_get's `alternatives` "+
+			"manifest to fetch a specific rendering."),
 		mcp.WithString("ref", mcp.Description("Reference string, e.g. \"BG 2.13\".")),
 		mcp.WithString("source", mcp.Description("Book code / source_id (with tokens).")),
 		mcp.WithString("tokens", mcp.Description("Position within the book (with source).")),
@@ -112,8 +113,9 @@ func registerVerseSynonyms(srv *server.MCPServer, d *Deps) {
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithTitleAnnotation(toolTitles[kind]),
 		mcp.WithRawOutputSchema(outputSchemaFor(kind)),
-		mcp.WithDescription("Word-by-word breakdown (the \"Synonyms\" section): an ordered array of {word, meaning} "+
-			"for one verse translation. Defaults to the canonical rendering; pass `kind` for an alternative."),
+		mcp.WithDescription("Fetch the word-by-word (\"Synonyms\") as a raw {word, meaning} array for one verse "+
+			"translation (data — verse_render already shows the word-by-word inside the card). Defaults to the "+
+			"canonical rendering; pass `kind` for an alternative."),
 		mcp.WithString("ref", mcp.Description("Reference string, e.g. \"BG 2.13\".")),
 		mcp.WithString("source", mcp.Description("Book code / source_id (with tokens).")),
 		mcp.WithString("tokens", mcp.Description("Position within the book (with source).")),
