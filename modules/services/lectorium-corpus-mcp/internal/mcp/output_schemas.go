@@ -7,7 +7,7 @@ import "encoding/json"
 //
 // The 15 data tools wrap their payload in the standard envelope
 // {ok, kind, result} (see internal/envelope); their schema is envSchema(result).
-// The three MCP-App tools (media_get, lecture_excerpt, excerpt_prepare) emit
+// The four App tools (verse_render, media_render, excerpt_render, excerpt_prepare) emit
 // their own flat structuredContent object instead of the envelope.
 //
 // Schemas are intentionally permissive — objects allow additional properties and
