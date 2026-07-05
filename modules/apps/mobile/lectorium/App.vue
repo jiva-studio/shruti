@@ -101,6 +101,7 @@ import { useAutoDownloadLoop } from "@lectorium/composables/useAutoDownloadLoop.
 import { useChatStoreProactiveSync } from "@lectorium/composables/useChatStoreProactiveSync.js"
 import { useProactiveDeepLink } from "@lectorium/composables/useProactiveDeepLink.js"
 import { useProactiveScheduler } from "@lectorium/composables/useProactiveScheduler.js"
+import { useSyncEngine } from "@lectorium/composables/useSyncEngine.js"
 import { useChatResume } from "@lectorium/composables/useChatResume.js"
 import { useUserNotifier } from "@lectorium/composables/useUserNotifier.js"
 import { useChatTurnNotifications } from "@lectorium/composables/useChatTurnNotifications.js"
@@ -179,6 +180,7 @@ useAutoArchiveSweep()
 const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
 useProactiveScheduler()
+useSyncEngine()
 useChatResume()
 useUserNotifier()
 useChatTurnNotifications()

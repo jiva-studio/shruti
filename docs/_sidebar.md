@@ -24,6 +24,7 @@
   * [Subscriptions & RevenueCat](repos/lectorium/architecture/subscriptions.md)
   * [Background playlist (Pro)](repos/lectorium/architecture/background-playlist.md)
   * [Observability (Langfuse)](repos/lectorium/architecture/observability.md)
+  * [Profile sync](repos/lectorium/architecture/profile-sync.md)
   * **Chat**
     * [Pipeline](repos/lectorium/architecture/chat-pipeline.md)
     * [Intents & routing](repos/lectorium/architecture/chat-intents.md)

@@ -1,0 +1,357 @@
+import type { IDatabase } from "@ports/app/index.js"
+import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
+import type { SyncDoc } from "@lib/domain"
+import { compareHlcString } from "@lib/domain"
+import type {
+  NoteRow,
+  PlaylistItemRow,
+  ListeningSessionRow,
+  SyncDocHlcRow,
+} from "@lib/persistence/user"
+import { createIdGenerator } from "./idGenerator.js"
+
+/**
+ * SQL adapter implementing {@link ISyncApplyRepository}: applies **remote**
+ * changes to the three synced collection tables (`notes`, `playlist_items`,
+ * `listening_sessions`) and maintains the `sync_doc_hlc` side-table
+ * (014 migration).
+ *
+ * Deliberately bypasses the domain repositories so a pulled change is **not**
+ * re-journaled into the outbox (which would echo it back to the server). All
+ * writes are raw `db.execute` inside the caller's reentrant unit-of-work.
+ *
+ * The row snapshots handled here are the client-native (snake_case) wire
+ * shapes — identical to what the sync-journal decorator writes into
+ * `outbox.data` — so this adapter maps them straight onto columns.
+ */
+
+const newPlaylistItemId = createIdGenerator("playlist")
+
+/** Lowest possible HLC — used as the local doc's HLC when none is on record
+ *  (e.g. a pre-sync row) so a remote change with any real HLC wins on the LWW
+ *  collections, while the add-wins playlist rule still unions the fields. */
+const FLOOR_HLC = "000000000000000:00000:0"
+
+interface NoteWire {
+  id: string
+  track_id: string
+  text: string
+  time_start: number
+  time_end: number
+  created_at: number
+  meta: unknown
+}
+interface PlaylistWire {
+  id?: string
+  track_id: string
+  added_at: number
+  archived_at: number | null
+  collection_id: string | null
+}
+interface SessionWire {
+  id: string
+  item_id: string
+  /** Natural cross-device key: the stable catalog track this session played.
+   *  Carried so a session pulled from another device (whose `item_id` is a
+   *  meaningless remote surrogate) re-attaches to the correct LOCAL playlist
+   *  item, keeping it in the progress / heatmap JOINs. */
+  track_id: string | null
+  started_at: number
+  ended_at: number
+  from_position: number
+  to_position: number
+}
+interface ChatSessionWire {
+  id: string
+  title: string | null
+  created_at: number
+  updated_at: number
+  track_id: string | null
+}
+interface ChatMessageWire {
+  id: string
+  session_id: string
+  role: string
+  content: string
+  created_at: number
+  meta: string | null
+}
+
+export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepository {
+  /** Highest of the pending-outbox HLC and the recorded server HLC for a doc,
+   *  or `null` when neither exists. */
+  async function knownLocalHlc(collection: string, docId: string): Promise<string | null> {
+    const outboxRows = await db.query<{ hlc: string }>(
+      "SELECT hlc FROM outbox WHERE collection = ? AND doc_id = ? ORDER BY id DESC LIMIT 1",
+      [collection, docId]
+    )
+    const serverRows = await db.query<Pick<SyncDocHlcRow, "server_hlc">>(
+      "SELECT server_hlc FROM sync_doc_hlc WHERE collection = ? AND doc_id = ?",
+      [collection, docId]
+    )
+    const outboxHlc = outboxRows[0]?.hlc ?? null
+    const serverHlc = serverRows[0]?.server_hlc ?? null
+    if (outboxHlc === null) return serverHlc
+    if (serverHlc === null) return outboxHlc
+    return compareHlcString(outboxHlc, serverHlc) >= 0 ? outboxHlc : serverHlc
+  }
+
+  async function readLocalRow(collection: string, docId: string): Promise<unknown | null> {
+    switch (collection) {
+      case "notes": {
+        const rows = await db.query<NoteRow>("SELECT * FROM notes WHERE id = ?", [docId])
+        return rows[0] ? noteRowToWire(rows[0]) : null
+      }
+      case "playlist_items": {
+        // doc_id is the natural key track_id, not the local surrogate id.
+        const rows = await db.query<PlaylistItemRow>(
+          "SELECT * FROM playlist_items WHERE track_id = ? ORDER BY added_at DESC LIMIT 1",
+          [docId]
+        )
+        return rows[0] ? playlistRowToWire(rows[0]) : null
+      }
+      case "listening_sessions": {
+        // Resolve the natural track key via the local playlist item so the
+        // snapshot carries `track_id` symmetrically with what the journal
+        // decorator writes.
+        const rows = await db.query<ListeningSessionRow & { track_id: string | null }>(
+          `SELECT ls.*, pi.track_id AS track_id
+             FROM listening_sessions ls
+             LEFT JOIN playlist_items pi ON pi.id = ls.item_id
+            WHERE ls.id = ?`,
+          [docId]
+        )
+        return rows[0] ? sessionRowToWire(rows[0]) : null
+      }
+      case "chat_sessions": {
+        const rows = await db.query<ChatSessionWire>(
+          "SELECT id, title, created_at, updated_at, track_id FROM chat_sessions WHERE id = ?",
+          [docId]
+        )
+        return rows[0] ?? null
+      }
+      case "chat_messages": {
+        const rows = await db.query<ChatMessageWire>(
+          "SELECT id, session_id, role, content, created_at, meta FROM chat_messages WHERE id = ?",
+          [docId]
+        )
+        return rows[0] ?? null
+      }
+      default:
+        throw new Error(`syncApply: unknown collection "${collection}"`)
+    }
+  }
+
+  async function recordServerHlc(collection: string, docId: string, hlc: string): Promise<void> {
+    await db.execute(
+      `INSERT INTO sync_doc_hlc (collection, doc_id, server_hlc) VALUES (?, ?, ?)
+       ON CONFLICT(collection, doc_id) DO UPDATE SET server_hlc = ?`,
+      [collection, docId, hlc, hlc]
+    )
+  }
+
+  async function upsertRow(collection: string, docId: string, data: unknown): Promise<void> {
+    switch (collection) {
+      case "notes":
+        return upsertNote(data as NoteWire)
+      case "playlist_items":
+        return upsertPlaylist(docId, data as PlaylistWire)
+      case "listening_sessions":
+        return upsertSession(data as SessionWire)
+      case "chat_sessions":
+        return upsertChatSession(data as ChatSessionWire)
+      case "chat_messages":
+        return upsertChatMessage(docId, data as ChatMessageWire)
+      default:
+        throw new Error(`syncApply: unknown collection "${collection}"`)
+    }
+  }
+
+  async function deleteRow(collection: string, docId: string): Promise<void> {
+    switch (collection) {
+      case "notes":
+        await db.execute("DELETE FROM notes WHERE id = ?", [docId])
+        return
+      case "playlist_items":
+        await db.execute("DELETE FROM playlist_items WHERE track_id = ?", [docId])
+        return
+      case "listening_sessions":
+        await db.execute("DELETE FROM listening_sessions WHERE id = ?", [docId])
+        return
+      case "chat_sessions":
+        // Tombstone-per-session cascade: dropping the session removes its
+        // messages locally too, mirroring the server's ON DELETE CASCADE. No
+        // per-message tombstones are replicated — this is the whole cascade.
+        await db.execute("DELETE FROM chat_messages WHERE session_id = ?", [docId])
+        await db.execute("DELETE FROM chat_sessions WHERE id = ?", [docId])
+        return
+      case "chat_messages":
+        await db.execute("DELETE FROM chat_messages WHERE id = ?", [docId])
+        return
+      default:
+        throw new Error(`syncApply: unknown collection "${collection}"`)
+    }
+  }
+
+  async function upsertNote(wire: NoteWire): Promise<void> {
+    const meta =
+      wire.meta === null || wire.meta === undefined
+        ? null
+        : typeof wire.meta === "string"
+          ? wire.meta
+          : JSON.stringify(wire.meta)
+    await db.execute(
+      `INSERT OR REPLACE INTO notes (id, track_id, text, time_start, time_end, created_at, meta)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [wire.id, wire.track_id, wire.text, wire.time_start, wire.time_end, wire.created_at, meta]
+    )
+  }
+
+  async function upsertPlaylist(docId: string, wire: PlaylistWire): Promise<void> {
+    // Keyed on the natural sync key track_id (= docId), not the wire's local
+    // surrogate id (which is the *writing* device's, meaningless here). Reuse
+    // the existing local row's id when the track is already present.
+    const existing = await db.query<{ id: string }>(
+      "SELECT id FROM playlist_items WHERE track_id = ? LIMIT 1",
+      [docId]
+    )
+    if (existing[0]) {
+      await db.execute(
+        "UPDATE playlist_items SET added_at = ?, archived_at = ?, collection_id = ? WHERE id = ?",
+        [wire.added_at, wire.archived_at, wire.collection_id, existing[0].id]
+      )
+      return
+    }
+    await db.execute(
+      `INSERT INTO playlist_items (id, track_id, added_at, archived_at, collection_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [newPlaylistItemId(), docId, wire.added_at, wire.archived_at, wire.collection_id]
+    )
+  }
+
+  async function upsertSession(wire: SessionWire): Promise<void> {
+    // Re-key on the natural `track_id`: a session pulled from another device
+    // carries THAT device's `item_id` (a `pl_…` surrogate that means nothing
+    // here). Resolve the LOCAL playlist item for the same track so the session
+    // attaches to the right track and stays in the progress / heatmap JOINs.
+    // Fall back to the wire `item_id` only when the track isn't in this
+    // device's library yet (its `playlist_items` add-wins change is ordered
+    // ahead under the single cursor, so this is rare).
+    let itemId = wire.item_id
+    if (wire.track_id) {
+      const local = await db.query<{ id: string }>(
+        "SELECT id FROM playlist_items WHERE track_id = ? LIMIT 1",
+        [wire.track_id]
+      )
+      if (local[0]) itemId = local[0].id
+    }
+    await db.execute(
+      `INSERT OR REPLACE INTO listening_sessions
+         (id, item_id, started_at, ended_at, from_position, to_position)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [wire.id, itemId, wire.started_at, wire.ended_at, wire.from_position, wire.to_position]
+    )
+  }
+
+  async function upsertChatSession(wire: ChatSessionWire): Promise<void> {
+    await db.execute(
+      `INSERT OR REPLACE INTO chat_sessions (id, title, created_at, updated_at, track_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [wire.id, wire.title, wire.created_at, wire.updated_at, wire.track_id]
+    )
+  }
+
+  async function upsertChatMessage(docId: string, wire: ChatMessageWire): Promise<void> {
+    // Orphan-drop: a message whose parent session is absent locally (never
+    // arrived, or already tombstoned — its cascade removed it) is dropped
+    // rather than resurrecting the session. Parent-before-child ordering under
+    // the single pull cursor guarantees a live session's row is already
+    // present by the time its messages apply.
+    const parent = await db.query<{ id: string }>(
+      "SELECT id FROM chat_sessions WHERE id = ? LIMIT 1",
+      [wire.session_id]
+    )
+    if (!parent[0]) return
+    const meta =
+      wire.meta === null || wire.meta === undefined
+        ? null
+        : typeof wire.meta === "string"
+          ? wire.meta
+          : JSON.stringify(wire.meta)
+    await db.execute(
+      `INSERT OR REPLACE INTO chat_messages (id, session_id, role, content, created_at, meta)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [wire.id, wire.session_id, wire.role, wire.content, wire.created_at, meta]
+    )
+    void docId
+  }
+
+  return {
+    async getLocalDoc(collection: string, docId: string): Promise<SyncDoc<unknown> | null> {
+      const localHlc = await knownLocalHlc(collection, docId)
+      const row = await readLocalRow(collection, docId)
+      if (row === null && localHlc === null) return null
+      return {
+        docId,
+        hlc: localHlc ?? FLOOR_HLC,
+        deleted: row === null,
+        data: row,
+      }
+    },
+
+    async applyRemote(collection: string, doc: SyncDoc<unknown>, serverHlc: string): Promise<void> {
+      if (doc.deleted || doc.data === null) {
+        await deleteRow(collection, doc.docId)
+      } else {
+        await upsertRow(collection, doc.docId, doc.data)
+      }
+      await recordServerHlc(collection, doc.docId, serverHlc)
+    },
+
+    lastServerHlc: async (collection, docId) => {
+      const rows = await db.query<Pick<SyncDocHlcRow, "server_hlc">>(
+        "SELECT server_hlc FROM sync_doc_hlc WHERE collection = ? AND doc_id = ?",
+        [collection, docId]
+      )
+      return rows[0]?.server_hlc ?? null
+    },
+
+    recordServerHlc,
+  }
+}
+
+/* --- row → client-native (snake_case) wire snapshot --- */
+
+function noteRowToWire(row: NoteRow): NoteWire {
+  return {
+    id: row.id,
+    track_id: row.track_id,
+    text: row.text,
+    time_start: row.time_start,
+    time_end: row.time_end,
+    created_at: row.created_at,
+    meta: row.meta,
+  }
+}
+
+function playlistRowToWire(row: PlaylistItemRow): PlaylistWire {
+  return {
+    id: row.id,
+    track_id: row.track_id,
+    added_at: row.added_at,
+    archived_at: row.archived_at,
+    collection_id: row.collection_id,
+  }
+}
+
+function sessionRowToWire(row: ListeningSessionRow & { track_id?: string | null }): SessionWire {
+  return {
+    id: row.id,
+    item_id: row.item_id,
+    track_id: row.track_id ?? null,
+    started_at: row.started_at,
+    ended_at: row.ended_at,
+    from_position: row.from_position,
+    to_position: row.to_position,
+  }
+}

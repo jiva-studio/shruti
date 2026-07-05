@@ -41,3 +41,5 @@ export * from "./chat/runChatTurn.js"
 export * from "./chat/replayChatTurn.js"
 export * from "./chat/submitChatFeedback.js"
 export * from "./chat/recordInlineHintCooldown.js"
+
+export * from "./sync/index.js"

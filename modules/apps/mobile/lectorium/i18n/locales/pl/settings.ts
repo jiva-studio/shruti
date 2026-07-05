@@ -175,6 +175,11 @@ export default {
     description: "Tłumacz cytaty na język czatu.",
   },
 
+  syncChats: {
+    title: "Synchronizuj czaty",
+    description: "Zachowaj rozmowy Ask Sadhu zsynchronizowane na wszystkich urządzeniach.",
+  },
+
   smartLibrary: {
     title: "Inteligentna biblioteka",
     description: "Miej świeże wykłady pod ręką i porządkuj je po wysłuchaniu",

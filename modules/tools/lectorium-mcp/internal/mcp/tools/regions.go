@@ -69,6 +69,7 @@ func registerRegionsUpsert(s *server.MCPServer, deps RegionsDeps) {
 		mcp.WithString("shareVideoUrl", mcp.Required(), mcp.Description("Share-video reels endpoint, e.g. \"https://host/share/video/reels\".")),
 		mcp.WithString("authBaseUrl", mcp.Required(), mcp.Description("Auth service base URL, e.g. \"https://host/auth\".")),
 		mcp.WithString("chatBaseUrl", mcp.Required(), mcp.Description("Chat service base URL, e.g. \"https://host\".")),
+		mcp.WithString("profileBaseUrl", mcp.Description("OPTIONAL profile-sync service base URL, e.g. \"https://host\". Omit/empty ⇒ the region ships without it and the client's profile-sync engine stays OFF (no chatBaseUrl fallback); set it to turn read-only chat-history sync on. Must be https when supplied.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		fields := map[string]string{}
@@ -80,13 +81,14 @@ func registerRegionsUpsert(s *server.MCPServer, deps RegionsDeps) {
 			fields[key] = v
 		}
 		out, err := deps.UseCase.Upsert(regions.Region{
-			ID:            fields["id"],
-			Name:          fields["name"],
-			URLTemplate:   fields["urlTemplate"],
-			ShareAudioURL: fields["shareAudioUrl"],
-			ShareVideoURL: fields["shareVideoUrl"],
-			AuthBaseURL:   fields["authBaseUrl"],
-			ChatBaseURL:   fields["chatBaseUrl"],
+			ID:             fields["id"],
+			Name:           fields["name"],
+			URLTemplate:    fields["urlTemplate"],
+			ShareAudioURL:  fields["shareAudioUrl"],
+			ShareVideoURL:  fields["shareVideoUrl"],
+			AuthBaseURL:    fields["authBaseUrl"],
+			ChatBaseURL:    fields["chatBaseUrl"],
+			ProfileBaseURL: req.GetString("profileBaseUrl", ""),
 		})
 		if err != nil {
 			return envelopeFromRegionsError(kind, err), nil

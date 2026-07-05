@@ -12,7 +12,7 @@ interface StoredChat extends ChatMeta {
   messages: SerializedMsg[]
 }
 
-interface SerializedMsg {
+export interface SerializedMsg {
   role: 'user' | 'assistant'
   text: string
   statusKey?: string
@@ -20,6 +20,34 @@ interface SerializedMsg {
   researchQuestions?: string[]
   // Serialized Map fields live here as [key, value] entry arrays.
   [field: string]: unknown
+}
+
+/** A single chat message pulled from the `profile` service. Carries a stable
+ *  server `id` and `createdAt` so mergeRemote can dedupe/order across
+ *  incremental pulls (both are persisted but ignored by deserializeMsg, so they
+ *  never leak into the live Msg). */
+export interface RemoteChatMessage extends SerializedMsg {
+  id: string
+  createdAt: number
+}
+
+/** One server chat session to merge into the local store. `hasSession` is false
+ *  when this pull carried only *messages* for the session (an incremental
+ *  append) and no `chat_sessions` change — mergeRemote then keeps the existing
+ *  session's fields and drops it entirely if the session is unknown locally
+ *  (orphan-drop). */
+export interface RemoteChat {
+  id: string
+  hasSession: boolean
+  title: string | null
+  updatedAt: number
+  trackId?: string | null
+  messages: RemoteChatMessage[]
+}
+
+export interface RemoteMerge {
+  upserts: RemoteChat[]
+  deletes: string[]
 }
 
 // Rich payloads on a Msg are Vue-reactive Maps, which JSON.stringify flattens to
@@ -69,6 +97,11 @@ export interface UseChatHistory {
   newChat: () => void
   openChat: (id: string) => void
   deleteChat: (id: string) => void
+  /** Union server-sourced chat sessions/messages into the local store without
+   *  clobbering local-only sessions. Server is authoritative on the fields it
+   *  provides (title, updatedAt, its messages); the current localStorage
+   *  history stays the local cache. Read-only sync — never pushes. */
+  mergeRemote: (remote: RemoteMerge) => void
 }
 
 /**
@@ -175,6 +208,66 @@ export function useChatHistory(
     flush()
   }
 
+  function titleFromSerialized(msgs: SerializedMsg[]): string {
+    const first = msgs.find((m) => m.role === 'user' && m.text)
+    const t = (first?.text ?? '').trim().replace(/\s+/g, ' ')
+    return t.length > 48 ? `${t.slice(0, 48)}…` : t || '…'
+  }
+
+  function mergeRemote(remote: RemoteMerge) {
+    let changed = false
+
+    // Tombstones first: a deleted session drops it (and, via this same store,
+    // its messages — no per-message tombstones on the wire).
+    for (const id of remote.deletes) {
+      if (store.delete(id)) {
+        changed = true
+        if (currentId.value === id) {
+          currentId.value = ''
+          messages.value = []
+        }
+      }
+    }
+
+    for (const rc of remote.upserts) {
+      const prev = store.get(rc.id)
+      // Orphan-drop: messages arrived for a session we've never seen and this
+      // pull carried no session row for it → nothing to attach them to.
+      if (!rc.hasSession && !prev) continue
+
+      // Preserve previously-synced server messages (they carry a stable id) and
+      // union in this pull's messages, deduped by id, ordered by createdAt. A
+      // purely local session shares no ids with the server, so its content is
+      // untouched unless the same id is authoritative on the server too.
+      const byId = new Map<string, RemoteChatMessage>()
+      if (prev) {
+        for (const m of prev.messages) {
+          const mid = (m as Partial<RemoteChatMessage>).id
+          if (typeof mid === 'string') byId.set(mid, m as RemoteChatMessage)
+        }
+      }
+      for (const m of rc.messages) byId.set(m.id, m)
+      const merged = [...byId.values()].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+
+      const title =
+        (rc.hasSession ? rc.title : null) ??
+        prev?.title ??
+        titleFromSerialized(merged)
+      store.set(rc.id, {
+        id: rc.id,
+        title,
+        updatedAt: Math.max(rc.updatedAt || 0, prev?.updatedAt || 0) || Date.now(),
+        messages: merged,
+      })
+      changed = true
+    }
+
+    if (changed) {
+      refreshIndex()
+      flush()
+    }
+  }
+
   onMounted(() => {
     load()
     // Reopen the most recent conversation so a refresh doesn't lose context.
@@ -186,5 +279,5 @@ export function useChatHistory(
   watch(() => messages.value.length, persistSoon)
   if (opts.busy) watch(opts.busy, (b) => { if (!b) persistSoon() })
 
-  return { chats, currentId, newChat, openChat, deleteChat }
+  return { chats, currentId, newChat, openChat, deleteChat, mergeRemote }
 }

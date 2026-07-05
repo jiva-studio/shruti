@@ -343,6 +343,11 @@ services:
       CLEANUP_SIGNED_IN_TTL: ${LECTORIUM_CLEANUP_SIGNED_IN_TTL:-17520h}
       CLEANUP_SIGNED_IN_INTERVAL: ${LECTORIUM_CLEANUP_SIGNED_IN_INTERVAL:-24h}
       CLEANUP_SIGNED_IN_DRY_RUN: ${LECTORIUM_CLEANUP_SIGNED_IN_DRY_RUN:-true}
+      # profile sync service internal URL — cleanup-worker POSTs
+      # /internal/purge here on user.deleted so profile erases the user's
+      # synced data. Empty → the purge is a logged no-op (safe before profile
+      # is deployed); see internal/profileclient.
+      PROFILE_INTERNAL_URL: http://profile:8085
       PORT: "8090"
       ENV: ${LECTORIUM_ENV:-dev}
       SERVICE_VERSION: ${LECTORIUM_CLEANUP_WORKER_TAG:-latest}
@@ -599,6 +604,94 @@ services:
       retries: 40
       start_period: 10s
 
+  # profile-postgres: the profile sync service's OWN Postgres — deliberately
+  # separate from the shared `lectorium` DB. profile knows only its own
+  # database (device<->server sync substrate: changes-log + HLC cursors),
+  # so it never contends with chat/auth on the shared instance and can be
+  # backed up / wiped independently. Stock postgres:16-alpine — the schema
+  # uses only core features (IDENTITY / jsonb / hashtext), no pgvector.
+  # Origin only; the RU proxy forwards /profile/* to global.
+  profile-postgres:
+    profiles: [origin]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: profile
+      POSTGRES_PASSWORD: ${LECTORIUM_PROFILE_POSTGRES_PASSWORD:?LECTORIUM_PROFILE_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_DB: profile
+    volumes:
+      - profiledata:/var/lib/postgresql/data
+    networks: [lectorium]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profile -d profile"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # profile-migrate: one-shot embedded-migration apply for profile's own DB,
+  # mirroring the shared `migrator`. Same image as `profile` with a different
+  # arg — `profile migrate` applies the go:embed'd migrations (advisory-locked)
+  # then exits 0; `profile` (serve) refuses traffic until the schema is current.
+  # Watchtower re-runs this stopped container when a new image lands.
+  profile-migrate:
+    profiles: [origin]
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/jiva-studio}/lectorium-profile:${LECTORIUM_PROFILE_TAG:-latest}
+    restart: "no"
+    logging: *default-logging
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    command: ["migrate"]
+    env_file:
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
+    environment:
+      DATABASE_URL: postgresql://profile:${LECTORIUM_PROFILE_POSTGRES_PASSWORD:?}@profile-postgres:5432/profile?sslmode=disable
+    networks: [lectorium]
+    depends_on:
+      profile-postgres: { condition: service_healthy }
+
+  # profile: device<->server user-data sync service (library, listening
+  # history, notes, chat). chi+pgx, RS256-verifies the aud="chat" access
+  # token against the shared public.pem, talks ONLY to profile-postgres.
+  # /profile/sync/* is edge-routed; /internal/purge is container-to-container
+  # (cleanup-worker calls it on user.deleted — never through the public edge).
+  # Origin only — proxy hosts forward /profile/* to global via Caddy.
+  profile:
+    profiles: [origin]
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/jiva-studio}/lectorium-profile:${LECTORIUM_PROFILE_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
+    environment:
+      DATABASE_URL: postgresql://profile:${LECTORIUM_PROFILE_POSTGRES_PASSWORD:?}@profile-postgres:5432/profile?sslmode=disable
+      JWT_PUBLIC_KEY_PATH: /secrets/public.pem
+      PORT: "8085"
+      # Hard cap the server clamps pull.limit to (client can't demand an
+      # unbounded page). Code default is 500; override via LECTORIUM_*.
+      PULL_MAX_LIMIT: ${LECTORIUM_PROFILE_PULL_MAX_LIMIT:-500}
+      # Optional X-Internal-Token guard on POST /internal/purge (defense in
+      # depth atop the network-only routing). Same shared secret as auth /
+      # billing. Unset → network isolation is the only guard.
+      INTERNAL_API_TOKEN: ${LECTORIUM_INTERNAL_API_TOKEN:-}
+      ENV: ${LECTORIUM_ENV:-dev}
+      SERVICE_VERSION: ${LECTORIUM_PROFILE_TAG:-latest}
+    volumes:
+      - ${LECTORIUM_JWT_KEYS_DIR:-/opt/lectorium/jwt}:/secrets:ro
+    networks: [lectorium]
+    depends_on:
+      profile-postgres: { condition: service_healthy }
+      profile-migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "/profile", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
 networks:
   lectorium:
 
@@ -608,3 +701,4 @@ volumes:
   redisdata:
   share_video_scratch:
   corpusdata:
+  profiledata:

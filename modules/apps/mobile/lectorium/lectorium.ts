@@ -23,9 +23,10 @@ import type {
   IShareVideoService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
-import type { IProactiveChatService } from "@lib/contracts"
+import type { IProactiveChatService, ISyncClient } from "@lib/contracts"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useSyncChatsEnabled } from "@lectorium/composables/useSyncChats.js"
 import { useStoragePublicUrl } from "@kit/infra"
 import { useHttpShareAudioService } from "@infra/shareAudio/http/useHttpShareAudioService.js"
 import { useHttpShareVideoService } from "@infra/shareVideo/http/useHttpShareVideoService.js"
@@ -115,6 +116,20 @@ export interface Lectorium {
   readonly chatQuestionsService: ReturnType<typeof createHttpChatQuestionsService>
   readonly chatFeedbackService: ReturnType<typeof createHttpChatFeedbackService>
   readonly chatResumeService: ReturnType<typeof createHttpChatResumeService>
+  /**
+   * Profile device↔server sync transport (Lane D). The `useSyncEngine`
+   * composable hands this to `runSync` only when the account is signed-in and
+   * the active region has a `profileBaseUrl`; otherwise the engine is disabled.
+   * Always constructed (it is stateless) — the runtime gate lives in the
+   * composable, not here.
+   */
+  readonly syncClient: ISyncClient
+  /**
+   * Resolves this device's stable id (Capacitor `Device.getId()`) — the HLC
+   * tiebreak, the `sync_state` key, and the pull `X-Device-Id`. Wiring it also
+   * turns on the sync-journal decorator + engine repositories in the bundle.
+   */
+  readonly getDeviceId: () => Promise<string>
   /** Native Filesystem+Share / web Blob+IDB adapter for exporting / importing
    * the user database. Wired with a `() => databases.user` closure so the
    * user DB doesn't have to be open at app-bootstrap time. */
@@ -181,6 +196,10 @@ export interface InitLectoriumSeed {
   readonly auth: AuthPort
   readonly chatHttpRequest: (path: string, init?: RequestInit) => Promise<Response>
   readonly proactiveChat: IProactiveChatService
+  /** Profile-sync transport (Lane D). */
+  readonly syncClient: ISyncClient
+  /** Stable device-id provider; enables journaling + the sync engine repos. */
+  readonly getDeviceId: () => Promise<string>
   /** Factory invoked inside `initLectorium` with a `() => databases.user`
    * getter. The factory pattern keeps the circular dependency local — the
    * adapter would otherwise need to close over a not-yet-built `Lectorium`. */
@@ -284,6 +303,8 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     chatQuestionsService,
     chatFeedbackService,
     chatResumeService,
+    syncClient: seed.syncClient,
+    getDeviceId: seed.getDeviceId,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,
     activeServer,
@@ -333,12 +354,18 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
         throw new Error("repositories(): user DB is not open yet")
       }
       const appLanguage = useAppLanguage()
+      // Device-local "Sync chats" toggle (default ON); read live so a flip in
+      // Settings gates the very next chat write without rebuilding repos.
+      const syncChatsEnabled = useSyncChatsEnabled()
       cachedRepos = createAppRepositories({
         contentDb: databases.content,
         userDb: databases.user,
         filesStorage: seed.filesStorage,
         storagePublicUrl,
         getActiveLanguage: () => appLanguage.value,
+        // Turns on the sync-journal decorator + the engine repositories.
+        getDeviceId: seed.getDeviceId,
+        isChatSyncEnabled: () => syncChatsEnabled.value,
       })
       return cachedRepos
     },

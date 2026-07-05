@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, provide, computed } from 'vue'
+import { ref, nextTick, watch, provide, computed, onMounted } from 'vue'
 import { useT } from '../../i18n/ui'
 import ChatMessageBody from './ChatMessageBody.vue'
 import ChatMessageActions from './ChatMessageActions.vue'
@@ -17,6 +17,7 @@ import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
 import { webLocale } from '../../lib/i18n'
 import { useChatStream, type Msg } from '../../composables/useChatStream'
 import { useChatHistory } from '../../composables/useChatHistory'
+import { useProfileSync } from '../../composables/useProfileSync'
 import { useWebAuth } from '../../composables/useWebAuth'
 import { contentLangFor, type Lang } from '../../i18n/locales'
 
@@ -28,6 +29,9 @@ webLocale.value = cl
 const BACKEND_FALLBACK = 'https://api.shruti.local'
 const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
 const CHAT = (import.meta.env.PUBLIC_CHAT_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
+// `profile` service base — read-only chat-session pull for signed-in users.
+// Empty when unset → useProfileSync no-ops (sync stays off until configured).
+const PROFILE = (import.meta.env.PUBLIC_PROFILE_API_URL as string | undefined)?.replace(/\/$/, '') || ''
 const FREE_TURNS = 10
 
 const auth = useWebAuth({
@@ -100,10 +104,24 @@ const signedIn = computed(() => auth.signedIn.value)
 
 // Persisted conversation history (localStorage), namespaced per content language
 // so a ru session and an en session don't interleave.
-const { chats, currentId, newChat, openChat, deleteChat } = useChatHistory(messages, {
-  storageKey: `lts.ai.chats.v1.${cl}`,
+const CHATS_STORAGE_KEY = `lts.ai.chats.v1.${cl}`
+const { chats, currentId, newChat, openChat, deleteChat, mergeRemote } = useChatHistory(messages, {
+  storageKey: CHATS_STORAGE_KEY,
   busy,
 })
+
+// Read-only pull of the signed-in user's chat sessions from the `profile`
+// service, merged into the local history (the localStorage cache). No push.
+const profileSync = useProfileSync({
+  profileBaseUrl: PROFILE,
+  storageKey: CHATS_STORAGE_KEY,
+  merge: mergeRemote,
+})
+// Pull on chat open (mounts after useChatHistory's own onMounted load, so the
+// network merge lands on top of the hydrated cache), and again whenever the
+// user transitions into signed-in. No aggressive polling.
+onMounted(() => { void profileSync.pullChatSessions() })
+watch(() => auth.signedIn.value, (isIn) => { if (isIn) void profileSync.pullChatSessions() })
 
 // Sign-in / sign-out swaps the rate-limit bucket; drop any anonymous cap so
 // the next turn re-reads the signed-in user's real limits from the server.

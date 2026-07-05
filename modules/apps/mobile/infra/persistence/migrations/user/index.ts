@@ -12,6 +12,8 @@ import { migration_009_chat_sessions_track_id } from "./009_chat_sessions_track_
 import { migration_010_listening_sessions_fix_negative_delta } from "./010_listening_sessions_fix_negative_delta.js"
 import { migration_011_media_items_kind } from "./011_media_items_kind.js"
 import { migration_012_playlist_items_collection_id } from "./012_playlist_items_collection_id.js"
+import { migration_013_sync_outbox } from "./013_sync_outbox.js"
+import { migration_014_sync_doc_hlc } from "./014_sync_doc_hlc.js"
 
 /**
  * Ordered list of user-DB migrations. Append new migrations at the end —
@@ -31,4 +33,6 @@ export const userMigrations: readonly Migration[] = [
   migration_010_listening_sessions_fix_negative_delta,
   migration_011_media_items_kind,
   migration_012_playlist_items_collection_id,
+  migration_013_sync_outbox,
+  migration_014_sync_doc_hlc,
 ]

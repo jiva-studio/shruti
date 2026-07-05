@@ -25,10 +25,11 @@ When you delete your account, **all of your data is removed completely**. Nothin
 - **Sign-in links** — the Apple and Google sign-in connections attached to your account.
 - **All sessions** — every device signed in to the account is logged out.
 - **Server logs and chat records** — your chat history (your messages, the lecture excerpts we found, the model's replies) and any related diagnostic records and counters are deleted from our servers.
+- **Synced app data** — the library, listening history, notes, and chat conversations we store on our servers to keep your devices in sync. All of it is erased, with no retention.
 
 ## What remains
 
-The only thing that can remain is the **local data stored on your own device** — chats, notes, playlists, downloaded audio, and listening history. This never leaves your device. You can remove it too by choosing **Delete account and wipe data** during the deletion flow, or by uninstalling the app.
+The only thing that can remain is the **local data stored on your own device** — chats, notes, playlists, downloaded audio, and listening history. Any copy we synced to our servers is erased as described above; this is only the local copy on your device. You can remove it too by choosing **Delete account and wipe data** during the deletion flow, or by uninstalling the app.
 
 ## Retention
 

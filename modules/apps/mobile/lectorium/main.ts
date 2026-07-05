@@ -2,6 +2,7 @@ import "./polyfills.js"
 import { createApp } from "vue"
 import { createPinia } from "pinia"
 import { Capacitor } from "@capacitor/core"
+import { Device } from "@capacitor/device"
 import { IonicVue } from "@ionic/vue"
 
 /* Core CSS required for Ionic components to work properly */
@@ -48,6 +49,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
 import { createHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatService.js"
+import { createHttpSyncClient } from "@infra/sync/http/syncClient.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
 import {
   useWebRemoteFilesStorage,
@@ -111,6 +113,31 @@ const chatHttp = createFailoverClient({
   getPreferredId: () => useLectorium().activeServer.value.id,
   pickBaseUrl: (s) => s.chatBaseUrl,
   onPromoteFallback: (id) => useLectorium().setActiveServerById(id),
+})
+
+// Stable device id (Capacitor Device.getId()), memoized. The single source of
+// this device's identity for: the HLC tiebreak + `sync_state` key (via the
+// repository bundle), and the pull `X-Device-Id` header (via the sync client).
+// Matches how the auth adapter obtains it, so all three agree.
+const getDeviceId = (() => {
+  let cached: Promise<string> | null = null
+  return () => (cached ??= Device.getId().then((r) => r.identifier))
+})()
+
+// Profile-sync failover client. Routes ONLY on `profileBaseUrl` — no fallback
+// to chat. A region whose published config predates the `profile` service has
+// no `profileBaseUrl`; the sync engine is then disabled at runtime (the
+// `useSyncEngine` composable gates on it) and this client is never invoked.
+const profileHttp = createFailoverClient({
+  getServers: () => getRegions(),
+  getPreferredId: () => useLectorium().activeServer.value.id,
+  pickBaseUrl: (s) => s.profileBaseUrl ?? "",
+  onPromoteFallback: (id) => useLectorium().setActiveServerById(id),
+})
+const syncClient = createHttpSyncClient({
+  getAccessToken: () => useLectorium().auth.getAccessToken(),
+  request: withNetworkErrorContext((path, init) => profileHttp.request(path, init)),
+  getDeviceId,
 })
 
 initLectorium({
@@ -188,6 +215,11 @@ initLectorium({
     request: withNetworkErrorContext((path, init) => chatHttp.request(path, init)),
   }),
   chatHttpRequest: withNetworkErrorContext((path, init) => chatHttp.request(path, init)),
+  // Profile device↔server sync (Lane D). `getDeviceId` also enables the
+  // sync-journal decorator + the engine repositories in the bundle; `syncClient`
+  // is the transport the `useSyncEngine` composable drives when enabled.
+  getDeviceId,
+  syncClient,
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)

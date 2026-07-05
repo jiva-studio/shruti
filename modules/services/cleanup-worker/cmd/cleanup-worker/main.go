@@ -32,6 +32,7 @@ import (
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/handlers"
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/logging"
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/observability"
+	"github.com/jiva-studio/lectorium/cleanup-worker/internal/profileclient"
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/worker"
 )
 
@@ -73,8 +74,9 @@ func main() {
 	// more events to clean up after (media.deleted → S3 prefix wipe,
 	// etc).
 	lf := observability.NewClientFromEnv()
+	profile := profileclient.NewClientFromEnv() // PROFILE_INTERNAL_URL; empty = no-op
 	reg := handlers.NewRegistry()
-	reg.Register("user.deleted", handlers.UserDeleted(lf))
+	reg.Register("user.deleted", handlers.UserDeleted(lf, profile))
 	reg.Register("subscription.changed", handlers.SubscriptionChanged())
 
 	slog.InfoContext(bootCtx, "handlers_registered",

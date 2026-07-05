@@ -4,7 +4,6 @@ import { createSqlNoteRepository } from "./notesRepository.sql.js"
 import { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
 import { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
 import { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
-import { createSqlUnitOfWork } from "./unitOfWork.sql.js"
 import { createSqlTrackRepository } from "./tracksRepository.sql.js"
 import { createSqlAuthorRepository } from "./authorsRepository.sql.js"
 import { createSqlLocationRepository } from "./locationsRepository.sql.js"
@@ -18,6 +17,12 @@ import { createSqlProactiveStateRepository } from "./proactiveStateRepository.sq
 import { createSqlCollectionRepository } from "./collectionsRepository.sql.js"
 import { createSqlSettingsRepository } from "./settingsRepository.sql.js"
 import { createSqlDailyWisdomRepository } from "./dailyWisdomRepository.sql.js"
+import { createReentrantUnitOfWork } from "./reentrantUnitOfWork.sql.js"
+import { withSyncJournaling } from "./syncJournalDecorator.js"
+import { createSqlOutboxRepository } from "./outboxRepository.sql.js"
+import { createSqlSyncStateRepository } from "./syncStateRepository.sql.js"
+import { createSqlSyncApplyRepository } from "./syncApplyRepository.sql.js"
+import { createSqlSyncBackfillRepository } from "./syncBackfillRepository.sql.js"
 
 export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
@@ -38,6 +43,13 @@ export { createSqlProactiveStateRepository } from "./proactiveStateRepository.sq
 export { createSqlCollectionRepository } from "./collectionsRepository.sql.js"
 export { createSqlSettingsRepository } from "./settingsRepository.sql.js"
 export { createSqlDailyWisdomRepository } from "./dailyWisdomRepository.sql.js"
+export { createReentrantUnitOfWork } from "./reentrantUnitOfWork.sql.js"
+export { withSyncJournaling } from "./syncJournalDecorator.js"
+export type { SyncJournalDeps, JournaledUserRepositories } from "./syncJournalDecorator.js"
+export { createSqlOutboxRepository } from "./outboxRepository.sql.js"
+export { createSqlSyncStateRepository } from "./syncStateRepository.sql.js"
+export { createSqlSyncApplyRepository } from "./syncApplyRepository.sql.js"
+export { createSqlSyncBackfillRepository } from "./syncBackfillRepository.sql.js"
 export type {
   FeaturedCollectionRow,
   CollectionDetail,
@@ -58,13 +70,29 @@ export interface SqlAppRepositories {
   readonly playlistItems: ReturnType<typeof createSqlPlaylistItemRepository>
   readonly listeningSessions: ReturnType<typeof createSqlListeningSessionRepository>
   readonly mediaItems: ReturnType<typeof createSqlMediaItemRepository>
-  readonly unitOfWork: ReturnType<typeof createSqlUnitOfWork>
+  readonly unitOfWork: ReturnType<typeof createReentrantUnitOfWork>
   readonly chatSessions: ReturnType<typeof createSqlChatSessionRepository>
   readonly chatMessages: ReturnType<typeof createSqlChatMessageRepository>
   readonly proactiveState: ReturnType<typeof createSqlProactiveStateRepository>
   readonly collections: ReturnType<typeof createSqlCollectionRepository>
   readonly settings: ReturnType<typeof createSqlSettingsRepository>
   readonly dailyWisdom: ReturnType<typeof createSqlDailyWisdomRepository>
+  /**
+   * Profile-sync engine repositories (Lane D). Present only when `getDeviceId`
+   * is wired — the same gate that enables journaling. `undefined` on web /
+   * before the engine is enabled, where the sync engine never runs. The
+   * composable is the runtime gate; these are the ports it hands the engine.
+   */
+  readonly syncOutbox?: ReturnType<typeof createSqlOutboxRepository>
+  readonly syncState?: ReturnType<typeof createSqlSyncStateRepository>
+  readonly syncApply?: ReturnType<typeof createSqlSyncApplyRepository>
+  /**
+   * First-sync backfill reader (Lane E2b). Present under the same `getDeviceId`
+   * gate as the engine repos; enumerates pre-journaling local rows so the
+   * `backfillLocal` use case can enqueue them the first time a real account
+   * signs in on this device.
+   */
+  readonly syncBackfill?: ReturnType<typeof createSqlSyncBackfillRepository>
 }
 
 export interface CreateSqlAppRepositoriesDeps {
@@ -75,6 +103,22 @@ export interface CreateSqlAppRepositoriesDeps {
    * tracks repo's by-reference sort joins to track_variants for this code).
    */
   readonly getActiveLanguage: () => LanguageCode
+  /**
+   * Resolves this device's stable id (the HLC tiebreak for profile sync).
+   * When provided, the synced user repositories (`notes`, `playlistItems`,
+   * `listeningSessions`) are wrapped so every mutation is journaled into the
+   * `outbox` in the same transaction. Omit it (e.g. web, or before the sync
+   * engine is wired) to disable journaling — the plain repositories are used
+   * and behaviour is unchanged.
+   */
+  readonly getDeviceId?: () => Promise<string>
+  /**
+   * Device-local "Sync chats" gate (default ON). Gates chat journaling only —
+   * when it returns `false` no `chat_sessions` / `chat_messages` change is
+   * journaled. Omit to leave chat sync on; it never affects the non-chat
+   * collections.
+   */
+  readonly isChatSyncEnabled?: () => boolean
 }
 
 /**
@@ -84,7 +128,48 @@ export interface CreateSqlAppRepositoriesDeps {
  * because a sibling-infra import would violate the layer rules.
  */
 export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): SqlAppRepositories {
+  // One reentrant unit-of-work is shared between the bundle and the
+  // sync-journal decorator so a journal entry can join the caller's open
+  // transaction (see reentrantUnitOfWork.sql.ts). It's a strict superset of
+  // the plain unit-of-work's behaviour (identical when un-nested), so it is
+  // safe for every existing caller.
+  const unitOfWork = createReentrantUnitOfWork(deps.userDb)
+
+  // The synced user-data repositories. When a device id is available they are
+  // wrapped so every mutation is journaled to the outbox atomically. Chat is
+  // wrapped too but its journaling is additionally gated by `isChatSyncEnabled`.
+  const baseSynced = {
+    notes: createSqlNoteRepository(deps.userDb),
+    playlistItems: createSqlPlaylistItemRepository(deps.userDb),
+    listeningSessions: createSqlListeningSessionRepository(deps.userDb),
+    chatSessions: createSqlChatSessionRepository(deps.userDb),
+    chatMessages: createSqlChatMessageRepository(deps.userDb),
+  }
+  const synced = deps.getDeviceId
+    ? withSyncJournaling(baseSynced, {
+        userDb: deps.userDb,
+        unitOfWork,
+        getDeviceId: deps.getDeviceId,
+        isChatSyncEnabled: deps.isChatSyncEnabled,
+      })
+    : baseSynced
+
+  // Sync-engine repositories share the same userDb + reentrant unit-of-work as
+  // the journaling decorator, so a pull-merge batch and an outbox drain are
+  // each one atomic transaction. Built only when a device id is available —
+  // the same gate that enables journaling; without it the engine never runs.
+  const getDeviceId = deps.getDeviceId
+  const syncRepos = getDeviceId
+    ? {
+        syncOutbox: createSqlOutboxRepository(deps.userDb),
+        syncState: createSqlSyncStateRepository(deps.userDb, getDeviceId),
+        syncApply: createSqlSyncApplyRepository(deps.userDb),
+        syncBackfill: createSqlSyncBackfillRepository(deps.userDb),
+      }
+    : {}
+
   return {
+    ...syncRepos,
     tracks: createSqlTrackRepository({
       contentDb: deps.contentDb,
       getActiveLanguage: deps.getActiveLanguage,
@@ -95,13 +180,13 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     languages: createSqlLanguageRepository(deps.contentDb),
     tags: createSqlTagRepository(deps.contentDb),
     topics: createSqlTopicRepository(deps.contentDb),
-    notes: createSqlNoteRepository(deps.userDb),
-    playlistItems: createSqlPlaylistItemRepository(deps.userDb),
-    listeningSessions: createSqlListeningSessionRepository(deps.userDb),
+    notes: synced.notes,
+    playlistItems: synced.playlistItems,
+    listeningSessions: synced.listeningSessions,
     mediaItems: createSqlMediaItemRepository(deps.userDb),
-    unitOfWork: createSqlUnitOfWork(deps.userDb),
-    chatSessions: createSqlChatSessionRepository(deps.userDb),
-    chatMessages: createSqlChatMessageRepository(deps.userDb),
+    unitOfWork,
+    chatSessions: synced.chatSessions,
+    chatMessages: synced.chatMessages,
     proactiveState: createSqlProactiveStateRepository(deps.userDb),
     collections: createSqlCollectionRepository(deps.contentDb),
     settings: createSqlSettingsRepository(deps.contentDb),

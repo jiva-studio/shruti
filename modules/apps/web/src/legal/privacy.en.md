@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Effective date: June 18, 2026_
+_Effective date: July 5, 2026_
 
 This privacy policy applies to the Shruti app (hereby referred to as "Application") for mobile devices that was created by Aleksei Leontev (hereby referred to as "Service Provider") as a free service. The Application includes an optional paid subscription and an optional user account. This service is intended for use "AS IS".
 
@@ -64,6 +64,21 @@ To keep the service running and to improve answer quality, the Application's bac
 
 Both live on infrastructure we operate ourselves — they are not shared with any third-party analytics or observability service. Service logs are kept for up to 30 days; chat records for up to 90 days. When you delete your account, your chat records are removed right away — see the _Account deletion_ section below.
 
+## Syncing your data across your devices
+
+If you are **signed in** with Apple or Google, the Application stores a copy of your own app data on our servers so it stays in sync across every device signed in to the same account, and so it can be restored if you reinstall the Application or switch devices. For a signed-in account we store and sync:
+
+- **Your library** — the tracks and playlists you have added or saved.
+- **Listening history** — which lectures you have played, and your playback progress.
+- **Notes** — the timecoded notes you write on lectures.
+- **Chat history** — the "Ask Sadhu" conversations you start (your messages and the model's replies), so you can continue them on another device.
+
+This data is tied to your account and stored on infrastructure we operate ourselves; it is not shared with any third-party analytics or advertising service. Downloaded audio files and on-device settings are **not** synced — downloads stay on the device that made them. We keep this synced data until you delete it or delete your account (see the _Account deletion_ section below). This synced chat history is separate from the diagnostic **chat records** described in _Diagnostic logs and chat records_ above: those diagnostic records exist only to debug answer quality and are automatically purged on the roughly 90-day schedule, whereas your synced conversations are your own and are kept for cross-device continuity until you delete them or your account. If you are also signed in on our website at **shruti.app**, your synced conversations may additionally appear in the web "Ask Sadhu" chat there, where they are shown read-only.
+
+**Chat sync is optional.** Syncing your chat history is on by default, but you can turn it off at any time in the app's chat settings ("Sync chats"). Only conversations you start yourself are ever synced; automatic and system-generated messages are never sent to our servers for syncing.
+
+**Anonymous use stays on your device.** If you use the Application without signing in, none of this data is sent to our servers — your library, listening history, notes, and chats live only on your device until you choose to sign in. Signing in is what turns syncing on.
+
 ## Crash and error reporting
 
 To detect and fix crashes and bugs, the Application sends automatic crash and error reports from your device to **Sentry**, an error-monitoring service operated by Functional Software, Inc. (dba Sentry). A report is generated only when the app crashes or hits an unexpected error, and contains:
@@ -101,6 +116,7 @@ What we delete from our servers when you tap Delete Account:
 - The Apple and Google sign-in links attached to that account.
 - All active sessions — every device signed in to the account is logged out.
 - Your chat history with our service (your messages, the excerpts we found, the model's replies) and any related counters.
+- Everything we synced across your devices — your library, listening history, notes, and any chat conversations you chose to sync. All of it is erased from our servers with no retention.
 
 What stays on your device — and is your choice during the deletion flow — is the local data the Application has cached for you: chats, notes, playlists, downloaded audio, and listening history. You can wipe this local data as part of account deletion, or keep it and continue using the Application anonymously.
 
@@ -128,7 +144,7 @@ The Service Provider is concerned about safeguarding the confidentiality of your
 
 This Privacy Policy may be updated from time to time for any reason. The Service Provider will notify you of any changes to their Privacy Policy by updating this page with the new Privacy Policy. You are advised to consult this Privacy Policy regularly for any changes, as continued use is deemed approval of all changes.
 
-This privacy policy is effective as of June 18, 2026.
+This privacy policy is effective as of July 5, 2026.
 
 ## Your Consent
 

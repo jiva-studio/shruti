@@ -177,6 +177,11 @@ export default {
     description: "Az idézetek lefordítása a csevegés nyelvére.",
   },
 
+  syncChats: {
+    title: "Csevegések szinkronizálása",
+    description: "Tartsd az Ask Sadhu beszélgetéseidet szinkronban az összes eszközödön.",
+  },
+
   smartLibrary: {
     title: "Okos könyvtár",
     description: "Tartsd készenlétben a friss előadásokat, és takaríts el hallgatás után",

@@ -25,10 +25,11 @@ Kada izbrišete svoj nalog, **svi vaši podaci se u potpunosti uklanjaju**. Niš
 - **Veze za prijavu** — Apple i Google veze za prijavu povezane sa vašim nalogom.
 - **Sve sesije** — svaki uređaj prijavljen na nalog se odjavljuje.
 - **Serverski zapisi i evidencija četa** — vaša istorija četa (vaše poruke, odlomci iz predavanja koje smo pronašli, odgovori modela) i svi povezani dijagnostički zapisi i brojači brišu se sa naših servera.
+- **Sinhronizovani podaci** — biblioteka, istorija slušanja, beleške i četovi koje čuvamo na našim serverima radi sinhronizacije između vaših uređaja. Sve to se briše bez ikakvog perioda čuvanja.
 
 ## Šta ostaje
 
-Jedino što može da ostane jesu **lokalni podaci sačuvani na vašem sopstvenom uređaju** — četovi, beleške, plejliste, preuzeti audio i istorija slušanja. Oni nikada ne napuštaju vaš uređaj. Možete ih takođe ukloniti tako što ćete izabrati **Izbriši nalog i obriši podatke** tokom toka brisanja, ili deinstaliranjem aplikacije.
+Jedino što može da ostane jesu **lokalni podaci sačuvani na vašem sopstvenom uređaju** — četovi, beleške, plejliste, preuzeti audio i istorija slušanja. Kopija koju smo sinhronizovali na naše servere već je obrisana, kako je opisano iznad; ovo je samo lokalna kopija na vašem uređaju. Možete ih takođe ukloniti tako što ćete izabrati **Izbriši nalog i obriši podatke** tokom toka brisanja, ili deinstaliranjem aplikacije.
 
 ## Čuvanje podataka
 
