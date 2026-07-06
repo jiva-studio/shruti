@@ -119,22 +119,22 @@ type playlistItemRow struct {
 }
 
 type listeningSessionRow struct {
-	ItemID        *string    `json:"item_id"`
-	TrackID       *string    `json:"track_id"`
-	StartedAt     *epochTime `json:"started_at"`
-	EndedAt       *epochTime `json:"ended_at"`
-	FromPositionS *int       `json:"from_position_s"`
-	ToPositionS   *int       `json:"to_position_s"`
+	ItemID       *string    `json:"item_id"`
+	TrackID      *string    `json:"track_id"`
+	StartedAt    *epochTime `json:"started_at"`
+	EndedAt      *epochTime `json:"ended_at"`
+	FromPosition *int       `json:"from_position"`
+	ToPosition   *int       `json:"to_position"`
 }
 
 type noteRow struct {
-	TrackID    *string         `json:"track_id"`
-	Body       *string         `json:"body"`
-	TimeStartS *int            `json:"time_start_s"`
-	TimeEndS   *int            `json:"time_end_s"`
-	CreatedAt  *epochTime      `json:"created_at"`
-	UpdatedAt  *epochTime      `json:"updated_at"`
-	Meta       json.RawMessage `json:"meta"`
+	TrackID   *string         `json:"track_id"`
+	Text      *string         `json:"text"`
+	TimeStart *int            `json:"time_start"`
+	TimeEnd   *int            `json:"time_end"`
+	CreatedAt *epochTime      `json:"created_at"`
+	UpdatedAt *epochTime      `json:"updated_at"`
+	Meta      json.RawMessage `json:"meta"`
 }
 
 type chatSessionRow struct {
@@ -193,16 +193,16 @@ func upsertListeningSession(ctx context.Context, q querier, userID uuid.UUID, it
 	}
 	_, err := q.Exec(ctx,
 		`INSERT INTO profile.listening_sessions
-		     (user_id, doc_id, item_id, track_id, started_at, ended_at, from_position_s, to_position_s)
+		     (user_id, doc_id, item_id, track_id, started_at, ended_at, from_position, to_position)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT (user_id, doc_id) DO UPDATE SET
-		     item_id         = EXCLUDED.item_id,
-		     track_id        = EXCLUDED.track_id,
-		     started_at      = EXCLUDED.started_at,
-		     ended_at        = EXCLUDED.ended_at,
-		     from_position_s = EXCLUDED.from_position_s,
-		     to_position_s   = EXCLUDED.to_position_s`,
-		userID, it.DocID, row.ItemID, row.TrackID, tsArg(row.StartedAt), tsArg(row.EndedAt), row.FromPositionS, row.ToPositionS,
+		     item_id       = EXCLUDED.item_id,
+		     track_id      = EXCLUDED.track_id,
+		     started_at    = EXCLUDED.started_at,
+		     ended_at      = EXCLUDED.ended_at,
+		     from_position = EXCLUDED.from_position,
+		     to_position   = EXCLUDED.to_position`,
+		userID, it.DocID, row.ItemID, row.TrackID, tsArg(row.StartedAt), tsArg(row.EndedAt), row.FromPosition, row.ToPosition,
 	)
 	return err
 }
@@ -214,17 +214,17 @@ func upsertNote(ctx context.Context, q querier, userID uuid.UUID, it wire.PushIt
 	}
 	_, err := q.Exec(ctx,
 		`INSERT INTO profile.notes
-		     (user_id, doc_id, track_id, body, time_start_s, time_end_s, created_at, updated_at, meta)
+		     (user_id, doc_id, track_id, text, time_start, time_end, created_at, updated_at, meta)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (user_id, doc_id) DO UPDATE SET
-		     track_id     = EXCLUDED.track_id,
-		     body         = EXCLUDED.body,
-		     time_start_s = EXCLUDED.time_start_s,
-		     time_end_s   = EXCLUDED.time_end_s,
-		     created_at   = EXCLUDED.created_at,
-		     updated_at   = EXCLUDED.updated_at,
-		     meta         = EXCLUDED.meta`,
-		userID, it.DocID, row.TrackID, row.Body, row.TimeStartS, row.TimeEndS,
+		     track_id   = EXCLUDED.track_id,
+		     text       = EXCLUDED.text,
+		     time_start = EXCLUDED.time_start,
+		     time_end   = EXCLUDED.time_end,
+		     created_at = EXCLUDED.created_at,
+		     updated_at = EXCLUDED.updated_at,
+		     meta       = EXCLUDED.meta`,
+		userID, it.DocID, row.TrackID, row.Text, row.TimeStart, row.TimeEnd,
 		tsArg(row.CreatedAt), tsArg(row.UpdatedAt), jsonbArg(row.Meta),
 	)
 	return err

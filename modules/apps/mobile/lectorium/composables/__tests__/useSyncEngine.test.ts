@@ -156,3 +156,69 @@ describe("useSyncEngine — first-sync backfill", () => {
     app.unmount()
   })
 })
+
+describe("useSyncEngine — cursor-ownership reset", () => {
+  let setPullCursor: ReturnType<typeof vi.fn>
+  let setAckedSeq: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    setPullCursor = vi.fn(async () => {})
+    setAckedSeq = vi.fn(async () => {})
+    // Swap in a syncState that records the reset writes and a unit-of-work that
+    // actually invokes its callback (the default mocks are opaque `{}`).
+    ;(ctx.lectorium as { repositories: () => unknown }).repositories = () => ({
+      syncBackfill: {},
+      syncOutbox: {},
+      syncState: { setPullCursor, setAckedSeq },
+      syncApply: {},
+      unitOfWork: { run: (fn: () => unknown) => fn() },
+    })
+  })
+
+  it("resets pull_cursor + acked_seq when a different account signs in on this device", async () => {
+    // A prior account already owns the cursor on this device.
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "user-2"
+    ctx.auth!.signedIn = true
+    await flush()
+
+    expect(setPullCursor).toHaveBeenCalledWith(0)
+    expect(setAckedSeq).toHaveBeenCalledWith(0)
+    // Ownership now records the new account, and the reset precedes the pull.
+    expect(prefs.get("sync.cursorOwner")).toBe("user-2")
+    expect(setPullCursor.mock.invocationCallOrder[0]).toBeLessThan(
+      ctx.runSync.mock.invocationCallOrder[0]
+    )
+    app.unmount()
+  })
+
+  it("does NOT reset when the same account re-signs in (owner unchanged)", async () => {
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "user-1"
+    ctx.auth!.signedIn = true
+    await flush()
+
+    expect(setPullCursor).not.toHaveBeenCalled()
+    expect(setAckedSeq).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it("first-ever owner records ownership without touching the (already-zero) cursor", async () => {
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "user-1"
+    ctx.auth!.signedIn = true
+    await flush()
+
+    expect(setPullCursor).not.toHaveBeenCalled()
+    expect(prefs.get("sync.cursorOwner")).toBe("user-1")
+    app.unmount()
+  })
+})

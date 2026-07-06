@@ -167,17 +167,17 @@ erDiagram
         TEXT        track_id "denormalized for analytics"
         TIMESTAMPTZ started_at
         TIMESTAMPTZ ended_at
-        INT         from_position_s
-        INT         to_position_s
+        INT         from_position
+        INT         to_position
     }
 
     notes {
         UUID        user_id PK
         TEXT        doc_id PK "note_..."
         TEXT        track_id
-        TEXT        body
-        INT         time_start_s
-        INT         time_end_s
+        TEXT        text "note body"
+        INT         time_start
+        INT         time_end
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at "for LWW"
         JSONB       meta "nullable"

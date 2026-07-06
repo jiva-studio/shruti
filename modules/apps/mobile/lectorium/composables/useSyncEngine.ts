@@ -18,6 +18,13 @@ const DEBOUNCE_MS = 3000
  *  pre-sync local rows have already been backfilled into the outbox on this
  *  device, so the one-time first-sync backfill never re-runs on a later launch. */
 const BACKFILL_MARKER_PREFIX = "sync.backfilled."
+/** Device-local marker holding the `userId` that currently owns the pull
+ *  cursor. `sync_state` is keyed by device, not account, but the cursor is a
+ *  position in the server's GLOBAL change log scoped to ONE user's view — after
+ *  a sign-out + sign-in as a different account (the DB is not wiped on
+ *  sign-out) it would skip the new user's earlier changes. When the owner
+ *  differs we reset the cursor so the new identity re-pulls from 0. */
+const CURSOR_OWNER_KEY = "sync.cursorOwner"
 
 /**
  * Trigger composable for the profile sync engine (Lane D). Mounted once in
@@ -52,6 +59,10 @@ export function useSyncEngine(): void {
    *  pre-sync rows we've already enqueued this process, so the common path skips
    *  the Preferences read. The persisted marker survives restarts. */
   let backfilledUserId: string | null = null
+  /** In-memory echo of the cursor-owner marker: the account the local pull
+   *  cursor currently belongs to, so the common path skips the Preferences read
+   *  once confirmed. The persisted marker survives restarts. */
+  let cursorOwnerId: string | null = null
 
   function isEnabled(): boolean {
     if (!auth.signedIn) return false
@@ -82,6 +93,59 @@ export function useSyncEngine(): void {
       await useChatStore()
         .refreshSessions()
         .catch(() => undefined)
+    }
+  }
+
+  /**
+   * Cursor-ownership guard. `sync_state` is keyed by device, so its
+   * `pull_cursor` survives a sign-out (which does NOT wipe the DB). The cursor
+   * is a high-water mark in the server's GLOBAL change log for ONE account's
+   * filtered view; reusing it for a different account that signs in on this
+   * device would skip that account's changes with a lower `global_seq`. When
+   * the current owner differs from the account the cursor was last set for,
+   * reset `pull_cursor`/`acked_seq` to 0 so the new identity re-pulls its whole
+   * history (apply is an idempotent LWW no-op on rows it already has).
+   *
+   * `pushed_outbox_id` is deliberately NOT reset: it gates the device-local
+   * outbox and rewinding it would re-push the previous owner's rows under the
+   * new account. Runs once per account per process (guarded by an in-memory
+   * echo + a persisted `sync.cursorOwner` marker) and only when enabled.
+   */
+  async function maybeResetCursorForOwner(): Promise<void> {
+    if (!isEnabled()) return
+    const userId = auth.userId
+    if (!userId) return
+    if (cursorOwnerId === userId) return
+
+    const stored = await app.preferences.get(CURSOR_OWNER_KEY).catch(() => null)
+    if (stored === userId) {
+      cursorOwnerId = userId
+      return
+    }
+
+    let repos
+    try {
+      repos = app.repositories()
+    } catch {
+      return
+    }
+    const { syncState, unitOfWork } = repos
+    if (!syncState) return
+
+    try {
+      // A first-ever owner (stored === null) resets a cursor that is already 0
+      // — harmless; it just records ownership so a later switch is detected.
+      if (stored !== null) {
+        await unitOfWork.run(async () => {
+          await syncState.setPullCursor(0)
+          await syncState.setAckedSeq(0)
+        })
+      }
+      await app.preferences.set(CURSOR_OWNER_KEY, userId).catch(() => undefined)
+      cursorOwnerId = userId
+    } catch (err) {
+      // Non-fatal: leave the marker unset so the next cycle retries the reset.
+      console.warn("[sync] cursor owner reset failed", err)
     }
   }
 
@@ -145,6 +209,7 @@ export function useSyncEngine(): void {
 
     inFlight = true
     try {
+      await maybeResetCursorForOwner()
       await maybeBackfill()
       await runSync({
         gateway: app.syncClient,
