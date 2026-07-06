@@ -66,7 +66,6 @@ CREATE TABLE profile.notes (
     time_start   int,
     time_end     int,
     created_at   timestamptz,
-    updated_at   timestamptz,             -- for LWW
     meta         jsonb,                   -- nullable
     PRIMARY KEY (user_id, doc_id)
 );
