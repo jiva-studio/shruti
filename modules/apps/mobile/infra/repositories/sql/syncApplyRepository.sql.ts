@@ -153,13 +153,13 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
   async function upsertRow(collection: string, docId: string, data: unknown): Promise<void> {
     switch (collection) {
       case "notes":
-        return upsertNote(data as NoteWire)
+        return upsertNote(docId, data as NoteWire)
       case "playlist_items":
         return upsertPlaylist(docId, data as PlaylistWire)
       case "listening_sessions":
-        return upsertSession(data as SessionWire)
+        return upsertSession(docId, data as SessionWire)
       case "chat_sessions":
-        return upsertChatSession(data as ChatSessionWire)
+        return upsertChatSession(docId, data as ChatSessionWire)
       case "chat_messages":
         return upsertChatMessage(docId, data as ChatMessageWire)
       default:
@@ -193,7 +193,9 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     }
   }
 
-  async function upsertNote(wire: NoteWire): Promise<void> {
+  async function upsertNote(docId: string, wire: NoteWire): Promise<void> {
+    // Key on the sync doc_id — the canonical identity every client carries. The
+    // row payload's own `id` is optional and not relied upon.
     const meta =
       wire.meta === null || wire.meta === undefined
         ? null
@@ -203,7 +205,7 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     await db.execute(
       `INSERT OR REPLACE INTO notes (id, track_id, text, time_start, time_end, created_at, meta)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [wire.id, wire.track_id, wire.text, wire.time_start, wire.time_end, wire.created_at, meta]
+      [docId, wire.track_id, wire.text, wire.time_start, wire.time_end, wire.created_at, meta]
     )
   }
 
@@ -229,7 +231,8 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     )
   }
 
-  async function upsertSession(wire: SessionWire): Promise<void> {
+  async function upsertSession(docId: string, wire: SessionWire): Promise<void> {
+    // Key the row on the sync doc_id (canonical, always present).
     // Re-key on the natural `track_id`: a session pulled from another device
     // carries THAT device's `item_id` (a `pl_…` surrogate that means nothing
     // here). Resolve the LOCAL playlist item for the same track so the session
@@ -249,11 +252,14 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
       `INSERT OR REPLACE INTO listening_sessions
          (id, item_id, started_at, ended_at, from_position, to_position)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [wire.id, itemId, wire.started_at, wire.ended_at, wire.from_position, wire.to_position]
+      [docId, itemId, wire.started_at, wire.ended_at, wire.from_position, wire.to_position]
     )
   }
 
-  async function upsertChatSession(wire: ChatSessionWire): Promise<void> {
+  async function upsertChatSession(docId: string, wire: ChatSessionWire): Promise<void> {
+    // Key on the sync doc_id — the canonical identity every client carries; the
+    // row payload's own `id` is optional (the web omits it) and not used here.
+    //
     // In-place UPSERT, NOT `INSERT OR REPLACE`: the latter is a DELETE+INSERT,
     // and `chat_messages` has `ON DELETE CASCADE` on `session_id` with
     // `foreign_keys = ON`, so replacing a session would wipe its messages.
@@ -269,7 +275,7 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
          created_at = excluded.created_at,
          updated_at = excluded.updated_at,
          track_id   = excluded.track_id`,
-      [wire.id, wire.title, wire.created_at, wire.updated_at, wire.track_id]
+      [docId, wire.title, wire.created_at, wire.updated_at, wire.track_id]
     )
   }
 
@@ -296,6 +302,8 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     // In-place UPSERT, not `INSERT OR REPLACE` (DELETE+INSERT): the message's
     // proactive sidecar cascades on delete, and re-applying a message must not
     // churn rows other tables reference.
+    // Key on the sync doc_id — the canonical identity every client carries; the
+    // row payload's own `id` is optional and not used here.
     await db.execute(
       `INSERT INTO chat_messages (id, session_id, role, content, created_at, meta)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -305,9 +313,8 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
          content    = excluded.content,
          created_at = excluded.created_at,
          meta       = excluded.meta`,
-      [wire.id, wire.session_id, wire.role, wire.content, wire.created_at, meta]
+      [docId, wire.session_id, wire.role, wire.content, wire.created_at, meta]
     )
-    void docId
   }
 
   return {
