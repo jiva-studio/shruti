@@ -17,6 +17,12 @@ type Lang = 'ru' | 'en'
 export interface Msg {
   role: 'user' | 'assistant'
   text: string
+  /** Stable per-message id, assigned when the message is first persisted;
+   *  the sync doc_id so a message dedupes across devices and reloads. */
+  id?: string
+  /** Creation time (unix ms), assigned at first persist; orders messages
+   *  within a session for sync merge. */
+  createdAt?: number
   streaming?: boolean
   statusKey?: string
   /** Per-turn Langfuse trace id (hyphenless uuid4). Set on the assistant
