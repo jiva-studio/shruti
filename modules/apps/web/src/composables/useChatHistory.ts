@@ -205,6 +205,13 @@ export function useChatHistory(
     return t.length > 48 ? `${t.slice(0, 48)}…` : t || '…'
   }
 
+  /** Content fingerprint of a conversation — message ids, roles and text
+   *  lengths. Stable across a re-open (chat is append-only), so it distinguishes
+   *  a real edit (new/grown message) from merely navigating to a chat. */
+  function contentSig(msgs: ReadonlyArray<{ id?: string; role: string; text: string }>): string {
+    return msgs.map((m) => `${m.id ?? ''}:${m.role}:${(m.text ?? '').length}`).join('|')
+  }
+
   function persistNow() {
     // Drop the empty streaming placeholder so an interrupted turn isn't stored.
     const keep = messages.value.filter((m) => m.role === 'user' || m.text)
@@ -215,6 +222,10 @@ export function useChatHistory(
     // sync consistently. Floor at the session start so ids order after it.
     const sessionCreatedAt = prev?.createdAt ?? Date.now()
     stampMessageIds(keep, sessionCreatedAt - 1)
+    // Opening / switching chats re-runs persist with identical content. Only a
+    // real content change bumps `updatedAt` and triggers a sync — otherwise just
+    // selecting a chat would re-push it and reorder it on other devices.
+    if (prev && contentSig(prev.messages) === contentSig(keep)) return
     store.set(currentId.value, {
       id: currentId.value,
       title: titleFrom(keep),
