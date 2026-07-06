@@ -53,8 +53,8 @@ CREATE TABLE profile.listening_sessions (
     track_id        text,                 -- denormalized for analytics
     started_at      timestamptz,
     ended_at        timestamptz,
-    from_position_s int,
-    to_position_s   int,
+    from_position   int,
+    to_position     int,
     PRIMARY KEY (user_id, doc_id)
 );
 
@@ -62,9 +62,9 @@ CREATE TABLE profile.notes (
     user_id      uuid        NOT NULL,
     doc_id       text        NOT NULL,    -- note_...
     track_id     text,
-    body         text,
-    time_start_s int,
-    time_end_s   int,
+    text         text,                    -- note body; column name matches the client user.db (`text`)
+    time_start   int,
+    time_end     int,
     created_at   timestamptz,
     updated_at   timestamptz,             -- for LWW
     meta         jsonb,                   -- nullable

@@ -221,7 +221,7 @@ func TestUserIDComesFromJWTNotBody(t *testing.T) {
 			"doc_id":     "note-jwt",
 			"op":         "upsert",
 			"hlc":        "h1",
-			"data":       map[string]any{"body": "hi"},
+			"data":       map[string]any{"text": "hi"},
 		}},
 	}
 	rec := do(t, r, http.MethodPost, "/profile/sync/push", tok, body, nil)
@@ -257,7 +257,7 @@ func TestInternalPurgeNoJWT(t *testing.T) {
 	// Seed a user directly through the service, then purge with NO bearer.
 	uid := uuid.New()
 	if _, err := svc.Pool.Exec(context.Background(),
-		`INSERT INTO profile.notes (user_id, doc_id, body) VALUES ($1,'n','b')`, uid); err != nil {
+		`INSERT INTO profile.notes (user_id, doc_id, text) VALUES ($1,'n','b')`, uid); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	rec := do(t, r, http.MethodPost, "/internal/purge", "", map[string]any{"user_id": uid.String()}, nil)

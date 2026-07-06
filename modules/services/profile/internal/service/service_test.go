@@ -221,49 +221,52 @@ func TestPushProjectsTypedState(t *testing.T) {
 		t.Errorf("added_at not projected: %v", addedAt)
 	}
 
-	// notes projection.
+	// notes projection. Payload uses the REAL client user.db column names
+	// (`text`, `time_start`) the sync journal ships verbatim — not the DB
+	// projection column names — so this guards against wire/tag drift.
 	push(t, svc, uid, "devA",
 		item("notes", "note-1", "upsert", "n1", "",
-			`{"track_id":"trk-1","body":"hello","time_start_s":12,"meta":{"k":"v"}}`),
+			`{"track_id":"trk-1","text":"hello","time_start":12,"meta":{"k":"v"}}`),
 	)
 	var (
-		body       *string
-		timeStartS *int
-		meta       []byte
+		body      *string
+		timeStart *int
+		meta      []byte
 	)
 	if err := pool.QueryRow(ctx,
-		`SELECT body, time_start_s, meta FROM profile.notes WHERE user_id=$1 AND doc_id=$2`,
+		`SELECT text, time_start, meta FROM profile.notes WHERE user_id=$1 AND doc_id=$2`,
 		uid, "note-1",
-	).Scan(&body, &timeStartS, &meta); err != nil {
+	).Scan(&body, &timeStart, &meta); err != nil {
 		t.Fatalf("read notes: %v", err)
 	}
 	if body == nil || *body != "hello" {
-		t.Errorf("note body: want hello, got %v", body)
+		t.Errorf("note text: want hello, got %v", body)
 	}
-	if timeStartS == nil || *timeStartS != 12 {
-		t.Errorf("time_start_s: want 12, got %v", timeStartS)
+	if timeStart == nil || *timeStart != 12 {
+		t.Errorf("time_start: want 12, got %v", timeStart)
 	}
 	if string(meta) != `{"k": "v"}` && string(meta) != `{"k":"v"}` {
 		t.Errorf("note meta jsonb not projected: %q", string(meta))
 	}
 
-	// listening_sessions projection.
+	// listening_sessions projection. Payload uses the real client column
+	// names (`from_position`, `to_position`) shipped by the sync journal.
 	push(t, svc, uid, "devA",
 		item("listening_sessions", "ls-1", "upsert", "s1", "",
-			`{"track_id":"trk-1","from_position_s":0,"to_position_s":90}`),
+			`{"track_id":"trk-1","from_position":0,"to_position":90}`),
 	)
 	var (
 		toPos   *int
 		lsTrack *string
 	)
 	if err := pool.QueryRow(ctx,
-		`SELECT to_position_s, track_id FROM profile.listening_sessions WHERE user_id=$1 AND doc_id=$2`,
+		`SELECT to_position, track_id FROM profile.listening_sessions WHERE user_id=$1 AND doc_id=$2`,
 		uid, "ls-1",
 	).Scan(&toPos, &lsTrack); err != nil {
 		t.Fatalf("read listening_sessions: %v", err)
 	}
 	if toPos == nil || *toPos != 90 {
-		t.Errorf("to_position_s: want 90, got %v", toPos)
+		t.Errorf("to_position: want 90, got %v", toPos)
 	}
 	if lsTrack == nil || *lsTrack != "trk-1" {
 		t.Errorf("ls track_id: want trk-1, got %v", lsTrack)
