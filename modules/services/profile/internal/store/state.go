@@ -133,7 +133,6 @@ type noteRow struct {
 	TimeStart *int            `json:"time_start"`
 	TimeEnd   *int            `json:"time_end"`
 	CreatedAt *epochTime      `json:"created_at"`
-	UpdatedAt *epochTime      `json:"updated_at"`
 	Meta      json.RawMessage `json:"meta"`
 }
 
@@ -214,18 +213,17 @@ func upsertNote(ctx context.Context, q querier, userID uuid.UUID, it wire.PushIt
 	}
 	_, err := q.Exec(ctx,
 		`INSERT INTO profile.notes
-		     (user_id, doc_id, track_id, text, time_start, time_end, created_at, updated_at, meta)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		     (user_id, doc_id, track_id, text, time_start, time_end, created_at, meta)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT (user_id, doc_id) DO UPDATE SET
 		     track_id   = EXCLUDED.track_id,
 		     text       = EXCLUDED.text,
 		     time_start = EXCLUDED.time_start,
 		     time_end   = EXCLUDED.time_end,
 		     created_at = EXCLUDED.created_at,
-		     updated_at = EXCLUDED.updated_at,
 		     meta       = EXCLUDED.meta`,
 		userID, it.DocID, row.TrackID, row.Text, row.TimeStart, row.TimeEnd,
-		tsArg(row.CreatedAt), tsArg(row.UpdatedAt), jsonbArg(row.Meta),
+		tsArg(row.CreatedAt), jsonbArg(row.Meta),
 	)
 	return err
 }
