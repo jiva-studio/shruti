@@ -140,9 +140,11 @@ export function metaToRichFields(meta: string | null | undefined): Partial<Seria
 /*  Wire row builders (the opaque `data` blob for a sync Change)              */
 /* -------------------------------------------------------------------------- */
 
-/** The `chat_messages` wire row (`data` of a Change), snake_case per the
- *  server's typed projection. */
+/** The `chat_messages` wire row (`data` of a Change): the client-native row
+ *  verbatim, incl. its `id` (mirrors the doc_id), snake_case per the shared
+ *  contract. */
 export interface ChatMessageWireData {
+  id: string
   session_id: string
   role: "user" | "assistant"
   content: string
@@ -150,8 +152,9 @@ export interface ChatMessageWireData {
   created_at: number
 }
 
-/** The `chat_sessions` wire row. */
+/** The `chat_sessions` wire row — the client-native row verbatim, incl. `id`. */
 export interface ChatSessionWireData {
+  id: string
   title: string | null
   track_id: string | null
   created_at: number
@@ -160,6 +163,7 @@ export interface ChatSessionWireData {
 
 export function messageToWireData(sessionId: string, m: SerializedMsg): ChatMessageWireData {
   return {
+    id: m.id ?? "",
     session_id: sessionId,
     role: m.role,
     content: m.text,
@@ -186,9 +190,10 @@ export function wireDataToMessage(docId: string, data: unknown): SerializedMsg |
 }
 
 export function sessionToWireData(
-  chat: { title: string | null; updatedAt: number; createdAt?: number; trackId?: string | null },
+  chat: { id: string; title: string | null; updatedAt: number; createdAt?: number; trackId?: string | null },
 ): ChatSessionWireData {
   return {
+    id: chat.id,
     title: chat.title,
     track_id: chat.trackId ?? null,
     created_at: typeof chat.createdAt === "number" ? chat.createdAt : chat.updatedAt,
