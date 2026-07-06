@@ -47,13 +47,6 @@ export interface HttpSyncClientDeps {
   readonly getAccessToken: AccessTokenProvider
   /** Failover-aware HTTP client for the profile service. */
   readonly request: SyncRequest
-  /**
-   * This device's stable id (Capacitor `Device.getId()`), from the same source
-   * that stamps HLCs and keys `sync_state`. Sent as the `X-Device-Id` header on
-   * **pull** so the server can suppress echoing this device's own writes back
-   * to it (the `PullRequest` body carries only `{cursor, limit}` per Lane A).
-   */
-  readonly getDeviceId: () => Promise<string>
 }
 
 /**
@@ -84,11 +77,7 @@ export class SyncGatewayError extends Error {
  * POSTs JSON with a bearer token and deserializes the typed response.
  */
 export function createHttpSyncClient(deps: HttpSyncClientDeps): ISyncClient {
-  async function post(
-    path: string,
-    body: unknown,
-    extraHeaders?: Record<string, string>
-  ): Promise<Response> {
+  async function post(path: string, body: unknown): Promise<Response> {
     const token = await resolveAccessToken(deps.getAccessToken)
     return deps.request(path, {
       method: "POST",
@@ -96,7 +85,6 @@ export function createHttpSyncClient(deps: HttpSyncClientDeps): ISyncClient {
         "Content-Type": "application/json",
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
-        ...extraHeaders,
       },
       body: JSON.stringify(body),
     })
@@ -104,10 +92,10 @@ export function createHttpSyncClient(deps: HttpSyncClientDeps): ISyncClient {
 
   return {
     async pull(req: PullRequest): Promise<PullResponse> {
-      // The server reads the caller's own device id from X-Device-Id (not the
-      // body) to exclude this device's writes from the pulled page.
-      const deviceId = await deps.getDeviceId()
-      const response = await post("/profile/sync/pull", req, { "X-Device-Id": deviceId })
+      // The server derives user scope from the JWT and filters by the request
+      // cursor alone — a device receives its own writes back too (re-applying
+      // is an idempotent LWW no-op and the only way a wiped device recovers).
+      const response = await post("/profile/sync/pull", req)
       await throwIfNotOk(response, "pull")
       return (await response.json()) as PullResponse
     },

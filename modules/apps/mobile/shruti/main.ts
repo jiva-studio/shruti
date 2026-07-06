@@ -116,9 +116,9 @@ const chatHttp = createFailoverClient({
 })
 
 // Stable device id (Capacitor Device.getId()), memoized. The single source of
-// this device's identity for: the HLC tiebreak + `sync_state` key (via the
-// repository bundle), and the pull `X-Device-Id` header (via the sync client).
-// Matches how the auth adapter obtains it, so all three agree.
+// this device's identity for the HLC tiebreak + `sync_state` key (via the
+// repository bundle) and the cursor-ack `device_id`. Matches how the auth
+// adapter obtains it, so they agree.
 const getDeviceId = (() => {
   let cached: Promise<string> | null = null
   return () => (cached ??= Device.getId().then((r) => r.identifier))
@@ -137,7 +137,6 @@ const profileHttp = createFailoverClient({
 const syncClient = createHttpSyncClient({
   getAccessToken: () => useShruti().auth.getAccessToken(),
   request: withNetworkErrorContext((path, init) => profileHttp.request(path, init)),
-  getDeviceId,
 })
 
 initShruti({
