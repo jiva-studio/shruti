@@ -105,23 +105,30 @@ const signedIn = computed(() => auth.signedIn.value)
 // Persisted conversation history (localStorage), namespaced per content language
 // so a ru session and an en session don't interleave.
 const CHATS_STORAGE_KEY = `lts.ai.chats.v1.${cl}`
-const { chats, currentId, newChat, openChat, deleteChat, mergeRemote } = useChatHistory(messages, {
+// Late-bound so useChatHistory can notify the sync engine of local mutations
+// while the engine (below) still depends on the history's snapshot/merge.
+let requestSync: () => void = () => {}
+const { chats, currentId, newChat, openChat, deleteChat, mergeRemote, snapshot } = useChatHistory(messages, {
   storageKey: CHATS_STORAGE_KEY,
   busy,
+  onLocalChange: () => requestSync(),
 })
 
-// Read-only pull of the signed-in user's chat sessions from the `profile`
-// service, merged into the local history (the localStorage cache). No push.
+// Two-way sync of the signed-in user's chat sessions with the `profile`
+// service: pulls remote changes into the local history AND pushes local
+// creates / renames / deletes back up.
 const profileSync = useProfileSync({
   profileBaseUrl: PROFILE,
   storageKey: CHATS_STORAGE_KEY,
+  snapshot,
   merge: mergeRemote,
 })
-// Pull on chat open (mounts after useChatHistory's own onMounted load, so the
+requestSync = profileSync.requestSync
+// Sync on chat open (mounts after useChatHistory's own onMounted load, so the
 // network merge lands on top of the hydrated cache), and again whenever the
-// user transitions into signed-in. No aggressive polling.
-onMounted(() => { void profileSync.pullChatSessions() })
-watch(() => auth.signedIn.value, (isIn) => { if (isIn) void profileSync.pullChatSessions() })
+// user transitions into signed-in.
+onMounted(() => { void profileSync.sync() })
+watch(() => auth.signedIn.value, (isIn) => { if (isIn) void profileSync.sync() })
 
 // Sign-in / sign-out swaps the rate-limit bucket; drop any anonymous cap so
 // the next turn re-reads the signed-in user's real limits from the server.

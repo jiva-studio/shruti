@@ -1,5 +1,6 @@
 import { onMounted, ref, watch, type Ref } from 'vue'
 import type { Msg } from './useChatStream'
+import type { SnapshotChat } from './sync/profileSyncCore'
 
 /** Lightweight index entry shown in the sidebar list. */
 export interface ChatMeta {
@@ -9,12 +10,19 @@ export interface ChatMeta {
 }
 
 interface StoredChat extends ChatMeta {
+  /** Session creation time (unix ms) — the sync `created_at`. */
+  createdAt?: number
   messages: SerializedMsg[]
 }
 
 export interface SerializedMsg {
   role: 'user' | 'assistant'
   text: string
+  /** Stable message id (sync doc_id). Assigned at first persist; always
+   *  present for stored messages, optional only on a freshly-built value. */
+  id?: string
+  /** Message creation time (unix ms) — the sync `created_at`. */
+  createdAt?: number
   statusKey?: string
   aliases?: Record<string, unknown>
   researchQuestions?: string[]
@@ -41,6 +49,7 @@ export interface RemoteChat {
   hasSession: boolean
   title: string | null
   updatedAt: number
+  createdAt?: number
   trackId?: string | null
   messages: RemoteChatMessage[]
 }
@@ -59,6 +68,8 @@ const MAP_FIELDS = [
 
 function serializeMsg(m: Msg): SerializedMsg {
   const o: SerializedMsg = { role: m.role, text: m.text }
+  if (m.id) o.id = m.id
+  if (typeof m.createdAt === 'number') o.createdAt = m.createdAt
   if (m.statusKey) o.statusKey = m.statusKey
   if (m.traceId) o.traceId = m.traceId
   if (m.aliases) o.aliases = m.aliases
@@ -73,6 +84,8 @@ function serializeMsg(m: Msg): SerializedMsg {
 
 function deserializeMsg(o: SerializedMsg): Msg {
   const m: Record<string, unknown> = { role: o.role, text: o.text, streaming: false }
+  if (o.id) m.id = o.id
+  if (typeof o.createdAt === 'number') m.createdAt = o.createdAt
   if (o.statusKey) m.statusKey = o.statusKey
   if (o.traceId) m.traceId = o.traceId
   if (o.aliases) m.aliases = o.aliases
@@ -100,8 +113,12 @@ export interface UseChatHistory {
   /** Union server-sourced chat sessions/messages into the local store without
    *  clobbering local-only sessions. Server is authoritative on the fields it
    *  provides (title, updatedAt, its messages); the current localStorage
-   *  history stays the local cache. Read-only sync — never pushes. */
+   *  history stays the local cache. Applied for BOTH the initial pull and the
+   *  master-wins side of a push conflict — never re-emits as a local change. */
   mergeRemote: (remote: RemoteMerge) => void
+  /** Full current history as sync snapshot units, for the sync engine's
+   *  outbox diff. */
+  snapshot: () => SnapshotChat[]
 }
 
 /**
@@ -112,12 +129,16 @@ export interface UseChatHistory {
  */
 export function useChatHistory(
   messages: Ref<Msg[]>,
-  opts: { storageKey: string; busy?: Ref<boolean> },
+  opts: { storageKey: string; busy?: Ref<boolean>; onLocalChange?: () => void },
 ): UseChatHistory {
   const chats = ref<ChatMeta[]>([])
   const currentId = ref('')
   const store = new Map<string, StoredChat>()
   const MAX_CHATS = 40
+  /** localStorage envelope version. v2 adds per-message `id`/`createdAt` and a
+   *  session `createdAt` so the history is syncable; v1 rows are migrated on
+   *  load. */
+  const STORE_V = 2
 
   const canPersist = () => typeof window !== 'undefined' && !!window.localStorage
 
@@ -128,6 +149,27 @@ export function useChatHistory(
       .map(({ id, title, updatedAt }) => ({ id, title, updatedAt }))
   }
 
+  /** Assign a stable id + strictly-increasing createdAt to any message that
+   *  lacks one, in place, preserving array order. Mutates the live objects so
+   *  the ids persist and stay stable across reloads. */
+  function stampMessageIds(msgs: Array<{ id?: string; createdAt?: number }>, floor = 0) {
+    let last = floor
+    for (const m of msgs) {
+      if (!m.id) m.id = newId()
+      let c = typeof m.createdAt === 'number' ? m.createdAt : Date.now()
+      if (c <= last) c = last + 1
+      m.createdAt = c
+      last = c
+    }
+  }
+
+  /** Bring a stored chat up to the v2 shape: session createdAt + per-message
+   *  id/createdAt. Idempotent (already-stamped rows are untouched). */
+  function migrateChat(c: StoredChat) {
+    if (typeof c.createdAt !== 'number') c.createdAt = c.updatedAt ?? Date.now()
+    stampMessageIds(c.messages, c.createdAt - 1)
+  }
+
   function load() {
     if (!canPersist()) return
     try {
@@ -135,8 +177,13 @@ export function useChatHistory(
       if (!raw) return
       const parsed = JSON.parse(raw) as { v: number; chats: StoredChat[] }
       store.clear()
-      for (const c of parsed?.chats ?? []) store.set(c.id, c)
+      for (const c of parsed?.chats ?? []) {
+        migrateChat(c)
+        store.set(c.id, c)
+      }
       refreshIndex()
+      // Persist the migration so the freshly-minted ids are stable next load.
+      if ((parsed?.v ?? 1) < STORE_V) flush()
     } catch {
       /* corrupt storage — start clean rather than crash the island */
     }
@@ -146,7 +193,7 @@ export function useChatHistory(
     if (!canPersist()) return
     const all = [...store.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_CHATS)
     try {
-      localStorage.setItem(opts.storageKey, JSON.stringify({ v: 1, chats: all }))
+      localStorage.setItem(opts.storageKey, JSON.stringify({ v: STORE_V, chats: all }))
     } catch {
       /* quota exceeded — best effort */
     }
@@ -163,14 +210,21 @@ export function useChatHistory(
     const keep = messages.value.filter((m) => m.role === 'user' || m.text)
     if (!keep.length) return
     if (!currentId.value) currentId.value = newId()
+    const prev = store.get(currentId.value)
+    // Stamp stable ids + createdAt onto the LIVE messages so they persist and
+    // sync consistently. Floor at the session start so ids order after it.
+    const sessionCreatedAt = prev?.createdAt ?? Date.now()
+    stampMessageIds(keep, sessionCreatedAt - 1)
     store.set(currentId.value, {
       id: currentId.value,
       title: titleFrom(keep),
+      createdAt: sessionCreatedAt,
       updatedAt: Date.now(),
       messages: keep.map(serializeMsg),
     })
     refreshIndex()
     flush()
+    opts.onLocalChange?.()
   }
 
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -206,6 +260,7 @@ export function useChatHistory(
     }
     refreshIndex()
     flush()
+    opts.onLocalChange?.()
   }
 
   function titleFromSerialized(msgs: SerializedMsg[]): string {
@@ -256,6 +311,8 @@ export function useChatHistory(
       store.set(rc.id, {
         id: rc.id,
         title,
+        createdAt:
+          prev?.createdAt ?? rc.createdAt ?? merged[0]?.createdAt ?? Date.now(),
         updatedAt: Math.max(rc.updatedAt || 0, prev?.updatedAt || 0) || Date.now(),
         messages: merged,
       })
@@ -266,6 +323,16 @@ export function useChatHistory(
       refreshIndex()
       flush()
     }
+  }
+
+  function snapshot(): SnapshotChat[] {
+    return [...store.values()].map((c) => ({
+      id: c.id,
+      title: c.title,
+      updatedAt: c.updatedAt,
+      createdAt: c.createdAt,
+      messages: c.messages,
+    }))
   }
 
   onMounted(() => {
@@ -279,5 +346,5 @@ export function useChatHistory(
   watch(() => messages.value.length, persistSoon)
   if (opts.busy) watch(opts.busy, (b) => { if (!b) persistSoon() })
 
-  return { chats, currentId, newChat, openChat, deleteChat, mergeRemote }
+  return { chats, currentId, newChat, openChat, deleteChat, mergeRemote, snapshot }
 }

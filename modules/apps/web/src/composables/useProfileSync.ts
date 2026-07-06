@@ -1,232 +1,249 @@
-import { ref, type Ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 import { useWebAuth } from './useWebAuth'
 import type { RemoteChat, RemoteChatMessage, RemoteMerge } from './useChatHistory'
+import { createWebSyncClient } from './sync/webSyncClient'
+import {
+  adoptBaseline,
+  applyPushResponse,
+  buildPushItems,
+  diffOutbox,
+  newState,
+  outboxEmpty,
+  reducePull,
+  type MergePlan,
+  type SnapshotChat,
+  type SyncState,
+} from './sync/profileSyncCore'
 
 // ---------------------------------------------------------------------------
-// Wire contract (snake_case, exactly as the `profile` service emits it).
-// Mirrors docs/repos/lectorium/architecture/profile-sync.md → "Wire contract".
-// The web app doesn't share the mobile `servers.ts` / `libs/contracts/sync`, so
-// these read-only types live here. `data` is an opaque JSON blob to transport;
-// we narrow it per collection below.
+// Two-way chat sync against the `profile` service. This composable is the IO
+// shell around the pure engine (`sync/profileSyncCore`): it persists the sync
+// state in localStorage, drives the HTTP client, and applies the engine's
+// merge plan to the local chat history via `merge` (useChatHistory.mergeRemote).
+//
+// A cycle: pull every page (advancing the cursor) → ack → diff the local
+// history into the outbox → push → resolve conflicts (LWW). Runs on mount, on
+// sign-in, on a light interval, and — debounced — after any local mutation.
+// No-ops while signed-out / anonymous or without a configured base URL.
 // ---------------------------------------------------------------------------
 
-interface Change {
-  server_seq?: number
-  collection: string
-  doc_id: string
-  op: 'upsert' | 'delete'
-  data?: unknown
-  hlc: string
-}
-
-interface PullResponse {
-  changes: Change[]
-  cursor: number
-  has_more: boolean
-}
-
-/** `chat_sessions` row shipped back untouched (the client-native user.db row). */
-interface ChatSessionData {
-  title?: string | null
-  track_id?: string | null
-  created_at?: string | number | null
-  updated_at?: string | number | null
-}
-
-/** `chat_messages` row. `meta` is the versioned `{_v, data}` envelope — ignored
- *  by this read-only v1, which only surfaces role + content as plain text. */
-interface ChatMessageData {
-  session_id?: string
-  role?: string
-  content?: string
-  meta?: { _v?: number; data?: unknown } | null
-  created_at?: string | number | null
-}
-
-const CHAT_SESSIONS = 'chat_sessions'
-const CHAT_MESSAGES = 'chat_messages'
 const PULL_LIMIT = 200
 const MAX_PAGES = 50 // hard stop against a runaway has_more loop
-
-interface StoredCursor {
-  userId: string
-  cursor: number
-}
-
-/** ISO-8601 string or epoch → ms. Numbers under ~1e12 are treated as seconds. */
-function toMs(v: string | number | null | undefined): number {
-  if (typeof v === 'number') return v < 1e12 ? v * 1000 : v
-  if (typeof v === 'string') {
-    const n = Date.parse(v)
-    return Number.isFinite(n) ? n : 0
-  }
-  return 0
-}
+const MAX_PUSH_ROUNDS = 3 // re-push rounds for local-wins conflicts
+const DEBOUNCE_MS = 1500
+const INTERVAL_MS = 60 * 1000
 
 export interface UseProfileSyncOptions {
+  /** `profile` service base; empty ⇒ the whole engine no-ops. */
   profileBaseUrl: string
-  /** Namespaces the local pull cursor; pass the chat-history storage key so a
-   *  ru/en surface each track their own progress. */
+  /** Namespaces the persisted sync state per chat-history surface (ru/en). */
   storageKey: string
-  /** Injected from useChatHistory — the read-only merge target. */
+  /** Snapshot of the local chat history for the outbox diff. */
+  snapshot: () => SnapshotChat[]
+  /** Apply the engine's merge plan (remote + master-wins) to the history. */
   merge: (remote: RemoteMerge) => void
 }
 
 export interface UseProfileSync {
   syncing: Ref<boolean>
-  /** Pull the signed-in user's chat sessions from `profile` and merge them into
-   *  the local chat history. No-ops for anonymous/signed-out users. Read-only:
-   *  never pushes and never acks a server cursor. */
-  pullChatSessions: () => Promise<void>
+  /** Run a full pull+push cycle now. No-ops for anonymous/signed-out. */
+  sync: () => Promise<void>
+  /** Coalesced trigger for a cycle after a local mutation. */
+  requestSync: () => void
+}
+
+interface PersistedSync {
+  userId: string
+  state: SyncState
+}
+
+function makeDeviceId(): string {
+  try {
+    return `web-${crypto.randomUUID()}`
+  } catch {
+    return `web-${Date.now().toString(36)}-${Math.round(Math.random() * 1e9).toString(36)}`
+  }
 }
 
 export function useProfileSync(opts: UseProfileSyncOptions): UseProfileSync {
   const auth = useWebAuth()
   const syncing = ref(false)
-  const cursorKey = `${opts.storageKey}.profileCursor`
+  const base = opts.profileBaseUrl.replace(/\/$/, '')
+  const SYNC_KEY = `${opts.storageKey}.sync`
+  const DEVICE_KEY = `${opts.storageKey}.deviceId`
 
-  function readCursor(userId: string): number {
-    try {
-      const raw = localStorage.getItem(cursorKey)
-      if (!raw) return 0
-      const parsed = JSON.parse(raw) as StoredCursor
-      // A different account on this browser must re-sync from scratch.
-      return parsed.userId === userId ? parsed.cursor || 0 : 0
-    } catch {
-      return 0
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let interval: ReturnType<typeof setInterval> | null = null
+
+  const client = createWebSyncClient({ baseUrl: base, getToken: () => auth.ensureToken() })
+
+  function canPersist(): boolean {
+    return typeof window !== 'undefined' && !!window.localStorage
+  }
+
+  function loadDeviceId(): string {
+    if (!canPersist()) return makeDeviceId()
+    let id = localStorage.getItem(DEVICE_KEY)
+    if (!id) {
+      id = makeDeviceId()
+      try {
+        localStorage.setItem(DEVICE_KEY, id)
+      } catch {
+        /* private mode — a per-session id is still fine */
+      }
+    }
+    return id
+  }
+
+  /**
+   * Load the persisted sync state for this account. A fresh state (first run
+   * OR a different account signing in on this browser) starts at cursor 0 with
+   * an empty outbox/signature map — so the next diff re-pulls the account's
+   * history AND backfills the existing local chats under it, mirroring the
+   * mobile "the local rows belong to whoever signs in on this device" rule.
+   */
+  function loadStateFor(userId: string): SyncState {
+    if (canPersist()) {
+      try {
+        const raw = localStorage.getItem(SYNC_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw) as PersistedSync | null
+          if (parsed?.userId === userId && parsed.state) {
+            return reviveState(parsed.state)
+          }
+        }
+      } catch {
+        /* corrupt — fall through to a fresh state */
+      }
+    }
+    return newState(loadDeviceId())
+  }
+
+  function reviveState(s: Partial<SyncState>): SyncState {
+    const fresh = newState(s.deviceId || loadDeviceId())
+    return {
+      deviceId: fresh.deviceId,
+      lastHlc: typeof s.lastHlc === 'string' ? s.lastHlc : null,
+      cursor: typeof s.cursor === 'number' ? s.cursor : 0,
+      docHlc: s.docHlc && typeof s.docHlc === 'object' ? s.docHlc : {},
+      sessionSig: s.sessionSig && typeof s.sessionSig === 'object' ? s.sessionSig : {},
+      outbox: Array.isArray(s.outbox) ? s.outbox : [],
     }
   }
 
-  function writeCursor(userId: string, cursor: number): void {
+  function saveState(userId: string, state: SyncState): void {
+    if (!canPersist()) return
     try {
-      localStorage.setItem(cursorKey, JSON.stringify({ userId, cursor } satisfies StoredCursor))
+      localStorage.setItem(SYNC_KEY, JSON.stringify({ userId, state } satisfies PersistedSync))
     } catch {
-      /* private mode / quota — incremental resume just falls back to a full pull */
+      /* quota / private mode — the cycle still works in-memory this session */
     }
   }
 
-  async function pullChatSessions(): Promise<void> {
-    if (syncing.value) return
-    // Only signed-in (non-anonymous) accounts sync. hydrate() reads the
-    // persisted session without a network call so a page load that already
-    // holds a real token is recognised immediately.
+  function enabled(): boolean {
+    if (!base) return false
     auth.hydrate()
-    if (!auth.signedIn.value) return
+    return auth.signedIn.value && !!auth.session.value?.userId
+  }
+
+  /** Translate the engine's merge plan into a `RemoteMerge` for the history. */
+  function applyPlan(plan: MergePlan): void {
+    if (
+      plan.sessionUpserts.length === 0 &&
+      plan.messageUpserts.length === 0 &&
+      plan.sessionDeletes.length === 0
+    ) {
+      return
+    }
+    const bySession = new Map<string, RemoteChat>()
+    for (const s of plan.sessionUpserts) {
+      bySession.set(s.id, {
+        id: s.id,
+        hasSession: true,
+        title: s.title,
+        updatedAt: s.updatedAt,
+        createdAt: s.createdAt,
+        trackId: s.trackId,
+        messages: [],
+      })
+    }
+    for (const mu of plan.messageUpserts) {
+      let rc = bySession.get(mu.sessionId)
+      if (!rc) {
+        rc = { id: mu.sessionId, hasSession: false, title: null, updatedAt: 0, messages: [] }
+        bySession.set(mu.sessionId, rc)
+      }
+      rc.messages.push(mu.msg as RemoteChatMessage)
+    }
+    opts.merge({ upserts: [...bySession.values()], deletes: plan.sessionDeletes })
+  }
+
+  async function sync(): Promise<void> {
+    if (syncing.value || !enabled()) return
     const userId = auth.session.value?.userId
     if (!userId) return
 
     syncing.value = true
     try {
-      const base = opts.profileBaseUrl.replace(/\/$/, '')
-      if (!base) return
-      const token = await auth.ensureToken()
+      const state = loadStateFor(userId)
 
-      let cursor = readCursor(userId)
-      const changes: Change[] = []
+      // 1. Diff the local history into the outbox FIRST, so a local delete is
+      //    recorded before the pull — otherwise the server's echo of the
+      //    session's own create would resurrect it.
+      diffOutbox(state, opts.snapshot(), Date.now())
+
+      // 2. Pull every page since the cursor, merging as we go. `reducePull`
+      //    guards against echoes superseding pending local writes.
       for (let page = 0; page < MAX_PAGES; page++) {
-        let res: Response
-        try {
-          res = await fetch(`${base}/profile/sync/pull`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ cursor, limit: PULL_LIMIT }),
-          })
-        } catch {
-          return // network/service down — leave local cache untouched
-        }
-        if (!res.ok) return // 403 anon / 5xx / not-yet-deployed — silent no-op
-        let body: PullResponse
-        try {
-          body = (await res.json()) as PullResponse
-        } catch {
-          return
-        }
-        for (const c of body.changes ?? []) changes.push(c)
-        cursor = body.cursor ?? cursor
-        if (!body.has_more) break
+        const resp = await client.pull({ cursor: state.cursor, limit: PULL_LIMIT })
+        applyPlan(reducePull(state, resp))
+        state.cursor = typeof resp.cursor === 'number' ? resp.cursor : state.cursor
+        if (!resp.has_more) break
       }
+      // Seed baselines for just-merged sessions so a later local edit enqueues.
+      adoptBaseline(state, opts.snapshot())
+      // Acknowledge the applied cursor (drives server-side log compaction).
+      try {
+        await client.ackCursor({ device_id: state.deviceId, acked_seq: state.cursor })
+      } catch {
+        /* non-fatal */
+      }
+      saveState(userId, state)
 
-      if (changes.length) applyChanges(changes)
-      // Persist the advanced cursor for an incremental next pull.
-      writeCursor(userId, cursor)
+      // 3. Push, re-pushing local-wins conflicts with the fresh base HLC.
+      for (let round = 0; round < MAX_PUSH_ROUNDS && !outboxEmpty(state); round++) {
+        const items = buildPushItems(state)
+        if (items.length === 0) break
+        const resp = await client.push({ device_id: state.deviceId, changes: items })
+        applyPlan(applyPushResponse(state, resp))
+        saveState(userId, state)
+        // No conflicts to re-merge → the outbox is either drained or waiting
+        // on nothing this engine can resolve; stop.
+        if (!resp.conflicts || resp.conflicts.length === 0) break
+      }
+    } catch (err) {
+      // Network / service down / not-yet-deployed — leave the local cache and
+      // any persisted progress as-is; the next trigger retries idempotently.
+      console.warn('[profile-sync] cycle failed', err)
     } finally {
       syncing.value = false
     }
   }
 
-  function applyChanges(changes: Change[]): void {
-    // Changes arrive ordered by server_seq, so a session precedes its messages
-    // (parent-before-child) — reduce them into the final per-session state.
-    const sessions = new Map<string, { title: string | null; updatedAt: number; trackId: string | null }>()
-    const deletes = new Set<string>()
-    const msgs = new Map<string, Map<string, RemoteChatMessage>>()
-
-    for (const c of changes) {
-      if (c.collection === CHAT_SESSIONS) {
-        if (c.op === 'delete') {
-          sessions.delete(c.doc_id)
-          msgs.delete(c.doc_id)
-          deletes.add(c.doc_id)
-        } else {
-          const d = (c.data ?? {}) as ChatSessionData
-          sessions.set(c.doc_id, {
-            title: typeof d.title === 'string' && d.title.trim() ? d.title : null,
-            updatedAt: toMs(d.updated_at) || toMs(d.created_at),
-            trackId: d.track_id ?? null,
-          })
-          deletes.delete(c.doc_id)
-        }
-      } else if (c.collection === CHAT_MESSAGES) {
-        const d = (c.data ?? {}) as ChatMessageData
-        const sid = d.session_id
-        if (!sid) continue
-        // Orphan-drop: never resurrect a message onto a tombstoned session.
-        if (deletes.has(sid)) continue
-        if (c.op === 'delete') {
-          msgs.get(sid)?.delete(c.doc_id)
-          continue
-        }
-        if (d.role !== 'user' && d.role !== 'assistant') continue
-        let bucket = msgs.get(sid)
-        if (!bucket) {
-          bucket = new Map()
-          msgs.set(sid, bucket)
-        }
-        bucket.set(c.doc_id, {
-          id: c.doc_id,
-          role: d.role,
-          text: typeof d.content === 'string' ? d.content : '',
-          createdAt: toMs(d.created_at),
-        })
-      }
-      // All other collections (playlist_items, listening_sessions, notes) are
-      // out of scope for the web client — ignored.
-    }
-
-    const ids = new Set<string>([...sessions.keys(), ...msgs.keys()])
-    const upserts: RemoteChat[] = []
-    for (const id of ids) {
-      if (deletes.has(id)) continue
-      const s = sessions.get(id)
-      const bucket = msgs.get(id)
-      const messages = bucket
-        ? [...bucket.values()].sort((a, b) => a.createdAt - b.createdAt)
-        : []
-      upserts.push({
-        id,
-        hasSession: !!s,
-        title: s?.title ?? null,
-        updatedAt: s?.updatedAt || (messages.length ? messages[messages.length - 1].createdAt : 0),
-        trackId: s?.trackId ?? null,
-        messages,
-      })
-    }
-
-    opts.merge({ upserts, deletes: [...deletes] })
+  function requestSync(): void {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => void sync(), DEBOUNCE_MS)
   }
 
-  return { syncing, pullChatSessions }
+  onMounted(() => {
+    interval = setInterval(() => void sync(), INTERVAL_MS)
+  })
+  onBeforeUnmount(() => {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    if (interval) clearInterval(interval)
+    debounceTimer = null
+    interval = null
+  })
+
+  return { syncing, sync, requestSync }
 }
