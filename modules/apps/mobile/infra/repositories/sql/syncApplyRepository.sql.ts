@@ -9,6 +9,16 @@ import type {
   SyncDocHlcRow,
 } from "@lib/persistence/user"
 import { createIdGenerator } from "./idGenerator.js"
+import {
+  noteRowToWire,
+  playlistRowToWire,
+  sessionRowToWire,
+  type NoteWire,
+  type PlaylistWire,
+  type SessionWire,
+  type ChatSessionWire,
+  type ChatMessageWire,
+} from "./syncWire.js"
 
 /**
  * SQL adapter implementing {@link ISyncApplyRepository}: applies **remote**
@@ -31,51 +41,6 @@ const newPlaylistItemId = createIdGenerator("playlist")
  *  (e.g. a pre-sync row) so a remote change with any real HLC wins on the LWW
  *  collections, while the add-wins playlist rule still unions the fields. */
 const FLOOR_HLC = "000000000000000:00000:0"
-
-interface NoteWire {
-  id: string
-  track_id: string
-  text: string
-  time_start: number
-  time_end: number
-  created_at: number
-  meta: unknown
-}
-interface PlaylistWire {
-  id?: string
-  track_id: string
-  added_at: number
-  archived_at: number | null
-  collection_id: string | null
-}
-interface SessionWire {
-  id: string
-  item_id: string
-  /** Natural cross-device key: the stable catalog track this session played.
-   *  Carried so a session pulled from another device (whose `item_id` is a
-   *  meaningless remote surrogate) re-attaches to the correct LOCAL playlist
-   *  item, keeping it in the progress / heatmap JOINs. */
-  track_id: string | null
-  started_at: number
-  ended_at: number
-  from_position: number
-  to_position: number
-}
-interface ChatSessionWire {
-  id: string
-  title: string | null
-  created_at: number
-  updated_at: number
-  track_id: string | null
-}
-interface ChatMessageWire {
-  id: string
-  session_id: string
-  role: string
-  content: string
-  created_at: number
-  meta: string | null
-}
 
 export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepository {
   /** Highest of the pending-outbox HLC and the recorded server HLC for a doc,
@@ -348,41 +313,5 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     },
 
     recordServerHlc,
-  }
-}
-
-/* --- row → client-native (snake_case) wire snapshot --- */
-
-function noteRowToWire(row: NoteRow): NoteWire {
-  return {
-    id: row.id,
-    track_id: row.track_id,
-    text: row.text,
-    time_start: row.time_start,
-    time_end: row.time_end,
-    created_at: row.created_at,
-    meta: row.meta,
-  }
-}
-
-function playlistRowToWire(row: PlaylistItemRow): PlaylistWire {
-  return {
-    id: row.id,
-    track_id: row.track_id,
-    added_at: row.added_at,
-    archived_at: row.archived_at,
-    collection_id: row.collection_id,
-  }
-}
-
-function sessionRowToWire(row: ListeningSessionRow & { track_id?: string | null }): SessionWire {
-  return {
-    id: row.id,
-    item_id: row.item_id,
-    track_id: row.track_id ?? null,
-    started_at: row.started_at,
-    ended_at: row.ended_at,
-    from_position: row.from_position,
-    to_position: row.to_position,
   }
 }

@@ -31,6 +31,9 @@ const SESSION: BackfillCandidate = {
   data: {
     id: "ls_1",
     item_id: "pl_1",
+    // Resolved from the playlist item via the backfill JOIN — a backfilled
+    // session carries its track attribution just like a journaled one.
+    track_id: "trk_2",
     started_at: 900,
     ended_at: 950,
     from_position: 0,

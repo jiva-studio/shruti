@@ -164,7 +164,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
         syncOutbox: createSqlOutboxRepository(deps.userDb),
         syncState: createSqlSyncStateRepository(deps.userDb, getDeviceId),
         syncApply: createSqlSyncApplyRepository(deps.userDb),
-        syncBackfill: createSqlSyncBackfillRepository(deps.userDb),
+        syncBackfill: createSqlSyncBackfillRepository(deps.userDb, deps.isChatSyncEnabled),
       }
     : {}
 
