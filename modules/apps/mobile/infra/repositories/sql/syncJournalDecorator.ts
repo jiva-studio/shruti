@@ -9,6 +9,13 @@ import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionReposi
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
 import type { ListeningSessionRow } from "@lib/persistence/user"
 import { hlcNow, hlcToString, parseHlc, type SyncOp } from "@lib/domain"
+import {
+  sessionRowToWire,
+  chatSessionRowToWire,
+  chatMessageRowToWire,
+  type ChatSessionWire,
+  type ChatMessageWire,
+} from "./syncWire.js"
 
 /**
  * Write-interception (journaling) decorator for the synced user-data
@@ -80,22 +87,6 @@ const NOTES = "notes"
 const LISTENING_SESSIONS = "listening_sessions"
 const CHAT_SESSIONS = "chat_sessions"
 const CHAT_MESSAGES = "chat_messages"
-
-interface ChatSessionRow {
-  id: string
-  title: string | null
-  created_at: number
-  updated_at: number
-  track_id: string | null
-}
-interface ChatMessageRow {
-  id: string
-  session_id: string
-  role: string
-  content: string
-  created_at: number
-  meta: string | null
-}
 
 /** Wrap the synced repositories so every mutation is journaled to the outbox
  *  atomically. Read methods are delegated untouched. */
@@ -235,20 +226,25 @@ export function withSyncJournaling(
       [row.item_id]
     )
     const trackId = trackRows[0]?.track_id ?? null
-    await journal(LISTENING_SESSIONS, row.id, "upsert", sessionWire(row, trackId))
+    await journal(
+      LISTENING_SESSIONS,
+      row.id,
+      "upsert",
+      sessionRowToWire({ ...row, track_id: trackId })
+    )
   }
 
   /* ----------------------------- chat sessions ---------------------------- */
 
   /** Snapshot a chat session row and journal it as an upsert. */
   async function journalChatSession(id: string): Promise<void> {
-    const rows = await userDb.query<ChatSessionRow>(
+    const rows = await userDb.query<ChatSessionWire>(
       "SELECT id, title, created_at, updated_at, track_id FROM chat_sessions WHERE id = ?",
       [id]
     )
     const row = rows[0]
     if (!row) return
-    await journal(CHAT_SESSIONS, row.id, "upsert", chatSessionWire(row))
+    await journal(CHAT_SESSIONS, row.id, "upsert", chatSessionRowToWire(row))
   }
 
   /** Journal the parent session once, before any of its messages, so a pulled
@@ -288,13 +284,13 @@ export function withSyncJournaling(
   /** Snapshot a completed message row (exact persisted `meta` envelope) and
    *  journal it as an upsert. */
   async function journalChatMessage(id: string): Promise<void> {
-    const rows = await userDb.query<ChatMessageRow>(
+    const rows = await userDb.query<ChatMessageWire>(
       "SELECT id, session_id, role, content, created_at, meta FROM chat_messages WHERE id = ?",
       [id]
     )
     const row = rows[0]
     if (!row) return
-    await journal(CHAT_MESSAGES, row.id, "upsert", chatMessageWire(row))
+    await journal(CHAT_MESSAGES, row.id, "upsert", chatMessageRowToWire(row))
   }
 
   const chatMessages: IChatMessageRepository = {
@@ -337,55 +333,5 @@ function playlistWire(item: PlaylistItem) {
     added_at: item.addedAt,
     archived_at: item.archivedAt,
     collection_id: item.collectionId,
-  }
-}
-
-function sessionWire(row: ListeningSessionRow, trackId: string | null) {
-  return {
-    id: row.id,
-    item_id: row.item_id,
-    // Stable cross-device key (the state projection maps this JSON key onto a
-    // `track_id` column). Kept alongside `item_id` for local convenience.
-    track_id: trackId,
-    started_at: row.started_at,
-    ended_at: row.ended_at,
-    from_position: row.from_position,
-    to_position: row.to_position,
-  }
-}
-
-function chatSessionWire(row: {
-  id: string
-  title: string | null
-  created_at: number
-  updated_at: number
-  track_id: string | null
-}) {
-  return {
-    id: row.id,
-    title: row.title,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    track_id: row.track_id,
-  }
-}
-
-function chatMessageWire(row: {
-  id: string
-  session_id: string
-  role: string
-  content: string
-  created_at: number
-  meta: string | null
-}) {
-  return {
-    id: row.id,
-    session_id: row.session_id,
-    role: row.role,
-    content: row.content,
-    created_at: row.created_at,
-    // The versioned `{_v, data}` envelope, verbatim as persisted, so a
-    // receiving device tolerates another device's `_v` on apply.
-    meta: row.meta,
   }
 }

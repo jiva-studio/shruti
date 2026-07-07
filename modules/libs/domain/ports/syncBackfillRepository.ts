@@ -18,10 +18,14 @@ export interface BackfillCandidate {
 
 /**
  * Read-only port that enumerates local rows in the synced collections
- * (`notes`, `playlist_items`, `listening_sessions`) which predate journaling —
- * they have neither an `outbox` row nor a `sync_doc_hlc` record — so the
- * first-sync backfill (`@usecases/sync/backfillLocal`) can enqueue them for
- * upload the first time a real account signs in on this device.
+ * (`notes`, `playlist_items`, `listening_sessions`, and — when chat sync is on
+ * — the user-initiated `chat_sessions` / `chat_messages`) which predate
+ * journaling: they have neither an `outbox` row nor a `sync_doc_hlc` record, so
+ * the first-sync backfill (`@usecases/sync/backfillLocal`) can enqueue them for
+ * upload the first time a real account signs in on this device. Chat rows are
+ * gated + filtered to mirror the journal decorator (toggle-respecting,
+ * proactive-excluding, parent-before-child) so a re-signed device uploads the
+ * same chat history it would have journaled live.
  *
  * The anti-join against `outbox` / `sync_doc_hlc` **is** the idempotency guard:
  * once a candidate has been enqueued it owns an outbox row and is no longer
