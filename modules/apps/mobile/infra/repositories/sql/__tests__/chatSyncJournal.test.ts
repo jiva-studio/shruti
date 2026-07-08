@@ -38,6 +38,7 @@ async function applySchema(db: IDatabase): Promise<void> {
     chat_message_id TEXT PRIMARY KEY, rule_kind TEXT NOT NULL, rule_date TEXT NOT NULL,
     prep_state TEXT NOT NULL, prepared_at INTEGER, visible_at INTEGER,
     notify INTEGER NOT NULL DEFAULT 0, seen_at INTEGER,
+    scheduler_authored INTEGER NOT NULL DEFAULT 0,
     UNIQUE(rule_kind, rule_date)
   )`)
   await db.execute(`CREATE TABLE outbox (

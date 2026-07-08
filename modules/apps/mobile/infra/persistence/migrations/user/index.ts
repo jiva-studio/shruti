@@ -14,6 +14,7 @@ import { migration_011_media_items_kind } from "./011_media_items_kind.js"
 import { migration_012_playlist_items_collection_id } from "./012_playlist_items_collection_id.js"
 import { migration_013_sync_outbox } from "./013_sync_outbox.js"
 import { migration_014_sync_doc_hlc } from "./014_sync_doc_hlc.js"
+import { migration_015_proactive_state_scheduler_authored } from "./015_proactive_state_scheduler_authored.js"
 
 /**
  * Ordered list of user-DB migrations. Append new migrations at the end —
@@ -35,4 +36,5 @@ export const userMigrations: readonly Migration[] = [
   migration_012_playlist_items_collection_id,
   migration_013_sync_outbox,
   migration_014_sync_doc_hlc,
+  migration_015_proactive_state_scheduler_authored,
 ]
