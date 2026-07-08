@@ -1,7 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import type { Note } from "@lib/domain/note.js"
-import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
@@ -10,6 +8,8 @@ import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageReposi
 import type { ListeningSessionRow } from "@lib/persistence/user"
 import { hlcNow, hlcToString, parseHlc, type SyncOp } from "@lib/domain"
 import {
+  noteToWire,
+  playlistToWire,
   sessionRowToWire,
   chatSessionRowToWire,
   chatMessageRowToWire,
@@ -142,14 +142,14 @@ export function withSyncJournaling(
     create: (input) =>
       unitOfWork.run(async () => {
         const note = await base.notes.create(input)
-        await journal(NOTES, note.id, "upsert", noteWire(note))
+        await journal(NOTES, note.id, "upsert", noteToWire(note))
         return note
       }),
 
     update: (input) =>
       unitOfWork.run(async () => {
         const note = await base.notes.update(input)
-        await journal(NOTES, note.id, "upsert", noteWire(note))
+        await journal(NOTES, note.id, "upsert", noteToWire(note))
         return note
       }),
 
@@ -170,7 +170,7 @@ export function withSyncJournaling(
       unitOfWork.run(async () => {
         const item = await base.playlistItems.add(trackId, collectionId)
         // doc_id is the natural key track_id, not the local pl_… surrogate.
-        await journal(PLAYLIST_ITEMS, item.trackId, "upsert", playlistWire(item))
+        await journal(PLAYLIST_ITEMS, item.trackId, "upsert", playlistToWire(item))
         return item
       }),
 
@@ -178,7 +178,7 @@ export function withSyncJournaling(
       unitOfWork.run(async () => {
         await base.playlistItems.archive(id)
         const item = await base.playlistItems.getById(id)
-        if (item) await journal(PLAYLIST_ITEMS, item.trackId, "upsert", playlistWire(item))
+        if (item) await journal(PLAYLIST_ITEMS, item.trackId, "upsert", playlistToWire(item))
       }),
 
     remove: (id) =>
@@ -310,28 +310,4 @@ export function withSyncJournaling(
   }
 
   return { notes, playlistItems, listeningSessions, chatSessions, chatMessages }
-}
-
-/* --- client-native (snake_case) row snapshots for outbox.data --- */
-
-function noteWire(note: Note) {
-  return {
-    id: note.id,
-    track_id: note.trackId,
-    text: note.text,
-    time_start: note.timeStart,
-    time_end: note.timeEnd,
-    created_at: note.createdAt,
-    meta: note.meta,
-  }
-}
-
-function playlistWire(item: PlaylistItem) {
-  return {
-    id: item.id,
-    track_id: item.trackId,
-    added_at: item.addedAt,
-    archived_at: item.archivedAt,
-    collection_id: item.collectionId,
-  }
 }
