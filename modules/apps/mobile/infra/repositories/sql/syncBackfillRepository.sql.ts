@@ -34,11 +34,14 @@ import {
  * would sync a different chat history than a freshly-journaled one:
  *   - `isChatSyncEnabled()` gates the whole chat scan (default ON, like the
  *     decorator) — a device with the toggle off backfills no chat;
- *   - **proactive** messages are excluded (they bypass `chatMessages.create`,
- *     so they never journal) — a message is user-initiated iff it has no
- *     `chat_messages_proactive_state` row;
- *   - a session is a candidate only if it carries ≥1 user-initiated message (a
- *     proactive-only session stays out of sync), and every session is emitted
+ *   - **scheduler-authored** messages are excluded (they bypass
+ *     `chatMessages.create`, so they never journal) — a message is
+ *     scheduler-authored iff it owns a `chat_messages_proactive_state` row with
+ *     `scheduler_authored = 1`. An inline-hint cooldown (`attach`,
+ *     `scheduler_authored = 0`) sits on an ordinary journaled answer and does
+ *     NOT disqualify it;
+ *   - a session is a candidate only if it carries ≥1 non-scheduler message (a
+ *     scheduler-only session stays out of sync), and every session is emitted
  *     **before** any message (parent-before-child), so the apply side never
  *     orphan-drops a backfilled message.
  *
@@ -119,17 +122,23 @@ export function createSqlSyncBackfillRepository(
       // user-initiated messages, both filtered to rows without an outbox /
       // sync_doc_hlc record.
       if (isChatSyncEnabled()) {
-        // Sessions that carry ≥1 user-initiated (non-proactive) message — a
-        // proactive-only session never journals, so it must not backfill.
+        // A message is scheduler-authored (and must NOT sync, mirroring the
+        // decorator which never journals scheduler messages) iff it owns a
+        // proactive sidecar row flagged `scheduler_authored = 1`. An inline-hint
+        // cooldown (`attach`, `scheduler_authored = 0`) sits on an ordinary
+        // journaled answer and must NOT disqualify it.
+        const NOT_SCHEDULER = `NOT EXISTS (
+                    SELECT 1 FROM chat_messages_proactive_state p
+                     WHERE p.chat_message_id = m.id AND p.scheduler_authored = 1)`
+
+        // Sessions that carry ≥1 non-scheduler message — a scheduler-only
+        // session never journals, so it must not backfill.
         const chatSessionRows = await db.query<ChatSessionWire>(
           `SELECT c.id, c.title, c.created_at, c.updated_at, c.track_id
              FROM chat_sessions c
             WHERE EXISTS (
                     SELECT 1 FROM chat_messages m
-                     WHERE m.session_id = c.id
-                       AND NOT EXISTS (
-                             SELECT 1 FROM chat_messages_proactive_state p
-                              WHERE p.chat_message_id = m.id))
+                     WHERE m.session_id = c.id AND ${NOT_SCHEDULER})
               AND NOT EXISTS (
                     SELECT 1 FROM outbox o
                      WHERE o.collection = 'chat_sessions' AND o.doc_id = c.id)
@@ -141,13 +150,11 @@ export function createSqlSyncBackfillRepository(
           out.push({ collection: "chat_sessions", docId: row.id, data: chatSessionRowToWire(row) })
         }
 
-        // User-initiated messages only (proactive ones bypass journaling).
+        // Non-scheduler messages only (scheduler ones bypass journaling).
         const chatMessageRows = await db.query<ChatMessageWire>(
           `SELECT m.id, m.session_id, m.role, m.content, m.created_at, m.meta
              FROM chat_messages m
-            WHERE NOT EXISTS (
-                    SELECT 1 FROM chat_messages_proactive_state p
-                     WHERE p.chat_message_id = m.id)
+            WHERE ${NOT_SCHEDULER}
               AND NOT EXISTS (
                     SELECT 1 FROM outbox o
                      WHERE o.collection = 'chat_messages' AND o.doc_id = m.id)
