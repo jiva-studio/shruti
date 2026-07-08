@@ -1,4 +1,6 @@
 import type { NoteRow, PlaylistItemRow, ListeningSessionRow } from "@lib/persistence/user"
+import type { Note } from "@lib/domain/note.js"
+import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import { rowToNote, rowToPlaylistItem } from "./rowMappers.js"
 
 /**
@@ -56,8 +58,10 @@ export interface SessionWire {
   to_position: number
 }
 
-export function noteRowToWire(row: NoteRow): NoteWire {
-  const note = rowToNote(row)
+/** Canonical note wire shape — the ONE definition every path funnels through.
+ *  `meta` is the parsed object, not the raw DB string; the apply upsert
+ *  tolerates either, but the object is the canonical wire form. */
+export function noteToWire(note: Note): NoteWire {
   return {
     id: note.id,
     track_id: note.trackId,
@@ -65,13 +69,12 @@ export function noteRowToWire(row: NoteRow): NoteWire {
     time_start: note.timeStart,
     time_end: note.timeEnd,
     created_at: note.createdAt,
-    // Parsed object (not the raw DB string) — the canonical wire form.
     meta: note.meta,
   }
 }
 
-export function playlistRowToWire(row: PlaylistItemRow): PlaylistWire {
-  const item = rowToPlaylistItem(row)
+/** Canonical playlist-item wire shape — the ONE definition every path uses. */
+export function playlistToWire(item: PlaylistItem): PlaylistWire {
   return {
     id: item.id,
     track_id: item.trackId,
@@ -79,6 +82,16 @@ export function playlistRowToWire(row: PlaylistItemRow): PlaylistWire {
     archived_at: item.archivedAt,
     collection_id: item.collectionId,
   }
+}
+
+/** Row entrypoints for the SQL adapters — map to domain, then the single
+ *  `*ToWire` builder, so a row snapshot is byte-identical to a domain one. */
+export function noteRowToWire(row: NoteRow): NoteWire {
+  return noteToWire(rowToNote(row))
+}
+
+export function playlistRowToWire(row: PlaylistItemRow): PlaylistWire {
+  return playlistToWire(rowToPlaylistItem(row))
 }
 
 /**
