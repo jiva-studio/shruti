@@ -91,8 +91,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         await db.execute(
           `INSERT INTO chat_messages_proactive_state
              (chat_message_id, rule_kind, rule_date, prep_state, prepared_at,
-              visible_at, notify, seen_at)
-           VALUES (?, ?, ?, ?, NULL, ?, ?, NULL)
+              visible_at, notify, seen_at, scheduler_authored)
+           VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, 1)
            ON CONFLICT(rule_kind, rule_date) DO NOTHING`,
           [
             input.chatMessageId,
@@ -160,8 +160,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         db,
         `INSERT INTO chat_messages_proactive_state
            (chat_message_id, rule_kind, rule_date, prep_state, prepared_at,
-            visible_at, notify, seen_at)
-         VALUES (?, ?, ?, ?, ?, NULL, 0, strftime('%s','now'))`,
+            visible_at, notify, seen_at, scheduler_authored)
+         VALUES (?, ?, ?, ?, ?, NULL, 0, strftime('%s','now'), 0)`,
         [chatMessageId, ruleKind, ruleDate, prepState, preparedAt ?? null]
       )
     },

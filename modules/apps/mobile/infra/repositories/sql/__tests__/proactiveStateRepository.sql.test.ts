@@ -39,6 +39,7 @@ async function setupSchema(db: IDatabase): Promise<void> {
        visible_at       INTEGER,
        notify           INTEGER NOT NULL DEFAULT 0,
        seen_at          INTEGER,
+       scheduler_authored INTEGER NOT NULL DEFAULT 0,
        UNIQUE(rule_kind, rule_date),
        FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
      )`

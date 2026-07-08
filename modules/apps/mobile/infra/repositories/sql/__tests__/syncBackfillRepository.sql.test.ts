@@ -51,7 +51,9 @@ async function withSyncTables(db: IDatabase): Promise<void> {
   await db.execute(
     `CREATE TABLE chat_messages_proactive_state (
        chat_message_id TEXT PRIMARY KEY, rule_kind TEXT NOT NULL,
-       rule_date TEXT NOT NULL, prep_state TEXT NOT NULL, prepared_at INTEGER
+       rule_date TEXT NOT NULL, prep_state TEXT NOT NULL, prepared_at INTEGER,
+       visible_at INTEGER, notify INTEGER NOT NULL DEFAULT 0, seen_at INTEGER,
+       scheduler_authored INTEGER NOT NULL DEFAULT 0
      )`
   )
 }
@@ -159,8 +161,8 @@ describe("createSqlSyncBackfillRepository — chat", () => {
        VALUES ('cm_p', 'cs_p', 'assistant', 'proactive', 3, '{"_v":1,"data":{}}')`
     )
     await db.execute(
-      `INSERT INTO chat_messages_proactive_state (chat_message_id, rule_kind, rule_date, prep_state, prepared_at)
-       VALUES ('cm_p', 'daily', '2026-07-07', 'ready', 4)`
+      `INSERT INTO chat_messages_proactive_state (chat_message_id, rule_kind, rule_date, prep_state, prepared_at, scheduler_authored)
+       VALUES ('cm_p', 'daily', '2026-07-07', 'ready', 4, 1)`
     )
 
     const out = await createSqlSyncBackfillRepository(db).listUnsynced()
@@ -178,8 +180,8 @@ describe("createSqlSyncBackfillRepository — chat", () => {
               ('cm_pr', 'cs_m', 'assistant', 'nudge', 4, '{"_v":1,"data":{}}')`
     )
     await db.execute(
-      `INSERT INTO chat_messages_proactive_state (chat_message_id, rule_kind, rule_date, prep_state, prepared_at)
-       VALUES ('cm_pr', 'daily', '2026-07-07', 'ready', 5)`
+      `INSERT INTO chat_messages_proactive_state (chat_message_id, rule_kind, rule_date, prep_state, prepared_at, scheduler_authored)
+       VALUES ('cm_pr', 'daily', '2026-07-07', 'ready', 5, 1)`
     )
 
     const out = await createSqlSyncBackfillRepository(db).listUnsynced()
@@ -188,6 +190,37 @@ describe("createSqlSyncBackfillRepository — chat", () => {
     expect(msgIds).toEqual(["cm_u"])
     // The session still backfills (it carries a user-initiated message).
     expect(out.some((c) => c.collection === "chat_sessions" && c.docId === "cs_m")).toBe(true)
+  })
+
+  it("backfills an ordinary answer that carries an inline-hint cooldown (attach, scheduler_authored=0)", async () => {
+    // Regression: an inline-hint cooldown (`proactiveState.attach`) stamps a
+    // proactive_state row onto a REAL assistant answer. It must NOT disqualify
+    // the message — dropping it lost half the conversation on the wire.
+    await db.execute(
+      "INSERT INTO chat_sessions (id, title, created_at, updated_at, track_id) VALUES ('cs_h', NULL, 1, 2, NULL)"
+    )
+    await db.execute(
+      `INSERT INTO chat_messages (id, session_id, role, content, created_at, meta)
+       VALUES ('cm_q', 'cs_h', 'user', 'question', 3, '{"_v":1,"data":{}}'),
+              ('cm_a', 'cs_h', 'assistant', 'the real answer', 4, '{"_v":1,"data":{}}')`
+    )
+    // Inline-hint attach on the ASSISTANT answer: visible_at NULL, notify 0,
+    // seen_at set, scheduler_authored 0 — exactly what `attach()` writes.
+    await db.execute(
+      `INSERT INTO chat_messages_proactive_state
+         (chat_message_id, rule_kind, rule_date, prep_state, prepared_at, visible_at, notify, seen_at, scheduler_authored)
+       VALUES ('cm_a', 'enable_notifications_hint', '2026-07-07', 'ready', 5, NULL, 0, 5, 0)`
+    )
+
+    const out = await createSqlSyncBackfillRepository(db).listUnsynced()
+    const msgIds = out
+      .filter((c) => c.collection === "chat_messages")
+      .map((c) => c.docId)
+      .sort()
+
+    // BOTH the question and the real answer sync — the hint cooldown is invisible to backfill.
+    expect(msgIds).toEqual(["cm_a", "cm_q"])
+    expect(out.some((c) => c.collection === "chat_sessions" && c.docId === "cs_h")).toBe(true)
   })
 
   it("skips all chat when the Sync-chats toggle is off", async () => {
