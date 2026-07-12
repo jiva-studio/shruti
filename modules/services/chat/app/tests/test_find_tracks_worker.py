@@ -83,20 +83,29 @@ class _Catalog:
         return _track(track_id, self._titles[track_id])
 
     async def resolve(self, kind, text, *, lang, limit):
-        # Emulate the abbrev→entity fuzzy resolve for sources ("SB" → ШБ).
+        # Emulate the abbrev→entity fuzzy resolve: "SB" (en) → opaque id, whose
+        # extra.short_name is the EN abbrev (resolve matched the en side).
         if kind == "source":
-            abbr = {"SB": "ШБ", "BG": "БГ"}.get(text.strip().upper())
-            if abbr:
+            opaque = {"SB": "source_SB", "BG": "source_BG"}.get(text.strip().upper())
+            if opaque:
                 return [
                     ResolvedEntity(
-                        id=f"source_{text}", full_name="Source",
-                        confidence=1.0, extra={"short_name": abbr},
+                        id=opaque, full_name="Source",
+                        confidence=1.0, extra={"short_name": text.strip().upper()},
                     )
                 ]
         return []
 
     async def source_short_label(self, source_id, *, lang):
-        return self._sources.get(source_id)
+        # Localized label BY opaque id — ru gets "ШБ", not the en "SB".
+        loc = {
+            "source_SB": {"ru": "ШБ", "en": "SB"},
+            "source_BG": {"ru": "БГ", "en": "BG"},
+        }
+        by_id = self._sources.get(source_id) or loc.get(source_id)
+        if isinstance(by_id, dict):
+            return by_id.get(lang) or by_id.get("en")
+        return by_id
 
 
 class _FakeLLM:
