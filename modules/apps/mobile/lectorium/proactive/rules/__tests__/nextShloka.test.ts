@@ -74,7 +74,9 @@ function ctx(over: {
       },
       tracks: {
         async getByIds(ids: readonly TrackId[]) {
-          return new Map(ids.map((id) => [id, byId.get(id)]).filter(([, t]) => t) as [TrackId, Track][])
+          return new Map(
+            ids.map((id) => [id, byId.get(id)]).filter(([, t]) => t) as [TrackId, Track][]
+          )
         },
         async findByReference(
           sourceId: SourceId,
@@ -85,10 +87,9 @@ function ctx(over: {
           return (
             over.corpus.find(
               (t) =>
-                t.references.some(
-                  (r) => r.sourceId === sourceId && r.tokens.join(".") === key
-                ) &&
-                (!languages || languages.length === 0 ||
+                t.references.some((r) => r.sourceId === sourceId && r.tokens.join(".") === key) &&
+                (!languages ||
+                  languages.length === 0 ||
                   t.variants.some((v) => languages.includes(v.language)))
             ) ?? null
           )
@@ -103,10 +104,7 @@ describe("next_shloka rule — library language", () => {
     const out = await nextShlokaRule.detect(
       ctx({
         recent: ["listened_ru"],
-        corpus: [
-          track("listened_ru", ["2", "13"], ["ru"]),
-          track("next_ru", ["2", "14"], ["ru"]),
-        ],
+        corpus: [track("listened_ru", ["2", "13"], ["ru"]), track("next_ru", ["2", "14"], ["ru"])],
         libraryLanguages: ["ru"],
       }),
       {} as never
@@ -121,10 +119,7 @@ describe("next_shloka rule — library language", () => {
     const out = await nextShlokaRule.detect(
       ctx({
         recent: ["listened_ru"],
-        corpus: [
-          track("listened_ru", ["2", "13"], ["ru"]),
-          track("next_en", ["2", "14"], ["en"]),
-        ],
+        corpus: [track("listened_ru", ["2", "13"], ["ru"]), track("next_en", ["2", "14"], ["en"])],
         libraryLanguages: ["ru"],
       }),
       {} as never
@@ -136,10 +131,7 @@ describe("next_shloka rule — library language", () => {
     const out = await nextShlokaRule.detect(
       ctx({
         recent: ["listened_ru"],
-        corpus: [
-          track("listened_ru", ["2", "13"], ["ru"]),
-          track("next_en", ["2", "14"], ["en"]),
-        ],
+        corpus: [track("listened_ru", ["2", "13"], ["ru"]), track("next_en", ["2", "14"], ["en"])],
         libraryLanguages: [],
       }),
       {} as never
