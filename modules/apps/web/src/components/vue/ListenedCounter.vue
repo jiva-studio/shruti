@@ -117,12 +117,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-show="loaded" class="mx-auto max-w-6xl px-5">
+  <div v-show="loaded" class="h-full">
     <!-- Dark band matching the CTA sections: rounded-2xl, no shadow, cream on
          ink. Background is an OpenRouter-generated banner (peacock feathers +
          lotus + warm saffron glow, dark empty center for text) served like the
-         CTA bg images; a light ink overlay keeps the numbers crisp. -->
-    <div class="relative overflow-hidden rounded-2xl bg-ink px-7 py-16 text-center text-cream sm:px-12">
+         CTA bg images; a light ink overlay keeps the numbers crisp. h-full so
+         it matches the library band beside it. -->
+    <div class="relative flex h-full flex-col justify-center overflow-hidden rounded-2xl bg-ink px-7 py-16 text-center text-cream sm:px-12">
       <img
         src="/counter-bg.jpg"
         alt=""

@@ -9,10 +9,7 @@ interface Props {
 const { lang } = Astro.props
 ---
 
-<!-- Live "hours listened together" counter. The island fetches the
-     listening_daily report from the analytics service, sums the base, derives
-     a growth rate and ticks the number forward. It hides itself when the
-     report is unavailable, so a backend hiccup never leaves an empty band. -->
-<section class="py-12">
-  <ListenedCounterIsland client:load lang={lang} />
-</section>
+<!-- Live "hours listened together" counter band. Laid out beside LibraryStats
+     by Landing; renders as a full-height dark band, hidden until its report
+     loads. -->
+<ListenedCounterIsland client:load lang={lang} />
