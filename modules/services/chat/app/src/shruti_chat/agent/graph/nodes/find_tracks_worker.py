@@ -234,6 +234,23 @@ async def find_tracks_worker_node(
             break
 
     if not lectures:
+        # A bare scripture reference that matched no lecture is AMBIGUOUS, not a
+        # dead end: the user may want to READ those verses, not find a talk on
+        # them. Instead of a flat "no lectures were found" (the old behaviour on
+        # e.g. "sb 1.2.6-1.2.18"), ask one grounded question and offer the two
+        # concrete paths as follow-up chips. The chips carry the ref verbatim so
+        # the tap re-routes correctly via followup_rewrite. Deterministic +
+        # localized — no LLM hop, so the question streams instantly.
+        source_id = args.get("source_id")
+        tokens = args.get("tokens")
+        if source_id and tokens:
+            log.info(
+                "find_tracks_ref_clarify",
+                request_id=ctx.request_id,
+                source_id=source_id,
+                tokens=tokens,
+            )
+            return await _emit_ref_clarify(ctx, writer, source_id, str(tokens))
         log.info("find_tracks_empty", request_id=ctx.request_id, query=query[:80])
         return await _emit_empty(ctx, writer, query)
 
@@ -304,6 +321,48 @@ async def find_tracks_worker_node(
         n_lectures=len(kept),
         relaxed=relaxed,
     )
+    return {}
+
+
+# Localized "we found the reference but no lecture — verses or lectures?"
+# clarification. Kept deterministic (no LLM) so it streams instantly and is
+# trivially testable. `{ref}` is the human address ("ШБ 1.2.6-1.2.18"). Each
+# chip carries the ref verbatim so the tapped follow-up re-routes correctly.
+# en is the fallback for any locale not listed.
+_REF_CLARIFY: dict[str, tuple[str, str, str]] = {
+    "ru": (
+        "По запросу «{ref}» лекций не нашлось. "
+        "Показать сами стихи или найти лекции по этой теме?",
+        "Показать стихи {ref}",
+        "Найти лекции по теме {ref}",
+    ),
+    "en": (
+        "No lectures matched «{ref}». "
+        "Would you like the verses themselves, or lectures on this topic?",
+        "Show verses {ref}",
+        "Find lectures on {ref}",
+    ),
+}
+
+
+async def _emit_ref_clarify(
+    ctx: TurnContext, writer, source_id: str, tokens: str
+) -> dict:
+    """Ask whether the user wants the verses or lectures for a bare ref that
+    matched no lecture, with two self-contained follow-up chips."""
+    writer({"type": "status", "data": {"key": "composing_answer"}})
+    ref = tokens
+    if ctx.catalog_repo is not None:
+        try:
+            short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang)
+        except Exception:  # noqa: BLE001 — a label miss must never fail the turn
+            short = None
+        if short:
+            ref = f"{short} {tokens}"
+    question, chip_verses, chip_lectures = _REF_CLARIFY.get(ctx.lang, _REF_CLARIFY["en"])
+    writer({"type": "delta", "data": {"text": question.format(ref=ref)}})
+    writer({"type": "delta", "data": {"text": f"\n[followup:{chip_verses.format(ref=ref)}]"}})
+    writer({"type": "delta", "data": {"text": f"\n[followup:{chip_lectures.format(ref=ref)}]"}})
     return {}
 
 
