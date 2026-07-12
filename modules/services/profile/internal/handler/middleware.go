@@ -62,9 +62,11 @@ func clientIP(r *http.Request) string {
 }
 
 // requireBearer enforces a valid Authorization: Bearer <access-token>. It
-// pins audience="chat" (the token both mobile and web clients hold) and
-// REJECTS an anonymous token with 403 — only signed-in accounts sync. On
-// success the user id is stashed in the request + log context.
+// pins audience="chat" (the token both mobile and web clients hold). Anonymous
+// tokens ARE accepted — the sync substrate is identity-agnostic, keying on the
+// token's `sub` (a real auth.users id, device-provider or not); whether an
+// anonymous client actually pushes is the client's decision. On success the
+// user id is stashed in the request + log context.
 func requireBearer(v *jwt.Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -80,12 +82,6 @@ func requireBearer(v *jwt.Verifier) func(http.Handler) http.Handler {
 			}
 			if !claims.HasAudience(jwt.AudienceChat) {
 				writeErr(w, http.StatusUnauthorized, "invalid_audience", "token audience must include chat")
-				return
-			}
-			// Anonymous accounts do not sync — the client keeps the engine
-			// off, and the server enforces it too.
-			if claims.Anonymous {
-				writeErr(w, http.StatusForbidden, "anonymous_forbidden", "sync requires a signed-in account")
 				return
 			}
 			uid, err := claims.UserID()
