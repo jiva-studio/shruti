@@ -1,6 +1,6 @@
 # Profile sync
 
-`profile` is a planned Go service that syncs a user's own application data — their library, listening history, notes, and chat — across all the devices signed into the same account, and keeps a server-side copy as a backup. Today user data lives only in the on-device `user.db` (Capacitor SQLite) and never leaves the phone; there is no server-side copy and no cross-device continuity. This page is the design of record: a small delta-sync protocol (pull-since-checkpoint / push-changes) over the existing REST + JWT stack, a change-log as the source of truth with typed state tables as an analytics-friendly projection, per-data-type merge rules, and a dedicated Postgres. It keys everything on `auth.users.id`, and **runs only for signed-in accounts** — an anonymous user's data stays on the device until they sign in through a real account, at which point that stable id carries it to the server. The service owns no business rules about the *content* of the data — it is a thin, generic sync substrate; all merge logic runs on the client.
+`profile` is a planned Go service that syncs a user's own application data — their library, listening history, notes, and chat — across all the devices signed into the same account, and keeps a server-side copy as a backup. Today user data lives only in the on-device `user.db` (Capacitor SQLite) and never leaves the phone; there is no server-side copy and no cross-device continuity. This page is the design of record: a small delta-sync protocol (pull-since-checkpoint / push-changes) over the existing REST + JWT stack, a change-log as the source of truth with typed state tables as an analytics-friendly projection, per-data-type merge rules, and a dedicated Postgres. It keys everything on `auth.users.id` and **runs for any identity — anonymous device accounts included**, so a device keeps a server-side copy even if the user never signs in. Anonymous ids are stable per device but do not span devices/reinstalls, so for an anonymous user this is a server-side backup rather than cross-device continuity; signing in later keeps the same id (upgrade-in-place) and the data simply continues under it. The service owns no business rules about the *content* of the data — it is a thin, generic sync substrate; all merge logic runs on the client.
 
 > **Status: design, not yet built.** No `profile` service or schema exists in the tree yet. This page describes the final intended design in present tense (house style); treat it as the spec the implementation lanes build against.
 
@@ -18,7 +18,7 @@ Only user-*generated* / user-*state* data from `user.db` — never the read-only
 
 **Not synced:** `media_items` (offline-download cache — device-local, points at a local file path); the read-only content DB; the *chat-sync toggle* itself and other device-local preferences. User settings (`onboarding.topics`, `search.filters`, playback prefs) are a **later phase** with an explicit key whitelist — region choice, dev flags, and auth tokens are device-local and must never sync.
 
-**Only signed-in accounts sync at all.** An anonymous user's data lives only on their device; the sync engine stays off until they sign in through a real account (Google / Apple / email). The server enforces this too — it rejects a token whose `anonymous` claim is true on the sync endpoints.
+**Every identity syncs, anonymous included.** The engine runs as soon as a `userId` exists — an anonymous device account bootstraps one on first launch — so an anonymous user's data reaches the server as a backup even before any sign-in. The server does not gate on the `anonymous` claim: it is an identity-agnostic substrate keyed on the token's `sub` (a real `auth.users` id for anonymous device users too). Whether an anonymous client actually pushes is the client's call, not the server's.
 
 ## Sync model — change-log is the source of truth
 
@@ -47,7 +47,7 @@ Conflicts are rare because the data types are chosen to avoid them; when they ha
 
 ## API
 
-Three POST endpoints under `/profile/`, all authenticated by the shared RS256 JWT (`sub` = user id). `user_id` is taken **only** from the token — the client-supplied body never carries it. The server **rejects a token whose `anonymous` claim is true (403)** — only signed-in accounts sync — and the client does not run the engine while anonymous. Endpoints are POST-only (the edge CORS allowlist is `GET, POST, OPTIONS`); push and pull are both size-bounded and paginated, because the edge caps the request body.
+Three POST endpoints under `/profile/`, all authenticated by the shared RS256 JWT (`sub` = user id). `user_id` is taken **only** from the token — the client-supplied body never carries it. The middleware pins `aud="chat"` and extracts the user id from `sub`; it does **not** gate on the `anonymous` claim, so anonymous and signed-in tokens are served alike. Endpoints are POST-only (the edge CORS allowlist is `GET, POST, OPTIONS`); push and pull are both size-bounded and paginated, because the edge caps the request body.
 
 - `POST /profile/sync/push` — send local changes. Server applies each row if its `base_hlc` matches the current master (or the doc is new); otherwise returns it under `conflicts` with the master row for the client to re-merge.
 - `POST /profile/sync/pull` — receive changes since `cursor`, ordered by `global_seq`, excluding the caller's own device (echo suppression), paginated via `has_more`.
@@ -270,7 +270,7 @@ Scope for v1 is **read-only chat**: a `useProfileSync` composable pulls the sign
 
 ## Account merge on sign-in
 
-Sync is off while a user is anonymous; it **activates at sign-in**, when the device runs its first full sync — pull the account's existing server state, merge the data accumulated locally while anonymous by the per-collection rules, and push. Two paths reach a signed-in id:
+Sync **activates as soon as a `userId` exists** — at the anonymous bootstrap on first launch, not only at sign-in. The first full cycle pulls that id's existing server state, merges the data accumulated locally by the per-collection rules, and pushes. Because an anonymous user already syncs under its stable device id, sign-in is usually seamless. Two paths reach a signed-in id:
 
 - **Upgrade in place** (anonymous → Google/Apple/email on the same device): the `user_id` is unchanged, so the device just starts syncing and pushes its local data for the first time under that id.
 - **Cross-link** (two devices each anonymous, then both sign into the *same* account): they collapse to one server `user_id`; a device whose local `user_id` changed should reset its cursor and run the first full sync under the new id.

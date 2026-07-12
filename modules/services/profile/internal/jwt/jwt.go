@@ -24,8 +24,9 @@ const SignerKid = "v1"
 const AudienceChat = "chat"
 
 // Claims is the subset of the auth-issued payload profile cares about: the
-// subject (user id), the anonymous flag (sync endpoints reject anonymous),
-// and the standard registered claims (aud/exp/iat/sub).
+// subject (user id) and the standard registered claims (aud/exp/iat/sub). The
+// `anonymous` flag is decoded but not gated on — the sync substrate is
+// identity-agnostic and serves anonymous and signed-in tokens alike.
 type Claims struct {
 	Anonymous bool `json:"anonymous"`
 	gjwt.RegisteredClaims
