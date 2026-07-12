@@ -31,7 +31,7 @@ const RECENT_LIMIT = 10
  * know how long a chapter is without per-source metadata. The lookup
  * simply returns null and the rule stays silent.
  */
-const handler: ProactiveRuleHandler = {
+export const nextShlokaRule: ProactiveRuleHandler = {
   id: "next_shloka",
 
   async detect(ctx) {
@@ -49,7 +49,16 @@ const handler: ProactiveRuleHandler = {
       if (!lastRef.sourceId) continue
       const nextTokens = computeNextTokens(lastRef.tokens)
       if (nextTokens === null) continue
-      const nextTrack = await repos.tracks.findByReference(lastRef.sourceId, nextTokens)
+      // Restrict to the user's library (content) languages so we never nudge
+      // toward a lecture in a language they don't read — if the next verse only
+      // has an off-language recording the lookup returns null and we stay silent,
+      // same fail-closed behavior as an unknown chapter boundary. Empty library
+      // languages = any language.
+      const nextTrack = await repos.tracks.findByReference(
+        lastRef.sourceId,
+        nextTokens,
+        ctx.libraryLanguages
+      )
       if (nextTrack === null) continue
       // Skip if the "next" verse is already in the user's recent
       // listening — that means they've moved past it and the nudge
@@ -131,4 +140,4 @@ export function computeNextTokens(tokens: readonly string[]): readonly string[] 
   return [...tokens.slice(0, -1), String(n + 1)]
 }
 
-registerRule(handler)
+registerRule(nextShlokaRule)
