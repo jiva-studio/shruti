@@ -83,6 +83,9 @@ class _Catalog:
     async def resolve(self, kind, text, *, lang, limit):
         return []
 
+    async def source_short_label(self, source_id, *, lang):
+        return {"source_SB": "ШБ", "source_BG": "БГ"}.get(source_id)
+
 
 class _FakeLLM:
     def __init__(self) -> None:
@@ -177,6 +180,50 @@ async def test_below_floor_results_dropped(_events) -> None:
     )
     await ftw.find_tracks_worker_node({"user_query": "x", "extracted_args": {}}, _Runtime(ctx))
     assert not [e for e in _events if e["type"] == "action"]
+
+
+async def test_bare_ref_no_lecture_asks_verses_or_lectures(_events) -> None:
+    # "sb 1.2.6-1.2.18" → find_track carried source_id+tokens but matched no
+    # lecture. Instead of a flat "no lectures", ask one grounded question and
+    # offer both paths as self-contained follow-up chips (no LLM hop).
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),  # zero results
+        catalog_repo=_Catalog(),
+        llm=_FakeLLM(),
+        lang="ru",
+    )
+    out = await ftw.find_tracks_worker_node(
+        {
+            "user_query": "sb 1.2.6-1.2.18",
+            "extracted_args": {"source_id": "source_SB", "tokens": "1.2.6-1.2.18"},
+        },
+        _Runtime(ctx),
+    )
+    assert out == {}
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    # No card/cite actions — it's a question, not a result.
+    assert not [e for e in _events if e["type"] == "action"]
+    # Grounded question names the resolved address, and both chips carry the ref.
+    assert "ШБ 1.2.6-1.2.18" in text
+    assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text
+    assert "[followup:Найти лекции по теме ШБ 1.2.6-1.2.18]" in text
+
+
+async def test_empty_topic_query_still_flat_empty(_events) -> None:
+    # A topical query (no scripture ref) with no results keeps the old flat
+    # empty line — clarify is only for bare references.
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(),
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "очищение сердца", "extracted_args": {}}, _Runtime(ctx)
+    )
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert "[followup:" not in text
 
 
 async def test_uncatalogued_track_dropped(_events) -> None:
