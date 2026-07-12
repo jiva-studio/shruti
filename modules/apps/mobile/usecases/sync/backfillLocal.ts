@@ -25,22 +25,23 @@ export interface BackfillLocalResult {
 /**
  * First-sync backfill (Lane E2b).
  *
- * Sync is off while a user is anonymous, so rows created before that point have
- * **no** outbox entry and **no** `sync_doc_hlc` — the journal decorator never
- * saw them, so they would never upload. When a real account signs in, this use
- * case enumerates exactly those rows (via {@link ISyncBackfillRepository}) and
- * enqueues each into the outbox as an `upsert` with `base_hlc = ""` (a new doc)
- * and a freshly stamped, monotonic HLC. The `data` snapshot is produced by the
- * adapter in the **same wire shape the journal decorator writes**, so a
- * backfilled row is byte-identical to a journaled one; the normal push path
- * (`pushLocal`) then uploads them under the signed-in account.
+ * Rows created before journaling existed (or before this device first synced)
+ * have **no** outbox entry and **no** `sync_doc_hlc` — the journal decorator
+ * never saw them, so they would never upload. The first time the engine runs
+ * for an account (anonymous or signed-in), this use case enumerates exactly
+ * those rows (via {@link ISyncBackfillRepository}) and enqueues each into the
+ * outbox as an `upsert` with `base_hlc = ""` (a new doc) and a freshly stamped,
+ * monotonic HLC. The `data` snapshot is produced by the adapter in the **same
+ * wire shape the journal decorator writes**, so a backfilled row is
+ * byte-identical to a journaled one; the normal push path (`pushLocal`) then
+ * uploads them under that account.
  *
  * **Idempotent.** The reader only returns rows with neither an outbox row nor a
  * `sync_doc_hlc` record, so once this pass enqueues a row it drops out of the
  * candidate set — a second run finds nothing and enqueues nothing. The whole
  * pass runs inside the reentrant unit-of-work, so the enqueue is atomic.
  *
- * The engine's anonymous/`profileBaseUrl` gating is the caller's job (the
+ * The engine's `userId`/`profileBaseUrl` gating is the caller's job (the
  * `useSyncEngine` composable): this use case just moves rows into the outbox.
  */
 export async function backfillLocal(deps: BackfillLocalDeps): Promise<BackfillLocalResult> {
