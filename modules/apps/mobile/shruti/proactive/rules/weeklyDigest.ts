@@ -5,7 +5,7 @@ import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
 const DEFAULT_PREP_WINDOW_HOURS = 12
-const SUNDAY_NOTIFY_HOUR = 9
+const MONDAY_NOTIFY_HOUR = 9
 
 function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n)
@@ -20,25 +20,28 @@ function startOfDay(date: Date): Date {
 }
 
 /**
- * The next Sunday at/after `now`'s notify hour. When today IS Sunday
- * and we haven't yet passed the digest's notify hour, target TODAY —
- * otherwise a user who only opens the app on Sunday mornings would
- * always be pushed to next week's Sunday and never receive a digest
- * (and the detector's "already past" guard would be dead code).
+ * The next Monday at/after `now`'s notify hour. The digest fires on
+ * Monday morning so it recaps a *finished* week (the previous Mon–Sun) —
+ * a Sunday digest would land while the week is still running. When today
+ * IS Monday and we haven't yet passed the notify hour, target TODAY —
+ * otherwise a user who only opens the app on Monday mornings would always
+ * be pushed to next week's Monday and never receive a digest (and the
+ * detector's "already past" guard would be dead code).
  */
-export function nextSundayFrom(now: Date): Date {
+export function nextMondayFrom(now: Date): Date {
   const day = now.getDay() // 0=Sunday … 6=Saturday
-  let daysToSunday: number
-  if (day === 0) {
-    // Today is Sunday: keep today if still before the notify hour,
+  let daysToMonday: number
+  if (day === 1) {
+    // Today is Monday: keep today if still before the notify hour,
     // otherwise roll to next week.
-    daysToSunday = now.getHours() < SUNDAY_NOTIFY_HOUR ? 0 : 7
+    daysToMonday = now.getHours() < MONDAY_NOTIFY_HOUR ? 0 : 7
   } else {
-    daysToSunday = 7 - day
+    // 0(Sun)→1, 2(Tue)→6, 3→5, 4→4, 5→3, 6(Sat)→2.
+    daysToMonday = (8 - day) % 7
   }
-  const sunday = startOfDay(now)
-  sunday.setDate(sunday.getDate() + daysToSunday)
-  return sunday
+  const monday = startOfDay(now)
+  monday.setDate(monday.getDate() + daysToMonday)
+  return monday
 }
 
 function weekLabel(weekStart: Date, weekEnd: Date, locale: string): string {
@@ -54,30 +57,36 @@ function weekLabel(weekStart: Date, weekEnd: Date, locale: string): string {
 }
 
 /**
- * Sunday-morning recap of the past 7 days. Detector waits until we
- * are within 12 hours of the upcoming Sunday 09:00 so the data we
- * collect is fresh; cooldown of 144 h keeps us to one digest per week.
+ * Monday-morning recap of the *previous* (finished) week — the seven
+ * days Mon–Sun that just ended. Detector waits until we are within 12
+ * hours of the upcoming Monday 09:00 so the data we collect is fresh;
+ * cooldown of 144 h keeps us to one digest per week.
  *
  * The detector itself doesn't compose the body — it just inserts the
- * row. `buildContent` emits a single deterministic `[digest:from-to]`
- * marker (no LLM); `WeeklyDigestCard.vue` fetches the recap data for the
- * window and renders the chart + lecture list + summary badges.
+ * row. `buildContent` prepends a localised intro line and emits a single
+ * deterministic `[digest:from-to]` marker (no LLM); `WeeklyDigestCard.vue`
+ * fetches the recap data for the window and renders the chart + lecture
+ * list + summary badges.
  */
 const handler: ProactiveRuleHandler = {
   id: "weekly_digest",
 
   async detect(ctx, config) {
     const now = new Date(ctx.nowMs)
-    const sunday = nextSundayFrom(now)
-    const visibleAtMs = sunday.getTime() + SUNDAY_NOTIFY_HOUR * 3_600_000
+    const monday = nextMondayFrom(now)
+    const visibleAtMs = monday.getTime() + MONDAY_NOTIFY_HOUR * 3_600_000
     const msUntil = visibleAtMs - ctx.nowMs
     const prepWindowHours = config.prep_window_hours || DEFAULT_PREP_WINDOW_HOURS
     if (msUntil > prepWindowHours * 3_600_000) return []
     if (msUntil < -3_600_000) return [] // already past — don't backfill
 
+    // The recapped week is the one that just finished: previous Monday
+    // (7 days back) through the Sunday right before this Monday.
+    const weekStart = new Date(monday.getTime() - 7 * 86_400_000)
+    const weekEnd = new Date(monday.getTime() - 86_400_000)
     return [
       {
-        ruleDate: formatYmd(sunday),
+        ruleDate: formatYmd(monday),
         visibleAt: Math.floor(visibleAtMs / 1000),
         notify: true,
         // Localised session header — the override beats any (English)
@@ -85,7 +94,7 @@ const handler: ProactiveRuleHandler = {
         // title follows the user's app language like every other rule.
         sessionTitleOverride: ctx.t("chat.proactiveSessionTitleWeeklyDigest"),
         templateContext: {
-          week_label: weekLabel(new Date(sunday.getTime() - 6 * 86_400_000), sunday, ctx.locale),
+          week_label: weekLabel(weekStart, weekEnd, ctx.locale),
         },
       },
     ]
@@ -114,16 +123,22 @@ const handler: ProactiveRuleHandler = {
     ]
   },
 
-  async buildContent(entry) {
-    // 7-day window ending at the proactive message's rule_date. The card
-    // (`WeeklyDigestCard.vue`) loads the recap itself from this window —
-    // the rule just emits the marker, no LLM and no client-side
+  async buildContent(entry, ctx) {
+    // The finished week ending at the proactive message's rule_date
+    // (Monday 00:00 local): the 7 days [prev Monday, this Monday). The
+    // card (`WeeklyDigestCard.vue`) loads the recap itself from this
+    // window — the rule just emits the marker, no LLM and no client-side
     // aggregation here.
-    const sundayUtc = new Date(`${entry.ruleDate}T00:00:00`).getTime()
-    const fromMs = sundayUtc - 6 * 86_400_000
-    const toMs = sundayUtc + 86_400_000
+    const mondayLocal = new Date(`${entry.ruleDate}T00:00:00`).getTime()
+    const fromMs = mondayLocal - 7 * 86_400_000
+    const toMs = mondayLocal
 
-    return { bodyMd: `[digest:${fromMs}-${toMs}]` }
+    // A localised intro line precedes the widget: it reads as a friendly
+    // lead-in above the card in chat AND is what `toNotificationPreview`
+    // surfaces as the OS push body (the `[digest:…]` marker is stripped
+    // there). No LLM — the copy lives in i18n.
+    const intro = ctx.t("chat.weeklyDigestIntro")
+    return { bodyMd: `${intro}\n\n[digest:${fromMs}-${toMs}]` }
   },
 }
 

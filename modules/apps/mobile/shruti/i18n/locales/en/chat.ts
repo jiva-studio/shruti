@@ -301,6 +301,7 @@ export default {
   // Weekly sadhana digest card (`weekly_digest` rule). Deterministic — no
   // LLM. All labels static; lecture titles come localised from the catalog.
   weeklyDigestTitle: "Your week",
+  weeklyDigestIntro: "Here's how your week went 🙏",
   weeklyDigestTotalTime: "Total listening time",
   weeklyDigestLectures: "Lectures this week",
   weeklyDigestStreak: "Day streak",

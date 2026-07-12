@@ -18,6 +18,7 @@ const MARKER_PATTERNS: readonly RegExp[] = [
   /\[cite:[^\]]*\]/gi, // [cite:track_x@0-12|caption]
   /\[\^[^\]]*\]/g, // [^1] footnote / card marker
   /\[s=[^\]]*\]/g, // [s=0,1] leaked sentence marker
+  /\[digest:\d+-\d+\]/g, // [digest:from-to] weekly-recap card marker
 ]
 
 export function toNotificationPreview(bodyMd: string, max = 120): string {

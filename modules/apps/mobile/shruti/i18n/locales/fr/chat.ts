@@ -280,6 +280,7 @@ export default {
 
   // Weekly digest of the user's listening activity.
   weeklyDigestTitle: "Votre semaine",
+  weeklyDigestIntro: "Voici comment s'est passée ta semaine 🙏",
   weeklyDigestTotalTime: "Temps d'écoute total",
   weeklyDigestLectures: "Conférences cette semaine",
   weeklyDigestStreak: "Jours d'affilée",
