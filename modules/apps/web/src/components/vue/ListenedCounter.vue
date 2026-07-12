@@ -117,22 +117,30 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="loaded" class="mx-auto max-w-2xl px-5 text-center">
-    <div
-      class="rounded-3xl border border-coffee/10 bg-cream/60 px-6 py-10 shadow-sm backdrop-blur"
-    >
-      <p class="text-sm font-semibold uppercase tracking-wide text-coffee/70">
-        {{ t('counter.eyebrow') }}
-      </p>
-      <p class="mt-3 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
-        <span class="text-5xl font-bold tabular-nums text-ink sm:text-6xl">{{ hoursText }}</span>
-        <span class="text-2xl font-semibold text-coffee sm:text-3xl">{{ t('counter.hUnit') }}</span>
-        <span class="text-5xl font-bold tabular-nums text-ink sm:text-6xl">{{ minutes }}</span>
-        <span class="text-2xl font-semibold text-coffee sm:text-3xl">{{ t('counter.mUnit') }}</span>
-      </p>
-      <p class="mx-auto mt-4 max-w-md text-base leading-relaxed text-medium">
-        {{ t('counter.sub') }}
-      </p>
+  <div v-show="loaded" class="mx-auto max-w-6xl px-5">
+    <!-- Dark band matching the CTA sections: rounded-2xl, no shadow, cream on
+         ink. Background is an OpenRouter-generated banner (peacock feathers +
+         lotus + warm saffron glow, dark empty center for text) served like the
+         CTA bg images; a light ink overlay keeps the numbers crisp. -->
+    <div class="relative overflow-hidden rounded-2xl bg-ink px-7 py-16 text-center text-cream sm:px-12">
+      <img
+        src="/counter-bg.jpg"
+        alt=""
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+      />
+      <div class="pointer-events-none absolute inset-0 bg-ink/30"></div>
+      <div class="relative">
+        <p class="text-sm font-semibold uppercase tracking-wide text-cream/70">
+          {{ t('counter.eyebrow') }}
+        </p>
+        <p class="mt-4 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1">
+          <span class="text-6xl font-bold tabular-nums text-cream drop-shadow sm:text-7xl">{{ hoursText }}</span>
+          <span class="text-2xl font-semibold text-cream/70 sm:text-3xl">{{ t('counter.hUnit') }}</span>
+          <span class="text-6xl font-bold tabular-nums text-cream drop-shadow sm:text-7xl">{{ minutes }}</span>
+          <span class="text-2xl font-semibold text-cream/70 sm:text-3xl">{{ t('counter.mUnit') }}</span>
+        </p>
+      </div>
     </div>
   </div>
 </template>
