@@ -53,11 +53,37 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-show="loaded" class="mx-auto max-w-6xl px-5 text-center">
-    <p class="text-base text-coffee sm:text-lg">
-      <span class="font-bold text-ink">{{ countText }}</span> {{ t('library.lectures') }}
-      <span class="mx-2 text-coffee/40">·</span>
-      <span class="font-bold text-ink">{{ hoursText }}</span> {{ t('library.hours') }}
-    </p>
+  <div v-show="loaded" class="h-full">
+    <!-- Second band beside the listened-counter: same dark rounded-2xl style,
+         its own OpenRouter-generated background (cand-lit library of old books
+         + palm-leaf manuscripts). h-full so both bands align. -->
+    <div class="relative flex h-full flex-col justify-center overflow-hidden rounded-2xl bg-ink px-7 py-16 text-center text-cream sm:px-10">
+      <img
+        src="/library-bg.jpg"
+        alt=""
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+      />
+      <div class="pointer-events-none absolute inset-0 bg-ink/45"></div>
+      <div class="relative">
+        <p class="text-sm font-semibold uppercase tracking-wide text-cream/70">
+          {{ t('library.eyebrow') }}
+        </p>
+        <div class="mt-5 flex flex-wrap items-end justify-center gap-x-8 gap-y-4">
+          <div>
+            <div class="text-5xl font-bold tabular-nums text-cream drop-shadow sm:text-6xl">{{ countText }}</div>
+            <div class="mt-1.5 text-xs font-semibold uppercase tracking-wide text-cream/60">
+              {{ t('library.lectures') }}
+            </div>
+          </div>
+          <div>
+            <div class="text-3xl font-bold tabular-nums text-cream/90 drop-shadow sm:text-4xl">{{ hoursText }}</div>
+            <div class="mt-1.5 text-xs font-semibold uppercase tracking-wide text-cream/60">
+              {{ t('library.hours') }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
