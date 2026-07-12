@@ -12,7 +12,17 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/jiva-studio/lectorium/analytics/internal/catalog"
 )
+
+// Deps are the data sources a report may read. Each report uses only what it
+// needs — listening_daily reads Pool (profile DB), library_totals reads
+// Catalog (the CDN-published lecture catalog).
+type Deps struct {
+	Pool    *pgxpool.Pool
+	Catalog *catalog.Provider
+}
 
 // Func computes one report. It validates/normalizes the query params itself
 // and returns the raw result payload plus the normalized params actually
@@ -20,7 +30,7 @@ import (
 //
 // Invalid input must be reported via BadParam so the handler maps it to a
 // 400 invalid_params; any other error is treated as a 500.
-type Func func(ctx context.Context, pool *pgxpool.Pool, q url.Values) (result any, params map[string]any, err error)
+type Func func(ctx context.Context, deps Deps, q url.Values) (result any, params map[string]any, err error)
 
 // Report binds a name and cache TTL to its compute function.
 type Report struct {

@@ -23,6 +23,10 @@ type Config struct {
 	// MaxRangeDays caps the width of a date-range report so a caller can't
 	// demand an unbounded scan / response.
 	MaxRangeDays int
+	// MediaBaseURL is the Bunny-CDN pull-zone base that publishes the catalog
+	// SQLite (/public/config.json manifest + /public/db/lectorium.{v}.db). The
+	// library_totals report self-fetches from it, same as corpus-mcp / chat.
+	MediaBaseURL string
 	// Env tags log lines. "dev" | "staging" | "prod". Defaults to "dev".
 	Env string
 	// ServiceVersion is the image tag at runtime; surfaces in every log line.
@@ -35,6 +39,7 @@ func Load() (*Config, error) {
 		DatabaseURL:    env("DATABASE_URL", ""),
 		CacheTTL:       envDuration("CACHE_TTL", 60*time.Second),
 		MaxRangeDays:   envInt("MAX_RANGE_DAYS", 400),
+		MediaBaseURL:   env("MEDIA_BASE_URL", "https://akds-lectorium.b-cdn.net"),
 		Env:            env("ENV", "dev"),
 		ServiceVersion: env("SERVICE_VERSION", "dev"),
 	}

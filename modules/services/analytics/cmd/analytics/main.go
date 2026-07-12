@@ -28,6 +28,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/jiva-studio/lectorium/analytics/internal/cache"
+	"github.com/jiva-studio/lectorium/analytics/internal/catalog"
 	"github.com/jiva-studio/lectorium/analytics/internal/config"
 	"github.com/jiva-studio/lectorium/analytics/internal/db"
 	"github.com/jiva-studio/lectorium/analytics/internal/handler"
@@ -72,10 +73,25 @@ func runServe() {
 	}
 	defer pool.Close()
 
+	// Catalog totals come from the CDN-published catalog SQLite. Warm the cache
+	// in the background so the first library_totals request is fast; a failure
+	// here is non-fatal (the report retries on demand).
+	catalogProvider := catalog.New(cfg.MediaBaseURL)
+	go func() {
+		warmCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if _, err := catalogProvider.Totals(warmCtx); err != nil {
+			slog.WarnContext(warmCtx, "catalog_warm_failed", "err", err.Error())
+		} else {
+			slog.Info("catalog_warmed")
+		}
+	}()
+
 	root := handler.NewRouter(handler.RouterDeps{
-		Pool:       pool,
-		Cache:      cache.New(),
-		DefaultTTL: cfg.CacheTTL,
+		Pool:        pool,
+		Catalog:     catalogProvider,
+		Cache:       cache.New(),
+		FallbackTTL: cfg.CacheTTL,
 	})
 
 	srv := &http.Server{
