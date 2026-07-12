@@ -345,20 +345,37 @@ _REF_CLARIFY: dict[str, tuple[str, str, str]] = {
 }
 
 
+async def _source_short(ctx: TurnContext, source_id: str) -> str | None:
+    """Best-effort short label ("ШБ") for a source. `source_id` may be an
+    opaque catalog id (deterministic path) OR an abbreviation like "SB" (the
+    LLM router emits the abbrev). `source_short_label` matches the opaque id
+    by exact equality and does NOT normalize, so on the abbrev path we fall
+    back to resolving the name and reading its `short_name`."""
+    if ctx.catalog_repo is None:
+        return None
+    try:
+        short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang)
+    except Exception:  # noqa: BLE001 — a label miss must never fail the turn
+        short = None
+    if short:
+        return short
+    try:
+        hits = await ctx.catalog_repo.resolve("source", source_id, lang=None, limit=1)
+    except Exception:  # noqa: BLE001
+        return None
+    if hits:
+        return hits[0].extra.get("short_name") or hits[0].full_name or None
+    return None
+
+
 async def _emit_ref_clarify(
     ctx: TurnContext, writer, source_id: str, tokens: str
 ) -> dict:
     """Ask whether the user wants the verses or lectures for a bare ref that
     matched no lecture, with two self-contained follow-up chips."""
     writer({"type": "status", "data": {"key": "composing_answer"}})
-    ref = tokens
-    if ctx.catalog_repo is not None:
-        try:
-            short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang)
-        except Exception:  # noqa: BLE001 — a label miss must never fail the turn
-            short = None
-        if short:
-            ref = f"{short} {tokens}"
+    short = await _source_short(ctx, source_id)
+    ref = f"{short} {tokens}" if short else tokens
     question, chip_verses, chip_lectures = _REF_CLARIFY.get(ctx.lang, _REF_CLARIFY["en"])
     writer({"type": "delta", "data": {"text": question.format(ref=ref)}})
     writer({"type": "delta", "data": {"text": f"\n[followup:{chip_verses.format(ref=ref)}]"}})
