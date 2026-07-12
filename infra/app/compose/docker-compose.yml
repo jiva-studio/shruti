@@ -699,6 +699,10 @@ services:
       CACHE_TTL: ${SHRUTI_ANALYTICS_CACHE_TTL:-60s}
       # Hard cap on a date-range report's width (days).
       MAX_RANGE_DAYS: ${SHRUTI_ANALYTICS_MAX_RANGE_DAYS:-400}
+      # Bunny-CDN pull-zone base — the library_totals report self-fetches the
+      # catalog SQLite from here (/public/config.json + /public/db/…), same CDN
+      # base corpus-mcp / chat use.
+      MEDIA_BASE_URL: ${SHRUTI_MEDIA_BASE_URL:-https://cdn.shruti.local}
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_ANALYTICS_TAG:-latest}
     networks: [shruti]

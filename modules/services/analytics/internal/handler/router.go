@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/analytics/internal/cache"
+	"github.com/jiva-studio/shruti/analytics/internal/catalog"
 	"github.com/jiva-studio/shruti/analytics/internal/reports"
 )
 
@@ -24,11 +25,12 @@ var (
 
 // RouterDeps bundles everything NewRouter needs.
 type RouterDeps struct {
-	Pool  *pgxpool.Pool
-	Cache *cache.Cache
-	// DefaultTTL caps how long any report is cached; a report's own TTL is
-	// clamped to it so ops can shorten caching globally via CACHE_TTL.
-	DefaultTTL time.Duration
+	Pool    *pgxpool.Pool
+	Catalog *catalog.Provider
+	Cache   *cache.Cache
+	// FallbackTTL is used for a report that declares no TTL of its own. Setting
+	// it to 0 (CACHE_TTL=0) disables caching entirely — an ops kill switch.
+	FallbackTTL time.Duration
 }
 
 // NewRouter wires:
@@ -41,7 +43,11 @@ func NewRouter(d RouterDeps) http.Handler {
 
 	r.Get("/healthz", healthz)
 
-	h := &reportsHandler{pool: d.Pool, cache: d.Cache, defaultTTL: d.DefaultTTL}
+	h := &reportsHandler{
+		deps:        reports.Deps{Pool: d.Pool, Catalog: d.Catalog},
+		cache:       d.Cache,
+		fallbackTTL: d.FallbackTTL,
+	}
 	r.Get("/analytics/reports/{name}", h.serve)
 
 	return r
@@ -64,9 +70,9 @@ type errObj struct {
 }
 
 type reportsHandler struct {
-	pool       *pgxpool.Pool
-	cache      *cache.Cache
-	defaultTTL time.Duration
+	deps        reports.Deps
+	cache       *cache.Cache
+	fallbackTTL time.Duration
 }
 
 func (h *reportsHandler) serve(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +94,7 @@ func (h *reportsHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, params, err := rep.Fn(r.Context(), h.pool, r.URL.Query())
+	result, params, err := rep.Fn(r.Context(), h.deps, r.URL.Query())
 	if err != nil {
 		var pe *reports.ParamError
 		if errors.As(err, &pe) {
@@ -111,16 +117,18 @@ func (h *reportsHandler) serve(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// effectiveTTL clamps a report's own TTL to the service-wide cap. A
-// DefaultTTL of 0 disables caching entirely (ops kill switch via CACHE_TTL=0).
+// effectiveTTL picks the cache duration for a report. The report's own TTL is
+// authoritative (listening_daily 60s, library_totals 24h); FallbackTTL only
+// applies when a report declares none. FallbackTTL == 0 (CACHE_TTL=0) disables
+// caching entirely — an ops kill switch.
 func (h *reportsHandler) effectiveTTL(reportTTL time.Duration) time.Duration {
-	if h.defaultTTL <= 0 {
+	if h.fallbackTTL <= 0 {
 		return 0
 	}
-	if reportTTL <= 0 || reportTTL > h.defaultTTL {
-		return h.defaultTTL
+	if reportTTL > 0 {
+		return reportTTL
 	}
-	return reportTTL
+	return h.fallbackTTL
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {

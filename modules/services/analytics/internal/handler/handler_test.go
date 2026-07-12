@@ -17,7 +17,7 @@ import (
 // below: the report validates its params BEFORE it ever touches the DB, so
 // invalid input and unknown-report paths never dereference the pool.
 func newTestRouter() http.Handler {
-	return NewRouter(RouterDeps{Pool: nil, Cache: cache.New(), DefaultTTL: 60 * time.Second})
+	return NewRouter(RouterDeps{Pool: nil, Catalog: nil, Cache: cache.New(), FallbackTTL: 60 * time.Second})
 }
 
 func doGet(t *testing.T, h http.Handler, path string) (int, map[string]any) {

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // dateLayout is the wire format for the from/to params and each day key.
@@ -56,7 +54,7 @@ ORDER BY g`
 // ListeningDaily implements the listening_daily report.
 //
 //	GET /analytics/reports/listening_daily?from=YYYY-MM-DD&to=YYYY-MM-DD[&tz=IANA]
-func ListeningDaily(ctx context.Context, pool *pgxpool.Pool, q url.Values) (any, map[string]any, error) {
+func ListeningDaily(ctx context.Context, deps Deps, q url.Values) (any, map[string]any, error) {
 	fromStr := q.Get("from")
 	toStr := q.Get("to")
 	if fromStr == "" || toStr == "" {
@@ -87,7 +85,7 @@ func ListeningDaily(ctx context.Context, pool *pgxpool.Pool, q url.Values) (any,
 		return nil, nil, BadParam("tz must be a valid IANA timezone")
 	}
 
-	rows, err := pool.Query(ctx, listeningDailyQuery, fromStr, toStr, tz)
+	rows, err := deps.Pool.Query(ctx, listeningDailyQuery, fromStr, toStr, tz)
 	if err != nil {
 		return nil, nil, fmt.Errorf("query listening_daily: %w", err)
 	}
