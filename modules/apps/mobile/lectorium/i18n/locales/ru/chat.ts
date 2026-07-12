@@ -302,6 +302,7 @@ export default {
   // без LLM. Все подписи статичны; названия лекций приходят из каталога
   // уже в локали пользователя.
   weeklyDigestTitle: "Итоги недели",
+  weeklyDigestIntro: "Вот как прошла твоя неделя 🙏",
   weeklyDigestTotalTime: "Всего прослушано",
   weeklyDigestLectures: "Лекции за неделю",
   weeklyDigestStreak: "Дней подряд",

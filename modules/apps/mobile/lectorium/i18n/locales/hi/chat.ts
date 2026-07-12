@@ -275,6 +275,7 @@ export default {
   // Weekly-digest proactive session — a short rollup of the past week's
   // listening. `{count}` in `weeklyDigestMore` is the overflow count.
   weeklyDigestTitle: "आपका सप्ताह",
+  weeklyDigestIntro: "यहाँ देखें आपका सप्ताह कैसा रहा 🙏",
   weeklyDigestTotalTime: "कुल सुनने का समय",
   weeklyDigestLectures: "इस सप्ताह के प्रवचन",
   weeklyDigestStreak: "लगातार दिन",

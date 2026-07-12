@@ -277,6 +277,7 @@ export default {
 
   // Weekly digest summary card.
   weeklyDigestTitle: "Tu semana",
+  weeklyDigestIntro: "Así fue tu semana 🙏",
   weeklyDigestTotalTime: "Tiempo total de escucha",
   weeklyDigestLectures: "Clases esta semana",
   weeklyDigestStreak: "Días seguidos",

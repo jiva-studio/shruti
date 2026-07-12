@@ -274,6 +274,7 @@ export default {
 
   // Weekly digest — summary of the user's listening over the past 7 days.
   weeklyDigestTitle: "Ваш тиждень",
+  weeklyDigestIntro: "Ось як минув твій тиждень 🙏",
   weeklyDigestTotalTime: "Загальний час прослуховування",
   weeklyDigestLectures: "Лекцій за тиждень",
   weeklyDigestStreak: "Днів поспіль",

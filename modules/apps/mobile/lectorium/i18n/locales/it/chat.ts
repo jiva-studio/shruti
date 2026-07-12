@@ -285,6 +285,7 @@ export default {
     "Hai iniziato “{title}” ma non l'hai finita. Vuoi riprendere da dove eri rimasto?",
 
   weeklyDigestTitle: "La tua settimana",
+  weeklyDigestIntro: "Ecco com'è andata la tua settimana 🙏",
   weeklyDigestTotalTime: "Tempo di ascolto totale",
   weeklyDigestLectures: "Lezioni di questa settimana",
   weeklyDigestStreak: "Giorni di fila",

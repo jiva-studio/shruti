@@ -214,6 +214,10 @@ onMounted(() => {
 }
 .digest-chart-col {
   flex: 1 1 0;
+  /* Fill the chart's fixed height so the track below is a definite box —
+   * without this the column shrinks to its label and the bars' percentage
+   * heights resolve against ~0, collapsing every bar to the 2px floor. */
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;

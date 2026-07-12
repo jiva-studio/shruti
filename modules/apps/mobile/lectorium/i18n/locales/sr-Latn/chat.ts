@@ -274,6 +274,7 @@ export default {
 
   // Weekly digest — proactive recap of the user's listening week.
   weeklyDigestTitle: "Vaša nedelja",
+  weeklyDigestIntro: "Evo kako je protekla tvoja nedelja 🙏",
   weeklyDigestTotalTime: "Ukupno vreme slušanja",
   weeklyDigestLectures: "Predavanja ove nedelje",
   weeklyDigestStreak: "Niz dana",
