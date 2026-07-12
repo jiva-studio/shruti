@@ -420,17 +420,32 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       return result
     },
 
-    async findByReference(sourceId: SourceId, tokens: readonly string[]): Promise<Track | null> {
+    async findByReference(
+      sourceId: SourceId,
+      tokens: readonly string[],
+      languages?: readonly LanguageCode[]
+    ): Promise<Track | null> {
       // Tokens are stored as the dot-joined string in `track_references.tokens`
       // (see TrackReferenceRow). Reconstruct that representation here so the
       // SQL stays an indexed equality lookup rather than a substring scan.
       const tokenKey = tokens.join(".")
+      // When library languages are set, require a variant in one of them so the
+      // picked track is actually playable in the user's language — otherwise the
+      // arbitrary LIMIT 1 could return an off-language lecture. Empty = any
+      // language (same as the list-filter convention above).
+      const langFilter =
+        languages && languages.length > 0
+          ? ` AND EXISTS (SELECT 1 FROM track_variants v
+                          WHERE v.track_id = t.id
+                            AND v.language IN (${languages.map(() => "?").join(",")}))`
+          : ""
+      const langParams = languages && languages.length > 0 ? languages : []
       const rows = await contentDb.query<TrackRow>(
         `SELECT t.* FROM tracks t
            JOIN track_references r ON r.track_id = t.id
-          WHERE r.source_id = ? AND r.tokens = ? AND t.hidden = 0
+          WHERE r.source_id = ? AND r.tokens = ? AND t.hidden = 0${langFilter}
           LIMIT 1`,
-        [sourceId, tokenKey]
+        [sourceId, tokenKey, ...langParams]
       )
       const hydrated = await hydrate(contentDb, rows)
       return hydrated[0] ?? null
