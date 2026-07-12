@@ -106,7 +106,13 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
     // row and the FK cascade would take the messages with it).
     await apply.applyRemote(
       "chat_sessions",
-      upsertDoc("s1", HLC_A, { id: "s1", title: "T", created_at: 1, updated_at: 1, track_id: null }),
+      upsertDoc("s1", HLC_A, {
+        id: "s1",
+        title: "T",
+        created_at: 1,
+        updated_at: 1,
+        track_id: null,
+      }),
       HLC_A
     )
     for (const mid of ["m1", "m2"]) {
@@ -129,12 +135,20 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
     // the chats after a from-scratch sync.
     await apply.applyRemote(
       "chat_sessions",
-      upsertDoc("s1", HLC_B, { id: "s1", title: "T2", created_at: 1, updated_at: 2, track_id: null }),
+      upsertDoc("s1", HLC_B, {
+        id: "s1",
+        title: "T2",
+        created_at: 1,
+        updated_at: 2,
+        track_id: null,
+      }),
       HLC_B
     )
 
     expect(await db.query("SELECT id FROM chat_messages WHERE session_id = 's1'")).toHaveLength(2)
-    const [row] = await db.query<{ title: string }>("SELECT title FROM chat_sessions WHERE id = 's1'")
+    const [row] = await db.query<{ title: string }>(
+      "SELECT title FROM chat_sessions WHERE id = 's1'"
+    )
     expect(row?.title).toBe("T2")
   })
 
