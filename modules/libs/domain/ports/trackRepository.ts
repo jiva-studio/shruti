@@ -85,10 +85,17 @@ export interface ITrackRepository {
    * "next verse" track when the user just finished BG 2.13. Returns
    * the first track that has a `track_references` row matching the
    * pair, or `null` if no such track exists in the catalog.
+   *
+   * `languages` restricts the match to tracks that carry a variant in
+   * one of the given content languages — so a Russian-library user is
+   * never nudged toward an English-only lecture. Empty / omitted means
+   * no language filter (any language), matching the "no library filter
+   * set" convention used across the app.
    */
   findByReference(
     sourceId: SourceId,
-    tokens: readonly string[]
+    tokens: readonly string[],
+    languages?: readonly LanguageCode[]
   ): Promise<Track | null>
 
   /**
