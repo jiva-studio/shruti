@@ -9,9 +9,8 @@ import { pushLocal } from "./pushLocal.js"
 export interface RunSyncDeps {
   /**
    * The transport. **`null` disables the engine** — `runSync` no-ops. The
-   * composition root passes `null` (or the composable never calls `runSync`)
-   * when the account is anonymous or the active region has no
-   * `profileBaseUrl`; there is no fallback transport.
+   * composable never calls `runSync` when there is no `userId` yet or the
+   * active region has no `profileBaseUrl`; there is no fallback transport.
    */
   readonly gateway: ISyncClient | null
   readonly outbox: IOutboxRepository
@@ -45,10 +44,9 @@ const SKIPPED: RunSyncResult = { skipped: true, pulled: 0, pushed: 0, conflicts:
  * against current server state (minimizing conflicts); then drain the outbox.
  * After a cycle that changed any local rows, the affected stores are refreshed.
  *
- * Guarded: a `null` gateway (anonymous session, or a region without
- * `profileBaseUrl`) makes this a no-op. This is defense-in-depth — the
- * trigger composable already gates on the same conditions and simply doesn't
- * call `runSync` when disabled.
+ * Guarded: a `null` gateway (a region without `profileBaseUrl`) makes this a
+ * no-op. This is defense-in-depth — the trigger composable already gates on the
+ * same conditions and simply doesn't call `runSync` when disabled.
  */
 export async function runSync(deps: RunSyncDeps): Promise<RunSyncResult> {
   if (!deps.gateway) return SKIPPED

@@ -3,10 +3,11 @@ import { createApp, reactive, ref } from "vue"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 /**
- * Behavioural test for the Lane E2b sign-in wiring in `useSyncEngine`: the
- * engine must stay dark while anonymous, run the first-sync backfill exactly
- * once per account (guarded by the device-local marker) the first time a real
- * account signs in, and always backfill *before* it pushes.
+ * Behavioural test for the Lane E2b wiring in `useSyncEngine`: the engine stays
+ * dark until a user identity exists, then runs for ANY identity — anonymous
+ * device accounts included, so their data reaches the server even without a
+ * sign-in. It runs the first-sync backfill exactly once per account (guarded by
+ * the device-local marker) and always backfills *before* it pushes.
  *
  * Everything the composable pulls in (use cases, the Lectorium singleton, the
  * Pinia stores, the Capacitor App listener, the sync-event bus) is mocked
@@ -95,12 +96,26 @@ beforeEach(() => {
 })
 
 describe("useSyncEngine — first-sync backfill", () => {
-  it("stays dark while anonymous: no backfill, no sync", async () => {
+  it("stays dark until an identity exists (no userId yet)", async () => {
     const app = mountEngine()
     await flush()
 
     expect(ctx.backfillLocal).not.toHaveBeenCalled()
     expect(ctx.runSync).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it("syncs for an anonymous identity (userId set, never signed in)", async () => {
+    const app = mountEngine()
+    await flush()
+
+    // Anonymous bootstrap resolves: a userId appears while signedIn stays false.
+    ctx.auth!.userId = "anon-1"
+    await flush()
+
+    expect(ctx.backfillLocal).toHaveBeenCalledTimes(1)
+    expect(ctx.runSync).toHaveBeenCalledTimes(1)
+    expect(prefs.get("sync.backfilled.anon-1")).toBe("1")
     app.unmount()
   })
 
