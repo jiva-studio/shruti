@@ -31,14 +31,16 @@ const CURSOR_OWNER_KEY = "sync.cursorOwner"
  * `App.vue`, mirroring `useProactiveScheduler`. It ONLY triggers the use-case
  * — no merge / HLC / HTTP logic lives here.
  *
- * Fires `runSync` on: app launch, sign-in, a light foreground interval, each
- * `appStateChange` resume, and (debounced) after a local mutation emits
- * `sync-requested`. Ahead of each cycle it runs the one-time first-sync
- * backfill (Lane E2b) so an account's pre-sync local rows upload the first time
- * it signs in on this device.
+ * Fires `runSync` on: app launch, a new `userId` appearing (anonymous
+ * bootstrap or sign-in), a light foreground interval, each `appStateChange`
+ * resume, and (debounced) after a local mutation emits `sync-requested`. Ahead
+ * of each cycle it runs the one-time first-sync backfill (Lane E2b) so an
+ * account's pre-sync local rows upload the first time the engine runs for it on
+ * this device.
  *
  * Gates (no-op unless ALL hold):
- *  - the account is signed-in and NOT anonymous (`auth.signedIn`);
+ *  - a user identity exists (`auth.userId`) — anonymous OR signed-in; sync is
+ *    identity-agnostic and keeps a server-side copy for anonymous devices too;
  *  - the active region has a `profileBaseUrl` (no chat fallback);
  *  - the engine repositories exist (i.e. `getDeviceId` was wired).
  * When disabled it never calls `runSync`; `runSync` itself also no-ops on a
@@ -52,7 +54,7 @@ export function useSyncEngine(): void {
   let debounce: ReturnType<typeof setTimeout> | null = null
   let resumeHandle: PluginListenerHandle | null = null
   let unsubRequested: (() => void) | null = null
-  let unwatchSignedIn: (() => void) | null = null
+  let unwatchUserId: (() => void) | null = null
   /** Single-flight guard — overlapping cycles would double-push the outbox. */
   let inFlight = false
   /** In-memory echo of the once-per-account backfill marker: the account whose
@@ -65,7 +67,10 @@ export function useSyncEngine(): void {
   let cursorOwnerId: string | null = null
 
   function isEnabled(): boolean {
-    if (!auth.signedIn) return false
+    // Any user identity syncs — anonymous device accounts included, so their
+    // data reaches the server even if they never sign in. Keyed on the token's
+    // `sub`, which is a stable auth.users id for anonymous users too.
+    if (!auth.userId) return false
     if (!app.activeServer.value.profileBaseUrl) return false
     try {
       // Present only when getDeviceId was wired at the composition root.
@@ -150,13 +155,14 @@ export function useSyncEngine(): void {
   }
 
   /**
-   * First-sync backfill (Lane E2b). The first time a real account is signed in
-   * on this device, enqueue its pre-sync local rows (created while anonymous,
-   * before journaling) into the outbox so the following `runSync` uploads them
-   * under that account. Runs **once per account** — guarded by a device-local
-   * `sync.backfilled.<userId>` marker — and only when the engine is enabled, so
-   * it never fires while anonymous (Upgrade-in-place: the local rows belong to
-   * whoever signs in on this device and upload under the new id).
+   * First-sync backfill (Lane E2b). The first time the engine runs for an
+   * account on this device, enqueue its pre-sync local rows (created before
+   * journaling existed) into the outbox so the following `runSync` uploads them
+   * under that id. Runs **once per account** — guarded by a device-local
+   * `sync.backfilled.<userId>` marker — and only when the engine is enabled.
+   * Fires for anonymous users too (their id is stable per device); on an
+   * upgrade-in-place the id is unchanged, so a marker already exists and the
+   * backfill does not re-run.
    */
   async function maybeBackfill(): Promise<void> {
     if (!isEnabled()) return
@@ -241,11 +247,15 @@ export function useSyncEngine(): void {
     })
     // A local mutation journaled a change — push it soon (coalesced).
     unsubRequested = onSyncEvent("sync-requested", requestDebounced)
-    // Sign-in (anonymous → real account) runs the first full sync immediately.
-    unwatchSignedIn = watch(
-      () => auth.signedIn,
+    // A new identity appearing runs the first full sync immediately: the
+    // anonymous bootstrap resolving on cold boot, or an anonymous→real
+    // upgrade / account switch (a changing `userId`). onMounted's initial
+    // sync() may fire before the async auth bootstrap sets `userId`, so this
+    // watch is what kicks the first anonymous cycle.
+    unwatchUserId = watch(
+      () => auth.userId,
       (now, prev) => {
-        if (now && !prev) void sync()
+        if (now && now !== prev) void sync()
       }
     )
   })
@@ -263,7 +273,7 @@ export function useSyncEngine(): void {
     resumeHandle = null
     unsubRequested?.()
     unsubRequested = null
-    unwatchSignedIn?.()
-    unwatchSignedIn = null
+    unwatchUserId?.()
+    unwatchUserId = null
   })
 }
