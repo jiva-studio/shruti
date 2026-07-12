@@ -132,6 +132,18 @@ import role-proxy.conf
             events 300
             window 1m
         }
+        # /analytics/* — public read-only reports for the marketing site's
+        # live counter. Cheap cached JSON; keep generous so a CGNAT-shared
+        # IP loading the homepage repeatedly isn't fenced. Dedicated zone so
+        # it doesn't count against the chat DoS cap below.
+        zone analytics {
+            match {
+                path /analytics/*
+            }
+            key {client_ip}
+            events 300
+            window 1m
+        }
         # /chat/* root — main LLM cost surface. Loose DoS shield: this
         # cap is for catching obvious botnet-scale abuse from one IP,
         # not for governing legitimate user behaviour. The 200/h cap we
@@ -151,7 +163,7 @@ import role-proxy.conf
                 # NOT on /auth/*, /share/* or /profile/*. Order matters:
                 # more specific zones above were already checked.
                 not {
-                    path /auth/* /share/* /profile/*
+                    path /auth/* /share/* /profile/* /analytics/*
                 }
             }
             key {client_ip}
