@@ -346,11 +346,13 @@ _REF_CLARIFY: dict[str, tuple[str, str, str]] = {
 
 
 async def _source_short(ctx: TurnContext, source_id: str) -> str | None:
-    """Best-effort short label ("ШБ") for a source. `source_id` may be an
-    opaque catalog id (deterministic path) OR an abbreviation like "SB" (the
-    LLM router emits the abbrev). `source_short_label` matches the opaque id
-    by exact equality and does NOT normalize, so on the abbrev path we fall
-    back to resolving the name and reading its `short_name`."""
+    """Best-effort short label in the USER's language ("ШБ" for ru) for a
+    source. `source_id` may be an opaque catalog id (deterministic path) OR an
+    abbreviation like "SB" (the LLM router emits the abbrev). `source_short_label`
+    matches the opaque id by exact equality and does NOT normalize, so on the
+    abbrev path we resolve the name → opaque id, then read the label BY ID so it
+    comes back in `ctx.lang` (resolve alone would hand back whatever locale the
+    abbrev matched — "SB" for a ru user)."""
     if ctx.catalog_repo is None:
         return None
     try:
@@ -363,9 +365,13 @@ async def _source_short(ctx: TurnContext, source_id: str) -> str | None:
         hits = await ctx.catalog_repo.resolve("source", source_id, lang=None, limit=1)
     except Exception:  # noqa: BLE001
         return None
-    if hits:
-        return hits[0].extra.get("short_name") or hits[0].full_name or None
-    return None
+    if not hits:
+        return None
+    try:
+        short = await ctx.catalog_repo.source_short_label(hits[0].id, lang=ctx.lang)
+    except Exception:  # noqa: BLE001
+        short = None
+    return short or hits[0].extra.get("short_name") or hits[0].full_name or None
 
 
 async def _emit_ref_clarify(
