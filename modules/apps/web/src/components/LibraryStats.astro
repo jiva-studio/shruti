@@ -9,8 +9,6 @@ interface Props {
 const { lang } = Astro.props
 ---
 
-<!-- One-line library size stat (lecture count + total hours), fed by the
-     analytics library_totals report. Hides itself if unavailable. -->
-<div class="pb-10">
-  <LibraryStatsIsland client:load lang={lang} />
-</div>
+<!-- Library-size stat band (lecture count + total hours), fed by the analytics
+     library_totals report. Sits to the right of the listened-counter. -->
+<LibraryStatsIsland client:load lang={lang} />

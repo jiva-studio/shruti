@@ -59,9 +59,15 @@ const homeLd = {
 
 <FeatureList lang={lang} />
 
-<ListenedCounter lang={lang} />
-
-<LibraryStats lang={lang} />
+<section class="mx-auto max-w-6xl px-5 py-12">
+  <!-- Two analytics bands side by side (stacked on mobile). The arbitrary
+       variant makes each island's <astro-island> wrapper a full-height block so
+       the bands' h-full matches heights across the grid row. -->
+  <div class="grid items-stretch gap-5 lg:grid-cols-5 [&_astro-island]:block [&_astro-island]:h-full">
+    <div class="lg:col-span-3"><ListenedCounter lang={lang} /></div>
+    <div class="lg:col-span-2"><LibraryStats lang={lang} /></div>
+  </div>
+</section>
 
 <WisdomSection lang={lang} />
 
