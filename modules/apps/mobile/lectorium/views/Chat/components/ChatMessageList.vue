@@ -3,7 +3,13 @@
     <div
       v-for="(msg, i) in messages"
       :key="msg.id"
-      :class="['msg-slot', { tail: i === messages.length - 1 && msg.role === 'assistant' }]"
+      :class="[
+        'msg-slot',
+        {
+          tail: i === messages.length - 1 && msg.role === 'assistant',
+          lead: i === 0 && msg.role === 'assistant',
+        },
+      ]"
     >
       <ChatMessageBubble
         :message="msg"
@@ -93,6 +99,20 @@ const lastAssistantIndex = computed<number>(() => {
  * column flow of the message list. */
 .msg-slot {
   display: contents;
+}
+
+/* A proactive chat opens with an assistant message (the agent speaks
+ * first). A user bubble clears the fixed-top fade via its own top
+ * padding; assistant prose has none, so its opening line would tuck
+ * under the fade and read as overlapping the header. Promote the lead
+ * slot to a real box (same trick as `.tail`) and add the top inset here,
+ * so the spacing rule lives on the slot the list owns instead of
+ * reaching into the bubble's internals. Placed before `.tail` so a
+ * single-message session — lead AND tail — keeps the tail box; only the
+ * padding carries over. */
+.msg-slot.lead {
+  display: block;
+  padding-top: 10px;
 }
 
 /* The tail slot — last assistant message in the conversation — owns
