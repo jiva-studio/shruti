@@ -641,6 +641,14 @@ async def run_synthesizer_turn(
 
     prose_chars = 0
     full_prose: list[str] = []
+    # Visible-output guards for the empty-completion check below. `prose_chars`
+    # counts POST-expansion delta text but includes whitespace; `has_visible`
+    # tracks whether any NON-whitespace prose actually reached the client.
+    # `emitted_card` tracks whether a card/commentary action was emitted — a
+    # turn that renders only a `[verse:N]` card (e.g. show_verse) has no prose
+    # yet is a valid answer and must NOT be flagged as an empty failure.
+    has_visible = False
+    emitted_card = False
     stream_started = perf_counter()
     first_token_logged = False
 
@@ -672,24 +680,32 @@ async def run_synthesizer_turn(
             # has the payload when it renders the card (payload-before-marker,
             # same invariant the worker flushes uphold for verse/cite).
             for action in expander.take_commentary_actions():
+                emitted_card = True
                 yield SynthesizerEvent(type=action["type"], data=action["data"])
             # Auto-render cards (verse / cite / media / chapter): the expander
             # queued a CardRequest for each marker it produced — the bridge
             # builds + (cited-only) translates + emits each payload, only for
             # the cards actually cited.
             for req in expander.take_card_requests():
+                emitted_card = True
                 yield SynthesizerEvent(type="card_request", data={"req": req})
             if cleaned:
                 prose_chars += len(cleaned)
+                if cleaned.strip():
+                    has_visible = True
                 yield SynthesizerEvent(type="delta", data={"text": cleaned})
 
         tail = await expander.flush()
         for action in expander.take_commentary_actions():
+            emitted_card = True
             yield SynthesizerEvent(type=action["type"], data=action["data"])
         for req in expander.take_card_requests():
+            emitted_card = True
             yield SynthesizerEvent(type="card_request", data={"req": req})
         if tail:
             prose_chars += len(tail)
+            if tail.strip():
+                has_visible = True
             yield SynthesizerEvent(type="delta", data={"text": tail})
     finally:
         # Drop the per-stream remap so a shared expander can't carry a
@@ -698,15 +714,23 @@ async def run_synthesizer_turn(
 
     full_text = "".join(full_prose)
 
-    # A completion that produced ZERO text is not a (blank) answer — it's
-    # an upstream failure the streaming layer couldn't recover from (its
-    # retry + fallback both came back empty, or the provider streamed
-    # nothing). Yielding `done` with an empty `prose` here would let the
-    # turn finalize as had_error=False: no quota refund, no client retry,
-    # the user silently charged for a blank message. Emit an `error` event
-    # instead so the bridge sets had_error and finalize refunds + the
-    # client shows "chat temporarily unavailable, try again".
-    if not full_prose:
+    # A completion that produced no VISIBLE answer is not a (blank) reply —
+    # it's an upstream failure the streaming layer couldn't recover from (its
+    # retry + fallback both came back empty, the provider streamed nothing, or
+    # the model emitted only markers/whitespace that the expander consumed into
+    # nothing visible). Yielding `done` with empty prose here would let the turn
+    # finalize as had_error=False: no quota refund, no client retry, the user
+    # silently charged for a blank message. Emit an `error` event instead so the
+    # bridge sets had_error and finalize refunds + the client shows "chat
+    # temporarily unavailable, try again".
+    #
+    # Gate on BOTH "no visible non-whitespace prose" AND "no card emitted":
+    # a turn that renders only a card (e.g. show_verse streaming a lone
+    # `[verse:N]` marker) delivered a real answer and must not be flagged.
+    # `full_prose` (raw pre-expansion tokens) is the wrong signal — a
+    # refusal shaped as bare markers leaves it non-empty while nothing
+    # visible reached the user.
+    if not has_visible and not emitted_card:
         log.warning(
             "synth_empty_completion",
             request_id=request_id,

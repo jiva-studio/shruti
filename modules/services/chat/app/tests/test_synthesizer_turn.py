@@ -145,6 +145,56 @@ async def test_empty_stream_emits_error_not_blank_done() -> None:
 
 
 @pytest.mark.asyncio
+async def test_whitespace_only_stream_emits_error_not_blank_done() -> None:
+    """Regression: a completion that streams only whitespace (or markers the
+    expander consumes into nothing visible) left the RAW-token guard happy —
+    `full_prose` was non-empty — so the turn finalized as a blank `done`,
+    silently charging the user for an empty message. The guard must key on
+    VISIBLE non-whitespace prose, so this now emits `chat_unavailable`."""
+    aliases = TurnAliasMap()
+    expander = MarkerExpander(aliases)
+    llm = StreamingLLM(chunks=["  ", "\n", "\t "])
+
+    events = await _drain(
+        run_synthesizer_turn(
+            "что?",
+            tool_results=[],
+            llm=llm,
+            expander=expander,
+            system_prompt="sys",
+        )
+    )
+    assert [ev.type for ev in events if ev.type == "done"] == []
+    errors = [ev for ev in events if ev.type == "error"]
+    assert len(errors) == 1
+    assert errors[0].data["code"] == "chat_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_card_only_answer_does_not_error() -> None:
+    """A turn that renders only a verse card (no lead-in prose) delivered a
+    real answer — it must finalize as `done`, never as an empty-completion
+    error. Guards against the empty-check over-firing on card-only replies
+    (e.g. show_verse streaming a lone verse marker)."""
+    aliases = TurnAliasMap()
+    n = aliases.alias_verse("source_BG", "2.13", addr_label="БГ 2.13")
+    expander = MarkerExpander(aliases)
+    llm = StreamingLLM(chunks=[f"[^{n}]"])
+
+    events = await _drain(
+        run_synthesizer_turn(
+            "verse",
+            tool_results=[{"placeholder": True}],
+            llm=llm,
+            expander=expander,
+            system_prompt="sys",
+        )
+    )
+    assert [ev.type for ev in events if ev.type == "error"] == []
+    assert len([ev for ev in events if ev.type == "done"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_ref_marker_to_lecture_expands_into_cite_form() -> None:
     """LLM writes `[^N]`; if alias N is a lecture fragment, server
     expands into the `[cite:track@start-end|caption]` shape the
