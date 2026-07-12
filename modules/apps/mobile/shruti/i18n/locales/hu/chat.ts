@@ -274,6 +274,7 @@ export default {
 
   // Weekly digest — proactive summary of the past week's listening.
   weeklyDigestTitle: "A heted",
+  weeklyDigestIntro: "Így telt a heted 🙏",
   weeklyDigestTotalTime: "Összes hallgatási idő",
   weeklyDigestLectures: "Előadások a héten",
   weeklyDigestStreak: "Napos sorozat",

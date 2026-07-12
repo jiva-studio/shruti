@@ -274,6 +274,7 @@ export default {
 
   // Weekly digest copy — summary of the user's listening over the past week.
   weeklyDigestTitle: "আপনার সপ্তাহ",
+  weeklyDigestIntro: "আপনার সপ্তাহটি কেমন কাটল দেখে নিন 🙏",
   weeklyDigestTotalTime: "মোট শোনার সময়",
   weeklyDigestLectures: "এই সপ্তাহের লেকচার",
   weeklyDigestStreak: "দিনের ধারা",

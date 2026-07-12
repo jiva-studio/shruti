@@ -290,6 +290,7 @@ export default {
   // Weekly digest proactive session — recap of the past week's listening.
   // `{count}` is the number of additional lectures beyond those listed.
   weeklyDigestTitle: "Deine Woche",
+  weeklyDigestIntro: "So verlief deine Woche 🙏",
   weeklyDigestTotalTime: "Gesamte Hörzeit",
   weeklyDigestLectures: "Vorträge diese Woche",
   weeklyDigestStreak: "Tage in Folge",
