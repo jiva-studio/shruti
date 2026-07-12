@@ -14,5 +14,5 @@ const { lang } = Astro.props
      a growth rate and ticks the number forward. It hides itself when the
      report is unavailable, so a backend hiccup never leaves an empty band. -->
 <section class="py-12">
-  <ListenedCounterIsland client:visible lang={lang} />
+  <ListenedCounterIsland client:load lang={lang} />
 </section>
