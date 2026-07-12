@@ -109,3 +109,15 @@ services:
       dockerfile: services/share-transcript/Dockerfile
     ports:
       - "${SHRUTI_SHARE_TRANSCRIPT_PORT:-11085}:8084"
+
+  # analytics is in the `origin` profile, so a full `up` would otherwise try
+  # to PULL its private ghcr image. Build from source (same modules/ context)
+  # and expose the host port for local report probing.
+  analytics:
+    image: shruti-analytics:dev
+    pull_policy: never
+    build:
+      context: ../../../modules
+      dockerfile: services/analytics/Dockerfile
+    ports:
+      - "${SHRUTI_ANALYTICS_PORT:-11086}:8086"

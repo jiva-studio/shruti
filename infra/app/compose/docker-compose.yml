@@ -672,6 +672,45 @@ services:
       retries: 40
       start_period: 10s
 
+  # analytics: read-only reports over the profile DB (chi+pgx). Serves a
+  # generic GET /analytics/reports/{name} that returns raw data as JSON —
+  # e.g. listening_daily gives listening seconds per calendar day for a date
+  # range. All derived logic (rates, extrapolation, formatting) lives on the
+  # client (the public website's live-counter widget). It owns no schema and
+  # runs no migrations; it reads profile-postgres and caches results in
+  # memory. Origin only; the RU proxy forwards /analytics/* to global.
+  analytics:
+    profiles: [origin]
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-analytics:${SHRUTI_ANALYTICS_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../../.env}
+    environment:
+      # Reads the profile service's OWN Postgres (read-only) — same DSN as
+      # profile. Analytics creates nothing there.
+      DATABASE_URL: postgresql://profile:${SHRUTI_PROFILE_POSTGRES_PASSWORD:?}@profile-postgres:5432/profile?sslmode=disable
+      PORT: "8086"
+      # How long a computed report is served from memory. Set to 0 to disable
+      # caching entirely (ops kill switch).
+      CACHE_TTL: ${SHRUTI_ANALYTICS_CACHE_TTL:-60s}
+      # Hard cap on a date-range report's width (days).
+      MAX_RANGE_DAYS: ${SHRUTI_ANALYTICS_MAX_RANGE_DAYS:-400}
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_ANALYTICS_TAG:-latest}
+    networks: [shruti]
+    depends_on:
+      profile-postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/analytics", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
 networks:
   shruti:
 
