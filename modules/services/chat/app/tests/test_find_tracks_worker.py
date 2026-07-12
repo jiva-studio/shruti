@@ -16,7 +16,7 @@ import pytest
 
 from shruti_chat.agent.graph.nodes import find_tracks_worker as ftw
 from shruti_chat.agent.turn_aliases import TurnAliasMap
-from shruti_chat.domain.entities import Chunk, ScoredChunk, Track
+from shruti_chat.domain.entities import Chunk, ResolvedEntity, ScoredChunk, Track
 
 
 @dataclass
@@ -63,10 +63,12 @@ def _track(tid: str, title: str | None) -> Track:
 
 
 class _Catalog:
-    def __init__(self, *, titles=None, descriptions=None, eligible=None) -> None:
+    def __init__(self, *, titles=None, descriptions=None, eligible=None, sources=None) -> None:
         self._titles = titles or {}
         self._descriptions = descriptions or {}
         self._eligible = eligible
+        # opaque-id → short label, for source_short_label (exact id match, no norm)
+        self._sources = sources or {}
 
     async def filter_track_ids(self, **kwargs):
         return self._eligible
@@ -81,10 +83,20 @@ class _Catalog:
         return _track(track_id, self._titles[track_id])
 
     async def resolve(self, kind, text, *, lang, limit):
+        # Emulate the abbrev→entity fuzzy resolve for sources ("SB" → ШБ).
+        if kind == "source":
+            abbr = {"SB": "ШБ", "BG": "БГ"}.get(text.strip().upper())
+            if abbr:
+                return [
+                    ResolvedEntity(
+                        id=f"source_{text}", full_name="Source",
+                        confidence=1.0, extra={"short_name": abbr},
+                    )
+                ]
         return []
 
     async def source_short_label(self, source_id, *, lang):
-        return {"source_SB": "ШБ", "source_BG": "БГ"}.get(source_id)
+        return self._sources.get(source_id)
 
 
 class _FakeLLM:
@@ -185,18 +197,20 @@ async def test_below_floor_results_dropped(_events) -> None:
 async def test_bare_ref_no_lecture_asks_verses_or_lectures(_events) -> None:
     # "sb 1.2.6-1.2.18" → find_track carried source_id+tokens but matched no
     # lecture. Instead of a flat "no lectures", ask one grounded question and
-    # offer both paths as self-contained follow-up chips (no LLM hop).
+    # offer both paths as self-contained follow-up chips (no LLM hop). Uses the
+    # LIVE path: the LLM router emits source_id as the abbreviation "SB", which
+    # source_short_label can't match by id — the label is recovered via resolve.
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[]]),  # zero results
-        catalog_repo=_Catalog(),
+        catalog_repo=_Catalog(),  # no opaque-id label; resolve("source","SB")→ШБ
         llm=_FakeLLM(),
         lang="ru",
     )
     out = await ftw.find_tracks_worker_node(
         {
             "user_query": "sb 1.2.6-1.2.18",
-            "extracted_args": {"source_id": "source_SB", "tokens": "1.2.6-1.2.18"},
+            "extracted_args": {"source_id": "SB", "tokens": "1.2.6-1.2.18"},
         },
         _Runtime(ctx),
     )
@@ -208,6 +222,28 @@ async def test_bare_ref_no_lecture_asks_verses_or_lectures(_events) -> None:
     assert "ШБ 1.2.6-1.2.18" in text
     assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text
     assert "[followup:Найти лекции по теме ШБ 1.2.6-1.2.18]" in text
+
+
+async def test_bare_ref_clarify_falls_back_to_bare_tokens_when_unresolvable(_events) -> None:
+    # If neither source_short_label nor resolve yields a label, the clarify
+    # still fires — just with the bare tokens (never crashes, never dead-ends).
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(),  # resolve("source","ZZ") → []
+        llm=_FakeLLM(),
+        lang="en",
+    )
+    await ftw.find_tracks_worker_node(
+        {
+            "user_query": "ZZ 9.9",
+            "extracted_args": {"source_id": "ZZ", "tokens": "9.9"},
+        },
+        _Runtime(ctx),
+    )
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert "[followup:Show verses 9.9]" in text
+    assert "[followup:Find lectures on 9.9]" in text
 
 
 async def test_empty_topic_query_still_flat_empty(_events) -> None:
