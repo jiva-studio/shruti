@@ -65,7 +65,7 @@ defineProps<{
 .translation {
   margin: 0.25rem 0 0;
   align-self: stretch;
-  text-align: left;
+  text-align: justify;
   opacity: 0.9;
 }
 
