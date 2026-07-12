@@ -30,9 +30,9 @@ type RouterDeps struct {
 
 // NewRouter wires every route:
 //
-//	POST /profile/sync/push    (bearer JWT, non-anonymous)
-//	POST /profile/sync/pull     (bearer JWT, non-anonymous)
-//	POST /profile/sync/cursor   (bearer JWT, non-anonymous)
+//	POST /profile/sync/push    (bearer JWT, aud=chat)
+//	POST /profile/sync/pull     (bearer JWT, aud=chat)
+//	POST /profile/sync/cursor   (bearer JWT, aud=chat)
 //	POST /internal/purge        (network-only, optional shared secret)
 //	GET  /healthz               (liveness)
 //	GET  /readyz                (gates traffic until migrations are current)

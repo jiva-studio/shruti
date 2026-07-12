@@ -152,21 +152,24 @@ func freshDBService(t *testing.T) *service.Service {
 	}
 }
 
-// ─── 10. Middleware: anonymous 403, aud/kid gating, user_id from JWT ──────
+// ─── 10. Middleware: anonymous accepted, aud/kid gating, user_id from JWT ──
 
-func TestAnonymousTokenForbidden(t *testing.T) {
+// The sync substrate is identity-agnostic: an anonymous token (device-provider
+// user) is accepted and reaches the handler, keyed on its `sub`. An empty
+// device_id makes push return 400 *before* the DB, proving pass-through
+// without Postgres; pull/cursor tolerate the nil pool likewise.
+func TestAnonymousTokenAccepted(t *testing.T) {
 	key, verifier := testKeys(t)
-	// A nil-pool service is fine: the anonymous check short-circuits in the
-	// middleware, well before any handler touches the DB.
 	svc := &service.Service{PullMaxLimit: 500}
 	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
 
 	anon := mintToken(t, key, uuid.NewString(), true, jwt.AudienceChat)
-	for _, path := range []string{"/profile/sync/push", "/profile/sync/pull", "/profile/sync/cursor"} {
-		rec := do(t, r, http.MethodPost, path, anon, map[string]any{}, nil)
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("%s with anonymous token: want 403, got %d (%s)", path, rec.Code, rec.Body.String())
-		}
+	rec := do(t, r, http.MethodPost, "/profile/sync/push", anon, map[string]any{"device_id": ""}, nil)
+	if rec.Code == http.StatusForbidden || rec.Code == http.StatusUnauthorized {
+		t.Fatalf("anonymous token must pass the middleware, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("anonymous token should reach handler (400 on empty device_id), got %d (%s)", rec.Code, rec.Body.String())
 	}
 }
 
