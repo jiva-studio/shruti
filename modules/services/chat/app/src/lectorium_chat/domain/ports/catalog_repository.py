@@ -58,6 +58,7 @@ class CatalogRepository(Protocol):
         ref_prefix: str | None = None,
         ref_from: int | None = None,
         ref_to: int | None = None,
+        anniversary_md: str | None = None,
     ) -> list[Track]:
         ...
 
