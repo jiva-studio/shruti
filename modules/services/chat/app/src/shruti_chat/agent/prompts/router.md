@@ -263,6 +263,13 @@ Extract structured args ONLY for fields you can identify from the query:
   (user_tracks_list) instead of the semantic corpus search. Do NOT set it for
   a topical/metadata lecture search (that's plain find_track) or a deictic
   last/current lecture (those are `recent_ref` / `current_ref`).
+
+  A trailing `[context: …]` line on the user message states the player state.
+  Set the deictic flags CONSISTENTLY with it: set `current_ref` only when "a
+  lecture is currently open"; set `recent_ref` / `history_ref` only when "the
+  user has listening history". If the context says otherwise, the user is
+  pointing at something that isn't there — do NOT set the flag (the request is
+  better answered by asking or by a normal search).
 - action_kind (one of "pdf" | "reminder" | "smart_library" | "pro") —
   REQUIRED when intent=create_action. Pick by the trigger token:
   pdf/скачать/поделиться/download/share/export/print → "pdf";
