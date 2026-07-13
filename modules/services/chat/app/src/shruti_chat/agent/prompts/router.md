@@ -264,8 +264,8 @@ Extract structured args ONLY for fields you can identify from the query:
   a topical/metadata lecture search (that's plain find_track) or a deictic
   last/current lecture (those are `recent_ref` / `current_ref`).
 
-  A trailing `[context: …]` line on the user message states the player state.
-  Set the deictic flags CONSISTENTLY with it: set `current_ref` only when "a
+  A trailing `[turn-context: …]` line in THIS system prompt states the player
+  state. Set the deictic flags CONSISTENTLY with it: set `current_ref` only when "a
   lecture is currently open"; set `recent_ref` / `history_ref` only when "the
   user has listening history". If the context says otherwise, the user is
   pointing at something that isn't there — do NOT set the flag (the request is
