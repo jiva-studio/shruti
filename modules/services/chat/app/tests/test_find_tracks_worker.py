@@ -16,7 +16,7 @@ import pytest
 
 from lectorium_chat.agent.graph.nodes import find_tracks_worker as ftw
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
-from lectorium_chat.domain.entities import Chunk, ScoredChunk, Track
+from lectorium_chat.domain.entities import Chunk, ResolvedEntity, ScoredChunk, Track
 
 
 @dataclass
@@ -31,6 +31,7 @@ class _Ctx:
     translate_citations: bool = False
     translator: Any | None = None
     request_id: str = "req-test"
+    kv_cache: Any | None = None
 
 
 @dataclass
@@ -63,13 +64,29 @@ def _track(tid: str, title: str | None) -> Track:
 
 
 class _Catalog:
-    def __init__(self, *, titles=None, descriptions=None, eligible=None) -> None:
-        self._titles = titles or {}
+    def __init__(
+        self, *, titles=None, descriptions=None, eligible=None, sources=None,
+        ref_tracks=None,
+    ) -> None:
+        self._titles = dict(titles or {})
         self._descriptions = descriptions or {}
         self._eligible = eligible
+        # opaque-id → short label, for source_short_label (exact id match, no norm)
+        self._sources = sources or {}
+        # Tracks returned by the deterministic ref-index probe (list_tracks).
+        self._ref_tracks = ref_tracks or []
+        for t in self._ref_tracks:
+            self._titles.setdefault(t.id, t.title)
+        self.filter_kwargs: dict = {}
 
     async def filter_track_ids(self, **kwargs):
+        self.filter_kwargs = kwargs
         return self._eligible
+
+    async def list_tracks(self, **kwargs):
+        # The ref-index probe: return the configured lectures regardless of the
+        # exact ref window (the parsing is covered by _ref_filter's own tests).
+        return list(self._ref_tracks)
 
     async def get_outline(self, track_id, lang):
         return ("[]", self._descriptions.get(track_id))
@@ -81,15 +98,46 @@ class _Catalog:
         return _track(track_id, self._titles[track_id])
 
     async def resolve(self, kind, text, *, lang, limit):
+        # Emulate the abbrev→entity fuzzy resolve: "SB" (en) → opaque id, whose
+        # extra.short_name is the EN abbrev (resolve matched the en side).
+        if kind == "source":
+            opaque = {"SB": "source_SB", "BG": "source_BG"}.get(text.strip().upper())
+            if opaque:
+                return [
+                    ResolvedEntity(
+                        id=opaque, full_name="Source",
+                        confidence=1.0, extra={"short_name": text.strip().upper()},
+                    )
+                ]
         return []
+
+    async def source_short_label(self, source_id, *, lang):
+        # Localized label BY opaque id — ru gets "ШБ", not the en "SB".
+        loc = {
+            "source_SB": {"ru": "ШБ", "en": "SB"},
+            "source_BG": {"ru": "БГ", "en": "BG"},
+        }
+        by_id = self._sources.get(source_id) or loc.get(source_id)
+        if isinstance(by_id, dict):
+            return by_id.get(lang) or by_id.get("en")
+        return by_id
 
 
 class _FakeLLM:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.situations: list[str] = []
 
     async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
         self.calls.append(run_name or "")
+        fields = set(getattr(schema, "model_fields", {}))
+        if {"line", "chips"} <= fields:  # LocalizedReply — echo the situation
+            situation = messages[-1]["content"]
+            self.situations.append(situation)
+            # A deterministic stand-in: a marker line + one chip, so tests can
+            # assert the localized path ran and a chip was emitted, without
+            # depending on real LLM phrasing.
+            return schema(line=f"LINE[{run_name}]", chips=["CHIP"])
         return schema(text=f"prose[{run_name}]")
 
 
@@ -177,6 +225,152 @@ async def test_below_floor_results_dropped(_events) -> None:
     )
     await ftw.find_tracks_worker_node({"user_query": "x", "extracted_args": {}}, _Runtime(ctx))
     assert not [e for e in _events if e["type"] == "action"]
+
+
+async def test_bare_ref_probe_serves_lectures_the_embedding_missed(_events) -> None:
+    # "sb 1.2.6-1.2.18" → semantic search returns 0 (a bare ref embeds to
+    # noise), but the deterministic ref-index HAS lectures. Probe it and SERVE
+    # those lectures (cards) instead of dead-ending, plus a "show verses" chip.
+    # Uses the LIVE path: the router emits source_id as the abbreviation "SB".
+    refs = [_track("r1", "Ценность жизни"), _track("r2", "Служите Богу")]
+    llm = _FakeLLM()
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),  # semantic: zero
+        catalog_repo=_Catalog(ref_tracks=refs),  # ref-index: two lectures
+        llm=llm,
+        lang="ru",
+    )
+    out = await ftw.find_tracks_worker_node(
+        {
+            "user_query": "sb 1.2.6-1.2.18",
+            "extracted_args": {"source_id": "SB", "tokens": "1.2.6-1.2.18"},
+        },
+        _Runtime(ctx),
+    )
+    assert out == {}
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    card_ids = [
+        e["data"]["payload"]["track_id"]
+        for e in _events if e["type"] == "action" and e["data"]["kind"] == "card"
+    ]
+    assert card_ids == ["r1", "r2"]                     # served the found lectures
+    assert "[card:r1]" in text and "[card:r2]" in text
+    # Lead-in + verses chip are LLM-localized (any language), not hardcoded.
+    assert "LINE[localized_reply]" in text
+    assert "[followup:CHIP]" in text
+    # The resolved ref label ("ШБ 1.2.6-1.2.18") is handed to the localizer so
+    # the LLM writes it into the user's-language line.
+    assert any("ШБ 1.2.6-1.2.18" in s for s in llm.situations)
+
+
+async def test_bare_ref_with_no_lectures_asks_to_show_verses(_events) -> None:
+    # When the ref-index is ALSO empty, don't dead-end: ask whether the user
+    # wanted the verses themselves, with a self-contained chip.
+    llm = _FakeLLM()
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(ref_tracks=[]),  # semantic AND ref-index empty
+        llm=llm,
+        lang="ru",
+    )
+    await ftw.find_tracks_worker_node(
+        {
+            "user_query": "sb 1.2.6-1.2.18",
+            "extracted_args": {"source_id": "SB", "tokens": "1.2.6-1.2.18"},
+        },
+        _Runtime(ctx),
+    )
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert not [e for e in _events if e["type"] == "action"]  # no cards — a question
+    assert "LINE[localized_reply]" in text
+    assert "[followup:CHIP]" in text
+    # The "no lectures on <ref>, show verses?" ask is localized with the ref.
+    assert any("ШБ 1.2.6-1.2.18" in s for s in llm.situations)
+
+
+async def test_topic_plus_date_applies_date_filter(_events) -> None:
+    # "лекции про карму за 1975" — a topic AND an explicit date range. The
+    # semantic path must constrain the search by date (regression: _build_filters
+    # used to read only `year` and dropped date_from/date_to/anniversary_md).
+    chunks = [_sc("t1", 70000, 0.9, "quote")]
+    cat = _Catalog(titles={"t1": "Лекция"}, descriptions={"t1": "d"})
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([chunks]),
+        catalog_repo=cat,
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {
+            "user_query": "карма",
+            "extracted_args": {"date_from": "1975-01-01", "date_to": "1975-12-31",
+                               "anniversary_md": "07-09"},
+        },
+        _Runtime(ctx),
+    )
+    # The date constraint reached the catalog filter, not silently dropped.
+    assert cat.filter_kwargs.get("date_from") == "1975-01-01"
+    assert cat.filter_kwargs.get("date_to") == "1975-12-31"
+    assert cat.filter_kwargs.get("anniversary_md") == "07-09"
+
+
+async def test_date_only_query_probes_and_serves(_events) -> None:
+    # "лекции 9 июля" → anniversary_md; semantic search finds nothing (no topic
+    # to embed), so probe the catalog's date index and serve what's on that day.
+    refs = [_track("d1", "Все измы"), _track("d2", "Смерть — это Бог")]
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(ref_tracks=refs),  # list_tracks returns these
+        llm=_FakeLLM(),
+        lang="ru",
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции 9 июля", "extracted_args": {"anniversary_md": "07-09"}},
+        _Runtime(ctx),
+    )
+    card_ids = [
+        e["data"]["payload"]["track_id"]
+        for e in _events if e["type"] == "action" and e["data"]["kind"] == "card"
+    ]
+    assert card_ids == ["d1", "d2"]
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert "LINE[localized_reply]" in text  # LLM-localized lead-in, any language
+
+
+async def test_date_query_with_no_lectures_says_so(_events) -> None:
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(ref_tracks=[]),
+        llm=_FakeLLM(),
+        lang="ru",
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции 30 февраля", "extracted_args": {"anniversary_md": "02-30"}},
+        _Runtime(ctx),
+    )
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert not [e for e in _events if e["type"] == "action"]
+    assert "LINE[localized_reply]" in text  # localized "no lectures for that date"
+
+
+async def test_empty_topic_query_still_flat_empty(_events) -> None:
+    # A topical query (no scripture ref) with no results keeps the old flat
+    # empty line — clarify is only for bare references.
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(),
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "очищение сердца", "extracted_args": {}}, _Runtime(ctx)
+    )
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert "[followup:" not in text
 
 
 async def test_uncatalogued_track_dropped(_events) -> None:

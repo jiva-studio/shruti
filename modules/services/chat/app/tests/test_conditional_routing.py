@@ -82,10 +82,24 @@ def test_find_track_goes_to_find_tracks_worker() -> None:
 def test_find_track_history_ref_stays_on_catalog_worker() -> None:
     # Listening history by time window («что я слушал на этой неделе») is a
     # personal user_tracks_list query, not a corpus search — it must NOT reach
-    # the semantic worker, which would return junk.
+    # the semantic worker, which would return junk. WITH a listen-log present it
+    # goes to the catalog worker.
+    assert (
+        route_after_router({
+            "intent": "find_track",
+            "extracted_args": {"history_ref": True},
+            "history_summary": "recent=5 in_progress=2",
+        })
+        == "catalog_worker"
+    )
+
+
+def test_find_track_history_ref_without_history_asks() -> None:
+    # Same query but NO listen-log (client didn't send recent_tracks / sync off)
+    # → the catalog worker would deflect with "nothing found"; ask instead.
     assert (
         route_after_router({"intent": "find_track", "extracted_args": {"history_ref": True}})
-        == "catalog_worker"
+        == "clarify_worker"
     )
 
 
@@ -210,12 +224,20 @@ def test_create_action_track_anchor_overrides_catalog_hint() -> None:
 def test_research_recent_ref_goes_to_catalog_worker() -> None:
     """«перескажи последнюю лекцию» — research intent + recent_ref must
     go to the catalog worker (user_tracks_list → track_outline_get),
-    NOT research_worker (which would blind-search the corpus and refuse)."""
+    NOT research_worker (which would blind-search the corpus and refuse) —
+    when there IS a listen-log to resolve against."""
     state = {
         "intent": "research",
         "extracted_args": {"recent_ref": True},
+        "history_summary": "recent=3 in_progress=1",
     }
     assert route_after_router(state) == "catalog_worker"
+
+
+def test_research_recent_ref_without_history_asks() -> None:
+    """recent_ref but no listen-log → ask which lecture instead of deflecting."""
+    state = {"intent": "research", "extracted_args": {"recent_ref": True}}
+    assert route_after_router(state) == "clarify_worker"
 
 
 def test_research_without_recent_ref_stays_research() -> None:
@@ -230,12 +252,24 @@ def test_research_without_recent_ref_stays_research() -> None:
 def test_create_action_pdf_recent_ref_goes_to_action_worker() -> None:
     """«сделай PDF последней лекции» — no anchor, but recent_ref means the
     action worker resolves the last track itself via user_tracks_list, so
-    skip the pre-action search instead of misrouting to research_worker."""
+    skip the pre-action search instead of misrouting to research_worker —
+    when there IS a listen-log to resolve against."""
+    state = {
+        "intent": "create_action",
+        "extracted_args": {"action_kind": "pdf", "recent_ref": True},
+        "history_summary": "recent=4 in_progress=1",
+    }
+    assert route_after_router(state) == "action_worker"
+
+
+def test_create_action_pdf_recent_ref_without_history_asks() -> None:
+    """PDF of "last lecture" with no listen-log → user_tracks_list yields
+    nothing and the PDF card can't render; ask which lecture instead."""
     state = {
         "intent": "create_action",
         "extracted_args": {"action_kind": "pdf", "recent_ref": True},
     }
-    assert route_after_router(state) == "action_worker"
+    assert route_after_router(state) == "clarify_worker"
 
 
 def test_create_action_pdf_recent_ref_anchor_still_short_path() -> None:
