@@ -52,8 +52,18 @@ def parse_tokens(tokens: str | None) -> tuple[list[int], int, int] | None:
     if right is None:
         return (prefix, from_v, from_v)
     if "." in right:
-        # Range crosses a prefix boundary (e.g. "7.28-8.6"); approximate
-        # as "from from_v onwards within this prefix". A handful of rows.
+        # A dotted right side is either a SAME-prefix full-form range
+        # ("1.2.6-1.2.18" → prefix [1,2], 6..18) or a genuine cross-prefix
+        # range ("7.28-8.6"). Parse the right ladder: when its prefix equals
+        # the left prefix, use its last component as the EXACT upper bound
+        # (so "1.2.6-1.2.18" doesn't spill into 1.2.19+). Only a real
+        # cross-prefix range keeps the "from from_v onwards" approximation.
+        try:
+            right_ints = [int(p) for p in right.split(".") if p]
+        except ValueError:
+            right_ints = []
+        if right_ints and right_ints[:-1] == prefix:
+            return (prefix, from_v, right_ints[-1])
         return (prefix, from_v, 99999)
     try:
         right_int = int(right)

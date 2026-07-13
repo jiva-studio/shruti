@@ -76,8 +76,10 @@ class _Catalog:
         self._ref_tracks = ref_tracks or []
         for t in self._ref_tracks:
             self._titles.setdefault(t.id, t.title)
+        self.filter_kwargs: dict = {}
 
     async def filter_track_ids(self, **kwargs):
+        self.filter_kwargs = kwargs
         return self._eligible
 
     async def list_tracks(self, **kwargs):
@@ -268,6 +270,32 @@ async def test_bare_ref_with_no_lectures_asks_to_show_verses(_events) -> None:
     assert not [e for e in _events if e["type"] == "action"]  # no cards — a question
     assert "лекций не нашлось" in text
     assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text
+
+
+async def test_topic_plus_date_applies_date_filter(_events) -> None:
+    # "лекции про карму за 1975" — a topic AND an explicit date range. The
+    # semantic path must constrain the search by date (regression: _build_filters
+    # used to read only `year` and dropped date_from/date_to/anniversary_md).
+    chunks = [_sc("t1", 70000, 0.9, "quote")]
+    cat = _Catalog(titles={"t1": "Лекция"}, descriptions={"t1": "d"})
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([chunks]),
+        catalog_repo=cat,
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {
+            "user_query": "карма",
+            "extracted_args": {"date_from": "1975-01-01", "date_to": "1975-12-31",
+                               "anniversary_md": "07-09"},
+        },
+        _Runtime(ctx),
+    )
+    # The date constraint reached the catalog filter, not silently dropped.
+    assert cat.filter_kwargs.get("date_from") == "1975-01-01"
+    assert cat.filter_kwargs.get("date_to") == "1975-12-31"
+    assert cat.filter_kwargs.get("anniversary_md") == "07-09"
 
 
 async def test_date_only_query_probes_and_serves(_events) -> None:

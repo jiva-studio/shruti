@@ -71,13 +71,19 @@ _TRACK_FREE_ACTIONS = ("reminder", "smart_library", "pro")
 
 
 def _has_recent_history(state: ChatState) -> bool:
-    """True when the request carries a non-empty listen-log — surfaced as
+    """True when the request carries ANY listen-log — surfaced as
     `history_summary`, minted from `user_context.recent_tracks`. A deictic
     history/recent query («что я слушал на неделе», «последнюю лекцию») can
     ONLY be answered when this is present; without it the catalog worker's
     `user_tracks_list` returns [] and the turn deflects with a confusing
-    "not found". Route those to `clarify_worker` instead so we ask for a
-    name/topic rather than dead-ending.
+    "not found". Route those to `clarify_worker` instead of dead-ending.
+
+    COARSE by design: this checks that a log EXISTS, not that a specific TIME
+    WINDOW is non-empty. A «что я слушал вчера» when the user only has month-old
+    history still routes to catalog_worker (which then finds nothing for that
+    window). Narrowing that requires the window math the catalog worker does —
+    out of scope here; the common failure this fixes is an EMPTY log (sync off /
+    anon / nothing played), which is the current prod reality.
     """
     return bool(state.get("history_summary"))
 
@@ -207,6 +213,11 @@ def route_after_router(state: ChatState) -> str:
         # the #46 bug: it semantic-searches for "the last lecture" and
         # returns junk cards.
         if _is_recent_ref(state):
+            # …but with no listen-log, user_tracks_list yields nothing and the
+            # PDF card can't render — ask which lecture instead of dead-ending
+            # (same rationale as the research/find_track deictic paths).
+            if not _has_recent_history(state):
+                return "clarify_worker"
             return "action_worker"
         # Topic-only PDF («pdf про карму») → semantic gather.
         return "research_worker"
