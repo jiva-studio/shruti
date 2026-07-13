@@ -34,14 +34,70 @@ from shruti_chat.application.react_loop import (
     run_react_loop,
 )
 from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.application.cache_helpers import TTL_30D, cached_llm_json
 from shruti_chat.config import get_settings
+from shruti_chat.domain.entities import Message
 from shruti_chat.indexer.library.repo import fetch_media, fetch_verse_body
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.research.pipeline import reduce_locale_to_content_lang
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
+from pydantic import BaseModel, Field
+
 
 log = get_logger(__name__)
+
+
+class LocalizedReply(BaseModel):
+    """A short assistant reply generated in the USER's language."""
+
+    line: str
+    chips: list[str] = Field(default_factory=list)
+
+
+async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
+    """One cheap-LLM call that writes a short chat reply in the user's language
+    (`ctx.lang`) from an English `situation` description: a `line` plus 0-3
+    tappable follow-up `chips`. This is how the service localizes fixed replies
+    to EVERY shipped locale (es/hi/bn/uk/sr/…), not just a hardcoded ru/en pair
+    — same pattern as the find_tracks intro. Degrades to an empty reply on any
+    LLM miss so a localization failure never crashes the SSE stream.
+
+    KV-cached by `(situation, lang, model)` for 30 days: these replies are
+    deterministic for a given situation+language, so the same "no lectures on
+    <ref>" or "name a lecture" phrasing is written by the LLM once and then
+    served from cache — no per-turn model call on the hot paths."""
+    sys = (
+        "You write ONE short assistant reply for a Vedic-lecture chat, in the "
+        "user's language. Return `line` (<=25 words, plain text, no markdown) "
+        "and `chips` (0-3 follow-up suggestion labels the user can tap, <=6 "
+        "words each, in the user's language; [] if none asked for). Keep any "
+        "scripture reference, number, or date in `line` verbatim. Do not add a "
+        "reference to a chip unless the situation says to."
+    )
+    usr = f"Language code: {ctx.lang}\nSituation: {situation}"
+    msgs: list[Message] = [
+        {"role": "system", "content": sys},
+        {"role": "user", "content": usr},
+    ]
+    model = get_settings().llm_cheap
+
+    async def _call() -> LocalizedReply:
+        return await ctx.llm.structured_output(
+            msgs, LocalizedReply, model=model, run_name="localized_reply",
+        )
+
+    try:
+        if ctx.kv_cache is not None:
+            return await cached_llm_json(
+                ctx.kv_cache, ns="localized_reply",
+                key_parts={"s": situation, "lang": ctx.lang, "model": model},
+                ttl_s=TTL_30D, schema=LocalizedReply, factory=_call,
+            )
+        return await _call()
+    except Exception:  # noqa: BLE001 — never fail the turn on a phrasing miss
+        log.exception("localized_reply_failed", request_id=ctx.request_id)
+        return LocalizedReply(line="", chips=[])
 
 
 # Worker prompt sections — every tool-calling worker uses the same
