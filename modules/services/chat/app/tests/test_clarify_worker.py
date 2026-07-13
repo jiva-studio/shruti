@@ -1,6 +1,6 @@
 """Unit tests for the clarify_worker node — the deterministic terminal that
-asks a grounded question when a deictic request can't be resolved (no current
-lecture / no listen-history)."""
+asks a grounded question (LLM-localized to the user's language) when a deictic
+request can't be resolved (no current lecture / no listen-history)."""
 
 from __future__ import annotations
 
@@ -12,10 +12,25 @@ import pytest
 from shruti_chat.agent.graph.nodes import clarify_worker as cw
 
 
+class _FakeLLM:
+    """Echoes the situation so the test can assert which prompt was chosen,
+    and returns a marker line so the emit path is exercised."""
+
+    def __init__(self) -> None:
+        self.situations: list[str] = []
+
+    async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
+        situation = messages[-1]["content"]
+        self.situations.append(situation)
+        return schema(line="LOCALIZED_LINE", chips=[])
+
+
 @dataclass
 class _Ctx:
+    llm: Any = field(default_factory=_FakeLLM)
     lang: str = "ru"
     request_id: str = "req-test"
+    kv_cache: Any | None = None
 
 
 @dataclass
@@ -30,44 +45,41 @@ def _events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     return captured
 
 
-async def _text(events: list[dict]) -> str:
+def _text(events: list[dict]) -> str:
     return "".join(e["data"]["text"] for e in events if e["type"] == "delta")
 
 
-async def test_points_at_lecture_asks_to_name_or_sync(_events) -> None:
-    # current_ref / recent_ref → "which lecture" prompt.
+async def test_points_at_lecture_uses_which_lecture_prompt(_events) -> None:
+    # current_ref / recent_ref → the "name the lecture / enable sync" situation.
+    llm = _FakeLLM()
     await cw.clarify_worker_node(
         {"intent": "research", "extracted_args": {"recent_ref": True}},
-        _Runtime(_Ctx(lang="ru")),
+        _Runtime(_Ctx(llm=llm)),
     )
-    text = await _text(_events)
-    assert "какую лекцию" in text.lower() or "назовите лекцию" in text.lower()
+    assert "LOCALIZED_LINE" in _text(_events)          # localized line streamed
     assert not [e for e in _events if e["type"] == "action"]  # a question, no cards
+    assert "specific lecture" in llm.situations[0]      # picked the right prompt
+    assert "enable listening sync" in llm.situations[0]
 
 
-async def test_history_query_asks_for_topic(_events) -> None:
-    # history_ref (time window) with no history → "name a topic/author/book".
+async def test_history_query_uses_no_history_prompt(_events) -> None:
+    # history_ref (time window) → the "name a topic/author/book" situation.
+    llm = _FakeLLM()
     await cw.clarify_worker_node(
         {"intent": "find_track", "extracted_args": {"history_ref": True}},
-        _Runtime(_Ctx(lang="ru")),
+        _Runtime(_Ctx(llm=llm)),
     )
-    text = await _text(_events)
-    assert "истории" in text.lower()
+    assert "LOCALIZED_LINE" in _text(_events)
+    assert "no listening history" in llm.situations[0]
+    assert "topic, author, or book" in llm.situations[0]
 
 
-async def test_english_locale(_events) -> None:
-    await cw.clarify_worker_node(
-        {"intent": "find_track", "extracted_args": {"history_ref": True}},
-        _Runtime(_Ctx(lang="en")),
-    )
-    text = await _text(_events)
-    assert "listening history" in text.lower()
-
-
-async def test_unknown_locale_falls_back_to_english(_events) -> None:
+async def test_language_is_passed_to_localizer(_events) -> None:
+    # The user's language reaches the localizer, so ANY locale is covered (not a
+    # hardcoded ru/en pair).
+    llm = _FakeLLM()
     await cw.clarify_worker_node(
         {"intent": "research", "extracted_args": {"current_ref": True}},
-        _Runtime(_Ctx(lang="hi")),
+        _Runtime(_Ctx(llm=llm, lang="hi")),
     )
-    text = await _text(_events)
-    assert "lecture" in text.lower()
+    assert "hi" in llm.situations[0]  # "Language code: hi" is in the prompt
