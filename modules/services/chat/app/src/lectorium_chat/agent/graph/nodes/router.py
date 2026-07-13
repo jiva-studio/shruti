@@ -72,6 +72,13 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
         # surface track refs the user can point at? Disambiguates deictic
         # follow-ups and keys the router cache so they don't collide.
         prior_turn_had_refs = bool(extract_prior_track_refs(state.get("history")))
+        # Player-context signals so the classifier sets deictic flags
+        # consistently with reality (don't flag current_ref with nothing open,
+        # or recent_ref/history_ref with no listen-log). Both are already in
+        # state: current_track_ref (minted from user_context.current_track_id)
+        # and history_summary (from user_context.recent_tracks).
+        has_current_track = bool(state.get("current_track_ref"))
+        has_recent_history = bool(state.get("history_summary"))
         # A genuine parse failure (structured-output retries + fallback model
         # + JSON salvage all exhausted) raises out of run_router_turn. The
         # domain design says `unknown` is the intended soft fallback — a failed
@@ -84,6 +91,8 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
                 llm=ctx.llm,
                 request_id=ctx.request_id,
                 prior_turn_had_refs=prior_turn_had_refs,
+                has_current_track=has_current_track,
+                has_recent_history=has_recent_history,
                 kv_cache=ctx.kv_cache,
                 callbacks=[cb] if cb is not None else None,
             )

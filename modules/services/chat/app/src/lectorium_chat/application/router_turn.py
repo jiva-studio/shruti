@@ -85,6 +85,8 @@ async def run_router_turn(
     request_id: str | None = None,
     model: str | None = None,
     prior_turn_had_refs: bool = False,
+    has_current_track: bool = False,
+    has_recent_history: bool = False,
     kv_cache: "Any | None" = None,
     # Langfuse handler list. When the router result is served from the
     # KV cache (deterministic hit), no LLM call happens and the
@@ -126,15 +128,26 @@ async def run_router_turn(
     )
     system_text = router_prompt.text.replace("{{LANG}}", lang)
     effective_model = router_prompt.config.get("model") or model
-    # Surface the one conversation-context bit the classifier needs to
-    # disambiguate a deictic follow-up. Kept terse + machine-parseable so
-    # it can't be mistaken for part of the user's question.
-    context_hint = (
-        "\n\n[context: the previous answer offered specific lectures/refs "
-        "the user may be referring to]"
-        if prior_turn_had_refs
-        else ""
+    # Surface the conversation + player context bits the classifier needs to
+    # set deictic flags CONSISTENTLY with reality — so it doesn't flag
+    # `current_ref` when no lecture is open, or `recent_ref`/`history_ref` when
+    # there is no listen-history to resolve against. Kept terse +
+    # machine-parseable so it can't be mistaken for part of the question.
+    hint_parts: list[str] = []
+    if prior_turn_had_refs:
+        hint_parts.append(
+            "the previous answer offered specific lectures/refs the user may "
+            "be referring to"
+        )
+    hint_parts.append(
+        "a lecture is currently open" if has_current_track
+        else "no lecture is currently open"
     )
+    hint_parts.append(
+        "the user has listening history" if has_recent_history
+        else "the user has NO listening history yet"
+    )
+    context_hint = "\n\n[context: " + "; ".join(hint_parts) + "]"
     messages: list[Message] = [
         {"role": "system", "content": system_text},
         {"role": "user", "content": f"{user_query}{context_hint}"},
@@ -165,6 +178,10 @@ async def run_router_turn(
                 # must not serve a decision cached for the same text in a
                 # no-context conversation, and vice-versa.
                 "prior_refs": prior_turn_had_refs,
+                # The player-context bits change the deictic-flag guidance, so
+                # the same text under different context must not collide.
+                "cur": has_current_track,
+                "hist": has_recent_history,
             },
             ttl_s=TTL_7D,
             schema=RoutingDecision,
