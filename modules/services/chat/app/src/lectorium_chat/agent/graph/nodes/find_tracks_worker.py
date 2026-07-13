@@ -194,9 +194,15 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
         f"Write the description in language code '{ctx.lang}'."
     )
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
-    out = await ctx.llm.structured_output(
-        msgs, _Prose, model=get_settings().llm_cheap, run_name="find_tracks_description"
-    )
+    try:
+        out = await ctx.llm.structured_output(
+            msgs, _Prose, model=get_settings().llm_cheap, run_name="find_tracks_description"
+        )
+    except Exception:  # noqa: BLE001 — a flaky cheap-model / parse miss on ONE card's
+        # blurb must not blow up the whole find_track turn (it's gathered with the
+        # others). Degrade to no description; the card still renders from its title.
+        log.warning("find_tracks_description_failed", request_id=ctx.request_id)
+        return ""
     return out.text.strip()
 
 
@@ -214,9 +220,14 @@ async def _intro(ctx: TurnContext, query: str, n: int, relaxed: str) -> str:
         f"Write the line in language code '{ctx.lang}'."
     )
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
-    out = await ctx.llm.structured_output(
-        msgs, _Prose, model=get_settings().llm_cheap, run_name="find_tracks_intro"
-    )
+    try:
+        out = await ctx.llm.structured_output(
+            msgs, _Prose, model=get_settings().llm_cheap, run_name="find_tracks_intro"
+        )
+    except Exception:  # noqa: BLE001 — same resilience as _describe: a parse miss on
+        # the lead-in must not kill the turn. Degrade to no intro line.
+        log.warning("find_tracks_intro_failed", request_id=ctx.request_id)
+        return ""
     return out.text.strip()
 
 
@@ -301,7 +312,8 @@ async def find_tracks_worker_node(
     intro, descriptions = prose[0], list(prose[1:])
 
     writer({"type": "status", "data": {"key": "composing_answer"}})
-    writer({"type": "delta", "data": {"text": intro + "\n\n"}})
+    if intro:
+        writer({"type": "delta", "data": {"text": intro + "\n\n"}})
 
     for (sc, disp, _description), desc_text in zip(kept, descriptions):
         chunk = sc.chunk
