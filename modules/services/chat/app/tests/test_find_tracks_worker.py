@@ -158,6 +158,39 @@ def _events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     return captured
 
 
+class _ProseRaisingLLM(_FakeLLM):
+    """Raises on the _Prose calls (per-lecture description / intro), like a flaky
+    cheap model returning unparseable JSON — the exact prod crash to guard."""
+
+    async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
+        if run_name in ("find_tracks_description", "find_tracks_intro"):
+            raise RuntimeError("structured_output: no parseable _Prose JSON in model output")
+        return await super().structured_output(messages, schema, run_name=run_name, model=model, callbacks=callbacks)
+
+
+async def test_description_parse_failure_does_not_crash_the_turn(_events) -> None:
+    # A flaky cheap-model parse miss on a card's blurb (and the intro) used to
+    # propagate out of asyncio.gather and null the whole find_track turn. Now it
+    # degrades: cards still render (without description / lead-in), no exception.
+    chunks = [_sc("t1", 70000, 0.9, "t1 quote"), _sc("t2", 80000, 0.6, "t2 quote")]
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([chunks]),
+        catalog_repo=_Catalog(titles={"t1": "Лекция А", "t2": "Лекция Б"},
+                              descriptions={"t1": "d", "t2": "d"}),
+        llm=_ProseRaisingLLM(),
+    )
+    out = await ftw.find_tracks_worker_node(
+        {"user_query": "vrindavan conversations", "extracted_args": {}}, _Runtime(ctx)
+    )
+    assert out == {}  # completed, did not raise
+    card_ids = [
+        e["data"]["payload"]["track_id"]
+        for e in _events if e["type"] == "action" and e["data"]["kind"] == "card"
+    ]
+    assert card_ids == ["t1", "t2"]  # cards still served despite the parse failures
+
+
 async def test_emits_description_card_and_verbatim_quote(_events) -> None:
     chunks = [
         _sc("t1", 65000, 0.7, "t1 weaker"),
