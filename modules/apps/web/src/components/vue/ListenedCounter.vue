@@ -17,6 +17,13 @@ const ANALYTICS = (import.meta.env.PUBLIC_ANALYTICS_URL as string | undefined)?.
 const WINDOW_DAYS = 365
 const RATE_WINDOW_DAYS = 14
 
+// Legacy listening that accrued BEFORE the analytics counter existed — the app
+// ran untracked for a while, so the report window doesn't include it. A flat
+// historical baseline (hours), added to the live total so the counter reflects
+// the true cumulative hours instead of restarting from the tracked window.
+const LEGACY_HOURS = 200
+const LEGACY_SECONDS = LEGACY_HOURS * 3600
+
 // BCP-47 tag for Intl number grouping (site lang codes are lowercased).
 const NUMBER_LOCALE: Record<string, string> = {
   ru: 'ru',
@@ -43,7 +50,8 @@ let timer: ReturnType<typeof setInterval> | undefined
 const liveSeconds = computed(() => {
   if (!loaded.value) return 0
   const elapsed = Math.max(0, (nowMs.value - asOfMs.value) / 1000)
-  return baseSeconds.value + ratePerSecond.value * elapsed
+  // LEGACY_SECONDS is the pre-tracking baseline; the rest is the live tracked total.
+  return LEGACY_SECONDS + baseSeconds.value + ratePerSecond.value * elapsed
 })
 
 const hours = computed(() => Math.floor(liveSeconds.value / 3600))
