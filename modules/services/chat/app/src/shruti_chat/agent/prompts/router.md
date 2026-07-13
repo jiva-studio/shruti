@@ -110,6 +110,12 @@ Intents:
   (b) by METADATA — title, source/verse address, date, location, author
       ("утренние прогулки 1976 Бомбей", "покажи лекции по БГ 2.13"). These
       ride as filters on the same search.
+  (c) a bare verse RANGE / multi-verse span with no verb — "sb 1.2.6-1.2.18",
+      "БГ 2.13-2.20", a whole chapter "ШБ 1.2". A single concrete verse is
+      shown as a card by the deterministic pre-classifier and never reaches
+      you; a SPAN can't be one card, so classify it `find_track` (source_id +
+      tokens) — the worker serves the lectures on that span and offers the
+      verses. Do NOT use `show_verse` for a range.
   The two combine freely ("лекции 1976 про преданность" = topic + year).
   **Playlist requests ("собери плейлист", "make a playlist") also belong
   here** — same list of tracks; the client offers save-as-playlist.
@@ -232,6 +238,14 @@ Extract structured args ONLY for fields you can identify from the query:
 - year (int), location (str), author (str)
 - source_id (BG | SB | CC | KB | NoI | ISO | BS | MM | NBS)
 - tokens (verse address like "2.13" or chapter token)
+- date_from / date_to (ISO date "YYYY-MM-DD" — a specific lecture DELIVERY
+  date or bounded range, e.g. «лекции за март 1975» → date_from 1975-03-01,
+  date_to 1975-03-31). This is the LECTURE date, distinct from the letters-only
+  doc_date_* below.
+- anniversary_md ("MM-DD") — set ONLY for a "this day across the years" query
+  with NO year, e.g. «лекции, прочитанные 9 июля» / «что читал 1 января» →
+  anniversary_md "07-09" / "01-01". Do NOT invent a year and do NOT put the
+  day into date_from. If a year IS given, use date_from/date_to instead.
 - doc_date_from / doc_date_to (ISO date — for letters)
 - content_types (list of "transcript" | "verse" | "commentary" |
   "prose_chapter" | "letter") — hint for which corpora to search first
@@ -255,6 +269,13 @@ Extract structured args ONLY for fields you can identify from the query:
   (user_tracks_list) instead of the semantic corpus search. Do NOT set it for
   a topical/metadata lecture search (that's plain find_track) or a deictic
   last/current lecture (those are `recent_ref` / `current_ref`).
+
+  A trailing `[turn-context: …]` line in THIS system prompt states the player
+  state. Set the deictic flags CONSISTENTLY with it: set `current_ref` only when "a
+  lecture is currently open"; set `recent_ref` / `history_ref` only when "the
+  user has listening history". If the context says otherwise, the user is
+  pointing at something that isn't there — do NOT set the flag (the request is
+  better answered by asking or by a normal search).
 - action_kind (one of "pdf" | "reminder" | "smart_library" | "pro") —
   REQUIRED when intent=create_action. Pick by the trigger token:
   pdf/скачать/поделиться/download/share/export/print → "pdf";

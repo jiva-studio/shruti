@@ -7,6 +7,7 @@ Business logic lives in `application/*_turn.py`.
 
 from shruti_chat.agent.graph.nodes.action_worker import action_worker_node
 from shruti_chat.agent.graph.nodes.catalog_worker import catalog_worker_node
+from shruti_chat.agent.graph.nodes.clarify_worker import clarify_worker_node
 from shruti_chat.agent.graph.nodes.corpus_fallback import corpus_fallback_node
 from shruti_chat.agent.graph.nodes.find_tracks_worker import find_tracks_worker_node
 from shruti_chat.agent.graph.nodes.help_worker import help_worker_node
@@ -23,6 +24,7 @@ __all__ = [
     "corpus_fallback_node",
     "locate_worker_node",
     "catalog_worker_node",
+    "clarify_worker_node",
     "find_tracks_worker_node",
     "recommend_worker_node",
     "action_worker_node",
