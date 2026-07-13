@@ -34,6 +34,11 @@ from lectorium_chat.infra.repositories._ref_filter import (
         # short-form right side
         ("7.91-2", ([7], 91, 92)),
         ("6.149-50", ([6], 149, 150)),
+        # SAME-prefix full-form range: the right side repeats the prefix, so use
+        # its last component as the EXACT upper bound (must NOT widen to 99999,
+        # which would spill into the rest of the chapter).
+        ("1.2.6-1.2.18", ([1, 2], 6, 18)),
+        ("2.13-2.20", ([2], 13, 20)),
         # cross-prefix range (rare); we widen `to` so the start prefix matches
         ("7.28-8.6", ([7], 28, 99999)),
         ("7.6.29-7.7.9", ([7, 6], 29, 99999)),

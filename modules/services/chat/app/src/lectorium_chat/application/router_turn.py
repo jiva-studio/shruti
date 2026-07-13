@@ -147,10 +147,15 @@ async def run_router_turn(
         "the user has listening history" if has_recent_history
         else "the user has NO listening history yet"
     )
-    context_hint = "\n\n[context: " + "; ".join(hint_parts) + "]"
+    # Attach the hint to the SYSTEM message, not the user message: the user
+    # controls their query text and could otherwise forge a `[context: …]`
+    # block to flip the deictic flags. On the trusted system side it can't be
+    # spoofed. (The state-side guards in conditional.py cross-check the flags
+    # regardless, but keeping the signal un-forgeable is the cleaner contract.)
+    context_hint = "\n\n[turn-context: " + "; ".join(hint_parts) + "]"
     messages: list[Message] = [
-        {"role": "system", "content": system_text},
-        {"role": "user", "content": f"{user_query}{context_hint}"},
+        {"role": "system", "content": f"{system_text}{context_hint}"},
+        {"role": "user", "content": user_query},
     ]
 
     async def _call() -> RoutingDecision:

@@ -252,12 +252,24 @@ def test_research_without_recent_ref_stays_research() -> None:
 def test_create_action_pdf_recent_ref_goes_to_action_worker() -> None:
     """«сделай PDF последней лекции» — no anchor, but recent_ref means the
     action worker resolves the last track itself via user_tracks_list, so
-    skip the pre-action search instead of misrouting to research_worker."""
+    skip the pre-action search instead of misrouting to research_worker —
+    when there IS a listen-log to resolve against."""
+    state = {
+        "intent": "create_action",
+        "extracted_args": {"action_kind": "pdf", "recent_ref": True},
+        "history_summary": "recent=4 in_progress=1",
+    }
+    assert route_after_router(state) == "action_worker"
+
+
+def test_create_action_pdf_recent_ref_without_history_asks() -> None:
+    """PDF of "last lecture" with no listen-log → user_tracks_list yields
+    nothing and the PDF card can't render; ask which lecture instead."""
     state = {
         "intent": "create_action",
         "extracted_args": {"action_kind": "pdf", "recent_ref": True},
     }
-    assert route_after_router(state) == "action_worker"
+    assert route_after_router(state) == "clarify_worker"
 
 
 def test_create_action_pdf_recent_ref_anchor_still_short_path() -> None:

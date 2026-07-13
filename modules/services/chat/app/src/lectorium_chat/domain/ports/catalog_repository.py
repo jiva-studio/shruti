@@ -71,9 +71,11 @@ class CatalogRepository(Protocol):
         tag_ids: list[str] | None,
         date_from: str | None,
         date_to: str | None,
+        anniversary_md: str | None = None,
     ) -> list[str] | None:
         """Return eligible track_ids for the metadata filters, or None
-        when no filter is active (caller should skip the constraint)."""
+        when no filter is active (caller should skip the constraint).
+        `anniversary_md` ("MM-DD") matches that calendar day across all years."""
         ...
 
     async def resolve(
