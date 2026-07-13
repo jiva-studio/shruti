@@ -3,7 +3,7 @@ module github.com/jiva-studio/shruti/auth
 go 1.25.0
 
 require (
-	github.com/go-chi/chi/v5 v5.2.2
+	github.com/go-chi/chi/v5 v5.2.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
@@ -39,7 +39,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.41.0 // indirect
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
