@@ -134,6 +134,39 @@ watch(() => auth.signedIn.value, (isIn) => { if (isIn) void profileSync.sync() }
 // the next turn re-reads the signed-in user's real limits from the server.
 watch(() => auth.session.value?.quotaId, () => resetLimits())
 
+// ── Resizable history sidebar (desktop) ────────────────────────────────────
+// The list column can be dragged wider/narrower by its right edge; the width
+// is clamped (never collapses, never swallows the conversation) and remembered
+// per browser.
+const SIDEBAR_KEY = 'lts.ai.sidebarWidth'
+const SIDEBAR_MIN = 200
+const SIDEBAR_MAX = 480
+const sidebarWidth = ref(256) // = w-64, the previous fixed width
+const clampSidebar = (px: number) => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Math.round(px)))
+onMounted(() => {
+  const saved = Number(window.localStorage?.getItem(SIDEBAR_KEY))
+  if (Number.isFinite(saved) && saved > 0) sidebarWidth.value = clampSidebar(saved)
+})
+let dragStartX = 0
+let dragStartW = 0
+function onSidebarMove(e: MouseEvent) {
+  sidebarWidth.value = clampSidebar(dragStartW + (e.clientX - dragStartX))
+}
+function onSidebarUp() {
+  window.removeEventListener('mousemove', onSidebarMove)
+  window.removeEventListener('mouseup', onSidebarUp)
+  document.body.style.userSelect = ''
+  try { window.localStorage?.setItem(SIDEBAR_KEY, String(sidebarWidth.value)) } catch { /* quota */ }
+}
+function startSidebarDrag(e: MouseEvent) {
+  e.preventDefault()
+  dragStartX = e.clientX
+  dragStartW = sidebarWidth.value
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onSidebarMove)
+  window.addEventListener('mouseup', onSidebarUp)
+}
+
 const lastQuestion = ref('')
 function send(text: string) {
   lastQuestion.value = text
@@ -214,7 +247,10 @@ function statusLabelFor(m: Msg): string {
     </div>
 
     <!-- Left rail: logo top, new chat, auth pinned bottom-left (ChatGPT-style) -->
-    <aside class="hidden w-64 flex-col border-r border-line bg-cream-deep/40 md:flex">
+    <aside
+      class="hidden shrink-0 flex-col border-r border-line bg-cream-deep/40 md:flex"
+      :style="{ width: sidebarWidth + 'px' }"
+    >
       <a :href="`/${props.lang}/`" class="flex items-center gap-2 px-4 pb-2 pt-4 font-serif text-lg font-bold text-ink">
         <img src="/app-icon.png" :alt="L.brand" width="32" height="32" class="h-8 w-8 rounded-lg" />
         <span class="whitespace-nowrap">{{ L.brand }}</span>
@@ -266,6 +302,16 @@ function statusLabelFor(m: Msg): string {
         <WebAuthBar :lang="props.lang" placement="up" />
       </div>
     </aside>
+
+    <!-- Drag handle to resize the history sidebar (desktop only). A slim strip
+         on the sidebar's right edge; grab-widen/narrow, clamped + remembered. -->
+    <div
+      class="hidden w-1 shrink-0 cursor-col-resize bg-line/30 transition-colors hover:bg-saffron/50 md:block"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize sidebar"
+      @mousedown="startSidebarDrag"
+    ></div>
 
     <!-- Chat column -->
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
