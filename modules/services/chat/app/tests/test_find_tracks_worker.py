@@ -63,15 +63,27 @@ def _track(tid: str, title: str | None) -> Track:
 
 
 class _Catalog:
-    def __init__(self, *, titles=None, descriptions=None, eligible=None, sources=None) -> None:
-        self._titles = titles or {}
+    def __init__(
+        self, *, titles=None, descriptions=None, eligible=None, sources=None,
+        ref_tracks=None,
+    ) -> None:
+        self._titles = dict(titles or {})
         self._descriptions = descriptions or {}
         self._eligible = eligible
         # opaque-id → short label, for source_short_label (exact id match, no norm)
         self._sources = sources or {}
+        # Tracks returned by the deterministic ref-index probe (list_tracks).
+        self._ref_tracks = ref_tracks or []
+        for t in self._ref_tracks:
+            self._titles.setdefault(t.id, t.title)
 
     async def filter_track_ids(self, **kwargs):
         return self._eligible
+
+    async def list_tracks(self, **kwargs):
+        # The ref-index probe: return the configured lectures regardless of the
+        # exact ref window (the parsing is covered by _ref_filter's own tests).
+        return list(self._ref_tracks)
 
     async def get_outline(self, track_id, lang):
         return ("[]", self._descriptions.get(track_id))
@@ -203,16 +215,16 @@ async def test_below_floor_results_dropped(_events) -> None:
     assert not [e for e in _events if e["type"] == "action"]
 
 
-async def test_bare_ref_no_lecture_asks_verses_or_lectures(_events) -> None:
-    # "sb 1.2.6-1.2.18" → find_track carried source_id+tokens but matched no
-    # lecture. Instead of a flat "no lectures", ask one grounded question and
-    # offer both paths as self-contained follow-up chips (no LLM hop). Uses the
-    # LIVE path: the LLM router emits source_id as the abbreviation "SB", which
-    # source_short_label can't match by id — the label is recovered via resolve.
+async def test_bare_ref_probe_serves_lectures_the_embedding_missed(_events) -> None:
+    # "sb 1.2.6-1.2.18" → semantic search returns 0 (a bare ref embeds to
+    # noise), but the deterministic ref-index HAS lectures. Probe it and SERVE
+    # those lectures (cards) instead of dead-ending, plus a "show verses" chip.
+    # Uses the LIVE path: the router emits source_id as the abbreviation "SB".
+    refs = [_track("r1", "Ценность жизни"), _track("r2", "Служите Богу")]
     ctx = _Ctx(
         embedder=_Embedder(),
-        chunk_repo=_ChunkRepo([[]]),  # zero results
-        catalog_repo=_Catalog(),  # no opaque-id label; resolve("source","SB")→ШБ
+        chunk_repo=_ChunkRepo([[]]),  # semantic: zero
+        catalog_repo=_Catalog(ref_tracks=refs),  # ref-index: two lectures
         llm=_FakeLLM(),
         lang="ru",
     )
@@ -225,34 +237,37 @@ async def test_bare_ref_no_lecture_asks_verses_or_lectures(_events) -> None:
     )
     assert out == {}
     text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    # No card/cite actions — it's a question, not a result.
-    assert not [e for e in _events if e["type"] == "action"]
-    # Grounded question names the resolved address, and both chips carry the ref.
-    assert "ШБ 1.2.6-1.2.18" in text
-    assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text
-    assert "[followup:Найти лекции по теме ШБ 1.2.6-1.2.18]" in text
+    card_ids = [
+        e["data"]["payload"]["track_id"]
+        for e in _events if e["type"] == "action" and e["data"]["kind"] == "card"
+    ]
+    assert card_ids == ["r1", "r2"]                     # served the found lectures
+    assert "ШБ 1.2.6-1.2.18" in text                    # localized ref label
+    assert "[card:r1]" in text and "[card:r2]" in text
+    assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text  # verses chip
 
 
-async def test_bare_ref_clarify_falls_back_to_bare_tokens_when_unresolvable(_events) -> None:
-    # If neither source_short_label nor resolve yields a label, the clarify
-    # still fires — just with the bare tokens (never crashes, never dead-ends).
+async def test_bare_ref_with_no_lectures_asks_to_show_verses(_events) -> None:
+    # When the ref-index is ALSO empty, don't dead-end: ask whether the user
+    # wanted the verses themselves, with a self-contained chip.
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[]]),
-        catalog_repo=_Catalog(),  # resolve("source","ZZ") → []
+        catalog_repo=_Catalog(ref_tracks=[]),  # semantic AND ref-index empty
         llm=_FakeLLM(),
-        lang="en",
+        lang="ru",
     )
     await ftw.find_tracks_worker_node(
         {
-            "user_query": "ZZ 9.9",
-            "extracted_args": {"source_id": "ZZ", "tokens": "9.9"},
+            "user_query": "sb 1.2.6-1.2.18",
+            "extracted_args": {"source_id": "SB", "tokens": "1.2.6-1.2.18"},
         },
         _Runtime(ctx),
     )
     text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert "[followup:Show verses 9.9]" in text
-    assert "[followup:Find lectures on 9.9]" in text
+    assert not [e for e in _events if e["type"] == "action"]  # no cards — a question
+    assert "лекций не нашлось" in text
+    assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text
 
 
 async def test_empty_topic_query_still_flat_empty(_events) -> None:
