@@ -134,28 +134,55 @@ async def test_lang_substituted_into_system_prompt() -> None:
     assert "{{LANG}}" not in msgs[0]["content"]
     assert "`ru`" in msgs[0]["content"] or "ru\n" in msgs[0]["content"]
     assert msgs[1]["role"] == "user"
+    # The user message is the clean query; the player-context hint rides on the
+    # trusted SYSTEM message (so the user can't forge it).
     assert msgs[1]["content"] == "привет"
+    assert "[turn-context:" in msgs[0]["content"]
 
 
 @pytest.mark.asyncio
 async def test_prior_refs_flag_adds_context_hint_to_user_message() -> None:
     """A deictic follow-up ("эту") is ambiguous on the latest message
-    alone. When the prior turn surfaced refs, the router gets a terse
-    context hint appended to the user message so the classifier can
-    disambiguate; with no prior refs the message is untouched."""
+    alone. When the prior turn surfaced refs, the [turn-context] line in the
+    system message says so; with no prior refs that clause is omitted (the line
+    still carries the player-context bits). The user message stays clean."""
     llm = FakeLLMForRouter(
         responses=[RoutingDecision(intent="research", confidence=0.9)]
     )
     await run_router_turn("эту", lang="ru", llm=llm, prior_turn_had_refs=True)
-    msg = llm.seen_calls[0][1]["content"]
-    assert msg.startswith("эту")
-    assert "previous answer offered" in msg
+    sys_msg, user_msg = llm.seen_calls[0][0]["content"], llm.seen_calls[0][1]["content"]
+    assert user_msg == "эту"
+    assert "previous answer offered" in sys_msg
 
     llm2 = FakeLLMForRouter(
         responses=[RoutingDecision(intent="research", confidence=0.9)]
     )
     await run_router_turn("эту", lang="ru", llm=llm2, prior_turn_had_refs=False)
-    assert llm2.seen_calls[0][1]["content"] == "эту"
+    assert "previous answer offered" not in llm2.seen_calls[0][0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_player_context_bits_surface_in_hint() -> None:
+    """The router message states the player state so the classifier sets
+    deictic flags consistently with reality (nothing open / no history)."""
+    llm = FakeLLMForRouter(
+        responses=[RoutingDecision(intent="research", confidence=0.9)]
+    )
+    await run_router_turn(
+        "перескажи текущую", lang="ru", llm=llm,
+        has_current_track=True, has_recent_history=False,
+    )
+    sys_msg = llm.seen_calls[0][0]["content"]  # hint is on the system message
+    assert "a lecture is currently open" in sys_msg
+    assert "NO listening history" in sys_msg
+
+    llm2 = FakeLLMForRouter(
+        responses=[RoutingDecision(intent="research", confidence=0.9)]
+    )
+    await run_router_turn("привет", lang="ru", llm=llm2)  # defaults: both False
+    sys_msg2 = llm2.seen_calls[0][0]["content"]
+    assert "no lecture is currently open" in sys_msg2
+    assert "NO listening history" in sys_msg2
 
 
 @pytest.mark.asyncio

@@ -37,13 +37,16 @@ from langgraph.runtime import Runtime
 from pydantic import BaseModel
 
 from shruti_chat.agent.graph.nodes._worker_common import (
+    LocalizedReply,
     build_cite_payload,
+    localized_reply,
     resolve_track_display,
 )
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message, ScoredChunk
+from shruti_chat.infra.repositories._ref_filter import parse_tokens
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 log = get_logger(__name__)
@@ -93,7 +96,17 @@ async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]
     """Ordered (relaxed-label, filter-kwargs) ladder: index 0 is fully
     constrained, each next entry drops the narrowest remaining constraint."""
     source_id = args.get("source_id") if isinstance(args.get("source_id"), str) else None
-    date_from, date_to = _year_range(args.get("year"))
+    # Delivery-date constraint: an explicit ISO range (date_from/date_to) wins;
+    # otherwise derive a full-year range from a bare `year`. `anniversary_md`
+    # ("MM-DD") narrows to that calendar day across all years. All three combine
+    # freely with a topic so "лекции про карму за 1975" / "…9 июля" filter too.
+    def _s(k: str) -> str | None:
+        v = args.get(k)
+        return v if isinstance(v, str) and v else None
+    date_from, date_to = _s("date_from"), _s("date_to")
+    if not date_from and not date_to:
+        date_from, date_to = _year_range(args.get("year"))
+    anniversary_md = _s("anniversary_md")
     author_id = await _resolve_id(ctx, "author", args.get("author"))
     location_id = await _resolve_id(ctx, "location", args.get("location"))
 
@@ -104,11 +117,12 @@ async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]
         "tag_ids": None,
         "date_from": date_from,
         "date_to": date_to,
+        "anniversary_md": anniversary_md,
     }
     ladder: list[tuple[str, dict]] = [("", dict(full))]
     relaxed: list[str] = []
     for label, keys in (
-        ("year", ("date_from", "date_to")),
+        ("date", ("date_from", "date_to", "anniversary_md")),
         ("location", ("location_id",)),
         ("author", ("author_id",)),
         ("source", ("source_id",)),
@@ -234,6 +248,28 @@ async def find_tracks_worker_node(
             break
 
     if not lectures:
+        # Semantic search found nothing — but for a BARE scripture reference
+        # that's the wrong tool: "sb 1.2.6-1.2.18" embeds to noise, so a real
+        # match scores below the floor. The catalog maps lectures→verses
+        # directly (track_references), so probe that index deterministically
+        # before giving up. Most bare refs DO have lectures the embedding
+        # missed — serve them. Only when the ref-index is ALSO empty do we ask
+        # whether the user wanted the verses themselves.
+        source_id = args.get("source_id")
+        tokens = args.get("tokens")
+        if source_id and tokens:
+            return await _probe_and_answer_ref(ctx, writer, str(source_id), str(tokens))
+        # A date-only query ("лекции, прочитанные 9 июля") is also invisible to
+        # semantic search (no topic to embed). The catalog stores a per-track
+        # date, so probe it directly by year range and/or "on this day" (MM-DD
+        # across all years — the anniversary the user usually means).
+        date_from = args.get("date_from")
+        date_to = args.get("date_to")
+        anniversary = args.get("anniversary_md")
+        if date_from or date_to or anniversary:
+            return await _probe_and_answer_date(
+                ctx, writer, date_from, date_to, anniversary,
+            )
         log.info("find_tracks_empty", request_id=ctx.request_id, query=query[:80])
         return await _emit_empty(ctx, writer, query)
 
@@ -305,6 +341,185 @@ async def find_tracks_worker_node(
         relaxed=relaxed,
     )
     return {}
+
+
+def _emit_reply(writer, reply, *, prefix_line: str = "", suffix: str = "") -> None:
+    """Stream a LocalizedReply: the line (optionally with a trailing `suffix`
+    like the card block already emitted separately) then its follow-up chips,
+    each as a `[followup:…]` marker on its own line."""
+    line = (reply.line or "").strip()
+    if line:
+        writer({"type": "delta", "data": {"text": prefix_line + line + suffix}})
+    for chip in reply.chips[:3]:
+        chip = chip.replace("]", "").replace("|", "").strip()
+        if chip:
+            writer({"type": "delta", "data": {"text": f"\n[followup:{chip}]"}})
+
+
+async def _resolve_source(ctx: TurnContext, source_id: str) -> tuple[str, str | None]:
+    """Resolve a source arg to `(opaque_id, short_label)`. `source_id` may be an
+    opaque catalog id (deterministic path) OR an abbreviation like "SB" (the LLM
+    router emits the abbrev). Returns the opaque id needed for the ref lookup and
+    the label localized to `ctx.lang` ("ШБ" for ru). Falls back to the input id
+    and a None label when the repo can't resolve it."""
+    if ctx.catalog_repo is None:
+        return source_id, None
+    try:
+        short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang)
+    except Exception:  # noqa: BLE001 — a label miss must never fail the turn
+        short = None
+    if short:  # source_id was already the opaque id
+        return source_id, short
+    try:
+        hits = await ctx.catalog_repo.resolve("source", source_id, lang=None, limit=1)
+    except Exception:  # noqa: BLE001
+        hits = []
+    # The resolved id DRIVES the lecture filter (source_id=opaque below), not
+    # just the label — so a weak fuzzy match must not swap in the wrong book.
+    # Require real confidence; below it, keep the input id (which won't match →
+    # the honest "no lectures, show verses?" clarify) rather than serve a
+    # different scripture.
+    if not hits or hits[0].confidence < 0.6:
+        return source_id, None
+    opaque = hits[0].id
+    try:
+        short = await ctx.catalog_repo.source_short_label(opaque, lang=ctx.lang)
+    except Exception:  # noqa: BLE001
+        short = None
+    return opaque, (short or hits[0].extra.get("short_name") or None)
+
+
+async def _probe_and_answer_ref(
+    ctx: TurnContext, writer, source_id: str, tokens: str
+) -> dict:
+    """Semantic search missed a bare scripture ref. Probe the catalog's
+    lecture→verse index (deterministic, no embedding) and either SERVE the
+    lectures it finds, or — when that index is also empty — ask whether the user
+    wanted the verses themselves."""
+    opaque, short = await _resolve_source(ctx, source_id)
+    ref = f"{short} {tokens}" if short else tokens
+
+    tracks = []
+    parsed = parse_tokens(tokens)
+    if parsed is not None and ctx.catalog_repo is not None:
+        prefix, ref_from, ref_to = parsed
+        try:
+            tracks = await ctx.catalog_repo.list_tracks(
+                author_id=None, source_id=opaque, location_id=None, tag_ids=None,
+                title_query=None, date_from=None, date_to=None, lang=ctx.lang,
+                limit=8, offset=0,
+                ref_prefix=".".join(map(str, prefix)) or None,
+                ref_from=ref_from, ref_to=ref_to,
+            )
+        except Exception:  # noqa: BLE001 — a probe miss falls back to the clarify
+            log.exception("find_tracks_ref_probe_failed", request_id=ctx.request_id)
+            tracks = []
+
+    writer({"type": "status", "data": {"key": "composing_answer"}})
+    cards = await _renderable(ctx, tracks)
+
+    if cards:
+        # SERVE: these are the lectures semantic search missed. Emit a lead-in
+        # (LLM-localized to the user's language), one card per lecture, and a
+        # chip to see the verses instead. The count is of RENDERABLE cards
+        # (title-less ones dropped), so it never claims more than it shows.
+        log.info(
+            "find_tracks_ref_served", request_id=ctx.request_id,
+            source_id=opaque, tokens=tokens, n=len(cards),
+        )
+        reply = await localized_reply(
+            ctx,
+            f"Found {len(cards)} lecture(s) that discuss the verses {ref}. Write a "
+            f"one-line lead-in for the list below. Add ONE chip that means 'show "
+            f"the verses {ref} themselves' and includes '{ref}'.",
+        )
+        _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[]), suffix="\n\n")
+        _stream_cards(writer, cards)
+        for chip in (reply.chips or [])[:1]:
+            chip = chip.replace("]", "").replace("|", "").strip()
+            if chip:
+                writer({"type": "delta", "data": {"text": f"[followup:{chip}]"}})
+        return {}
+
+    # The ref-index is empty too — ask whether they wanted the verses.
+    log.info(
+        "find_tracks_ref_clarify", request_id=ctx.request_id,
+        source_id=opaque, tokens=tokens,
+    )
+    reply = await localized_reply(
+        ctx,
+        f"No lectures were found on {ref}. Ask, in one short line, whether the "
+        f"user wants to read the verses {ref} themselves. Add ONE chip meaning "
+        f"'show verses {ref}' that includes '{ref}'.",
+    )
+    _emit_reply(writer, reply)
+    return {}
+
+
+async def _probe_and_answer_date(
+    ctx: TurnContext, writer, date_from, date_to, anniversary_md,
+) -> dict:
+    """A date-only query has no topic to embed, so probe the catalog's per-track
+    date index directly: `date_from`/`date_to` bound a year/range, `anniversary_md`
+    ("MM-DD") matches that calendar day across ALL years ("in this day in
+    history"). Serve what's found, else say so honestly."""
+    tracks = []
+    if ctx.catalog_repo is not None:
+        try:
+            tracks = await ctx.catalog_repo.list_tracks(
+                author_id=None, source_id=None, location_id=None, tag_ids=None,
+                title_query=None, date_from=date_from, date_to=date_to, lang=ctx.lang,
+                limit=8, offset=0, anniversary_md=anniversary_md,
+            )
+        except Exception:  # noqa: BLE001 — a probe miss falls back to the empty line
+            log.exception("find_tracks_date_probe_failed", request_id=ctx.request_id)
+            tracks = []
+    writer({"type": "status", "data": {"key": "composing_answer"}})
+    cards = await _renderable(ctx, tracks)
+    if cards:
+        log.info(
+            "find_tracks_date_served", request_id=ctx.request_id,
+            date_from=date_from, date_to=date_to, anniversary_md=anniversary_md,
+            n=len(cards),
+        )
+        reply = await localized_reply(
+            ctx,
+            f"Found {len(cards)} lecture(s) delivered on the requested date. "
+            f"Write a one-line lead-in for the list below. No chips.",
+        )
+        _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[]), suffix="\n\n")
+        _stream_cards(writer, cards)
+        return {}
+    reply = await localized_reply(
+        ctx, "No lectures were found for the requested date. Say so in one "
+             "short line. No chips.",
+    )
+    _emit_reply(writer, reply)
+    return {}
+
+
+async def _renderable(ctx: TurnContext, tracks) -> list[tuple[str, dict]]:
+    """Resolve display attribution for each track, DROPPING any with no title —
+    a catalog-less client can't render it (same invariant as the main find
+    path). Returns [(track_id, payload), …] so the caller can size the lead-in
+    to what will actually show and fall through when nothing is renderable."""
+    out: list[tuple[str, dict]] = []
+    for track in tracks:
+        disp = await resolve_track_display(ctx, track.id)
+        title = disp.get("track_title") or track.title
+        if not title:
+            continue
+        out.append((track.id, {"track_id": track.id, **disp, "track_title": title}))
+    return out
+
+
+def _stream_cards(writer, cards: list[tuple[str, dict]]) -> None:
+    """Emit one card action + `[card:id]` marker per resolved card
+    (payload-before-marker, honouring the SSE ordering invariant)."""
+    for track_id, payload in cards:
+        writer({"type": "action",
+                "data": {"kind": "card", "id": track_id, "payload": payload}})
+        writer({"type": "delta", "data": {"text": f"[card:{track_id}]\n\n"}})
 
 
 async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:

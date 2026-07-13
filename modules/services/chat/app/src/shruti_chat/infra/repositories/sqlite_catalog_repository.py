@@ -289,9 +289,11 @@ def _filter_track_ids_sync(
     tag_ids: list[str] | None,
     date_from: str | None,
     date_to: str | None,
+    anniversary_md: str | None = None,
 ) -> list[str] | None:
     source_id = _normalize_source_id(db_path, source_id)
-    if not any([author_id, source_id, location_id, tag_ids, date_from, date_to]):
+    if not any([author_id, source_id, location_id, tag_ids, date_from, date_to,
+                anniversary_md]):
         return None
     sql = ["SELECT t.id FROM tracks t WHERE t.hidden = 0"]
     params: list[Any] = []
@@ -303,6 +305,8 @@ def _filter_track_ids_sync(
         sql.append("AND t.date >= ?"); params.append(date_from)
     if date_to:
         sql.append("AND t.date <= ?"); params.append(date_to)
+    if anniversary_md:
+        sql.append("AND substr(t.date, 6, 5) = ?"); params.append(anniversary_md)
     if tag_ids:
         ph = ",".join("?" * len(tag_ids))
         sql.append(
@@ -566,6 +570,7 @@ def _list_tracks_sync(
     ref_prefix: str | None = None,
     ref_from: int | None = None,
     ref_to: int | None = None,
+    anniversary_md: str | None = None,
 ) -> list[Track]:
     source_id = _normalize_source_id(db_path, source_id)
     # When lang is None, fall back to "en" for the title-lookup join, but
@@ -597,6 +602,10 @@ def _list_tracks_sync(
             sql.append("AND t.date >= ?"); params.append(date_from)
         if date_to:
             sql.append("AND t.date <= ?"); params.append(date_to)
+        if anniversary_md:
+            # "on this day in history": month-day (MM-DD) across all years.
+            # Dates are stored as YYYY-MM-DD, so substr(6,5) is the MM-DD slice.
+            sql.append("AND substr(t.date, 6, 5) = ?"); params.append(anniversary_md)
         if tag_ids:
             placeholders = ",".join("?" * len(tag_ids))
             sql.append(
@@ -1078,6 +1087,7 @@ class SqliteCatalogRepository:
         ref_prefix: str | None = None,
         ref_from: int | None = None,
         ref_to: int | None = None,
+        anniversary_md: str | None = None,
     ) -> list[Track]:
         return await asyncio.to_thread(
             _list_tracks_sync,
@@ -1092,6 +1102,7 @@ class SqliteCatalogRepository:
             lang=lang,
             limit=limit,
             offset=offset,
+            anniversary_md=anniversary_md,
             ref_prefix=ref_prefix,
             ref_from=ref_from,
             ref_to=ref_to,
@@ -1106,6 +1117,7 @@ class SqliteCatalogRepository:
         tag_ids: list[str] | None,
         date_from: str | None,
         date_to: str | None,
+        anniversary_md: str | None = None,
     ) -> list[str] | None:
         return await asyncio.to_thread(
             _filter_track_ids_sync,
@@ -1116,6 +1128,7 @@ class SqliteCatalogRepository:
             tag_ids=tag_ids,
             date_from=date_from,
             date_to=date_to,
+            anniversary_md=anniversary_md,
         )
 
     async def resolve(
