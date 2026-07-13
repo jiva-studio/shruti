@@ -302,16 +302,21 @@ function statusLabelFor(m: Msg): string {
       </div>
     </aside>
 
-    <!-- Drag handle = the sidebar's single divider line (the aside has no
-         border of its own). A 1px line, grab-widen/narrow, clamped + remembered;
-         highlights on hover. Desktop only. -->
-    <div
-      class="hidden w-px shrink-0 cursor-col-resize bg-line transition-colors hover:bg-saffron md:block"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize sidebar"
-      @mousedown="startSidebarDrag"
-    ></div>
+    <!-- Sidebar divider + resize handle (desktop only). Visually a single 1px
+         line (the aside has no border of its own); its layout footprint stays
+         1px so nothing shifts. A WIDER transparent grab zone is overlaid,
+         centred on the line, so it's easy to grab without changing the look.
+         Hovering the grab zone highlights the line (group-hover). -->
+    <div class="group relative hidden w-px shrink-0 md:block">
+      <div class="h-full w-px bg-line transition-colors group-hover:bg-saffron"></div>
+      <div
+        class="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2 cursor-col-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        @mousedown="startSidebarDrag"
+      ></div>
+    </div>
 
     <!-- Chat column -->
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
