@@ -25,6 +25,16 @@ const signInClass = computed(() =>
     : 'flex h-9 items-center rounded-lg border border-line bg-cream px-4 text-sm font-semibold text-ink-soft transition hover:border-saffron hover:text-saffron'
 )
 
+// Signed-in trigger. Keeps the saffron-tinted bordered pill in BOTH placements.
+// In the rail it spans the full column (px-3 py-2) with the name flexing so the
+// Pro badge sits in the right corner with padding (never glued/clipped); in the
+// top nav it's the compact hug-content pill.
+const accountClass = computed(() =>
+  isRail.value
+    ? 'flex w-full items-center gap-2 rounded-lg border border-saffron/30 bg-saffron/10 px-3 py-2 text-sm text-ink-soft transition hover:border-saffron hover:bg-saffron/15'
+    : 'flex h-9 items-center gap-2 rounded-lg border border-saffron/30 bg-saffron/10 px-3 text-sm text-ink-soft transition hover:border-saffron hover:bg-saffron/15'
+)
+
 const BACKEND_FALLBACK = 'https://api.shruti.local'
 const AUTH = (import.meta.env.PUBLIC_AUTH_API_URL as string | undefined)?.replace(/\/$/, '') || BACKEND_FALLBACK
 const googleClientId = import.meta.env.PUBLIC_GOOGLE_CLIENT_ID as string | undefined
@@ -115,18 +125,20 @@ onBeforeUnmount(() => {
     <template v-if="auth.signedIn.value">
       <button
         type="button"
-        class="flex h-9 items-center gap-2 rounded-lg border border-saffron/30 bg-saffron/10 px-3 text-sm text-ink-soft transition hover:border-saffron hover:bg-saffron/15"
-        :class="isRail && 'w-full'"
+        :class="accountClass"
         @click="toggle"
       >
-        <span class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-saffron/20 text-xs font-semibold text-saffron">
+        <span class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-saffron/20 text-xs font-semibold text-saffron">
           <img v-if="auth.session.value?.picture" :src="auth.session.value.picture" alt="" class="h-full w-full object-cover" />
           <span v-else>{{ initial }}</span>
         </span>
-        <span class="hidden max-w-[8rem] truncate sm:inline">{{ displayName }}</span>
+        <span
+          class="hidden truncate text-left sm:inline"
+          :class="isRail ? 'min-w-0 flex-1' : 'max-w-[8rem]'"
+        >{{ displayName }}</span>
         <span
           v-if="auth.isPro.value"
-          class="rounded-full bg-saffron px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-cream"
+          class="shrink-0 rounded-full bg-saffron px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-cream"
           >Pro</span
         >
       </button>

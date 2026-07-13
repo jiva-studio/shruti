@@ -71,7 +71,6 @@ const L = {
   retry: t('ai.retry'),
   errTitle: t('ai.errTitle'),
   errBody: t('ai.errBody'),
-  suggestions: [t('chat.suggest.1'), t('chat.suggest.2'), t('chat.suggest.3')],
 }
 
 const STATUS: Record<string, string> = {
@@ -133,6 +132,39 @@ watch(() => auth.signedIn.value, (isIn) => { if (isIn) void profileSync.sync() }
 // Sign-in / sign-out swaps the rate-limit bucket; drop any anonymous cap so
 // the next turn re-reads the signed-in user's real limits from the server.
 watch(() => auth.session.value?.quotaId, () => resetLimits())
+
+// ── Resizable history sidebar (desktop) ────────────────────────────────────
+// The list column can be dragged wider/narrower by its right edge; the width
+// is clamped (never collapses, never swallows the conversation) and remembered
+// per browser.
+const SIDEBAR_KEY = 'lts.ai.sidebarWidth'
+const SIDEBAR_MIN = 200
+const SIDEBAR_MAX = 480
+const sidebarWidth = ref(256) // = w-64, the previous fixed width
+const clampSidebar = (px: number) => Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Math.round(px)))
+onMounted(() => {
+  const saved = Number(window.localStorage?.getItem(SIDEBAR_KEY))
+  if (Number.isFinite(saved) && saved > 0) sidebarWidth.value = clampSidebar(saved)
+})
+let dragStartX = 0
+let dragStartW = 0
+function onSidebarMove(e: MouseEvent) {
+  sidebarWidth.value = clampSidebar(dragStartW + (e.clientX - dragStartX))
+}
+function onSidebarUp() {
+  window.removeEventListener('mousemove', onSidebarMove)
+  window.removeEventListener('mouseup', onSidebarUp)
+  document.body.style.userSelect = ''
+  try { window.localStorage?.setItem(SIDEBAR_KEY, String(sidebarWidth.value)) } catch { /* quota */ }
+}
+function startSidebarDrag(e: MouseEvent) {
+  e.preventDefault()
+  dragStartX = e.clientX
+  dragStartW = sidebarWidth.value
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onSidebarMove)
+  window.addEventListener('mouseup', onSidebarUp)
+}
 
 const lastQuestion = ref('')
 function send(text: string) {
@@ -214,7 +246,10 @@ function statusLabelFor(m: Msg): string {
     </div>
 
     <!-- Left rail: logo top, new chat, auth pinned bottom-left (ChatGPT-style) -->
-    <aside class="hidden w-64 flex-col border-r border-line bg-cream-deep/40 md:flex">
+    <aside
+      class="hidden shrink-0 flex-col bg-cream-deep/40 md:flex"
+      :style="{ width: sidebarWidth + 'px' }"
+    >
       <a :href="`/${props.lang}/`" class="flex items-center gap-2 px-4 pb-2 pt-4 font-serif text-lg font-bold text-ink">
         <img src="/app-icon.png" :alt="L.brand" width="32" height="32" class="h-8 w-8 rounded-lg" />
         <span class="whitespace-nowrap">{{ L.brand }}</span>
@@ -267,6 +302,22 @@ function statusLabelFor(m: Msg): string {
       </div>
     </aside>
 
+    <!-- Sidebar divider + resize handle (desktop only). Visually a single 1px
+         line (the aside has no border of its own); its layout footprint stays
+         1px so nothing shifts. A WIDER transparent grab zone is overlaid,
+         centred on the line, so it's easy to grab without changing the look.
+         Hovering the grab zone highlights the line (group-hover). -->
+    <div class="group relative hidden w-px shrink-0 md:block">
+      <div class="h-full w-px bg-line transition-colors group-hover:bg-saffron"></div>
+      <div
+        class="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2 cursor-col-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        @mousedown="startSidebarDrag"
+      ></div>
+    </div>
+
     <!-- Chat column -->
     <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <!-- Empty state: centered greeting + composer + prompt chips -->
@@ -284,14 +335,6 @@ function statusLabelFor(m: Msg): string {
             >
               <template #spinner><ChatDots /></template>
             </ChatComposer>
-          </div>
-          <div class="mt-5 flex flex-wrap justify-center gap-2">
-            <button
-              v-for="s in L.suggestions"
-              :key="s"
-              class="rounded-full border border-line bg-cream px-4 py-2 text-sm text-ink-soft transition hover:border-saffron hover:text-saffron"
-              @click="send(s)"
-            >{{ s }}</button>
           </div>
         </div>
       </div>
