@@ -31,6 +31,7 @@ class _Ctx:
     translate_citations: bool = False
     translator: Any | None = None
     request_id: str = "req-test"
+    kv_cache: Any | None = None
 
 
 @dataclass
@@ -125,9 +126,18 @@ class _Catalog:
 class _FakeLLM:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.situations: list[str] = []
 
     async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
         self.calls.append(run_name or "")
+        fields = set(getattr(schema, "model_fields", {}))
+        if {"line", "chips"} <= fields:  # LocalizedReply — echo the situation
+            situation = messages[-1]["content"]
+            self.situations.append(situation)
+            # A deterministic stand-in: a marker line + one chip, so tests can
+            # assert the localized path ran and a chip was emitted, without
+            # depending on real LLM phrasing.
+            return schema(line=f"LINE[{run_name}]", chips=["CHIP"])
         return schema(text=f"prose[{run_name}]")
 
 
@@ -223,11 +233,12 @@ async def test_bare_ref_probe_serves_lectures_the_embedding_missed(_events) -> N
     # those lectures (cards) instead of dead-ending, plus a "show verses" chip.
     # Uses the LIVE path: the router emits source_id as the abbreviation "SB".
     refs = [_track("r1", "Ценность жизни"), _track("r2", "Служите Богу")]
+    llm = _FakeLLM()
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[]]),  # semantic: zero
         catalog_repo=_Catalog(ref_tracks=refs),  # ref-index: two lectures
-        llm=_FakeLLM(),
+        llm=llm,
         lang="ru",
     )
     out = await ftw.find_tracks_worker_node(
@@ -244,19 +255,24 @@ async def test_bare_ref_probe_serves_lectures_the_embedding_missed(_events) -> N
         for e in _events if e["type"] == "action" and e["data"]["kind"] == "card"
     ]
     assert card_ids == ["r1", "r2"]                     # served the found lectures
-    assert "ШБ 1.2.6-1.2.18" in text                    # localized ref label
     assert "[card:r1]" in text and "[card:r2]" in text
-    assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text  # verses chip
+    # Lead-in + verses chip are LLM-localized (any language), not hardcoded.
+    assert "LINE[localized_reply]" in text
+    assert "[followup:CHIP]" in text
+    # The resolved ref label ("ШБ 1.2.6-1.2.18") is handed to the localizer so
+    # the LLM writes it into the user's-language line.
+    assert any("ШБ 1.2.6-1.2.18" in s for s in llm.situations)
 
 
 async def test_bare_ref_with_no_lectures_asks_to_show_verses(_events) -> None:
     # When the ref-index is ALSO empty, don't dead-end: ask whether the user
     # wanted the verses themselves, with a self-contained chip.
+    llm = _FakeLLM()
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[]]),
         catalog_repo=_Catalog(ref_tracks=[]),  # semantic AND ref-index empty
-        llm=_FakeLLM(),
+        llm=llm,
         lang="ru",
     )
     await ftw.find_tracks_worker_node(
@@ -268,8 +284,10 @@ async def test_bare_ref_with_no_lectures_asks_to_show_verses(_events) -> None:
     )
     text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
     assert not [e for e in _events if e["type"] == "action"]  # no cards — a question
-    assert "лекций не нашлось" in text
-    assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text
+    assert "LINE[localized_reply]" in text
+    assert "[followup:CHIP]" in text
+    # The "no lectures on <ref>, show verses?" ask is localized with the ref.
+    assert any("ШБ 1.2.6-1.2.18" in s for s in llm.situations)
 
 
 async def test_topic_plus_date_applies_date_filter(_events) -> None:
@@ -319,7 +337,7 @@ async def test_date_only_query_probes_and_serves(_events) -> None:
     ]
     assert card_ids == ["d1", "d2"]
     text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert "на эту дату" in text
+    assert "LINE[localized_reply]" in text  # LLM-localized lead-in, any language
 
 
 async def test_date_query_with_no_lectures_says_so(_events) -> None:
@@ -336,7 +354,7 @@ async def test_date_query_with_no_lectures_says_so(_events) -> None:
     )
     text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
     assert not [e for e in _events if e["type"] == "action"]
-    assert "не нашлось" in text
+    assert "LINE[localized_reply]" in text  # localized "no lectures for that date"
 
 
 async def test_empty_topic_query_still_flat_empty(_events) -> None:

@@ -37,7 +37,9 @@ from langgraph.runtime import Runtime
 from pydantic import BaseModel
 
 from lectorium_chat.agent.graph.nodes._worker_common import (
+    LocalizedReply,
     build_cite_payload,
+    localized_reply,
     resolve_track_display,
 )
 from lectorium_chat.agent.graph.state import ChatState
@@ -341,23 +343,17 @@ async def find_tracks_worker_node(
     return {}
 
 
-# Localized deterministic strings for the bare-ref probe outcomes. `{ref}` is
-# the human address ("ШБ 1.2.6-1.2.18"); `{n}` is the lecture count. en is the
-# fallback for any locale not listed. Chips carry the ref verbatim so the tapped
-# follow-up re-routes correctly via followup_rewrite.
-_REF_SERVE_INTRO: dict[str, str] = {
-    "ru": "Нашёл {n} лекц. по стихам «{ref}»:",
-    "en": "Found {n} lecture(s) on «{ref}»:",
-}
-_REF_VERSES_CHIP: dict[str, str] = {
-    "ru": "Показать стихи {ref}",
-    "en": "Show verses {ref}",
-}
-# When the ref-index is ALSO empty: honest "no lectures" + offer the verses.
-_REF_CLARIFY: dict[str, tuple[str, str]] = {
-    "ru": ("По стихам «{ref}» лекций не нашлось. Показать сами стихи?", "Показать стихи {ref}"),
-    "en": ("No lectures found on «{ref}». Show the verses themselves?", "Show verses {ref}"),
-}
+def _emit_reply(writer, reply, *, prefix_line: str = "", suffix: str = "") -> None:
+    """Stream a LocalizedReply: the line (optionally with a trailing `suffix`
+    like the card block already emitted separately) then its follow-up chips,
+    each as a `[followup:…]` marker on its own line."""
+    line = (reply.line or "").strip()
+    if line:
+        writer({"type": "delta", "data": {"text": prefix_line + line + suffix}})
+    for chip in reply.chips[:3]:
+        chip = chip.replace("]", "").replace("|", "").strip()
+        if chip:
+            writer({"type": "delta", "data": {"text": f"\n[followup:{chip}]"}})
 
 
 async def _resolve_source(ctx: TurnContext, source_id: str) -> tuple[str, str | None]:
@@ -423,19 +419,26 @@ async def _probe_and_answer_ref(
     cards = await _renderable(ctx, tracks)
 
     if cards:
-        # SERVE: these are the lectures semantic search missed. Emit a lead-in,
-        # one card per lecture, and a chip to see the verses instead. The count
-        # is of RENDERABLE cards (title-less ones dropped), so it never claims
-        # more than it shows.
+        # SERVE: these are the lectures semantic search missed. Emit a lead-in
+        # (LLM-localized to the user's language), one card per lecture, and a
+        # chip to see the verses instead. The count is of RENDERABLE cards
+        # (title-less ones dropped), so it never claims more than it shows.
         log.info(
             "find_tracks_ref_served", request_id=ctx.request_id,
             source_id=opaque, tokens=tokens, n=len(cards),
         )
-        intro = _REF_SERVE_INTRO.get(ctx.lang, _REF_SERVE_INTRO["en"])
-        writer({"type": "delta", "data": {"text": intro.format(n=len(cards), ref=ref) + "\n\n"}})
+        reply = await localized_reply(
+            ctx,
+            f"Found {len(cards)} lecture(s) that discuss the verses {ref}. Write a "
+            f"one-line lead-in for the list below. Add ONE chip that means 'show "
+            f"the verses {ref} themselves' and includes '{ref}'.",
+        )
+        _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[]), suffix="\n\n")
         _stream_cards(writer, cards)
-        chip = _REF_VERSES_CHIP.get(ctx.lang, _REF_VERSES_CHIP["en"])
-        writer({"type": "delta", "data": {"text": f"[followup:{chip.format(ref=ref)}]"}})
+        for chip in (reply.chips or [])[:1]:
+            chip = chip.replace("]", "").replace("|", "").strip()
+            if chip:
+                writer({"type": "delta", "data": {"text": f"[followup:{chip}]"}})
         return {}
 
     # The ref-index is empty too — ask whether they wanted the verses.
@@ -443,21 +446,14 @@ async def _probe_and_answer_ref(
         "find_tracks_ref_clarify", request_id=ctx.request_id,
         source_id=opaque, tokens=tokens,
     )
-    question, chip = _REF_CLARIFY.get(ctx.lang, _REF_CLARIFY["en"])
-    writer({"type": "delta", "data": {"text": question.format(ref=ref)}})
-    writer({"type": "delta", "data": {"text": f"\n[followup:{chip.format(ref=ref)}]"}})
+    reply = await localized_reply(
+        ctx,
+        f"No lectures were found on {ref}. Ask, in one short line, whether the "
+        f"user wants to read the verses {ref} themselves. Add ONE chip meaning "
+        f"'show verses {ref}' that includes '{ref}'.",
+    )
+    _emit_reply(writer, reply)
     return {}
-
-
-# Localized lead-in / empty line for a date-only lecture query.
-_DATE_SERVE_INTRO: dict[str, str] = {
-    "ru": "Нашёл {n} лекц. на эту дату:",
-    "en": "Found {n} lecture(s) on that date:",
-}
-_DATE_EMPTY: dict[str, str] = {
-    "ru": "Лекций на эту дату не нашлось.",
-    "en": "No lectures found for that date.",
-}
 
 
 async def _probe_and_answer_date(
@@ -486,11 +482,19 @@ async def _probe_and_answer_date(
             date_from=date_from, date_to=date_to, anniversary_md=anniversary_md,
             n=len(cards),
         )
-        intro = _DATE_SERVE_INTRO.get(ctx.lang, _DATE_SERVE_INTRO["en"])
-        writer({"type": "delta", "data": {"text": intro.format(n=len(cards)) + "\n\n"}})
+        reply = await localized_reply(
+            ctx,
+            f"Found {len(cards)} lecture(s) delivered on the requested date. "
+            f"Write a one-line lead-in for the list below. No chips.",
+        )
+        _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[]), suffix="\n\n")
         _stream_cards(writer, cards)
         return {}
-    writer({"type": "delta", "data": {"text": _DATE_EMPTY.get(ctx.lang, _DATE_EMPTY["en"])}})
+    reply = await localized_reply(
+        ctx, "No lectures were found for the requested date. Say so in one "
+             "short line. No chips.",
+    )
+    _emit_reply(writer, reply)
     return {}
 
 
