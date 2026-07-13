@@ -566,6 +566,7 @@ def _list_tracks_sync(
     ref_prefix: str | None = None,
     ref_from: int | None = None,
     ref_to: int | None = None,
+    anniversary_md: str | None = None,
 ) -> list[Track]:
     source_id = _normalize_source_id(db_path, source_id)
     # When lang is None, fall back to "en" for the title-lookup join, but
@@ -597,6 +598,10 @@ def _list_tracks_sync(
             sql.append("AND t.date >= ?"); params.append(date_from)
         if date_to:
             sql.append("AND t.date <= ?"); params.append(date_to)
+        if anniversary_md:
+            # "on this day in history": month-day (MM-DD) across all years.
+            # Dates are stored as YYYY-MM-DD, so substr(6,5) is the MM-DD slice.
+            sql.append("AND substr(t.date, 6, 5) = ?"); params.append(anniversary_md)
         if tag_ids:
             placeholders = ",".join("?" * len(tag_ids))
             sql.append(
@@ -1078,6 +1083,7 @@ class SqliteCatalogRepository:
         ref_prefix: str | None = None,
         ref_from: int | None = None,
         ref_to: int | None = None,
+        anniversary_md: str | None = None,
     ) -> list[Track]:
         return await asyncio.to_thread(
             _list_tracks_sync,
@@ -1092,6 +1098,7 @@ class SqliteCatalogRepository:
             lang=lang,
             limit=limit,
             offset=offset,
+            anniversary_md=anniversary_md,
             ref_prefix=ref_prefix,
             ref_from=ref_from,
             ref_to=ref_to,

@@ -232,6 +232,14 @@ Extract structured args ONLY for fields you can identify from the query:
 - year (int), location (str), author (str)
 - source_id (BG | SB | CC | KB | NoI | ISO | BS | MM | NBS)
 - tokens (verse address like "2.13" or chapter token)
+- date_from / date_to (ISO date "YYYY-MM-DD" — a specific lecture DELIVERY
+  date or bounded range, e.g. «лекции за март 1975» → date_from 1975-03-01,
+  date_to 1975-03-31). This is the LECTURE date, distinct from the letters-only
+  doc_date_* below.
+- anniversary_md ("MM-DD") — set ONLY for a "this day across the years" query
+  with NO year, e.g. «лекции, прочитанные 9 июля» / «что читал 1 января» →
+  anniversary_md "07-09" / "01-01". Do NOT invent a year and do NOT put the
+  day into date_from. If a year IS given, use date_from/date_to instead.
 - doc_date_from / doc_date_to (ISO date — for letters)
 - content_types (list of "transcript" | "verse" | "commentary" |
   "prose_chapter" | "letter") — hint for which corpora to search first
