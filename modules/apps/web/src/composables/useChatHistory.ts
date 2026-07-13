@@ -347,10 +347,10 @@ export function useChatHistory(
   }
 
   onMounted(() => {
+    // Populate the sidebar list, but LAND ON THE WELCOME SCREEN — do not
+    // auto-reopen the last conversation. Opening /ai should invite a fresh
+    // question; past chats stay one click away in the sidebar.
     load()
-    // Reopen the most recent conversation so a refresh doesn't lose context.
-    const latest = chats.value[0]
-    if (latest) loadInto(latest.id)
   })
 
   // Persist on transcript growth and at each turn boundary (busy → idle).
