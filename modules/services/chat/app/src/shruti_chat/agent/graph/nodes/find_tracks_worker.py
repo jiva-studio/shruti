@@ -44,6 +44,7 @@ from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message, ScoredChunk
+from shruti_chat.infra.repositories._ref_filter import parse_tokens
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 log = get_logger(__name__)
@@ -234,23 +235,17 @@ async def find_tracks_worker_node(
             break
 
     if not lectures:
-        # A bare scripture reference that matched no lecture is AMBIGUOUS, not a
-        # dead end: the user may want to READ those verses, not find a talk on
-        # them. Instead of a flat "no lectures were found" (the old behaviour on
-        # e.g. "sb 1.2.6-1.2.18"), ask one grounded question and offer the two
-        # concrete paths as follow-up chips. The chips carry the ref verbatim so
-        # the tap re-routes correctly via followup_rewrite. Deterministic +
-        # localized — no LLM hop, so the question streams instantly.
+        # Semantic search found nothing — but for a BARE scripture reference
+        # that's the wrong tool: "sb 1.2.6-1.2.18" embeds to noise, so a real
+        # match scores below the floor. The catalog maps lectures→verses
+        # directly (track_references), so probe that index deterministically
+        # before giving up. Most bare refs DO have lectures the embedding
+        # missed — serve them. Only when the ref-index is ALSO empty do we ask
+        # whether the user wanted the verses themselves.
         source_id = args.get("source_id")
         tokens = args.get("tokens")
         if source_id and tokens:
-            log.info(
-                "find_tracks_ref_clarify",
-                request_id=ctx.request_id,
-                source_id=source_id,
-                tokens=tokens,
-            )
-            return await _emit_ref_clarify(ctx, writer, source_id, str(tokens))
+            return await _probe_and_answer_ref(ctx, writer, str(source_id), str(tokens))
         log.info("find_tracks_empty", request_id=ctx.request_id, query=query[:80])
         return await _emit_empty(ctx, writer, query)
 
@@ -324,68 +319,109 @@ async def find_tracks_worker_node(
     return {}
 
 
-# Localized "we found the reference but no lecture — verses or lectures?"
-# clarification. Kept deterministic (no LLM) so it streams instantly and is
-# trivially testable. `{ref}` is the human address ("ШБ 1.2.6-1.2.18"). Each
-# chip carries the ref verbatim so the tapped follow-up re-routes correctly.
-# en is the fallback for any locale not listed.
-_REF_CLARIFY: dict[str, tuple[str, str, str]] = {
-    "ru": (
-        "По запросу «{ref}» лекций не нашлось. "
-        "Показать сами стихи или найти лекции по этой теме?",
-        "Показать стихи {ref}",
-        "Найти лекции по теме {ref}",
-    ),
-    "en": (
-        "No lectures matched «{ref}». "
-        "Would you like the verses themselves, or lectures on this topic?",
-        "Show verses {ref}",
-        "Find lectures on {ref}",
-    ),
+# Localized deterministic strings for the bare-ref probe outcomes. `{ref}` is
+# the human address ("ШБ 1.2.6-1.2.18"); `{n}` is the lecture count. en is the
+# fallback for any locale not listed. Chips carry the ref verbatim so the tapped
+# follow-up re-routes correctly via followup_rewrite.
+_REF_SERVE_INTRO: dict[str, str] = {
+    "ru": "Нашёл {n} лекц. по стихам «{ref}»:",
+    "en": "Found {n} lecture(s) on «{ref}»:",
+}
+_REF_VERSES_CHIP: dict[str, str] = {
+    "ru": "Показать стихи {ref}",
+    "en": "Show verses {ref}",
+}
+# When the ref-index is ALSO empty: honest "no lectures" + offer the verses.
+_REF_CLARIFY: dict[str, tuple[str, str]] = {
+    "ru": ("По стихам «{ref}» лекций не нашлось. Показать сами стихи?", "Показать стихи {ref}"),
+    "en": ("No lectures found on «{ref}». Show the verses themselves?", "Show verses {ref}"),
 }
 
 
-async def _source_short(ctx: TurnContext, source_id: str) -> str | None:
-    """Best-effort short label in the USER's language ("ШБ" for ru) for a
-    source. `source_id` may be an opaque catalog id (deterministic path) OR an
-    abbreviation like "SB" (the LLM router emits the abbrev). `source_short_label`
-    matches the opaque id by exact equality and does NOT normalize, so on the
-    abbrev path we resolve the name → opaque id, then read the label BY ID so it
-    comes back in `ctx.lang` (resolve alone would hand back whatever locale the
-    abbrev matched — "SB" for a ru user)."""
+async def _resolve_source(ctx: TurnContext, source_id: str) -> tuple[str, str | None]:
+    """Resolve a source arg to `(opaque_id, short_label)`. `source_id` may be an
+    opaque catalog id (deterministic path) OR an abbreviation like "SB" (the LLM
+    router emits the abbrev). Returns the opaque id needed for the ref lookup and
+    the label localized to `ctx.lang` ("ШБ" for ru). Falls back to the input id
+    and a None label when the repo can't resolve it."""
     if ctx.catalog_repo is None:
-        return None
+        return source_id, None
     try:
         short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang)
     except Exception:  # noqa: BLE001 — a label miss must never fail the turn
         short = None
-    if short:
-        return short
+    if short:  # source_id was already the opaque id
+        return source_id, short
     try:
         hits = await ctx.catalog_repo.resolve("source", source_id, lang=None, limit=1)
     except Exception:  # noqa: BLE001
-        return None
+        hits = []
     if not hits:
-        return None
+        return source_id, None
+    opaque = hits[0].id
     try:
-        short = await ctx.catalog_repo.source_short_label(hits[0].id, lang=ctx.lang)
+        short = await ctx.catalog_repo.source_short_label(opaque, lang=ctx.lang)
     except Exception:  # noqa: BLE001
         short = None
-    return short or hits[0].extra.get("short_name") or hits[0].full_name or None
+    return opaque, (short or hits[0].extra.get("short_name") or None)
 
 
-async def _emit_ref_clarify(
+async def _probe_and_answer_ref(
     ctx: TurnContext, writer, source_id: str, tokens: str
 ) -> dict:
-    """Ask whether the user wants the verses or lectures for a bare ref that
-    matched no lecture, with two self-contained follow-up chips."""
-    writer({"type": "status", "data": {"key": "composing_answer"}})
-    short = await _source_short(ctx, source_id)
+    """Semantic search missed a bare scripture ref. Probe the catalog's
+    lecture→verse index (deterministic, no embedding) and either SERVE the
+    lectures it finds, or — when that index is also empty — ask whether the user
+    wanted the verses themselves."""
+    opaque, short = await _resolve_source(ctx, source_id)
     ref = f"{short} {tokens}" if short else tokens
-    question, chip_verses, chip_lectures = _REF_CLARIFY.get(ctx.lang, _REF_CLARIFY["en"])
+
+    tracks = []
+    parsed = parse_tokens(tokens)
+    if parsed is not None and ctx.catalog_repo is not None:
+        prefix, ref_from, ref_to = parsed
+        try:
+            tracks = await ctx.catalog_repo.list_tracks(
+                author_id=None, source_id=opaque, location_id=None, tag_ids=None,
+                title_query=None, date_from=None, date_to=None, lang=ctx.lang,
+                limit=8, offset=0,
+                ref_prefix=".".join(map(str, prefix)) or None,
+                ref_from=ref_from, ref_to=ref_to,
+            )
+        except Exception:  # noqa: BLE001 — a probe miss falls back to the clarify
+            log.exception("find_tracks_ref_probe_failed", request_id=ctx.request_id)
+            tracks = []
+
+    writer({"type": "status", "data": {"key": "composing_answer"}})
+
+    if tracks:
+        # SERVE: these are the lectures semantic search missed. Emit a lead-in,
+        # one card per lecture, and a chip to see the verses instead.
+        log.info(
+            "find_tracks_ref_served", request_id=ctx.request_id,
+            source_id=opaque, tokens=tokens, n=len(tracks),
+        )
+        intro = _REF_SERVE_INTRO.get(ctx.lang, _REF_SERVE_INTRO["en"])
+        writer({"type": "delta", "data": {"text": intro.format(n=len(tracks), ref=ref) + "\n\n"}})
+        for track in tracks:
+            disp = await resolve_track_display(ctx, track.id)
+            payload = {"track_id": track.id, **disp}
+            payload.setdefault("track_title", track.title)
+            writer({"type": "action",
+                    "data": {"kind": "card", "id": track.id, "payload": payload}})
+            writer({"type": "delta", "data": {"text": f"[card:{track.id}]\n\n"}})
+        chip = _REF_VERSES_CHIP.get(ctx.lang, _REF_VERSES_CHIP["en"])
+        writer({"type": "delta", "data": {"text": f"[followup:{chip.format(ref=ref)}]"}})
+        return {}
+
+    # The ref-index is empty too — ask whether they wanted the verses.
+    log.info(
+        "find_tracks_ref_clarify", request_id=ctx.request_id,
+        source_id=opaque, tokens=tokens,
+    )
+    question, chip = _REF_CLARIFY.get(ctx.lang, _REF_CLARIFY["en"])
     writer({"type": "delta", "data": {"text": question.format(ref=ref)}})
-    writer({"type": "delta", "data": {"text": f"\n[followup:{chip_verses.format(ref=ref)}]"}})
-    writer({"type": "delta", "data": {"text": f"\n[followup:{chip_lectures.format(ref=ref)}]"}})
+    writer({"type": "delta", "data": {"text": f"\n[followup:{chip.format(ref=ref)}]"}})
     return {}
 
 
