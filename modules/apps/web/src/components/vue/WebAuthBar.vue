@@ -25,13 +25,13 @@ const signInClass = computed(() =>
     : 'flex h-9 items-center rounded-lg border border-line bg-cream px-4 text-sm font-semibold text-ink-soft transition hover:border-saffron hover:text-saffron'
 )
 
-// Signed-in trigger. In the rail it mirrors the "Get the app" row exactly
-// (full width, px-3 py-2, plain hover — no border/fill card) so the avatar
-// lines up vertically with the download icon and the paddings are symmetric.
-// In the top nav it stays the compact saffron-tinted pill.
+// Signed-in trigger. Keeps the saffron-tinted bordered pill in BOTH placements.
+// In the rail it spans the full column (px-3 py-2) with the name flexing so the
+// Pro badge sits in the right corner with padding (never glued/clipped); in the
+// top nav it's the compact hug-content pill.
 const accountClass = computed(() =>
   isRail.value
-    ? 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-soft transition hover:bg-cream'
+    ? 'flex w-full items-center gap-2 rounded-lg border border-saffron/30 bg-saffron/10 px-3 py-2 text-sm text-ink-soft transition hover:border-saffron hover:bg-saffron/15'
     : 'flex h-9 items-center gap-2 rounded-lg border border-saffron/30 bg-saffron/10 px-3 text-sm text-ink-soft transition hover:border-saffron hover:bg-saffron/15'
 )
 
@@ -134,7 +134,7 @@ onBeforeUnmount(() => {
         </span>
         <span
           class="hidden truncate text-left sm:inline"
-          :class="isRail ? 'min-w-0' : 'max-w-[8rem]'"
+          :class="isRail ? 'min-w-0 flex-1' : 'max-w-[8rem]'"
         >{{ displayName }}</span>
         <span
           v-if="auth.isPro.value"
