@@ -71,7 +71,6 @@ const L = {
   retry: t('ai.retry'),
   errTitle: t('ai.errTitle'),
   errBody: t('ai.errBody'),
-  suggestions: [t('chat.suggest.1'), t('chat.suggest.2'), t('chat.suggest.3')],
 }
 
 const STATUS: Record<string, string> = {
@@ -248,7 +247,7 @@ function statusLabelFor(m: Msg): string {
 
     <!-- Left rail: logo top, new chat, auth pinned bottom-left (ChatGPT-style) -->
     <aside
-      class="hidden shrink-0 flex-col border-r border-line bg-cream-deep/40 md:flex"
+      class="hidden shrink-0 flex-col bg-cream-deep/40 md:flex"
       :style="{ width: sidebarWidth + 'px' }"
     >
       <a :href="`/${props.lang}/`" class="flex items-center gap-2 px-4 pb-2 pt-4 font-serif text-lg font-bold text-ink">
@@ -303,10 +302,11 @@ function statusLabelFor(m: Msg): string {
       </div>
     </aside>
 
-    <!-- Drag handle to resize the history sidebar (desktop only). A slim strip
-         on the sidebar's right edge; grab-widen/narrow, clamped + remembered. -->
+    <!-- Drag handle = the sidebar's single divider line (the aside has no
+         border of its own). A 1px line, grab-widen/narrow, clamped + remembered;
+         highlights on hover. Desktop only. -->
     <div
-      class="hidden w-1 shrink-0 cursor-col-resize bg-line/30 transition-colors hover:bg-saffron/50 md:block"
+      class="hidden w-px shrink-0 cursor-col-resize bg-line transition-colors hover:bg-saffron md:block"
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize sidebar"
@@ -330,14 +330,6 @@ function statusLabelFor(m: Msg): string {
             >
               <template #spinner><ChatDots /></template>
             </ChatComposer>
-          </div>
-          <div class="mt-5 flex flex-wrap justify-center gap-2">
-            <button
-              v-for="s in L.suggestions"
-              :key="s"
-              class="rounded-full border border-line bg-cream px-4 py-2 text-sm text-ink-soft transition hover:border-saffron hover:text-saffron"
-              @click="send(s)"
-            >{{ s }}</button>
           </div>
         </div>
       </div>
