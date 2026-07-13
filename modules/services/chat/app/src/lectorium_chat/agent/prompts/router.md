@@ -110,6 +110,12 @@ Intents:
   (b) by METADATA — title, source/verse address, date, location, author
       ("утренние прогулки 1976 Бомбей", "покажи лекции по БГ 2.13"). These
       ride as filters on the same search.
+  (c) a bare verse RANGE / multi-verse span with no verb — "sb 1.2.6-1.2.18",
+      "БГ 2.13-2.20", a whole chapter "ШБ 1.2". A single concrete verse is
+      shown as a card by the deterministic pre-classifier and never reaches
+      you; a SPAN can't be one card, so classify it `find_track` (source_id +
+      tokens) — the worker serves the lectures on that span and offers the
+      verses. Do NOT use `show_verse` for a range.
   The two combine freely ("лекции 1976 про преданность" = topic + year).
   **Playlist requests ("собери плейлист", "make a playlist") also belong
   here** — same list of tracks; the client offers save-as-playlist.
