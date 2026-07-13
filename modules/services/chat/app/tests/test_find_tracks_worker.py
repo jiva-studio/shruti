@@ -270,6 +270,47 @@ async def test_bare_ref_with_no_lectures_asks_to_show_verses(_events) -> None:
     assert "[followup:Показать стихи ШБ 1.2.6-1.2.18]" in text
 
 
+async def test_date_only_query_probes_and_serves(_events) -> None:
+    # "лекции 9 июля" → anniversary_md; semantic search finds nothing (no topic
+    # to embed), so probe the catalog's date index and serve what's on that day.
+    refs = [_track("d1", "Все измы"), _track("d2", "Смерть — это Бог")]
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(ref_tracks=refs),  # list_tracks returns these
+        llm=_FakeLLM(),
+        lang="ru",
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции 9 июля", "extracted_args": {"anniversary_md": "07-09"}},
+        _Runtime(ctx),
+    )
+    card_ids = [
+        e["data"]["payload"]["track_id"]
+        for e in _events if e["type"] == "action" and e["data"]["kind"] == "card"
+    ]
+    assert card_ids == ["d1", "d2"]
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert "на эту дату" in text
+
+
+async def test_date_query_with_no_lectures_says_so(_events) -> None:
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(ref_tracks=[]),
+        llm=_FakeLLM(),
+        lang="ru",
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции 30 февраля", "extracted_args": {"anniversary_md": "02-30"}},
+        _Runtime(ctx),
+    )
+    text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert not [e for e in _events if e["type"] == "action"]
+    assert "не нашлось" in text
+
+
 async def test_empty_topic_query_still_flat_empty(_events) -> None:
     # A topical query (no scripture ref) with no results keeps the old flat
     # empty line — clarify is only for bare references.

@@ -246,6 +246,17 @@ async def find_tracks_worker_node(
         tokens = args.get("tokens")
         if source_id and tokens:
             return await _probe_and_answer_ref(ctx, writer, str(source_id), str(tokens))
+        # A date-only query ("лекции, прочитанные 9 июля") is also invisible to
+        # semantic search (no topic to embed). The catalog stores a per-track
+        # date, so probe it directly by year range and/or "on this day" (MM-DD
+        # across all years — the anniversary the user usually means).
+        date_from = args.get("date_from")
+        date_to = args.get("date_to")
+        anniversary = args.get("anniversary_md")
+        if date_from or date_to or anniversary:
+            return await _probe_and_answer_date(
+                ctx, writer, date_from, date_to, anniversary,
+            )
         log.info("find_tracks_empty", request_id=ctx.request_id, query=query[:80])
         return await _emit_empty(ctx, writer, query)
 
@@ -403,13 +414,7 @@ async def _probe_and_answer_ref(
         )
         intro = _REF_SERVE_INTRO.get(ctx.lang, _REF_SERVE_INTRO["en"])
         writer({"type": "delta", "data": {"text": intro.format(n=len(tracks), ref=ref) + "\n\n"}})
-        for track in tracks:
-            disp = await resolve_track_display(ctx, track.id)
-            payload = {"track_id": track.id, **disp}
-            payload.setdefault("track_title", track.title)
-            writer({"type": "action",
-                    "data": {"kind": "card", "id": track.id, "payload": payload}})
-            writer({"type": "delta", "data": {"text": f"[card:{track.id}]\n\n"}})
+        await _emit_track_cards(ctx, writer, tracks)
         chip = _REF_VERSES_CHIP.get(ctx.lang, _REF_VERSES_CHIP["en"])
         writer({"type": "delta", "data": {"text": f"[followup:{chip.format(ref=ref)}]"}})
         return {}
@@ -423,6 +428,62 @@ async def _probe_and_answer_ref(
     writer({"type": "delta", "data": {"text": question.format(ref=ref)}})
     writer({"type": "delta", "data": {"text": f"\n[followup:{chip.format(ref=ref)}]"}})
     return {}
+
+
+# Localized lead-in / empty line for a date-only lecture query.
+_DATE_SERVE_INTRO: dict[str, str] = {
+    "ru": "Нашёл {n} лекц. на эту дату:",
+    "en": "Found {n} lecture(s) on that date:",
+}
+_DATE_EMPTY: dict[str, str] = {
+    "ru": "Лекций на эту дату не нашлось.",
+    "en": "No lectures found for that date.",
+}
+
+
+async def _probe_and_answer_date(
+    ctx: TurnContext, writer, date_from, date_to, anniversary_md,
+) -> dict:
+    """A date-only query has no topic to embed, so probe the catalog's per-track
+    date index directly: `date_from`/`date_to` bound a year/range, `anniversary_md`
+    ("MM-DD") matches that calendar day across ALL years ("in this day in
+    history"). Serve what's found, else say so honestly."""
+    tracks = []
+    if ctx.catalog_repo is not None:
+        try:
+            tracks = await ctx.catalog_repo.list_tracks(
+                author_id=None, source_id=None, location_id=None, tag_ids=None,
+                title_query=None, date_from=date_from, date_to=date_to, lang=ctx.lang,
+                limit=8, offset=0, anniversary_md=anniversary_md,
+            )
+        except Exception:  # noqa: BLE001 — a probe miss falls back to the empty line
+            log.exception("find_tracks_date_probe_failed", request_id=ctx.request_id)
+            tracks = []
+    writer({"type": "status", "data": {"key": "composing_answer"}})
+    if tracks:
+        log.info(
+            "find_tracks_date_served", request_id=ctx.request_id,
+            date_from=date_from, date_to=date_to, anniversary_md=anniversary_md,
+            n=len(tracks),
+        )
+        intro = _DATE_SERVE_INTRO.get(ctx.lang, _DATE_SERVE_INTRO["en"])
+        writer({"type": "delta", "data": {"text": intro.format(n=len(tracks)) + "\n\n"}})
+        await _emit_track_cards(ctx, writer, tracks)
+        return {}
+    writer({"type": "delta", "data": {"text": _DATE_EMPTY.get(ctx.lang, _DATE_EMPTY["en"])}})
+    return {}
+
+
+async def _emit_track_cards(ctx: TurnContext, writer, tracks) -> None:
+    """Emit one card action + `[card:id]` marker per track (payload-before-marker),
+    server-resolving the display attribution for catalog-less clients."""
+    for track in tracks:
+        disp = await resolve_track_display(ctx, track.id)
+        payload = {"track_id": track.id, **disp}
+        payload.setdefault("track_title", track.title)
+        writer({"type": "action",
+                "data": {"kind": "card", "id": track.id, "payload": payload}})
+        writer({"type": "delta", "data": {"text": f"[card:{track.id}]\n\n"}})
 
 
 async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
