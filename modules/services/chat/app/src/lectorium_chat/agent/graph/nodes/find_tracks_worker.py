@@ -474,6 +474,22 @@ async def _probe_and_answer_date(
         except Exception:  # noqa: BLE001 — a probe miss falls back to the empty line
             log.exception("find_tracks_date_probe_failed", request_id=ctx.request_id)
             tracks = []
+    # A plain-English description of the requested date so the localized lead-in
+    # states the RIGHT date (never invents one — the LLM has no date otherwise).
+    if anniversary_md and "-" in anniversary_md:
+        mm, dd = anniversary_md.split("-", 1)
+        date_desc = (
+            f"the recurring calendar day — month {int(mm)}, day {int(dd)} "
+            f"(i.e. day {int(dd)} of month {int(mm)}) — across ALL years, an "
+            f"anniversary (NOT one specific year)"
+        )
+    elif date_from and date_to:
+        date_desc = f"the date range {date_from} to {date_to} (ISO YYYY-MM-DD)"
+    elif date_from:
+        date_desc = f"on or after {date_from} (ISO YYYY-MM-DD)"
+    else:
+        date_desc = f"on or before {date_to} (ISO YYYY-MM-DD)"
+
     writer({"type": "status", "data": {"key": "composing_answer"}})
     cards = await _renderable(ctx, tracks)
     if cards:
@@ -484,15 +500,18 @@ async def _probe_and_answer_date(
         )
         reply = await localized_reply(
             ctx,
-            f"Found {len(cards)} lecture(s) delivered on the requested date. "
-            f"Write a one-line lead-in for the list below. No chips.",
+            f"Found {len(cards)} lecture(s) delivered on {date_desc}. Write a "
+            f"one-line lead-in that names this date NATURALLY in the user's "
+            f"language (e.g. 'лекции за 9 июля'). Use ONLY this date — do not "
+            f"invent a specific year or a different date. No chips.",
         )
         _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[]), suffix="\n\n")
         _stream_cards(writer, cards)
         return {}
     reply = await localized_reply(
-        ctx, "No lectures were found for the requested date. Say so in one "
-             "short line. No chips.",
+        ctx, f"No lectures were found for {date_desc}. Say so in one short line, "
+             f"naming the date naturally in the user's language. No invented "
+             f"dates. No chips.",
     )
     _emit_reply(writer, reply)
     return {}
