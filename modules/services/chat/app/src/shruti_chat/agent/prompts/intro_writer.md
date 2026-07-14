@@ -42,11 +42,9 @@ Without a Curator note, ignore this section entirely.
 
 # OUTPUT
 
-Return strict JSON. No prose, no fences.
+Write the intro paragraph and nothing else.
 
-{ "intro": "..." }
-
-If the theses are too few or too thin for an intro to add anything over just reading them, return `{ "intro": "" }`.
+If the theses are too few or too thin for an intro to add anything over just reading them, return an empty string.
 
 # EXAMPLE
 
@@ -59,4 +57,4 @@ Input:
     3. «Шримад-Бхагаватам» подтверждает: лотосные стопы Господа сжигают семена кармы преданного.
 
 Output:
-{ "intro": "Карма обусловленной души распадается на три слоя, но чистое преданное служение мгновенно выжигает накопленную и создаваемую карму, оставляя лишь дозревающую prarabdha — проживаемую уже без новой кармической цепи. «Шримад-Бхагаватам» закрепляет это образом лотосных стоп Господа, выжигающих сами семена кармы преданного." }
+Карма обусловленной души распадается на три слоя, но чистое преданное служение мгновенно выжигает накопленную и создаваемую карму, оставляя лишь дозревающую prarabdha — проживаемую уже без новой кармической цепи. «Шримад-Бхагаватам» закрепляет это образом лотосных стоп Господа, выжигающих сами семена кармы преданного.
