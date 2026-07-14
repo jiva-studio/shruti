@@ -88,6 +88,27 @@ class LLMPort(Protocol):
         """
         ...
 
+    async def text_completion(
+        self,
+        messages: list[Message],
+        *,
+        model: str | None = None,
+        run_name: str | None = None,
+    ) -> str:
+        """One-shot completion returning plain text — for callers whose
+        whole payload is a single prose string (a search-card blurb, an
+        intro/conclusion line).
+
+        Prefer this over `structured_output` with a one-field wrapper
+        schema: asking a (cheap) model for a `{"field": "…"}` envelope
+        around one sentence buys nothing and, on weak models, fails to
+        parse — costing a retry, the fallback model, and latency for output
+        that was never structured. Temperature is forced to 0 in the
+        adapter, same as `structured_output`. An empty string is a valid
+        result ("nothing to add").
+        """
+        ...
+
     # NB: an earlier draft of the port exposed `as_chat_model() ->
     # BaseChatModel` as an escape hatch for LangGraph's
     # `create_react_agent`. We don't use create_react_agent (we run

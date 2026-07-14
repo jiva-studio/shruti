@@ -137,33 +137,6 @@ class Outline(BaseModel):
     skipped_reason: str | None = None
 
 
-class ConclusionResponse(BaseModel):
-    """Output of the server-side conclusion synthesis fallback. Fires
-    when `synthesis_planner` leaves `conclusion=None` on a 3+ thesis
-    answer despite the prompt rule, which is consistent behaviour for
-    weaker structured-output models.
-
-    Kept tiny (single string field) — Pydantic max_length lets the
-    LLM emit empty/blank strings as a "no good conclusion to write"
-    signal without triggering a validation error and breaking the call.
-    """
-
-    conclusion: str = Field(default="", max_length=600)
-
-
-class IntroResponse(BaseModel):
-    """Output of the server-side intro synthesis pass. The planner writes
-    `intro` inline in its structured output, BEFORE it has emitted the
-    theses — so that intro can only echo the topics/headers, never the
-    actual claims (a "we'll look at A, B, C" table of contents). This
-    dedicated pass runs AFTER the theses are fixed and rewrites the intro
-    from their finished claim text. Tiny single-string field; an empty/
-    blank string is a valid "no intro needed" signal.
-    """
-
-    intro: str = Field(default="", max_length=600)
-
-
 class TopicExtractionResult(BaseModel):
     """Output of `topic_extractor.extract_topics`. 0-5 short topic strings
     (1-4 words each) extracted from the user query for matching against
