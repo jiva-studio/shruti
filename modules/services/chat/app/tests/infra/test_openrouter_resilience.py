@@ -9,7 +9,7 @@ on the wire — gets its own test.
 
 from __future__ import annotations
 
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk
 from pydantic import BaseModel
 
 from shruti_chat.config import Settings
@@ -77,6 +77,20 @@ def _stub_structured(provider, script):
         raise action[1]
 
     provider._raw_structured = _raw_structured
+    return calls
+
+
+def _stub_text(provider, script):
+    calls: list[str] = []
+
+    async def _raw_text(model, messages, *, run_name=None):
+        action = script[len(calls)]
+        calls.append(model)
+        if action[0] == "ok":
+            return action[1]
+        raise action[1]
+
+    provider._raw_text = _raw_text
     return calls
 
 
@@ -198,6 +212,53 @@ async def test_structured_raises_when_all_fail():
     assert raised
 
 
+# ── text_completion (plain-prose path) ───────────────────────────────
+
+async def test_text_primary_success_no_retry_no_fallback():
+    p = _provider()
+    calls = _stub_text(p, [("ok", "a blurb")])
+    out = await p.text_completion([{"role": "user", "content": "q"}])
+    assert out == "a blurb"
+    assert calls == [p._default_model]
+
+
+async def test_text_retries_same_model_then_succeeds():
+    p = _provider(max_retries=2)
+    calls = _stub_text(p, [
+        ("fail", _Transient()),
+        ("ok", "recovered"),
+    ])
+    out = await p.text_completion([{"role": "user", "content": "q"}])
+    assert out == "recovered"
+    assert calls == [p._default_model, p._default_model]
+
+
+async def test_text_escalates_to_fallback():
+    p = _provider(max_retries=1)
+    calls = _stub_text(p, [
+        ("fail", _Transient()),
+        ("fail", _Transient()),
+        ("ok", "fb"),
+    ])
+    out = await p.text_completion([{"role": "user", "content": "q"}])
+    assert out == "fb"
+    assert calls == [p._default_model, p._default_model, p._fallback_model]
+
+
+async def test_text_raises_when_all_fail():
+    p = _provider(max_retries=0)
+    _stub_text(p, [
+        ("fail", _Fatal()),   # primary (no retries)
+        ("fail", _Fatal()),   # fallback
+    ])
+    raised = False
+    try:
+        await p.text_completion([{"role": "user", "content": "q"}])
+    except _Fatal:
+        raised = True
+    assert raised
+
+
 # ── empty-completion stream (silent provider failure) ──────────────────
 
 
@@ -305,3 +366,45 @@ async def test_exhausted_empty_stream_maps_to_provider_unavailable():
         raised = exc
     assert raised is not None
     assert is_provider_unavailable(raised)
+
+
+# ── _raw_text: no JSON asked, output cleaned ──────────────────────────
+
+
+class _FakeInvokeClient:
+    """Stands in for the pooled ChatOpenAI in `_raw_text`: a plain
+    non-streaming `ainvoke` returning one AIMessage. Note it has NO
+    `with_structured_output` — the plain-text path must never ask for JSON."""
+
+    def __init__(self, content: str) -> None:
+        self._content = content
+
+    async def ainvoke(self, _msgs):
+        return AIMessage(content=self._content)
+
+
+async def test_raw_text_returns_bare_string_no_json_requested():
+    p = _provider()
+    p._client_for = lambda *a, **k: _FakeInvokeClient("Лекция о выборе супруга.")
+    out = await p._raw_text(
+        p._default_model, [{"role": "user", "content": "q"}], run_name="t",
+    )
+    assert out == "Лекция о выборе супруга."
+
+
+async def test_raw_text_strips_fence_and_quotes():
+    p = _provider()
+    p._client_for = lambda *a, **k: _FakeInvokeClient('```\n"готовый текст"\n```')
+    out = await p._raw_text(
+        p._default_model, [{"role": "user", "content": "q"}], run_name="t",
+    )
+    assert out == "готовый текст"
+
+
+async def test_raw_text_empty_is_valid_empty_string():
+    p = _provider()
+    p._client_for = lambda *a, **k: _FakeInvokeClient("   ")
+    out = await p._raw_text(
+        p._default_model, [{"role": "user", "content": "q"}], run_name="t",
+    )
+    assert out == ""
