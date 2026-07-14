@@ -52,6 +52,13 @@ class _LLM:
             return self.script()
         return self.script
 
+    async def text_completion(self, messages, *, model=None, run_name=None) -> str:
+        # intro_writer / conclusion_writer prose passes — a blank reply is a
+        # valid "nothing to add" and keeps these node tests focused on the
+        # planner's outline, not the writers.
+        self.calls.append((messages, run_name, model))
+        return ""
+
 
 @pytest.mark.asyncio
 async def test_empty_tool_results_returns_outline_none_skips_llm():

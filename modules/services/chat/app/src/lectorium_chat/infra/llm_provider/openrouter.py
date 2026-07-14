@@ -111,6 +111,24 @@ def _extract_json_object(text: str) -> str | None:
     return None
 
 
+def _strip_plain_text(text: str) -> str:
+    """Clean a plain-text prose reply from a cheap model. Small models
+    sometimes wrap a one-liner in a ``` fence or matching quotes even when
+    not asked to. Strip one such layer so the card/intro reads clean.
+    """
+    s = text.strip()
+    if s.startswith("```"):
+        nl = s.find("\n")
+        s = (s[nl + 1 :] if nl != -1 else "").strip()
+        if s.endswith("```"):
+            s = s[:-3].strip()
+    # One layer of symmetric wrapping quotes ("…", '…', «…», “…”).
+    _PAIRS = {'"': '"', "'": "'", "«": "»", "“": "”"}
+    if len(s) >= 2 and s[0] in _PAIRS and s[-1] == _PAIRS[s[0]]:
+        s = s[1:-1].strip()
+    return s
+
+
 # Provider-availability failures: by the time one of these escapes
 # `stream_completion` the retries AND the fallback model are already
 # exhausted, so the backend genuinely can't get a completion from anyone
@@ -738,6 +756,110 @@ class OpenRouterLLMProvider:
 
         assert last_exc is not None
         raise last_exc
+
+    async def text_completion(
+        self,
+        messages: list[Message],
+        *,
+        model: str | None = None,
+        run_name: str | None = None,
+    ) -> str:
+        """One-shot plain-text completion with transient-retry + model
+        fallback — for callers whose whole payload is a single prose string
+        (a card blurb, an intro/conclusion line). No JSON envelope is asked
+        of the model, so there is no parse step to miss: a JSON round-trip
+        around one sentence only buys wasted retries + latency on weak
+        models. Returns the (cleaned) text; "" is a valid "nothing to say".
+
+        Mirrors `structured_output`'s orchestration: same-model transient
+        retries, then escalate to the fallback model.
+        """
+        validated_model = self._validate_model(model)
+        fallback_model = self._fallback_for(validated_model)
+        last_exc: BaseException | None = None
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                return await self._raw_text(
+                    validated_model, messages, run_name=run_name,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if attempt < self._max_retries and _is_retryable(exc):
+                    delay = self._backoff_delay(attempt)
+                    log.warning(
+                        "llm_text_retry", model=validated_model,
+                        attempt=attempt + 1, delay_s=round(delay, 3),
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                break
+
+        if fallback_model is not None:
+            log.warning(
+                "llm_text_fallback", primary=validated_model,
+                fallback=fallback_model, error=str(last_exc),
+            )
+            try:
+                return await self._raw_text(
+                    fallback_model, messages, run_name=run_name,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                log.warning(
+                    "llm_text_fallback_failed",
+                    fallback=fallback_model, error=str(exc),
+                )
+
+        assert last_exc is not None
+        raise last_exc
+
+    async def _raw_text(
+        self,
+        validated_model: str,
+        messages: list[Message],
+        *,
+        run_name: str | None,
+    ) -> str:
+        """One plain-text completion against `validated_model`. No
+        retry/fallback (that lives in `text_completion`), no JSON /
+        `response_format` — the model just writes prose and we return the
+        cleaned string. Same Langfuse generation + usage bookkeeping and the
+        same one-shot `streaming=False` (so `usage_metadata` survives) as
+        `_raw_structured`. temperature is forced to 0 for deterministic,
+        cache-friendly output (these are short localized one-liners).
+        """
+        client = self._client_for(validated_model, temperature=0, streaming=False)
+        lc_msgs = [_to_langchain_message(m) for m in messages]
+        gen_ctx = self._generation_ctx(
+            name=run_name,
+            model=validated_model,
+            messages=messages,
+            model_parameters={"temperature": 0},
+        )
+        with gen_ctx as gen:
+            raw_msg: Any = await client.ainvoke(lc_msgs)
+            raw_text = getattr(raw_msg, "content", "") or ""
+            if not isinstance(raw_text, str):
+                raw_text = str(raw_text)
+            text = _strip_plain_text(raw_text)
+
+            if gen is not None:
+                try:
+                    usage_meta = getattr(raw_msg, "usage_metadata", None) or {}
+                    usage_in = usage_meta.get("input_tokens") or 0
+                    usage_out = usage_meta.get("output_tokens") or 0
+                    usage_cached = (
+                        usage_meta.get("input_token_details") or {}
+                    ).get("cache_read") or 0
+                    gen.update(
+                        output=text,
+                        usage_details=_usage_details(usage_in, usage_out, usage_cached),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("langfuse_generation_update_failed", error=str(exc))
+            return text
 
     async def _raw_structured(
         self,

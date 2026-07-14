@@ -51,24 +51,29 @@ class _Runtime:
 
 
 class _LLM:
-    """Records the user-message content of every structured_output call so
-    the test can inspect the `Language:` directive the writers emitted."""
+    """Records the user-message content of every LLM call so the test can
+    inspect the `Language:` directive the writers emitted."""
 
     def __init__(self, outline: Outline) -> None:
         self._outline = outline
         self.user_messages: list[str] = []
 
-    async def structured_output(self, messages, schema, *, model=None, **_extra):
+    def _record(self, messages) -> None:
         user = next(
             (m["content"] for m in messages if m.get("role") == "user"), ""
         )
         self.user_messages.append(user)
-        # The planner returns the Outline; the intro/conclusion writers
-        # return their own response shapes — just hand back an empty one
-        # via duck-typing on the schema.
-        if schema is Outline:
-            return self._outline
-        return schema()  # IntroResponse() / ConclusionResponse() — empty
+
+    async def structured_output(self, messages, schema, *, model=None, **_extra):
+        # Only the planner's Outline still goes through structured_output.
+        self._record(messages)
+        return self._outline
+
+    async def text_completion(self, messages, *, model=None, run_name=None) -> str:
+        # intro_writer / conclusion_writer — plain text; empty is fine, the
+        # test only asserts on the `Language:` directive they carried.
+        self._record(messages)
+        return ""
 
 
 def _directive_lines(messages: list[str]) -> list[str]:

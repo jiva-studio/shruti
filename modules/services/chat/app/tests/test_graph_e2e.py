@@ -60,6 +60,17 @@ class FakeLLM:
         assert isinstance(resp, schema)
         return resp  # type: ignore[return-value]
 
+    async def text_completion(
+        self,
+        messages: list[Message],
+        *,
+        model: str | None = None,
+        run_name: str | None = None,
+    ) -> str:
+        # Prose passes (card blurb / intro / conclusion). The e2e routes here
+        # don't exercise them; return blank so an incidental call is harmless.
+        return ""
+
     async def stream_completion(
         self,
         messages: list[Message],

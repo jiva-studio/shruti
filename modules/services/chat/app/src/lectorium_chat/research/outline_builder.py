@@ -26,8 +26,6 @@ from lectorium_chat.domain.entities import Message
 from lectorium_chat.observability.langfuse_client import prompt_with_fallback
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.models import (
-    ConclusionResponse,
-    IntroResponse,
     Outline,
     Thesis,
 )
@@ -221,12 +219,10 @@ async def _synthesize_conclusion(
             {"role": "system", "content": prompt.text},
             {"role": "user", "content": user_msg},
         ]
-        response: ConclusionResponse = await llm.structured_output(
-            messages, ConclusionResponse,
-            model=effective_model, callbacks=callbacks,
-            run_name="conclusion_writer",
+        conclusion = await llm.text_completion(
+            messages, model=effective_model, run_name="conclusion_writer",
         )
-    except (ValidationError, Exception) as exc:  # noqa: BLE001 — best-effort
+    except Exception as exc:  # noqa: BLE001 — best-effort
         log.warning(
             "conclusion_writer_failed",
             error=str(exc),
@@ -234,7 +230,7 @@ async def _synthesize_conclusion(
         )
         return outline
 
-    cleaned = (response.conclusion or "").strip()
+    cleaned = (conclusion or "").strip()
     if not cleaned:
         # Writer signalled "no good conclusion fits" — let the answer
         # end on the last thesis instead of synthesising filler.
@@ -311,12 +307,10 @@ async def synthesize_intro(
             {"role": "system", "content": prompt.text},
             {"role": "user", "content": user_msg},
         ]
-        response: IntroResponse = await llm.structured_output(
-            messages, IntroResponse,
-            model=effective_model, callbacks=callbacks,
-            run_name="intro_writer",
+        intro = await llm.text_completion(
+            messages, model=effective_model, run_name="intro_writer",
         )
-    except (ValidationError, Exception) as exc:  # noqa: BLE001 — best-effort
+    except Exception as exc:  # noqa: BLE001 — best-effort
         log.warning(
             "intro_writer_failed",
             error=str(exc),
@@ -324,11 +318,7 @@ async def synthesize_intro(
         )
         return None
 
-    if not isinstance(response, IntroResponse):
-        # Adapter returned an unexpected shape (or None) — keep planner's.
-        return None
-
-    cleaned = (response.intro or "").strip()
+    cleaned = (intro or "").strip()
     if not cleaned:
         # Writer signalled "no intro adds value" — keep the planner's.
         log.info("intro_writer_returned_empty", n_theses=len(outline.theses))

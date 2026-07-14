@@ -34,7 +34,6 @@ from collections import defaultdict
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
-from pydantic import BaseModel
 
 from lectorium_chat.agent.graph.nodes._worker_common import (
     LocalizedReply,
@@ -64,12 +63,6 @@ _MIN_SCORE = 0.45
 # ("Лекция по ШБ … итак, зачитайте"). Never quote those when a real passage
 # exists.
 _INTRO_MS = 60_000
-
-
-class _Prose(BaseModel):
-    """A single prose string — the only thing the model produces this turn."""
-
-    text: str
 
 
 def _year_range(year: object) -> tuple[str | None, str | None]:
@@ -195,15 +188,15 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
     )
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     try:
-        out = await ctx.llm.structured_output(
-            msgs, _Prose, model=get_settings().llm_cheap, run_name="find_tracks_description"
+        out = await ctx.llm.text_completion(
+            msgs, model=get_settings().llm_cheap, run_name="find_tracks_description"
         )
-    except Exception:  # noqa: BLE001 — a flaky cheap-model / parse miss on ONE card's
-        # blurb must not blow up the whole find_track turn (it's gathered with the
+    except Exception:  # noqa: BLE001 — a flaky cheap-model call on ONE card's blurb
+        # must not blow up the whole find_track turn (it's gathered with the
         # others). Degrade to no description; the card still renders from its title.
         log.warning("find_tracks_description_failed", request_id=ctx.request_id)
         return ""
-    return out.text.strip()
+    return out.strip()
 
 
 async def _intro(ctx: TurnContext, query: str, n: int, relaxed: str) -> str:
@@ -221,14 +214,14 @@ async def _intro(ctx: TurnContext, query: str, n: int, relaxed: str) -> str:
     )
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     try:
-        out = await ctx.llm.structured_output(
-            msgs, _Prose, model=get_settings().llm_cheap, run_name="find_tracks_intro"
+        out = await ctx.llm.text_completion(
+            msgs, model=get_settings().llm_cheap, run_name="find_tracks_intro"
         )
-    except Exception:  # noqa: BLE001 — same resilience as _describe: a parse miss on
+    except Exception:  # noqa: BLE001 — same resilience as _describe: a flaky call on
         # the lead-in must not kill the turn. Degrade to no intro line.
         log.warning("find_tracks_intro_failed", request_id=ctx.request_id)
         return ""
-    return out.text.strip()
+    return out.strip()
 
 
 async def find_tracks_worker_node(

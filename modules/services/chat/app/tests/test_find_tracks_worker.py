@@ -129,16 +129,20 @@ class _FakeLLM:
         self.situations: list[str] = []
 
     async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
+        # Only the localized clarify/empty reply (LocalizedReply — line+chips)
+        # still uses structured_output; the per-card blurb + intro are plain
+        # text now (see `text_completion`).
         self.calls.append(run_name or "")
-        fields = set(getattr(schema, "model_fields", {}))
-        if {"line", "chips"} <= fields:  # LocalizedReply — echo the situation
-            situation = messages[-1]["content"]
-            self.situations.append(situation)
-            # A deterministic stand-in: a marker line + one chip, so tests can
-            # assert the localized path ran and a chip was emitted, without
-            # depending on real LLM phrasing.
-            return schema(line=f"LINE[{run_name}]", chips=["CHIP"])
-        return schema(text=f"prose[{run_name}]")
+        situation = messages[-1]["content"]
+        self.situations.append(situation)
+        # A deterministic stand-in: a marker line + one chip, so tests can
+        # assert the localized path ran and a chip was emitted, without
+        # depending on real LLM phrasing.
+        return schema(line=f"LINE[{run_name}]", chips=["CHIP"])
+
+    async def text_completion(self, messages, *, model=None, run_name=None):
+        self.calls.append(run_name or "")
+        return f"prose[{run_name}]"
 
 
 def _sc(track_id: str, start: int, score: float, text: str) -> ScoredChunk:
@@ -159,13 +163,13 @@ def _events(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
 
 class _ProseRaisingLLM(_FakeLLM):
-    """Raises on the _Prose calls (per-lecture description / intro), like a flaky
-    cheap model returning unparseable JSON — the exact prod crash to guard."""
+    """Raises on the prose calls (per-lecture description / intro), like a
+    flaky cheap model / exhausted fallback — the exact prod crash to guard."""
 
-    async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
+    async def text_completion(self, messages, *, model=None, run_name=None):
         if run_name in ("find_tracks_description", "find_tracks_intro"):
-            raise RuntimeError("structured_output: no parseable _Prose JSON in model output")
-        return await super().structured_output(messages, schema, run_name=run_name, model=model, callbacks=callbacks)
+            raise RuntimeError("llm_text: provider unavailable")
+        return await super().text_completion(messages, model=model, run_name=run_name)
 
 
 async def test_description_parse_failure_does_not_crash_the_turn(_events) -> None:
