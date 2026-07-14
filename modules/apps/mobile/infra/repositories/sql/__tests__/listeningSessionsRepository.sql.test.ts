@@ -118,6 +118,25 @@ describe("listeningSessionsRepository.sql", () => {
     expect(session?.toPosition).toBe(90)
   })
 
+  it("tick()/finish() never rewind to_position below the mark (backward scrub keeps high-water)", async () => {
+    // Repro of the prod negative-delta rows: a session opened at 775s, then a
+    // backward position event (fast scrub to 23s) arrived as a plain tick/finish
+    // — NOT through seek(). Without the monotonic guard this wrote from=775,
+    // to=23 (delta -752). MAX(to_position, ?) must hold `to` at 775.
+    const repo = createSqlListeningSessionRepository(db)
+    const id = await repo.forceStart({ itemId: ITEM_A, position: 775 })
+
+    await repo.tick(id, { position: 23 })
+    let session = await repo.getLastSessionForItem(ITEM_A)
+    expect(session?.toPosition).toBe(775)
+
+    await repo.finish(id, { position: 23 })
+    session = await repo.getLastSessionForItem(ITEM_A)
+    expect(session?.toPosition).toBe(775)
+    // Never a negative delta.
+    expect(session!.toPosition - session!.fromPosition).toBeGreaterThanOrEqual(0)
+  })
+
   it("getProgressForItems returns the high-water mark (MAX to_position) per item", async () => {
     await rawInsert(db, {
       id: "a1",
