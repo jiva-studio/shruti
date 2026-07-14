@@ -75,19 +75,28 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
     },
 
     async tick(id, { position }) {
-      await mutate(db, "UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
-        nowSec(),
-        position,
-        id,
-      ])
+      // `to_position` is monotonic non-decreasing WITHIN a session: a backward
+      // position event — a fast scrub or an out-of-order player tick that
+      // bypassed `seek()` — must not rewind `to` below `from` and manufacture a
+      // negative `to - from` delta. `MAX(to_position, ?)` keeps the high-water
+      // mark and preserves real forward progress; a genuine backward jump is a
+      // seek and opens its own session via `seek()`.
+      await mutate(
+        db,
+        "UPDATE listening_sessions SET ended_at = ?, to_position = MAX(to_position, ?) WHERE id = ?",
+        [nowSec(), position, id]
+      )
     },
 
     async finish(id, { position }) {
-      await mutate(db, "UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
-        nowSec(),
-        position,
-        id,
-      ])
+      // Same monotonic guard as tick(): a finish landing below where the
+      // session already reached keeps the high-water mark, so a session can
+      // never persist a negative delta. See tick() for the rationale.
+      await mutate(
+        db,
+        "UPDATE listening_sessions SET ended_at = ?, to_position = MAX(to_position, ?) WHERE id = ?",
+        [nowSec(), position, id]
+      )
     },
 
     async finishAt(id, { position, endedAtSec }) {
