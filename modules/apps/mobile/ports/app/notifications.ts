@@ -8,3 +8,4 @@
  * notification tap can deep-link into the originating chat session.
  */
 export type { INotificationScheduler, ScheduledNotification } from "@kit/infra"
+export { NotificationsDisabledError } from "@kit/infra"

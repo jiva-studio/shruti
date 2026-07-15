@@ -1,11 +1,23 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   arbitrate,
   reconcile,
   NOTIFICATION_PRIORITY,
   type NotificationCandidate,
 } from "../notificationPlanner.js"
-import type { INotificationScheduler } from "@ports/app/notifications.js"
+import {
+  NotificationsDisabledError,
+  type INotificationScheduler,
+} from "@ports/app/notifications.js"
+import { reportError } from "@lectorium/services/monitoring/reportError.js"
+
+vi.mock("@lectorium/services/monitoring/reportError.js", () => ({
+  reportError: vi.fn(),
+}))
+
+beforeEach(() => {
+  vi.mocked(reportError).mockClear()
+})
 
 const DAY_MS = 86_400_000
 // A fixed local-noon anchor so each "+N days" offset lands on a distinct
@@ -150,5 +162,33 @@ describe("reconcile", () => {
     expect(notifications.cancel).toHaveBeenCalledWith(8)
     expect(managed.has(8)).toBe(false)
     expect(managed.has(7)).toBe(true)
+  })
+
+  it("stays silent when notifications are disabled, and retries once granted", async () => {
+    const notifications = fakeNotifications()
+    // Permission off: the adapter surfaces a typed NotificationsDisabledError.
+    notifications.schedule.mockRejectedValueOnce(new NotificationsDisabledError())
+    const managed = new Map<number, string>()
+    const desired = [candidate({ id: 7, fireAtMs: NOON + DAY_MS })]
+
+    await reconcile(desired, notifications, managed)
+    // Not a fault → not reported, and NOT recorded so it can retry.
+    expect(reportError).not.toHaveBeenCalled()
+    expect(managed.has(7)).toBe(false)
+
+    // Permission granted later → schedule succeeds and is now recorded.
+    await reconcile(desired, notifications, managed)
+    expect(managed.has(7)).toBe(true)
+    expect(reportError).not.toHaveBeenCalled()
+  })
+
+  it("reports a genuine schedule failure", async () => {
+    const notifications = fakeNotifications()
+    notifications.schedule.mockRejectedValueOnce(new Error("scheduler exploded"))
+    const managed = new Map<number, string>()
+
+    await reconcile([candidate({ id: 7, fireAtMs: NOON + DAY_MS })], notifications, managed)
+    expect(reportError).toHaveBeenCalledWith("notify-planner", expect.any(Error))
+    expect(managed.has(7)).toBe(false)
   })
 })

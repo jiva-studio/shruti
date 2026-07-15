@@ -1,4 +1,5 @@
 import type { INotificationScheduler } from "@ports/app/notifications.js"
+import { NotificationsDisabledError } from "@ports/app/notifications.js"
 import { reportError } from "@lectorium/services/monitoring/reportError.js"
 import { notificationIdFor } from "./hash.js"
 
@@ -101,6 +102,10 @@ export async function reconcile(
       })
       managed.set(c.id, signature)
     } catch (err) {
+      // Notifications disabled for the app is a permission state, not a fault:
+      // leaving it out of `managed` means the next reconcile retries once the
+      // user grants permission. Don't page Sentry for it (was LETORIUM-1).
+      if (err instanceof NotificationsDisabledError) continue
       reportError("notify-planner", err)
     }
   }

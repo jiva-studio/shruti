@@ -21,8 +21,6 @@ describe("isExpectedError", () => {
     expect(isExpectedError({ name: "AbortError", message: "x" })).toBe(true)
     expect(isExpectedError({ name: "PurchaseCancelledError" })).toBe(true)
     expect(isExpectedError({ name: "PurchaseNotAllowedError" })).toBe(true)
-    // JSON.parse failures on cached blobs (every such site has a fallback)
-    expect(isExpectedError(new SyntaxError("Unexpected token < in JSON"))).toBe(true)
   })
 
   it("drops expected errors from plain-object rejections (Capacitor plugins, console.error(obj))", () => {
@@ -83,6 +81,9 @@ describe("isExpectedError", () => {
   it("keeps real failures", () => {
     expect(isExpectedError(new Error("RevenueCat configure failed"))).toBe(false)
     expect(isExpectedError(new TypeError("x is not a function"))).toBe(false)
+    // SyntaxError is NOT suppressed: JSON.parse-of-cache sites catch locally,
+    // so a SyntaxError reaching here is a genuine bug (or a broken JS chunk).
+    expect(isExpectedError(new SyntaxError("Unexpected token < in JSON"))).toBe(false)
     // "Load failed" is NOT deny-listed: a failed dynamic import (broken deploy)
     // surfaces as `TypeError: Load failed` on iOS WebKit and must stay visible;
     // "download failed" must not be swallowed as a substring of it either.
