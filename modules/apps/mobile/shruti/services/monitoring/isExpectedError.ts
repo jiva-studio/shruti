@@ -12,6 +12,14 @@
  * Both the `captureConsole` path (auto-escalated `console.error`) and the
  * explicit {@link reportError} helper run candidates through this so a benign
  * signature is dropped regardless of how it reached Sentry.
+ *
+ * PREFER typed errors over adding entries here. When WE own the throw/catch
+ * seam, model the expected condition as a named error class and swallow it at
+ * the call site (see `PurchaseCancelledError`, `NotificationsDisabledError`) —
+ * that keeps intent at the source and never risks masking an unrelated failure
+ * that happens to share a message or a generic class name. This list is only
+ * for THIRD-PARTY / platform errors we can't tag at their origin (raw Capacitor
+ * plugin rejections, RevenueCat numeric codes, platform network/WebKit strings).
  */
 
 // Message signatures that are always expected/benign across the app's adapters.
@@ -26,16 +34,20 @@ const EXPECTED_MESSAGE =
   /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|not open yet|Seek operation failed/i
 
 // Error class names that are control-flow, not faults: request cancellation,
-// user-cancelled IAP, a store-refused purchase (IAP disabled on this build /
-// restricted account / unsupported region), and JSON.parse failures on
-// cached/persisted blobs (every such site has an explicit fallback — a real
-// syntax bug would surface as an unhandled error via the global handlers, not
-// here).
+// user-cancelled IAP, and a store-refused purchase (IAP disabled on this build
+// / restricted account / unsupported region).
+//
+// NB: "SyntaxError" is deliberately NOT here. It was once listed to cover
+// JSON.parse of cached/persisted blobs, but every such site (10 of them, all
+// under Preferences-backed stores) already has its own try/catch with a
+// fallback, so a benign parse error never reaches this filter. Suppressing the
+// whole class instead masked GENUINE SyntaxErrors (a real code bug, or a
+// malformed dynamic-import chunk surfacing through the global handlers), so it
+// must stay visible.
 const EXPECTED_NAMES = new Set([
   "AbortError",
   "PurchaseCancelledError",
   "PurchaseNotAllowedError",
-  "SyntaxError",
   // Our own connectivity wrapper (services/http/networkError.ts) — thrown when
   // a request can't reach any server. Every call site has failover + retry; a
   // real backend fault surfaces as a distinct `HTTP 5xx`, not a NetworkError.
