@@ -61,8 +61,17 @@ function ctx(over: {
   const recentTracks = over.recent.map((id) => byId.get(id as TrackId)!).filter(Boolean)
   return {
     libraryLanguages: over.libraryLanguages,
+    locale: "en",
     t: (k: string) => k,
     repos: {
+      // `detect` reads sources only to localise the verse label in the
+      // session title; an empty dictionary makes `formatReference` fall
+      // back to the raw source id, which is fine for these assertions.
+      sources: {
+        async listAll() {
+          return []
+        },
+      },
       listeningSessions: {
         async listRecentTracksWithProgress() {
           return recentTracks.map((t, i) => ({
@@ -111,6 +120,9 @@ describe("next_shloka rule — library language", () => {
     )
     expect(out).toHaveLength(1)
     expect(out[0].ruleDate).toBe("next_ru")
+    // Title names the specific verse so successive nudges read distinctly
+    // (empty source dict → raw source id "src_bg", real dict → "BG").
+    expect(out[0].sessionTitleOverride).toBe("chat.proactiveSessionTitleNextShloka — src_bg 2.14")
   })
 
   it("stays silent when the next verse only exists in another language", async () => {

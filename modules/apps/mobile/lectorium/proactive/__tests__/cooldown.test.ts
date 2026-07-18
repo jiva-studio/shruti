@@ -22,9 +22,24 @@ describe("isWithinCooldown", () => {
     expect(isWithinCooldown(cfg, { ...last, createdAt: NOW - 25 * HOUR }, NOW)).toBe(false)
   })
 
-  it("pending / superseded instances don't gate a new one", () => {
+  it("a pending instance gates within the window — no duplicate storm", () => {
+    // Regression: a row stuck in `pending` (buildContent not ready yet)
+    // used to be treated as "never fired", so moving-ruleDate rules like
+    // next_shloka minted a fresh row every tick. It must gate like `ready`.
     const cfg = { cooldown_hours: 24 }
-    expect(isWithinCooldown(cfg, { prepState: "pending", createdAt: NOW }, NOW)).toBe(false)
+    expect(isWithinCooldown(cfg, { prepState: "pending", createdAt: NOW - 1 * HOUR }, NOW)).toBe(
+      true
+    )
+    // …but a genuinely stuck pending still releases once the window elapses.
+    expect(isWithinCooldown(cfg, { prepState: "pending", createdAt: NOW - 25 * HOUR }, NOW)).toBe(
+      false
+    )
+  })
+
+  it("a superseded instance does not gate — a replacement may fire at once", () => {
+    // `superseded` = the suggestion was actively invalidated (track dropped
+    // by catalog.publish), so a fresh instance should be allowed immediately.
+    const cfg = { cooldown_hours: 24 }
     expect(isWithinCooldown(cfg, { prepState: "superseded", createdAt: NOW }, NOW)).toBe(false)
   })
 
