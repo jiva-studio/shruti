@@ -204,6 +204,37 @@ func TestValidTokenPassesMiddleware(t *testing.T) {
 	}
 }
 
+// A client push of a server-owned collection (library_items) is rejected with
+// 403 and the stable server_owned_collection code — the pull-only boundary. The
+// rejection precedes any DB work, so no Postgres is needed.
+func TestPushServerOwnedCollectionForbidden(t *testing.T) {
+	key, verifier := testKeys(t)
+	svc := &service.Service{PullMaxLimit: 500}
+	r := NewRouter(RouterDeps{Svc: svc, Verifier: verifier})
+
+	tok := mintToken(t, key, uuid.NewString(), false, jwt.AudienceChat)
+	body := map[string]any{
+		"device_id": "devA",
+		"changes": []map[string]any{{
+			"collection": "library_items", "doc_id": "lib-1", "op": "upsert",
+			"hlc": "h1", "data": map[string]any{"status": "ready"},
+		}},
+	}
+	rec := do(t, r, http.MethodPost, "/profile/sync/push", tok, body, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("push of server-owned collection: want 403, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Error struct{ Code string } `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if resp.Error.Code != "server_owned_collection" {
+		t.Errorf("error code: want server_owned_collection, got %q", resp.Error.Code)
+	}
+}
+
 // user_id is taken ONLY from the JWT sub: a body that tries to smuggle a
 // different user_id is ignored, and the change lands under the token's user.
 func TestUserIDComesFromJWTNotBody(t *testing.T) {

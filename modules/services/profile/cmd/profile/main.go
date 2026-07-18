@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/profile/internal/config"
+	"github.com/jiva-studio/shruti/profile/internal/events"
 	"github.com/jiva-studio/shruti/profile/internal/handler"
+	"github.com/jiva-studio/shruti/profile/internal/hlc"
 	"github.com/jiva-studio/shruti/profile/internal/jwt"
 	logpkg "github.com/jiva-studio/shruti/profile/internal/logging"
 	"github.com/jiva-studio/shruti/profile/internal/service"
@@ -119,7 +121,14 @@ func runServe() {
 		Cursors:      &store.CursorRepo{Pool: pool},
 		Maint:        &store.MaintenanceRepo{Pool: pool},
 		PullMaxLimit: cfg.PullMaxLimit,
+		HLC:          hlc.NewClock(),
 	}
+
+	// Personal Library server-authored ingest (track.events → library_items via
+	// svc.ApplyServerChange). Wired but INERT until the streams broker lands —
+	// see events.Consumer and #1224. Constructed here so the write path it drives
+	// is exercised end-to-end the moment the broker is connected.
+	_ = &events.Consumer{Applier: svc}
 
 	root := handler.NewRouter(handler.RouterDeps{
 		Svc:        svc,
