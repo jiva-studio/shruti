@@ -27,5 +27,9 @@ ARG SHRUTI_BUILD_TIME=dev
 ENV SHRUTI_BUILD_SHA=$SHRUTI_BUILD_SHA \
     SHRUTI_BUILD_TIME=$SHRUTI_BUILD_TIME
 EXPOSE 8086
+# FROM scratch has no shell/curl — the binary self-probes /healthz over
+# localhost via the `healthz` subcommand (exit 0 healthy / 1 unhealthy).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/orchestrator", "healthz"]
 ENTRYPOINT ["/orchestrator"]
 CMD ["serve"]
