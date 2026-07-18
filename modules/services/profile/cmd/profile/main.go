@@ -24,6 +24,7 @@ import (
 	"github.com/jiva-studio/shruti/profile/internal/hlc"
 	"github.com/jiva-studio/shruti/profile/internal/jwt"
 	logpkg "github.com/jiva-studio/shruti/profile/internal/logging"
+	"github.com/jiva-studio/shruti/profile/internal/pending"
 	"github.com/jiva-studio/shruti/profile/internal/service"
 	"github.com/jiva-studio/shruti/profile/internal/store"
 )
@@ -143,6 +144,21 @@ func runServe() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	// Corpus-review producer: keep the pending.db artifact on S3 fresh so the
+	// offline admin MCP can browse user-generated tracks. Disabled cleanly
+	// (logged warning) when S3 config is absent, so local/dev still boots.
+	prodCtx, prodCancel := context.WithCancel(context.Background())
+	defer prodCancel()
+	if producer, perr := pending.NewProducer(prodCtx, pool, cfg.Pending); perr != nil {
+		slog.ErrorContext(bootCtx, "pending_producer_init_failed", "err", perr.Error())
+		os.Exit(1)
+	} else if producer != nil {
+		slog.Info("pending_producer_starting", "key", cfg.Pending.Key, "interval", cfg.Pending.Interval.String())
+		go producer.Start(prodCtx)
+	} else {
+		slog.Warn("pending_producer_disabled", "reason", "PENDING_S3_BUCKET unset")
+	}
+
 	go func() {
 		slog.Info("server_listening", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -155,6 +171,7 @@ func runServe() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	slog.Info("shutdown_start")
+	prodCancel() // stop the pending producer loop before draining HTTP
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
