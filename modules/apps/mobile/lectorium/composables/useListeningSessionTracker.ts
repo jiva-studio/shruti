@@ -76,12 +76,44 @@ export function useListeningSessionTracker(
 ): ListeningSessionTracker {
   let activeSessionId: ListeningSessionId | null = null
   let activeItemId: PlaylistItemId | null = null
+  // Synchronous "a session is open OR an open() is in-flight, for this item".
+  // The player drives us with FIRE-AND-FORGET progress events, and its
+  // "is a session already open?" guard reads `hasActiveSession()`. But
+  // `activeSessionId` is only assigned AFTER the awaited DB insert resolves,
+  // so between calling `start()` and that insert completing the guard still
+  // reports "no session". A burst of progress events (a seek/scrub, a resume
+  // flushing buffered native events, or a duplicated progress listener) then
+  // each passes the guard and opens its OWN row — all reading the same
+  // pre-burst high-water mark, so hundreds of overlapping sessions land with
+  // the same `from_position` and the activity total balloons. `openItemId` is
+  // claimed BEFORE the first await, so those racing events see the session as
+  // already open and route to `tick()` (a no-op until the row exists) instead
+  // of opening duplicates.
+  let openItemId: PlaylistItemId | null = null
   let lastTickAt = 0
   // Wall-clock (ms) and track position (ms) at which the *current* session
   // row opened. Used to split a session that crosses local midnight so each
   // calendar day keeps its own listening (see `splitAtMidnightIfNeeded`).
   let sessionOpenedAtMs = 0
   let sessionOpenPositionMs = 0
+
+  // Serialize every mutation so the in-memory session pointer transitions in
+  // call order. Without this a `finish()` racing an in-flight `start()` can
+  // interleave their awaits — the finish sees `activeSessionId === null`
+  // (the start hasn't committed yet), does nothing, and the start then
+  // commits a row that never gets closed. Chaining forces open → close →
+  // reopen to apply strictly in the order the player asked for them.
+  let opQueue: Promise<unknown> = Promise.resolve()
+  function serialize<T>(op: () => Promise<T>): Promise<T> {
+    const run = opQueue.then(op, op)
+    // Keep the tail alive regardless of this op's outcome so a rejected op
+    // (e.g. a locked DB on finish) doesn't wedge the queue for later ops.
+    opQueue = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
 
   /**
    * Record when/where the current session opened. `openedAtMs` defaults to
@@ -151,8 +183,17 @@ export function useListeningSessionTracker(
     }
   }
 
-  async function start({ itemId, positionMs }: { itemId: PlaylistItemId; positionMs: number }) {
-    if (activeSessionId !== null) {
+  // ---- raw ops --------------------------------------------------------------
+  // These mutate the session pointer directly and MUST run inside `serialize`
+  // (never call each other through the public wrappers, or the queue would
+  // wait on itself and deadlock).
+
+  async function openRaw(
+    itemId: PlaylistItemId,
+    positionMs: number,
+    { force }: { force: boolean }
+  ) {
+    if (!force && activeSessionId !== null) {
       // Defensive: caller forgot to close. If that lingering session opened on
       // an earlier local day (the app sat open in the background across one or
       // more midnights before this `start`), split it first so each spanned
@@ -171,26 +212,19 @@ export function useListeningSessionTracker(
         // ignore — we'll still open a new session below
       }
     }
-    activeSessionId = await deps.getRepo().start({ itemId, position: msToSec(positionMs) })
+    // `forceStart` pins from = position (an explicit discontinuity: seek /
+    // midnight-split continuation); `start` inherits from the item's
+    // high-water mark so ordinary resume-forward tiles without a gap.
+    activeSessionId = force
+      ? await deps.getRepo().forceStart({ itemId, position: msToSec(positionMs) })
+      : await deps.getRepo().start({ itemId, position: msToSec(positionMs) })
     activeItemId = itemId
+    openItemId = itemId
     lastTickAt = Date.now()
     noteSessionOpen(positionMs)
   }
 
-  async function forceStart({
-    itemId,
-    positionMs,
-  }: {
-    itemId: PlaylistItemId
-    positionMs: number
-  }) {
-    activeSessionId = await deps.getRepo().forceStart({ itemId, position: msToSec(positionMs) })
-    activeItemId = itemId
-    lastTickAt = Date.now()
-    noteSessionOpen(positionMs)
-  }
-
-  async function tick({ positionMs }: { positionMs: number }) {
+  async function tickRaw(positionMs: number) {
     if (activeSessionId === null) return
     const now = Date.now()
     if (now - lastTickAt < TICK_INTERVAL_MS) return
@@ -201,7 +235,7 @@ export function useListeningSessionTracker(
     await deps.getRepo().tick(activeSessionId, { position: msToSec(positionMs) })
   }
 
-  async function finish({ positionMs }: { positionMs: number }) {
+  async function closeRaw(positionMs: number) {
     if (activeSessionId === null) return
     const itemId = activeItemId
     if (itemId !== null) await splitAtMidnightIfNeeded(itemId, positionMs)
@@ -216,8 +250,56 @@ export function useListeningSessionTracker(
       // it open and losing the interval from the activity totals.
       activeSessionId = id
       activeItemId = itemId
+      openItemId = itemId
       throw e
     }
+  }
+
+  // ---- public API -----------------------------------------------------------
+
+  async function start({ itemId, positionMs }: { itemId: PlaylistItemId; positionMs: number }) {
+    // A session for this item is already open or opening — the periodic tick
+    // advances it. This synchronous check (before any await) is what stops the
+    // burst-of-progress-events storm.
+    if (openItemId === itemId) return
+    openItemId = itemId // claim synchronously, before the awaited insert
+    try {
+      await serialize(() => openRaw(itemId, positionMs, { force: false }))
+    } catch (e) {
+      // Open failed: release the claim (unless a newer op already moved it) so
+      // a later progress event can retry instead of being deduped forever.
+      if (openItemId === itemId && activeSessionId === null) openItemId = activeItemId
+      throw e
+    }
+  }
+
+  async function forceStart({
+    itemId,
+    positionMs,
+  }: {
+    itemId: PlaylistItemId
+    positionMs: number
+  }) {
+    openItemId = itemId
+    try {
+      await serialize(() => openRaw(itemId, positionMs, { force: true }))
+    } catch (e) {
+      if (openItemId === itemId && activeSessionId === null) openItemId = activeItemId
+      throw e
+    }
+  }
+
+  async function tick({ positionMs }: { positionMs: number }) {
+    if (openItemId === null) return
+    await serialize(() => tickRaw(positionMs))
+  }
+
+  async function finish({ positionMs }: { positionMs: number }) {
+    if (openItemId === null && activeSessionId === null) return
+    // Release the claim synchronously so a racing `start` (e.g. an immediate
+    // replay) queues a fresh open AFTER this close rather than being deduped.
+    openItemId = null
+    await serialize(() => closeRaw(positionMs))
   }
 
   async function seek({
@@ -231,15 +313,19 @@ export function useListeningSessionTracker(
     positionAfterMs: number
     willKeepPlaying: boolean
   }) {
-    if (activeSessionId !== null) {
-      const id = activeSessionId
-      activeSessionId = null
-      activeItemId = null
-      await deps.getRepo().finish(id, { position: msToSec(positionBeforeMs) })
-    }
-    if (willKeepPlaying) {
-      await forceStart({ itemId, positionMs: positionAfterMs })
-    }
+    // Claim/clear synchronously to match the post-seek state the caller expects.
+    openItemId = willKeepPlaying ? itemId : null
+    await serialize(async () => {
+      if (activeSessionId !== null) {
+        const id = activeSessionId
+        activeSessionId = null
+        activeItemId = null
+        await deps.getRepo().finish(id, { position: msToSec(positionBeforeMs) })
+      }
+      if (willKeepPlaying) {
+        await openRaw(itemId, positionAfterMs, { force: true })
+      }
+    })
   }
 
   async function flushOnHide({ positionMs }: { positionMs: number }) {
@@ -253,7 +339,11 @@ export function useListeningSessionTracker(
     finish,
     seek,
     flushOnHide,
-    hasActiveSession: () => activeSessionId !== null,
-    activeItemId: () => activeItemId,
+    // Reflect the SYNCHRONOUS intent (`openItemId`), not just the committed
+    // `activeSessionId`. The player reads these to decide start-vs-tick on the
+    // next progress event; if they lagged the DB insert, the reentrancy storm
+    // this tracker guards against would reappear at the call site.
+    hasActiveSession: () => openItemId !== null || activeSessionId !== null,
+    activeItemId: () => openItemId ?? activeItemId,
   }
 }
