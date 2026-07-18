@@ -89,6 +89,63 @@ func TestEnsureTrackAudioTable_BackfillsOriginal(t *testing.T) {
 	}
 }
 
+func TestEnsureTrackContributorColumn(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	mustExec(t, db, `CREATE TABLE tracks (
+		id TEXT PRIMARY KEY, author_id TEXT, location_id TEXT,
+		date TEXT, hidden INTEGER DEFAULT 0)`)
+
+	// Column absent before migration.
+	has, err := columnExists(ctx, db, "tracks", "contributor_user_id")
+	if err != nil {
+		t.Fatalf("columnExists: %v", err)
+	}
+	if has {
+		t.Fatal("contributor_user_id should not exist before migration")
+	}
+
+	if err := ensureTrackContributorColumn(ctx, db); err != nil {
+		t.Fatalf("ensureTrackContributorColumn: %v", err)
+	}
+
+	has, err = columnExists(ctx, db, "tracks", "contributor_user_id")
+	if err != nil {
+		t.Fatalf("columnExists after: %v", err)
+	}
+	if !has {
+		t.Fatal("contributor_user_id missing after migration")
+	}
+
+	// Writable + nullable: a row with an explicit attribution and one without.
+	mustExec(t, db, `INSERT INTO tracks (id, contributor_user_id) VALUES ('t1', 'user_abc')`)
+	mustExec(t, db, `INSERT INTO tracks (id) VALUES ('t2')`)
+	var got sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT contributor_user_id FROM tracks WHERE id='t1'`).Scan(&got); err != nil {
+		t.Fatalf("scan t1: %v", err)
+	}
+	if !got.Valid || got.String != "user_abc" {
+		t.Errorf("t1 contributor = %+v, want user_abc", got)
+	}
+	if err := db.QueryRowContext(ctx,
+		`SELECT contributor_user_id FROM tracks WHERE id='t2'`).Scan(&got); err != nil {
+		t.Fatalf("scan t2: %v", err)
+	}
+	if got.Valid {
+		t.Errorf("t2 contributor should be NULL, got %q", got.String)
+	}
+
+	// Idempotent: second run is a no-op.
+	if err := ensureTrackContributorColumn(ctx, db); err != nil {
+		t.Fatalf("second ensureTrackContributorColumn: %v", err)
+	}
+}
+
 func mustExec(t *testing.T, db *sql.DB, q string, args ...any) {
 	t.Helper()
 	if _, err := db.Exec(q, args...); err != nil {
