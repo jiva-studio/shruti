@@ -9,7 +9,9 @@ package ports
 
 import (
 	"context"
+	"time"
 
+	"github.com/jiva-studio/lectorium/orchestrator/internal/domain/ingest"
 	"github.com/jiva-studio/lectorium/orchestrator/internal/domain/job"
 )
 
@@ -23,6 +25,13 @@ type Fetcher interface {
 // the ASR-detected language.
 type Transcriber interface {
 	Transcribe(ctx context.Context, audioPath string) (transcript []byte, lang string, err error)
+}
+
+// Reviewer resolves a raw TrackDraft's metadata against the corpus
+// dictionaries (author/location/date/lang), returning the enriched draft. It is
+// the (LLM-assisted) review stage between transcription and store.
+type Reviewer interface {
+	Review(ctx context.Context, draft ingest.TrackDraft) (ingest.TrackDraft, error)
 }
 
 // BlobStore writes artifacts to the content-addressed public path
@@ -51,3 +60,14 @@ type JobRepository interface {
 // Tx is an opaque transaction handle threaded through repository + event bus so
 // the outbox write shares the job write's transaction.
 type Tx interface{}
+
+// Clock supplies the current time. Injected so job timestamps and pipeline
+// timeouts are deterministic under test (production uses a wall-clock impl).
+type Clock interface {
+	Now() time.Time
+}
+
+// IDGen mints unique job ids (opaque to the domain; UUIDv4 in production).
+type IDGen interface {
+	NewID() string
+}

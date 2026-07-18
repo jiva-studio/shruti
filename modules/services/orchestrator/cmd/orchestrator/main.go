@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/orchestrator/internal/config"
-	"github.com/jiva-studio/lectorium/orchestrator/internal/handler"
 	logpkg "github.com/jiva-studio/lectorium/orchestrator/internal/logging"
 	"github.com/jiva-studio/lectorium/orchestrator/internal/store"
+	"github.com/jiva-studio/lectorium/orchestrator/internal/wire"
 )
 
 func main() {
@@ -89,30 +89,20 @@ func runServe() {
 	bootCtx, bootCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer bootCancel()
 
-	pool, err := store.Connect(bootCtx, cfg.DatabaseURL)
+	// wire.Build is the composition root: it connects the pool, applies the
+	// embedded migrations (advisory-locked + idempotent, safe on every start
+	// and across replicas), gates on a current schema, and wires the router.
+	// `orchestrator migrate` stays available for manual ops.
+	deps, err := wire.Build(bootCtx, cfg)
 	if err != nil {
-		slog.ErrorContext(bootCtx, "db_connect_failed", "err", err.Error())
+		slog.ErrorContext(bootCtx, "wire_build_failed", "err", err.Error())
 		os.Exit(1)
 	}
-	defer pool.Close()
-
-	// Apply embedded migrations on boot (advisory-locked + idempotent, safe on
-	// every start and across replicas). SchemaReady is a final guard against a
-	// partial apply. `orchestrator migrate` stays available for manual ops.
-	if err := store.Migrate(bootCtx, pool); err != nil {
-		slog.ErrorContext(bootCtx, "migrate_failed", "err", err.Error())
-		os.Exit(1)
-	}
-	if err := store.SchemaReady(bootCtx, pool); err != nil {
-		slog.ErrorContext(bootCtx, "schema_not_ready", "err", err.Error())
-		os.Exit(1)
-	}
-
-	root := handler.NewRouter(handler.RouterDeps{Pool: pool})
+	defer deps.Pool.Close()
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           root,
+		Handler:           deps.Handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
