@@ -52,7 +52,9 @@ type Job struct {
 
 // allowedTransitions encodes the state machine.
 var allowedTransitions = map[State]map[State]bool{
-	StateQueued:  {StateRunning: true, StateCancelled: true},
+	// queued may fail directly when a pre-flight check rejects it (e.g. the
+	// PRO-tier re-verification fails before any work starts).
+	StateQueued:  {StateRunning: true, StateCancelled: true, StateFailed: true},
 	StateRunning: {StateDone: true, StateFailed: true, StateCancelled: true},
 	// failed may be retried back into the queue by the worker until it
 	// dead-letters (attempts cap enforced at the application layer).

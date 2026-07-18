@@ -11,6 +11,12 @@ tools/
 web/
 mobile
 
+# ...except the shared Go pipeline module: backend service images
+# (orchestrator) import it via a local `replace ../../libs/pipeline`, so it
+# must survive the blanket libs/ exclusion above (last match wins).
+!libs/pipeline
+!libs/pipeline/**
+
 # Per-service noise that should never end up in any image.
 # Note: services/*/scripts/ stays — share-video has a postinstall hook
 # that copies font subsets; auth/chat don't ship scripts/ so excluding
