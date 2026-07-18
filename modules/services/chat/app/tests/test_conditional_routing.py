@@ -107,6 +107,14 @@ def test_research_goes_to_research_worker() -> None:
     assert route_after_router({"intent": "research"}) == "research_worker"
 
 
+def test_add_to_library_goes_to_add_to_library_worker() -> None:
+    # The new PRO-gated "add an external lecture to my library" intent routes
+    # to its deterministic terminal worker (which itself gates on tier).
+    assert (
+        route_after_router({"intent": "add-to-library"}) == "add_to_library_worker"
+    )
+
+
 def test_unknown_routes_through_light_research() -> None:
     # #39: `unknown` no longer drops to a tool-less synthesizer reply.
     # It runs a light research pass so a single misclassification can't
