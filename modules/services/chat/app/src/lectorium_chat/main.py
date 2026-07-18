@@ -257,6 +257,22 @@ async def lifespan(app: FastAPI):
         name="indexer_scheduler",
     )
 
+    # Private per-user RAG (#1227): consume `track.events` (track.ready /
+    # track.linked / library.unlinked) to index user tracks under
+    # kind='user_track' and maintain the `owned` ACL projection. No-op when
+    # STREAMS_REDIS_URL is unset (build returns None) — the feature stays off
+    # without a broker, exactly like the ingest publisher.
+    from lectorium_chat.infra.broker.track_events_consumer import (
+        build_track_events_consumer,
+    )
+    track_events_consumer = build_track_events_consumer(s, embedder)
+    track_events_task = None
+    if track_events_consumer is not None:
+        track_events_task = asyncio.create_task(
+            track_events_consumer.run(stop_event),
+            name="track_events_consumer",
+        )
+
     log.info(
         "service_ready",
         ms_to_ready=int((time.monotonic() - started) * 1000),
@@ -272,6 +288,16 @@ async def lifespan(app: FastAPI):
             await scheduler_task
         except (asyncio.CancelledError, Exception):
             pass
+        # Track-events consumer drains on stop_event (blocking XREADGROUP
+        # unblocks within _BLOCK_MS); cancel as a hard backstop, then close
+        # its Redis client so a redeploy doesn't leak the connection.
+        if track_events_task is not None:
+            track_events_task.cancel()
+            try:
+                await track_events_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await _close_quietly(track_events_consumer, "close", "aclose")
         # Cancel any in-flight detached chat-turn producers so the redeploy
         # terminates cleanly instead of abandoning tasks mid-run.
         await turn_runner.shutdown()

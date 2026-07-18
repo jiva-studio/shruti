@@ -30,6 +30,13 @@ class ChunkRepository(Protocol):
         the corpus language set is never hardcoded. Cached (24h)."""
         ...
 
+    async def get_owned_track_ids(self, user_id: str) -> list[str]:
+        """Track ids the given user (JWT `sub`) may retrieve in the private
+        `user_track` lane, read from the server-side `owned` ACL projection.
+        Never derived from client-supplied history. Empty for anon/unknown
+        users; best-effort (a missing projection yields [])."""
+        ...
+
     async def search_by_embedding(
         self,
         embedding: list[float],
@@ -38,11 +45,15 @@ class ChunkRepository(Protocol):
         excluded_track_ids: list[str] | None = None,
         lang: str | None,
         top_k: int,
+        kind: str = "track_transcript",
     ) -> list[ScoredChunk]:
-        """ANN search over lecture-transcript chunks. Implementations
-        apply the active `embed_model` filter AND restrict to
-        `kind='track_transcript'` internally — library content lives in
-        the same table but is queried via `search_library_by_embedding`."""
+        """ANN search over lecture chunks of a single `kind`. Implementations
+        apply the active `embed_model` filter and restrict to the requested
+        `kind`. `kind='track_transcript'` (default) is the public corpus;
+        `kind='user_track'` is the private per-user lane — the two are
+        physically separate partial HNSW indexes, so the default search can
+        never return private rows. Library content (verse/commentary/…) lives
+        in the same table but is queried via `search_library_by_embedding`."""
         ...
 
     async def search_library_by_embedding(

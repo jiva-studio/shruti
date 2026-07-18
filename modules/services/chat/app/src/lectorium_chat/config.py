@@ -185,6 +185,17 @@ class Settings(BaseSettings):
     streams_redis_url: str | None = None
     ingest_request_stream: str = "ingest.request"
 
+    # Track-lifecycle events for the private per-user RAG lane (#1227). The
+    # orchestrator / library emit `track.ready` (transcript indexed + owned),
+    # `track.linked` (owned), `library.unlinked` (owned removed) onto this
+    # Redis Stream. The chat service runs a consumer-group reader that indexes
+    # the transcript under kind='user_track' and maintains the `owned` ACL
+    # projection. Shares STREAMS_REDIS_URL with the ingest broker; unset URL ⇒
+    # the consumer never starts (feature off, no-op).
+    track_events_stream: str = "track.events"
+    track_events_group: str = "chat-indexer"
+    track_events_consumer: str = "chat-1"
+
     # ── Indexer ─────────────────────────────────────────────────────────
     catalog_dir: Path = Path("/var/lib/chat")
     # Fractional values are allowed (e.g. 0.25 = every 15 min). The loop

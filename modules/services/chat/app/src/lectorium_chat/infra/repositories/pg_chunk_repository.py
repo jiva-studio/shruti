@@ -23,13 +23,25 @@ import asyncpg
 
 from lectorium_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, ScoredLibraryChunk
 from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
+from lectorium_chat.observability.logging import get_logger
+
+log = get_logger(__name__)
 
 # Chunk kinds may be inlined as SQL literals (to match the per-kind partial
 # HNSW indexes from migration 0035, whose predicates the planner can only
 # match against a constant — not a bound array param). Validate against this
 # fixed internal vocabulary before string-building as defence-in-depth.
 _ALLOWED_KINDS = frozenset(
-    {"track_transcript", "verse", "commentary", "prose_chapter", "letter", "media", "title"}
+    {
+        "track_transcript",
+        "user_track",
+        "verse",
+        "commentary",
+        "prose_chapter",
+        "letter",
+        "media",
+        "title",
+    }
 )
 
 # Languages with a per-(kind,lang) composite partial HNSW index on the
@@ -107,6 +119,28 @@ class PgChunkRepository:
         # cached_json round-trips through JSON; the value is a list of str.
         return list(result) if isinstance(result, list) else await _raw()
 
+    async def get_owned_track_ids(self, user_id: str) -> list[str]:
+        """Track ids the given user (JWT `sub`) may retrieve in the private
+        lane — read from the server-side `owned` projection (migration 0044).
+
+        This is the SOLE ACL source for the private lane: it is keyed on the
+        verified `sub`, never on client-supplied `recent_tracks`, so a client
+        cannot widen its own access. Returns an empty list for an anonymous /
+        unknown user or when the projection has no rows for them. Best-effort:
+        a missing `owned` table (migration not yet applied) yields [] rather
+        than failing the turn, matching the feature's graceful-degradation
+        contract."""
+        if not user_id:
+            return []
+        try:
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT track_id FROM owned WHERE user_id = $1", user_id
+                )
+        except asyncpg.UndefinedTableError:
+            return []
+        return [r["track_id"] for r in rows]
+
     async def search_by_embedding(
         self,
         embedding: list[float],
@@ -115,7 +149,14 @@ class PgChunkRepository:
         excluded_track_ids: list[str] | None = None,
         lang: str | None,
         top_k: int,
+        kind: str = "track_transcript",
     ) -> list[ScoredChunk]:
+        # `kind` selects the lane: 'track_transcript' is the public corpus,
+        # 'user_track' is the private per-user lane (migration 0043). The two
+        # never overlap — each is a distinct partial HNSW predicate — so the
+        # default corpus search can never return a user_track row.
+        if kind not in _ALLOWED_KINDS:
+            raise ValueError(f"unknown chunk kind: {kind}")
         if self._cache is None:
             return await self._search_by_embedding_raw(
                 embedding,
@@ -123,6 +164,7 @@ class PgChunkRepository:
                 excluded_track_ids=excluded_track_ids,
                 lang=lang,
                 top_k=top_k,
+                kind=kind,
             )
         from lectorium_chat.application.cache_helpers import TTL_6H, make_key
         key = make_key(
@@ -133,6 +175,7 @@ class PgChunkRepository:
                 "excluded": sorted(excluded_track_ids) if excluded_track_ids else None,
                 "lang": lang,
                 "top_k": top_k,
+                "kind": kind,
             },
         )
         cached = await self._cache.get(key)
@@ -161,6 +204,7 @@ class PgChunkRepository:
             excluded_track_ids=excluded_track_ids,
             lang=lang,
             top_k=top_k,
+            kind=kind,
         )
         try:
             payload = json.dumps(
@@ -194,23 +238,33 @@ class PgChunkRepository:
         excluded_track_ids: list[str] | None = None,
         lang: str | None,
         top_k: int,
+        kind: str = "track_transcript",
     ) -> list[ScoredChunk]:
-        # `kind='track_transcript'` keeps library rows out of lecture search.
-        # Embedding column lives in `chunk_embeddings_d{dim}` (migration
-        # 0030); join through chunk_id. The kind/lang filters target the
-        # EMBEDDING table (migration 0035 denormalized them there) so the
-        # `WHERE kind='track_transcript'` partial HNSW index is used — a
-        # filter on `c` would only post-filter after a full-index deep scan.
+        # `kind` keeps the lanes apart: 'track_transcript' is the public
+        # corpus, 'user_track' the private per-user lane — library rows
+        # (verse/commentary/…) never appear either way. Embedding column
+        # lives in `chunk_embeddings_d{dim}` (migration 0030); join through
+        # chunk_id. The kind/lang filters target the EMBEDDING table
+        # (migration 0035 denormalized them there) so the matching partial
+        # HNSW index is used — a filter on `c` would only post-filter after
+        # a full-index deep scan. `kind` is validated against the fixed
+        # internal vocabulary before it's inlined (defence-in-depth), same
+        # as the library search — a bound param can't match a partial-index
+        # predicate at plan time.
+        if kind not in _ALLOWED_KINDS:
+            raise ValueError(f"unknown chunk kind: {kind}")
         emb_table = self._router.chunk_table
-        where = ["c.embed_model = $1", "e.kind = 'track_transcript'"]
+        where = ["c.embed_model = $1", f"e.kind = '{kind}'"]
         params: list[Any] = [self._embed_model]
         if lang:
-            if lang in _LECTURE_PARTIAL_LANGS:
-                # Inline lang as a constant so the per-(kind,lang) composite
-                # partial HNSW index (migration 0036) is matched — a bound
-                # `lang = $param` can't be. Safe: only the fixed-set values
-                # in _LECTURE_PARTIAL_LANGS ever reach this branch. Other
-                # langs fall through to the param + kind-only `_hnsw_lec`.
+            # The per-(kind,lang) composite partial HNSW index (migration
+            # 0036) exists ONLY for the public lecture lane; inlining lang as
+            # a constant matches it. The private lane has a kind-only partial
+            # (0043), so its lang stays a bound post-filter param.
+            if kind == "track_transcript" and lang in _LECTURE_PARTIAL_LANGS:
+                # Safe: only the fixed-set values in _LECTURE_PARTIAL_LANGS
+                # ever reach this branch. Other langs fall through to the
+                # bound param.
                 where.append(f"e.lang = '{lang}'")
             else:
                 where.append(f"e.lang = ${len(params) + 1}")
