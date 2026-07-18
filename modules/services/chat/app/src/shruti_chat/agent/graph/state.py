@@ -41,6 +41,9 @@ class ChatState(TypedDict, total=False):
     user_query: str
     lang: str
     request_id: str
+    # Subscription tier ("pro" | "free" | "anon"), from the verified JWT
+    # claim. Read by the add_to_library_worker to PRO-gate the capability.
+    tier: str
 
     # ── User context anchors ───────────────────────────────────────────
     # Integer aliases pre-minted by chat_turn.py wrapper from the

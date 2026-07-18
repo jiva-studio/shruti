@@ -195,6 +195,8 @@ async def run_chat_turn(
     client_trace_id: str | None = None,
     region: str | None = None,
     turn_config: dict[str, Any] | None = None,
+    tier: str = "free",
+    jwt: str | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Drive one chat turn through the LangGraph chat graph.
 
@@ -366,6 +368,13 @@ async def run_chat_turn(
             embed_dim=deps.settings.embed_dim,
             kv_cache=deps.kv_cache,
             embed_task=embed_task,
+            # Add-to-library (#1226): identity for the ingest.request payload,
+            # plus the provider resolver + broker publisher from the deps.
+            # `getattr` tolerates test AppDeps doubles that predate the fields.
+            user_id=(user_context.user_id if user_context else None),
+            jwt=jwt,
+            lecture_search=getattr(deps, "lecture_search", None),
+            ingest_publisher=getattr(deps, "ingest_publisher", None),
         )
 
         initial_state: dict[str, Any] = {
@@ -373,6 +382,7 @@ async def run_chat_turn(
             "user_query": _extract_latest_user_query(history),
             "lang": lang,
             "request_id": trace_id,
+            "tier": tier,
             "tool_results": [],
             "focus_ref": focus_ref,
             "focus_around_ms": focus_around_ms,
