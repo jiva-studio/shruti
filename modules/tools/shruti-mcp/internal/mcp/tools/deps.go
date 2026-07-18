@@ -59,6 +59,7 @@ type Deps struct {
 	LibraryAttribution  LibraryAttributionDeps
 	LibraryImport       LibraryImportDeps
 	LibraryPublish      LibraryPublishDeps
+	Pending             PendingDeps
 	Proactive           ProactiveDeps
 	Regions             RegionsDeps
 	ConfigPublish       ConfigPublishDeps
