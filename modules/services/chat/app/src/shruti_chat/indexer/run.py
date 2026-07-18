@@ -9,6 +9,8 @@ Two phases:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import time
 import uuid
 from contextlib import suppress
@@ -18,11 +20,14 @@ import structlog
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.indexer import catalog, s3
-from shruti_chat.indexer.chunker import Chunk, chunk_reviewed
+from shruti_chat.indexer.chunker import chunk_reviewed
 from shruti_chat.indexer.embed import Embedder, get_embedder
 from shruti_chat.indexer.library import db as library_db
 from shruti_chat.indexer.library.attribution_indexer import run_once_attribution
 from shruti_chat.indexer.library.indexer import run_once_library
+from shruti_chat.indexer.orchestrator_adapter import (
+    orchestrator_transcript_to_reviewed,
+)
 from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from shruti_chat.observability.logging import get_logger
 
@@ -262,44 +267,110 @@ async def run_once(
 
 
 async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: Settings) -> int:
-    """Fetch one transcript, chunk, embed, upsert, mark indexed. Returns chunk count."""
-    t0 = time.monotonic()
+    """Fetch one CORPUS transcript from S3 and index it. Returns chunk count.
+
+    Thin wrapper over `index_one_track` — the public corpus lane fetches the
+    reviewed transcript by CDN key and indexes it under
+    `kind='track_transcript'` with the catalog sha256 as the change-token.
+    """
     reviewed = await s3.fetch_transcript(obj.key, settings)
+    return await index_one_track(
+        obj.track_id,
+        reviewed,
+        obj.lang,
+        kind="track_transcript",
+        embedder=embedder,
+        settings=settings,
+        etag=obj.etag,
+    )
+
+
+def _content_etag(reviewed: dict) -> str:
+    """sha256 over the reviewed payload — the change-token for a user track.
+
+    Corpus tracks carry the catalog's sha256; user tracks arrive as an inline
+    transcript with no external etag, so we derive one from the content so a
+    re-delivered identical `track.ready` event is a cheap no-op upsert."""
+    payload = json.dumps(reviewed, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+async def index_one_track(
+    track_id: str,
+    transcript_ref: dict | str,
+    lang: str,
+    *,
+    kind: str = "user_track",
+    embedder: Embedder | None = None,
+    settings: Settings | None = None,
+    etag: str | None = None,
+) -> int:
+    """Chunk → embed → upsert ONE track's transcript. Returns chunk count.
+
+    The shared indexing core for BOTH lanes:
+    - public corpus (`kind='track_transcript'`, called by `_process_one`);
+    - private per-user tracks (`kind='user_track'`, called by the
+      `track.events` consumer for the "add to my library" flow).
+
+    `transcript_ref` is either the transcript payload itself (an orchestrator
+    transcript or an already-reviewed dict — normalised via the orchestrator
+    adapter) or a CDN key string to fetch it from. `kind` is written to BOTH
+    `chunks.kind` and the embedding row's denormalised `kind`, so the private
+    lane's rows are structurally invisible to the public `track_transcript`
+    partial HNSW index (migration 0043) — the isolation guarantee.
+    """
+    s = settings or get_settings()
+    emb = embedder or get_embedder(s)
+    t0 = time.monotonic()
+
+    if isinstance(transcript_ref, str):
+        raw = await s3.fetch_transcript(transcript_ref, s)
+    else:
+        raw = transcript_ref
+    reviewed = orchestrator_transcript_to_reviewed(raw, track_id=track_id, lang=lang)
+    if etag is None:
+        etag = _content_etag(reviewed)
+
     chunks = chunk_reviewed(reviewed)
+    pool = get_pool()
     if not chunks:
-        async with get_pool().acquire() as conn:
+        async with pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO indexed_items
                   (item_kind, item_id, lang, embed_model, etag, indexed_at)
-                VALUES ('track_transcript', $1, $2, $3, $4, NOW())
+                VALUES ($1, $2, $3, $4, $5, NOW())
                 ON CONFLICT (item_kind, item_id, lang, embed_model)
-                DO UPDATE SET etag=$4, indexed_at=NOW()
+                DO UPDATE SET etag=$5, indexed_at=NOW()
                 """,
-                obj.track_id, obj.lang, embedder.name, obj.etag,
+                kind, track_id, lang, emb.name, etag,
             )
         return 0
 
-    vectors = await embedder.embed_documents([c.text for c in chunks])
+    vectors = await emb.embed_documents([c.text for c in chunks])
     # Embedding column is no longer on `chunks` after migration 0030 —
     # the active dim's per-dim table receives the vectors. Indexer
     # routes through `EmbeddingTableRouter`; FK CASCADE on chunk_id
     # means deleting the chunks row also removes its embedding row.
-    router = EmbeddingTableRouter(dim=settings.embed_dim)
-    pool = get_pool()
+    router = EmbeddingTableRouter(dim=s.embed_dim)
     async with pool.acquire() as conn:
         async with conn.transaction():
             # Cascading delete: dropping the chunks row removes any
             # matching d{N} embedding rows automatically (FK CASCADE).
+            # Scoped by kind too so re-indexing a user_track can never
+            # collide with a same-id public track (content-addressed ids
+            # make that near-impossible, but scope defensively).
             await conn.execute(
-                "DELETE FROM chunks WHERE track_id=$1 AND lang=$2 AND embed_model=$3",
-                obj.track_id, obj.lang, embedder.name,
+                "DELETE FROM chunks WHERE track_id=$1 AND lang=$2 "
+                "AND embed_model=$3 AND kind=$4",
+                track_id, lang, emb.name, kind,
             )
             # Bulk insert metadata rows via UNNEST; RETURNING id keeps
             # the (chunk, embedding) zip aligned because UNNEST preserves
-            # input order. Then bulk-insert the matching d{N} rows.
-            track_ids = [c.track_id for c in chunks]
-            langs = [c.lang for c in chunks]
+            # input order. `track_id`/`lang`/`kind` are the AUTHORITATIVE
+            # values (not the chunk's own copies) so the ACL id and the
+            # kind discriminator are consistent for every row.
+            n = len(chunks)
             starts = [c.start_ms for c in chunks]
             ends = [c.end_ms for c in chunks]
             texts = [c.text for c in chunks]
@@ -308,42 +379,43 @@ async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: S
                 """
                 INSERT INTO chunks
                   (track_id, lang, start_ms, end_ms, text,
-                   reference_source_id, embed_model)
+                   reference_source_id, embed_model, kind)
                 SELECT * FROM UNNEST(
                   $1::text[], $2::text[], $3::int[], $4::int[], $5::text[],
-                  $6::text[], $7::text[]
+                  $6::text[], $7::text[], $8::text[]
                 )
                 RETURNING id
                 """,
-                track_ids, langs, starts, ends, texts, ref_src,
-                [embedder.name] * len(chunks),
+                [track_id] * n, [lang] * n, starts, ends, texts, ref_src,
+                [emb.name] * n, [kind] * n,
             )
             chunk_ids = [int(r["id"]) for r in id_rows]
-            # kind/lang denormalized onto the embedding row (migration 0035)
-            # so the per-kind partial HNSW index can be used at query time.
-            # Lecture chunks are always 'track_transcript'.
+            # kind/lang denormalized onto the embedding row (migrations 0035 /
+            # 0043) so the per-kind partial HNSW index can be used at query
+            # time. The private lane writes kind='user_track'.
             await conn.executemany(
                 f"""
                 INSERT INTO {router.chunk_table} (chunk_id, embedding, kind, lang)
-                VALUES ($1, $2, 'track_transcript', $3)
+                VALUES ($1, $2, $3, $4)
                 """,
-                list(zip(chunk_ids, vectors, langs, strict=True)),
+                [(cid, vec, kind, lang) for cid, vec in zip(chunk_ids, vectors, strict=True)],
             )
             await conn.execute(
                 """
                 INSERT INTO indexed_items
                   (item_kind, item_id, lang, embed_model, etag, indexed_at)
-                VALUES ('track_transcript', $1, $2, $3, $4, NOW())
+                VALUES ($1, $2, $3, $4, $5, NOW())
                 ON CONFLICT (item_kind, item_id, lang, embed_model)
-                DO UPDATE SET etag=$4, indexed_at=NOW()
+                DO UPDATE SET etag=$5, indexed_at=NOW()
                 """,
-                obj.track_id, obj.lang, embedder.name, obj.etag,
+                kind, track_id, lang, emb.name, etag,
             )
 
     log.info(
         "chunk_track_done",
-        track_id=obj.track_id,
-        lang=obj.lang,
+        track_id=track_id,
+        lang=lang,
+        kind=kind,
         chunks_created=len(chunks),
         duration_ms=int((time.monotonic() - t0) * 1000),
     )

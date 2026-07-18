@@ -673,6 +673,11 @@ async def run_research(
     # generation, attribution confirmation). None = no observability;
     # the LLM adapter then skips the `callbacks` kwarg on each call.
     callbacks: list[Any] | None = None,
+    # ACL for the private per-user lecture lane (#1227): the set of
+    # `user_track` ids this user owns, resolved server-side from the `owned`
+    # projection keyed on the JWT `sub`. None / empty ⇒ the private lane is
+    # off and retrieval is the public corpus only.
+    owned_track_ids: list[str] | None = None,
 ) -> ResearchResult:
     """Code-driven research. Called from `research_worker_node` when
     `router.intent == "research"`.
@@ -734,6 +739,7 @@ async def run_research(
             request_id=request_id, on_event=on_event,
             reranker=reranker,
             callbacks=callbacks,
+            owned_track_ids=owned_track_ids,
         )
 
     # 1. PARALLEL: plan + question-attribution lookup + speculative
@@ -845,6 +851,7 @@ async def run_research(
             alias_map=alias_map, llm=llm, router_args=router_args,
             expand_model=expand_model, library_db=library_db,
             request_id=request_id, on_event=on_event, reranker=reranker,
+            owned_track_ids=owned_track_ids,
         )
         _attach_memory(result, memory_result)
         _kick_caption_gen(
@@ -877,6 +884,7 @@ async def run_research(
         kv_cache=kv_cache,
         reranker=reranker,
         callbacks=callbacks,
+        owned_track_ids=owned_track_ids,
     )
     _attach_memory(long_result, memory_result)
     _kick_caption_gen(
@@ -907,6 +915,7 @@ async def _lean_path(
     request_id: str | None,
     on_event: OnEvent | None,
     reranker: Any,
+    owned_track_ids: list[str] | None = None,
 ) -> ResearchResult:
     """Lean retrieval taken whenever the sufficiency gate returns CORRECT —
     a pinned question-attribution (legacy SHORT) OR a strong memory match (new).
@@ -968,6 +977,7 @@ async def _lean_path(
                 reranker=reranker,
                 rerank_query=question,
                 boost_kinds=boost_kinds_from(question, router_args),
+                owned_track_ids=owned_track_ids,
             ),
             default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
             name="supplementary_fanout", request_id=request_id,
@@ -1147,6 +1157,7 @@ async def _research_path(
     kv_cache: Any | None = None,
     reranker: Any = None,
     callbacks: list[Any] | None = None,
+    owned_track_ids: list[str] | None = None,
 ) -> ResearchResult:
     """WIDE path: topic-extract → topic-lookup → fanout with coverage gate
     and up to `policy.max_fanout_rounds` rounds (default WIDE_POLICY).
@@ -1287,6 +1298,7 @@ async def _research_path(
                 reranker=reranker,
                 rerank_query=question,
                 boost_kinds=boost_kinds_from(question, router_args),
+                owned_track_ids=owned_track_ids,
             ),
             default=None, timeout=TIMEOUT_FANOUT_S,
             name=f"fanout_round_{round_idx}", request_id=request_id,
