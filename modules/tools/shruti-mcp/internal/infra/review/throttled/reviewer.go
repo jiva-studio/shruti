@@ -13,7 +13,7 @@ package throttledreview
 import (
 	"context"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/ports/review"
 )
 
 type Reviewer struct {

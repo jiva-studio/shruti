@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 	outlineport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/outline"
 	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )

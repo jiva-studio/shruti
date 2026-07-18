@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 // Reviewer reviews ONE chunk of segments. Critical contract: the LLM never

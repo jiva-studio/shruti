@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 // Strategy names understood by audio-denoiser/denoise_mp3.py --plan.

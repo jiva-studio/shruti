@@ -3,7 +3,7 @@ package transcribereg
 import (
 	"sync"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/shruti/pipeline/ports/transcriber"
 )
 
 // Registry implements transcriber.Registry.

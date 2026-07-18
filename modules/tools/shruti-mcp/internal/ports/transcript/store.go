@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 // Store owns the on-disk paths for transcript artifacts under out/.

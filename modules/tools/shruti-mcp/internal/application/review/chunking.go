@@ -3,8 +3,8 @@ package review
 import (
 	"strings"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
-	reviewport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
+	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
 )
 
 // joinChunkText concatenates segment texts with single spaces — only
