@@ -52,17 +52,17 @@ const pendingColumns = `track_id, owner_id,
 	COALESCE(date_raw,''), COALESCE(references_raw,''), lang,
 	COALESCE(transcript_path,''), COALESCE(audio_path,''),
 	COALESCE(audio_duration_ms,0), COALESCE(audio_size_bytes,0),
-	COALESCE(suggested_at,''), COALESCE(consumed_at,'')`
+	COALESCE(created_at,''), COALESCE(consumed_at,'')`
 
 func scanTrack(sc interface{ Scan(...any) error }) (pending.Track, error) {
 	var t pending.Track
 	err := sc.Scan(&t.TrackID, &t.OwnerID, &t.TitleRaw, &t.AuthorRaw, &t.LocationRaw,
 		&t.DateRaw, &t.ReferencesRaw, &t.Lang, &t.TranscriptPath, &t.AudioPath,
-		&t.AudioDurationMs, &t.AudioSizeBytes, &t.SuggestedAt, &t.ConsumedAt)
+		&t.AudioDurationMs, &t.AudioSizeBytes, &t.CreatedAt, &t.ConsumedAt)
 	return t, err
 }
 
-// List returns pending rows ordered by (suggested_at, track_id). By default
+// List returns pending rows ordered by (created_at, track_id). By default
 // only unconsumed rows are returned.
 func (r *Repo) List(ctx context.Context, opts pending.ListOpts) ([]pending.Track, error) {
 	limit := opts.Limit
@@ -142,11 +142,11 @@ func ensurePendingTable(ctx context.Context, db *sql.DB) error {
 			audio_path        TEXT,
 			audio_duration_ms INTEGER,
 			audio_size_bytes  INTEGER,
-			suggested_at      TEXT,
+			created_at      TEXT,
 			consumed_at       TEXT
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_pending_unconsumed
-			ON pending(consumed_at, suggested_at)`,
+			ON pending(consumed_at, created_at)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.ExecContext(ctx, s); err != nil {

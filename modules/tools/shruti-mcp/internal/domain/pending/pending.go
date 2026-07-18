@@ -1,5 +1,5 @@
 // Package pending holds the domain types for the corpus-promotion queue —
-// the "suggested-for-corpus" rows the admin reviews and promotes into the
+// the "user-generated" rows the admin reviews and promotes into the
 // shared catalog (Phase-2 admin promotion, epic #1236, issue #1233).
 //
 // The queue is delivered to the offline admin MCP as a published SQLite
@@ -9,7 +9,7 @@
 // the sqlite adapter implement the READ side the admin tools consume.
 package pending
 
-// Track is one suggested-for-corpus row: a user-added ("personal library")
+// Track is one user-generated row: a user-added ("personal library")
 // lecture, already published to the public CDN, that a user (or the system)
 // has proposed for promotion into the shared corpus.
 //
@@ -37,7 +37,7 @@ type Track struct {
 	AudioDurationMs int64 `json:"audio_duration_ms"`
 	AudioSizeBytes  int64 `json:"audio_size_bytes"`
 
-	SuggestedAt string `json:"suggested_at"` // RFC3339, set by the producer
+	CreatedAt string `json:"created_at"` // RFC3339, set by the producer
 	// ConsumedAt is set by the admin MCP (library.approve) once the row has
 	// been promoted, so a later producer pass can reconcile / drop it. Empty =
 	// still pending.

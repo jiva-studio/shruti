@@ -1,5 +1,5 @@
 // Package promote implements the corpus-promotion gate (issue #1232): the
-// admin approves a suggested-for-corpus "personal library" track and it becomes
+// admin approves a user-generated "personal library" track and it becomes
 // a normal corpus track for everyone, keeping its stable track_id.
 //
 // This is the "track.commit + catalog.publish" step of the promotion flow —
