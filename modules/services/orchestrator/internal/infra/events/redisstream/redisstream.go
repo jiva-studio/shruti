@@ -61,7 +61,11 @@ type Consumer struct {
 func NewConsumer(rdb *redis.Client, stream, group, consumer string, h Handler) *Consumer {
 	return &Consumer{
 		rdb: rdb, stream: stream, group: group, consumer: consumer, handler: h,
-		block: 5 * time.Second, count: 16, minIdle: 60 * time.Second,
+		// minIdle must exceed the slowest in-flight stage (transcription can run
+		// ~10 min) so a live-but-slow job isn't reclaimed by another replica and
+		// processed twice. 15 min leaves headroom; a genuinely crashed consumer's
+		// entries still get redelivered, just after this window.
+		block: 5 * time.Second, count: 16, minIdle: 15 * time.Minute,
 	}
 }
 
