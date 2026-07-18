@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 	fsartifact "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
 	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )

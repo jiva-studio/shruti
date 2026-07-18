@@ -12,7 +12,7 @@ package transcriber
 import (
 	"context"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 type Options struct {

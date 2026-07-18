@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	hybridreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/hybrid"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/ports/review"
 )
 
 // Registry implements review.Registry.

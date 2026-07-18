@@ -10,7 +10,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/shruti/pipeline/ports/transcriber"
 	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 

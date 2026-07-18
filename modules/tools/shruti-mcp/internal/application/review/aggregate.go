@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
-	reviewport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
+	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
 	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 

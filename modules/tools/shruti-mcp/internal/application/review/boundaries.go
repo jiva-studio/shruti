@@ -5,9 +5,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
-	reviewport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
+	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/ports/sentencesplit"
 )
 
 // idxBoundary tracks which raw idx is the final segment of a sentence.
