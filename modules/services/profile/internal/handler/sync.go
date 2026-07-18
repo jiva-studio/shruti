@@ -89,9 +89,14 @@ func decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
-// writeServiceErr maps a service error to an HTTP status: validation faults
-// are 400, everything else is a 500 logged with context.
+// writeServiceErr maps a service error to an HTTP status: forbidden faults are
+// 403 (with the error's stable code), validation faults are 400, everything
+// else is a 500 logged with context.
 func writeServiceErr(w http.ResponseWriter, r *http.Request, logMsg string, err error) {
+	if f, ok := service.AsForbidden(err); ok {
+		writeErr(w, http.StatusForbidden, f.Code, f.Error())
+		return
+	}
 	if service.IsValidation(err) {
 		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
