@@ -375,6 +375,7 @@ async def fanout_search_with_boost(
     reranker: Any = None,
     rerank_query: str | None = None,
     boost_kinds: frozenset[str] = frozenset(),
+    owned_track_ids: list[str] | None = None,
 ) -> FanoutResult:
     """One round of fanout. Returns top-K envelopes.
 
@@ -455,6 +456,33 @@ async def fanout_search_with_boost(
                 for s in scored
             ]
 
+        async def _user_lecture(use_lang: str | None) -> list[_RawScored]:
+            # Private per-user lane (#1227): the SAME lecture retrieval, but
+            # over `kind='user_track'` chunks restricted to the tracks THIS
+            # user owns (ACL from the server-side `owned` table, passed in as
+            # `owned_track_ids`). Off entirely when the user owns nothing, so
+            # a signed-out / library-less turn pays zero extra ANN cost and
+            # the public corpus behaviour is byte-for-byte unchanged.
+            if not owned_track_ids:
+                return []
+            _t = time.perf_counter()
+            scored = await chunk_repo.search_by_embedding(
+                q_vec,
+                eligible_track_ids=owned_track_ids,
+                lang=use_lang,
+                top_k=fetch_k,
+                kind="user_track",
+            )
+            _record("user_lecture", _t)
+            # Surfaced under the same "lecture" kind so private results merge
+            # into the lecture dedup / ranking / citation path identically to
+            # corpus lectures — the isolation lives in the ACL + kind filter,
+            # not in a separate downstream branch.
+            return [
+                _RawScored(s.chunk, s.score, "lecture", _lecture_dedup_key(s.chunk), sq_id)
+                for s in scored
+            ]
+
         async def _library(use_lang: str | None, kinds: list[str]) -> list[_RawScored]:
             _t = time.perf_counter()
             scored = await chunk_repo.search_library_by_embedding(
@@ -503,13 +531,14 @@ async def fanout_search_with_boost(
             # cosine top-K. Other library kinds keep one combined fetch. The
             # lexical lane runs alongside (forced members).
             other_lib = [k for k in _LIBRARY_KINDS if k != "verse"]
-            lec, verse_lib, rest_lib, lex = await asyncio.gather(
+            lec, usr_lec, verse_lib, rest_lib, lex = await asyncio.gather(
                 _lecture(use_lang),
+                _user_lecture(use_lang),
                 _library(use_lang, ["verse"]),
                 _library(use_lang, other_lib),
                 _lexical(use_lang),
             )
-            return lec + verse_lib + rest_lib + lex
+            return lec + usr_lec + verse_lib + rest_lib + lex
 
         # Search ONLY the requested language. Retrieved chunks are surfaced to
         # the user verbatim (cited, never LLM-rewritten/translated), so a
