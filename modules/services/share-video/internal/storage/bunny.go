@@ -12,9 +12,9 @@ import (
 
 // BunnyUploader writes finished reels to Bunny Edge Storage's HTTP API
 // ({endpoint}/{zone}/{key} with an `AccessKey` header). Only the public,
-// client-facing reel OUTPUT moves to Bunny; source/background reads and the
-// SpeechKit presigned-URL flow stay on the S3-compatible client (Bunny has no
-// presigning). nil *BunnyUploader = keep uploading output to S3.
+// client-facing reel OUTPUT moves to Bunny; source/background reads stay on
+// the S3-compatible client (Bunny has no presigning). nil *BunnyUploader =
+// keep uploading output to S3.
 type BunnyUploader struct {
 	endpoint string
 	zone     string

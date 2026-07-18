@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,9 +36,13 @@ type BackgroundsInput struct {
 	Bucket      string
 	Prefix      string
 	Theme       string
-	VideoID     string  // deterministic shuffle seed
+	VideoID     string // deterministic shuffle seed
 	DurationSec float64
 	TempDir     string
+	// LocalDir, when set, sources background clips from
+	// <LocalDir>/<theme>/*.mp4 on disk instead of S3 — dev/smoke runs
+	// without bucket access. Empty → S3 path (production).
+	LocalDir string
 }
 
 // ListAndConcatBackgrounds is the Go port of s3Backgrounds.ts. Lists
@@ -46,24 +51,37 @@ type BackgroundsInput struct {
 // them with ffmpeg's concat demuxer (stream-copy, no re-encode).
 // Returns the path to the concatenated background MP4.
 func ListAndConcatBackgrounds(ctx context.Context, in BackgroundsInput) (string, error) {
-	themePrefix := strings.TrimRight(in.Prefix, "/") + "/" + in.Theme + "/"
-	keys, err := listThemeKeys(ctx, in.S3, in.Bucket, themePrefix)
-	if err != nil {
-		return "", fmt.Errorf("list backgrounds: %w", err)
-	}
-	if len(keys) == 0 {
-		return "", fmt.Errorf("%w: %s", ErrUnknownTheme, in.Theme)
-	}
-
-	nClips := int(math.Max(1, math.Ceil(in.DurationSec/5)))
-	ordered := pickClips(keys, in.VideoID, nClips)
-
 	if err := os.MkdirAll(in.TempDir, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir %s: %w", in.TempDir, err)
 	}
-	localPaths, err := downloadAll(ctx, in.S3, in.Bucket, ordered, in.TempDir)
-	if err != nil {
-		return "", fmt.Errorf("download backgrounds: %w", err)
+
+	nClips := int(math.Max(1, math.Ceil(in.DurationSec/5)))
+
+	var localPaths []string
+	if in.LocalDir != "" {
+		// Local mode: files already on disk, no download step.
+		keys, err := listLocalThemeClips(in.LocalDir, in.Theme)
+		if err != nil {
+			return "", fmt.Errorf("list local backgrounds: %w", err)
+		}
+		if len(keys) == 0 {
+			return "", fmt.Errorf("%w: %s (local)", ErrUnknownTheme, in.Theme)
+		}
+		localPaths = pickClips(keys, in.VideoID, nClips)
+	} else {
+		themePrefix := strings.TrimRight(in.Prefix, "/") + "/" + in.Theme + "/"
+		keys, err := listThemeKeys(ctx, in.S3, in.Bucket, themePrefix)
+		if err != nil {
+			return "", fmt.Errorf("list backgrounds: %w", err)
+		}
+		if len(keys) == 0 {
+			return "", fmt.Errorf("%w: %s", ErrUnknownTheme, in.Theme)
+		}
+		ordered := pickClips(keys, in.VideoID, nClips)
+		localPaths, err = downloadAll(ctx, in.S3, in.Bucket, ordered, in.TempDir)
+		if err != nil {
+			return "", fmt.Errorf("download backgrounds: %w", err)
+		}
 	}
 
 	outPath := filepath.Join(in.TempDir, "bg.mp4")
@@ -71,6 +89,28 @@ func ListAndConcatBackgrounds(ctx context.Context, in BackgroundsInput) (string,
 		return "", fmt.Errorf("concat backgrounds: %w", err)
 	}
 	return outPath, nil
+}
+
+// listLocalThemeClips returns the sorted absolute paths of *.mp4 under
+// <dir>/<theme>/. Sorted so the deterministic shuffle is stable across
+// runs the same way the S3 key list is.
+func listLocalThemeClips(dir, theme string) ([]string, error) {
+	themeDir := filepath.Join(dir, theme)
+	entries, err := os.ReadDir(themeDir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(strings.ToLower(e.Name()), ".mp4") {
+			out = append(out, filepath.Join(themeDir, e.Name()))
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // listCache caches per-(bucket,prefix) key lists for a few minutes so
