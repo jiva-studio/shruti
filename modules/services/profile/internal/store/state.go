@@ -59,6 +59,19 @@ var Collections = map[string]bool{
 	"notes":              true,
 	"chat_sessions":      true,
 	"chat_messages":      true,
+	// library_items is server-owned: written ONLY via the server-authored path
+	// (Service.ApplyServerChange). Whitelisted here so ApplyState / pull treat
+	// it as a first-class collection; clients pull it but never push it.
+	"library_items": true,
+}
+
+// ServerOwned is the subset of Collections whose documents are authored ONLY by
+// the server (Service.ApplyServerChange) and are pull-only for clients. The
+// client Push path REJECTS these so a device can never forge or overwrite
+// server-owned state; ApplyServerChange and the pull/projection paths still
+// accept them. Every key here MUST also be in Collections.
+var ServerOwned = map[string]bool{
+	"library_items": true,
 }
 
 // ApplyState projects one already-validated change onto its typed state
@@ -82,6 +95,8 @@ func ApplyState(ctx context.Context, q querier, userID uuid.UUID, it wire.PushIt
 		return upsertChatSession(ctx, q, userID, it)
 	case "chat_messages":
 		return upsertChatMessage(ctx, q, userID, it)
+	case "library_items":
+		return upsertLibraryItem(ctx, q, userID, it)
 	default:
 		return fmt.Errorf("unknown collection %q", it.Collection)
 	}
@@ -107,6 +122,7 @@ var stateTable = map[string]string{
 	"notes":              "profile.notes",
 	"chat_sessions":      "profile.chat_sessions",
 	"chat_messages":      "profile.chat_messages",
+	"library_items":      "profile.library_items",
 }
 
 // --- typed row shapes (json tags == user.db / DDL column names) -----------
@@ -149,6 +165,33 @@ type chatMessageRow struct {
 	Content   *string         `json:"content"`
 	Meta      json.RawMessage `json:"meta"`
 	CreatedAt *epochTime      `json:"created_at"`
+}
+
+// libraryItemRow is the server-authored Personal Library projection. Every
+// field is server-owned; json tags match the library_items columns the
+// server-authored path ships in its data blob (there is no client user.db
+// counterpart — the client only reads this collection).
+type libraryItemRow struct {
+	TrackID        *string    `json:"track_id"` // nullable until fetched
+	Status         *string    `json:"status"`
+	Origin         *string    `json:"origin"`
+	Error          *string    `json:"error"`
+	TitleRaw       *string    `json:"title_raw"`
+	AuthorRaw      *string    `json:"author_raw"`
+	LocationRaw    *string    `json:"location_raw"`
+	DateRaw        *string    `json:"date_raw"`
+	LangHint       *string    `json:"lang_hint"`
+	AuthorID       *string    `json:"author_id"`
+	LocationID     *string    `json:"location_id"`
+	Date           *string    `json:"date"`
+	DatePrecision  *string    `json:"date_precision"`
+	Lang           *string    `json:"lang"`
+	LangConfidence *float64   `json:"lang_confidence"`
+	AudioKey       *string    `json:"audio_key"`
+	TranscriptKey  *string    `json:"transcript_key"`
+	CoverKey       *string    `json:"cover_key"`
+	Duration       *int       `json:"duration"`
+	AddedAt        *epochTime `json:"added_at"`
 }
 
 func decode(it wire.PushItem, dst any) error {
@@ -266,6 +309,54 @@ func upsertChatMessage(ctx context.Context, q querier, userID uuid.UUID, it wire
 		     meta       = EXCLUDED.meta,
 		     created_at = EXCLUDED.created_at`,
 		userID, it.DocID, row.SessionID, row.Role, row.Content, jsonbArg(row.Meta), tsArg(row.CreatedAt),
+	)
+	return err
+}
+
+// upsertLibraryItem projects a server-authored library_items change. doc_id is
+// the library membership id (a uuid), independent of track_id (which stays
+// NULL until the track is fetched). Mirrors upsertPlaylistItem's ON CONFLICT
+// shape so a re-projection of the same doc is a full overwrite.
+func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+	var row libraryItemRow
+	if err := decode(it, &row); err != nil {
+		return err
+	}
+	_, err := q.Exec(ctx,
+		`INSERT INTO profile.library_items
+		     (user_id, doc_id, track_id, status, origin, error,
+		      title_raw, author_raw, location_raw, date_raw, lang_hint,
+		      author_id, location_id, date, date_precision, lang, lang_confidence,
+		      audio_key, transcript_key, cover_key, duration, added_at)
+		 VALUES ($1, $2, $3, $4, $5, $6,
+		         $7, $8, $9, $10, $11,
+		         $12, $13, $14, $15, $16, $17,
+		         $18, $19, $20, $21, $22)
+		 ON CONFLICT (user_id, doc_id) DO UPDATE SET
+		     track_id        = EXCLUDED.track_id,
+		     status          = EXCLUDED.status,
+		     origin          = EXCLUDED.origin,
+		     error           = EXCLUDED.error,
+		     title_raw       = EXCLUDED.title_raw,
+		     author_raw      = EXCLUDED.author_raw,
+		     location_raw    = EXCLUDED.location_raw,
+		     date_raw        = EXCLUDED.date_raw,
+		     lang_hint       = EXCLUDED.lang_hint,
+		     author_id       = EXCLUDED.author_id,
+		     location_id     = EXCLUDED.location_id,
+		     date            = EXCLUDED.date,
+		     date_precision  = EXCLUDED.date_precision,
+		     lang            = EXCLUDED.lang,
+		     lang_confidence = EXCLUDED.lang_confidence,
+		     audio_key       = EXCLUDED.audio_key,
+		     transcript_key  = EXCLUDED.transcript_key,
+		     cover_key       = EXCLUDED.cover_key,
+		     duration        = EXCLUDED.duration,
+		     added_at        = EXCLUDED.added_at`,
+		userID, it.DocID, row.TrackID, row.Status, row.Origin, row.Error,
+		row.TitleRaw, row.AuthorRaw, row.LocationRaw, row.DateRaw, row.LangHint,
+		row.AuthorID, row.LocationID, row.Date, row.DatePrecision, row.Lang, row.LangConfidence,
+		row.AudioKey, row.TranscriptKey, row.CoverKey, row.Duration, tsArg(row.AddedAt),
 	)
 	return err
 }
