@@ -141,23 +141,6 @@ func (b *fakeBlob) Exists(_ context.Context, key string) (bool, error) {
 	return ok, nil
 }
 
-type fakeClaimer struct {
-	mu     sync.Mutex
-	owners map[string]string
-}
-
-func newClaimer() *fakeClaimer { return &fakeClaimer{owners: map[string]string{}} }
-
-func (c *fakeClaimer) Claim(_ context.Context, hash, jobID string) (bool, string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if owner, ok := c.owners[hash]; ok {
-		return false, owner, nil
-	}
-	c.owners[hash] = jobID
-	return true, jobID, nil
-}
-
 type fakeTier struct {
 	userID string
 	pro    bool
@@ -174,7 +157,6 @@ type harness struct {
 	fetch  *fakeFetcher
 	trans  *fakeTranscriber
 	blob   *fakeBlob
-	claim  *fakeClaimer
 	tier   fakeTier
 	svc    *Service
 }
@@ -186,7 +168,6 @@ func newHarness(maxAttempts int) *harness {
 		fetch:  &fakeFetcher{content: []byte("audio-bytes")},
 		trans:  &fakeTranscriber{lang: "en"},
 		blob:   newBlob(),
-		claim:  newClaimer(),
 		tier:   fakeTier{userID: "user-1", pro: true},
 	}
 	h.build(maxAttempts)
@@ -201,7 +182,6 @@ func (h *harness) build(maxAttempts int) {
 		Transcriber:       h.trans,
 		Reviewer:          review.New(),
 		Blob:              h.blob,
-		Claimer:           h.claim,
 		Tier:              h.tier,
 		MaxAttempts:       maxAttempts,
 		TrackEventsStream: "track.events",
