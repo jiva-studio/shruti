@@ -17,9 +17,12 @@ Flow (no synthesizer — terminates at END like find_tracks_worker):
 4. Emit each candidate as a card — a server-resolved `action` payload FIRST
    (kind=`library_candidate`), then its `[card:…]` marker (action-before-
    marker, same invariant as find_tracks_worker).
-5. Publish the top candidate to the broker (the `add_to_library_publish`
-   action-tool → XADD `ingest.request` {user_id, url, jwt}) and emit its
-   `added_to_library` confirmation card + a localized lead-in.
+
+The worker NEVER publishes `ingest.request` itself. Publishing happens only
+when the user taps a candidate card's "Add to library" action, which invokes
+the `add_to_library_publish` action-tool (→ XADD `ingest.request`
+{user_id, url, jwt}). This keeps ingest an explicit, user-chosen action
+rather than a speculative side effect of every Pro turn.
 """
 
 from __future__ import annotations
@@ -34,7 +37,6 @@ from shruti_chat.agent.graph.nodes._worker_common import localized_reply
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.agent.tools.actions import _new_action_id
-from shruti_chat.agent.tools.add_to_library import add_to_library_publish
 from shruti_chat.lecture_search.models import Candidate
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
@@ -86,32 +88,20 @@ async def add_to_library_worker_node(
 
     writer({"type": "status", "data": {"key": "composing_answer"}})
 
-    # ── 5a. Publish the top candidate ──────────────────────────────────
+    # ── 5. Offer the candidates ────────────────────────────────────────
+    # We do NOT publish here. The worker only surfaces tappable candidate
+    # cards; the actual `ingest.request` is published solely when the user
+    # taps a card's "Add to library" action (the `add_to_library_publish`
+    # action-tool). This avoids adding a lecture the user never chose.
     top = candidates[0]
-    result = await add_to_library_publish(
-        url=top.url,
-        user_id=getattr(ctx, "user_id", "") or "",
-        jwt=getattr(ctx, "jwt", "") or "",
-        title=top.title,
-        thumbnail=top.thumbnail,
-        author=top.author,
-        publisher=getattr(ctx, "ingest_publisher", None),
-        yield_event=_yield_event,
-    )
-
     lead = await localized_reply(
         ctx,
-        f"Confirm to the user that the lecture «{top.title or top.url}» is being "
-        f"added to their personal library and will appear once processed. One "
-        f"short line. No chips.",
+        f"Tell the user we found «{top.title or top.url}»"
+        + (" and other options" if len(candidates) > 1 else "")
+        + " and invite them to tap a result to add it to their personal "
+        "library. One short line. No chips.",
     )
     _emit_line(writer, lead.line)
-
-    if isinstance(result, dict) and result.get("action_id"):
-        writer({
-            "type": "delta",
-            "data": {"text": f"\n[action:added_to_library|id={result['action_id']}]\n"},
-        })
 
     # ── 4. Candidate cards (the top one plus alternatives) ─────────────
     _stream_candidate_cards(writer, candidates[:_MAX_CANDIDATES])
@@ -120,7 +110,6 @@ async def add_to_library_worker_node(
         "add_to_library_ok",
         request_id=ctx.request_id,
         n_candidates=len(candidates),
-        published=bool(isinstance(result, dict) and result.get("published")),
         top_provider=top.provider,
     )
     return {}

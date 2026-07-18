@@ -23,7 +23,7 @@ keep working.
 from __future__ import annotations
 
 import asyncio
-from time import perf_counter
+from time import perf_counter, time
 from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
 
@@ -180,6 +180,21 @@ def _extract_latest_user_query(history: list[dict[str, Any]]) -> str:
     return ""
 
 
+def _effective_tier(tier: str, tier_expires_at: int) -> str:
+    """Coerce a stale Pro claim back to free.
+
+    Auth may mint `tier="pro"` with a `tier_expires_at` (UNIX epoch) that
+    has already passed — e.g. a dropped EXPIRATION webhook. A lapsed token
+    must not unlock Pro-only capabilities (add-to-library), so we downgrade
+    it to free before the tier reaches any graph gate. Mirrors the rate
+    limiter's `_user_limit_for` (`application/rate_limiter.py`). `0` means
+    "no expiry claim" and is left as-is.
+    """
+    if tier == "pro" and tier_expires_at != 0 and tier_expires_at < int(time()):
+        return "free"
+    return tier
+
+
 async def run_chat_turn(
     history: list[dict[str, Any]],
     *,
@@ -196,6 +211,7 @@ async def run_chat_turn(
     region: str | None = None,
     turn_config: dict[str, Any] | None = None,
     tier: str = "free",
+    tier_expires_at: int = 0,
     jwt: str | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Drive one chat turn through the LangGraph chat graph.
@@ -377,12 +393,19 @@ async def run_chat_turn(
             ingest_publisher=getattr(deps, "ingest_publisher", None),
         )
 
+        # A stale Pro claim (auth minted tier="pro" but tier_expires_at is in
+        # the past — e.g. a dropped EXPIRATION webhook) must NOT unlock
+        # Pro-only capabilities like add-to-library. Coerce it back to free
+        # BEFORE the tier reaches any graph gate, mirroring the rate limiter
+        # (`application/rate_limiter._user_limit_for`).
+        effective_tier = _effective_tier(tier, tier_expires_at)
+
         initial_state: dict[str, Any] = {
             "history": history,
             "user_query": _extract_latest_user_query(history),
             "lang": lang,
             "request_id": trace_id,
-            "tier": tier,
+            "tier": effective_tier,
             "tool_results": [],
             "focus_ref": focus_ref,
             "focus_around_ms": focus_around_ms,
