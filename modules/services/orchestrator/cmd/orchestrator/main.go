@@ -99,6 +99,29 @@ func runServe() {
 		os.Exit(1)
 	}
 	defer deps.Pool.Close()
+	if deps.Redis != nil {
+		defer deps.Redis.Close()
+	}
+
+	// Broker-driven pipeline: the outbox relay drains lifecycle events, the
+	// consumer processes ingest.request. Both run for the process lifetime and
+	// are torn down when the root context is cancelled on shutdown.
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	if deps.Relay != nil {
+		go func() {
+			if err := deps.Relay.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("relay_stopped", "err", err.Error())
+			}
+		}()
+	}
+	if deps.Consumer != nil {
+		go func() {
+			if err := deps.Consumer.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("consumer_stopped", "err", err.Error())
+			}
+		}()
+	}
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -118,6 +141,7 @@ func runServe() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	slog.Info("shutdown_start")
+	workerCancel() // stop the consumer + relay before draining HTTP
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

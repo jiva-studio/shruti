@@ -48,13 +48,27 @@ type EventBus interface {
 }
 
 // JobRepository persists the Job aggregate — the source of truth.
+//
+// The plain Create/Get/Save run against the pool; the CreateTx/SaveTx variants
+// run within a caller-supplied Tx so a job write and its outbox event (via
+// EventBus.Publish) commit atomically — the transactional-outbox invariant.
 type JobRepository interface {
 	Create(ctx context.Context, j *job.Job) error
 	Get(ctx context.Context, id string) (*job.Job, error)
 	Save(ctx context.Context, j *job.Job) error
+	CreateTx(ctx context.Context, q Tx, j *job.Job) error
+	SaveTx(ctx context.Context, q Tx, j *job.Job) error
 	// WithTx runs fn inside a transaction so a job write and its outbox event
 	// commit atomically.
 	WithTx(ctx context.Context, fn func(Tx) error) error
+}
+
+// TierVerifier re-verifies the PRO entitlement carried in an ingest request's
+// JWT at processing time (the tier could have lapsed since the request was
+// enqueued). It returns the token subject (user id) and whether the token
+// grants an ACTIVE pro tier; err is non-nil only for a malformed/invalid token.
+type TierVerifier interface {
+	VerifyPro(token string) (userID string, pro bool, err error)
 }
 
 // Tx is an opaque transaction handle threaded through repository + event bus so
