@@ -63,6 +63,7 @@ from lectorium_chat.agent.graph.conditional import (
 )
 from lectorium_chat.agent.graph.nodes import (
     action_worker_node,
+    add_to_library_worker_node,
     catalog_worker_node,
     clarify_worker_node,
     corpus_fallback_node,
@@ -100,6 +101,7 @@ def build_chat_graph() -> Pregel:
     builder.add_node("find_tracks_worker", find_tracks_worker_node)
     builder.add_node("recommend_worker", recommend_worker_node)
     builder.add_node("action_worker", action_worker_node)
+    builder.add_node("add_to_library_worker", add_to_library_worker_node)
     builder.add_node("help_worker", help_worker_node)
     builder.add_node("show_verse_worker", show_verse_worker_node)
     builder.add_node("clarify_worker", clarify_worker_node)
@@ -119,6 +121,7 @@ def build_chat_graph() -> Pregel:
             "find_tracks_worker": "find_tracks_worker",
             "recommend_worker": "recommend_worker",
             "action_worker": "action_worker",
+            "add_to_library_worker": "add_to_library_worker",
             "help_worker": "help_worker",
             "show_verse_worker": "show_verse_worker",
             "clarify_worker": "clarify_worker",
@@ -167,6 +170,10 @@ def build_chat_graph() -> Pregel:
     # lectures, force-emits each card + verbatim why-quote, and writes the
     # global + per-lecture headers (the only LLM hop) itself — no synthesizer.
     builder.add_edge("find_tracks_worker", END)
+    # add_to_library_worker is a deterministic terminal too: it PRO-gates,
+    # searches providers, emits candidate cards, and publishes the top match
+    # to the ingest broker itself — no synthesizer.
+    builder.add_edge("add_to_library_worker", END)
     # clarify_worker is a deterministic terminal: it emits one localized
     # question for a deictic request we can't ground (no current lecture / no
     # listen-history) — no synthesizer.

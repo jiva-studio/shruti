@@ -114,6 +114,17 @@ async def chat(
     _check_protocol_version(x_chat_protocol_version)
     request_id = uuid.uuid4().hex[:12]
 
+    # Raw bearer token — rides the add-to-library ingest.request payload so
+    # the ingest worker (#1224) can re-verify and act on the user's behalf.
+    # Read off the request headers (not a route param) so the same value is
+    # available when the handler is unit-tested by direct call.
+    _authz = request.headers.get("authorization")
+    bearer_jwt = (
+        _authz[len("Bearer "):]
+        if _authz and _authz.startswith("Bearer ")
+        else None
+    )
+
     # Client mints an assistant ChatMessage.id (UUIDv4) before opening
     # the stream and sends its hyphenless 32-hex form as X-Trace-Id so
     # message identity == Langfuse trace identity. Score writes from a
@@ -243,6 +254,14 @@ async def chat(
                 client_trace_id=client_trace_id,
                 region=region,
                 turn_config=(body.config.model_dump() if body.config else None),
+                # Add-to-library (#1226): the verified tier PRO-gates the
+                # capability; the raw bearer token rides the ingest.request
+                # payload so the ingest worker can act on the user's behalf.
+                # `tier_expires_at` lets the turn coerce a lapsed Pro claim
+                # back to free before the gate (same as the rate limiter).
+                tier=user.tier,
+                tier_expires_at=user.tier_expires_at,
+                jwt=bearer_jwt,
             )
         return _stream_with_intent_capture(inner, turn_meta)
 

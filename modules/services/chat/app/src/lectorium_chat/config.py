@@ -159,6 +159,32 @@ class Settings(BaseSettings):
     rerank_concurrency: int = 2
     rerank_timeout_s: float = 10.0
 
+    # ── Add-to-library: external lecture search + ingest broker (#1226) ──
+    # PRO-only "add an external lecture to my library". The multi-provider
+    # search resolver tries these in order; each adapter is inert until its
+    # credential is set (only YouTube Data API v3 is a real, keyed adapter —
+    # the rest are structured stubs). All optional: a keyless deploy simply
+    # finds no candidates for a non-URL query (a pasted link still works).
+    youtube_api_key: str | None = None          # YouTube Data API v3 (primary)
+    serpapi_api_key: str | None = None          # SerpApi (free tier fallback)
+    dataforseo_login: str | None = None         # DataForSEO Basic-auth login
+    dataforseo_password: str | None = None      # DataForSEO Basic-auth password
+    # Optional BCP-47 region bias for YouTube search results. Empty = global.
+    lecture_search_region: str = ""
+    # yt-dlp fallback is off by default (the container ships no yt_dlp binary
+    # / no egress). Flip on only where the package + network are present.
+    lecture_search_ytdlp_enabled: bool = False
+    # Per-provider hard timeout inside the resolver's ordered fallback.
+    lecture_search_timeout_s: float = 4.0
+
+    # Ingest broker (#1224). When a PRO user adds a lecture, chat XADDs an
+    # `ingest.request` onto this Redis Stream for the ingest worker to pick
+    # up. Distinct URL from the cache/rate-limit Redis so the broker can live
+    # on its own instance. Unset → the publisher no-ops (logs the intent),
+    # so the feature degrades gracefully before #1224 is deployed.
+    streams_redis_url: str | None = None
+    ingest_request_stream: str = "ingest.request"
+
     # ── Indexer ─────────────────────────────────────────────────────────
     catalog_dir: Path = Path("/var/lib/chat")
     # Fractional values are allowed (e.g. 0.25 = every 15 min). The loop

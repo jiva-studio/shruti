@@ -226,6 +226,23 @@ Intents:
     "configure auto-download",
     "upgrade to pro",
     "buy the subscription".
+- add-to-library: the user wants to ADD an EXTERNAL lecture (one that is NOT
+  already in this app's corpus) to their OWN personal library — typically by
+  pasting a link (YouTube / a video URL) or asking to "find <lecture> on
+  YouTube and add it", "download this talk into my library", "save this video
+  to my library". The tell is an EXTERNAL source (a pasted http(s) link, or an
+  explicit "on YouTube / from the web") COMBINED with an add/save/import verb
+  aimed at the user's library. This is a Pro-only capability (the worker gates
+  on tier). Do NOT confuse with `create_action` (pdf/reminder/smart_library/
+  pro), with `find_track` (search THIS app's corpus for lectures), or with
+  `research` (answer from the corpus). A bare corpus lecture search stays
+  find_track; only an EXTERNAL add belongs here.
+  Examples (ru): "добавь это видео в мою библиотеку",
+                 "найди на ютубе лекцию про бхакти и добавь в библиотеку",
+                 "сохрани https://youtu.be/xxxx в мою библиотеку".
+  Examples (en): "add this video to my library",
+                 "find a lecture about bhakti on youtube and add it to my library",
+                 "save https://youtu.be/xxxx to my library".
 - unknown: ONLY a query that is genuinely out-of-scope (nothing to do
   with Vedic philosophy, scripture, Prabhupāda's teachings, or this
   app — e.g. "what's the weather", "write me Python code"), pure
