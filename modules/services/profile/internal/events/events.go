@@ -29,14 +29,19 @@ const libraryItemsCollection = "library_items"
 // server-authored write path. An interface (not the concrete type) so events
 // has no import cycle with service and is trivially faked in tests.
 type Applier interface {
-	ApplyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op string, data json.RawMessage) (wire.Change, error)
+	ApplyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op, eventID string, data json.RawMessage) (wire.Change, error)
 }
 
 // TrackEvent is one decoded `track.events` message. `type` selects the op:
 // a `track.ready`/fetch-progress event upserts the projection; a removal event
 // deletes it (and, once #1224 lands, emits `library.unlinked`). Data is the
 // server-owned library_items payload projected verbatim by ApplyServerChange.
+//
+// ID is the broker message id — a monotonic idempotency key. It is passed to
+// ApplyServerChange, which derives a DETERMINISTIC hlc from it, so a redelivered
+// message writes exactly one change-log row instead of a duplicate.
 type TrackEvent struct {
+	ID     string          `json:"id"`
 	Type   string          `json:"type"`
 	UserID uuid.UUID       `json:"user_id"`
 	DocID  string          `json:"doc_id"`
@@ -55,9 +60,10 @@ type Consumer struct {
 // service lifecycle today without it doing (or breaking) anything.
 func (c *Consumer) Run(ctx context.Context) error {
 	// TODO(#1224): connect to STREAMS_REDIS_URL; XREADGROUP GROUP profile ...;
-	// for each message decode a TrackEvent, call handle, XACK on success.
-	// Redelivery is safe: ApplyServerChange is a per-doc fast-forward and the
-	// change log is idempotent on (user_id, collection, doc_id, hlc).
+	// for each message set TrackEvent.ID to the stream message id, call handle,
+	// XACK on success. Redelivery is safe: ApplyServerChange derives a
+	// deterministic hlc from that id, so the change log stays idempotent on
+	// (user_id, collection, doc_id, hlc).
 	<-ctx.Done()
 	return ctx.Err()
 }
@@ -71,6 +77,6 @@ func (c *Consumer) handle(ctx context.Context, ev TrackEvent) error {
 		// TODO(#1224): also emit a `library.unlinked` event to the outbox.
 		op = "delete"
 	}
-	_, err := c.Applier.ApplyServerChange(ctx, ev.UserID, libraryItemsCollection, ev.DocID, op, ev.Data)
+	_, err := c.Applier.ApplyServerChange(ctx, ev.UserID, libraryItemsCollection, ev.DocID, op, ev.ID, ev.Data)
 	return err
 }

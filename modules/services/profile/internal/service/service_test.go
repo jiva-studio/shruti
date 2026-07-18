@@ -626,7 +626,7 @@ func TestPurgeUserIsolated(t *testing.T) {
 		// library_items is server-owned — seed it via the server-authored path,
 		// not a client push, so the purge coverage exercises the real writer.
 		if _, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-1", "upsert",
-			json.RawMessage(`{"status":"ready","track_id":"trk"}`)); err != nil {
+			"1718000000000-0", json.RawMessage(`{"status":"ready","track_id":"trk"}`)); err != nil {
 			t.Fatalf("seed library_items: %v", err)
 		}
 		if err := svc.AckCursor(ctx, uid, wire.CursorRequest{DeviceID: "d", AckedSeq: 3}); err != nil {
@@ -681,7 +681,7 @@ func TestApplyServerChangeProjectsLibraryItem(t *testing.T) {
 		"audio_key":"a/1.mp3","transcript_key":"t/1.json","cover_key":"c/1.jpg",
 		"duration":3600,"added_at":"2026-02-03T04:05:06Z"
 	}`
-	ch, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-a", "upsert", json.RawMessage(data))
+	ch, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-a", "upsert", "1718000000000-0", json.RawMessage(data))
 	if err != nil {
 		t.Fatalf("apply server change: %v", err)
 	}
@@ -726,7 +726,7 @@ func TestApplyServerChangeProjectsLibraryItem(t *testing.T) {
 
 	// track_id stays NULL until fetched: a payload that omits it.
 	if _, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-b", "upsert",
-		json.RawMessage(`{"status":"pending"}`)); err != nil {
+		"1718000000001-0", json.RawMessage(`{"status":"pending"}`)); err != nil {
 		t.Fatalf("apply pending: %v", err)
 	}
 	if err := pool.QueryRow(ctx,
@@ -748,7 +748,7 @@ func TestApplyServerChangeAppendsAndIsPullable(t *testing.T) {
 	ctx := context.Background()
 
 	ch, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-x", "upsert",
-		json.RawMessage(`{"status":"ready"}`))
+		"1718000000000-0", json.RawMessage(`{"status":"ready"}`))
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -786,9 +786,9 @@ func TestApplyServerChangeAppendsAndIsPullable(t *testing.T) {
 		t.Fatalf("server-authored change not pullable: %+v", page.Changes)
 	}
 
-	// A second server write fast-forwards strictly newer than the first.
+	// A later event (larger broker id) sorts strictly newer than the first.
 	ch2, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-x", "upsert",
-		json.RawMessage(`{"status":"normalized"}`))
+		"1718000000001-0", json.RawMessage(`{"status":"normalized"}`))
 	if err != nil {
 		t.Fatalf("apply 2: %v", err)
 	}
@@ -797,7 +797,7 @@ func TestApplyServerChangeAppendsAndIsPullable(t *testing.T) {
 	}
 
 	// Delete tombstones the projection but still appends a change row.
-	if _, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-x", "delete", nil); err != nil {
+	if _, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-x", "delete", "1718000000002-0", nil); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if stateCount(t, pool, "profile.library_items", uid, "lib-x") != 0 {
@@ -806,11 +806,78 @@ func TestApplyServerChangeAppendsAndIsPullable(t *testing.T) {
 
 	// Validation: unknown collection and empty doc are caller faults.
 	if _, err := svc.ApplyServerChange(ctx, uid, "not_a_collection", "d", "upsert",
-		json.RawMessage(`{}`)); err == nil || !IsValidation(err) {
+		"1718000000003-0", json.RawMessage(`{}`)); err == nil || !IsValidation(err) {
 		t.Errorf("unknown collection must be a validation error, got %v", err)
 	}
 	if _, err := svc.ApplyServerChange(ctx, uid, "library_items", "", "upsert",
-		json.RawMessage(`{}`)); err == nil || !IsValidation(err) {
+		"1718000000004-0", json.RawMessage(`{}`)); err == nil || !IsValidation(err) {
 		t.Errorf("empty doc_id must be a validation error, got %v", err)
+	}
+}
+
+// ─── 12. Push REJECTS a server-owned collection (pull-only enforcement) ─────
+
+// A client push of library_items is forbidden: the collection is server-owned
+// (written only via ApplyServerChange). The rejection happens in the up-front
+// validation, before any DB work — so this runs without Postgres.
+func TestPushRejectsServerOwnedCollection(t *testing.T) {
+	svc := &Service{PullMaxLimit: 500} // nil pool: rejection precedes any tx
+	resp, err := svc.Push(context.Background(), uuid.New(), wire.PushRequest{
+		DeviceID: "devA",
+		Changes: []wire.PushItem{
+			item("library_items", "lib-1", "upsert", "h1", "", `{"status":"ready"}`),
+		},
+	})
+	if err == nil {
+		t.Fatalf("push of a server-owned collection must be rejected, got resp %+v", resp)
+	}
+	f, ok := AsForbidden(err)
+	if !ok {
+		t.Fatalf("want a ForbiddenError, got %T: %v", err, err)
+	}
+	if f.Code != "server_owned_collection" {
+		t.Errorf("code: want server_owned_collection, got %q", f.Code)
+	}
+	if len(resp.Applied) != 0 {
+		t.Errorf("nothing must be applied on rejection, got %+v", resp.Applied)
+	}
+}
+
+// ─── 13. Server-authored redelivery is idempotent (one change-log row) ──────
+
+// Applying the SAME server event (same broker id) twice writes exactly one
+// change-log row — the deterministic hlc collides on the UNIQUE constraint —
+// while a genuinely newer event still appends a second row.
+func TestApplyServerChangeIdempotentOnRedelivery(t *testing.T) {
+	svc := newService(t, 0)
+	uid := uuid.New()
+	ctx := context.Background()
+
+	data := json.RawMessage(`{"status":"ready","track_id":"trk-9"}`)
+	const eventID = "1718000000000-0"
+
+	first, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-r", "upsert", eventID, data)
+	if err != nil {
+		t.Fatalf("first apply: %v", err)
+	}
+	// Redelivery of the identical event: same hlc, no duplicate row.
+	second, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-r", "upsert", eventID, data)
+	if err != nil {
+		t.Fatalf("redelivery apply: %v", err)
+	}
+	if first.HLC != second.HLC {
+		t.Errorf("redelivery must derive the same hlc: %q != %q", first.HLC, second.HLC)
+	}
+	if n := changeCount(t, svc.Pool, uid, "library_items", "lib-r"); n != 1 {
+		t.Fatalf("redelivery must leave exactly one change-log row, got %d", n)
+	}
+
+	// A genuinely newer event (larger broker id) appends a second row.
+	if _, err := svc.ApplyServerChange(ctx, uid, "library_items", "lib-r", "upsert",
+		"1718000000001-0", json.RawMessage(`{"status":"normalized","track_id":"trk-9"}`)); err != nil {
+		t.Fatalf("newer apply: %v", err)
+	}
+	if n := changeCount(t, svc.Pool, uid, "library_items", "lib-r"); n != 2 {
+		t.Fatalf("a distinct newer event must append a row, got %d rows", n)
 	}
 }

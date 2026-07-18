@@ -65,6 +65,15 @@ var Collections = map[string]bool{
 	"library_items": true,
 }
 
+// ServerOwned is the subset of Collections whose documents are authored ONLY by
+// the server (Service.ApplyServerChange) and are pull-only for clients. The
+// client Push path REJECTS these so a device can never forge or overwrite
+// server-owned state; ApplyServerChange and the pull/projection paths still
+// accept them. Every key here MUST also be in Collections.
+var ServerOwned = map[string]bool{
+	"library_items": true,
+}
+
 // ApplyState projects one already-validated change onto its typed state
 // table inside the caller's transaction. Upserts convert the wire snapshot
 // (client-native user.db row) into real columns; deletes tombstone the row.
