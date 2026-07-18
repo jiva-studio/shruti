@@ -184,8 +184,9 @@ def route_after_router(state: ChatState) -> str:
         return "find_tracks_worker"
     if intent == "add-to-library":
         # PRO-gated "add an external lecture to my library". The worker itself
-        # gates on tier, searches providers, and publishes ingest.request —
-        # deterministic terminal, no synthesizer.
+        # gates on tier and searches providers, then offers tappable candidate
+        # cards — deterministic terminal, no synthesizer. It does NOT publish;
+        # ingest.request is published only when the user taps a card's action.
         return "add_to_library_worker"
     if intent == "recommend":
         # Deterministic topic-affinity recommender — no LLM ReAct loop.

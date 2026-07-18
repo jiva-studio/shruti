@@ -257,7 +257,10 @@ async def chat(
                 # Add-to-library (#1226): the verified tier PRO-gates the
                 # capability; the raw bearer token rides the ingest.request
                 # payload so the ingest worker can act on the user's behalf.
+                # `tier_expires_at` lets the turn coerce a lapsed Pro claim
+                # back to free before the gate (same as the rate limiter).
                 tier=user.tier,
+                tier_expires_at=user.tier_expires_at,
                 jwt=bearer_jwt,
             )
         return _stream_with_intent_capture(inner, turn_meta)
