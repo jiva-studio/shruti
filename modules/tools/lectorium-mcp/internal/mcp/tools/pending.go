@@ -33,10 +33,11 @@ func registerPendingRefresh(s *server.MCPServer, deps PendingDeps) {
 	const kind = "library.pending.refresh"
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription(
-			"Self-fetch the corpus-promotion queue artifact (pending.db) from the "+
-				"CDN — download → verify → atomic swap, exactly like catalog.refresh. "+
-				"The offline admin MCP has no prod-DB access; suggestions arrive as a "+
-				"published SQLite artifact."),
+			"Self-fetch the user-generated-tracks review artifact (pending.db) from "+
+				"the CDN — download → verify → atomic swap, exactly like catalog.refresh. "+
+				"The offline admin MCP has no prod-DB access, so the user-generated "+
+				"tracks it reviews arrive as a published SQLite artifact (users never "+
+				"submit anything — the admin browses and approves)."),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		res, err := deps.Refresh.Run(ctx)
@@ -50,7 +51,7 @@ func registerPendingRefresh(s *server.MCPServer, deps PendingDeps) {
 func registerPendingList(s *server.MCPServer, deps PendingDeps) {
 	const kind = "library.pending.list"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("List suggested-for-corpus tracks from the fetched pending.db (paginated). Unconsumed only unless include_consumed=true."),
+		mcp.WithDescription("List user-generated tracks from the fetched pending.db (paginated). Unconsumed only unless include_consumed=true."),
 		mcp.WithBoolean("include_consumed", mcp.Description("Also list rows already promoted (consumed). Default false.")),
 		mcp.WithNumber("limit", mcp.Description("Page size (default 100).")),
 		mcp.WithString("cursor", mcp.Description("Cursor (last-seen track_id) from previous page.")),
@@ -79,7 +80,7 @@ func registerPendingList(s *server.MCPServer, deps PendingDeps) {
 func registerPendingGet(s *server.MCPServer, deps PendingDeps) {
 	const kind = "library.pending.get"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Get one suggested-for-corpus track (raw metadata + public CDN keys) from the fetched pending.db."),
+		mcp.WithDescription("Get one user-generated track (raw metadata + public CDN keys) from the fetched pending.db."),
 		mcp.WithString("track_id", mcp.Required()),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -102,7 +103,7 @@ func registerLibraryApprove(s *server.MCPServer, deps PendingDeps) {
 	const kind = "library.approve"
 	tool := mcp.NewTool(kind,
 		mcp.WithDescription(
-			"Promote a suggested-for-corpus track into the shared corpus (zero-copy): "+
+			"Promote a user-generated track into the shared corpus (zero-copy): "+
 				"writes the catalog track row (reusing the personal track's already-public "+
 				"transcript/audio bytes and its stable track_id) with contributor_user_id "+
 				"attribution, then marks the pending row consumed. Metadata is normalized at "+
