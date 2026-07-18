@@ -1,9 +1,10 @@
 import type { LanguageCode, SourceId, TrackId } from "@lib/domain/core.js"
 import type { Source } from "@lib/domain/source.js"
+import type { Track } from "@lib/domain/track.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import { preferredContentLanguage } from "@lib/domain/services/localizedName.js"
 import { registerRule } from "../registry.js"
-import type { ProactiveRuleHandler } from "../types.js"
+import type { ProactiveContext, ProactiveRuleHandler } from "../types.js"
 
 /** Single action id per message — exactly one card. */
 const ACTION_ID = "main"
@@ -73,7 +74,16 @@ export const nextShlokaRule: ProactiveRuleHandler = {
           // no OS push — the chat badge is enough.
           visibleAt: null,
           notify: false,
-          sessionTitleOverride: ctx.t("chat.proactiveSessionTitleNextShloka"),
+          // Name the actual verse in the session title ("… — BG 2.14")
+          // so successive nudges read distinctly instead of a stack of
+          // identical "next verse" headers. Falls back to the bare title
+          // when the reference can't be localised (never blocks the nudge).
+          sessionTitleOverride: await buildSessionTitle(
+            ctx,
+            lastRef.sourceId,
+            nextTokens,
+            nextTrack
+          ),
           templateContext: {},
         },
       ]
@@ -121,6 +131,28 @@ export const nextShlokaRule: ProactiveRuleHandler = {
       },
     }
   },
+}
+
+/**
+ * Compose the proactive session title. Appends the localised verse
+ * reference to the generic "next verse" header ("… — BG 2.14") so
+ * successive nudges are distinguishable; returns the bare header when the
+ * reference can't be resolved (unknown content language / missing source),
+ * so a title is never blank.
+ */
+async function buildSessionTitle(
+  ctx: ProactiveContext,
+  sourceId: SourceId,
+  tokens: readonly string[],
+  nextTrack: Track
+): Promise<string> {
+  const base = ctx.t("chat.proactiveSessionTitleNextShloka")
+  const lang = preferredContentLanguage(nextTrack, ctx.libraryLanguages, ctx.locale as LanguageCode)
+  if (lang === undefined) return base
+  const allSources = await ctx.repos.sources.listAll()
+  const sourcesById = new Map<SourceId, Source>(allSources.map((s) => [s.id, s]))
+  const refLabel = formatReference({ sourceId, tokens }, sourcesById, lang)
+  return refLabel ? `${base} — ${refLabel}` : base
 }
 
 /**
