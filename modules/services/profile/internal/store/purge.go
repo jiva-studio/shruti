@@ -29,6 +29,7 @@ var purgeTables = []string{
 	"profile.notes",
 	"profile.listening_sessions",
 	"profile.playlist_items",
+	"profile.library_items",
 	"profile.sync_cursors",
 	"profile.changes",
 }

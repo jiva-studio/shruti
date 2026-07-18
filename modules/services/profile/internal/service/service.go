@@ -9,12 +9,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/profile/internal/hlc"
 	"github.com/jiva-studio/shruti/profile/internal/store"
 	"github.com/jiva-studio/shruti/profile/internal/wire"
 )
@@ -42,6 +44,19 @@ type Service struct {
 	Cursors      *store.CursorRepo
 	Maint        *store.MaintenanceRepo
 	PullMaxLimit int
+	// HLC mints server-authored change stamps. Optional — a lazy default is
+	// created on first use so hand-built Services stay valid; production wires
+	// one explicitly.
+	HLC *hlc.Clock
+}
+
+// clock returns the configured server HLC generator, lazily creating a default
+// so ApplyServerChange works on a Service constructed without one.
+func (s *Service) clock() *hlc.Clock {
+	if s.HLC == nil {
+		s.HLC = hlc.NewClock()
+	}
+	return s.HLC
 }
 
 // Push applies a batch of local changes for one user. Each row is applied if
@@ -115,6 +130,75 @@ func (s *Service) Push(ctx context.Context, userID uuid.UUID, req wire.PushReque
 		return wire.PushResponse{}, err
 	}
 	return resp, nil
+}
+
+// ApplyServerChange is the server-authored write path — the net-new counterpart
+// to the client Push. It writes ONE change for a server-owned collection (today
+// only library_items) as the single writer "server:orchestrator", so clients
+// receive it purely by pulling; they never push these documents.
+//
+// It mirrors Push's durability guarantees for a single row: one transaction
+// under the per-user advisory lock (so global_seq is assigned in commit order),
+// reads the doc's current master to fast-forward the base, mints a server HLC
+// strictly newer than that master, appends the change-log row (device_id
+// "server:orchestrator") and projects it. Retried commits at the SAME minted
+// hlc are absorbed by UNIQUE(user_id, collection, doc_id, hlc).
+func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op string, data json.RawMessage) (wire.Change, error) {
+	if !store.Collections[collection] {
+		return wire.Change{}, badRequest("unknown collection %q", collection)
+	}
+	if op != "upsert" && op != "delete" {
+		return wire.Change{}, badRequest("invalid op %q (want upsert|delete)", op)
+	}
+	if docID == "" {
+		return wire.Change{}, badRequest("doc_id is required")
+	}
+	if op == "upsert" && len(data) == 0 {
+		return wire.Change{}, badRequest("data is required for an upsert")
+	}
+
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return wire.Change{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := store.AdvisoryXactLock(ctx, tx, userID); err != nil {
+		return wire.Change{}, err
+	}
+
+	// Fast-forward past the doc's current master so the server stamp is newer.
+	base := ""
+	if master, found, err := s.Changes.Latest(ctx, tx, userID, collection, docID); err != nil {
+		return wire.Change{}, err
+	} else if found {
+		base = master.HLC
+	}
+
+	it := wire.PushItem{
+		Collection: collection,
+		DocID:      docID,
+		Op:         op,
+		Data:       data,
+		HLC:        s.clock().Next(base),
+		BaseHLC:    base,
+	}
+	if err := s.Changes.Append(ctx, tx, userID, hlc.ServerNodeID, it); err != nil {
+		return wire.Change{}, err
+	}
+	if err := store.ApplyState(ctx, tx, userID, it); err != nil {
+		return wire.Change{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return wire.Change{}, err
+	}
+	return wire.Change{
+		Collection: collection,
+		DocID:      docID,
+		Op:         op,
+		Data:       data,
+		HLC:        it.HLC,
+	}, nil
 }
 
 // Pull returns changes for the user with global_seq > cursor, excluding the
