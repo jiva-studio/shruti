@@ -27,6 +27,11 @@ export default {
   // Title is the fallback toast header for sessions without their own title.
   proactiveNewMessageTitle: "New message",
   proactiveNewMessageToast: "Sadhu has a new message for you.",
+  // Grouped variant — shown when several proactive messages surface in the
+  // same tick (app open). `{count}` is parenthesised to stay plural-safe
+  // across every locale (no noun-agreement branch needed).
+  proactiveNewMessagesTitle: "New messages",
+  proactiveNewMessagesToast: "Sadhu has new messages for you ({count}).",
   // Action button on the in-app toast — opens the chat session.
   openButton: "Open",
 }
