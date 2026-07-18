@@ -10,8 +10,9 @@
 package pending
 
 // Track is one user-generated row: a user-added ("personal library")
-// lecture, already published to the public CDN, that a user (or the system)
-// has proposed for promotion into the shared corpus.
+// lecture, already published to the public CDN, that the admin may promote
+// into the shared corpus. Users never submit anything — the admin browses
+// these and approves.
 //
 // Metadata is RAW (as the user/ingest supplied it) — author/location/source
 // names are unresolved strings. The admin normalizes them to canonical dict
@@ -24,11 +25,11 @@ package pending
 type Track struct {
 	TrackID   string `json:"track_id"`   // stable id, preserved into the corpus
 	OwnerID   string `json:"owner_id"`   // user who contributed → contributor_user_id
-	TitleRaw  string `json:"title_raw"`  // proposed title (raw)
+	TitleRaw  string `json:"title_raw"`  // title (raw)
 	AuthorRaw string `json:"author_raw"` // speaker name (raw, unresolved)
 	LocationRaw string `json:"location_raw"` // place (raw, unresolved); may be empty
 	DateRaw   string `json:"date_raw"`   // YYYY-MM-DD if known; may be empty
-	ReferencesRaw string `json:"references_raw"` // opaque JSON of proposed scripture refs; may be empty
+	ReferencesRaw string `json:"references_raw"` // opaque JSON of scripture refs; may be empty
 	Lang      string `json:"lang"`       // transcript / variant language
 
 	// Already-published CDN keys of the personal track (zero-copy promotion).
