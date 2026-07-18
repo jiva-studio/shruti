@@ -99,6 +99,12 @@ export function useSyncEngine(): void {
         .refreshSessions()
         .catch(() => undefined)
     }
+    if (collections.includes("library_items")) {
+      // Personal library (epic #1236) is pull-only and server-owned. The "My
+      // Library" shelf/store that would refresh here lands in #1229; no store
+      // observes library_items yet, so there is nothing to refresh — this
+      // branch is the documented seam #1229 fills in.
+    }
   }
 
   /**
