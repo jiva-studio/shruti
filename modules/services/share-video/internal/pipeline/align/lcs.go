@@ -1,9 +1,9 @@
-// Package align force-aligns caller-supplied text to Whisper/SpeechKit
+// Package align force-aligns caller-supplied text to the transcriber's
 // word-level timestamps, then groups the aligned word stream into
 // slides of at most maxCharsPerSlide characters.
 //
 // Why force-align at all: caller text has clean punctuation/casing we
-// want to render; Whisper/SpeechKit have reliable word boundaries we
+// want to render; the transcriber has reliable word boundaries we
 // want for highlighting. We pair them up so rendered surface form is
 // the caller's, but the timing is from the recogniser.
 //
