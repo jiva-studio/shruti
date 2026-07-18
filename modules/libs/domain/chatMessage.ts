@@ -50,6 +50,19 @@ export type ChatActionPayload =
       readonly id: string
       readonly trackId: string
     }
+  | {
+      /** A candidate external lecture the chat found (personal library, epic
+       *  #1236). Rendered as a candidate card; confirming it PRO-gates and
+       *  fires the client→server call that triggers ingest of `url`. */
+      readonly kind: "add_to_library"
+      readonly id: string
+      /** External lecture URL to ingest (YouTube link, etc.). */
+      readonly url: string
+      readonly title: string
+      readonly author: string | null
+      /** Thumbnail URL (already absolute — provider-hosted), or null. */
+      readonly thumbnail: string | null
+    }
 
 export interface ChatSharePdfRefPayload {
   readonly shortName: string | null
