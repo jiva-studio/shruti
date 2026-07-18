@@ -15,3 +15,11 @@ export type { PushLocalDeps, PushLocalResult } from "./pushLocal.js"
 export { isSyncedCollection, changeToDoc, outboxToDoc, mergeChange } from "./mergeRouting.js"
 export { backfillLocal } from "./backfillLocal.js"
 export type { BackfillLocalDeps, BackfillLocalResult } from "./backfillLocal.js"
+export {
+  IDLE_SYNC_INTERVAL_MS,
+  PENDING_SYNC_MIN_MS,
+  PENDING_SYNC_MAX_MS,
+  isPendingLibraryItem,
+  hasPendingLibraryItems,
+  nextSyncDelayMs,
+} from "./libraryPendingSchedule.js"
