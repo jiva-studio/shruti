@@ -102,17 +102,26 @@ const lastAssistantIndex = computed<number>(() => {
 }
 
 /* A proactive chat opens with an assistant message (the agent speaks
- * first). A user bubble clears the fixed-top fade via its own top
- * padding; assistant prose has none, so its opening line would tuck
- * under the fade and read as overlapping the header. Promote the lead
- * slot to a real box (same trick as `.tail`) and add the top inset here,
- * so the spacing rule lives on the slot the list owns instead of
- * reaching into the bubble's internals. Placed before `.tail` so a
- * single-message session — lead AND tail — keeps the tail box; only the
- * padding carries over. */
+ * first). It renders at scrollTop=0 and — unlike a user bubble, which
+ * gets pinned below the fade by `scrollMessageToTop`'s scroll-margin —
+ * is never scrolled, so nothing pushes it clear of the fixed-top fade.
+ * A short single-message session has no scroll room either, so a scroll
+ * fix can't help; only a top inset on the slot can.
+ *
+ * The inset has to bridge the gap the content padding leaves open: the
+ * fade (`.chat-fixed-top`) runs `safe-area + action-row (~52px) +
+ * padding-bottom (28px)`, but `.chat-content`'s `--padding-top` only
+ * reserves `safe-area + 44px`. So the fade's 28px gradient tail overhangs
+ * the content and the opening line tucks under it. Match that 28px tail
+ * here so the lead line lands clear of the fade, the same visual spot a
+ * user bubble ends up in.
+ *
+ * Promote the lead slot to a real box (same trick as `.tail`). Placed
+ * before `.tail` so a single-message session — lead AND tail — keeps the
+ * tail box; only the padding carries over. */
 .msg-slot.lead {
   display: block;
-  padding-top: 10px;
+  padding-top: 28px;
 }
 
 /* The tail slot — last assistant message in the conversation — owns
