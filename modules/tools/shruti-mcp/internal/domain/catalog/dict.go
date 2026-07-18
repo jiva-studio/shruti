@@ -66,6 +66,13 @@ type TrackRow struct {
 	LocationID string
 	Date       string // YYYY-MM-DD; empty = unknown
 	Hidden     bool
+	// ContributorUserID attributes a track that entered the corpus via the
+	// admin promotion gate (a user-added "personal library" lecture the admin
+	// approved) to the user who contributed it. Empty for the vast majority of
+	// tracks (curator-imported): the corpus stays ownerless — this is purely
+	// attribution, never an access-control owner. Wire-mapped to the nullable
+	// tracks.contributor_user_id column (additive; see ensureTrackContributorColumn).
+	ContributorUserID string
 	// TagIDs lists kind-tag ids (tag_morning_walk, tag_conversation, …) that
 	// classify this track. Wire-mapped to the canonical track_tags join table.
 	// Track-level (not per-variant): "morning walk" stays a morning walk
