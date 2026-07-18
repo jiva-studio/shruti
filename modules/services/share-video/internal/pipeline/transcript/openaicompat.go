@@ -14,45 +14,53 @@ import (
 	"time"
 )
 
-const whisperEndpoint = "https://api.openai.com/v1/audio/transcriptions"
-
-type whisper struct {
-	apiKey string
-	httpc  *http.Client
+// client posts audio to an OpenAI-compatible /audio/transcriptions
+// endpoint (OpenRouter by default) with word-level timestamp granularity.
+// OpenRouter mirrors the OpenAI multipart contract exactly, so the same
+// request shape works against either upstream — only the base URL, model
+// and key differ.
+type client struct {
+	apiKey   string
+	endpoint string
+	model    string
+	httpc    *http.Client
 }
 
-func newWhisper(apiKey string) *whisper {
-	return &whisper{
-		apiKey: apiKey,
+func newClient(c Config) *client {
+	base := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
+	return &client{
+		apiKey:   c.APIKey,
+		endpoint: base + "/audio/transcriptions",
+		model:    c.Model,
 		httpc: &http.Client{
 			Timeout: 5 * time.Minute, // big-enough cap for 120s clips
 		},
 	}
 }
 
-type whisperWord struct {
+type respWord struct {
 	Word  string  `json:"word"`
 	Start float64 `json:"start"`
 	End   float64 `json:"end"`
 }
 
-type whisperResponse struct {
-	Text  string        `json:"text"`
-	Words []whisperWord `json:"words"`
+type transcriptionResponse struct {
+	Text  string     `json:"text"`
+	Words []respWord `json:"words"`
 }
 
-// Transcribe posts the audio file via multipart/form-data to the
-// audio.transcriptions endpoint with verbose_json + word granularity.
+// Transcribe uploads the audio as multipart/form-data and asks for
+// verbose_json + word granularity.
 //
-// Form field naming notes:
+// Form fields (identical across OpenAI and OpenRouter):
 //   - "file": the audio file
-//   - "model": "whisper-1"
+//   - "model": e.g. "openai/whisper-large-v3"
 //   - "response_format": "verbose_json"
-//   - "timestamp_granularities[]": "word" — bracketed name is part of
-//     the API contract; both openai-node and the OpenAI cookbook
-//     examples send it exactly like that.
+//   - "timestamp_granularities[]": "word" — the bracketed name is part of
+//     the API contract; both openai-node and the OpenAI cookbook send it
+//     exactly like this.
 //   - "language": ISO-639-1 code, optional
-func (w *whisper) Transcribe(ctx context.Context, audioPath string, opts Options) (Result, error) {
+func (c *client) Transcribe(ctx context.Context, audioPath string, opts Options) (Result, error) {
 	f, err := os.Open(audioPath)
 	if err != nil {
 		return Result{}, fmt.Errorf("open %s: %w", audioPath, err)
@@ -69,7 +77,7 @@ func (w *whisper) Transcribe(ctx context.Context, audioPath string, opts Options
 		return Result{}, fmt.Errorf("copy audio: %w", err)
 	}
 	for _, kv := range [][2]string{
-		{"model", "whisper-1"},
+		{"model", c.model},
 		{"response_format", "verbose_json"},
 		{"timestamp_granularities[]", "word"},
 	} {
@@ -86,16 +94,16 @@ func (w *whisper) Transcribe(ctx context.Context, audioPath string, opts Options
 		return Result{}, fmt.Errorf("multipart close: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, whisperEndpoint, &buf)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, &buf)
 	if err != nil {
 		return Result{}, fmt.Errorf("build request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+w.apiKey)
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
-	resp, err := w.httpc.Do(req)
+	resp, err := c.httpc.Do(req)
 	if err != nil {
-		return Result{}, fmt.Errorf("whisper request: %w", err)
+		return Result{}, fmt.Errorf("transcription request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -104,10 +112,10 @@ func (w *whisper) Transcribe(ctx context.Context, audioPath string, opts Options
 		return Result{}, fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return Result{}, fmt.Errorf("whisper http %d: %s", resp.StatusCode, truncate(body, 400))
+		return Result{}, fmt.Errorf("transcription http %d: %s", resp.StatusCode, truncate(body, 400))
 	}
 
-	var out whisperResponse
+	var out transcriptionResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return Result{}, fmt.Errorf("decode response: %w", err)
 	}

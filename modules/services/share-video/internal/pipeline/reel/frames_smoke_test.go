@@ -32,7 +32,7 @@ func TestRender_WordFrameSmoke(t *testing.T) {
 			{Word: "world", Start: 1.4, End: 2.0},
 		},
 	}
-	frames, err := r.GenerateWordFrames(slide, 0, tmp)
+	frames, err := r.GenerateWordFrames(slide, 0, tmp, nil)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}

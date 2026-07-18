@@ -1,8 +1,8 @@
 // Package config loads share-video settings once at boot.
 //
 // Env-var names mirror the legacy TypeScript service so compose blocks
-// can be dropped in unchanged. The transcriber dispatch reads the same
-// TRANSCRIBER env (whisper | speechkit) used by the Node version.
+// can be dropped in unchanged. Transcription goes through an OpenAI-
+// compatible endpoint (OpenRouter by default) — see TRANSCRIBE_* below.
 package config
 
 import (
@@ -25,21 +25,21 @@ type Config struct {
 	BackgroundsPrefix string
 	OutputPrefix      string
 	OutputPublicBase  string
-	TranscribeScratch string
 	AWSRegion         string
 	S3EndpointURL     string
 
 	// OutputBackend selects where the finished reel is written: "s3" (default,
-	// AWS/Yandex) or "bunny". Reads + SpeechKit always stay on S3 (Bunny has no
+	// AWS/Yandex) or "bunny". Reads always stay on S3 (Bunny has no
 	// presigning), so only the client-facing reel output flips.
 	OutputBackend   string
 	StorageZone     string
 	StorageKey      string
 	StorageEndpoint string
 
-	OpenAIAPIKey    string
-	SpeechKitAPIKey string
-	Transcriber     string
+	// Transcription (OpenAI-compatible /audio/transcriptions).
+	TranscribeAPIKey  string
+	TranscribeBaseURL string
+	TranscribeModel   string
 
 	JWTPublicKeyPath string
 
@@ -49,6 +49,16 @@ type Config struct {
 	FfmpegBin  string
 	FfprobeBin string
 	TempRoot   string
+
+	// Local-mode overrides for running without S3 (dev / smoke tests).
+	// Each, when set, bypasses S3 for that stage:
+	//   LocalBackgroundsDir/<theme>/*.mp4 — background clips
+	//   LocalSourceDir/<sourceKey>        — source audio
+	//   LocalOutputDir/<...>.mp4          — finished reel (URL = file path)
+	// All empty in production → pure S3/Bunny behaviour.
+	LocalBackgroundsDir string
+	LocalSourceDir      string
+	LocalOutputDir      string
 
 	// Static rendering knobs that match ReelGenerator defaults.
 	SlideWidth  int
@@ -70,7 +80,6 @@ func Load() (Config, error) {
 		BackgroundsPrefix: env("SHRUTI_S3_BACKGROUNDS_PREFIX", "private/share/video/backgrounds"),
 		OutputPrefix:      env("SHRUTI_S3_VIDEO_PREFIX", "public/share/video"),
 		OutputPublicBase:  os.Getenv("OUTPUT_PUBLIC_BASE"),
-		TranscribeScratch: env("TRANSCRIBE_SCRATCH_PREFIX", "private/share/video/transcribe-scratch"),
 		AWSRegion:         env("AWS_REGION", "us-east-1"),
 		S3EndpointURL:     os.Getenv("S3_ENDPOINT_URL"),
 
@@ -79,9 +88,9 @@ func Load() (Config, error) {
 		StorageKey:      os.Getenv("STORAGE_KEY"),
 		StorageEndpoint: os.Getenv("STORAGE_ENDPOINT"),
 
-		OpenAIAPIKey:    os.Getenv("OPENAI_API_KEY"),
-		SpeechKitAPIKey: os.Getenv("SPEECHKIT_API_KEY"),
-		Transcriber:     strings.ToLower(env("TRANSCRIBER", "whisper")),
+		TranscribeAPIKey:  os.Getenv("OPENROUTER_API_KEY"),
+		TranscribeBaseURL: env("TRANSCRIBE_BASE_URL", "https://openrouter.ai/api/v1"),
+		TranscribeModel:   env("TRANSCRIBE_MODEL", "openai/whisper-large-v3"),
 
 		JWTPublicKeyPath: env("JWT_PUBLIC_KEY_PATH", "/secrets/public.pem"),
 
@@ -91,6 +100,10 @@ func Load() (Config, error) {
 		FfmpegBin:  env("FFMPEG_BIN", "/usr/bin/ffmpeg"),
 		FfprobeBin: env("FFPROBE_BIN", "/usr/bin/ffprobe"),
 		TempRoot:   env("TEMP_ROOT", "/tmp/render"),
+
+		LocalBackgroundsDir: os.Getenv("LOCAL_BACKGROUNDS_DIR"),
+		LocalSourceDir:      os.Getenv("LOCAL_SOURCE_DIR"),
+		LocalOutputDir:      os.Getenv("LOCAL_OUTPUT_DIR"),
 
 		SlideWidth:  720,
 		SlideHeight: 1280,

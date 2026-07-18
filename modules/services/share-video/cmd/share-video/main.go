@@ -68,15 +68,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Transcriber dispatch.
-	tx, err := transcript.New(cfg.Transcriber, transcript.Deps{
-		S3:              store.API,
-		S3Presigner:     store.Presigner,
-		Bucket:          cfg.Bucket,
-		ScratchPrefix:   cfg.TranscribeScratch,
-		StorageEndpoint: cfg.S3EndpointURL,
-		OpenAIKey:       cfg.OpenAIAPIKey,
-		SpeechKitKey:    cfg.SpeechKitAPIKey,
+	// Transcription (OpenAI-compatible /audio/transcriptions, OpenRouter by default).
+	tx, err := transcript.New(transcript.Config{
+		APIKey:  cfg.TranscribeAPIKey,
+		BaseURL: cfg.TranscribeBaseURL,
+		Model:   cfg.TranscribeModel,
 	})
 	if err != nil {
 		log.Error("transcriber_init_failed", "err", err.Error())
@@ -119,6 +115,10 @@ func main() {
 		Region:            cfg.AWSRegion,
 		LogoPath:          logoPath,
 		TitleIconPath:     iconPath,
+
+		LocalBackgroundsDir: cfg.LocalBackgroundsDir,
+		LocalSourceDir:      cfg.LocalSourceDir,
+		LocalOutputDir:      cfg.LocalOutputDir,
 	}
 
 	// HTTP layer. Single-key verifier — multi-kid dir scanning was

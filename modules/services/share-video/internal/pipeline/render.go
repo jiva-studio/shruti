@@ -27,7 +27,7 @@ import (
 type Renderer struct {
 	S3 *s3.Client
 	// BunnyOut, when set, receives the finished reel instead of S3 (the
-	// client-facing output moves to Bunny; reads + SpeechKit stay on S3).
+	// client-facing output moves to Bunny; reads stay on S3).
 	BunnyOut          *storage.BunnyUploader
 	Transcriber       transcript.Transcriber
 	Frames            *reel.Renderer
@@ -41,6 +41,12 @@ type Renderer struct {
 	Region            string
 	LogoPath          string
 	TitleIconPath     string
+
+	// Local-mode dirs (all empty in production). When set they bypass S3
+	// for that stage — see config.Config.Local*Dir.
+	LocalBackgroundsDir string
+	LocalSourceDir      string
+	LocalOutputDir      string
 }
 
 // Input is what each task in the queue brings to the renderer.
@@ -105,12 +111,30 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 	if err := CutAudio(ctx, r.FFmpegBin, srcPath, cutPath, in.Request.StartMs, in.Request.EndMs); err != nil {
 		return Output{}, fmt.Errorf("audio cut: %w", err)
 	}
-	audioDur, err := ProbeDuration(ctx, r.FFprobeBin, cutPath)
+
+	// Optional cleanup (loudness normalize + dead-pause removal) BEFORE
+	// transcription, so word timings — and therefore caption sync — refer
+	// to the cleaned audio. Legacy requests (Audio nil) keep the raw cut.
+	audioPath := cutPath
+	if AudioCleanupRequested(in.Request.Audio) {
+		processedPath := filepath.Join(in.TempDir, "clean.mp3")
+		log.Info("audio_cleanup_start", "normalize", in.Request.Audio.Normalize, "trim_silence", in.Request.Audio.TrimSilence)
+		if err := ProcessAudio(ctx, r.FFmpegBin, cutPath, processedPath, in.Request.Audio); err != nil {
+			return Output{}, fmt.Errorf("audio cleanup: %w", err)
+		}
+		audioPath = processedPath
+	}
+
+	audioDur, err := ProbeDuration(ctx, r.FFprobeBin, audioPath)
 	if err != nil {
 		return Output{}, fmt.Errorf("audio probe: %w", err)
 	}
 
-	// Parallel: backgrounds list+concat AND transcription.
+	layout := in.Request.ResolveLayout()
+	overlay := buildOverlay(layout)
+
+	// Parallel: backgrounds list+concat AND — only when the transcript
+	// section is on — transcription.
 	g, gctx := errgroup.WithContext(ctx)
 	var bgPath string
 	var transcriptResult transcript.Result
@@ -126,6 +150,7 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 			VideoID:     in.VideoID,
 			DurationSec: audioDur,
 			TempDir:     filepath.Join(in.TempDir, "bg"),
+			LocalDir:    r.LocalBackgroundsDir,
 		})
 		if err != nil {
 			return fmt.Errorf("backgrounds: %w", err)
@@ -133,43 +158,59 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 		bgPath = p
 		return nil
 	})
-	g.Go(func() error {
-		log.Info("transcribe_start", "lang", in.Request.Lang)
-		res, err := r.Transcriber.Transcribe(gctx, cutPath, transcript.Options{Language: in.Request.Lang})
-		if err != nil {
-			return fmt.Errorf("transcribe: %w", err)
-		}
-		transcriptResult = res
-		return nil
-	})
+	if layout.Transcript {
+		g.Go(func() error {
+			log.Info("transcribe_start", "lang", in.Request.Lang)
+			res, err := r.Transcriber.Transcribe(gctx, audioPath, transcript.Options{Language: in.Request.Lang})
+			if err != nil {
+				return fmt.Errorf("transcribe: %w", err)
+			}
+			transcriptResult = res
+			return nil
+		})
+	}
 	if err := g.Wait(); err != nil {
 		return Output{}, err
 	}
 
-	// Align caller's punctuated text to the recogniser's timings.
-	aligned := align.ForceAlign(in.Request.Text, transcriptResult.Words, audioDur)
-	slides := align.WordsToSlides(aligned, 60) // maxCharsPerSlide
-	if len(slides) == 0 {
-		return Output{}, fmt.Errorf("force-align produced no slides")
-	}
-
-	log.Info("frames_start", "slides", len(slides))
 	framesDir := filepath.Join(in.TempDir, "frames")
 	var allFrames []reel.FrameSpec
-	for i, slide := range slides {
-		fs, err := r.Frames.GenerateWordFrames(slide, i, framesDir)
+	if layout.Transcript {
+		// Align caller's punctuated text to the recogniser's timings.
+		aligned := align.ForceAlign(in.Request.Text, transcriptResult.Words, audioDur)
+		// Pack by wrapped-line count (≤3) rather than raw char count, so a
+		// caption never spills a 4th line onto the brand watermark below it.
+		slides, err := r.Frames.PackSlides(aligned, reel.MaxCaptionLines)
 		if err != nil {
-			return Output{}, fmt.Errorf("render slide %d: %w", i, err)
+			return Output{}, fmt.Errorf("pack slides: %w", err)
 		}
-		allFrames = append(allFrames, fs...)
+		if len(slides) == 0 {
+			return Output{}, fmt.Errorf("force-align produced no slides")
+		}
+		log.Info("frames_start", "slides", len(slides))
+		for i, slide := range slides {
+			fs, err := r.Frames.GenerateWordFrames(slide, i, framesDir, overlay)
+			if err != nil {
+				return Output{}, fmt.Errorf("render slide %d: %w", i, err)
+			}
+			allFrames = append(allFrames, fs...)
+		}
+	} else {
+		// Transcript off: one static overlay frame spanning the clip.
+		log.Info("frames_start", "slides", 0, "persistent", true)
+		fs, err := r.Frames.GeneratePersistentFrame(overlay, audioDur, framesDir)
+		if err != nil {
+			return Output{}, fmt.Errorf("render persistent frame: %w", err)
+		}
+		allFrames = []reel.FrameSpec{fs}
 	}
 
 	// Title card on top of the first 0.5s (optional). The audio is NOT
 	// shifted — the title overlay sits on top of the first 0.5s of
 	// audio. Matches ReelGenerator.ts:143-159.
-	if !in.Request.SkipIntro && strings.TrimSpace(in.Request.Title) != "" && r.TitleIconPath != "" {
+	if layout.IntroEnabled && strings.TrimSpace(layout.IntroTitle) != "" {
 		titleFramePath := filepath.Join(in.TempDir, "title_frame.png")
-		if err := r.Frames.GenerateTitleFrame(in.Request.Title, titleFramePath); err == nil {
+		if err := r.Frames.GenerateTitleFrame(layout.IntroTitle, titleFramePath, layout.IntroIcon); err == nil {
 			// Drop frames the title fully covers; clip the first
 			// surviving one to start at the title-overlay end.
 			var survived []reel.FrameSpec
@@ -191,15 +232,14 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 		}
 	}
 
-	// Composite. SkipLogo suppresses the trailing logo.mp4 append by
-	// handing the composer an empty logo path.
+	// Composite. Outro (logo.mp4) is appended only when enabled.
 	finalPath := filepath.Join(in.TempDir, "reel.mp4")
-	logoPath := r.LogoPath
-	if in.Request.SkipLogo {
-		logoPath = ""
+	logoPath := ""
+	if layout.OutroEnabled {
+		logoPath = r.LogoPath
 	}
 	log.Info("composite_start", "frames", len(allFrames))
-	if err := r.Composer.Compose(ctx, bgPath, allFrames, cutPath, audioDur, logoPath, finalPath, in.TempDir); err != nil {
+	if err := r.Composer.Compose(ctx, bgPath, allFrames, audioPath, audioDur, logoPath, finalPath, in.TempDir); err != nil {
 		return Output{}, fmt.Errorf("compose: %w", err)
 	}
 
@@ -215,7 +255,45 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 	return Output{URL: url, OutputKey: outputKey}, nil
 }
 
+// buildOverlay maps the resolved layout's persistent sections onto the
+// reel overlay. Returns nil when neither header nor center is present so
+// the renderer takes its no-overlay fast path.
+func buildOverlay(l types.ResolvedLayout) *reel.Overlay {
+	if l.Header == nil && l.Center == nil && l.Brand == nil {
+		return nil
+	}
+	ov := &reel.Overlay{}
+	if l.Header != nil {
+		ov.Header = &reel.HeaderText{Text: l.Header.Text, Sub: l.Header.Sub}
+	}
+	if l.Center != nil && l.Center.Shloka != nil {
+		ov.Center = &reel.ShlokaText{IAST: l.Center.Shloka.IAST, Translation: l.Center.Shloka.Translation}
+	}
+	if l.Brand != nil {
+		ov.Brand = &reel.BrandMark{Text: l.Brand.Text, Position: l.Brand.Position}
+	}
+	return ov
+}
+
 func (r *Renderer) downloadSource(ctx context.Context, key, dst string) error {
+	// Local mode: read the source from <LocalSourceDir>/<key> instead of
+	// S3. key is validated at the API layer (public/tracks|shares/...mp3).
+	if r.LocalSourceDir != "" {
+		src := filepath.Join(r.LocalSourceDir, filepath.Clean("/"+key))
+		in, err := os.Open(src)
+		if err != nil {
+			return fmt.Errorf("open local source %s: %w", src, err)
+		}
+		defer in.Close()
+		out, err := os.Create(dst)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		_, err = copyAll(out, in)
+		return err
+	}
+
 	resp, err := r.S3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(r.Bucket),
 		Key:    aws.String(key),
@@ -234,6 +312,17 @@ func (r *Renderer) downloadSource(ctx context.Context, key, dst string) error {
 }
 
 func (r *Renderer) uploadOutput(ctx context.Context, localPath, key string) error {
+	if r.LocalOutputDir != "" {
+		dst := filepath.Join(r.LocalOutputDir, filepath.Clean("/"+key))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		body, err := os.ReadFile(localPath)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, body, 0o644)
+	}
 	if r.BunnyOut != nil {
 		return r.BunnyOut.Put(ctx, key, localPath, "video/mp4")
 	}
@@ -252,6 +341,9 @@ func (r *Renderer) uploadOutput(ctx context.Context, localPath, key string) erro
 }
 
 func (r *Renderer) buildOutputURL(key string) string {
+	if r.LocalOutputDir != "" {
+		return "file://" + filepath.Join(r.LocalOutputDir, filepath.Clean("/"+key))
+	}
 	if r.OutputPublicBase != "" {
 		return strings.TrimRight(r.OutputPublicBase, "/") + "/" + key
 	}
