@@ -35,6 +35,12 @@ services:
     ports:
       - "${LECTORIUM_REDIS_PORT:-11083}:6379"
 
+  # Dedicated stream broker (personal-library events). Own host port so it
+  # can't collide with the cache Redis on 11083 while both run locally.
+  redis-streams:
+    ports:
+      - "${LECTORIUM_STREAMS_REDIS_PORT:-11087}:6379"
+
   # Migrator image is private on GHCR; local dev builds it from
   # source so nobody needs a registry token to bring the stack up.
   migrator:
