@@ -1,27 +1,29 @@
-// Package hlc is the server-side Hybrid Logical Clock generator for the
+// Package hlc derives the server-side Hybrid Logical Clock stamps for the
 // server-authored write path.
 //
-// Today the only writer of the change log is the client Push path, where every
-// change already carries an HLC minted on the device (see the TS
-// @lib/domain/sync/hlc — wire format `<physical_ms:15>:<counter:5>:<device_id>`,
-// compared lexicographically). The server-authored path (Service.ApplyServerChange)
-// needs its OWN monotonic clock so a server-minted change on a document is
-// deterministically NEWER than the client's current master for that document,
-// and than any prior server write — under the same string comparison the
-// `hlc` text column uses.
+// The client Push path mints an HLC on the device (wire format
+// `<physical_ms:15>:<counter:5>:<device_id>`, compared lexicographically). The
+// server-authored path (Service.ApplyServerChange) needs its own stamps in the
+// SAME wire format so the shared `hlc` text column stays order-comparable
+// across client and server writes.
 //
-// The node id is fixed to "server:orchestrator". Strict newer-than is
-// guaranteed by fast-forwarding past the base HLC (the doc's current master),
-// not by the device tiebreak — so a server write always wins regardless of the
-// client device id it races.
+// Server stamps are DETERMINISTIC in the source event's idempotency key rather
+// than freshly minted on each call: the same event id always maps to the same
+// hlc, so a redelivered broker message collides on the change log's
+// UNIQUE(user_id, collection, doc_id, hlc) and writes exactly one row. For a
+// server-owned collection the server is the SOLE writer and events arrive in
+// broker order, so ordering by the (monotonic) event id is the correct total
+// order — there is no client master to leapfrog, and a wall-clock fast-forward
+// (which mints a fresh, ever-newer stamp) would defeat the redelivery collision.
+//
+// The node id is fixed to "server:orchestrator".
 package hlc
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
 // ServerNodeID is the device_id every server-authored change is stamped with.
@@ -35,102 +37,57 @@ const ServerNodeID = "server:orchestrator"
 const (
 	physicalDigits = 15
 	counterDigits  = 5
-	maxCounter     = 1e5 - 1 // 99999 — 5 digits; overflow advances physical
+	// counterMod bounds the counter to the 5-digit field; physicalMod bounds
+	// the physical component to the 15-digit field so hashed fallbacks stay
+	// width-correct.
+	counterMod  = 100000
+	physicalMod = 1_000_000_000_000_000
 )
 
-// Clock mints monotonically increasing HLC strings for the server node. Safe
-// for concurrent use — one process-wide instance serializes all server writes
-// through its mutex, which is cheap relative to the surrounding DB transaction.
-type Clock struct {
-	mu       sync.Mutex
-	nodeID   string
-	now      func() int64 // unix millis; injectable for tests
-	lastPhys int64
-	lastCtr  int64
-}
+// Clock derives server-node HLC stamps. Stamps are a pure function of the
+// event id, so the Clock is stateless and safe for concurrent use.
+type Clock struct{ nodeID string }
 
-// NewClock returns a Clock for the fixed server node using the wall clock.
-func NewClock() *Clock {
-	return &Clock{nodeID: ServerNodeID, now: func() int64 { return time.Now().UnixMilli() }}
-}
+// NewClock returns a Clock for the fixed server node.
+func NewClock() *Clock { return &Clock{nodeID: ServerNodeID} }
 
-// newClockAt is the test seam: a Clock driven by an injected millis source.
-func newClockAt(now func() int64) *Clock {
-	return &Clock{nodeID: ServerNodeID, now: now}
-}
-
-// Next mints an HLC strictly greater than both this clock's last-issued stamp
-// AND the optional base (the document's current master HLC — pass "" for a
-// brand-new doc). The standard HLC "send" rule: physical = max(wall, last,
-// base); the counter bumps past whichever of last/base shares that physical so
-// successive writes in the same millisecond stay strictly ordered.
-func (c *Clock) Next(base string) string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	basePhys, baseCtr, hasBase := int64(0), int64(0), false
-	if base != "" {
-		if p, ct, ok := parse(base); ok {
-			basePhys, baseCtr, hasBase = p, ct, true
-		}
-	}
-
-	phys := c.now()
-	if c.lastPhys > phys {
-		phys = c.lastPhys
-	}
-	if hasBase && basePhys > phys {
-		phys = basePhys
-	}
-
-	ctr := int64(0)
-	if phys == c.lastPhys {
-		if v := c.lastCtr + 1; v > ctr {
-			ctr = v
-		}
-	}
-	if hasBase && phys == basePhys {
-		if v := baseCtr + 1; v > ctr {
-			ctr = v
-		}
-	}
-	if ctr > maxCounter {
-		// Counter overflow within one millisecond (not reachable in practice) —
-		// advance physical so the serialized width holds.
-		phys++
-		ctr = 0
-	}
-
-	c.lastPhys, c.lastCtr = phys, ctr
+// Deterministic maps an event idempotency key to a server HLC. The SAME
+// eventID always yields the SAME stamp, so a redelivered server event collides
+// on UNIQUE(user_id, collection, doc_id, hlc) and appends exactly one row.
+//
+// A Redis-Streams id ("<millis>-<seq>") or a bare integer is decoded straight
+// into the physical/counter fields, so broker order is preserved as hlc order —
+// the correct total order for a server-owned, single-writer collection. Any
+// other token is hashed deterministically (still idempotent, but not
+// order-preserving) as a safety net for non-stream callers.
+func (c *Clock) Deterministic(eventID string) string {
+	phys, ctr := decodeEventID(eventID)
 	return format(phys, ctr, c.nodeID)
+}
+
+// decodeEventID extracts (physical, counter) from an event id. "<a>-<b>" (a
+// Redis-Streams id) and a bare non-negative integer decode directly and
+// preserve order; anything else falls back to a stable 64-bit hash split across
+// the two fields.
+func decodeEventID(eventID string) (phys, ctr int64) {
+	a, b, hasDash := strings.Cut(eventID, "-")
+	if p, err := strconv.ParseInt(a, 10, 64); err == nil && p >= 0 {
+		if !hasDash {
+			return p % physicalMod, 0
+		}
+		if q, err := strconv.ParseInt(b, 10, 64); err == nil && q >= 0 {
+			return p % physicalMod, q % counterMod
+		}
+	}
+	// Non-numeric token: hash deterministically so redelivery still collides.
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(eventID))
+	sum := int64(h.Sum64() & 0x7fffffffffffffff)
+	return sum % physicalMod, sum % counterMod
 }
 
 // format serializes to the zero-padded wire string. Kept byte-for-byte
 // compatible with the TS hlcToString so string comparison is order-preserving.
 func format(phys, ctr int64, nodeID string) string {
 	return fmt.Sprintf("%0*d:%0*d:%s", physicalDigits, phys, counterDigits, ctr, nodeID)
-}
-
-// parse extracts (physical, counter) from a wire HLC. The device id may itself
-// contain ':', so only the first two separators matter. Returns ok=false on a
-// structurally invalid string — the caller then treats it as "no base".
-func parse(s string) (phys, ctr int64, ok bool) {
-	first := strings.IndexByte(s, ':')
-	if first < 0 {
-		return 0, 0, false
-	}
-	second := strings.IndexByte(s[first+1:], ':')
-	if second < 0 {
-		return 0, 0, false
-	}
-	second += first + 1
-	p, err := strconv.ParseInt(s[:first], 10, 64)
-	if err != nil {
-		return 0, 0, false
-	}
-	ct, err := strconv.ParseInt(s[first+1:second], 10, 64)
-	if err != nil {
-		return 0, 0, false
-	}
-	return p, ct, true
 }
