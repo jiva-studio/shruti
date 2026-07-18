@@ -26,8 +26,15 @@ vi.mock("@usecases/sync/index.js", () => ({
   backfillLocal: (...a: unknown[]) =>
     (ctx.backfillLocal as unknown as (...x: unknown[]) => unknown)(...a),
   runSync: (...a: unknown[]) => (ctx.runSync as unknown as (...x: unknown[]) => unknown)(...a),
+  // Personal-library poll cadence (#1229). Kept idle here so the self-
+  // rescheduling poll never fires a second cycle during these microtask flushes.
+  hasPendingLibraryItems: () => false,
+  nextSyncDelayMs: () => 3 * 60 * 1000,
 }))
 vi.mock("@shruti/shruti.js", () => ({ useShruti: () => ctx.shruti }))
+vi.mock("@shruti/stores/useLibraryStore.js", () => ({
+  useLibraryStore: () => ({ refresh: async () => {} }),
+}))
 vi.mock("@shruti/stores/useAuthStore.js", () => ({ useAuthStore: () => ctx.auth }))
 vi.mock("@shruti/stores/usePlaylistStore.js", () => ({
   usePlaylistStore: () => ({ refresh: async () => {} }),
@@ -91,6 +98,7 @@ beforeEach(() => {
       syncState: {},
       syncApply: {},
       unitOfWork: {},
+      libraryItems: { listAll: async () => [] },
     }),
   }
 })
@@ -187,6 +195,7 @@ describe("useSyncEngine — cursor-ownership reset", () => {
       syncState: { setPullCursor, setAckedSeq },
       syncApply: {},
       unitOfWork: { run: (fn: () => unknown) => fn() },
+      libraryItems: { listAll: async () => [] },
     })
   })
 

@@ -60,6 +60,13 @@
       :state="actionState(token.actionId)"
       @confirm="onConfirmAction"
     />
+    <ActionCardAddToLibrary
+      v-else-if="token.kind === 'action' && token.actionKind === 'add_to_library'"
+      :action-id="token.actionId"
+      :payload="addToLibraryPayload(token.actionId)"
+      :state="actionState(token.actionId)"
+      @confirm="onConfirmAction"
+    />
     <VerseCardContainer
       v-else-if="token.kind === 'verse'"
       :source-id="token.sourceId"
@@ -145,6 +152,7 @@ import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
 import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"
 import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
 import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
+import ActionCardAddToLibrary from "./ActionCardAddToLibrary.vue"
 
 const props = defineProps<{ message: ChatMessage }>()
 defineEmits<{
@@ -233,6 +241,13 @@ function queueNextTrackPayload(
 ): Extract<ChatActionPayload, { kind: "queue_next_track" }> | undefined {
   const a = props.message.actions?.[actionId]
   return a && a.kind === "queue_next_track" ? a : undefined
+}
+
+function addToLibraryPayload(
+  actionId: string
+): Extract<ChatActionPayload, { kind: "add_to_library" }> | undefined {
+  const a = props.message.actions?.[actionId]
+  return a && a.kind === "add_to_library" ? a : undefined
 }
 
 async function onConfirmAction(actionId: string, override?: { time?: string }): Promise<void> {
