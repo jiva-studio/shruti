@@ -699,3 +699,65 @@ describe("useListeningSessionTracker finish() failure", () => {
     expect(rows[0].to_position).toBe(60)
   })
 })
+
+describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
+  let db: IDatabase
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyUserSchemaForTests(db)
+  })
+
+  // Faithful reproduction of the player call site (`usePlayerSession.applyStatus`):
+  // fire-and-forget, deciding start-vs-tick from the tracker's synchronous
+  // guards. Before the fix, `hasActiveSession()` lagged the awaited insert, so
+  // a burst of "playing" events each opened its own overlapping session and the
+  // activity total ballooned (one 57-min track summed to ~180h in the field).
+  function drivePlaying(
+    tracker: ReturnType<typeof useListeningSessionTracker>,
+    itemId: PlaylistItemId,
+    positionMs: number
+  ): void {
+    if (!tracker.hasActiveSession() || tracker.activeItemId() !== itemId) {
+      void tracker.start({ itemId, positionMs }).catch(() => {})
+    } else {
+      void tracker.tick({ positionMs }).catch(() => {})
+    }
+  }
+
+  it("a burst of progress events opens exactly one session, not one per event", async () => {
+    const repo = createSqlListeningSessionRepository(db)
+    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+
+    // 300 progress frames delivered in one synchronous burst (position marching
+    // forward), none awaited — exactly what the native engine did at 06:24:42.
+    for (let i = 0; i < 300; i++) {
+      drivePlaying(tracker, ITEM_A, 643_000 + i * 5_000)
+    }
+    await tracker.finish({ positionMs: 643_000 + 300 * 5_000 })
+
+    const rows = await db.query<{ from_position: number; to_position: number }>(
+      "SELECT from_position, to_position FROM listening_sessions"
+    )
+    // The storm created hundreds of rows; the fix keeps it to a single one.
+    expect(rows).toHaveLength(1)
+
+    const totalSec = await repo.getTotalListenedSeconds()
+    // One clean interval [643s, 2143s] — 1500s of audio, NOT 300× that.
+    expect(totalSec).toBe(2143 - 643)
+  })
+
+  it("does not deduplicate a genuine replay after the session is finished", async () => {
+    const repo = createSqlListeningSessionRepository(db)
+    const tracker = useListeningSessionTracker({ getRepo: () => repo })
+
+    // Listen 0→600, finish, then replay from 0→600 again. Both count.
+    await tracker.start({ itemId: ITEM_A, positionMs: 0 })
+    await tracker.finish({ positionMs: 600_000 })
+    await tracker.start({ itemId: ITEM_A, positionMs: 0 })
+    await tracker.finish({ positionMs: 600_000 })
+
+    const rows = await db.query<{ id: string }>("SELECT id FROM listening_sessions")
+    expect(rows).toHaveLength(2)
+  })
+})
