@@ -133,7 +133,6 @@ func buildPipeline(ctx context.Context, cfg *config.Config, repo *jobpg.Repo) (*
 		Transcriber:       deepgram.New(cfg.DeepgramAPIKey, cfg.DeepgramModel),
 		Reviewer:          review.New(),
 		Blob:              blob,
-		Claimer:           repo,
 		Tier:              verifier,
 		Clock:             sys.Clock{},
 		IDs:               sys.IDGen{},

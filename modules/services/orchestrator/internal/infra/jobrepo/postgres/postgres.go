@@ -131,27 +131,6 @@ func (r *Repo) Publish(ctx context.Context, t ports.Tx, topic string, payload []
 	return err
 }
 
-// Claim implements ports.ContentClaimer: an INSERT-on-conflict on the content
-// hash primary key. ok=true means this job won the claim; ok=false returns the
-// job id that already owns the content.
-func (r *Repo) Claim(ctx context.Context, hash, jobID string) (bool, string, error) {
-	tag, err := r.pool.Exec(ctx,
-		`INSERT INTO orchestrator.content_jobs (hash, job_id) VALUES ($1,$2)
-		 ON CONFLICT (hash) DO NOTHING`, hash, jobID)
-	if err != nil {
-		return false, "", err
-	}
-	if tag.RowsAffected() == 1 {
-		return true, jobID, nil
-	}
-	var owner string
-	if err := r.pool.QueryRow(ctx,
-		`SELECT job_id::text FROM orchestrator.content_jobs WHERE hash=$1`, hash).Scan(&owner); err != nil {
-		return false, "", err
-	}
-	return false, owner, nil
-}
-
 // --- Outbox drain (used by the redisstream relay) ---
 
 // OutboxRow is one unpublished outbox entry.

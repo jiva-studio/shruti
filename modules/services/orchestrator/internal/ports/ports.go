@@ -63,14 +63,6 @@ type JobRepository interface {
 	WithTx(ctx context.Context, fn func(Tx) error) error
 }
 
-// ContentClaimer provides in-flight dedup: the first job to claim a content
-// hash wins the exclusive right to process it (backed by a unique key on
-// content_jobs.hash). Later claimants get ok=false plus the winning job id, so
-// a concurrent re-ingest of identical audio collapses instead of racing.
-type ContentClaimer interface {
-	Claim(ctx context.Context, hash, jobID string) (ok bool, ownerJobID string, err error)
-}
-
 // TierVerifier re-verifies the PRO entitlement carried in an ingest request's
 // JWT at processing time (the tier could have lapsed since the request was
 // enqueued). It returns the token subject (user id) and whether the token

@@ -8,8 +8,9 @@
 //     the broker message id, so a redelivered message maps to the SAME job
 //     (idempotent create; attempts accumulate for the dead-letter cap).
 //   - PRO tier is RE-VERIFIED from the request JWT at processing time.
-//   - In-flight dedup via a content-hash claim: identical audio collapses onto
-//     the first job that claimed it instead of re-transcribing.
+//   - Dedup on the stored artifact: if identical audio was already ingested and
+//     its blob is present, the new owner is linked to it instead of
+//     re-transcribing — and a track is never announced before its blob exists.
 //   - At-least-once: on a transient failure the message is left pending
 //     (Process returns an error) until MaxAttempts, then the job dead-letters
 //     (marked failed, `track.failed` emitted) and the message is acked.
@@ -42,7 +43,6 @@ type Deps struct {
 	Transcriber ports.Transcriber
 	Reviewer    ports.Reviewer
 	Blob        ports.BlobStore
-	Claimer     ports.ContentClaimer
 	Tier        ports.TierVerifier
 	Clock       ports.Clock
 	IDs         ports.IDGen
@@ -138,13 +138,19 @@ func (s *Service) run(ctx context.Context, msgID string, j *job.Job, req ingest.
 	}
 	defer os.RemoveAll(filepath.Dir(localPath))
 
-	// In-flight dedup: claim the content hash. A loser collapses onto the
-	// winning job's track (the user still gets it linked).
-	ok, owner, err := s.d.Claimer.Claim(ctx, hash, j.ID)
+	// Dedup on the artifact itself: if this exact content was already ingested
+	// and STORED by a prior job, the blob is present — link this owner to it
+	// instantly instead of re-transcribing. Keying on the verified blob (not a
+	// speculative claim) means we never announce a track whose bytes are
+	// missing, and a failed prior job leaves nothing to unblock: it simply
+	// didn't store the blob, so the next request re-processes normally. Two
+	// genuinely-simultaneous first ingests of new content both process and both
+	// write the same content-addressed keys (idempotent) — wasteful but correct.
+	already, err := s.d.Blob.Exists(ctx, audioKey(hash))
 	if err != nil {
-		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("claim: %w", err))
+		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("dedup probe: %w", err))
 	}
-	if !ok && owner != j.ID {
+	if already {
 		return s.finishDedup(ctx, msgID, j, hash, req)
 	}
 
@@ -199,7 +205,8 @@ func (s *Service) finishReady(ctx context.Context, msgID string, j *job.Job, has
 	return nil
 }
 
-// finishDedup collapses this job onto an already-claimed content hash.
+// finishDedup collapses this job onto content whose blob is already stored
+// (verified present by the Exists probe in run), linking this owner instantly.
 func (s *Service) finishDedup(ctx context.Context, msgID string, j *job.Job, hash string, req ingest.Request) error {
 	j.TrackID = hash
 	j.Result = readyResult(hash, "", ingest.TrackDraft{TitleRaw: req.Title}, req)
