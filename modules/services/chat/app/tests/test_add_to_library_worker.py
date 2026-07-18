@@ -1,13 +1,15 @@
 """Tests for `agent/graph/nodes/add_to_library_worker` (intent=add-to-library).
 
 The worker is a deterministic terminal (no synthesizer), so the tests capture
-the SSE writer stream and assert on its structure: the PRO gate (pro → candidate
-cards only, NO publish; free → upsell, no publish), the candidate-card SSE shape
-+ action-before-marker ordering, the direct-URL fast path, and the empty result.
+the SSE writer stream and assert on its structure: the PRO gate (free → upsell,
+no publish), a SEARCH query → candidate cards only with NO publish (+ action-
+before-marker ordering), a CONCRETE lecture URL → exactly one direct publish
+with NO candidate cards, and the empty result.
 
-The worker never publishes `ingest.request` itself — that happens only when the
-user taps a card's "Add to library" action (the `add_to_library_publish`
-action-tool). So a Pro turn must emit cards but leave the publisher untouched.
+A search query never publishes `ingest.request` — that happens when the user
+taps a card's "Add to library" action. A concrete lecture URL (YouTube
+watch/short link or a direct audio file) is an explicit target and IS published
+directly, PRO-gated, with a confirmation card instead of candidate cards.
 """
 
 from __future__ import annotations
@@ -162,27 +164,75 @@ async def test_candidate_action_precedes_its_card_marker(_events) -> None:
     assert action_idx < marker_idx
 
 
-# ── Direct-URL fast path ─────────────────────────────────────────────────
+# ── Concrete lecture URL → direct publish ────────────────────────────────
 
 
-async def test_pro_direct_url_skips_search_and_offers_link(_events) -> None:
-    pub = _FakePublisher()
+async def test_pro_youtube_url_publishes_directly_no_cards(_events) -> None:
+    pub = _FakePublisher(ok=True)
     res = _FakeResolver([Candidate(url="https://other", title="X")])
     ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=res)
 
-    await atl.add_to_library_worker_node(
+    out = await atl.add_to_library_worker_node(
         {
             "user_query": "save https://youtu.be/abc123 to my library",
             "tier": "pro",
         },
         _Runtime(ctx),
     )
-    # The pasted link is used verbatim; the resolver is NOT consulted, and
-    # nothing is published — only a candidate card is offered.
+    assert out == {}
+    # A concrete lecture URL is published DIRECTLY: no search, exactly one
+    # ingest.request, and NO candidate cards.
     assert res.calls == []
-    assert pub.calls == []
-    cands = _actions(_events, "library_candidate")
-    assert cands[0]["data"]["payload"]["url"] == "https://youtu.be/abc123"
+    assert pub.calls == [("user-1", "https://youtu.be/abc123", "jwt-token")]
+    assert _actions(_events, "library_candidate") == []
+    # The confirmation is the added_to_library action + its inline marker.
+    confirms = _actions(_events, "added_to_library")
+    assert len(confirms) == 1
+    assert confirms[0]["data"]["payload"]["url"] == "https://youtu.be/abc123"
+    assert "[action:added_to_library|id=" in _delta_text(_events)
+
+
+async def test_pro_watch_url_with_params_publishes_once(_events) -> None:
+    pub = _FakePublisher(ok=True)
+    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=_FakeResolver([]))
+    await atl.add_to_library_worker_node(
+        {
+            "user_query": "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s add it",
+            "tier": "pro",
+        },
+        _Runtime(ctx),
+    )
+    assert len(pub.calls) == 1
+    assert pub.calls[0][1] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s"
+    assert _actions(_events, "library_candidate") == []
+
+
+async def test_pro_audio_url_publishes_directly(_events) -> None:
+    pub = _FakePublisher(ok=True)
+    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=_FakeResolver([]))
+    await atl.add_to_library_worker_node(
+        {"user_query": "add https://cdn.example.org/talks/lecture-01.mp3", "tier": "pro"},
+        _Runtime(ctx),
+    )
+    assert pub.calls == [
+        ("user-1", "https://cdn.example.org/talks/lecture-01.mp3", "jwt-token")
+    ]
+    assert _actions(_events, "added_to_library")
+    assert _actions(_events, "library_candidate") == []
+
+
+async def test_pro_broker_unconfigured_still_confirms(_events) -> None:
+    # No ingest_publisher (STREAMS_REDIS_URL unset → NoopIngestPublisher).
+    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=None, lecture_search=_FakeResolver([]))
+    out = await atl.add_to_library_worker_node(
+        {"user_query": "add https://youtu.be/xyz789", "tier": "pro"},
+        _Runtime(ctx),
+    )
+    assert out == {}
+    # No broker → no crash; still confirms with a pending card.
+    confirms = _actions(_events, "added_to_library")
+    assert len(confirms) == 1
+    assert confirms[0]["data"]["payload"]["queued"] is False
 
 
 # ── Empty result ─────────────────────────────────────────────────────────
