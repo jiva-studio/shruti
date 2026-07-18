@@ -30,12 +30,24 @@
  *                     planner changed (e.g. the daily-reminder Settings
  *                     toggle). The scheduler re-runs a tick so the
  *                     daily push turns on/off promptly.
+ *   - `tick-settled`— a tick finished (emitted in `tick()`'s `finally`,
+ *                     so it fires even on an early return / throw).
+ *                     Marks the coalescing boundary for "everything that
+ *                     surfaced this open": subscribers that would otherwise
+ *                     react once per `row-prepped` can instead flush a
+ *                     SINGLE grouped reaction here (e.g. one toast for N
+ *                     freshly-prepped proactive messages instead of N).
  *
  * Listeners run synchronously inside emit. Throwing is swallowed
  * per-listener so one buggy subscriber doesn't take the bus down.
  */
 
-export type ProactiveEvent = "tick-ready" | "row-created" | "row-prepped" | "replan"
+export type ProactiveEvent =
+  | "tick-ready"
+  | "row-created"
+  | "row-prepped"
+  | "replan"
+  | "tick-settled"
 
 const listeners = new Map<ProactiveEvent, Set<() => void>>()
 

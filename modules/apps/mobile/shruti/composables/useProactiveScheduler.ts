@@ -422,6 +422,12 @@ export function useProactiveScheduler(): void {
       await tickInner()
     } finally {
       tickInFlight = false
+      // End-of-tick marker. Subscribers that coalesce per-tick activity
+      // (the chat toast groups all rows prepped this tick into ONE
+      // notification) flush here. Emitted in `finally` so it fires even
+      // when `tickInner` early-returns (no repo / master off / no rules)
+      // or throws — the coalescer must never be left waiting.
+      emitProactive("tick-settled")
     }
   }
 
