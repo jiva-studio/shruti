@@ -7,11 +7,19 @@
 # are the SAME image with different args — compose runs migrate to completion,
 # then starts serve (which refuses traffic until the schema is current).
 
-FROM golang:1.25-alpine AS build
+# 1.26 (not 1.25 like the other services) because the shared pipeline module
+# requires go >= 1.26.2.
+FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY services/orchestrator/go.mod services/orchestrator/go.sum ./
+# The service depends on the shared pipeline module via a local
+# `replace github.com/jiva-studio/shruti/pipeline => ../../libs/pipeline`,
+# so that module must be present in the build context at the SAME relative
+# location. Both trees are copied under /src preserving structure, so from the
+# service dir `../../libs/pipeline` resolves to /src/libs/pipeline.
+COPY libs/pipeline/ ./libs/pipeline/
+COPY services/orchestrator/ ./services/orchestrator/
+WORKDIR /src/services/orchestrator
 RUN go mod download
-COPY services/orchestrator/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \
     -o /out/orchestrator ./cmd/orchestrator
