@@ -6,6 +6,7 @@ import type {
   NoteRow,
   PlaylistItemRow,
   ListeningSessionRow,
+  LibraryItemRow,
   SyncDocHlcRow,
 } from "@lib/persistence/user"
 import { createIdGenerator } from "./idGenerator.js"
@@ -13,11 +14,13 @@ import {
   noteRowToWire,
   playlistRowToWire,
   sessionRowToWire,
+  libraryItemRowToWire,
   type NoteWire,
   type PlaylistWire,
   type SessionWire,
   type ChatSessionWire,
   type ChatMessageWire,
+  type LibraryItemWire,
 } from "./syncWire.js"
 
 /**
@@ -102,6 +105,13 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         )
         return rows[0] ?? null
       }
+      case "library_items": {
+        // Pull-only: doc_id is the membership id (= library_items.id).
+        const rows = await db.query<LibraryItemRow>("SELECT * FROM library_items WHERE id = ?", [
+          docId,
+        ])
+        return rows[0] ? libraryItemRowToWire(rows[0]) : null
+      }
       default:
         throw new Error(`syncApply: unknown collection "${collection}"`)
     }
@@ -127,6 +137,8 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         return upsertChatSession(docId, data as ChatSessionWire)
       case "chat_messages":
         return upsertChatMessage(docId, data as ChatMessageWire)
+      case "library_items":
+        return upsertLibraryItem(docId, data as LibraryItemWire)
       default:
         throw new Error(`syncApply: unknown collection "${collection}"`)
     }
@@ -152,6 +164,11 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         return
       case "chat_messages":
         await db.execute("DELETE FROM chat_messages WHERE id = ?", [docId])
+        return
+      case "library_items":
+        // Server-authored removal (e.g. "remove from My library") arrives as a
+        // tombstone; drop the local membership row.
+        await db.execute("DELETE FROM library_items WHERE id = ?", [docId])
         return
       default:
         throw new Error(`syncApply: unknown collection "${collection}"`)
@@ -279,6 +296,44 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
          created_at = excluded.created_at,
          meta       = excluded.meta`,
       [docId, wire.session_id, wire.role, wire.content, wire.created_at, meta]
+    )
+  }
+
+  async function upsertLibraryItem(docId: string, wire: LibraryItemWire): Promise<void> {
+    // Pull-only, server-owned: the server is the single writer, so the row is
+    // applied wholesale keyed on the sync doc_id (= membership id). A plain
+    // `INSERT OR REPLACE` is fine — nothing references library_items by FK.
+    await db.execute(
+      `INSERT OR REPLACE INTO library_items (
+         id, track_id, status, origin, title_raw, author_raw, location_raw,
+         date_raw, lang_hint, author_id, location_id, date, date_precision,
+         lang, lang_confidence, error, audio_key, transcript_key, duration,
+         cover_key, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        docId,
+        wire.track_id ?? null,
+        wire.status,
+        wire.origin ?? null,
+        wire.title_raw ?? null,
+        wire.author_raw ?? null,
+        wire.location_raw ?? null,
+        wire.date_raw ?? null,
+        wire.lang_hint ?? null,
+        wire.author_id ?? null,
+        wire.location_id ?? null,
+        wire.date ?? null,
+        wire.date_precision ?? null,
+        wire.lang ?? null,
+        wire.lang_confidence ?? null,
+        wire.error ?? null,
+        wire.audio_key ?? null,
+        wire.transcript_key ?? null,
+        wire.duration ?? null,
+        wire.cover_key ?? null,
+        wire.created_at ?? null,
+        wire.updated_at ?? null,
+      ]
     )
   }
 

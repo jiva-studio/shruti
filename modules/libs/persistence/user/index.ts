@@ -24,6 +24,54 @@ export interface PlaylistItemRow {
   readonly collection_id: string | null
 }
 
+/**
+ * Personal library membership row (017 migration). Server-owned and
+ * **pull-only** — the client never writes it; the sync engine only ever
+ * applies the `profile` server's version. Mirrors `profile.library_items`
+ * (see docs/repos/lectorium/architecture/personal-library.md § Data model).
+ *
+ * `id` is the per-user membership id (UUID, the sync doc_id); `track_id` is the
+ * content hash, NULL until the fetch step computes it. The `*_raw` columns are
+ * the lossless captured metadata; the resolved id/value columns (`author_id`,
+ * `location_id`, `date`, `lang`, …) are NULL until the pipeline confidently
+ * matches them. `audio_key` / `transcript_key` / `duration` are filled on
+ * `ready`; `cover_key` is a re-hosted thumbnail (NULL → plain placeholder).
+ */
+export interface LibraryItemRow {
+  readonly id: string
+  readonly track_id: string | null
+  /** "queued" | "processing" | "ready" | "failed". */
+  readonly status: string
+  /** "private" | "published"; NULL on older/partial rows. */
+  readonly origin: string | null
+  readonly title_raw: string | null
+  readonly author_raw: string | null
+  readonly location_raw: string | null
+  readonly date_raw: string | null
+  readonly lang_hint: string | null
+  readonly author_id: string | null
+  readonly location_id: string | null
+  /** Resolved ISO date "YYYY-MM-DD", or NULL when unresolved. */
+  readonly date: string | null
+  readonly date_precision: string | null
+  /** ASR-detected content language — authoritative when present. */
+  readonly lang: string | null
+  readonly lang_confidence: number | null
+  /** User-visible failure reason on a `failed` row. */
+  readonly error: string | null
+  /** Full bucket key of the audio, filled on ready (e.g.
+   *  "public/tracks/<track_id>/audio/original.mp3"). */
+  readonly audio_key: string | null
+  /** Full bucket key of the JSON transcript, filled on ready. */
+  readonly transcript_key: string | null
+  /** Audio duration in milliseconds, filled on ready. */
+  readonly duration: number | null
+  /** Re-hosted cover/thumbnail key; NULL → app shows a plain placeholder. */
+  readonly cover_key: string | null
+  readonly created_at: number | null
+  readonly updated_at: number | null
+}
+
 export interface ListeningSessionRow {
   readonly id: string
   readonly item_id: string
