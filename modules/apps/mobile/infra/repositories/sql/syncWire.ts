@@ -1,4 +1,9 @@
-import type { NoteRow, PlaylistItemRow, ListeningSessionRow } from "@lib/persistence/user"
+import type {
+  NoteRow,
+  PlaylistItemRow,
+  ListeningSessionRow,
+  LibraryItemRow,
+} from "@lib/persistence/user"
 import type { Note } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import { rowToNote, rowToPlaylistItem } from "./rowMappers.js"
@@ -152,5 +157,64 @@ export function chatMessageRowToWire(row: ChatMessageWire): ChatMessageWire {
     content: row.content,
     created_at: row.created_at,
     meta: row.meta,
+  }
+}
+
+/**
+ * Client-native (snake_case) snapshot for `library_items`. This collection is
+ * **pull-only** (server-owned), so there is no push/journal path — the shape
+ * exists only so the apply adapter can (a) re-snapshot a local row for
+ * `getLocalDoc` and (b) map the server's wire row onto columns on apply. The
+ * server's projected wire row is byte-compatible with this shape.
+ */
+export interface LibraryItemWire {
+  id: string
+  track_id: string | null
+  status: string
+  origin: string | null
+  title_raw: string | null
+  author_raw: string | null
+  location_raw: string | null
+  date_raw: string | null
+  lang_hint: string | null
+  author_id: string | null
+  location_id: string | null
+  date: string | null
+  date_precision: string | null
+  lang: string | null
+  lang_confidence: number | null
+  error: string | null
+  audio_key: string | null
+  transcript_key: string | null
+  duration: number | null
+  cover_key: string | null
+  created_at: number | null
+  updated_at: number | null
+}
+
+export function libraryItemRowToWire(row: LibraryItemRow): LibraryItemWire {
+  return {
+    id: row.id,
+    track_id: row.track_id,
+    status: row.status,
+    origin: row.origin,
+    title_raw: row.title_raw,
+    author_raw: row.author_raw,
+    location_raw: row.location_raw,
+    date_raw: row.date_raw,
+    lang_hint: row.lang_hint,
+    author_id: row.author_id,
+    location_id: row.location_id,
+    date: row.date,
+    date_precision: row.date_precision,
+    lang: row.lang,
+    lang_confidence: row.lang_confidence,
+    error: row.error,
+    audio_key: row.audio_key,
+    transcript_key: row.transcript_key,
+    duration: row.duration,
+    cover_key: row.cover_key,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   }
 }

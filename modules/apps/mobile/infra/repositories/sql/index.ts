@@ -2,6 +2,7 @@ import type { IDatabase } from "@ports/app/index.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 import { createSqlNoteRepository } from "./notesRepository.sql.js"
 import { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
+import { createSqlLibraryItemRepository } from "./libraryItemsRepository.sql.js"
 import { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
 import { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
 import { createSqlTrackRepository } from "./tracksRepository.sql.js"
@@ -27,6 +28,7 @@ import { createSqlSyncBackfillRepository } from "./syncBackfillRepository.sql.js
 export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
 export { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
+export { createSqlLibraryItemRepository } from "./libraryItemsRepository.sql.js"
 export { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
 export { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
 export { createSqlUnitOfWork } from "./unitOfWork.sql.js"
@@ -68,6 +70,10 @@ export interface SqlAppRepositories {
   readonly topics: ReturnType<typeof createSqlTopicRepository>
   readonly notes: ReturnType<typeof createSqlNoteRepository>
   readonly playlistItems: ReturnType<typeof createSqlPlaylistItemRepository>
+  /** Personal library (epic #1236) — read-only; rows are pull-only from
+   *  `profile`. Always present (does not depend on the sync `getDeviceId`
+   *  gate; the sync-apply adapter fills the table when the engine runs). */
+  readonly libraryItems: ReturnType<typeof createSqlLibraryItemRepository>
   readonly listeningSessions: ReturnType<typeof createSqlListeningSessionRepository>
   readonly mediaItems: ReturnType<typeof createSqlMediaItemRepository>
   readonly unitOfWork: ReturnType<typeof createReentrantUnitOfWork>
@@ -182,6 +188,9 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     topics: createSqlTopicRepository(deps.contentDb),
     notes: synced.notes,
     playlistItems: synced.playlistItems,
+    // Read-only + pull-only: not wrapped in the sync-journal decorator (the
+    // client never writes library_items), built straight on userDb.
+    libraryItems: createSqlLibraryItemRepository(deps.userDb),
     listeningSessions: synced.listeningSessions,
     mediaItems: createSqlMediaItemRepository(deps.userDb),
     unitOfWork,
