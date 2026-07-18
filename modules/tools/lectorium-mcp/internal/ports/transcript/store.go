@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 // Store owns the on-disk paths for transcript artifacts under out/.

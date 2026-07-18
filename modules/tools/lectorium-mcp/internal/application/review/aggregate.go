@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
-	reviewport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
+	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 )
 

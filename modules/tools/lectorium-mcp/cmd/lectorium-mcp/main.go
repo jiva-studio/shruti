@@ -99,7 +99,7 @@ import (
 	glossaryport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/glossary"
 	outlineport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
 	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/sentencesplit"
+	"github.com/jiva-studio/lectorium/pipeline/ports/sentencesplit"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/worker"
 )
 

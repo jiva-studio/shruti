@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 // Reviewer reviews ONE chunk of segments. Critical contract: the LLM never

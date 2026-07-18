@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	hybridreview "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/hybrid"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
 // Registry implements review.Registry.

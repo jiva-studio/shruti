@@ -3,8 +3,8 @@ package review
 import (
 	"strings"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
-	reviewport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
+	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
 // joinChunkText concatenates segment texts with single spaces — only

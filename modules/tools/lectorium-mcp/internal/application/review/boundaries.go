@@ -5,9 +5,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
-	reviewport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/sentencesplit"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
+	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
+	"github.com/jiva-studio/lectorium/pipeline/ports/sentencesplit"
 )
 
 // idxBoundary tracks which raw idx is the final segment of a sentence.

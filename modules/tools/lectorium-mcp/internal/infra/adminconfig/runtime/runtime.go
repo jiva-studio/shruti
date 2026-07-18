@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/config"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/lectorium/pipeline/ports/transcriber"
 )
 
 // Endpointer is implemented by transcribe-providers whose upstream URL

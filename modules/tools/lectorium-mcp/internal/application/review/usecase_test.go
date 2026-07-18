@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 	fsartifact "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
 	sqliteregistry "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
 	reviewreg "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
 	fstranscript "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/transcriptstore/fs"
-	reviewport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
 // fakeReviewer just upper-cases the text. Crucially, it never sees timestamps

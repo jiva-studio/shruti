@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 // Strategy names understood by audio-denoiser/denoise_mp3.py --plan.
