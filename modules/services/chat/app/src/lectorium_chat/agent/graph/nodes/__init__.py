@@ -6,6 +6,9 @@ Business logic lives in `application/*_turn.py`.
 """
 
 from lectorium_chat.agent.graph.nodes.action_worker import action_worker_node
+from lectorium_chat.agent.graph.nodes.add_to_library_worker import (
+    add_to_library_worker_node,
+)
 from lectorium_chat.agent.graph.nodes.catalog_worker import catalog_worker_node
 from lectorium_chat.agent.graph.nodes.clarify_worker import clarify_worker_node
 from lectorium_chat.agent.graph.nodes.corpus_fallback import corpus_fallback_node
@@ -28,6 +31,7 @@ __all__ = [
     "find_tracks_worker_node",
     "recommend_worker_node",
     "action_worker_node",
+    "add_to_library_worker_node",
     "help_worker_node",
     "show_verse_worker_node",
     "synthesizer_node",

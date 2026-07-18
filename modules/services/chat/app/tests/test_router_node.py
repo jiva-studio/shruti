@@ -123,6 +123,26 @@ async def test_router_node_event_carries_actual_intent(
     assert events[0]["data"]["params"]["intent"] == "research"
 
 
+async def test_router_node_surfaces_add_to_library_intent(
+    monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
+) -> None:
+    """The new add-to-library intent flows through the node unchanged and is
+    surfaced on the router_decision event (so downstream routing sees it)."""
+
+    async def _fake_router_turn(*_a, **_k) -> RoutingDecision:
+        return RoutingDecision(
+            intent="add-to-library", confidence=0.9, extracted_args={}
+        )
+
+    monkeypatch.setattr(router_node_mod, "run_router_turn", _fake_router_turn)
+
+    out = await router_node(_state("add this video to my library"), _Runtime(_Ctx()))
+
+    assert out["intent"] == "add-to-library"
+    events = _router_decision_events(_capture_stream)
+    assert events[0]["data"]["params"]["intent"] == "add-to-library"
+
+
 async def test_router_parse_failure_soft_falls_to_unknown(
     monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
 ) -> None:

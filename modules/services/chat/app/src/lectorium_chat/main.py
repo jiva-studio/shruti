@@ -201,6 +201,22 @@ async def lifespan(app: FastAPI):
 
     reranker = get_reranker(s)
 
+    # Add-to-library (#1226): multi-provider external-lecture search resolver
+    # + ingest.request broker publisher. Both built unconditionally — a
+    # keyless deploy gets inert providers (a pasted URL still works), and an
+    # unconfigured broker gets a no-op publisher that logs the intent.
+    from lectorium_chat.infra.broker.publisher import build_ingest_publisher
+    from lectorium_chat.lecture_search.providers import build_default_providers
+    from lectorium_chat.lecture_search.resolver import LectureSearchResolver
+
+    lecture_search = LectureSearchResolver(
+        build_default_providers(s),
+        per_provider_timeout_s=s.lecture_search_timeout_s,
+    )
+    ingest_publisher = build_ingest_publisher(
+        s.streams_redis_url, stream=s.ingest_request_stream
+    )
+
     app.state.deps = AppDeps(
         settings=s,
         pool=pool,
@@ -217,6 +233,8 @@ async def lifespan(app: FastAPI):
         chat_graph=chat_graph,
         reranker=reranker,
         translation_service=translation_service,
+        lecture_search=lecture_search,
+        ingest_publisher=ingest_publisher,
     )
 
     # Wire the registered tool callables with their concrete adapters.
@@ -266,6 +284,7 @@ async def lifespan(app: FastAPI):
         await _close_quietly(idempotency_store, "close", "aclose")
         await _close_quietly(turn_store, "close", "aclose")
         await _close_quietly(reranker, "close", "aclose")
+        await _close_quietly(ingest_publisher, "close", "aclose")
         await close_pool()
         # Flush pending Langfuse traces last — close() above doesn't
         # block on the SDK's background flusher; if we exit before it

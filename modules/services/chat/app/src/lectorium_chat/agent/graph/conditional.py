@@ -182,6 +182,11 @@ def route_after_router(state: ChatState) -> str:
         # metadata filters — returning lecture cards each with a verbatim
         # why-quote.
         return "find_tracks_worker"
+    if intent == "add-to-library":
+        # PRO-gated "add an external lecture to my library". The worker itself
+        # gates on tier, searches providers, and publishes ingest.request —
+        # deterministic terminal, no synthesizer.
+        return "add_to_library_worker"
     if intent == "recommend":
         # Deterministic topic-affinity recommender — no LLM ReAct loop.
         return "recommend_worker"

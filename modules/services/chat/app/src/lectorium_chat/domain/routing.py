@@ -31,6 +31,7 @@ Intent = Literal[
     "recommend",        # personal "what to listen next" — topic-affinity from history
     "show_verse",       # a bare scripture reference ("БГ 2.13") — fetch + show that verse
     "create_action",    # user wants to create something (playlist, PDF, reminder)
+    "add-to-library",   # PRO: find an external lecture (YouTube/web) and add it to the personal library
     "unknown",          # ambiguous or out-of-scope; soft fallback to synthesizer
 ]
 
