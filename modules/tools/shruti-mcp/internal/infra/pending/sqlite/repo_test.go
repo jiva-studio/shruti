@@ -25,11 +25,11 @@ func seed(t *testing.T, r *Repo, rows ...pending.Track) {
 		_, err := r.db.Exec(`INSERT INTO pending
 			(track_id, owner_id, title_raw, author_raw, location_raw, date_raw,
 			 references_raw, lang, transcript_path, audio_path, audio_duration_ms,
-			 audio_size_bytes, suggested_at)
+			 audio_size_bytes, created_at)
 			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			p.TrackID, p.OwnerID, p.TitleRaw, p.AuthorRaw, p.LocationRaw, p.DateRaw,
 			p.ReferencesRaw, p.Lang, p.TranscriptPath, p.AudioPath, p.AudioDurationMs,
-			p.AudioSizeBytes, p.SuggestedAt)
+			p.AudioSizeBytes, p.CreatedAt)
 		if err != nil {
 			t.Fatalf("seed %s: %v", p.TrackID, err)
 		}
@@ -44,9 +44,9 @@ func TestListGetAndMarkConsumed(t *testing.T) {
 		pending.Track{TrackID: "track_a", OwnerID: "user_1", TitleRaw: "A", Lang: "en",
 			TranscriptPath: "public/tracks/track_a/transcripts/en.json",
 			AudioPath:      "public/tracks/track_a/audio/original.mp3",
-			AudioDurationMs: 1000, AudioSizeBytes: 42, SuggestedAt: "2026-07-01T00:00:00Z"},
+			AudioDurationMs: 1000, AudioSizeBytes: 42, CreatedAt: "2026-07-01T00:00:00Z"},
 		pending.Track{TrackID: "track_b", OwnerID: "user_2", TitleRaw: "B", Lang: "ru",
-			SuggestedAt: "2026-07-02T00:00:00Z"},
+			CreatedAt: "2026-07-02T00:00:00Z"},
 	)
 
 	// List (unconsumed only by default).
