@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// A minted stamp has the fixed wire shape and the server node id.
-func TestNextFormat(t *testing.T) {
-	c := newClockAt(func() int64 { return 1718000000000 })
-	got := c.Next("")
+// A derived stamp has the fixed wire shape and the server node id.
+func TestDeterministicFormat(t *testing.T) {
+	c := NewClock()
+	got := c.Deterministic("1718000000000-0")
 	parts := strings.SplitN(got, ":", 3)
 	if len(parts) != 3 {
 		t.Fatalf("want 3 colon-separated parts, got %q", got)
@@ -24,45 +24,45 @@ func TestNextFormat(t *testing.T) {
 	}
 }
 
-// Successive stamps at a frozen wall clock stay strictly increasing (counter
-// bumps) and lexicographically ordered.
-func TestNextMonotonicSameMillis(t *testing.T) {
-	c := newClockAt(func() int64 { return 1718000000000 })
-	prev := c.Next("")
-	for i := 0; i < 5; i++ {
-		cur := c.Next("")
-		if cur <= prev {
-			t.Fatalf("stamp %d not strictly greater: %q <= %q", i, cur, prev)
+// The SAME event id always maps to the SAME stamp — the idempotency guarantee
+// that makes a redelivered event collide on the change log's UNIQUE constraint.
+func TestDeterministicStableForSameEvent(t *testing.T) {
+	c := NewClock()
+	for _, id := range []string{"1718000000000-0", "42", "evt-abc-def"} {
+		if a, b := c.Deterministic(id), c.Deterministic(id); a != b {
+			t.Errorf("stamp not stable for %q: %q != %q", id, a, b)
 		}
-		prev = cur
 	}
 }
 
-// A stamp fast-forwards strictly past a base whose physical time is in the
-// future relative to the wall clock — the "newer than the client master" rule.
-func TestNextFastForwardsPastFutureBase(t *testing.T) {
-	c := newClockAt(func() int64 { return 1000 })
-	// base physical is far ahead of the wall clock.
-	base := format(9_000_000_000_000, 7, "device-abc")
-	got := c.Next(base)
-	if got <= base {
-		t.Fatalf("stamp must be newer than base: %q <= %q", got, base)
+// A stream id ("<millis>-<seq>") decodes so that broker order is preserved as
+// lexicographic hlc order — later events sort strictly after earlier ones.
+func TestDeterministicStreamOrderPreserved(t *testing.T) {
+	c := NewClock()
+	ordered := []string{
+		"1718000000000-0",
+		"1718000000000-1",
+		"1718000000001-0",
+		"1718000000002-9",
 	}
-	// Same-millis base → counter must exceed the base counter.
-	p, ctr, ok := parse(got)
-	if !ok {
-		t.Fatalf("minted stamp does not parse: %q", got)
-	}
-	if p != 9_000_000_000_000 || ctr != 8 {
-		t.Fatalf("want physical=9e12 counter=8, got physical=%d counter=%d", p, ctr)
+	for i := 1; i < len(ordered); i++ {
+		prev, cur := c.Deterministic(ordered[i-1]), c.Deterministic(ordered[i])
+		if cur <= prev {
+			t.Fatalf("%q must sort after %q: %q <= %q", ordered[i], ordered[i-1], cur, prev)
+		}
 	}
 }
 
-// An unparseable base is treated as "no base" rather than panicking.
-func TestNextToleratesGarbageBase(t *testing.T) {
-	c := newClockAt(func() int64 { return 1718000000000 })
-	got := c.Next("not-an-hlc")
+// A non-stream token still produces a stable, well-formed stamp (hash fallback)
+// so a misconfigured caller never crashes and redelivery is still idempotent.
+func TestDeterministicHashFallback(t *testing.T) {
+	c := NewClock()
+	got := c.Deterministic("not-a-stream-id")
 	if got == "" {
-		t.Fatal("expected a stamp even with a garbage base")
+		t.Fatal("expected a stamp for an arbitrary token")
+	}
+	parts := strings.SplitN(got, ":", 3)
+	if len(parts) != 3 || len(parts[0]) != physicalDigits || len(parts[1]) != counterDigits {
+		t.Fatalf("hashed stamp is malformed: %q", got)
 	}
 }
