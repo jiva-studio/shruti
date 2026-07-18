@@ -148,6 +148,42 @@ services:
       timeout: 3s
       retries: 20
 
+  # Dedicated broker for the personal-library event streams
+  # (ingest.request / track.events / library.unlinked). Deliberately a
+  # SEPARATE instance from the `redis` cache above: Redis Streams entries
+  # carry no TTL, so under the cache's `volatile-lru` + 1gb cap they would
+  # never be eligible for eviction and Redis would OOM — wedging chat's L2
+  # cache with it. Here the policy is `noeviction`: the broker never silently
+  # drops undelivered stream entries. Bounded memory is the PRODUCERS' job via
+  # mandatory `MAXLEN ~ N` trimming + consumer `XACK` (see
+  # modules/services/README-streams.md); if trimming ever stalls, `XADD` fails
+  # loudly at the maxmemory ceiling instead of consuming the whole host.
+  # Origin only — every stream producer/consumer (orchestrator, chat, profile)
+  # is origin-scoped; the RU proxy forwards those routes to global.
+  redis-streams:
+    profiles: [origin]
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - streamsdata:/data
+    networks: [shruti]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   chat:
     # origin only — proxy hosts forward /chat to global via Caddy.
     profiles: [origin]
@@ -722,6 +758,7 @@ volumes:
   pgdata:
   chatdata:
   redisdata:
+  streamsdata:
   share_video_scratch:
   corpusdata:
   profiledata:
