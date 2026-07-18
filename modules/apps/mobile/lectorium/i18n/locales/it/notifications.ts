@@ -25,6 +25,8 @@ export default {
   // foreground (its background delivery is a separate scheduled notification).
   proactiveNewMessageTitle: "Nuovo messaggio",
   proactiveNewMessageToast: "Sadhu ha un nuovo messaggio per te.",
+  proactiveNewMessagesTitle: "Nuovi messaggi",
+  proactiveNewMessagesToast: "Sadhu ha nuovi messaggi per te ({count}).",
   // Action button on the in-app toast — opens the chat session.
   openButton: "Apri",
 }

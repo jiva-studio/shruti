@@ -22,6 +22,8 @@ export default {
   // Toast shown when a proactive message appears while the app is in the foreground.
   proactiveNewMessageTitle: "Nuevo mensaje",
   proactiveNewMessageToast: "Sadhu tiene un nuevo mensaje para ti.",
+  proactiveNewMessagesTitle: "Nuevos mensajes",
+  proactiveNewMessagesToast: "Sadhu tiene nuevos mensajes para ti ({count}).",
   // Action button on the in-app toast — opens the chat session.
   openButton: "Abrir",
 }

@@ -26,6 +26,8 @@ export default {
   // their own title.
   proactiveNewMessageTitle: "नया संदेश",
   proactiveNewMessageToast: "साधु के पास आपके लिए एक नया संदेश है।",
+  proactiveNewMessagesTitle: "नए संदेश",
+  proactiveNewMessagesToast: "साधु के पास आपके लिए नए संदेश हैं ({count})।",
   // Action button on the in-app toast — opens the chat session.
   openButton: "खोलें",
 }

@@ -29,6 +29,8 @@ export default {
   // Title is the fallback toast header for sessions without their own title.
   proactiveNewMessageTitle: "Új üzenet",
   proactiveNewMessageToast: "Sadhunak új üzenete van számodra.",
+  proactiveNewMessagesTitle: "Új üzenetek",
+  proactiveNewMessagesToast: "Sadhunak új üzenetei vannak számodra ({count}).",
   // Action button on the in-app toast — opens the chat session.
   openButton: "Megnyitás",
 }

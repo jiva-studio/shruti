@@ -27,6 +27,8 @@ export default {
   // Title is the fallback toast header for sessions without their own title.
   proactiveNewMessageTitle: "Нове повідомлення",
   proactiveNewMessageToast: "Садху має для вас нове повідомлення.",
+  proactiveNewMessagesTitle: "Нові повідомлення",
+  proactiveNewMessagesToast: "Садху має для вас нові повідомлення ({count}).",
   // Action button on the in-app toast — opens the chat session.
   openButton: "Відкрити",
 }
