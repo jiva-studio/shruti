@@ -5,32 +5,32 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jiva-studio/lectorium/pipeline/transcript"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 	"github.com/jiva-studio/lectorium/pipeline/ports/sentencesplit"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
-// idxBoundary tracks which raw idx is the final segment of a sentence.
+// IdxBoundary tracks which raw idx is the final segment of a sentence.
 // Two writers populate it:
 //   - LLM-derived voting (one entry per chunk, edge-distance preference)
-//   - razdel splitter (when uc.Splitter is set, runs once on the merged
+//   - razdel splitter (when a Splitter is set, runs once on the merged
 //     corrected text and overrides the voting result)
-type idxBoundary struct {
-	edgeDist int
-	isEnd    bool
-	hasInfo  bool
+type IdxBoundary struct {
+	EdgeDist int
+	IsEnd    bool
+	HasInfo  bool
 }
 
-// splitWithRazdel concatenates the corrected text in idx order, asks
+// SplitWithRazdel concatenates the corrected text in idx order, asks
 // the splitter for sentence boundaries by character offset, and maps
-// those back to per-segment isEnd flags. On any error returns ok=false
+// those back to per-segment IsEnd flags. On any error returns ok=false
 // so the caller keeps the LLM-derived boundaries as fallback.
 //
 // Each segment's text in the merged passage is followed by a single
 // space; we record (start,end) RUNE offsets so we can map razdel's
 // character-based sentence ranges back to idx positions correctly for
 // non-ASCII (Russian, Sanskrit IAST) where one character ≠ one byte.
-func splitWithRazdel(ctx context.Context, splitter sentencesplit.Splitter, raw []transcript.RawSegment, idxText map[int]string) ([]idxBoundary, bool) {
+func SplitWithRazdel(ctx context.Context, splitter sentencesplit.Splitter, raw []transcript.RawSegment, idxText map[int]string) ([]IdxBoundary, bool) {
 	if len(raw) == 0 {
 		return nil, false
 	}
@@ -54,12 +54,12 @@ func splitWithRazdel(ctx context.Context, splitter sentencesplit.Splitter, raw [
 	if err != nil || len(sents) == 0 {
 		return nil, false
 	}
-	boundaries := make([]idxBoundary, len(raw))
+	boundaries := make([]IdxBoundary, len(raw))
 	for i := range boundaries {
-		boundaries[i].edgeDist = -1
+		boundaries[i].EdgeDist = -1
 	}
 	// For each sentence find the last segment whose char range overlaps
-	// it; mark that one as isEnd.
+	// it; mark that one as IsEnd.
 	for _, sent := range sents {
 		lastSeg := -1
 		for i := range raw {
@@ -71,21 +71,21 @@ func splitWithRazdel(ctx context.Context, splitter sentencesplit.Splitter, raw [
 			}
 		}
 		if lastSeg >= 0 {
-			boundaries[lastSeg].isEnd = true
-			boundaries[lastSeg].hasInfo = true
+			boundaries[lastSeg].IsEnd = true
+			boundaries[lastSeg].HasInfo = true
 		}
 	}
 	for i := range boundaries {
-		boundaries[i].hasInfo = true
+		boundaries[i].HasInfo = true
 	}
 	return boundaries, true
 }
 
-// buildEndSet validates that `sentences` covers exactly the chunk's idx set,
+// BuildEndSet validates that `sentences` covers exactly the chunk's idx set,
 // each idx exactly once, and returns the set of "last idx in group" values.
 // Returns ok=false if the model violated the contract — caller should ignore
 // sentence info from that chunk and fall back to per-segment blocks.
-func buildEndSet(segs []reviewport.ChunkSegment, sentences [][]int) (map[int]bool, bool) {
+func BuildEndSet(segs []reviewport.ChunkSegment, sentences [][]int) (map[int]bool, bool) {
 	if len(sentences) == 0 {
 		return nil, false
 	}

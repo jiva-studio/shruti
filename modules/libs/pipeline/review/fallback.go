@@ -7,22 +7,22 @@ import (
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
-// chunkAttempt is the outcome of one chunk's review across all retry attempts.
-// `final` carries the last ChunkResponse we observed (for debug even on failure);
-// `err` is non-nil iff every attempt failed validation or transport.
-type chunkAttempt struct {
-	final    reviewport.ChunkResponse
-	attempts int
-	err      error
+// ChunkAttempt is the outcome of one chunk's review across all retry attempts.
+// Final carries the last ChunkResponse we observed (for debug even on failure);
+// Err is non-nil iff every attempt failed validation or transport.
+type ChunkAttempt struct {
+	Final    reviewport.ChunkResponse
+	Attempts int
+	Err      error
 }
 
-// tagOutcome returns a copy of the input models with the given outcome
+// TagOutcome returns a copy of the input models with the given outcome
 // stamped on each entry that doesn't already have one. Existing
 // outcomes are preserved (a retry-idx-mismatch entry that gets
 // superseded keeps the more specific reason — the chain context is
 // already implicit from the surrounding accepted entry's role/name).
 // flags/note overlay regardless, since they describe THIS rejection.
-func tagOutcome(models []reviewport.ModelEntry, outcome string, flags []string, note string) []reviewport.ModelEntry {
+func TagOutcome(models []reviewport.ModelEntry, outcome string, flags []string, note string) []reviewport.ModelEntry {
 	if len(models) == 0 {
 		return nil
 	}
@@ -42,7 +42,9 @@ func tagOutcome(models []reviewport.ModelEntry, outcome string, flags []string, 
 	return out
 }
 
-func tryReview(ctx context.Context, r reviewport.Reviewer, req reviewport.ChunkRequest, retries int) chunkAttempt {
+// TryReview runs one chunk through the reviewer with up to `retries` retries,
+// validating the idx set and audit gate on each attempt.
+func TryReview(ctx context.Context, r reviewport.Reviewer, req reviewport.ChunkRequest, retries int) ChunkAttempt {
 	expected := map[int]struct{}{}
 	for _, s := range req.Segments {
 		expected[s.Idx] = struct{}{}
@@ -68,20 +70,20 @@ func tryReview(ctx context.Context, r reviewport.Reviewer, req reviewport.ChunkR
 		hasResp = true
 		if err := validateChunk(expected, resp.Segments); err != nil {
 			lastErr = fmt.Errorf("idx-set mismatch")
-			rejected = append(rejected, tagOutcome(resp.Models, reviewport.OutcomeRetryIdxMismatch, nil, "")...)
+			rejected = append(rejected, TagOutcome(resp.Models, reviewport.OutcomeRetryIdxMismatch, nil, "")...)
 			continue
 		}
 		resp.AuditFlags = reviewport.DetectAuditFlags(req, resp)
 		if reviewport.AnyCriticalAuditFlag(resp.AuditFlags) {
 			lastErr = fmt.Errorf("audit gate failed: %v", resp.AuditFlags)
-			rejected = append(rejected, tagOutcome(resp.Models, reviewport.OutcomeRetryAuditFailed, resp.AuditFlags, "")...)
+			rejected = append(rejected, TagOutcome(resp.Models, reviewport.OutcomeRetryAuditFailed, resp.AuditFlags, "")...)
 			last = resp
 			continue
 		}
 		// Successful call. Prepend the rejected retry entries so the
 		// final Models[] reflects the full call history in order.
 		resp.Models = append(append([]reviewport.ModelEntry{}, rejected...), resp.Models...)
-		return chunkAttempt{final: resp, attempts: attempt + 1, err: nil}
+		return ChunkAttempt{Final: resp, Attempts: attempt + 1, Err: nil}
 	}
 	if !hasResp {
 		last = reviewport.ChunkResponse{}
@@ -92,7 +94,7 @@ func tryReview(ctx context.Context, r reviewport.Reviewer, req reviewport.ChunkR
 	// raw untagged copy of the final retry, already covered by the
 	// rejected list.
 	last.Models = append([]reviewport.ModelEntry{}, rejected...)
-	return chunkAttempt{final: last, attempts: retries + 1, err: lastErr}
+	return ChunkAttempt{Final: last, Attempts: retries + 1, Err: lastErr}
 }
 
 func validateChunk(expected map[int]struct{}, got []reviewport.ChunkSegment) error {
