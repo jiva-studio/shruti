@@ -317,6 +317,30 @@ func upsertChatMessage(ctx context.Context, q querier, userID uuid.UUID, it wire
 // the library membership id (a uuid), independent of track_id (which stays
 // NULL until the track is fetched). Mirrors upsertPlaylistItem's ON CONFLICT
 // shape so a re-projection of the same doc is a full overwrite.
+// LibraryMembershipsByTrack returns the membership doc_ids whose projected
+// library_items row carries this track_id (0, 1, or more — a user may add the
+// same source repeatedly, and each add is its own membership). MarkPublished uses
+// it to map a promotion (which carries only the content hash) back to the
+// membership row(s) to flip to origin='published'.
+func LibraryMembershipsByTrack(ctx context.Context, q querier, userID uuid.UUID, trackID string) ([]string, error) {
+	rows, err := q.Query(ctx,
+		`SELECT doc_id FROM profile.library_items WHERE user_id = $1 AND track_id = $2`,
+		userID, trackID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
 	var row libraryItemRow
 	if err := decode(it, &row); err != nil {

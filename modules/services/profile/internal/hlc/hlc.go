@@ -80,6 +80,27 @@ func (c *Clock) Terminal() string {
 	return format(physicalMod-1, 0, c.nodeID)
 }
 
+// Ranked stamps a server HLC from a fixed lifecycle RANK rather than an event
+// id. A library membership advances through ordered states — queued < processing
+// < ready|failed — with a promotion flip above all of them (see Terminal).
+// Encoding the rank as the physical field makes the higher state deterministically
+// win last-writer-wins on BOTH the server projection and the client (which
+// re-resolves state from the pulled change log by hlc), while staying idempotent:
+// the same rank always yields the same stamp, so a redelivered event collides on
+// UNIQUE(user_id, collection, doc_id, hlc) and appends exactly one row. Ranks MUST
+// stay below Terminal (physicalMod-1) so a publish flip supersedes every state.
+//
+// Sound ONLY for a server-owned, pull-only collection (library_items): no client
+// ever mints a millisecond-physical stamp on the same doc that a tiny
+// rank-physical would spuriously lose to.
+func (c *Clock) Ranked(rank int) string {
+	p := int64(rank)
+	if p < 0 {
+		p = 0
+	}
+	return format(p%physicalMod, 0, c.nodeID)
+}
+
 // decodeEventID extracts (physical, counter) from an event id. "<a>-<b>" (a
 // Redis-Streams id) and a bare non-negative integer decode directly and
 // preserve order; anything else falls back to a stable 64-bit hash split across
