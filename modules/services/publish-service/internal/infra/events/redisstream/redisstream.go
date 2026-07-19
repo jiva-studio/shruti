@@ -73,7 +73,12 @@ func NewConsumer(rdb *redis.Client, stream, group, consumer string, h Handler) *
 // iteration first reclaims stale pending entries (XAUTOCLAIM) then reads new
 // ones (XREADGROUP >).
 func (c *Consumer) Run(ctx context.Context) error {
-	if err := c.rdb.XGroupCreateMkStream(ctx, c.stream, c.group, "$").Err(); err != nil &&
+	// Start at "0" (stream head), not "$": on a fresh deploy the orchestrator may
+	// have emitted track.ready events before this group existed; "$" would skip
+	// that backlog and those tracks would never be promoted. The consume handler
+	// is idempotent, so replaying the (MAXLEN-bounded) head is safe. Mirrors the
+	// profile consumer, which also creates its group at "0".
+	if err := c.rdb.XGroupCreateMkStream(ctx, c.stream, c.group, "0").Err(); err != nil &&
 		!strings.Contains(err.Error(), "BUSYGROUP") {
 		return err
 	}

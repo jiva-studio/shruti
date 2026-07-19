@@ -28,7 +28,7 @@ func readyResult(res ingest.Result) []byte {
 		"status":         "ready",
 		"track_id":       res.TrackID,
 		"lang":           res.Lang,
-		"title":          res.Title,
+		"title_raw":      res.Title,
 		"audio_key":      res.AudioKey,
 		"transcript_key": res.TranscriptKey,
 		"source_url":     res.SourceURL,
