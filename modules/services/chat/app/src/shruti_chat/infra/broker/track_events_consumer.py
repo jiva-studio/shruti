@@ -49,6 +49,14 @@ _BATCH = 16
 # re-embed. Long enough to absorb consumer restarts / redeliveries, short
 # enough that a genuinely re-uploaded (re-transcribed) track re-indexes.
 _PROCESSED_TTL_S = 7 * 24 * 3600
+# Reclaim entries stranded in the group PEL (a delivery that was never ACKed —
+# handler error — or a crashed consumer's in-flight message) once they have sat
+# idle this long. The read loop only fetches new ('>') entries, so without an
+# explicit XAUTOCLAIM a non-ACKed message is NEVER re-read — the transient-failure
+# retry the design contract promises would silently never happen. Re-processing
+# is idempotent (processed-set guard + ON CONFLICT upserts), so a short window is
+# safe even if two replicas briefly both hold the entry.
+_RECLAIM_MIN_IDLE_MS = 120_000  # 2 min
 
 
 def _decode(v: Any) -> str:
@@ -161,6 +169,7 @@ class TrackEventsConsumer:
             return
         log.info("track_events_consumer_started", stream=self._stream, group=self._group)
         while not stop_event.is_set():
+            await self._reclaim()
             try:
                 resp = await self._client.xreadgroup(
                     self._group,
@@ -179,6 +188,31 @@ class TrackEventsConsumer:
                 for msg_id, fields in entries:
                     await self._process(msg_id, fields)
         log.info("track_events_consumer_stopped", stream=self._stream)
+
+    async def _reclaim(self) -> None:
+        """Redeliver PEL entries idle > _RECLAIM_MIN_IDLE_MS back to this consumer.
+
+        Closes the gap where a handler error leaves a message un-ACKed but the
+        read loop (fetching only '>') never re-reads it — so the transient-failure
+        retry the class docstring promises actually happens. Best-effort: a
+        reclaim error is logged and the loop proceeds to a normal read."""
+        try:
+            resp = await self._client.xautoclaim(
+                self._stream,
+                self._group,
+                self._consumer,
+                _RECLAIM_MIN_IDLE_MS,
+                start_id="0-0",
+                count=_BATCH,
+            )
+        except Exception as exc:  # noqa: BLE001 — reclaim is best-effort
+            log.warning("track_events_reclaim_failed", error=str(exc))
+            return
+        # redis-py returns [next_cursor, messages] (Redis 6.2) or
+        # [next_cursor, messages, deleted_ids] (Redis 7+); only messages matter.
+        messages = resp[1] if isinstance(resp, (list, tuple)) and len(resp) > 1 else []
+        for msg_id, fields in messages:
+            await self._process(msg_id, fields)
 
     async def _process(self, msg_id: Any, raw_fields: Any) -> None:
         fields = {_decode(k): _decode(v) for k, v in (raw_fields or {}).items()}
