@@ -1,7 +1,10 @@
 // Package pending is the PRODUCER half of the corpus-review pipeline: it
-// exports user-generated (server-owned profile.library_items) tracks into a
-// SQLite `pending.db` and uploads it to S3, where the offline admin MCP
-// (shruti-mcp, the CONSUMER) fetches it to browse + approve the tracks.
+// exports the publish-service's own not-yet-published `tracks` into a SQLite
+// `pending.db` and (via the promote ticker) uploads it to S3, where the offline
+// admin MCP (shruti-mcp, the CONSUMER) fetches it to browse + approve tracks.
+//
+// It was moved here from services/profile as part of #1236 — the pending.db
+// writer belongs on the promotion side, not in the thin sync substrate.
 //
 // The SQLite schema below is a cross-service CONTRACT shared byte-for-byte with
 // the consumer — do NOT change a column name, type, or the index without a
@@ -34,27 +37,26 @@ CREATE TABLE pending (
 CREATE INDEX idx_pending_unconsumed ON pending(consumed_at, created_at);
 `
 
-// Row is one raw profile.library_items record (only the columns the export
-// needs). Mapping into a pending row happens in WriteDB so the column mapping
-// is unit-testable without Postgres.
+// Row is one raw not-yet-published track record (only the columns the export
+// needs). Mapping into a pending row happens in WriteDB so the column mapping is
+// unit-testable without Postgres.
 type Row struct {
-	OwnerID       string  // library_items.user_id
-	TrackID       string  // library_items.track_id (guaranteed non-empty by the query)
-	TitleRaw      *string // library_items.title_raw
-	AuthorRaw     *string // library_items.author_raw
-	LocationRaw   *string // library_items.location_raw
-	DateRaw       *string // library_items.date_raw
-	Lang          *string // library_items.lang
-	LangHint      *string // library_items.lang_hint
-	TranscriptKey *string // library_items.transcript_key
-	AudioKey      *string // library_items.audio_key
+	OwnerID       string  // tracks.owner_id
+	TrackID       string  // tracks.track_id (guaranteed non-empty by the query)
+	TitleRaw      *string // metadata->>'title'
+	AuthorRaw     *string // metadata->>'author'
+	LocationRaw   *string // metadata->>'location'
+	DateRaw       *string // metadata->>'date'
+	Lang          *string // tracks.lang
+	LangHint      *string // metadata->>'lang_hint'
+	TranscriptKey *string // tracks.transcript_key
+	AudioKey      *string // tracks.audio_key
 
-	// DurationSec is library_items.duration, which the migration documents as
-	// SECONDS. The consumer's column is audio_duration_ms, so WriteDB converts
-	// seconds → milliseconds (×1000). This is the ONLY unit assumption in the
-	// mapping; if library_items.duration ever changes unit, update convertMS.
+	// DurationSec is the source duration in SECONDS. The consumer's column is
+	// audio_duration_ms, so WriteDB converts seconds → milliseconds (×1000).
+	// This is the ONLY unit assumption in the mapping.
 	DurationSec *int
-	AddedAt     *time.Time // library_items.added_at
+	AddedAt     *time.Time // tracks.created_at
 }
 
 // lang resolves the NOT NULL pending.lang: first non-empty of lang, lang_hint,
@@ -96,9 +98,9 @@ func nullStr(s *string) any {
 // WriteDB creates a fresh SQLite pending.db at path (overwriting any existing
 // file) with the contract schema and one pending row per input Row.
 //
-// Mapping (library_items → pending):
+// Mapping (tracks → pending):
 //   - track_id        ← track_id (PK)
-//   - owner_id        ← user_id
+//   - owner_id        ← owner_id
 //   - title/author/location/date_raw ← passthrough
 //   - references_raw  ← ""  (not stored server-side)
 //   - lang            ← COALESCE(lang, lang_hint, 'ru')
@@ -109,9 +111,9 @@ func nullStr(s *string) any {
 //   - created_at      ← added_at as RFC3339
 //   - consumed_at     ← ""  (the consumer stamps this on approval)
 func WriteDB(path string, rows []Row) (err error) {
-	// os.Remove semantics: sql.Open won't truncate an existing file, so callers
-	// must hand us a fresh path. The producer always writes to a unique temp
-	// file, and tests write to t.TempDir(); we still create a clean DB here.
+	// sql.Open won't truncate an existing file, so callers must hand us a fresh
+	// path. The producer always writes to a unique temp file, and tests write to
+	// t.TempDir(); we still create a clean DB here.
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
 		return fmt.Errorf("open sqlite %s: %w", path, err)

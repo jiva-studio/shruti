@@ -420,3 +420,56 @@ async def index_one_track(
         duration_ms=int((time.monotonic() - t0) * 1000),
     )
     return len(chunks)
+
+
+async def _graft_promoted_track(
+    track_id: str, *, settings: Settings | None = None
+) -> int:
+    """Promote a private `user_track` into the public corpus lane in place.
+
+    When a user-uploaded track is approved and published into the corpus
+    (publish-service emits `track.published`), its already-indexed chunks must
+    stop being ACL-scoped and start being visible to everyone. Rather than
+    re-embedding, we RELABEL the existing rows from `kind='user_track'` to
+    `kind='track_transcript'` (moving them onto the public partial-HNSW lane) and
+    DROP the per-user `owned` ACL rows for the track.
+
+    Idempotent: a track that was never a user_track (or was already grafted)
+    matches nothing and the call is a cheap no-op. Returns the number of chunk
+    rows relabelled. Runs from the `track.published` consumer; the corpus
+    indexer remains the safety net that (re)indexes the public transcript.
+    """
+    s = settings or get_settings()
+    router = EmbeddingTableRouter(dim=s.embed_dim)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Relabel the embedding rows FIRST, while their chunks still carry
+            # kind='user_track' (the subquery keys off that), so the per-kind
+            # partial HNSW index picks them up as public.
+            await conn.execute(
+                f"""
+                UPDATE {router.chunk_table} SET kind = 'track_transcript'
+                 WHERE kind = 'user_track'
+                   AND chunk_id IN (
+                       SELECT id FROM chunks
+                        WHERE track_id = $1 AND kind = 'user_track'
+                   )
+                """,
+                track_id,
+            )
+            relabelled = await conn.execute(
+                "UPDATE chunks SET kind = 'track_transcript' "
+                "WHERE track_id = $1 AND kind = 'user_track'",
+                track_id,
+            )
+            # The corpus lane is public — drop the now-redundant ACL rows so the
+            # track is no longer treated as privately owned.
+            await conn.execute("DELETE FROM owned WHERE track_id = $1", track_id)
+    # asyncpg returns a status string like "UPDATE 12"; parse the count.
+    try:
+        n = int(str(relabelled).split()[-1])
+    except (ValueError, IndexError):
+        n = 0
+    log.info("user_track_grafted_to_corpus", track_id=track_id, chunks_relabelled=n)
+    return n

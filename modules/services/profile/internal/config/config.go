@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
 )
 
 type Config struct {
@@ -32,38 +31,21 @@ type Config struct {
 	// network-only routing). Empty = network isolation is the only guard,
 	// matching the design doc's "no JWT" purge contract.
 	InternalAPIToken string
-	// Pending configures the corpus-review artifact producer (pending.db → S3).
-	Pending PendingConfig
-}
 
-// PendingConfig configures the background producer that exports user-generated
-// (server-owned library_items) tracks into a SQLite `pending.db` on S3, which
-// the offline admin MCP fetches to browse + approve them. The producer is
-// DISABLED (a clean no-op) when Bucket is empty, so local/dev boots without S3.
-type PendingConfig struct {
-	// Bucket is the S3 bucket the artifact lands in. Empty disables the
-	// producer entirely.
-	Bucket string
-	// Key is the object key the pending.db is uploaded to.
-	Key string
-	// Endpoint optionally overrides the S3 endpoint for S3-compatible stores
-	// (Yandex Object Storage, MinIO). Empty = default AWS resolution.
-	Endpoint string
-	// Region is the S3 region (defaults to us-east-1).
-	Region string
-	// AccessKeyID / SecretAccessKey are optional static credentials. When
-	// empty the SDK's default chain (env, instance profile) is used.
-	AccessKeyID     string
-	SecretAccessKey string
-	// ForcePathStyle selects path-style addressing, required by most
-	// S3-compatible endpoints.
-	ForcePathStyle bool
-	// Interval is how often the artifact is regenerated and re-uploaded.
-	Interval time.Duration
+	// --- Streams broker (dedicated redis-streams instance, see
+	// services/README-streams.md). Empty StreamsRedisURL disables the
+	// server-authored ingest consumers so the service still boots for pure sync
+	// (HTTP-only) ops. ---
+	StreamsRedisURL string // STREAMS_REDIS_URL, e.g. redis://redis-streams:6379/0
+	// TrackEventsStream is CONSUMED: the orchestrator's lifecycle stream, whose
+	// `track.ready` events project into library_items.
+	TrackEventsStream string // TRACK_EVENTS_STREAM (default "track.events")
+	// TrackPublishedStream is CONSUMED: the publish-service's promotion stream,
+	// whose events flip a library item's origin to 'published'.
+	TrackPublishedStream string // TRACK_PUBLISHED_STREAM (default "track.published")
+	// ConsumerName is this container's id within the consumer groups.
+	ConsumerName string // CONSUMER_NAME (default hostname)
 }
-
-// Enabled reports whether the producer should run.
-func (p PendingConfig) Enabled() bool { return p.Bucket != "" }
 
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -74,16 +56,11 @@ func Load() (*Config, error) {
 		ServiceVersion:   env("SERVICE_VERSION", "dev"),
 		PullMaxLimit:     envInt("PULL_MAX_LIMIT", 500),
 		InternalAPIToken: os.Getenv("INTERNAL_API_TOKEN"),
-		Pending: PendingConfig{
-			Bucket:          os.Getenv("PENDING_S3_BUCKET"),
-			Key:             env("PENDING_S3_KEY", "public/db/pending.db"),
-			Endpoint:        os.Getenv("PENDING_S3_ENDPOINT"),
-			Region:          env("PENDING_S3_REGION", "us-east-1"),
-			AccessKeyID:     os.Getenv("PENDING_S3_ACCESS_KEY_ID"),
-			SecretAccessKey: os.Getenv("PENDING_S3_SECRET_ACCESS_KEY"),
-			ForcePathStyle:  envBool("PENDING_S3_FORCE_PATH_STYLE", false),
-			Interval:        envDuration("PENDING_INTERVAL", 5*time.Minute),
-		},
+
+		StreamsRedisURL:      env("STREAMS_REDIS_URL", ""),
+		TrackEventsStream:    env("TRACK_EVENTS_STREAM", "track.events"),
+		TrackPublishedStream: env("TRACK_PUBLISHED_STREAM", "track.published"),
+		ConsumerName:         env("CONSUMER_NAME", hostname()),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
@@ -110,20 +87,11 @@ func envInt(k string, def int) int {
 	return def
 }
 
-func envBool(k string, def bool) bool {
-	if v := os.Getenv(k); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
+// hostname returns the container hostname (the natural per-consumer id within a
+// Redis consumer group); falls back to a constant if unavailable.
+func hostname() string {
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
 	}
-	return def
-}
-
-func envDuration(k string, def time.Duration) time.Duration {
-	if v := os.Getenv(k); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return d
-		}
-	}
-	return def
+	return "profile"
 }

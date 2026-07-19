@@ -273,6 +273,20 @@ async def lifespan(app: FastAPI):
             name="track_events_consumer",
         )
 
+    # Corpus-promotion graft (#1236): consume `track.published` to relabel a
+    # promoted user track's chunks onto the public corpus lane and drop its
+    # `owned` ACL. No-op when STREAMS_REDIS_URL is unset (build returns None).
+    from shruti_chat.infra.broker.track_published_consumer import (
+        build_track_published_consumer,
+    )
+    track_published_consumer = build_track_published_consumer(s)
+    track_published_task = None
+    if track_published_consumer is not None:
+        track_published_task = asyncio.create_task(
+            track_published_consumer.run(stop_event),
+            name="track_published_consumer",
+        )
+
     log.info(
         "service_ready",
         ms_to_ready=int((time.monotonic() - started) * 1000),
@@ -298,6 +312,14 @@ async def lifespan(app: FastAPI):
             except (asyncio.CancelledError, Exception):
                 pass
         await _close_quietly(track_events_consumer, "close", "aclose")
+        # Same drain-then-cancel-then-close discipline for the promotion graft.
+        if track_published_task is not None:
+            track_published_task.cancel()
+            try:
+                await track_published_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await _close_quietly(track_published_consumer, "close", "aclose")
         # Cancel any in-flight detached chat-turn producers so the redeploy
         # terminates cleanly instead of abandoning tasks mid-run.
         await turn_runner.shutdown()
