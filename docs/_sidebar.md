@@ -25,6 +25,7 @@
   * [Background playlist (Pro)](repos/lectorium/architecture/background-playlist.md)
   * [Observability (Langfuse)](repos/lectorium/architecture/observability.md)
   * [Profile sync](repos/lectorium/architecture/profile-sync.md)
+  * [Personal library](repos/lectorium/architecture/personal-library.md)
   * **Chat**
     * [Pipeline](repos/lectorium/architecture/chat-pipeline.md)
     * [Intents & routing](repos/lectorium/architecture/chat-intents.md)
@@ -73,6 +74,8 @@
   * [Testing & Qase](repos/lectorium/runbooks/testing.md)
   * [lectorium-mcp](repos/lectorium/runbooks/lectorium-mcp.md)
   * [track-selector](repos/lectorium/runbooks/track-selector.md)
+  * [Personal library compliance](repos/lectorium/runbooks/personal-library-compliance.md)
+  * [Personal library deploy](repos/lectorium/runbooks/personal-library-deploy.md)
   * [RevenueCat webhook rotation](runbooks/rc-webhook-secret-rotation.md)
   * [App Store certificates](repos/lectorium/runbooks/certificates.md)
   * [Storage (legacy)](repos/lectorium/runbooks/storage.md)
