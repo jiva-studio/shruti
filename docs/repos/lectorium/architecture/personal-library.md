@@ -1,8 +1,8 @@
 # Personal library (user-added lectures)
 
-The **personal library** lets a user add lectures that are *not* in the shared corpus — by pasting a link, or by asking chat to find one on the internet — and have them downloaded, transcribed, reviewed, and dropped into a private, per-user collection that appears in a new **"My library"** section of the app. Two small, single-responsibility cloud services carry the backend: a new **`orchestrator`** runs the *ingest* pipeline (fetch → transcribe → review → store → emit `track.ready`), reusing the transcription/review logic already written in `lectorium-mcp`; a new **`publish-service`** owns the *publish* side (consume `track.ready`, reconcile the corpus `current.db`, build the admin review artifact `pending.db`, emit `track.published`). They never call each other directly — all cross-service traffic is over a dedicated **`redis-streams`** broker. Per-user metadata lives in the existing **`profile`** service as a new `library_items` collection and reaches the device over the existing profile-sync; audio and transcripts live at a **content-addressed public CDN path** (`public/tracks/<track_id>/…`, where `track_id` is the 256-bit content hash — unlisted by virtue of being unguessable), served exactly like corpus audio with no signing. A later phase lets an admin **promote** a user-added track into the shared corpus — a **zero-copy** operation by design (the bytes are already public; promotion only adds a catalog row and a shared-index entry), because every user track is processed *as a corpus candidate* from the start. Ingest is a **PRO-only** capability.
+The **personal library** lets a user add lectures that are *not* in the shared corpus — by pasting a link, or by asking chat to find one on the internet — and have them downloaded, transcribed, reviewed, and dropped into a private, per-user collection that appears in a new **"My library"** section of the app. Small, single-responsibility cloud services carry the backend: a new stateless **`ingest`** worker does the heavy lifting (fetch → transcribe → review → store), then reports back to a new thin **`orchestrator`** coordinator that owns the `jobs` table, the retry policy, and the public `track.events` lifecycle (emitting `track.queued`/`processing`/`ready`/`failed`/`linked`); a new **`publish-service`** owns the *publish* side (consume `track.ready`, reconcile the corpus `current.db`, build the admin review artifact `pending.db`, emit `track.published`); the existing **`profile`** service carries per-user membership. The ingest/review logic is reused from `lectorium-mcp`. The services never call each other directly — all cross-service traffic is over a dedicated **`redis-streams`** broker. Per-user metadata lives in the existing **`profile`** service as a new `library_items` collection and reaches the device over the existing profile-sync; audio and transcripts live at a **content-addressed public CDN path** (`public/tracks/<track_id>/…`, where `track_id` is the 256-bit content hash — unlisted by virtue of being unguessable), served exactly like corpus audio with no signing. A later phase lets an admin **promote** a user-added track into the shared corpus — a **zero-copy** operation by design (the bytes are already public; promotion only adds a catalog row and a shared-index entry), because every user track is processed *as a corpus candidate* from the start. Ingest is a **PRO-only** capability.
 
-> **Status: implemented on feature branches, pending merge/deploy.** The `orchestrator` and `publish-service` services, the `library_items` collection, the shared pipeline lib, the chat search/RAG path, and the mobile UI all exist on the `feat/personal-library-*` branches (see the [deploy runbook](../runbooks/personal-library-deploy.md)); they are not yet on `main` or in production. This page is the design of record and describes the intended end state. It builds on [Profile sync](profile-sync.md), [Chat intents & routing](chat-intents.md), and the `lectorium-mcp` pipeline.
+> **Status: implemented on feature branches, pending merge/deploy.** The `ingest`, `orchestrator`, and `publish-service` services, the `library_items` collection, the shared pipeline lib, the chat search/RAG path, and the mobile UI all exist on the `feat/personal-library-*` branches (see the [deploy runbook](../runbooks/personal-library-deploy.md)); they are not yet on `main` or in production. This page is the design of record and describes the intended end state. It builds on [Profile sync](profile-sync.md), [Chat intents & routing](chat-intents.md), and the `lectorium-mcp` pipeline.
 
 ## Scope and phasing
 
@@ -20,12 +20,16 @@ graph LR
     U[User in chat: link or find-request] --> CH[chat-service]
     CH -->|search: candidates| CH
     CH -->|publish ingest.request| EV[(Redis Streams)]
-    EV -->|consume: run job| ORC[orchestrator NEW]
-    ORC -->|yt-dlp via residential proxy| NET[YouTube / web mp3]
-    ORC -->|audio| DG[Deepgram transcript]
-    ORC -->|review usecase| SHARED[shared pipeline lib]
-    ORC -->|audio + transcript| S3[(S3/CDN public/tracks/track_id)]
-    ORC -->|track.ready on track.events| EV[(Redis Streams)]
+    EV -->|consume request| ORC[orchestrator NEW thin coordinator]
+    ORC -->|create job + dispatch ingest.work| EV
+    EV -->|consume ingest.work| ING[ingest NEW stateless worker]
+    ING -->|yt-dlp via residential proxy| NET[YouTube / web mp3]
+    ING -->|audio| DG[Deepgram transcript]
+    ING -->|review usecase| SHARED[shared pipeline lib]
+    ING -->|audio + transcript| S3[(S3/CDN public/tracks/track_id)]
+    ING -->|ingest.result| EV
+    EV -->|consume ingest.result| ORC
+    ORC -->|track.events lifecycle| EV
     EV -->|consume: project status| PR[profile + library_items]
     EV -->|consume: index transcript| CIDX[chat private RAG index]
     EV -->|consume track.ready| PUB[publish-service NEW]
@@ -43,14 +47,15 @@ graph LR
     MCP -.->|read pending.db, approve| PUB
 ```
 
-Responsibilities are split so each service does one thing: **search is conversational** (chat), **ingest is heavy and proxied** (orchestrator), and **publish is a background reconciler** (publish-service):
+Responsibilities are split so each service does one thing: **search is conversational** (chat), **ingest is heavy and proxied** (the stateless `ingest` worker), **coordination is thin** (orchestrator owns the job/lifecycle/retry), and **publish is a background reconciler** (publish-service):
 
 | Concern | Owner | Why |
 |---|---|---|
 | Detect "add to library" intent | `chat-service` | It already routes intents |
 | Search the internet for candidates | `chat-service` | Interactive: present candidates, user picks; metadata-only, no proxy |
-| Download bytes | `orchestrator` | Needs residential egress; heavy/long-running |
-| Transcribe / review / normalize | `orchestrator` (reusing the shared lib) | Same logic as corpus ingest |
+| Coordinate jobs, own lifecycle events + retry policy | `orchestrator` | Thin coordinator: owns the `jobs` table + outbox, maps `ingest.result` onto `track.events`, re-dispatches on retriable failure |
+| Download bytes | `ingest` | Needs residential egress; heavy/long-running; stateless worker |
+| Transcribe / review / normalize | `ingest` (reusing the shared lib) | Same logic as corpus ingest |
 | Store per-user metadata | `profile` | Already the per-user data plane (sync, auth, anon, GDPR) |
 | Store audio/transcript blobs | S3 (content-addressed) | Enables dedup and cheap public promotion |
 | Deliver to device | `profile` sync + public CDN | Reuses the existing sync path; audio via the ordinary CDN path |
@@ -65,6 +70,7 @@ sequenceDiagram
     participant Chat as chat-service
     participant EV as Redis Streams
     participant Orc as orchestrator
+    participant Ing as ingest worker
     participant Prof as profile
     participant S3
 
@@ -76,23 +82,33 @@ sequenceDiagram
     end
     Chat->>EV: publish ingest.request {user_id, url, jwt}
     Chat-->>App: "Added, processing…"
-    EV->>Orc: consume request
-    Orc->>Orc: create Job(queued) in own DB (source of truth)
-    Orc->>EV: emit track.queued
-    EV->>Prof: consume -> library_item(status=queued)
-    Orc->>Orc: fetch (yt-dlp via proxy) -> content hash = track_id
-    Orc->>Orc: transcribe (Deepgram) -> review (shared lib)
-    Orc->>S3: put public/tracks/track_id/{audio,transcript}
-    Orc->>EV: emit track.ready {track_id, keys, metadata, transcript_ref}
-    EV->>Prof: consume -> library_item(status=ready, ...)
-    EV->>Chat: consume -> index transcript into private RAG
+    EV->>Orc: consume ingest.request
+    Note over Orc: one tx: create Job(queued) + track.queued event + ingest.work command
+    Orc->>EV: emit track.queued (on track.events)
+    Orc->>EV: dispatch ingest.work {job_id, url, title, owner_id, attempt}
+    EV->>Prof: consume track.queued -> library_item(status=queued)
+    EV->>Ing: consume ingest.work
+    Ing->>EV: emit ingest.result {job_id, phase=processing}
+    Ing->>Ing: fetch (yt-dlp via proxy) -> content hash = track_id
+    Ing->>Ing: transcribe (Deepgram) -> review (shared lib)
+    Ing->>S3: put public/tracks/track_id/{audio,transcript} + HEAD-verify
+    Ing->>EV: emit ingest.result {job_id, phase=ready, track_id, keys, ...} then ack
+    EV->>Orc: consume ingest.result
+    Orc->>EV: translate phase -> emit track.ready on track.events (id from job_id)
+    Note over Orc,Ing: on retriable failure below cap, Orc re-dispatches a fresh ingest.work
+    EV->>Prof: consume track.ready -> library_item(status=ready, ...)
+    EV->>Chat: consume track.ready -> index transcript into private RAG
     App->>Prof: sync pull -> library_item ready in user.db
     App->>S3: stream audio via public CDN path (unguessable id)
 ```
 
-## The orchestrator service
+## The orchestrator and ingest services
 
-A generic **job orchestrator** where library-ingest is the first scenario — designed so future orchestrated tasks slot in without touching the core. Hexagonal / DDD, following the `lectorium-mcp` layout and the `profile` migration pattern.
+The ingest backend is split into two single-responsibility services: a thin **`orchestrator`** coordinator that owns state and lifecycle, and a stateless **`ingest`** worker that does the heavy fetch/transcribe/review/store. They talk only over the broker (`ingest.work` out, `ingest.result` back); neither calls the other over HTTP.
+
+### The orchestrator service (thin coordinator)
+
+A generic **job orchestrator** where library-ingest is the first scenario — designed so future orchestrated tasks slot in without touching the core. Hexagonal / DDD, following the `lectorium-mcp` layout and the `profile` migration pattern. The orchestrator **never fetches, transcribes, or stores** — it owns the `jobs` table (source of truth) + a transactional outbox, re-verifies the PRO tier, dispatches work to the `ingest` worker, and maps the worker's `ingest.result` phases onto job-state transitions and the public `track.events` lifecycle. It also **owns the retry policy**: a `retriable` failure below the attempt cap re-dispatches a fresh `ingest.work`; otherwise the job dead-letters with `track.failed`.
 
 ```
 modules/services/orchestrator/
@@ -102,40 +118,57 @@ modules/services/orchestrator/
       job/                        # GENERIC core, kind-agnostic
         job.go                    # Job{id, kind, owner_id, state, spec, progress, result, attempts, ts}
         state.go                  # queued -> running -> done | failed | cancelled
-      ingest/                     # bounded context: library-ingest
+      ingest/                     # bounded context: library-ingest (job spec/result shape)
         source.go                 # Source{url, kind}
         draft.go                  # TrackDraft: raw + resolved metadata
-        content.go                # content hash -> stable track_id
     application/                  # use cases, one folder per scenario
-      runingest/                  # consume request -> create Job -> fetch -> transcribe -> review -> store -> emit events
+      handlerequest/              # consume ingest.request -> tier check -> one tx: Job + track.queued + ingest.work
+      handleresult/               # consume ingest.result -> job transition + track.events; retry on retriable
       getstatus/  canceljob/
     ports/                        # interfaces = the extension surface
       driving.go                  # IngestService (Status / Cancel)
-      driven.go                   # Transcriber, Reviewer, BlobStore, EventBus,
-                                  #   JobRepository, Fetcher, Clock, IDGen
+      driven.go                   # EventBus, JobRepository, TierVerifier, Clock, IDGen
     infra/                        # adapters implement ports
+      events/redisstream/         # consume ingest.request + ingest.result; dispatch ingest.work; emit track.* lifecycle events
+      jobrepo/postgres/           # own DB + embedded self-run migrations
+```
+
+**Extensibility rule.** The `job` aggregate, `EventBus`, and `JobRepository` are kind-agnostic. Adding a new orchestrated task later = a new bounded context under `domain/`, a new use case under `application/`, and a handler registered for a new `JobKind`. Existing use cases and the core are untouched.
+
+**Note — search is not in the orchestrator.** The `ingest.request` it consumes always carries a **concrete URL**. Query→URL resolution happens in chat first, so the orchestrator carries no NLU or candidate ranking, and there is no search port here.
+
+### The ingest service (stateless worker)
+
+The **`ingest`** worker is a pure, content-addressed, **stateless** function with **no Postgres**. It consumes `ingest.work`, does the heavy lifting — yt-dlp fetch → content-hash → transcribe (Deepgram) → review (shared `libs/pipeline`) → store to S3 (`public/tracks/<hash>/{audio,transcript}`) → HEAD-verify — emits exactly one terminal `ingest.result` (plus a `processing` heartbeat), then **always acks**. It does **not** retry and does **not** track attempts (both live in the orchestrator); redelivery is safe because the content-hash makes every step idempotent. Its image ships `yt-dlp` + `ffmpeg` (not FROM-scratch). Every external dependency (Deepgram, yt-dlp, S3, Redis) sits behind a port, so swapping any of them is an adapter change.
+
+```
+modules/services/ingest/
+  cmd/ingest/main.go              # wire + subcommand: serve (no migrate — stateless)
+  internal/
+    application/
+      runingest/                  # consume ingest.work -> fetch -> hash -> transcribe -> review -> store -> emit ingest.result
+    ports/
+      driven.go                   # Transcriber, Reviewer, BlobStore, Fetcher, EventBus, Clock
+    infra/
       fetch/ytdlp/                # yt-dlp + residential proxy
       transcribe/deepgram/
       review/                     # wraps the shared pipeline lib
       blob/s3/
-      events/redisstream/         # consume ingest.request; emit track.* lifecycle events
-      jobrepo/postgres/           # own DB + embedded self-run migrations
+      events/redisstream/         # consume ingest.work; emit ingest.result
 ```
-
-**Extensibility rule.** The `job` aggregate, `EventBus`, and `JobRepository` are kind-agnostic. Adding a new orchestrated task later = a new bounded context under `domain/`, a new use case under `application/`, and a handler registered for a new `JobKind`. Existing use cases and the core are untouched. Because every external dependency (Deepgram, yt-dlp, S3, Redis) sits behind a port, swapping any of them is an adapter change.
-
-**Note — search is not in the orchestrator.** The `ingest.request` it consumes always carries a **concrete URL**. Query→URL resolution happens in chat first, so the orchestrator carries no NLU or candidate ranking, and there is no search port here.
 
 ### Messaging — no point-to-point internal HTTP
 
-The orchestrator talks to the rest of the system **only through the broker**, never through internal HTTP endpoints on other services.
+Both services talk to the rest of the system **only through the broker**, never through internal HTTP endpoints on other services.
 
 > **Dedicated broker instance.** The shared prod Redis is a 1 GB LRU cache (`volatile-lru`) — stream entries have no TTL, so they would never evict and eventually OOM the cache that `chat` depends on. Streams therefore run on a **separate `redis-streams` broker** — a dedicated Redis instance configured `appendonly`, no LRU eviction, with `MAXLEN` trimming + reliable `XACK`. (Redis Streams was chosen over RabbitMQ/NATS: the go-redis client is already vendored, and the outbox→relay `XADD`/`XREADGROUP`/`XACK` pattern is thin.)
 
 Streams:
 
-- **`ingest.request`** — chat publishes `{user_id, url, jwt}`; the orchestrator consumes and runs the job. Durable and retryable; chat gets no synchronous reply and does not need one (it shows "processing" optimistically, and the item appears via sync).
-- **`track.events`** — the orchestrator emits track lifecycle events (`track.queued` / `track.processing` / `track.ready` / `track.failed`, plus `track.linked` when a second user dedup-adds an existing track) with `{track_id, owner_id, keys, metadata, transcript_ref}`. This is a **fan-out**: independent consumer groups subscribe —
+- **`ingest.request`** — chat publishes `{user_id, url, jwt}`; the **orchestrator** consumes it, re-verifies tier, and creates the job. Durable and retryable; chat gets no synchronous reply and does not need one (it shows "processing" optimistically, and the item appears via sync).
+- **`ingest.work`** — the **orchestrator** dispatches `{job_id, url, title, owner_id, attempt}` to the **`ingest`** worker (committed in the same tx as the job row + the `track.queued` event). A re-dispatch on a retriable failure carries an incremented `attempt`.
+- **`ingest.result`** — the **`ingest`** worker reports back to the **orchestrator**: `{job_id, phase, track_id?, lang?, title?, audio_key?, transcript_key?, source_url?, error?, retriable?}` with `phase ∈ {processing, ready, linked, failed}`. The worker emits a `processing` heartbeat and exactly one terminal result, then always acks; it never emits `track.events`.
+- **`track.events`** — the **orchestrator** (not the worker) emits track lifecycle events (`track.queued` / `track.processing` / `track.ready` / `track.failed`, plus `track.linked` when a second user dedup-adds an existing track) with `{track_id, owner_id, keys, metadata, transcript_ref}`, by translating the worker's `ingest.result` phase onto a job-state transition. Event ids are derived from the **`job_id`** — stable across both streams and across redelivery, so downstream consumers stay idempotent. This is a **fan-out**: independent consumer groups subscribe —
   - **`profile`** projects the status/metadata into `library_items` (a server-authored change — **net-new substrate**: today `profile` has only the client `Push` path and no server-side HLC, so this needs a new `ApplyServerChange` method + an HLC generator + the Redis consumer + a transactional outbox, not just the ~6-step collection projection),
   - **`chat`** indexes the transcript into its private RAG index on `track.ready`, and records `(owner_id, track_id)` in its local `owned` projection on `track.ready` / `track.linked`,
   - **`publish-service`** consumes `track.ready` into its own `publish.tracks` table; a ticker then reconciles the corpus `current.db` and rebuilds `pending.db` for admin review,
@@ -147,7 +180,7 @@ Events are published from the producer's own DB via a **transactional outbox** (
 
 ### Shared pipeline library
 
-The reusable ingest logic (`normalize`, `transcript/review`, `metadata`) currently lives in `lectorium-mcp/internal/application/*`. Go's `internal/` rules block cross-module import, so it is **extracted into a public package** (e.g. `pkg/pipeline/*` or a dedicated module) imported by *both* `lectorium-mcp` and `orchestrator`. Three dependencies are abstracted behind ports because they are hardcoded to single-corpus / local-FS today:
+The reusable ingest logic (`normalize`, `transcript/review`, `metadata`) currently lives in `lectorium-mcp/internal/application/*`. Go's `internal/` rules block cross-module import, so it is **extracted into a public package** (e.g. `libs/pipeline/*` or a dedicated module) imported by *both* `lectorium-mcp` and the `ingest` worker (the orchestrator does not import it — it never runs the pipeline). Three dependencies are abstracted behind ports because they are hardcoded to single-corpus / local-FS today:
 
 - **Transcriber** — a `Deepgram` adapter is added alongside the existing transcriber-service adapter.
 - **Storage** — a "write straight to the per-user content-addressed S3 prefix" adapter.
@@ -203,9 +236,11 @@ Added to the `profile` service as a sixth synced collection (see [Profile sync](
 
 **Metadata is captured in three states** per dimension (author / location / date / references): `*_raw` (always, lossless), the resolved id/value (only when confidently matched), and a status/confidence. While private, unresolved is fine — the app shows `author_raw`. Normalization is only *required* at the public-promotion gate.
 
-### `orchestrator` own Postgres
+### `orchestrator` own Postgres (`ingest` has none)
 
 The orchestrator owns a separate Postgres with a `jobs` table (`Job` aggregate) as the **source of truth**. Emitted `track.events` are a transactional-outbox projection of the job, so a crash between steps never leaves an orphaned `queued` item — it is recoverable from the job row and re-emitted. Migrations are **embedded and self-run** on startup, copying the `profile` pattern exactly: an `orchestrator migrate` subcommand (no separate binary), a `pg_advisory_lock` so parallel containers do not race, a `schema_migrations` ledger, and a `/readyz` gate until applied. See `modules/services/profile/internal/store/store.go` for the reference implementation.
+
+The **`ingest`** worker has **no database at all** — it is stateless and content-addressed, so all durable state (jobs, attempts, lifecycle) lives in the orchestrator's Postgres, and `publish-service` keeps its own separate Postgres for the publish projection.
 
 ### Migrations, by service
 
@@ -215,6 +250,7 @@ The orchestrator owns a separate Postgres with a `jobs` table (`Job` aggregate) 
 |---|---|---|
 | `profile` | `library_items` (server-owned, pull-only for clients): table + whitelist + projection + purge + the server-authored write path (`ApplyServerChange` / `MarkPublished`) | self-run (own DB, embedded) |
 | `orchestrator` | `jobs` + outbox tables | self-run (own DB, embedded) |
+| `ingest` | none — **stateless worker, no database** | n/a (no `migrate` subcommand) |
 | `publish-service` | `tracks` (publish projection) + outbox tables | self-run (own DB, embedded) |
 | `chat` | new `kind='user_track'` partial HNSW index on the existing embedding tables + an `owned(user_id, track_id)` projection table | **central migrator** — new `NNNN_*.up/.down.sql` in `infra/app/db/migrations/` |
 | mobile `user.db` | `library_items` table + wire type (pull-only — no outbox/journal) | on-device migration, ships with the app version |
@@ -239,7 +275,7 @@ On day one the search layer is **$0** (providers 1 + 3 are free). The resolver t
 YouTube covers most cases, but lectures also live on archives like iskcondesiretree and on the open web as bare mp3s. Two mechanisms must be kept distinct:
 
 - **Discovery** — YouTube API only finds YouTube. Everything else is reached through the **web-SERP** providers (SerpApi / DataForSEO), which return **pages**, not media URLs.
-- **Extraction** — turning a page into a downloadable mp3 + metadata. This is a step YouTube hides (yt-dlp resolves it by id), but a generic page needs it. It lives in the orchestrator's `Fetcher` port, generalized into a **registry of extractors keyed by domain**: **yt-dlp is the default multi-site extractor** (1000+ sites, plus a generic `<audio>` / `*.mp3` handler), and **site-specific adapters** (iskcondesiretree, speaker archives) are added behind the same port as they prove worth it.
+- **Extraction** — turning a page into a downloadable mp3 + metadata. This is a step YouTube hides (yt-dlp resolves it by id), but a generic page needs it. It lives in the `ingest` worker's `Fetcher` port, generalized into a **registry of extractors keyed by domain**: **yt-dlp is the default multi-site extractor** (1000+ sites, plus a generic `<audio>` / `*.mp3` handler), and **site-specific adapters** (iskcondesiretree, speaker archives) are added behind the same port as they prove worth it.
 
 **Metadata from the filename.** Archives like iskcondesiretree encode rich metadata in the file name / path — speaker, date, place, scripture reference (e.g. `SB_01.02.06_Class_Prabhupada_Los-Angeles_1972.mp3`). This is exactly what `lectorium-mcp`'s `track.metadata.extract` already does (LLM filename parse + ffprobe + dictionary resolve), so the shared lib **reuses it**: for archive sources the `*_raw` metadata comes mostly from the filename, then feeds the same resolve step. "What to download" is not ambiguous — the user picked a specific candidate = a specific media URL; if a page holds several mp3s, discovery returns them as **separate candidates** and the user chooses.
 
@@ -317,7 +353,8 @@ Single-track Q&A and whole-library search are the **same query with a different 
 | Service | Role in RAG |
 |---|---|
 | `chat` | owns the RAG index (corpus + private `kind='user_track'` rows in the same `chunks` table); runs the union retrieval and the per-track indexer; on `track.published`, grafts the private track into the corpus namespace |
-| `orchestrator` | produces the transcript, then emits `track.ready`; `chat` consumes and indexes. No index DB access, no HTTP call |
+| `ingest` | produces the transcript and stores it to S3, then reports `ingest.result` to the orchestrator. No index DB access |
+| `orchestrator` | translates `ingest.result` into `track.ready` on `track.events`; `chat` consumes and indexes. No index DB access, no HTTP call |
 | `publish-service` | consumes `track.ready`; on admin approval, reconciles the corpus and emits `track.published`, which triggers the chat graft. No index DB access |
 | `profile` | source of truth for ownership (`user_id → track_id`); `chat` reads it to build the ACL filter |
 
@@ -352,8 +389,8 @@ graph TD
 - **Anon → signed-in upgrade.** If auth re-keys `user_id` on upgrade, `library_items` must migrate alongside `playlist_items` / `notes`. Confirm how the existing per-user data handles this and include the new collection.
 - **GDPR + dedup.** `profile` purge covers the `library_items` row, but content-addressed blobs are shared across users — S3 deletion needs **refcounting / GC**, not eager delete on one user's removal.
 - **Denoise (optional).** YouTube audio is often noisy; the corpus denoise stage can be reused as an optional step.
-- **CDN propagation lag.** The orchestrator writes to Bunny Edge Storage; the client reads via the CDN pull zone. A `track.ready` can beat CDN availability → the audio 404s briefly. Emit `ready` only **after a HEAD-verify** of the object (or have the client tolerate a short retry).
-- **First always-on writer to the corpus bucket.** Today corpus audio reaches `public/tracks/…` via an offline `aws s3 sync` from the curator box; the orchestrator would be the **first prod service** writing there. Scope its S3 credentials to hash-derived paths to bound blast radius on the real catalog.
+- **CDN propagation lag.** The `ingest` worker writes to Bunny Edge Storage; the client reads via the CDN pull zone. A `track.ready` can beat CDN availability → the audio 404s briefly. The worker therefore **HEAD-verifies** the object before reporting `ingest.result` `phase=ready`, so the orchestrator only emits `track.ready` after the object is confirmed present (or have the client tolerate a short retry).
+- **First always-on writer to the corpus bucket.** Today corpus audio reaches `public/tracks/…` via an offline `aws s3 sync` from the curator box; the `ingest` worker would be the **first prod service** writing there. Scope its S3 credentials to hash-derived paths to bound blast radius on the real catalog.
 - **`storage-sync` mirrors it for free.** Writing to Bunny under `public/tracks/…` is automatically mirrored to the RU (Yandex) region by the existing hourly `storage-sync` — no extra multi-region work.
 
 ## Compliance (non-technical track)
@@ -375,7 +412,7 @@ Phase 2 depends on a compliance workstream, not more architecture: a **DMCA/take
 
 Ground-truthed against the tree; these refine the plan without changing its shape:
 
-- **Shared pipeline lib is bigger than "3 ports."** The mcp usecases are welded to `lakeport.Registry` + `transcriptport.Store` and (for metadata) the whole catalog surface — not just Transcriber/Storage/Fetch. Extract the **pure functions** (review chunking/boundaries/aggregate/fallback, `domain/transcript`) into a **new shared Go module** (no `go.work` exists today — 15 independent `go.mod`s), and have the orchestrator write its **own thin `Run`** against its `Job` aggregate instead of implementing `lakeport.Registry`. For private ingest, **skip** the catalog auto-create/resolve in `extractmeta` (normalization is a promotion-gate concern).
+- **Shared pipeline lib is bigger than "3 ports."** The mcp usecases are welded to `lakeport.Registry` + `transcriptport.Store` and (for metadata) the whole catalog surface — not just Transcriber/Storage/Fetch. Extract the **pure functions** (review chunking/boundaries/aggregate/fallback, `domain/transcript`) into a **new shared Go module** (no `go.work` exists today — 15 independent `go.mod`s), and have the `ingest` worker write its **own thin `Run`** against the `ingest.work` spec instead of implementing `lakeport.Registry`. For private ingest, **skip** the catalog auto-create/resolve in `extractmeta` (normalization is a promotion-gate concern).
 - **Client playback needs a `library_item → synthetic Track` adapter.** The storage-URL resolver / downloader / transcript loader are path-agnostic and reused unchanged, but they consume a `Track` from the corpus `library.db`. A `library_item` isn't there, so build a synthetic `Track` whose variant paths point at `public/tracks/<track_id>/…`; then playback/download/transcript are genuinely zero-new-code.
 - **Poll-while-pending is new client behavior.** The app-wide sync loop exists but runs a flat 3-minute cadence — too slow for a ~10-min ingest. Add a dynamic short-backoff interval **while any `library_item` is pending**, in the existing `useSyncEngine`, plus a `requestSync()` right after the "Add" tap so the first `queued` row lands fast.
 - **"Add to library" needs a new client→server call.** Every existing chat action is purely client-side; there is no client→server action dispatch today. The candidate-card action must reach `chat` to publish `ingest.request` (PRO-gated) — new transport.
