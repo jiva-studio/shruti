@@ -1,10 +1,10 @@
 // Package postgres implements the orchestrator's persistence ports against its
-// own Postgres: the JobRepository (source of truth), the transactional-outbox
-// EventBus, and the content-hash ContentClaimer used for in-flight dedup.
+// own Postgres: the JobRepository (source of truth) and the transactional-outbox
+// EventBus.
 //
-// All three share one Tx type so a job write and its lifecycle event land in
-// the same transaction (the outbox invariant): a relay later drains the outbox
-// to the broker, so an event is published iff the job write committed.
+// Both share one Tx type so a job write and its lifecycle event land in the same
+// transaction (the outbox invariant): a relay later drains the outbox to the
+// broker, so an event is published iff the job write committed.
 package postgres
 
 import (
@@ -20,7 +20,7 @@ import (
 	"github.com/jiva-studio/lectorium/orchestrator/internal/ports"
 )
 
-// Repo is the pgx-backed JobRepository + EventBus + ContentClaimer.
+// Repo is the pgx-backed JobRepository + EventBus.
 type Repo struct {
 	pool *pgxpool.Pool
 }
@@ -61,11 +61,9 @@ func (r *Repo) WithTx(ctx context.Context, fn func(ports.Tx) error) error {
 	return tx.Commit(ctx)
 }
 
-func (r *Repo) Create(ctx context.Context, j *job.Job) error  { return r.insert(ctx, r.pool, j) }
 func (r *Repo) CreateTx(ctx context.Context, t ports.Tx, j *job.Job) error {
 	return r.insert(ctx, r.q(t), j)
 }
-func (r *Repo) Save(ctx context.Context, j *job.Job) error { return r.update(ctx, r.pool, j) }
 func (r *Repo) SaveTx(ctx context.Context, t ports.Tx, j *job.Job) error {
 	return r.update(ctx, r.q(t), j)
 }

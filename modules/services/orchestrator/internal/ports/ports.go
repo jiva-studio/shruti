@@ -26,9 +26,7 @@ type EventBus interface {
 // run within a caller-supplied Tx so a job write and its outbox rows (via
 // EventBus.Publish) commit atomically — the transactional-outbox invariant.
 type JobRepository interface {
-	Create(ctx context.Context, j *job.Job) error
 	Get(ctx context.Context, id string) (*job.Job, error)
-	Save(ctx context.Context, j *job.Job) error
 	CreateTx(ctx context.Context, q Tx, j *job.Job) error
 	SaveTx(ctx context.Context, q Tx, j *job.Job) error
 	// WithTx runs fn inside a transaction so a job write and its outbox rows

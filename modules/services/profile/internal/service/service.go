@@ -257,9 +257,12 @@ func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, colle
 // (title/lang/audio_key/…) is preserved. Idempotent: the event id
 // "<track_id>:published" yields a deterministic hlc, so a redelivery collapses
 // to one change-log row.
-func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error {
+func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID, eventID string) error {
 	if trackID == "" {
 		return badRequest("track_id is required")
+	}
+	if eventID == "" {
+		return badRequest("event_id is required")
 	}
 	// Read the current server-authored projection so origin is merged in, not
 	// clobbering the ready-time metadata.
@@ -282,7 +285,7 @@ func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID s
 	if err != nil {
 		return err
 	}
-	_, err = s.ApplyServerChange(ctx, userID, "library_items", trackID, "upsert", trackID+":published", merged)
+	_, err = s.ApplyServerChange(ctx, userID, "library_items", trackID, "upsert", eventID, merged)
 	return err
 }
 
