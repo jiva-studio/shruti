@@ -23,7 +23,11 @@ const (
 // JobID echoes the WorkCommand so the orchestrator loads the right job. The
 // artifact fields are populated on ready/linked; Error/Retriable on failed.
 type Result struct {
-	JobID         string `json:"job_id"`
+	JobID string `json:"job_id"`
+	// Attempt echoes the WorkCommand's attempt number so the orchestrator can
+	// discard a stale/duplicate result whose attempt has already been superseded
+	// by a re-dispatch (idempotent retry accounting across redelivery).
+	Attempt       int    `json:"attempt,omitempty"`
 	Phase         string `json:"phase"`
 	TrackID       string `json:"track_id,omitempty"`
 	Lang          string `json:"lang,omitempty"`
