@@ -24,29 +24,16 @@ type Config struct {
 
 	// --- Streams broker (dedicated redis-streams instance, see
 	// services/README-streams.md). Empty StreamsRedisURL disables the
-	// consumer + relay so the service can still boot for HTTP-only ops. ---
-	StreamsRedisURL   string // STREAMS_REDIS_URL, e.g. redis://redis-streams:6379/0
-	IngestStream      string // INGEST_STREAM, consumed  (default "ingest.request")
-	TrackEventsStream string // TRACK_EVENTS_STREAM, produced (default "track.events")
-	ConsumerGroup     string // CONSUMER_GROUP (default "orchestrator")
-	ConsumerName      string // this container's consumer id (default hostname)
-	StreamMaxLen      int64  // approximate MAXLEN cap for produced streams
-
-	// --- Fetcher (#1221) ---
-	YtdlpProxy      string // YTDLP_PROXY — host-only proxy passed to yt-dlp --proxy
-	YtdlpBin        string // YTDLP_BIN (default "yt-dlp")
-	MaxAudioBytes   int64  // MAX_AUDIO_BYTES cap on a downloaded artifact
-	MaxAudioSeconds int64  // MAX_AUDIO_DURATION_SECONDS cap on source duration
-
-	// --- Transcriber (#1222, Deepgram) ---
-	DeepgramAPIKey string // DEEPGRAM_API_KEY
-	DeepgramModel  string // DEEPGRAM_MODEL (default "nova-2")
-
-	// --- BlobStore (#1223, S3) ---
-	S3Bucket     string // S3_BUCKET
-	S3Region     string // S3_REGION (default "us-east-1")
-	S3Endpoint   string // S3_ENDPOINT (optional; for S3-compatible stores)
-	S3PublicBase string // S3_PUBLIC_BASE (optional CDN base for URL composition)
+	// consumers + relay so the service can still boot for HTTP-only ops. ---
+	StreamsRedisURL     string // STREAMS_REDIS_URL, e.g. redis://redis-streams:6379/0
+	IngestStream        string // INGEST_STREAM, consumed  (default "ingest.request")
+	WorkStream          string // INGEST_WORK_STREAM, produced → ingest worker (default "ingest.work")
+	ResultStream        string // INGEST_RESULT_STREAM, consumed ← ingest worker (default "ingest.result")
+	TrackEventsStream   string // TRACK_EVENTS_STREAM, produced (default "track.events")
+	ConsumerGroup       string // CONSUMER_GROUP for ingest.request (default "orchestrator")
+	ResultConsumerGroup string // RESULT_CONSUMER_GROUP for ingest.result (default "orchestrator-result")
+	ConsumerName        string // this container's consumer id (default hostname)
+	StreamMaxLen        int64  // approximate MAXLEN cap for produced streams
 
 	// --- Tier re-verification (JWT, RS256 kid=v1, aud=chat) ---
 	AuthPublicKeyFile string // AUTH_JWT_PUBLIC_KEY_FILE — PEM RSA public key
@@ -60,25 +47,15 @@ func Load() (*Config, error) {
 		ServiceVersion: env("SERVICE_VERSION", "dev"),
 		MaxAttempts:    envInt("MAX_ATTEMPTS", 5),
 
-		StreamsRedisURL:   env("STREAMS_REDIS_URL", ""),
-		IngestStream:      env("INGEST_STREAM", "ingest.request"),
-		TrackEventsStream: env("TRACK_EVENTS_STREAM", "track.events"),
-		ConsumerGroup:     env("CONSUMER_GROUP", "orchestrator"),
-		ConsumerName:      env("CONSUMER_NAME", hostname()),
-		StreamMaxLen:      int64(envInt("TRACK_EVENTS_MAXLEN", 10000)),
-
-		YtdlpProxy:      env("YTDLP_PROXY", ""),
-		YtdlpBin:        env("YTDLP_BIN", "yt-dlp"),
-		MaxAudioBytes:   int64(envInt("MAX_AUDIO_BYTES", 512*1024*1024)),  // 512 MiB
-		MaxAudioSeconds: int64(envInt("MAX_AUDIO_DURATION_SECONDS", 4*60*60)), // 4h
-
-		DeepgramAPIKey: env("DEEPGRAM_API_KEY", ""),
-		DeepgramModel:  env("DEEPGRAM_MODEL", "nova-2"),
-
-		S3Bucket:     env("S3_BUCKET", ""),
-		S3Region:     env("S3_REGION", "us-east-1"),
-		S3Endpoint:   env("S3_ENDPOINT", ""),
-		S3PublicBase: env("S3_PUBLIC_BASE", ""),
+		StreamsRedisURL:     env("STREAMS_REDIS_URL", ""),
+		IngestStream:        env("INGEST_STREAM", "ingest.request"),
+		WorkStream:          env("INGEST_WORK_STREAM", "ingest.work"),
+		ResultStream:        env("INGEST_RESULT_STREAM", "ingest.result"),
+		TrackEventsStream:   env("TRACK_EVENTS_STREAM", "track.events"),
+		ConsumerGroup:       env("CONSUMER_GROUP", "orchestrator"),
+		ResultConsumerGroup: env("RESULT_CONSUMER_GROUP", "orchestrator-result"),
+		ConsumerName:        env("CONSUMER_NAME", hostname()),
+		StreamMaxLen:        int64(envInt("TRACK_EVENTS_MAXLEN", 10000)),
 
 		AuthPublicKeyFile: env("AUTH_JWT_PUBLIC_KEY_FILE", ""),
 	}

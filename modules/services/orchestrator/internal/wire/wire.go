@@ -1,9 +1,13 @@
 // Package wire is the orchestrator's composition root: it assembles the
-// concrete runtime dependencies (Postgres pool, embedded-migration apply,
-// schema gate, HTTP handler, and — for the ingest pipeline — the fetch /
-// transcribe / store adapters, the runingest use case, and the Redis-Streams
-// consumer + outbox relay) from a validated Config, keeping cmd/orchestrator
-// thin.
+// Postgres pool (with embedded-migration apply + schema gate), the HTTP
+// handler, and — when the streams broker is configured — the transactional
+// outbox relay plus the TWO Redis-Streams consumers that make up the
+// coordinator seam (the `ingest.request` handler and the `ingest.result`
+// handler), from a validated Config, keeping cmd/orchestrator thin.
+//
+// The orchestrator is a THIN coordinator: it no longer builds any
+// fetch/transcribe/store adapters (those live in the separate `ingest` worker).
+// Its only pipeline prerequisite is the PRO-tier verifier.
 package wire
 
 import (
@@ -19,31 +23,27 @@ import (
 	"github.com/jiva-studio/shruti/orchestrator/internal/config"
 	"github.com/jiva-studio/shruti/orchestrator/internal/handler"
 	"github.com/jiva-studio/shruti/orchestrator/internal/infra/authjwt"
-	blobs3 "github.com/jiva-studio/shruti/orchestrator/internal/infra/blob/s3"
 	"github.com/jiva-studio/shruti/orchestrator/internal/infra/events/redisstream"
-	"github.com/jiva-studio/shruti/orchestrator/internal/infra/fetch/ytdlp"
 	jobpg "github.com/jiva-studio/shruti/orchestrator/internal/infra/jobrepo/postgres"
-	"github.com/jiva-studio/shruti/orchestrator/internal/infra/review"
-	"github.com/jiva-studio/shruti/orchestrator/internal/infra/sys"
-	"github.com/jiva-studio/shruti/orchestrator/internal/infra/transcribe/deepgram"
 	"github.com/jiva-studio/shruti/orchestrator/internal/store"
 )
 
 // Deps is the assembled dependency graph handed back to the entrypoint. The
-// caller owns Pool and Redis and must close them on shutdown. Consumer and
-// Relay are nil when the streams broker (or the pipeline prerequisites) are not
+// caller owns Pool and Redis and must close them on shutdown. The consumers and
+// Relay are nil when the streams broker (or the tier verifier) is not
 // configured — the service still serves HTTP in that case.
 type Deps struct {
-	Pool     *pgxpool.Pool
-	Redis    *redis.Client
-	Handler  http.Handler
-	Consumer *redisstream.Consumer
-	Relay    *redisstream.Relay
+	Pool            *pgxpool.Pool
+	Redis           *redis.Client
+	Handler         http.Handler
+	RequestConsumer *redisstream.Consumer
+	ResultConsumer  *redisstream.Consumer
+	Relay           *redisstream.Relay
 }
 
 // Build connects the pool, applies migrations, verifies the schema, wires the
-// HTTP router, and — when configured — assembles the ingest pipeline and its
-// broker transport. On any failure it closes whatever it opened.
+// HTTP router, and — when configured — assembles the outbox relay and the two
+// coordinator consumers. On any failure it closes whatever it opened.
 func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	pool, err := store.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -79,67 +79,38 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 
 	repo := jobpg.New(pool)
 
-	// The outbox relay always runs when the broker is up: it drains whatever
-	// lifecycle events the pipeline commits.
+	// The outbox relay always runs when the broker is up: it drains whatever the
+	// coordinator commits — both track.events AND ingest.work rows (it publishes
+	// each row to its own topic).
 	deps.Relay = redisstream.NewRelay(rdb, outboxAdapter{repo}, cfg.StreamMaxLen)
 
-	// The consumer only starts when every pipeline prerequisite is present;
-	// otherwise a consumed message would fail with a misconfiguration.
-	svc, ready, missing := buildPipeline(ctx, cfg, repo)
-	if !ready {
-		slog.WarnContext(ctx, "ingest_consumer_disabled", "missing", missing)
+	// The consumers only start when the tier verifier is present; otherwise a
+	// consumed ingest.request would fail re-verification.
+	verifier, err := authjwt.NewFromFile(cfg.AuthPublicKeyFile)
+	if cfg.AuthPublicKeyFile == "" || err != nil {
+		reason := "AUTH_JWT_PUBLIC_KEY_FILE"
+		if err != nil {
+			reason = "AUTH_JWT_PUBLIC_KEY_FILE(invalid)"
+		}
+		slog.WarnContext(ctx, "ingest_consumers_disabled", "missing", reason)
 		return deps, nil
 	}
-	deps.Consumer = redisstream.NewConsumer(rdb, cfg.IngestStream, cfg.ConsumerGroup, cfg.ConsumerName, svc)
-	return deps, nil
-}
 
-// buildPipeline assembles the runingest use case. ready is false (with the list
-// of missing config keys) when a required credential is absent.
-func buildPipeline(ctx context.Context, cfg *config.Config, repo *jobpg.Repo) (*runingest.Service, bool, []string) {
-	var missing []string
-	if cfg.DeepgramAPIKey == "" {
-		missing = append(missing, "DEEPGRAM_API_KEY")
-	}
-	if cfg.S3Bucket == "" {
-		missing = append(missing, "S3_BUCKET")
-	}
-	if cfg.AuthPublicKeyFile == "" {
-		missing = append(missing, "AUTH_JWT_PUBLIC_KEY_FILE")
-	}
-
-	verifier, err := authjwt.NewFromFile(cfg.AuthPublicKeyFile)
-	if cfg.AuthPublicKeyFile != "" && err != nil {
-		missing = append(missing, "AUTH_JWT_PUBLIC_KEY_FILE(invalid)")
-	}
-	blob, err := blobs3.New(ctx, cfg.S3Bucket, cfg.S3Region, cfg.S3Endpoint)
-	if cfg.S3Bucket != "" && err != nil {
-		missing = append(missing, "S3(config)")
-	}
-	if len(missing) > 0 {
-		return nil, false, missing
-	}
-
-	fetcher := ytdlp.New(ytdlp.Options{
-		Bin:        cfg.YtdlpBin,
-		Proxy:      cfg.YtdlpProxy,
-		MaxBytes:   cfg.MaxAudioBytes,
-		MaxSeconds: cfg.MaxAudioSeconds,
-	})
-	svc := runingest.New(runingest.Deps{
+	d := runingest.Deps{
 		Repo:              repo,
 		Events:            repo,
-		Fetcher:           fetcher,
-		Transcriber:       deepgram.New(cfg.DeepgramAPIKey, cfg.DeepgramModel),
-		Reviewer:          review.New(),
-		Blob:              blob,
 		Tier:              verifier,
-		Clock:             sys.Clock{},
-		IDs:               sys.IDGen{},
 		MaxAttempts:       cfg.MaxAttempts,
 		TrackEventsStream: cfg.TrackEventsStream,
-	})
-	return svc, true, nil
+		WorkStream:        cfg.WorkStream,
+	}
+	deps.RequestConsumer = redisstream.NewConsumer(
+		rdb, cfg.IngestStream, cfg.ConsumerGroup, cfg.ConsumerName, runingest.NewRequestHandler(d),
+	)
+	deps.ResultConsumer = redisstream.NewConsumer(
+		rdb, cfg.ResultStream, cfg.ResultConsumerGroup, cfg.ConsumerName, runingest.NewResultHandler(d),
+	)
+	return deps, nil
 }
 
 // outboxAdapter bridges the persistence repo's outbox drain to the relay's

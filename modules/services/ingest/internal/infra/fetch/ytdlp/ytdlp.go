@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiva-studio/shruti/orchestrator/internal/domain/ingest"
+	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
 )
 
 // Runner executes an external command and returns its combined stdout. Injected

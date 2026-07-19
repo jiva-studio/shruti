@@ -1,6 +1,8 @@
-// Shruti orchestrator service — a generic job orchestrator whose first
-// scenario is personal-library ingest (fetch -> transcribe -> review -> store
-// -> emit events). See docs: architecture/personal-library.md.
+// Shruti orchestrator service — a generic job coordinator whose first
+// scenario is personal-library ingest. It dispatches the heavy
+// fetch/transcribe/store work to the stateless `ingest` worker (via an
+// ingest.work outbox row), reacts to ingest.result, and drives the track.events
+// lifecycle. See docs: architecture/personal-library.md.
 //
 // Single Go binary with subcommands (mirrors services/profile):
 //
@@ -103,9 +105,11 @@ func runServe() {
 		defer deps.Redis.Close()
 	}
 
-	// Broker-driven pipeline: the outbox relay drains lifecycle events, the
-	// consumer processes ingest.request. Both run for the process lifetime and
-	// are torn down when the root context is cancelled on shutdown.
+	// Broker-driven coordinator: the outbox relay drains lifecycle events AND
+	// ingest.work dispatches, the request consumer processes ingest.request, and
+	// the result consumer processes ingest.result from the ingest worker. All
+	// run for the process lifetime and are torn down when the root context is
+	// cancelled on shutdown.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 	if deps.Relay != nil {
@@ -115,10 +119,17 @@ func runServe() {
 			}
 		}()
 	}
-	if deps.Consumer != nil {
+	if deps.RequestConsumer != nil {
 		go func() {
-			if err := deps.Consumer.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("consumer_stopped", "err", err.Error())
+			if err := deps.RequestConsumer.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("request_consumer_stopped", "err", err.Error())
+			}
+		}()
+	}
+	if deps.ResultConsumer != nil {
+		go func() {
+			if err := deps.ResultConsumer.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("result_consumer_stopped", "err", err.Error())
 			}
 		}()
 	}
