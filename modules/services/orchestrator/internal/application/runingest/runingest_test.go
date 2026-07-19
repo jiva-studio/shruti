@@ -294,6 +294,17 @@ func TestResult_Ready_MarksDone(t *testing.T) {
 	if le.Type != ingest.EventReady || le.ID != jobID+":ready" || le.TrackID != "hash123" {
 		t.Fatalf("ready event wrong: %+v", le)
 	}
+	// The ready event keys the projection on the membership id (jobID), the SAME
+	// doc_id as the earlier queued/processing events — NOT the content hash — so
+	// the library_items row advances in place instead of orphaning.
+	if le.DocID != jobID {
+		t.Fatalf("ready doc_id must be the membership jobID %q, got %q", jobID, le.DocID)
+	}
+	for _, ev := range last {
+		if ev.DocID != jobID {
+			t.Fatalf("lifecycle event %s keyed on %q, want membership jobID %q", ev.Type, ev.DocID, jobID)
+		}
+	}
 }
 
 func TestResult_ReadyWhileQueued_MarksDone(t *testing.T) {

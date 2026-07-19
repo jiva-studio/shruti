@@ -129,7 +129,7 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
 			return err
 		}
-		queued := event(jobID+":queued", ingest.EventQueued, owner, jobID, "", statusData("queued", req.URL))
+		queued := event(jobID+":queued", ingest.EventQueued, owner, jobID, "", statusData("queued", req.Title))
 		if err := h.publishEvent(ctx, tx, queued); err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ func (h *RequestHandler) failNotPro(ctx context.Context, jobID string, req inges
 		return fmt.Errorf("to failed: %w", err)
 	}
 	j.Err = errUnauthorized.Error()
-	ev := event(jobID+":failed", ingest.EventFailed, j.OwnerID, jobID, j.TrackID, failData(errUnauthorized.Error()))
+	ev := event(jobID+":failed", ingest.EventFailed, j.OwnerID, jobID, j.TrackID, failData(errUnauthorized.Error(), req.Title))
 	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
 		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
 			return err
@@ -199,7 +199,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		if err := j.To(job.StateRunning); err != nil {
 			return fmt.Errorf("to running: %w", err)
 		}
-		ev := event(res.JobID+":processing", ingest.EventProcessing, j.OwnerID, res.JobID, "", statusData("processing", specURL(j)))
+		ev := event(res.JobID+":processing", ingest.EventProcessing, j.OwnerID, res.JobID, "", statusData("processing", specRequest(j).Title))
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseReady:
@@ -213,7 +213,11 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		if err := j.To(job.StateDone); err != nil {
 			return fmt.Errorf("to done: %w", err)
 		}
-		ev := event(res.JobID+":ready", ingest.EventReady, j.OwnerID, res.TrackID, res.TrackID, j.Result)
+		// Key the projection on the JOB id (the stable library membership id) —
+		// the SAME doc_id as queued/processing/failed — so the row advances in
+		// place; the content hash rides along in track_id (via j.Result / the
+		// TrackEvent.TrackID field), not as the key.
+		ev := event(res.JobID+":ready", ingest.EventReady, j.OwnerID, res.JobID, res.TrackID, j.Result)
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseFailed:
@@ -256,7 +260,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 			}
 		}
 		j.Err = res.Error
-		ev := event(res.JobID+":failed", ingest.EventFailed, j.OwnerID, res.JobID, j.TrackID, failData(res.Error))
+		ev := event(res.JobID+":failed", ingest.EventFailed, j.OwnerID, res.JobID, j.TrackID, failData(res.Error, specRequest(j).Title))
 		return h.save(ctx, j, ev)
 
 	default:
@@ -353,4 +357,3 @@ func specRequest(j *job.Job) ingest.Request {
 }
 
 // specURL is specRequest's URL — the source url carried through the lifecycle.
-func specURL(j *job.Job) string { return specRequest(j).URL }

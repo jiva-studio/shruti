@@ -4,8 +4,9 @@
 // via the server-authored write path.
 //
 //   - `track.events`  (consumer group "profile"): the orchestrator's stream.
-//     A `track.ready` event upserts the library_items projection; a
-//     `track.removed` event deletes it. Other lifecycle types are ignored.
+//     Every lifecycle event upserts the library_items projection —
+//     queued/processing/ready/failed advance the row's status under a
+//     rank-ordered hlc — and a `track.removed` event deletes it.
 //   - `track.published` (consumer group "profile-published"): the
 //     publish-service's stream. Each event flips the library item's
 //     origin to 'published' for that track_id.
@@ -55,10 +56,12 @@ func Connect(ctx context.Context, url string) (*redis.Client, error) {
 }
 
 // Applier is the subset of *service.Service the track.events consumer needs —
-// the server-authored write path. An interface (not the concrete type) so events
-// has no import cycle with service and is trivially faked in tests.
+// the server-authored library_items write path. An interface (not the concrete
+// type) so events has no import cycle with service and is trivially faked in
+// tests. rank orders the lifecycle states under last-writer-wins (see
+// hlc.Clock.Ranked): a later state must win regardless of broker arrival order.
 type Applier interface {
-	ApplyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op, eventID string, data json.RawMessage) (wire.Change, error)
+	ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, docID, op string, rank int, data json.RawMessage) (wire.Change, error)
 }
 
 // PublishApplier is the subset of *service.Service the track.published consumer
@@ -67,14 +70,14 @@ type PublishApplier interface {
 	MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error
 }
 
-// TrackEvent is one decoded `track.events` message. `type` selects the op: a
-// `track.ready` event upserts the projection; a `track.removed` event deletes
-// it. Data is the server-owned library_items payload projected verbatim by
-// ApplyServerChange.
+// TrackEvent is one decoded `track.events` message. `type` selects the op and
+// the LWW rank (see lifecycleOp); DocID is the library membership id (the
+// orchestrator's jobID) shared by every state of one ingest. Data is the
+// server-owned library_items payload projected verbatim.
 //
-// ID is the producer's deterministic idempotency key. It is passed to
-// ApplyServerChange, which derives a DETERMINISTIC hlc from it, so a redelivered
-// message writes exactly one change-log row instead of a duplicate.
+// Idempotency comes from the rank-derived hlc (same state → same stamp → the
+// change-log UNIQUE collides on redelivery), not from ID; ID is retained only
+// for logging/back-compat.
 type TrackEvent struct {
 	ID     string          `json:"id"`
 	Type   string          `json:"type"`
@@ -119,19 +122,38 @@ func (c *Consumer) process(ctx context.Context, msgID string, payload []byte) er
 }
 
 // handle projects a single decoded event through the server-authored write
-// path. Exercised directly by the package tests.
+// path. Every lifecycle state is projected so the client's library_items row
+// reflects queued → processing → ready|failed (the app renders a processing
+// spinner and a failed+retry affordance from it); a promotion later flips origin
+// via MarkPublished. Exercised directly by the package tests.
 func (c *Consumer) handle(ctx context.Context, ev TrackEvent) error {
-	var op string
-	switch ev.Type {
-	case "track.ready":
-		op = "upsert"
-	case "track.removed":
-		op = "delete"
-	default:
-		return nil // ignore queued/processing/failed
+	op, rank, ok := lifecycleOp(ev.Type)
+	if !ok {
+		return nil // unknown type — ack to drop
 	}
-	_, err := c.Applier.ApplyServerChange(ctx, ev.UserID, libraryItemsCollection, ev.DocID, op, ev.ID, ev.Data)
+	_, err := c.Applier.ApplyLibraryLifecycle(ctx, ev.UserID, ev.DocID, op, rank, ev.Data)
 	return err
+}
+
+// lifecycleOp maps a track.events type to its projection op and LWW rank. Ranks
+// are ordered so the later state wins: queued(1) < processing(2) < ready|failed(3)
+// < removed(4), all below a publish flip (Terminal). ready and failed share a
+// rank because a job reaches exactly one of them, so they never race on the same
+// membership. All states key the SAME membership doc_id (the orchestrator's
+// jobID), so the row progresses in place instead of orphaning.
+func lifecycleOp(eventType string) (op string, rank int, ok bool) {
+	switch eventType {
+	case "track.queued":
+		return "upsert", 1, true
+	case "track.processing":
+		return "upsert", 2, true
+	case "track.ready", "track.failed":
+		return "upsert", 3, true
+	case "track.removed":
+		return "delete", 4, true
+	default:
+		return "", 0, false
+	}
 }
 
 // PublishedEvent is one decoded `track.published` message: the publish-service

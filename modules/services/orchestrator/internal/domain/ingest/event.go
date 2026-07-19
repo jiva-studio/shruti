@@ -13,9 +13,11 @@ const (
 )
 
 // TrackEvent is one `track.events` message. The shape matches the profile
-// consumer's decoder: ID is a stable idempotency key (the source message id),
-// DocID is the track id (the content hash) once known — else the job id — and
-// Data is the server-owned library_items projection applied verbatim.
+// consumer's decoder: ID is a stable idempotency key, DocID is the library
+// membership id (the jobID) — the SAME across every lifecycle state of one
+// ingest so the projection advances in place — TrackID carries the content hash
+// once known, and Data is the server-owned library_items projection applied
+// verbatim.
 type TrackEvent struct {
 	ID      string          `json:"id"`
 	Type    string          `json:"type"`
