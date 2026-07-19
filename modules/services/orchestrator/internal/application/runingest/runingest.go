@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -295,13 +296,37 @@ func (c *core) publishEvent(ctx context.Context, tx ports.Tx, e ingest.TrackEven
 }
 
 // dispatchWork enqueues an ingest.work command on the outbox (topic
-// WorkStream), reliably fanned out to the ingest worker by the same relay.
+// WorkStream), reliably fanned out to the ingest worker by the same relay. A
+// retry (attempt >= 2) is stamped with a backoff so a transient outage isn't
+// burned through; the first attempt dispatches immediately.
 func (c *core) dispatchWork(ctx context.Context, tx ports.Tx, jobID, url, title, owner string, attempt int) error {
 	b, err := ingest.WorkCommand{JobID: jobID, URL: url, Title: title, OwnerID: owner, Attempt: attempt}.Marshal()
 	if err != nil {
 		return err
 	}
-	return c.d.Events.Publish(ctx, tx, c.d.WorkStream, b)
+	return c.d.Events.PublishAfter(ctx, tx, c.d.WorkStream, b, retryBackoff(attempt))
+}
+
+// retryBackoff is the not-before delay before an ingest.work dispatch for a
+// given attempt number. The first attempt is immediate; a retry waits an
+// exponential backoff (attempt 2→15s, 3→30s, 4→60s, then capped at 2m) so a
+// brief upstream outage — or an open yt-dlp circuit breaker serving its ~30s
+// cooldown — doesn't consume the whole (default 5) attempt budget in
+// milliseconds. Capped so a job still dead-letters in bounded time.
+func retryBackoff(attempt int) time.Duration {
+	if attempt <= 1 {
+		return 0
+	}
+	const maxBackoff = 2 * time.Minute
+	shift := attempt - 2
+	if shift > 4 { // 15s<<4 = 240s already past the cap; also avoids int64 overflow
+		return maxBackoff
+	}
+	d := 15 * time.Second << uint(shift)
+	if d > maxBackoff {
+		d = maxBackoff
+	}
+	return d
 }
 
 // event builds a lifecycle event. Its ID is derived from the JOB id + type so

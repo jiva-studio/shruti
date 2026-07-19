@@ -8,6 +8,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/jiva-studio/shruti/orchestrator/internal/domain/job"
 )
@@ -18,6 +19,10 @@ import (
 // the outbox row's topic selects the destination stream.
 type EventBus interface {
 	Publish(ctx context.Context, q Tx, topic string, payload []byte) error
+	// PublishAfter enqueues a row the relay holds until now()+delay — a not-before
+	// backoff used to space out a retry re-dispatch (a delay of 0 is identical to
+	// Publish). Immediate rows keep draining while a delayed one waits.
+	PublishAfter(ctx context.Context, q Tx, topic string, payload []byte, delay time.Duration) error
 }
 
 // JobRepository persists the Job aggregate — the source of truth.

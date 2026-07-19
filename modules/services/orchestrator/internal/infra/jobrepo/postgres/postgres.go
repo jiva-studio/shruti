@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -133,11 +134,26 @@ func getJob(ctx context.Context, q querier, id, lock string) (*job.Job, error) {
 }
 
 // Publish implements ports.EventBus: it appends an event to the outbox in the
-// caller's transaction (the same tx as the job write).
+// caller's transaction (the same tx as the job write). available_at defaults to
+// now(), so the row drains on the next relay tick.
 func (r *Repo) Publish(ctx context.Context, t ports.Tx, topic string, payload []byte) error {
 	_, err := r.q(t).Exec(ctx,
 		`INSERT INTO orchestrator.outbox (topic, payload) VALUES ($1, $2::jsonb)`,
 		topic, string(payload))
+	return err
+}
+
+// PublishAfter implements ports.EventBus: like Publish but stamps a not-before
+// available_at of now()+delay, so the relay holds the row until then. Used to
+// back off a retry re-dispatch (a delay<=0 falls back to an immediate row).
+func (r *Repo) PublishAfter(ctx context.Context, t ports.Tx, topic string, payload []byte, delay time.Duration) error {
+	if delay <= 0 {
+		return r.Publish(ctx, t, topic, payload)
+	}
+	_, err := r.q(t).Exec(ctx,
+		`INSERT INTO orchestrator.outbox (topic, payload, available_at)
+		 VALUES ($1, $2::jsonb, now() + make_interval(secs => $3))`,
+		topic, string(payload), delay.Seconds())
 	return err
 }
 
@@ -160,9 +176,12 @@ func (r *Repo) DrainUnpublished(ctx context.Context, limit int, publish func(top
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// available_at <= now() holds back a backed-off retry row while letting every
+	// immediate row (available_at defaults to now()) drain in seq order.
 	rows, err := tx.Query(ctx,
 		`SELECT seq, topic, payload FROM orchestrator.outbox
-		  WHERE published_at IS NULL ORDER BY seq LIMIT $1 FOR UPDATE SKIP LOCKED`, limit)
+		  WHERE published_at IS NULL AND available_at <= now()
+		  ORDER BY seq LIMIT $1 FOR UPDATE SKIP LOCKED`, limit)
 	if err != nil {
 		return 0, err
 	}
