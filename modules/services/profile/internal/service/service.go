@@ -185,6 +185,15 @@ func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, colle
 	return s.applyServerChange(ctx, userID, collection, docID, op, s.clock().Deterministic(eventID), data)
 }
 
+// ApplyLibraryLifecycle projects one library_items lifecycle event
+// (queued/processing/ready/failed → upsert, removed → delete) under a RANK-ordered
+// hlc so a later state deterministically wins last-writer-wins regardless of
+// broker arrival order (see hlc.Clock.Ranked). All states of one ingest share the
+// membership doc_id, so the row advances in place.
+func (s *Service) ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, docID, op string, rank int, data json.RawMessage) (wire.Change, error) {
+	return s.applyServerChange(ctx, userID, "library_items", docID, op, s.clock().Ranked(rank), data)
+}
+
 // applyServerChange is the shared server-authored write with a caller-supplied
 // hlc: ApplyServerChange derives it deterministically from the event id, while
 // MarkPublished passes a TERMINAL stamp so a promotion always wins last-writer-
@@ -260,44 +269,59 @@ func (s *Service) applyServerChange(ctx context.Context, userID uuid.UUID, colle
 // been promoted into the published corpus (origin='published'). It is driven by
 // the publish-service's `track.published` event.
 //
-// In the server-authored ingest path a library_items row is keyed by
-// doc_id == track_id (the orchestrator's track.ready sets doc_id to the content
-// hash), so the flip targets doc_id = trackID. It MERGES origin into the
-// existing projection's data rather than overwriting, so the ready-time metadata
-// (title/lang/audio_key/…) is preserved.
+// A library_items row is keyed by the membership id (doc_id = the orchestrator's
+// jobID), while track.published carries only the content hash, so this maps the
+// track_id back to the membership row(s) and flips each. It MERGES origin into
+// the existing projection's data rather than overwriting, so the ready-time
+// metadata (title/lang/audio_key/…) is preserved by the replace-all upsert.
 //
 // The flip is stamped with a TERMINAL hlc (hlc.Clock.Terminal) so it wins
-// last-writer-wins over the earlier track.ready row — whose hlc is a high
-// fnv-hash of a non-numeric "<jobID>:ready" id that an ms-based stamp would lose
-// to. The terminal stamp is a constant, so a redelivered track.published
-// collapses on UNIQUE(user_id, collection, doc_id, hlc) to one change-log row.
+// last-writer-wins over every ranked lifecycle state (queued/processing/ready/
+// failed, all far below Terminal). The terminal stamp is a constant, so a
+// redelivered track.published collapses on UNIQUE(user_id, collection, doc_id,
+// hlc) to one change-log row.
 func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error {
 	if trackID == "" {
 		return badRequest("track_id is required")
 	}
-	// Read the current server-authored projection so origin is merged in, not
-	// clobbering the ready-time metadata.
-	master, found, err := s.Changes.Latest(ctx, s.Pool, userID, "library_items", trackID)
+	// library_items is keyed by the membership id (doc_id), NOT the content hash,
+	// so map this track_id back to the membership row(s) carrying it — a user may
+	// add the same source more than once, yielding several memberships for one
+	// track_id. If none exists yet, the track.ready that stamps track_id hasn't
+	// projected; there is nothing to flip, so ack (a redelivery/reclaim will retry
+	// the promotion, and a never-projected membership means the item is gone).
+	docIDs, err := store.LibraryMembershipsByTrack(ctx, s.Pool, userID, trackID)
 	if err != nil {
 		return err
 	}
-	data := map[string]json.RawMessage{}
-	if found && len(master.Data) > 0 {
-		if err := json.Unmarshal(master.Data, &data); err != nil {
-			return fmt.Errorf("decode master data: %w", err)
+	for _, docID := range docIDs {
+		// Read the current projection so origin is MERGED in, not clobbering the
+		// ready-time metadata (the replace-all upsert would otherwise null it).
+		master, found, err := s.Changes.Latest(ctx, s.Pool, userID, "library_items", docID)
+		if err != nil {
+			return err
+		}
+		data := map[string]json.RawMessage{}
+		if found && len(master.Data) > 0 {
+			if err := json.Unmarshal(master.Data, &data); err != nil {
+				return fmt.Errorf("decode master data: %w", err)
+			}
+		}
+		data["origin"] = json.RawMessage(`"published"`)
+		if _, ok := data["track_id"]; !ok {
+			tid, _ := json.Marshal(trackID)
+			data["track_id"] = tid
+		}
+		merged, err := json.Marshal(data)
+		if err != nil {
+			return err
+		}
+		// Terminal hlc so the flip wins LWW over every ranked lifecycle state.
+		if _, err := s.applyServerChange(ctx, userID, "library_items", docID, "upsert", s.clock().Terminal(), merged); err != nil {
+			return err
 		}
 	}
-	data["origin"] = json.RawMessage(`"published"`)
-	if _, ok := data["track_id"]; !ok {
-		tid, _ := json.Marshal(trackID)
-		data["track_id"] = tid
-	}
-	merged, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	_, err = s.applyServerChange(ctx, userID, "library_items", trackID, "upsert", s.clock().Terminal(), merged)
-	return err
+	return nil
 }
 
 // Pull returns changes for the user with global_seq > cursor, excluding the
