@@ -40,10 +40,9 @@ type Config struct {
 	DeepgramModel  string // DEEPGRAM_MODEL (default "nova-2")
 
 	// --- BlobStore (S3) ---
-	S3Bucket     string // S3_BUCKET
-	S3Region     string // S3_REGION (default "us-east-1")
-	S3Endpoint   string // S3_ENDPOINT (optional; for S3-compatible stores)
-	S3PublicBase string // S3_PUBLIC_BASE (optional CDN base for URL composition)
+	S3Bucket   string // S3_BUCKET
+	S3Region   string // S3_REGION (default "us-east-1")
+	S3Endpoint string // S3_ENDPOINT (optional; for S3-compatible stores)
 }
 
 func Load() (*Config, error) {
@@ -67,10 +66,9 @@ func Load() (*Config, error) {
 		DeepgramAPIKey: env("DEEPGRAM_API_KEY", ""),
 		DeepgramModel:  env("DEEPGRAM_MODEL", "nova-2"),
 
-		S3Bucket:     env("S3_BUCKET", ""),
-		S3Region:     env("S3_REGION", "us-east-1"),
-		S3Endpoint:   env("S3_ENDPOINT", ""),
-		S3PublicBase: env("S3_PUBLIC_BASE", ""),
+		S3Bucket:   env("S3_BUCKET", ""),
+		S3Region:   env("S3_REGION", "us-east-1"),
+		S3Endpoint: env("S3_ENDPOINT", ""),
 	}
 	if cfg.StreamMaxLen <= 0 {
 		cfg.StreamMaxLen = 10000

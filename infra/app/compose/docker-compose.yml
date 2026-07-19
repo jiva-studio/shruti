@@ -709,6 +709,7 @@ services:
     # idempotent), so no separate one-shot migrate container is needed.
     depends_on:
       profile-postgres: { condition: service_healthy }
+      redis-streams: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "/profile", "healthz"]
       interval: 15s
@@ -812,8 +813,14 @@ services:
       # track.events + ingest.work here.
       STREAMS_REDIS_URL: redis://redis-streams:6379/0
       PORT: "8086"
+      # PRO-tier re-verification key (RS256, kid=v1). Without it wire.go falls
+      # back to a nil verifier and the tier gate on ingest.request is OFF, so
+      # the mount + path must be present in every real deployment.
+      AUTH_JWT_PUBLIC_KEY_FILE: /secrets/public.pem
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_ORCHESTRATOR_TAG:-latest}
+    volumes:
+      - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}:/secrets:ro
     networks: [shruti]
     depends_on:
       orchestrator-postgres: { condition: service_healthy }
