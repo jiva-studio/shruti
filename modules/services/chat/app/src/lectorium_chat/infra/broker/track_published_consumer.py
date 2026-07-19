@@ -39,9 +39,10 @@ _BLOCK_MS = 5000  # XREADGROUP block window; bounds shutdown latency
 _BATCH = 16
 # Reclaim PEL entries idle this long — a graft that raised (un-ACKed) or a
 # crashed consumer's in-flight message. The read loop only fetches new ('>')
-# entries, so without XAUTOCLAIM a non-ACKed message is never retried. The graft
-# is an idempotent no-op once applied, so a short window is safe across replicas.
-_RECLAIM_MIN_IDLE_MS = 120_000  # 2 min
+# entries, so without XAUTOCLAIM a non-ACKed message is never retried. Must exceed
+# the slowest in-flight graft so a live entry isn't reclaimed out from under a slow
+# replica sharing this consumer name; 15 min matches the Go services.
+_RECLAIM_MIN_IDLE_MS = 900_000  # 15 min — parity with the Go services
 
 
 def _decode(v: Any) -> str:
