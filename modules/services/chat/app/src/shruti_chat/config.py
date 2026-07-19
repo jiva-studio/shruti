@@ -196,6 +196,17 @@ class Settings(BaseSettings):
     track_events_group: str = "chat-indexer"
     track_events_consumer: str = "chat-1"
 
+    # Corpus-promotion events (#1236). The publish-service emits `track.published`
+    # when an approved user track is promoted into the published corpus. The chat
+    # service consumes it to graft that track's already-indexed `user_track`
+    # chunks onto the public `track_transcript` lane and drop the `owned` ACL
+    # (see indexer.run._graft_promoted_track). Shares STREAMS_REDIS_URL; unset
+    # URL ⇒ the consumer never starts (feature off, no-op). The indexer-time
+    # (re)index of the public transcript remains the safety net.
+    track_published_stream: str = "track.published"
+    track_published_group: str = "chat-graft"
+    track_published_consumer: str = "chat-1"
+
     # ── Indexer ─────────────────────────────────────────────────────────
     catalog_dir: Path = Path("/var/lib/chat")
     # Fractional values are allowed (e.g. 0.25 = every 15 min). The loop
