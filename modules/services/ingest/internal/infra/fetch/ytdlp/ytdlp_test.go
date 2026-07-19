@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jiva-studio/shruti/orchestrator/internal/domain/ingest"
+	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
 )
 
 func TestBreaker_OpensAfterThresholdAndRecovers(t *testing.T) {

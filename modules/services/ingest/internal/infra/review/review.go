@@ -15,7 +15,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jiva-studio/shruti/orchestrator/internal/domain/ingest"
+	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
 	preview "github.com/jiva-studio/shruti/pipeline/review"
 	"github.com/jiva-studio/shruti/pipeline/transcript"
 )

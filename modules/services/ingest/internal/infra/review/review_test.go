@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jiva-studio/shruti/orchestrator/internal/domain/ingest"
+	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 

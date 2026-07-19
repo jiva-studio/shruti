@@ -3,9 +3,6 @@ package runingest
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -13,7 +10,6 @@ import (
 
 	"github.com/jiva-studio/shruti/orchestrator/internal/domain/ingest"
 	"github.com/jiva-studio/shruti/orchestrator/internal/domain/job"
-	"github.com/jiva-studio/shruti/orchestrator/internal/infra/review"
 	"github.com/jiva-studio/shruti/orchestrator/internal/ports"
 )
 
@@ -26,9 +22,9 @@ type fakeRepo struct {
 
 func newRepo() *fakeRepo { return &fakeRepo{jobs: map[string]job.Job{}} }
 
-func (r *fakeRepo) Create(_ context.Context, j *job.Job) error       { return r.put(j) }
+func (r *fakeRepo) Create(_ context.Context, j *job.Job) error               { return r.put(j) }
 func (r *fakeRepo) CreateTx(_ context.Context, _ ports.Tx, j *job.Job) error { return r.put(j) }
-func (r *fakeRepo) Save(_ context.Context, j *job.Job) error         { return r.put(j) }
+func (r *fakeRepo) Save(_ context.Context, j *job.Job) error                 { return r.put(j) }
 func (r *fakeRepo) SaveTx(_ context.Context, _ ports.Tx, j *job.Job) error   { return r.put(j) }
 
 func (r *fakeRepo) put(j *job.Job) error {
@@ -49,96 +45,58 @@ func (r *fakeRepo) Get(_ context.Context, id string) (*job.Job, error) {
 	return &cp, nil
 }
 
-func (r *fakeRepo) WithTx(ctx context.Context, fn func(ports.Tx) error) error { return fn(nil) }
+func (r *fakeRepo) WithTx(_ context.Context, fn func(ports.Tx) error) error { return fn(nil) }
 
+// fakeEvents records every outbox publish keyed by topic, so track.events and
+// ingest.work dispatches can be asserted separately.
 type fakeEvents struct {
 	mu   sync.Mutex
-	list []ingest.TrackEvent
+	list []published
 }
 
-func (e *fakeEvents) Publish(_ context.Context, _ ports.Tx, _ string, payload []byte) error {
-	var ev ingest.TrackEvent
-	if err := json.Unmarshal(payload, &ev); err != nil {
-		return err
-	}
+type published struct {
+	topic   string
+	payload []byte
+}
+
+func (e *fakeEvents) Publish(_ context.Context, _ ports.Tx, topic string, payload []byte) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.list = append(e.list, ev)
+	cp := append([]byte(nil), payload...)
+	e.list = append(e.list, published{topic: topic, payload: cp})
 	return nil
 }
 
-func (e *fakeEvents) types() []string {
+func (e *fakeEvents) trackEvents() []ingest.TrackEvent {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	out := make([]string, len(e.list))
-	for i, ev := range e.list {
-		out[i] = ev.Type
+	var out []ingest.TrackEvent
+	for _, p := range e.list {
+		if p.topic != "track.events" {
+			continue
+		}
+		var ev ingest.TrackEvent
+		if err := json.Unmarshal(p.payload, &ev); err == nil {
+			out = append(out, ev)
+		}
 	}
 	return out
 }
 
-// fakeFetcher writes `content` to a fresh temp dir and returns its path + the
-// real content hash, so runingest's os.ReadFile / content-addressing is
-// exercised end-to-end.
-type fakeFetcher struct {
-	content []byte
-	err     error
-	calls   int
-}
-
-func (f *fakeFetcher) Fetch(_ context.Context, _ string) (string, string, error) {
-	f.calls++
-	if f.err != nil {
-		return "", "", f.err
+func (e *fakeEvents) works() []ingest.WorkCommand {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var out []ingest.WorkCommand
+	for _, p := range e.list {
+		if p.topic != "ingest.work" {
+			continue
+		}
+		var w ingest.WorkCommand
+		if err := json.Unmarshal(p.payload, &w); err == nil {
+			out = append(out, w)
+		}
 	}
-	dir, err := os.MkdirTemp("", "fakefetch-*")
-	if err != nil {
-		return "", "", err
-	}
-	p := filepath.Join(dir, "audio.mp3")
-	if err := os.WriteFile(p, f.content, 0o600); err != nil {
-		return "", "", err
-	}
-	return p, ingest.ContentID(f.content), nil
-}
-
-type fakeTranscriber struct {
-	lang  string
-	err   error
-	calls int
-}
-
-func (t *fakeTranscriber) Transcribe(_ context.Context, _ string) ([]byte, string, error) {
-	t.calls++
-	if t.err != nil {
-		return nil, "", t.err
-	}
-	return []byte(`{"segments":[]}`), t.lang, nil
-}
-
-type fakeBlob struct {
-	mu       sync.Mutex
-	objects  map[string][]byte
-	existsNo bool // when true, Exists always reports false (HEAD-verify failure)
-}
-
-func newBlob() *fakeBlob { return &fakeBlob{objects: map[string][]byte{}} }
-
-func (b *fakeBlob) Put(_ context.Context, key string, body []byte, _ string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.objects[key] = body
-	return nil
-}
-
-func (b *fakeBlob) Exists(_ context.Context, key string) (bool, error) {
-	if b.existsNo {
-		return false, nil
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	_, ok := b.objects[key]
-	return ok, nil
+	return out
 }
 
 type fakeTier struct {
@@ -154,202 +112,258 @@ func (t fakeTier) VerifyPro(string) (string, bool, error) { return t.userID, t.p
 type harness struct {
 	repo   *fakeRepo
 	events *fakeEvents
-	fetch  *fakeFetcher
-	trans  *fakeTranscriber
-	blob   *fakeBlob
 	tier   fakeTier
-	svc    *Service
+	req    *RequestHandler
+	res    *ResultHandler
 }
 
-func newHarness(maxAttempts int) *harness {
-	h := &harness{
-		repo:   newRepo(),
-		events: &fakeEvents{},
-		fetch:  &fakeFetcher{content: []byte("audio-bytes")},
-		trans:  &fakeTranscriber{lang: "en"},
-		blob:   newBlob(),
-		tier:   fakeTier{userID: "user-1", pro: true},
-	}
-	h.build(maxAttempts)
-	return h
-}
-
-func (h *harness) build(maxAttempts int) {
-	h.svc = New(Deps{
+func newHarness(maxAttempts int, tier fakeTier) *harness {
+	h := &harness{repo: newRepo(), events: &fakeEvents{}, tier: tier}
+	d := Deps{
 		Repo:              h.repo,
 		Events:            h.events,
-		Fetcher:           h.fetch,
-		Transcriber:       h.trans,
-		Reviewer:          review.New(),
-		Blob:              h.blob,
 		Tier:              h.tier,
 		MaxAttempts:       maxAttempts,
 		TrackEventsStream: "track.events",
-	})
+		WorkStream:        "ingest.work",
+	}
+	h.req = NewRequestHandler(d)
+	h.res = NewResultHandler(d)
+	return h
 }
 
 func reqPayload(t *testing.T, url string) []byte {
 	t.Helper()
-	b, err := json.Marshal(ingest.Request{URL: url, Token: "tok", Title: "A talk"})
+	b, err := json.Marshal(ingest.Request{URL: url, Token: "tok", Title: "A talk", UserID: "user-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return b
 }
 
-// --- tests ---
+func resPayload(t *testing.T, r ingest.Result) []byte {
+	t.Helper()
+	b, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
 
-func TestProcess_HappyPath(t *testing.T) {
-	h := newHarness(3)
-	if err := h.svc.Process(context.Background(), "msg-1", reqPayload(t, "https://x/y")); err != nil {
+func jobIDFor(msgID string) string { return uuid.NewSHA1(jobNamespace, []byte(msgID)).String() }
+
+func lastTrackType(evs []ingest.TrackEvent) string {
+	if len(evs) == 0 {
+		return ""
+	}
+	return evs[len(evs)-1].Type
+}
+
+// --- RequestHandler tests ---
+
+func TestRequest_CreatesJobAndDispatchesWork(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	if err := h.req.Process(context.Background(), "msg-1", reqPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-
-	j, _ := h.repo.Get(context.Background(), jobIDFor("msg-1"))
-	if j == nil || j.State != job.StateDone {
-		t.Fatalf("job not done: %+v", j)
+	jobID := jobIDFor("msg-1")
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j == nil || j.State != job.StateQueued {
+		t.Fatalf("job not queued: %+v", j)
 	}
-	if j.TrackID != ingest.ContentID([]byte("audio-bytes")) {
-		t.Fatalf("track id mismatch: %q", j.TrackID)
+	// track.queued emitted with a job-derived id.
+	evs := h.events.trackEvents()
+	if len(evs) != 1 || evs[0].Type != ingest.EventQueued || evs[0].ID != jobID+":queued" {
+		t.Fatalf("queued event wrong: %+v", evs)
 	}
-	// audio + transcript stored under the content-addressed prefix
-	if _, ok := h.blob.objects["public/tracks/"+j.TrackID+"/audio"]; !ok {
-		t.Fatal("audio not stored")
+	// exactly one ingest.work dispatched, attempt 1.
+	works := h.events.works()
+	if len(works) != 1 {
+		t.Fatalf("want 1 ingest.work, got %d", len(works))
 	}
-	if _, ok := h.blob.objects["public/tracks/"+j.TrackID+"/transcript"]; !ok {
-		t.Fatal("transcript not stored")
-	}
-	want := []string{ingest.EventQueued, ingest.EventProcessing, ingest.EventReady}
-	if got := h.events.types(); !equal(got, want) {
-		t.Fatalf("events = %v, want %v", got, want)
+	w := works[0]
+	if w.JobID != jobID || w.URL != "https://x/y" || w.Title != "A talk" || w.OwnerID != "user-1" || w.Attempt != 1 {
+		t.Fatalf("work command wrong: %+v", w)
 	}
 }
 
-func TestProcess_NotPro_PermanentFail(t *testing.T) {
-	h := newHarness(3)
-	h.tier = fakeTier{userID: "user-1", pro: false}
-	h.build(3)
-
-	if err := h.svc.Process(context.Background(), "msg-2", reqPayload(t, "https://x/y")); err != nil {
+func TestRequest_NotPro_FailsWithoutDispatch(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: false})
+	if err := h.req.Process(context.Background(), "msg-2", reqPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process should ack (nil), got %v", err)
 	}
 	j, _ := h.repo.Get(context.Background(), jobIDFor("msg-2"))
 	if j == nil || j.State != job.StateFailed {
 		t.Fatalf("job not failed: %+v", j)
 	}
-	if h.fetch.calls != 0 {
-		t.Fatalf("fetcher should not run for non-pro, calls=%d", h.fetch.calls)
+	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventFailed {
+		t.Fatalf("last track event = %q, want track.failed", got)
 	}
-	if last := lastType(h.events.types()); last != ingest.EventFailed {
-		t.Fatalf("last event = %q, want track.failed", last)
-	}
-}
-
-func TestProcess_TransientRetryThenDeadLetter(t *testing.T) {
-	h := newHarness(2)
-	h.fetch = &fakeFetcher{err: errors.New("boom")}
-	h.build(2)
-
-	// Attempt 1: transient failure → error returned (message left pending).
-	if err := h.svc.Process(context.Background(), "msg-3", reqPayload(t, "https://x/y")); err == nil {
-		t.Fatal("attempt 1 should return an error (nack)")
-	}
-	j, _ := h.repo.Get(context.Background(), jobIDFor("msg-3"))
-	if j.State != job.StateRunning || j.Attempts != 1 {
-		t.Fatalf("after attempt 1: state=%s attempts=%d", j.State, j.Attempts)
-	}
-
-	// Attempt 2 (redelivery): reaches the cap → dead-letter, acked (nil).
-	if err := h.svc.Process(context.Background(), "msg-3", reqPayload(t, "https://x/y")); err != nil {
-		t.Fatalf("attempt 2 should dead-letter (nil), got %v", err)
-	}
-	j, _ = h.repo.Get(context.Background(), jobIDFor("msg-3"))
-	if j.State != job.StateFailed || j.Attempts != 2 {
-		t.Fatalf("after dead-letter: state=%s attempts=%d", j.State, j.Attempts)
-	}
-	if lastType(h.events.types()) != ingest.EventFailed {
-		t.Fatalf("expected a track.failed event, got %v", h.events.types())
-	}
-
-	// A further redelivery of a settled job is a no-op ack.
-	if err := h.svc.Process(context.Background(), "msg-3", reqPayload(t, "https://x/y")); err != nil {
-		t.Fatalf("settled redelivery should ack, got %v", err)
+	if n := len(h.events.works()); n != 0 {
+		t.Fatalf("no ingest.work should be dispatched for non-pro, got %d", n)
 	}
 }
 
-func TestProcess_HeadVerifyFailureRetries(t *testing.T) {
-	h := newHarness(3)
-	h.blob = newBlob()
-	h.blob.existsNo = true // artifacts "vanish" — HEAD-verify fails
-	h.build(3)
-
-	if err := h.svc.Process(context.Background(), "msg-4", reqPayload(t, "https://x/y")); err == nil {
-		t.Fatal("HEAD-verify failure should nack (return error)")
+func TestRequest_ExistingUnsettled_NoRedispatch(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	// First request dispatches once.
+	if err := h.req.Process(context.Background(), "msg-3", reqPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("first: %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobIDFor("msg-4"))
-	if j.State == job.StateDone {
-		t.Fatal("job must not be done when HEAD-verify fails")
+	// Redelivery of the SAME request (same msg id → same job) must not re-dispatch.
+	if err := h.req.Process(context.Background(), "msg-3", reqPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("redelivery: %v", err)
 	}
-}
-
-// TestContentHashDedup: two DIFFERENT requests carrying identical audio collapse
-// onto one track — the second claims-fails and skips transcription.
-func TestContentHashDedup(t *testing.T) {
-	h := newHarness(3)
-
-	if err := h.svc.Process(context.Background(), "msg-a", reqPayload(t, "https://x/a")); err != nil {
-		t.Fatalf("first ingest: %v", err)
-	}
-	// Second message, distinct job, SAME audio content (same fetcher content).
-	if err := h.svc.Process(context.Background(), "msg-b", reqPayload(t, "https://x/b")); err != nil {
-		t.Fatalf("second ingest: %v", err)
-	}
-
-	hash := ingest.ContentID([]byte("audio-bytes"))
-	jb, _ := h.repo.Get(context.Background(), jobIDFor("msg-b"))
-	if jb.State != job.StateDone || jb.TrackID != hash {
-		t.Fatalf("deduped job not done onto shared track: %+v", jb)
-	}
-	// Transcriber ran only for the FIRST job; the dedup path skipped it.
-	if h.trans.calls != 1 {
-		t.Fatalf("transcriber calls = %d, want 1 (dedup should skip)", h.trans.calls)
+	if n := len(h.events.works()); n != 1 {
+		t.Fatalf("redelivery must not re-dispatch: got %d ingest.work", n)
 	}
 }
 
-func TestContentID_Deterministic(t *testing.T) {
-	a := ingest.ContentID([]byte("same"))
-	b := ingest.ContentID([]byte("same"))
-	c := ingest.ContentID([]byte("different"))
-	if a != b {
-		t.Fatal("ContentID not deterministic for identical bytes")
+// --- ResultHandler tests ---
+
+// seed creates a queued job the way the RequestHandler would.
+func (h *harness) seedQueued(t *testing.T, msgID, url string) string {
+	t.Helper()
+	if err := h.req.Process(context.Background(), msgID, reqPayload(t, url)); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
-	if a == c {
-		t.Fatal("ContentID collided for different bytes")
+	return jobIDFor(msgID)
+}
+
+func TestResult_Processing_MovesToRunning(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-p", "https://x/y")
+
+	if err := h.res.Process(context.Background(), "any", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseProcessing})); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateRunning {
+		t.Fatalf("job not running: %s", j.State)
+	}
+	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventProcessing {
+		t.Fatalf("last track event = %q, want track.processing", got)
 	}
 }
 
-// --- helpers ---
+func TestResult_Ready_MarksDone(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-r", "https://x/y")
+	_ = h.res.Process(context.Background(), "any", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseProcessing}))
 
-func jobIDFor(msgID string) string {
-	// Mirror runingest's deterministic (UUIDv5) job-id derivation.
-	return uuid.NewSHA1(jobNamespace, []byte(msgID)).String()
+	ready := ingest.Result{
+		JobID: jobID, Phase: ingest.PhaseReady, TrackID: "hash123", Lang: "en",
+		Title: "A talk", AudioKey: "public/tracks/hash123/audio",
+		TranscriptKey: "public/tracks/hash123/transcript", SourceURL: "https://x/y",
+	}
+	if err := h.res.Process(context.Background(), "any", resPayload(t, ready)); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateDone || j.TrackID != "hash123" {
+		t.Fatalf("job not done onto track: %+v", j)
+	}
+	last := h.events.trackEvents()
+	le := last[len(last)-1]
+	if le.Type != ingest.EventReady || le.ID != jobID+":ready" || le.TrackID != "hash123" {
+		t.Fatalf("ready event wrong: %+v", le)
+	}
 }
 
-func lastType(ss []string) string {
-	if len(ss) == 0 {
-		return ""
+func TestResult_Linked_MarksDoneWithoutProcessing(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-l", "https://x/y")
+	// A dedup "linked" result can arrive while the job is still queued (the
+	// worker's processing heartbeat may not have landed) — it must still settle.
+	linked := ingest.Result{JobID: jobID, Phase: ingest.PhaseLinked, TrackID: "dedup1", Title: "A talk"}
+	if err := h.res.Process(context.Background(), "any", resPayload(t, linked)); err != nil {
+		t.Fatalf("Process: %v", err)
 	}
-	return ss[len(ss)-1]
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateDone || j.TrackID != "dedup1" {
+		t.Fatalf("linked job not done: %+v", j)
+	}
+	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventReady {
+		t.Fatalf("last track event = %q, want track.ready", got)
+	}
 }
 
-func equal(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+func TestResult_RetriableFailed_Redispatches(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-f", "https://x/y") // 1 ingest.work so far
+
+	failed := ingest.Result{JobID: jobID, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}
+	if err := h.res.Process(context.Background(), "any", resPayload(t, failed)); err != nil {
+		t.Fatalf("Process: %v", err)
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State.IsTerminal() {
+		t.Fatalf("retriable failure must not be terminal: %s", j.State)
 	}
-	return true
+	if j.Attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", j.Attempts)
+	}
+	works := h.events.works()
+	if len(works) != 2 {
+		t.Fatalf("retry must re-dispatch: got %d ingest.work", len(works))
+	}
+	if works[1].Attempt != 2 || works[1].URL != "https://x/y" {
+		t.Fatalf("re-dispatch command wrong: %+v", works[1])
+	}
+}
+
+func TestResult_RetriableFailed_DeadLettersAtCap(t *testing.T) {
+	h := newHarness(1, fakeTier{userID: "user-1", pro: true}) // cap = 1
+	jobID := h.seedQueued(t, "msg-d", "https://x/y")
+	// First retriable failure: Attempts 0 < 1 → re-dispatch, Attempts→1.
+	_ = h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}))
+	// Second retriable failure: Attempts 1 >= cap → dead-letter.
+	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseFailed, Error: "boom2", Retriable: true})); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateFailed {
+		t.Fatalf("job not failed at cap: %s", j.State)
+	}
+	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventFailed {
+		t.Fatalf("last track event = %q, want track.failed", got)
+	}
+}
+
+func TestResult_PermanentFailed_DeadLetters(t *testing.T) {
+	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-perm", "https://x/y")
+
+	failed := ingest.Result{JobID: jobID, Phase: ingest.PhaseFailed, Error: "unsupported", Retriable: false}
+	if err := h.res.Process(context.Background(), "any", resPayload(t, failed)); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateFailed || j.Err != "unsupported" {
+		t.Fatalf("permanent failure not dead-lettered: %+v", j)
+	}
+	if n := len(h.events.works()); n != 1 {
+		t.Fatalf("permanent failure must not re-dispatch: got %d ingest.work", n)
+	}
+}
+
+func TestResult_UnknownJob_Ignored(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	if err := h.res.Process(context.Background(), "any", resPayload(t, ingest.Result{JobID: "nope", Phase: ingest.PhaseReady})); err != nil {
+		t.Fatalf("unknown job should ack (nil), got %v", err)
+	}
+}
+
+func TestResult_SettledJob_Idempotent(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-s", "https://x/y")
+	_ = h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"}))
+	before := len(h.events.trackEvents())
+	// Redelivery of a result for a settled (done) job is a no-op.
+	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"})); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	if after := len(h.events.trackEvents()); after != before {
+		t.Fatalf("settled job re-emitted events: before=%d after=%d", before, after)
+	}
 }

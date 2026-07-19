@@ -785,11 +785,13 @@ services:
       timeout: 3s
       retries: 30
 
-  # orchestrator: generic job orchestrator; first scenario is personal-library
-  # ingest (fetch -> transcribe -> review -> store -> emit track.events). Single
-  # Go binary; `serve` applies the embedded migrations on boot (advisory-locked
-  # + idempotent, like profile), so no separate migrate container is needed.
-  # Consumes ingest.request and publishes track.events on the dedicated
+  # orchestrator: thin job COORDINATOR; first scenario is personal-library
+  # ingest. It does NOT fetch/transcribe/store — it dispatches that heavy work to
+  # the stateless `ingest` worker (ingest.work), reacts to ingest.result, and
+  # drives the track.events lifecycle. Single Go binary; `serve` applies the
+  # embedded migrations on boot (advisory-locked + idempotent, like profile), so
+  # no separate migrate container is needed. Consumes ingest.request +
+  # ingest.result and publishes track.events + ingest.work on the dedicated
   # redis-streams broker; talks ONLY to orchestrator-postgres. Origin only —
   # every stream producer/consumer is origin-scoped; the RU proxy forwards the
   # personal-library routes to global.
@@ -806,14 +808,9 @@ services:
     environment:
       DATABASE_URL: postgresql://orchestrator:${SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD:?}@orchestrator-postgres:5432/orchestrator?sslmode=disable
       # Dedicated Redis-Streams broker (separate from the cache `redis`) — the
-      # orchestrator XADDs track.events and XREADGROUPs ingest.request here.
+      # coordinator XREADGROUPs ingest.request + ingest.result and XADDs
+      # track.events + ingest.work here.
       STREAMS_REDIS_URL: redis://redis-streams:6379/0
-      # Deepgram transcription for the ingest pipeline. Unset → the transcribe
-      # stage is inert (service still boots + serves /healthz).
-      DEEPGRAM_API_KEY: ${SHRUTI_DEEPGRAM_API_KEY:-}
-      # Outbound proxy for yt-dlp source fetches (geo / rate shaping). Empty →
-      # direct egress.
-      YTDLP_PROXY: ${SHRUTI_YTDLP_PROXY:-}
       PORT: "8086"
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_ORCHESTRATOR_TAG:-latest}
@@ -823,6 +820,55 @@ services:
       redis-streams: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "/orchestrator", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  # ingest: the STATELESS heavy-lifting worker behind the orchestrator. Consumes
+  # ingest.work, downloads (yt-dlp) + transcribes (Deepgram) + stores (S3) the
+  # audio, and reports ingest.result. No database — the orchestrator owns the
+  # job store and the retry policy. Unlike the other Go services its image is
+  # NOT FROM-scratch: the container ships yt-dlp + ffmpeg. Origin only — same
+  # stream-locality reasoning as the orchestrator.
+  #
+  # Build context is rooted at modules/ (dockerfile services/ingest/Dockerfile),
+  # because the image COPYs libs/pipeline/ alongside services/ingest/.
+  ingest:
+    profiles: [origin]
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-ingest:${SHRUTI_INGEST_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../../.env}
+    environment:
+      # Dedicated Redis-Streams broker — XREADGROUPs ingest.work, XADDs
+      # ingest.result.
+      STREAMS_REDIS_URL: redis://redis-streams:6379/0
+      # Deepgram transcription. Unset → the consumer stays disabled (the worker
+      # still boots + serves /healthz).
+      DEEPGRAM_API_KEY: ${SHRUTI_DEEPGRAM_API_KEY:-}
+      # Outbound proxy for yt-dlp source fetches (geo / rate shaping). Empty →
+      # direct egress.
+      YTDLP_PROXY: ${SHRUTI_YTDLP_PROXY:-}
+      # S3 blob store for the content-addressed audio + transcript artifacts.
+      # Credentials come from the env_file (AWS_* default chain), same as the
+      # share-* services.
+      S3_BUCKET: ${SHRUTI_S3_BUCKET:-}
+      S3_REGION: ${AWS_REGION:-us-east-1}
+      S3_ENDPOINT: ${SHRUTI_S3_ENDPOINT_URL:-}
+      S3_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
+      PORT: "8088"
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_INGEST_TAG:-latest}
+    networks: [shruti]
+    depends_on:
+      redis-streams: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/ingest", "healthz"]
       interval: 15s
       timeout: 3s
       retries: 40
