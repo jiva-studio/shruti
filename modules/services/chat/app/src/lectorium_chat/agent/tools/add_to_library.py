@@ -50,7 +50,7 @@ async def add_to_library_publish(
         return {"error": "identity_required"}
 
     pub = publisher or NoopIngestPublisher()
-    published = await pub.publish(user_id=user_id, url=u, jwt=jwt)
+    published = await pub.publish(user_id=user_id, url=u, jwt=jwt, title=title)
 
     action_id = _new_action_id()
     yield_event(

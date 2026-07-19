@@ -53,7 +53,9 @@ class _FakePublisher:
         self.calls: list[tuple[str, str, str]] = []
         self._ok = ok
 
-    async def publish(self, *, user_id: str, url: str, jwt: str) -> bool:
+    async def publish(
+        self, *, user_id: str, url: str, jwt: str, title: str = ""
+    ) -> bool:
         self.calls.append((user_id, url, jwt))
         return self._ok
 

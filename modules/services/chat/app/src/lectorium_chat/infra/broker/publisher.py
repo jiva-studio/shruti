@@ -2,8 +2,13 @@
 
 When a PRO user adds an external lecture, chat publishes one message to the
 `ingest.request` stream so the ingest worker (#1224) can fetch + transcribe
-+ index it. Payload is intentionally tiny — `{user_id, url, jwt}` — the
-worker re-verifies the JWT and does the heavy lifting.
++ index it. The body travels in a single `payload` stream field as JSON
+`{url, token, user_id, title}` — the shared Redis-Streams envelope convention
+every Lectorium service uses (the orchestrator decodes it into its `Request`,
+whose fields are `url` / `token` / `user_id` / `title`). `token` carries the
+caller's JWT; the orchestrator re-verifies the PRO tier and does the heavy
+lifting. `title` is the source title chat already resolved, so a track is
+never announced untitled.
 
 Every publish is best-effort: an absent/unreachable broker logs and returns
 False rather than raising, because a chat turn must not fail just because
@@ -13,6 +18,7 @@ lands (the message simply queues, or no-ops when unconfigured).
 
 from __future__ import annotations
 
+import json
 from typing import Protocol
 
 from lectorium_chat.observability.logging import get_logger
@@ -26,7 +32,9 @@ _STREAM_MAXLEN = 100_000
 
 
 class IngestRequestPublisher(Protocol):
-    async def publish(self, *, user_id: str, url: str, jwt: str) -> bool:
+    async def publish(
+        self, *, user_id: str, url: str, jwt: str, title: str = ""
+    ) -> bool:
         """Publish one ingest request. Returns True on a confirmed enqueue,
         False on any soft failure (never raises)."""
         ...
@@ -36,7 +44,9 @@ class NoopIngestPublisher:
     """Used when no broker URL is configured. Logs the intent so the add is
     still observable, and reports False (nothing was actually enqueued)."""
 
-    async def publish(self, *, user_id: str, url: str, jwt: str) -> bool:
+    async def publish(
+        self, *, user_id: str, url: str, jwt: str, title: str = ""
+    ) -> bool:
         log.info("ingest_publish_noop", user_id=user_id, url=url)
         return False
 
@@ -58,14 +68,16 @@ class RedisStreamsIngestPublisher:
             health_check_interval=30,
         )
 
-    async def publish(self, *, user_id: str, url: str, jwt: str) -> bool:
+    async def publish(
+        self, *, user_id: str, url: str, jwt: str, title: str = ""
+    ) -> bool:
         from redis.exceptions import RedisError
 
-        fields = {
-            b"user_id": user_id.encode(),
-            b"url": url.encode(),
-            b"jwt": jwt.encode(),
-        }
+        # Single `payload` field carrying the JSON body — the shared envelope
+        # the orchestrator's consumer unwraps. Keys match its `Request` struct
+        # (`url` / `token` / `user_id` / `title`); the JWT goes in `token`.
+        body = {"url": url, "token": jwt, "user_id": user_id, "title": title}
+        fields = {b"payload": json.dumps(body).encode()}
         try:
             msg_id = await self._client.xadd(
                 self._stream, fields, maxlen=_STREAM_MAXLEN, approximate=True

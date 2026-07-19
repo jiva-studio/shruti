@@ -5,9 +5,9 @@ track-lifecycle events into two side effects for the private lane (#1227):
 
   - `track.ready`   → index the transcript under `kind='user_track'` AND upsert
                       the `owned(user_id, track_id)` ACL row.
-  - `track.linked`  → upsert `owned` only (the transcript is already indexed;
-                      a second user gained access to a shared track).
   - `library.unlinked` → delete the `owned` row (revoke this user's access).
+                      (Consumer wired; a producer for this removal event is not
+                      yet implemented — see the personal-library architecture doc.)
 
 Design contract:
   - Idempotent by track_id: re-delivery of the same `track.ready` re-runs the
@@ -19,9 +19,14 @@ Design contract:
   - No-op when STREAMS_REDIS_URL is unset — `build_track_events_consumer`
     returns None and the lifespan simply doesn't start the task.
 
-Event fields are flat Redis stream fields (all strings). `type` (or `event`)
-discriminates; a `track.ready` carries the transcript inline as a `transcript`
-JSON field OR a `transcript_url` to fetch, plus `track_id`, `user_id`, `lang`.
+Wire format: the orchestrator's relay ships the event as a single `payload`
+stream field carrying JSON `{id, type, user_id, doc_id, track_id, data}`, where
+`data` is the library_items projection `{status, track_id, lang, title_raw,
+audio_key, transcript_key, source_url}`. `_unwrap_payload` flattens that into a
+string dict so the handler can read `type`, `track_id`, `user_id`, `lang`, and
+`transcript_key` uniformly. A legacy flat-field message (no `payload`) passes
+through unchanged. The transcript is not inline: a `track.ready` carries a
+`transcript_key` blob path that `_maybe_index` resolves to the CDN and fetches.
 """
 
 from __future__ import annotations
@@ -48,6 +53,44 @@ _PROCESSED_TTL_S = 7 * 24 * 3600
 
 def _decode(v: Any) -> str:
     return v.decode() if isinstance(v, (bytes, bytearray)) else str(v)
+
+
+def _unwrap_payload(fields: dict[str, str]) -> dict[str, str]:
+    """Flatten the orchestrator's `payload` JSON envelope into the string dict
+    the handler reads.
+
+    The relay ships `{id, type, user_id, doc_id, track_id, data:{...}}` in a
+    single `payload` field. We lift both the top-level keys (type, track_id,
+    user_id, doc_id) and the nested `data` projection (lang, transcript_key,
+    title_raw, …) into one flat dict. A message with no `payload` (legacy flat
+    fields) or a malformed one is returned unchanged so nothing is lost.
+    """
+    raw = fields.get("payload")
+    if not raw:
+        return fields
+    try:
+        body = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return fields
+    if not isinstance(body, dict):
+        return fields
+
+    def _stringify(v: Any) -> str:
+        if isinstance(v, str):
+            return v
+        if isinstance(v, (dict, list)):
+            return json.dumps(v)
+        return str(v)
+
+    flat: dict[str, str] = {}
+    data = body.get("data")
+    if isinstance(data, dict):
+        flat.update({k: _stringify(v) for k, v in data.items() if v is not None})
+    # Top-level keys win over `data` on any overlap (e.g. track_id is identical).
+    flat.update(
+        {k: _stringify(v) for k, v in body.items() if k != "data" and v is not None}
+    )
+    return flat
 
 
 async def upsert_owned(user_id: str, track_id: str) -> None:
@@ -139,6 +182,7 @@ class TrackEventsConsumer:
 
     async def _process(self, msg_id: Any, raw_fields: Any) -> None:
         fields = {_decode(k): _decode(v) for k, v in (raw_fields or {}).items()}
+        fields = _unwrap_payload(fields)
         try:
             acked = await self.handle(fields)
         except Exception as exc:  # noqa: BLE001 — do NOT ack: allow redelivery
@@ -176,13 +220,12 @@ class TrackEventsConsumer:
                 await delete_owned(user_id, track_id)
             return True
 
-        if etype in ("track.ready", "track.linked"):
-            # ACL first — cheap, idempotent, and independent of indexing so a
-            # link is asserted even if the transcript indexing is deferred.
+        if etype == "track.ready":
+            # ACL first — cheap, idempotent, and independent of indexing so
+            # ownership is asserted even if the transcript indexing is deferred.
             if user_id:
                 await upsert_owned(user_id, track_id)
-            if etype == "track.ready":
-                await self._maybe_index(track_id, fields)
+            await self._maybe_index(track_id, fields)
             return True
 
         log.info("track_event_ignored", type=etype, track_id=track_id)

@@ -3,8 +3,9 @@
 Covers the four load-bearing behaviours:
   1. per-track index round-trip     — `index_one_track` → chunks retrievable
                                        via the `user_track` search lane;
-  2. `owned` projection maintenance  — track.linked upserts, library.unlinked
-                                       deletes, get_owned_track_ids reflects it;
+  2. `owned` projection maintenance  — track.ready upserts (with indexing),
+                                       library.unlinked deletes,
+                                       get_owned_track_ids reflects it;
   3. union retrieval                — `fanout_search_with_boost` merges the
                                        private lane with the corpus lane;
   4. isolation (critical)           — the DEFAULT corpus lane
@@ -265,18 +266,14 @@ async def test_index_one_track_round_trip(monkeypatch) -> None:
 # ── 2. owned projection maintenance ──────────────────────────────────────
 
 
-async def test_owned_maintenance_link_and_unlink(monkeypatch) -> None:
+async def test_owned_maintenance_unlink(monkeypatch) -> None:
     db = FakePg()
     monkeypatch.setattr(tec, "get_pool", lambda: db)
     consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
 
-    acked = await consumer.handle(
-        {"type": "track.linked", "track_id": "tk", "user_id": "userA"}
-    )
-    assert acked is True and ("userA", "tk") in db.owned
-
-    # get_owned_track_ids reads the server-side projection keyed on sub.
-    repo = _repo(db)
+    # Seed ownership (a prior track.ready), then a removal event revokes it.
+    db.owned.add(("userA", "tk"))
+    repo = _repo(db)  # get_owned_track_ids reads the projection keyed on sub.
     assert await repo.get_owned_track_ids("userA") == ["tk"]
     assert await repo.get_owned_track_ids("userB") == []
 
@@ -285,6 +282,80 @@ async def test_owned_maintenance_link_and_unlink(monkeypatch) -> None:
     )
     assert acked is True and ("userA", "tk") not in db.owned
     assert await repo.get_owned_track_ids("userA") == []
+
+
+async def test_orchestrator_payload_envelope_indexes(monkeypatch) -> None:
+    """HOP4 boundary: the EXACT wire the orchestrator relay emits — a single
+    `payload` field carrying `{id,type,user_id,doc_id,track_id,data}` with the
+    transcript as a CDN `transcript_key` — must unwrap, set ownership, fetch the
+    transcript by key, and index it under user_track. Guards the Python<->Go seam
+    the per-service fixtures never exercised."""
+    import json
+
+    db = FakePg()
+    monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
+    monkeypatch.setattr(tec, "get_pool", lambda: db)
+
+    # transcript_key resolves to the CDN; stub the fetch to the stored reviewed
+    # blob (the same transcript.Reviewed shape the ingest worker writes).
+    reviewed = {
+        "trackId": "rt-9", "language": "en", "version": 1,
+        "blocks": [
+            {"type": "sentence", "start": 0, "end": 4000,
+             "text": "Krishna speaks of the eternal soul."},
+        ],
+    }
+
+    async def _fake_fetch(key, settings=None):
+        assert key == "public/tracks/rt-9/transcripts/en.json"
+        return reviewed
+
+    monkeypatch.setattr("lectorium_chat.indexer.s3.fetch_transcript", _fake_fetch)
+
+    class _FakeRedis:
+        def __init__(self) -> None:
+            self.s: set[bytes] = set()
+
+        async def sadd(self, key, member):
+            if member in self.s:
+                return 0
+            self.s.add(member)
+            return 1
+
+        async def expire(self, *a):
+            return True
+
+        async def srem(self, key, member):
+            self.s.discard(member)
+            return 1
+
+        async def xack(self, *a):
+            return 1
+
+    consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
+    consumer._settings = _Settings()
+    consumer._embedder = FakeEmbedder()
+    consumer._processed_set = "test:processed"
+    consumer._stream = "track.events"
+    consumer._group = "chat"
+    consumer._client = _FakeRedis()
+
+    body = {
+        "id": "job-1:ready", "type": "track.ready", "user_id": "userA",
+        "doc_id": "rt-9", "track_id": "rt-9",
+        "data": {
+            "status": "ready", "track_id": "rt-9", "lang": "en",
+            "title_raw": "Gita 2.13",
+            "audio_key": "public/tracks/rt-9/audio/original.mp3",
+            "transcript_key": "public/tracks/rt-9/transcripts/en.json",
+            "source_url": "https://y/1",
+        },
+    }
+    raw_fields = {b"payload": json.dumps(body).encode()}
+    await consumer._process("1700000000000-0", raw_fields)
+
+    assert ("userA", "rt-9") in db.owned
+    assert db.chunks and all(r["kind"] == "user_track" for r in db.chunks)
 
 
 async def test_track_ready_indexes_and_owns(monkeypatch) -> None:
