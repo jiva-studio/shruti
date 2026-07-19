@@ -14,11 +14,14 @@ import (
 //
 // Raw metadata columns (title/author/location/date/lang_hint) are read out of
 // the `metadata` jsonb the track.ready event shipped; lang / audio_key /
-// transcript_key come from their own columns.
+// transcript_key come from their own columns. The event ships the raw title
+// under the projection key `title_raw` (matching profile's library_items
+// contract); author/location/date/lang_hint are absent for a link-sourced
+// track and read back as NULL.
 func QueryRows(ctx context.Context, pool *pgxpool.Pool) ([]Row, error) {
 	const q = `
 		SELECT owner_id, track_id,
-		       metadata->>'title'     AS title_raw,
+		       metadata->>'title_raw' AS title_raw,
 		       metadata->>'author'    AS author_raw,
 		       metadata->>'location'  AS location_raw,
 		       metadata->>'date'      AS date_raw,

@@ -65,6 +65,21 @@ func (c *Clock) Deterministic(eventID string) string {
 	return format(phys, ctr, c.nodeID)
 }
 
+// Terminal returns the maximal server HLC (physical filled to the 15-digit
+// field, counter 0). It stamps a MONOTONIC TERMINAL flip — a server-authored
+// transition that must win last-writer-wins over every ordinary event on the
+// same doc regardless of arrival order (e.g. the publish-service's
+// origin='published' flip beating an earlier track.ready row whose hlc is a
+// high fnv-hash). It is a constant, so a redelivered terminal event collides on
+// UNIQUE(user_id, collection, doc_id, hlc) and stays idempotent.
+//
+// Caveat: nothing sorts ABOVE a terminal stamp except a higher counter at the
+// same physical. A future terminal event that must supersede this one (e.g. a
+// library removal after a publish) has to stamp physicalMod-1 with counter > 0.
+func (c *Clock) Terminal() string {
+	return format(physicalMod-1, 0, c.nodeID)
+}
+
 // decodeEventID extracts (physical, counter) from an event id. "<a>-<b>" (a
 // Redis-Streams id) and a bare non-negative integer decode directly and
 // preserve order; anything else falls back to a stable 64-bit hash split across

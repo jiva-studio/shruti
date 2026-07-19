@@ -53,6 +53,34 @@ func TestDeterministicStreamOrderPreserved(t *testing.T) {
 	}
 }
 
+// A terminal stamp wins last-writer-wins over EVERY ordinary stamp — an
+// ms-based stream id AND a fnv-hashed non-numeric token (the track.ready
+// "<jobID>:ready" case that a plain ms stamp would lose to). It is also stable
+// so a redelivered publish collapses on the change-log UNIQUE. This locks in the
+// origin='published' flip landing regardless of the ready row's hlc.
+func TestTerminalWinsOverEveryOrdinaryStamp(t *testing.T) {
+	c := NewClock()
+	term := c.Terminal()
+	if a, b := c.Terminal(), c.Terminal(); a != b {
+		t.Fatalf("terminal stamp not stable: %q != %q", a, b)
+	}
+	if parts := strings.SplitN(term, ":", 3); len(parts) != 3 ||
+		len(parts[0]) != physicalDigits || len(parts[1]) != counterDigits || parts[2] != ServerNodeID {
+		t.Fatalf("terminal stamp malformed: %q", term)
+	}
+	for _, id := range []string{
+		"1718000000000-0",          // ordinary ms-seq stream id
+		"9999999999999-99999",      // a far-future stream id
+		"1b671a64-40d5-491e:ready", // a fnv-hashed non-numeric track.ready id
+		"not-a-stream-id",
+		"42",
+	} {
+		if ordinary := c.Deterministic(id); !(term > ordinary) {
+			t.Errorf("terminal %q must sort after ordinary %q (from %q)", term, ordinary, id)
+		}
+	}
+}
+
 // A non-stream token still produces a stable, well-formed stamp (hash fallback)
 // so a misconfigured caller never crashes and redelivery is still idempotent.
 func TestDeterministicHashFallback(t *testing.T) {

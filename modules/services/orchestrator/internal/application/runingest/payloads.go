@@ -21,8 +21,8 @@ func failData(msg string) []byte {
 }
 
 // readyResult is the track.ready event payload (and the job's terminal Result),
-// projected from the worker's ready/linked result. Shape is part of the
-// downstream contract — keep it stable.
+// projected from the worker's ready result. Shape is part of the downstream
+// contract — keep it stable.
 func readyResult(res ingest.Result) []byte {
 	b, _ := json.Marshal(map[string]any{
 		"status":         "ready",
