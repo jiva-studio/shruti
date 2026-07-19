@@ -22,6 +22,10 @@ PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 # profile sync service's OWN Postgres — separate DB, so its own password,
 # generated the same way as the shared one above.
 PROFILE_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+# orchestrator + publish-service each own a separate Postgres (personal-library
+# ingest/publish planes), so each gets its own generated password.
+ORCHESTRATOR_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+PUBLISH_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 # Admin shared secret for chat /status + /reindex. Generated (not a fixed
 # "dev-token") so a fresh checkout doesn't ship a known admin token.
 APP_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
@@ -31,6 +35,8 @@ cat > "$ENV_FILE" <<EOF
 
 SHRUTI_POSTGRES_PASSWORD=postgres
 SHRUTI_PROFILE_POSTGRES_PASSWORD=postgres
+SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD=postgres
+SHRUTI_PUBLISH_POSTGRES_PASSWORD=postgres
 SHRUTI_ENV_FILE=../.env.dev
 SHRUTI_JWT_KEYS_DIR=../../../../.config/shruti/jwt
 SHRUTI_IMAGE_TAG=dev
