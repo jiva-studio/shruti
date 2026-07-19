@@ -22,10 +22,12 @@ type fakeRepo struct {
 
 func newRepo() *fakeRepo { return &fakeRepo{jobs: map[string]job.Job{}} }
 
-func (r *fakeRepo) Create(_ context.Context, j *job.Job) error               { return r.put(j) }
 func (r *fakeRepo) CreateTx(_ context.Context, _ ports.Tx, j *job.Job) error { return r.put(j) }
-func (r *fakeRepo) Save(_ context.Context, j *job.Job) error                 { return r.put(j) }
 func (r *fakeRepo) SaveTx(_ context.Context, _ ports.Tx, j *job.Job) error   { return r.put(j) }
+
+func (r *fakeRepo) GetForUpdateTx(_ context.Context, _ ports.Tx, id string) (*job.Job, error) {
+	return r.Get(context.Background(), id)
+}
 
 func (r *fakeRepo) put(j *job.Job) error {
 	r.mu.Lock()
@@ -270,18 +272,19 @@ func TestResult_Ready_MarksDone(t *testing.T) {
 	}
 }
 
-func TestResult_Linked_MarksDoneWithoutProcessing(t *testing.T) {
+func TestResult_ReadyWhileQueued_MarksDone(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	jobID := h.seedQueued(t, "msg-l", "https://x/y")
-	// A dedup "linked" result can arrive while the job is still queued (the
-	// worker's processing heartbeat may not have landed) — it must still settle.
-	linked := ingest.Result{JobID: jobID, Phase: ingest.PhaseLinked, TrackID: "dedup1", Title: "A talk"}
-	if err := h.res.Process(context.Background(), "any", resPayload(t, linked)); err != nil {
+	// A ready result can arrive while the job is still queued (the worker's
+	// processing heartbeat may not have landed) — it must step through running
+	// and still settle to done.
+	ready := ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "dedup1", Lang: "en", Title: "A talk"}
+	if err := h.res.Process(context.Background(), "any", resPayload(t, ready)); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
 	j, _ := h.repo.Get(context.Background(), jobID)
 	if j.State != job.StateDone || j.TrackID != "dedup1" {
-		t.Fatalf("linked job not done: %+v", j)
+		t.Fatalf("ready job not done: %+v", j)
 	}
 	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventReady {
 		t.Fatalf("last track event = %q, want track.ready", got)

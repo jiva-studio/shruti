@@ -11,6 +11,7 @@ import (
 
 	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/shruti/ingest/internal/infra/review"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 // --- fakes ---
@@ -46,12 +47,16 @@ type fakeTranscriber struct {
 	calls int
 }
 
-func (t *fakeTranscriber) Transcribe(_ context.Context, _ string) ([]byte, string, error) {
+func (t *fakeTranscriber) Transcribe(_ context.Context, _ string) (transcript.Raw, string, error) {
 	t.calls++
 	if t.err != nil {
-		return nil, "", t.err
+		return transcript.Raw{}, "", t.err
 	}
-	return []byte(`{"segments":[]}`), t.lang, nil
+	raw := transcript.Raw{
+		Language: t.lang,
+		Segments: []transcript.RawSegment{{Idx: 0, Start: 0, End: 1000, Text: "hello"}},
+	}
+	return raw, t.lang, nil
 }
 
 type fakeBlob struct {
@@ -80,14 +85,18 @@ func (b *fakeBlob) Exists(_ context.Context, key string) (bool, error) {
 }
 
 type fakeResults struct {
-	mu   sync.Mutex
-	list []ingest.Result
+	mu           sync.Mutex
+	list         []ingest.Result
+	failTerminal bool // when true, publishing a ready/failed result errors
 }
 
 func (r *fakeResults) Publish(_ context.Context, res ingest.Result) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.list = append(r.list, res)
+	if r.failTerminal && res.Phase != ingest.PhaseProcessing {
+		return errors.New("broker unavailable")
+	}
 	return nil
 }
 
@@ -155,11 +164,23 @@ func TestProcess_Ready(t *testing.T) {
 	}
 
 	hash := ingest.ContentID([]byte("audio-bytes"))
-	if _, ok := h.blob.objects["public/tracks/"+hash+"/audio"]; !ok {
-		t.Fatal("audio not stored")
+	audioKey := "public/tracks/" + hash + "/audio/original.mp3"
+	transcriptKey := "public/tracks/" + hash + "/transcripts/en.json"
+	if _, ok := h.blob.objects[audioKey]; !ok {
+		t.Fatal("audio not stored at MCP key")
 	}
-	if _, ok := h.blob.objects["public/tracks/"+hash+"/transcript"]; !ok {
-		t.Fatal("transcript not stored")
+	body, ok := h.blob.objects[transcriptKey]
+	if !ok {
+		t.Fatal("transcript not stored at MCP key")
+	}
+	// The stored transcript must be the reviewed artifact (transcript.Reviewed),
+	// not the raw ASR — verify it round-trips and carries the windowed block.
+	var rev transcript.Reviewed
+	if err := json.Unmarshal(body, &rev); err != nil {
+		t.Fatalf("stored transcript is not transcript.Reviewed json: %v", err)
+	}
+	if rev.TrackId != hash || rev.Language != "en" || rev.Version != 1 || len(rev.Blocks) != 1 {
+		t.Fatalf("reviewed transcript wrong: %+v", rev)
 	}
 	if got, want := h.results.phases(), []string{ingest.PhaseProcessing, ingest.PhaseReady}; !equal(got, want) {
 		t.Fatalf("phases = %v, want %v", got, want)
@@ -168,29 +189,8 @@ func TestProcess_Ready(t *testing.T) {
 	if last.JobID != "job-1" || last.TrackID != hash || last.Lang != "en" {
 		t.Fatalf("ready result wrong: %+v", last)
 	}
-	if last.AudioKey != "public/tracks/"+hash+"/audio" || last.TranscriptKey != "public/tracks/"+hash+"/transcript" {
+	if last.AudioKey != audioKey || last.TranscriptKey != transcriptKey {
 		t.Fatalf("ready result keys wrong: %+v", last)
-	}
-}
-
-func TestProcess_Linked_Dedup(t *testing.T) {
-	h := newHarness()
-	hash := ingest.ContentID([]byte("audio-bytes"))
-	// Pre-seed the audio blob → the dedup probe finds it and links.
-	h.blob.objects["public/tracks/"+hash+"/audio"] = []byte("prior")
-
-	if err := h.svc.Process(context.Background(), "msg-2", workPayload(t, "https://x/y")); err != nil {
-		t.Fatalf("Process: %v", err)
-	}
-	if h.trans.calls != 0 {
-		t.Fatalf("transcriber ran on dedup path, calls=%d", h.trans.calls)
-	}
-	if got, want := h.results.phases(), []string{ingest.PhaseProcessing, ingest.PhaseLinked}; !equal(got, want) {
-		t.Fatalf("phases = %v, want %v", got, want)
-	}
-	last := h.results.last()
-	if last.TrackID != hash || last.SourceURL != "https://x/y" {
-		t.Fatalf("linked result wrong: %+v", last)
 	}
 }
 
@@ -231,6 +231,20 @@ func TestProcess_HeadVerifyFailure_Failed(t *testing.T) {
 	}
 	if last := h.results.last(); last.Phase != ingest.PhaseFailed {
 		t.Fatalf("expected failed on HEAD-verify miss, got %+v", last)
+	}
+}
+
+// A terminal result whose publish fails must NOT be acked: Process returns the
+// error so the entry stays pending and redelivery re-runs the pipeline.
+func TestProcess_TerminalPublishFails_NotAcked(t *testing.T) {
+	h := newHarness()
+	h.results.failTerminal = true
+	err := h.svc.Process(context.Background(), "msg-term", workPayload(t, "https://x/y"))
+	if err == nil {
+		t.Fatal("expected Process to return an error (leave pending) when the terminal result publish fails")
+	}
+	if last := h.results.last(); last.Phase != ingest.PhaseReady {
+		t.Fatalf("expected a ready terminal attempt, got %+v", last)
 	}
 }
 

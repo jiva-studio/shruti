@@ -13,6 +13,7 @@ import (
 	"context"
 
 	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 // Fetcher downloads a concrete source URL (via a configurable proxy) and
@@ -21,16 +22,20 @@ type Fetcher interface {
 	Fetch(ctx context.Context, url string) (localPath, contentHash string, err error)
 }
 
-// Transcriber turns a local audio file into a transcript artifact and reports
-// the ASR-detected language.
+// Transcriber turns a local audio file into a raw ASR transcript and reports
+// the detected language. The worker windows the raw segments into the stored
+// reviewed artifact via Reviewer.NormalizeTranscript.
 type Transcriber interface {
-	Transcribe(ctx context.Context, audioPath string) (transcript []byte, lang string, err error)
+	Transcribe(ctx context.Context, audioPath string) (raw transcript.Raw, lang string, err error)
 }
 
 // Reviewer resolves a raw TrackDraft's metadata (deterministic normalization
-// today; LLM-assisted dictionary resolution is future work).
+// today; LLM-assisted dictionary resolution is future work) and converts a raw
+// ASR transcript into the reviewed artifact the corpus/app read
+// (transcript.Reviewed — the same shape the MCP pipeline stores).
 type Reviewer interface {
 	Review(ctx context.Context, draft ingest.TrackDraft) (ingest.TrackDraft, error)
+	NormalizeTranscript(raw transcript.Raw) transcript.Reviewed
 }
 
 // BlobStore writes artifacts to the content-addressed public path
@@ -41,9 +46,10 @@ type BlobStore interface {
 }
 
 // ResultPublisher emits an `ingest.result` message back to the orchestrator.
-// Publishing is best-effort for the non-terminal heartbeat and mandatory for
-// the terminal outcome, but the worker always acks after emitting exactly one
-// terminal result regardless of publish latency (redelivery re-runs safely).
+// The non-terminal heartbeat is best-effort, but the terminal result (ready |
+// failed) is mandatory: the worker acks its `ingest.work` only after the
+// terminal result is durably published, so a publish fault leaves the entry
+// pending and redelivery re-runs the (content-addressed, idempotent) pipeline.
 type ResultPublisher interface {
 	Publish(ctx context.Context, r ingest.Result) error
 }

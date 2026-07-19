@@ -48,6 +48,12 @@ func (Reviewer) Review(_ context.Context, d ingest.TrackDraft) (ingest.TrackDraf
 	return d, nil
 }
 
+// NormalizeTranscript adapts the package-level normalizer onto ports.Reviewer so
+// the worker can window a raw ASR transcript into the stored reviewed artifact.
+func (Reviewer) NormalizeTranscript(raw transcript.Raw) transcript.Reviewed {
+	return NormalizeTranscript(raw)
+}
+
 // NormalizeTranscript converts ASR raw segments into a reviewed transcript
 // using the shared chunking algorithm and the deterministic per-segment
 // fallback (each segment becomes a sentence block carrying its ms offsets).
