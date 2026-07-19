@@ -861,13 +861,18 @@ services:
       # Outbound proxy for yt-dlp source fetches (geo / rate shaping). Empty →
       # direct egress.
       YTDLP_PROXY: ${SHRUTI_YTDLP_PROXY:-}
-      # S3 blob store for the content-addressed audio + transcript artifacts.
-      # Credentials come from the env_file (AWS_* default chain), same as the
-      # share-* services.
+      # Blob store for the content-addressed audio + transcript artifacts. The
+      # backend MUST match what the public CDN (b-cdn) serves from, or the app +
+      # chat can't fetch them. Global = "bunny" (Bunny Edge Storage, not
+      # S3-compatible); RU proxy / dev = "s3" (Yandex/AWS). Same STORAGE_* env as
+      # the share-* services.
+      STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
+      STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
+      # s3 backend: creds from the env_file (AWS_* default chain).
       S3_BUCKET: ${SHRUTI_S3_BUCKET:-}
       S3_REGION: ${AWS_REGION:-us-east-1}
       S3_ENDPOINT: ${SHRUTI_S3_ENDPOINT_URL:-}
-      S3_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-https://cdn.shruti.local}
       PORT: "8088"
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_INGEST_TAG:-latest}
@@ -926,9 +931,13 @@ services:
       STREAMS_REDIS_URL: redis://redis-streams:6379/0
       TRACK_EVENTS_STREAM: track.events
       TRACK_PUBLISHED_STREAM: track.published
-      # S3 for the content-addressed catalog + the pending.db review artifact.
-      # publish-service reads S3 creds EXPLICITLY (not the AWS default chain), so
-      # map them from the env_file's AWS_* values.
+      # Blob backend for the catalog + the pending.db review artifact. Must match
+      # what the CDN serves from — global = "bunny", RU/dev = "s3".
+      STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
+      STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
+      # s3 backend: publish-service reads S3 creds EXPLICITLY (not the AWS default
+      # chain), so map them from the env_file's AWS_* values.
       S3_BUCKET: ${SHRUTI_S3_BUCKET:-}
       S3_REGION: ${AWS_REGION:-us-east-1}
       S3_ENDPOINT: ${SHRUTI_S3_ENDPOINT_URL:-}

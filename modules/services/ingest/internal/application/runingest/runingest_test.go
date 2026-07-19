@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -210,7 +211,7 @@ func TestProcess_Failed_Transient(t *testing.T) {
 
 func TestProcess_Failed_Permanent(t *testing.T) {
 	h := newHarness()
-	h.fetch = &fakeFetcher{err: errors.New("fetch: invalid url \"::bad::\"")}
+	h.fetch = &fakeFetcher{err: fmt.Errorf("fetch: invalid url %q: %w", "::bad::", ingest.ErrPermanent)}
 	h.svc = New(Deps{Fetcher: h.fetch, Transcriber: h.trans, Reviewer: review.New(), Blob: h.blob, Results: h.results})
 
 	if err := h.svc.Process(context.Background(), "msg-4", workPayload(t, "::bad::")); err != nil {
