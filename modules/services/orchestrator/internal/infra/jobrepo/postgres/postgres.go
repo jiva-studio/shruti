@@ -90,19 +90,31 @@ func (r *Repo) update(ctx context.Context, q querier, j *job.Job) error {
 
 // Get loads a job by id; returns (nil, nil) when absent.
 func (r *Repo) Get(ctx context.Context, id string) (*job.Job, error) {
+	return getJob(ctx, r.pool, id, "")
+}
+
+// GetForUpdateTx loads a job by id inside the caller's transaction, taking a row
+// lock (SELECT … FOR UPDATE). Two consumers processing the same result serialize
+// on this lock, so the retry decision (re-check attempt, increment, re-dispatch)
+// happens exactly once even under concurrent redelivery.
+func (r *Repo) GetForUpdateTx(ctx context.Context, t ports.Tx, id string) (*job.Job, error) {
+	return getJob(ctx, r.q(t), id, " FOR UPDATE")
+}
+
+func getJob(ctx context.Context, q querier, id, lock string) (*job.Job, error) {
 	var (
-		j        job.Job
-		kind     string
-		state    string
-		owner    *string
-		trackID  *string
-		errStr   *string
-		spec     []byte
-		result   []byte
+		j       job.Job
+		kind    string
+		state   string
+		owner   *string
+		trackID *string
+		errStr  *string
+		spec    []byte
+		result  []byte
 	)
-	err := r.pool.QueryRow(ctx, `
+	err := q.QueryRow(ctx, `
 		SELECT id, kind, owner_id::text, state, spec, result, track_id, error, attempts, created_at, updated_at
-		  FROM orchestrator.jobs WHERE id=$1`, id).
+		  FROM orchestrator.jobs WHERE id=$1`+lock, id).
 		Scan(&j.ID, &kind, &owner, &state, &spec, &result, &trackID, &errStr, &j.Attempts, &j.CreatedAt, &j.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

@@ -8,17 +8,20 @@
 //
 //   - Idempotency comes from content-addressing: Fetch is pure and Put writes
 //     to `public/tracks/<hash>/…`, so a redelivered `ingest.work` (e.g. after a
-//     crash before XACK) re-runs safely and converges on the same keys.
-//   - Dedup: if identical audio was already stored by a prior job, the owner is
-//     LINKED to it (phase "linked") instead of re-transcribing.
-//   - The worker emits EXACTLY ONE terminal result (ready | linked | failed)
-//     and then ALWAYS acks. It never retries and never tracks attempts — the
-//     retry policy (and the attempt cap) lives entirely in the orchestrator,
-//     which decides whether a failed result is re-dispatched.
+//     crash or a lost result before XACK) re-runs safely and converges on the
+//     same keys — a duplicate re-transcribe simply overwrites identical bytes.
+//   - Stored artifacts match the MCP pipeline exactly: audio at
+//     `public/tracks/<hash>/audio/original.mp3` and the reviewed transcript at
+//     `public/tracks/<hash>/transcripts/<lang>.json`.
+//   - The worker emits ONE terminal result (ready | failed) and acks only once
+//     it is durably published. It never retries the pipeline for a business
+//     failure and never tracks attempts — the retry policy (and the attempt
+//     cap) lives entirely in the orchestrator.
 package runingest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,10 +48,12 @@ type Service struct {
 // New builds a Service.
 func New(d Deps) *Service { return &Service{d: d} }
 
-// Process handles one `ingest.work` message. It ALWAYS returns nil (safe to
-// XACK) once it has emitted a terminal result: the worker does not leave entries
-// pending for its own retry — the orchestrator owns retries. A non-decodable
-// payload is a poison pill and is dropped (nil, no result).
+// Process handles one `ingest.work` message. It returns nil (safe to XACK) only
+// after the TERMINAL result (ready | failed) is durably published; a publish
+// fault on the terminal result returns an error so the entry stays pending and
+// redelivery re-runs the (content-addressed, idempotent) pipeline. The worker
+// never retries the pipeline for a business failure — the orchestrator owns that
+// from the Retriable flag. A non-decodable payload is a poison pill (nil, drop).
 func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	cmd, err := ingest.DecodeWork(payload)
 	if err != nil {
@@ -64,47 +69,39 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	}
 	defer os.RemoveAll(filepath.Dir(localPath))
 
-	// Dedup on the artifact itself: if this exact content was already ingested
-	// and STORED by a prior job, the blob is present — link this owner to it
-	// instantly instead of re-transcribing.
-	already, err := s.d.Blob.Exists(ctx, audioKey(hash))
-	if err != nil {
-		return s.fail(ctx, cmd, fmt.Errorf("dedup probe: %w", err))
-	}
-	if already {
-		s.emit(ctx, ingest.Result{
-			JobID:         cmd.JobID,
-			Attempt:       cmd.Attempt,
-			Phase:         ingest.PhaseLinked,
-			TrackID:       hash,
-			Title:         cmd.Title,
-			AudioKey:      audioKey(hash),
-			TranscriptKey: transcriptKey(hash),
-			SourceURL:     cmd.URL,
-		})
-		return nil
-	}
-
 	audio, err := os.ReadFile(localPath)
 	if err != nil {
 		return s.fail(ctx, cmd, fmt.Errorf("read audio: %w", err))
 	}
 
-	transcript, lang, err := s.d.Transcriber.Transcribe(ctx, localPath)
+	raw, _, err := s.d.Transcriber.Transcribe(ctx, localPath)
 	if err != nil {
 		return s.fail(ctx, cmd, fmt.Errorf("transcribe: %w", err))
 	}
+	raw.TrackId = hash
+	if raw.Language == "" {
+		raw.Language = "und" // keep the transcripts/<lang>.json key well-formed
+	}
 
-	draft := ingest.TrackDraft{TitleRaw: cmd.Title, LangHint: lang}
+	// Window the raw ASR segments into the reviewed artifact the corpus/app read
+	// (transcript.Reviewed — the exact shape + key the MCP pipeline stores).
+	reviewed := s.d.Reviewer.NormalizeTranscript(raw)
+	transcriptBody, err := json.Marshal(reviewed)
+	if err != nil {
+		return s.fail(ctx, cmd, fmt.Errorf("marshal transcript: %w", err))
+	}
+
+	draft := ingest.TrackDraft{TitleRaw: cmd.Title, LangHint: raw.Language}
 	if draft, err = s.d.Reviewer.Review(ctx, draft); err != nil {
 		return s.fail(ctx, cmd, fmt.Errorf("review: %w", err))
 	}
+	lang := draft.Lang
 
-	aKey, tKey := audioKey(hash), transcriptKey(hash)
+	aKey, tKey := audioKey(hash), transcriptKey(hash, lang)
 	if err := s.d.Blob.Put(ctx, aKey, audio, "audio/mpeg"); err != nil {
 		return s.fail(ctx, cmd, fmt.Errorf("put audio: %w", err))
 	}
-	if err := s.d.Blob.Put(ctx, tKey, transcript, "application/json"); err != nil {
+	if err := s.d.Blob.Put(ctx, tKey, transcriptBody, "application/json"); err != nil {
 		return s.fail(ctx, cmd, fmt.Errorf("put transcript: %w", err))
 	}
 
@@ -119,36 +116,40 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		}
 	}
 
-	s.emit(ctx, ingest.Result{
+	return s.done(ctx, ingest.Result{
 		JobID:         cmd.JobID,
 		Attempt:       cmd.Attempt,
 		Phase:         ingest.PhaseReady,
 		TrackID:       hash,
-		Lang:          draft.Lang,
+		Lang:          lang,
 		Title:         draft.TitleRaw,
 		AudioKey:      aKey,
 		TranscriptKey: tKey,
 		SourceURL:     cmd.URL,
 	})
-	return nil
 }
 
-// fail emits a terminal failed result (classifying transient vs permanent) and
-// acks. The worker never retries — the orchestrator decides re-dispatch from
-// the Retriable flag and its own attempt cap.
+// fail publishes a terminal failed result (classifying transient vs permanent).
+// It returns the publish error (if any) so a lost terminal result redelivers;
+// the orchestrator decides re-dispatch from the Retriable flag and its cap.
 func (s *Service) fail(ctx context.Context, cmd ingest.WorkCommand, cause error) error {
-	s.emit(ctx, ingest.Result{
+	return s.done(ctx, ingest.Result{
 		JobID:     cmd.JobID,
 		Attempt:   cmd.Attempt,
 		Phase:     ingest.PhaseFailed,
 		Error:     cause.Error(),
 		Retriable: retriable(cause),
 	})
-	return nil
 }
 
-// emit publishes a result, best-effort: a publish failure is not fatal because
-// the content-addressed keys make a redelivered re-run idempotent.
+// done publishes a TERMINAL result and propagates the publish error: the worker
+// acks only once the outcome is durable (a publish fault → redelivery re-runs).
+func (s *Service) done(ctx context.Context, r ingest.Result) error {
+	return s.d.Results.Publish(ctx, r)
+}
+
+// emit publishes a NON-terminal heartbeat, best-effort: a publish failure is not
+// fatal because the terminal result still carries the outcome.
 func (s *Service) emit(ctx context.Context, r ingest.Result) {
 	_ = s.d.Results.Publish(ctx, r)
 }
@@ -167,7 +168,9 @@ func retriable(err error) bool {
 	return true
 }
 
-// --- blob keys (content-addressed public path) ---
+// --- blob keys (content-addressed public path; identical to the MCP pipeline) ---
 
-func audioKey(trackID string) string      { return "public/tracks/" + trackID + "/audio" }
-func transcriptKey(trackID string) string { return "public/tracks/" + trackID + "/transcript" }
+func audioKey(trackID string) string { return "public/tracks/" + trackID + "/audio/original.mp3" }
+func transcriptKey(trackID, lang string) string {
+	return "public/tracks/" + trackID + "/transcripts/" + lang + ".json"
+}

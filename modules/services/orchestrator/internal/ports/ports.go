@@ -27,6 +27,9 @@ type EventBus interface {
 // EventBus.Publish) commit atomically — the transactional-outbox invariant.
 type JobRepository interface {
 	Get(ctx context.Context, id string) (*job.Job, error)
+	// GetForUpdateTx loads a job inside a tx taking a row lock, so the retry
+	// decision is serialized across concurrent redelivery of the same result.
+	GetForUpdateTx(ctx context.Context, q Tx, id string) (*job.Job, error)
 	CreateTx(ctx context.Context, q Tx, j *job.Job) error
 	SaveTx(ctx context.Context, q Tx, j *job.Job) error
 	// WithTx runs fn inside a transaction so a job write and its outbox rows

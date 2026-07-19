@@ -8,9 +8,9 @@
 //     commits the job, a `track.queued` outbox event, and an `ingest.work`
 //     outbox command that dispatches the heavy lifting to the ingest worker.
 //   - ResultHandler consumes `ingest.result` (ingest → orchestrator): it maps
-//     the worker's phase reports (processing / ready / linked / failed) onto job
-//     state transitions and the `track.events` lifecycle, and owns the RETRY
-//     policy — a retriable failure below the attempt cap re-dispatches a fresh
+//     the worker's phase reports (processing / ready / failed) onto job state
+//     transitions and the `track.events` lifecycle, and owns the RETRY policy —
+//     a retriable failure below the attempt cap re-dispatches a fresh
 //     `ingest.work`; otherwise the job dead-letters with `track.failed`.
 //
 // Guarantees:
@@ -95,21 +95,19 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 	if err != nil {
 		return fmt.Errorf("load job: %w", err)
 	}
-	if existing != nil && isSettled(existing) {
-		return nil // already terminal — idempotent ack
-	}
-
-	// Re-verify PRO from the JWT. A lapsed / invalid token is a PERMANENT
-	// failure: create-or-fail the job, emit track.failed, and ack.
-	userID, pro, verr := h.d.Tier.VerifyPro(req.Token)
-	if verr != nil || !pro {
-		return h.failNotPro(ctx, jobID, req, payload, existing)
-	}
-
-	// A non-settled job already exists → its ingest.work dispatch is in flight.
-	// Do NOT re-dispatch (that is the ResultHandler's retry job).
+	// A job for this request already exists — settled or in flight. Ack without
+	// touching it: PRO was verified when it was created, and any retry belongs to
+	// the ResultHandler. (Re-verifying here would let a token that lapsed AFTER
+	// acceptance fail a job whose ingest.work is still in flight.)
 	if existing != nil {
 		return nil
+	}
+
+	// First time we see this request: verify PRO from the JWT. A lapsed / invalid
+	// token is a PERMANENT failure — create a failed job, emit track.failed, ack.
+	userID, pro, verr := h.d.Tier.VerifyPro(req.Token)
+	if verr != nil || !pro {
+		return h.failNotPro(ctx, jobID, req, payload)
 	}
 
 	owner := req.UserID
@@ -138,33 +136,25 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 	})
 }
 
-// failNotPro settles a job that failed PRO re-verification: create-or-transition
-// to failed, emit track.failed (id job:failed), and ack.
-func (h *RequestHandler) failNotPro(ctx context.Context, jobID string, req ingest.Request, payload []byte, existing *job.Job) error {
-	j := existing
-	isNew := j == nil
-	if isNew {
-		j = &job.Job{
-			ID:      jobID,
-			Kind:    job.KindLibraryIngest,
-			OwnerID: req.UserID,
-			State:   job.StateQueued,
-			Spec:    payload,
-		}
+// failNotPro settles a brand-new job that failed PRO verification: create it
+// directly in the failed state, emit track.failed (id job:failed), and ack.
+// Only reached for a request with no existing job (an in-flight/settled job is
+// never re-judged), so the job is always new.
+func (h *RequestHandler) failNotPro(ctx context.Context, jobID string, req ingest.Request, payload []byte) error {
+	j := &job.Job{
+		ID:      jobID,
+		Kind:    job.KindLibraryIngest,
+		OwnerID: req.UserID,
+		State:   job.StateQueued,
+		Spec:    payload,
 	}
-	if !j.State.IsTerminal() {
-		if err := j.To(job.StateFailed); err != nil {
-			return fmt.Errorf("to failed: %w", err)
-		}
+	if err := j.To(job.StateFailed); err != nil {
+		return fmt.Errorf("to failed: %w", err)
 	}
 	j.Err = errUnauthorized.Error()
 	ev := event(jobID+":failed", ingest.EventFailed, j.OwnerID, jobID, j.TrackID, failData(errUnauthorized.Error()))
 	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
-		if isNew {
-			if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
-				return err
-			}
-		} else if err := h.d.Repo.SaveTx(ctx, tx, j); err != nil {
+		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
 			return err
 		}
 		return h.publishEvent(ctx, tx, ev)
@@ -211,12 +201,11 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		ev := event(res.JobID+":processing", ingest.EventProcessing, j.OwnerID, res.JobID, "", statusData("processing", specURL(j)))
 		return h.save(ctx, j, ev)
 
-	case ingest.PhaseReady, ingest.PhaseLinked:
+	case ingest.PhaseReady:
 		j.TrackID = res.TrackID
 		j.Result = readyResult(res)
-		// A ready/linked may arrive while the job is still queued (a lost
-		// processing heartbeat) — step it through running so the To(Done)
-		// transition is legal.
+		// A ready may arrive while the job is still queued (a lost processing
+		// heartbeat) — step it through running so To(Done) is legal.
 		if j.State == job.StateQueued {
 			_ = j.To(job.StateRunning)
 		}
@@ -231,19 +220,33 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		// j.Attempts+1 (the last dispatched ingest.work); a redelivered failure
 		// from an already-superseded attempt (res.Attempt < that) must NOT
 		// re-dispatch again or double-count — the newer attempt owns the job now.
+		// (This is a cheap pre-filter; the authoritative check is under the row
+		// lock below so concurrent redelivery can't double-dispatch.)
 		if res.Attempt != j.Attempts+1 {
 			return nil
 		}
-		// Retry policy lives HERE: a retriable failure below the cap
-		// re-dispatches a fresh ingest.work (job stays non-terminal).
+		// Retry policy lives HERE: a retriable failure below the cap re-dispatches
+		// a fresh ingest.work. Re-load the job FOR UPDATE inside the tx and
+		// re-check under the lock, so two consumers racing the same result can't
+		// both increment + dispatch (the loser sees the bumped attempt and no-ops).
 		if res.Retriable && j.Attempts < h.d.MaxAttempts {
-			j.Attempts++
-			req := specRequest(j)
 			return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
-				if err := h.d.Repo.SaveTx(ctx, tx, j); err != nil {
+				locked, err := h.d.Repo.GetForUpdateTx(ctx, tx, res.JobID)
+				if err != nil {
 					return err
 				}
-				return h.dispatchWork(ctx, tx, res.JobID, req.URL, req.Title, j.OwnerID, j.Attempts+1)
+				if locked == nil || locked.State.IsTerminal() {
+					return nil // already settled by another consumer
+				}
+				if res.Attempt != locked.Attempts+1 {
+					return nil // superseded under the lock — do not re-dispatch
+				}
+				locked.Attempts++
+				req := specRequest(locked)
+				if err := h.d.Repo.SaveTx(ctx, tx, locked); err != nil {
+					return err
+				}
+				return h.dispatchWork(ctx, tx, res.JobID, req.URL, req.Title, locked.OwnerID, locked.Attempts+1)
 			})
 		}
 		if !j.State.IsTerminal() {
