@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jiva-studio/lectorium/orchestrator/internal/domain/ingest"
+	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 

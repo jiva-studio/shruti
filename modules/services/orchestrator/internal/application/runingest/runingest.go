@@ -1,28 +1,33 @@
-// Package runingest is the ingest pipeline use case: it consumes one
-// `ingest.request`, drives it through fetch → content-hash → transcribe →
-// review → store, and emits the `track.*` lifecycle via the transactional
-// outbox. It depends ONLY on ports, so the whole flow is exercised with fakes.
+// Package runingest is the orchestrator's coordination core. The orchestrator
+// is a THIN coordinator: it does NOT fetch, transcribe, or store anything —
+// that is the stateless `ingest` worker's job. This package holds the two
+// broker handlers that make up the seam:
+//
+//   - RequestHandler consumes `ingest.request` (chat → orchestrator): it
+//     creates the job, re-verifies the PRO tier, and — in ONE transaction —
+//     commits the job, a `track.queued` outbox event, and an `ingest.work`
+//     outbox command that dispatches the heavy lifting to the ingest worker.
+//   - ResultHandler consumes `ingest.result` (ingest → orchestrator): it maps
+//     the worker's phase reports (processing / ready / linked / failed) onto job
+//     state transitions and the `track.events` lifecycle, and owns the RETRY
+//     policy — a retriable failure below the attempt cap re-dispatches a fresh
+//     `ingest.work`; otherwise the job dead-letters with `track.failed`.
 //
 // Guarantees:
-//   - Job is the source of truth. The job id is derived deterministically from
-//     the broker message id, so a redelivered message maps to the SAME job
-//     (idempotent create; attempts accumulate for the dead-letter cap).
-//   - PRO tier is RE-VERIFIED from the request JWT at processing time.
-//   - Dedup on the stored artifact: if identical audio was already ingested and
-//     its blob is present, the new owner is linked to it instead of
-//     re-transcribing — and a track is never announced before its blob exists.
-//   - At-least-once: on a transient failure the message is left pending
-//     (Process returns an error) until MaxAttempts, then the job dead-letters
-//     (marked failed, `track.failed` emitted) and the message is acked.
+//   - The job is the source of truth. Its id is derived deterministically
+//     (UUIDv5) from the `ingest.request` message id, so a redelivered request
+//     maps to the SAME job (idempotent create).
+//   - `track.events` ids are derived from the JOB id (not the broker message
+//     id), so queued/processing/ready/failed for one job are stable across the
+//     two streams and any redelivery — downstream projections stay idempotent.
+//   - Everything is driven through ports, so the whole seam is exercised with
+//     fakes (no Postgres, no broker).
 package runingest
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/google/uuid"
 
@@ -35,63 +40,110 @@ import (
 // id, so redelivery is idempotent at the job level.
 var jobNamespace = uuid.MustParse("1b671a64-40d5-491e-99b0-da01ff1f3341")
 
-// Deps bundles the ports the use case needs.
+// errUnauthorized is a permanent (non-retryable) failure: the request's token
+// no longer grants an active PRO tier.
+var errUnauthorized = errors.New("pro tier not verified")
+
+// Deps bundles the ports both handlers share.
 type Deps struct {
-	Repo        ports.JobRepository
-	Events      ports.EventBus
-	Fetcher     ports.Fetcher
-	Transcriber ports.Transcriber
-	Reviewer    ports.Reviewer
-	Blob        ports.BlobStore
-	Tier        ports.TierVerifier
-	Clock       ports.Clock
-	IDs         ports.IDGen
+	Repo   ports.JobRepository
+	Events ports.EventBus
+	Tier   ports.TierVerifier
 
 	MaxAttempts       int
 	TrackEventsStream string
+	WorkStream        string
 }
 
-// Service runs the pipeline.
-type Service struct {
-	d Deps
-}
-
-// New builds a Service, defaulting the attempt cap and stream name.
-func New(d Deps) *Service {
+func (d *Deps) applyDefaults() {
 	if d.MaxAttempts <= 0 {
 		d.MaxAttempts = 5
 	}
 	if d.TrackEventsStream == "" {
 		d.TrackEventsStream = "track.events"
 	}
-	return &Service{d: d}
+	if d.WorkStream == "" {
+		d.WorkStream = "ingest.work"
+	}
 }
 
-// errUnauthorized is a permanent (non-retryable) failure: the request's token
-// no longer grants an active PRO tier.
-var errUnauthorized = errors.New("pro tier not verified")
+// core carries the shared deps + helpers the two handlers reuse.
+type core struct{ d Deps }
 
-// Process handles one message. It returns nil when the entry is safe to XACK
-// (success, dedup, permanent failure, or dead-letter) and a non-nil error to
-// leave the entry pending for redelivery (a retryable transient failure).
-func (s *Service) Process(ctx context.Context, msgID string, payload []byte) error {
+// RequestHandler processes `ingest.request` (chat → orchestrator).
+type RequestHandler struct{ core }
+
+// NewRequestHandler builds the request handler, defaulting the attempt cap and
+// stream names.
+func NewRequestHandler(d Deps) *RequestHandler {
+	d.applyDefaults()
+	return &RequestHandler{core{d}}
+}
+
+// Process handles one `ingest.request`. It returns nil when the entry is safe
+// to XACK and a non-nil error only to leave it pending for redelivery (a
+// transient persistence fault). No pipeline work happens here — the job is
+// created and the heavy lifting is dispatched to the ingest worker.
+func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []byte) error {
 	req, err := ingest.DecodeRequest(payload)
 	if err != nil {
-		// Poison pill — unparseable. Ack to drop it (redelivery can't help).
-		return nil
+		return nil // poison pill — unparseable; ack to drop it
 	}
 
 	jobID := uuid.NewSHA1(jobNamespace, []byte(msgID)).String()
-	existing, err := s.d.Repo.Get(ctx, jobID)
+	existing, err := h.d.Repo.Get(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("load job: %w", err)
 	}
-	if existing != nil && s.isSettled(existing) {
+	if existing != nil && isSettled(existing) {
 		return nil // already terminal — idempotent ack
 	}
 
+	// Re-verify PRO from the JWT. A lapsed / invalid token is a PERMANENT
+	// failure: create-or-fail the job, emit track.failed, and ack.
+	userID, pro, verr := h.d.Tier.VerifyPro(req.Token)
+	if verr != nil || !pro {
+		return h.failNotPro(ctx, jobID, req, payload, existing)
+	}
+
+	// A non-settled job already exists → its ingest.work dispatch is in flight.
+	// Do NOT re-dispatch (that is the ResultHandler's retry job).
+	if existing != nil {
+		return nil
+	}
+
+	owner := req.UserID
+	if owner == "" {
+		owner = userID
+	}
+	j := &job.Job{
+		ID:      jobID,
+		Kind:    job.KindLibraryIngest,
+		OwnerID: owner,
+		State:   job.StateQueued,
+		Spec:    payload,
+	}
+	// One tx: the job row + the track.queued event + the ingest.work dispatch
+	// all commit together (transactional outbox), so the worker is invoked iff
+	// the job was durably created.
+	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
+		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
+			return err
+		}
+		queued := event(jobID+":queued", ingest.EventQueued, owner, jobID, "", statusData("queued", req.URL))
+		if err := h.publishEvent(ctx, tx, queued); err != nil {
+			return err
+		}
+		return h.dispatchWork(ctx, tx, jobID, req.URL, req.Title, owner, 1)
+	})
+}
+
+// failNotPro settles a job that failed PRO re-verification: create-or-transition
+// to failed, emit track.failed (id job:failed), and ack.
+func (h *RequestHandler) failNotPro(ctx context.Context, jobID string, req ingest.Request, payload []byte, existing *job.Job) error {
 	j := existing
-	if j == nil {
+	isNew := j == nil
+	if isNew {
 		j = &job.Job{
 			ID:      jobID,
 			Kind:    job.KindLibraryIngest,
@@ -99,206 +151,155 @@ func (s *Service) Process(ctx context.Context, msgID string, payload []byte) err
 			State:   job.StateQueued,
 			Spec:    payload,
 		}
-		if err := s.create(ctx, j, s.event(msgID, ingest.EventQueued, j.OwnerID, jobID, "", statusData("queued", req.URL))); err != nil {
-			return fmt.Errorf("create job: %w", err)
-		}
 	}
-
-	// Re-verify PRO from the JWT. A lapsed / invalid token is a PERMANENT
-	// failure: fail the job, emit track.failed, and ack (no retry helps).
-	userID, pro, verr := s.d.Tier.VerifyPro(req.Token)
-	if verr != nil || !pro {
-		return s.deadLetter(ctx, msgID, j, errUnauthorized)
-	}
-	if j.OwnerID == "" {
-		j.OwnerID = userID
-	}
-
-	return s.run(ctx, msgID, j, req)
-}
-
-// run executes the fetch→store pipeline for a verified request.
-func (s *Service) run(ctx context.Context, msgID string, j *job.Job, req ingest.Request) error {
-	prev := j.State
-	if err := j.To(job.StateRunning); err != nil {
-		return fmt.Errorf("to running: %w", err)
-	}
-	j.Attempts++
-	var events []ingest.TrackEvent
-	if prev == job.StateQueued {
-		events = append(events, s.event(msgID, ingest.EventProcessing, j.OwnerID, j.ID, "", statusData("processing", req.URL)))
-	}
-	if err := s.save(ctx, j, events...); err != nil {
-		return fmt.Errorf("save running: %w", err)
-	}
-
-	localPath, hash, err := s.d.Fetcher.Fetch(ctx, req.URL)
-	if err != nil {
-		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("fetch: %w", err))
-	}
-	defer os.RemoveAll(filepath.Dir(localPath))
-
-	// Dedup on the artifact itself: if this exact content was already ingested
-	// and STORED by a prior job, the blob is present — link this owner to it
-	// instantly instead of re-transcribing. Keying on the verified blob (not a
-	// speculative claim) means we never announce a track whose bytes are
-	// missing, and a failed prior job leaves nothing to unblock: it simply
-	// didn't store the blob, so the next request re-processes normally. Two
-	// genuinely-simultaneous first ingests of new content both process and both
-	// write the same content-addressed keys (idempotent) — wasteful but correct.
-	already, err := s.d.Blob.Exists(ctx, audioKey(hash))
-	if err != nil {
-		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("dedup probe: %w", err))
-	}
-	if already {
-		return s.finishDedup(ctx, msgID, j, hash, req)
-	}
-
-	audio, err := os.ReadFile(localPath)
-	if err != nil {
-		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("read audio: %w", err))
-	}
-
-	transcript, lang, err := s.d.Transcriber.Transcribe(ctx, localPath)
-	if err != nil {
-		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("transcribe: %w", err))
-	}
-
-	draft := ingest.TrackDraft{TitleRaw: req.Title, LangHint: lang}
-	if draft, err = s.d.Reviewer.Review(ctx, draft); err != nil {
-		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("review: %w", err))
-	}
-
-	audioKey, transcriptKey := audioKey(hash), transcriptKey(hash)
-	if err := s.d.Blob.Put(ctx, audioKey, audio, "audio/mpeg"); err != nil {
-		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("put audio: %w", err))
-	}
-	if err := s.d.Blob.Put(ctx, transcriptKey, transcript, "application/json"); err != nil {
-		return s.retryOrDead(ctx, msgID, j, fmt.Errorf("put transcript: %w", err))
-	}
-
-	// HEAD-verify both artifacts before announcing the track.
-	for _, k := range []string{audioKey, transcriptKey} {
-		exists, err := s.d.Blob.Exists(ctx, k)
-		if err != nil {
-			return s.retryOrDead(ctx, msgID, j, fmt.Errorf("verify %s: %w", k, err))
-		}
-		if !exists {
-			return s.retryOrDead(ctx, msgID, j, fmt.Errorf("verify %s: missing after put", k))
-		}
-	}
-
-	return s.finishReady(ctx, msgID, j, hash, lang, draft, req)
-}
-
-// finishReady marks the job done and emits track.ready.
-func (s *Service) finishReady(ctx context.Context, msgID string, j *job.Job, hash, lang string, draft ingest.TrackDraft, req ingest.Request) error {
-	j.TrackID = hash
-	j.Result = readyResult(hash, lang, draft, req)
-	if err := j.To(job.StateDone); err != nil {
-		return fmt.Errorf("to done: %w", err)
-	}
-	ev := s.event(msgID, ingest.EventReady, j.OwnerID, hash, hash, j.Result)
-	if err := s.save(ctx, j, ev); err != nil {
-		return fmt.Errorf("save done: %w", err)
-	}
-	return nil
-}
-
-// finishDedup collapses this job onto content whose blob is already stored
-// (verified present by the Exists probe in run), linking this owner instantly.
-func (s *Service) finishDedup(ctx context.Context, msgID string, j *job.Job, hash string, req ingest.Request) error {
-	j.TrackID = hash
-	j.Result = readyResult(hash, "", ingest.TrackDraft{TitleRaw: req.Title}, req)
-	if err := j.To(job.StateDone); err != nil {
-		return fmt.Errorf("to done (dedup): %w", err)
-	}
-	ev := s.event(msgID, ingest.EventReady, j.OwnerID, hash, hash, j.Result)
-	if err := s.save(ctx, j, ev); err != nil {
-		return fmt.Errorf("save dedup: %w", err)
-	}
-	return nil
-}
-
-// retryOrDead records a pipeline error. Below the attempt cap it returns the
-// error so the message is redelivered; at the cap it dead-letters.
-func (s *Service) retryOrDead(ctx context.Context, msgID string, j *job.Job, cause error) error {
-	if j.Attempts >= s.d.MaxAttempts {
-		return s.deadLetter(ctx, msgID, j, cause)
-	}
-	j.Err = cause.Error()
-	if err := s.save(ctx, j); err != nil {
-		return fmt.Errorf("save retry: %w", err)
-	}
-	return cause // leave pending → redelivered
-}
-
-// deadLetter transitions the job to failed, emits track.failed, and acks.
-func (s *Service) deadLetter(ctx context.Context, msgID string, j *job.Job, cause error) error {
 	if !j.State.IsTerminal() {
 		if err := j.To(job.StateFailed); err != nil {
 			return fmt.Errorf("to failed: %w", err)
 		}
 	}
-	j.Err = cause.Error()
-	ev := s.event(msgID, ingest.EventFailed, j.OwnerID, j.ID, j.TrackID, failData(cause))
-	if err := s.save(ctx, j, ev); err != nil {
-		return fmt.Errorf("save failed: %w", err)
-	}
-	return nil // acked — a dead-lettered job won't be retried
+	j.Err = errUnauthorized.Error()
+	ev := event(jobID+":failed", ingest.EventFailed, j.OwnerID, jobID, j.TrackID, failData(errUnauthorized.Error()))
+	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
+		if isNew {
+			if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
+				return err
+			}
+		} else if err := h.d.Repo.SaveTx(ctx, tx, j); err != nil {
+			return err
+		}
+		return h.publishEvent(ctx, tx, ev)
+	})
 }
 
-// isSettled reports whether a loaded job needs no further work: done, or failed
-// after exhausting attempts.
-func (s *Service) isSettled(j *job.Job) bool {
-	switch j.State {
-	case job.StateDone, job.StateCancelled:
-		return true
-	case job.StateFailed:
-		return j.Attempts >= s.d.MaxAttempts
+// ResultHandler processes `ingest.result` (ingest → orchestrator).
+type ResultHandler struct{ core }
+
+// NewResultHandler builds the result handler, defaulting the attempt cap and
+// stream names.
+func NewResultHandler(d Deps) *ResultHandler {
+	d.applyDefaults()
+	return &ResultHandler{core{d}}
+}
+
+// Process handles one `ingest.result`. The job is loaded by result.JobID (NOT
+// the broker message id). It returns nil to XACK; a non-nil error leaves the
+// entry pending for a transient persistence fault.
+func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) error {
+	res, err := ingest.DecodeResult(payload)
+	if err != nil {
+		return nil // poison pill — unparseable; ack to drop it
+	}
+	j, err := h.d.Repo.Get(ctx, res.JobID)
+	if err != nil {
+		return fmt.Errorf("load job: %w", err)
+	}
+	if j == nil {
+		return nil // unknown job — nothing to do
+	}
+	if isSettled(j) {
+		return nil // already terminal — idempotent ack
+	}
+
+	switch res.Phase {
+	case ingest.PhaseProcessing:
+		if j.State != job.StateQueued {
+			return nil // already running — no-op
+		}
+		if err := j.To(job.StateRunning); err != nil {
+			return fmt.Errorf("to running: %w", err)
+		}
+		ev := event(res.JobID+":processing", ingest.EventProcessing, j.OwnerID, res.JobID, "", statusData("processing", specURL(j)))
+		return h.save(ctx, j, ev)
+
+	case ingest.PhaseReady, ingest.PhaseLinked:
+		j.TrackID = res.TrackID
+		j.Result = readyResult(res)
+		// A ready/linked may arrive while the job is still queued (a lost
+		// processing heartbeat) — step it through running so the To(Done)
+		// transition is legal.
+		if j.State == job.StateQueued {
+			_ = j.To(job.StateRunning)
+		}
+		if err := j.To(job.StateDone); err != nil {
+			return fmt.Errorf("to done: %w", err)
+		}
+		ev := event(res.JobID+":ready", ingest.EventReady, j.OwnerID, res.TrackID, res.TrackID, j.Result)
+		return h.save(ctx, j, ev)
+
+	case ingest.PhaseFailed:
+		// Retry policy lives HERE: a retriable failure below the cap
+		// re-dispatches a fresh ingest.work (job stays non-terminal).
+		if res.Retriable && j.Attempts < h.d.MaxAttempts {
+			j.Attempts++
+			req := specRequest(j)
+			return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
+				if err := h.d.Repo.SaveTx(ctx, tx, j); err != nil {
+					return err
+				}
+				return h.dispatchWork(ctx, tx, res.JobID, req.URL, req.Title, j.OwnerID, j.Attempts+1)
+			})
+		}
+		if !j.State.IsTerminal() {
+			if err := j.To(job.StateFailed); err != nil {
+				return fmt.Errorf("to failed: %w", err)
+			}
+		}
+		j.Err = res.Error
+		ev := event(res.JobID+":failed", ingest.EventFailed, j.OwnerID, res.JobID, j.TrackID, failData(res.Error))
+		return h.save(ctx, j, ev)
+
 	default:
-		return false
+		return nil // unknown phase — ignore
 	}
 }
 
-// --- persistence helpers (job write + outbox events in one tx) ---
+// --- shared helpers ---
 
-func (s *Service) create(ctx context.Context, j *job.Job, events ...ingest.TrackEvent) error {
-	return s.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
-		if err := s.d.Repo.CreateTx(ctx, tx, j); err != nil {
+// isSettled reports whether a loaded job needs no further work. A retriable
+// failure keeps the job non-terminal (it is re-dispatched, not transitioned),
+// so any terminal state is genuinely settled.
+func isSettled(j *job.Job) bool { return j.State.IsTerminal() }
+
+// save persists a job update and its outbox events in one tx.
+func (c *core) save(ctx context.Context, j *job.Job, events ...ingest.TrackEvent) error {
+	return c.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
+		if err := c.d.Repo.SaveTx(ctx, tx, j); err != nil {
 			return err
 		}
-		return s.publish(ctx, tx, events)
+		for _, e := range events {
+			if err := c.publishEvent(ctx, tx, e); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
-func (s *Service) save(ctx context.Context, j *job.Job, events ...ingest.TrackEvent) error {
-	return s.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
-		if err := s.d.Repo.SaveTx(ctx, tx, j); err != nil {
-			return err
-		}
-		return s.publish(ctx, tx, events)
-	})
-}
-
-func (s *Service) publish(ctx context.Context, tx ports.Tx, events []ingest.TrackEvent) error {
-	for _, e := range events {
-		b, err := e.Marshal()
-		if err != nil {
-			return err
-		}
-		if err := s.d.Events.Publish(ctx, tx, s.d.TrackEventsStream, b); err != nil {
-			return err
-		}
+// publishEvent enqueues a track.events lifecycle event on the outbox.
+func (c *core) publishEvent(ctx context.Context, tx ports.Tx, e ingest.TrackEvent) error {
+	b, err := e.Marshal()
+	if err != nil {
+		return err
 	}
-	return nil
+	return c.d.Events.Publish(ctx, tx, c.d.TrackEventsStream, b)
 }
 
-// event builds a lifecycle event. Its ID is deterministic per (message, type)
-// so redelivery re-emits the SAME id, keeping downstream projections idempotent.
-func (s *Service) event(msgID, typ, userID, docID, trackID string, data []byte) ingest.TrackEvent {
+// dispatchWork enqueues an ingest.work command on the outbox (topic
+// WorkStream), reliably fanned out to the ingest worker by the same relay.
+func (c *core) dispatchWork(ctx context.Context, tx ports.Tx, jobID, url, title, owner string, attempt int) error {
+	b, err := ingest.WorkCommand{JobID: jobID, URL: url, Title: title, OwnerID: owner, Attempt: attempt}.Marshal()
+	if err != nil {
+		return err
+	}
+	return c.d.Events.Publish(ctx, tx, c.d.WorkStream, b)
+}
+
+// event builds a lifecycle event. Its ID is derived from the JOB id + type so
+// redelivery (on either stream) re-emits the SAME id, keeping downstream
+// projections idempotent.
+func event(id, typ, userID, docID, trackID string, data []byte) ingest.TrackEvent {
 	return ingest.TrackEvent{
-		ID:      msgID + ":" + typ,
+		ID:      id,
 		Type:    typ,
 		UserID:  userID,
 		DocID:   docID,
@@ -307,32 +308,14 @@ func (s *Service) event(msgID, typ, userID, docID, trackID string, data []byte) 
 	}
 }
 
-// --- blob keys ---
+// --- spec / payload helpers ---
 
-func audioKey(trackID string) string      { return "public/tracks/" + trackID + "/audio" }
-func transcriptKey(trackID string) string { return "public/tracks/" + trackID + "/transcript" }
-
-// --- event/result payloads ---
-
-func statusData(status, url string) []byte {
-	b, _ := json.Marshal(map[string]any{"status": status, "url": url})
-	return b
+// specRequest recovers the original ingest.request from the job's Spec (used to
+// recover the URL/title when re-dispatching a retry).
+func specRequest(j *job.Job) ingest.Request {
+	req, _ := ingest.DecodeRequest(j.Spec)
+	return req
 }
 
-func failData(cause error) []byte {
-	b, _ := json.Marshal(map[string]any{"status": "failed", "error": cause.Error()})
-	return b
-}
-
-func readyResult(hash, lang string, draft ingest.TrackDraft, req ingest.Request) []byte {
-	b, _ := json.Marshal(map[string]any{
-		"status":         "ready",
-		"track_id":       hash,
-		"lang":           lang,
-		"title":          draft.TitleRaw,
-		"audio_key":      audioKey(hash),
-		"transcript_key": transcriptKey(hash),
-		"source_url":     req.URL,
-	})
-	return b
-}
+// specURL is specRequest's URL — the source url carried through the lifecycle.
+func specURL(j *job.Job) string { return specRequest(j).URL }

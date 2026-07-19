@@ -15,7 +15,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jiva-studio/lectorium/orchestrator/internal/domain/ingest"
+	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 	preview "github.com/jiva-studio/lectorium/pipeline/review"
 	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )

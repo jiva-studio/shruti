@@ -1,0 +1,117 @@
+// Package wire is the ingest worker's composition root: it assembles the fetch
+// / transcribe / review / store adapters, the runingest pipeline use case, the
+// Redis-Streams `ingest.work` consumer, and the `ingest.result` publisher from
+// a validated Config, keeping cmd/ingest thin.
+//
+// The worker is stateless — there is NO Postgres pool, no migrations, and no
+// outbox relay. When the streams broker (or a pipeline prerequisite) is not
+// configured the service still serves HTTP so health probes pass.
+package wire
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+
+	"github.com/redis/go-redis/v9"
+
+	"github.com/jiva-studio/lectorium/ingest/internal/application/runingest"
+	"github.com/jiva-studio/lectorium/ingest/internal/config"
+	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
+	"github.com/jiva-studio/lectorium/ingest/internal/handler"
+	blobs3 "github.com/jiva-studio/lectorium/ingest/internal/infra/blob/s3"
+	"github.com/jiva-studio/lectorium/ingest/internal/infra/events/redisstream"
+	"github.com/jiva-studio/lectorium/ingest/internal/infra/fetch/ytdlp"
+	"github.com/jiva-studio/lectorium/ingest/internal/infra/review"
+	"github.com/jiva-studio/lectorium/ingest/internal/infra/transcribe/deepgram"
+)
+
+// Deps is the assembled dependency graph handed back to the entrypoint. The
+// caller owns Redis and must close it on shutdown. Consumer is nil when the
+// streams broker (or a pipeline prerequisite) is not configured — the service
+// still serves HTTP in that case.
+type Deps struct {
+	Redis    *redis.Client
+	Handler  http.Handler
+	Consumer *redisstream.Consumer
+}
+
+// Build wires the HTTP router and — when configured — the `ingest.work`
+// consumer plus its pipeline. On any failure it closes whatever it opened.
+func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
+	deps := &Deps{
+		Handler: handler.NewRouter(handler.RouterDeps{}),
+	}
+
+	// The broker is optional: without STREAMS_REDIS_URL the service is
+	// HTTP-only (health/readiness), which keeps local/dev boots trivial.
+	if cfg.StreamsRedisURL == "" {
+		slog.WarnContext(ctx, "streams_disabled", "reason", "STREAMS_REDIS_URL unset")
+		return deps, nil
+	}
+
+	rdb, err := redisstream.Connect(ctx, cfg.StreamsRedisURL)
+	if err != nil {
+		return nil, fmt.Errorf("connect streams: %w", err)
+	}
+	deps.Redis = rdb
+
+	// The consumer only starts when every pipeline prerequisite is present;
+	// otherwise a consumed message would fail with a misconfiguration.
+	svc, ready, missing := buildPipeline(ctx, cfg, rdb)
+	if !ready {
+		slog.WarnContext(ctx, "ingest_consumer_disabled", "missing", missing)
+		return deps, nil
+	}
+	deps.Consumer = redisstream.NewConsumer(rdb, cfg.WorkStream, cfg.ConsumerGroup, cfg.ConsumerName, svc)
+	return deps, nil
+}
+
+// buildPipeline assembles the runingest use case. ready is false (with the list
+// of missing config keys) when a required credential is absent.
+func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (*runingest.Service, bool, []string) {
+	var missing []string
+	if cfg.DeepgramAPIKey == "" {
+		missing = append(missing, "DEEPGRAM_API_KEY")
+	}
+	if cfg.S3Bucket == "" {
+		missing = append(missing, "S3_BUCKET")
+	}
+
+	blob, err := blobs3.New(ctx, cfg.S3Bucket, cfg.S3Region, cfg.S3Endpoint)
+	if cfg.S3Bucket != "" && err != nil {
+		missing = append(missing, "S3(config)")
+	}
+	if len(missing) > 0 {
+		return nil, false, missing
+	}
+
+	fetcher := ytdlp.New(ytdlp.Options{
+		Bin:        cfg.YtdlpBin,
+		Proxy:      cfg.YtdlpProxy,
+		MaxBytes:   cfg.MaxAudioBytes,
+		MaxSeconds: cfg.MaxAudioSeconds,
+	})
+	svc := runingest.New(runingest.Deps{
+		Fetcher:     fetcher,
+		Transcriber: deepgram.New(cfg.DeepgramAPIKey, cfg.DeepgramModel),
+		Reviewer:    review.New(),
+		Blob:        blob,
+		Results:     resultAdapter{redisstream.NewResultPublisher(rdb, cfg.ResultStream, cfg.StreamMaxLen)},
+	})
+	return svc, true, nil
+}
+
+// resultAdapter bridges the domain-facing ports.ResultPublisher to the
+// transport-facing redisstream publisher, marshalling the result across the
+// boundary so neither package imports the other.
+type resultAdapter struct{ pub *redisstream.ResultPublisher }
+
+func (a resultAdapter) Publish(ctx context.Context, r ingest.Result) error {
+	b, err := r.Marshal()
+	if err != nil {
+		return err
+	}
+	return a.pub.Publish(ctx, b)
+}

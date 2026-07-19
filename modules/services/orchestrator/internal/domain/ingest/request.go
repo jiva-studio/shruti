@@ -25,8 +25,3 @@ func DecodeRequest(b []byte) (Request, error) {
 	}
 	return r, nil
 }
-
-// Source projects the request onto the fetcher's coarse input.
-func (r Request) Source() Source {
-	return Source{URL: r.URL, Kind: r.Kind}
-}
