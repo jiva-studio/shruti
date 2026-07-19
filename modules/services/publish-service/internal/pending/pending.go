@@ -43,7 +43,7 @@ CREATE INDEX idx_pending_unconsumed ON pending(consumed_at, created_at);
 type Row struct {
 	OwnerID       string  // tracks.owner_id
 	TrackID       string  // tracks.track_id (guaranteed non-empty by the query)
-	TitleRaw      *string // metadata->>'title'
+	TitleRaw      *string // metadata->>'title_raw'
 	AuthorRaw     *string // metadata->>'author'
 	LocationRaw   *string // metadata->>'location'
 	DateRaw       *string // metadata->>'date'

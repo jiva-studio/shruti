@@ -179,6 +179,19 @@ func (s *Service) Push(ctx context.Context, userID uuid.UUID, req wire.PushReque
 // under the per-user advisory lock (so global_seq is assigned in commit order),
 // appends the change-log row (device_id "server:orchestrator") and projects it.
 func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op, eventID string, data json.RawMessage) (wire.Change, error) {
+	if eventID == "" {
+		return wire.Change{}, badRequest("event_id is required")
+	}
+	return s.applyServerChange(ctx, userID, collection, docID, op, s.clock().Deterministic(eventID), data)
+}
+
+// applyServerChange is the shared server-authored write with a caller-supplied
+// hlc: ApplyServerChange derives it deterministically from the event id, while
+// MarkPublished passes a TERMINAL stamp so a promotion always wins last-writer-
+// wins over the earlier track.ready row. Everything below the hlc choice — the
+// per-user advisory lock, the idempotent change-log append, and the
+// project-only-if-newest gate — is identical for both callers.
+func (s *Service) applyServerChange(ctx context.Context, userID uuid.UUID, collection, docID, op, hlcStr string, data json.RawMessage) (wire.Change, error) {
 	if !store.Collections[collection] {
 		return wire.Change{}, badRequest("unknown collection %q", collection)
 	}
@@ -190,9 +203,6 @@ func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, colle
 	}
 	if docID == "" {
 		return wire.Change{}, badRequest("doc_id is required")
-	}
-	if eventID == "" {
-		return wire.Change{}, badRequest("event_id is required")
 	}
 	if op == "upsert" && len(data) == 0 {
 		return wire.Change{}, badRequest("data is required for an upsert")
@@ -213,7 +223,7 @@ func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, colle
 		DocID:      docID,
 		Op:         op,
 		Data:       data,
-		HLC:        s.clock().Deterministic(eventID),
+		HLC:        hlcStr,
 	}
 
 	// Read the current master to apply last-writer-wins by hlc, mirroring the
@@ -254,15 +264,16 @@ func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, colle
 // doc_id == track_id (the orchestrator's track.ready sets doc_id to the content
 // hash), so the flip targets doc_id = trackID. It MERGES origin into the
 // existing projection's data rather than overwriting, so the ready-time metadata
-// (title/lang/audio_key/…) is preserved. Idempotent: the event id
-// "<track_id>:published" yields a deterministic hlc, so a redelivery collapses
-// to one change-log row.
-func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID, eventID string) error {
+// (title/lang/audio_key/…) is preserved.
+//
+// The flip is stamped with a TERMINAL hlc (hlc.Clock.Terminal) so it wins
+// last-writer-wins over the earlier track.ready row — whose hlc is a high
+// fnv-hash of a non-numeric "<jobID>:ready" id that an ms-based stamp would lose
+// to. The terminal stamp is a constant, so a redelivered track.published
+// collapses on UNIQUE(user_id, collection, doc_id, hlc) to one change-log row.
+func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error {
 	if trackID == "" {
 		return badRequest("track_id is required")
-	}
-	if eventID == "" {
-		return badRequest("event_id is required")
 	}
 	// Read the current server-authored projection so origin is merged in, not
 	// clobbering the ready-time metadata.
@@ -285,7 +296,7 @@ func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID, 
 	if err != nil {
 		return err
 	}
-	_, err = s.ApplyServerChange(ctx, userID, "library_items", trackID, "upsert", eventID, merged)
+	_, err = s.applyServerChange(ctx, userID, "library_items", trackID, "upsert", s.clock().Terminal(), merged)
 	return err
 }
 

@@ -84,13 +84,12 @@ func TestHandleIgnoresOtherTypes(t *testing.T) {
 type fakePublishApplier struct {
 	userID  uuid.UUID
 	trackID string
-	eventID string
 	calls   int
 }
 
-func (f *fakePublishApplier) MarkPublished(_ context.Context, userID uuid.UUID, trackID, eventID string) error {
+func (f *fakePublishApplier) MarkPublished(_ context.Context, userID uuid.UUID, trackID string) error {
 	f.calls++
-	f.userID, f.trackID, f.eventID = userID, trackID, eventID
+	f.userID, f.trackID = userID, trackID
 	return nil
 }
 
@@ -100,11 +99,11 @@ func TestPublishedConsumerMarksPublished(t *testing.T) {
 	c := &PublishedConsumer{Applier: fp}
 	owner := uuid.New()
 	ev := PublishedEvent{Type: "track.published", TrackID: "trk-9", OwnerID: owner}
-	if err := c.handle(context.Background(), "1700000000000-0", ev); err != nil {
+	if err := c.handle(context.Background(), ev); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
-	if fp.calls != 1 || fp.trackID != "trk-9" || fp.userID != owner || fp.eventID != "1700000000000-0" {
-		t.Errorf("MarkPublished not called correctly: calls=%d track=%q user=%v event=%q", fp.calls, fp.trackID, fp.userID, fp.eventID)
+	if fp.calls != 1 || fp.trackID != "trk-9" || fp.userID != owner {
+		t.Errorf("MarkPublished not called correctly: calls=%d track=%q user=%v", fp.calls, fp.trackID, fp.userID)
 	}
 }
 
@@ -112,7 +111,7 @@ func TestPublishedConsumerMarksPublished(t *testing.T) {
 func TestPublishedConsumerDropsEmptyTrackID(t *testing.T) {
 	fp := &fakePublishApplier{}
 	c := &PublishedConsumer{Applier: fp}
-	if err := c.handle(context.Background(), "1700000000000-0", PublishedEvent{Type: "track.published"}); err != nil {
+	if err := c.handle(context.Background(), PublishedEvent{Type: "track.published"}); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if fp.calls != 0 {
