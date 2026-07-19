@@ -143,38 +143,65 @@ func (r *Repo) Publish(ctx context.Context, t ports.Tx, topic string, payload []
 
 // --- Outbox drain (used by the redisstream relay) ---
 
-// OutboxRow is one unpublished outbox entry.
-type OutboxRow struct {
-	Seq     int64
-	Topic   string
-	Payload []byte
-}
-
-// FetchUnpublished returns up to limit unpublished outbox rows in seq order.
-func (r *Repo) FetchUnpublished(ctx context.Context, limit int) ([]OutboxRow, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT seq, topic, payload FROM orchestrator.outbox
-		  WHERE published_at IS NULL ORDER BY seq LIMIT $1`, limit)
+// DrainUnpublished claims up to limit unpublished outbox rows with
+// `FOR UPDATE SKIP LOCKED`, and — in the SAME transaction — publishes each via
+// publish() and stamps it published. The row lock is what makes the relay
+// safe to run on MULTIPLE orchestrator replicas: a second replica's SELECT skips
+// the rows the first has claimed, so no event is XADDed twice by racing relays.
+//
+// Ordering is preserved (ORDER BY seq) and delivery stays at-least-once: a
+// publish() error (or a crash) rolls the whole batch back, leaving those rows
+// unpublished for the next tick — a duplicate XADD on the already-published
+// prefix is absorbed by the idempotent consumers, exactly as before.
+func (r *Repo) DrainUnpublished(ctx context.Context, limit int, publish func(topic string, payload []byte) error) (int, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	defer rows.Close()
-	var out []OutboxRow
-	for rows.Next() {
-		var row OutboxRow
-		if err := rows.Scan(&row.Seq, &row.Topic, &row.Payload); err != nil {
-			return nil, err
-		}
-		out = append(out, row)
-	}
-	return out, rows.Err()
-}
+	defer func() { _ = tx.Rollback(ctx) }()
 
-// MarkPublished stamps published_at on a drained outbox row.
-func (r *Repo) MarkPublished(ctx context.Context, seq int64) error {
-	_, err := r.pool.Exec(ctx,
-		`UPDATE orchestrator.outbox SET published_at=now() WHERE seq=$1`, seq)
-	return err
+	rows, err := tx.Query(ctx,
+		`SELECT seq, topic, payload FROM orchestrator.outbox
+		  WHERE published_at IS NULL ORDER BY seq LIMIT $1 FOR UPDATE SKIP LOCKED`, limit)
+	if err != nil {
+		return 0, err
+	}
+	// Buffer the batch before publishing: pgx forbids issuing the per-row UPDATE
+	// while the SELECT cursor is still open on the same tx.
+	type outboxRow struct {
+		seq     int64
+		topic   string
+		payload []byte
+	}
+	var batch []outboxRow
+	for rows.Next() {
+		var row outboxRow
+		if err := rows.Scan(&row.seq, &row.topic, &row.payload); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		batch = append(batch, row)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	n := 0
+	for _, row := range batch {
+		if err := publish(row.topic, row.payload); err != nil {
+			return n, err // rollback: this batch stays unpublished, redelivered next tick
+		}
+		if _, err := tx.Exec(ctx,
+			`UPDATE orchestrator.outbox SET published_at=now() WHERE seq=$1`, row.seq); err != nil {
+			return n, err
+		}
+		n++
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return n, err
+	}
+	return n, nil
 }
 
 // --- helpers ---

@@ -39,10 +39,23 @@ type Config struct {
 	DeepgramAPIKey string // DEEPGRAM_API_KEY
 	DeepgramModel  string // DEEPGRAM_MODEL (default "nova-2")
 
-	// --- BlobStore (S3) ---
+	// --- BlobStore ---
+	// StorageBackend selects where content-addressed artifacts are written:
+	// "s3" (AWS / S3-compatible like Yandex, via S3Endpoint) or "bunny" (Bunny
+	// Edge Storage — NOT S3-compatible; a plain HTTP API). It MUST match the
+	// backend the public CDN (b-cdn) serves from, or the app/chat can't read the
+	// audio + transcript. On global this is "bunny"; the RU proxy uses "s3".
+	StorageBackend string // STORAGE_BACKEND (default "s3")
+
+	// S3 backend.
 	S3Bucket   string // S3_BUCKET
 	S3Region   string // S3_REGION (default "us-east-1")
 	S3Endpoint string // S3_ENDPOINT (optional; for S3-compatible stores)
+
+	// Bunny backend (same env names as share-audio / storage-sync).
+	StorageZone     string // STORAGE_ZONE (Bunny storage-zone name, e.g. shruti-engine-eu)
+	StorageEndpoint string // STORAGE_ENDPOINT (optional; default https://storage.bunnycdn.com)
+	StorageKey      string // STORAGE_KEY (storage-zone read+write password)
 }
 
 func Load() (*Config, error) {
@@ -66,9 +79,15 @@ func Load() (*Config, error) {
 		DeepgramAPIKey: env("DEEPGRAM_API_KEY", ""),
 		DeepgramModel:  env("DEEPGRAM_MODEL", "nova-2"),
 
+		StorageBackend: env("STORAGE_BACKEND", "s3"),
+
 		S3Bucket:   env("S3_BUCKET", ""),
 		S3Region:   env("S3_REGION", "us-east-1"),
 		S3Endpoint: env("S3_ENDPOINT", ""),
+
+		StorageZone:     env("STORAGE_ZONE", ""),
+		StorageEndpoint: env("STORAGE_ENDPOINT", ""),
+		StorageKey:      os.Getenv("STORAGE_KEY"),
 	}
 	if cfg.StreamMaxLen <= 0 {
 		cfg.StreamMaxLen = 10000

@@ -135,10 +135,11 @@ func TestResolveOneExactMatchSkipsLLM(t *testing.T) {
 	}
 }
 
-// runMemo is sync.Map on a value-receiver — copies don't share state, so
-// the memo only deduplicates within a single Run() walk (one track's
-// author + location + refs). Cross-Run dedup isn't part of the contract,
-// so there's no point pinning it here.
+// runMemo is a *sync.Map allocated fresh at the top of each Run(): copies made
+// by the value-receiver methods share the current walk's memo (one track's
+// author + location + refs dedup to a single LLM call), but different Runs never
+// share. Cross-Run dedup isn't part of the contract, so there's no point pinning
+// it here. (A direct resolveOne call outside Run gets its own throwaway memo.)
 
 func TestResolveOneAutoCreateOnNoMatch(t *testing.T) {
 	uc, cat, rsv := newUC()

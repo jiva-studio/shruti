@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -50,16 +51,31 @@ type Config struct {
 	// fetched from the configured S3 bucket when no HTTP URL is set.
 	CorpusCatalogS3Key string
 
-	// --- BlobStore (S3 / S3-compatible) ---
+	// --- BlobStore ---
+	// StorageBackend selects the blob backend: "s3" (AWS / S3-compatible like
+	// Yandex) or "bunny" (Bunny Edge Storage — NOT S3-compatible). It must match
+	// the backend the public CDN serves from. On global this is "bunny".
+	StorageBackend string // STORAGE_BACKEND (default "s3")
+
+	// S3 backend.
 	S3Bucket         string // S3_BUCKET
 	S3Region         string // S3_REGION (default "us-east-1")
 	S3Endpoint       string // S3_ENDPOINT (optional; for S3-compatible stores)
 	S3AccessKeyID    string // S3_ACCESS_KEY_ID (optional static creds)
 	S3SecretKey      string // S3_SECRET_ACCESS_KEY
 	S3ForcePathStyle bool   // S3_FORCE_PATH_STYLE
+
+	// Bunny backend (same env names as share-audio / storage-sync).
+	StorageZone     string // STORAGE_ZONE (Bunny storage-zone name)
+	StorageEndpoint string // STORAGE_ENDPOINT (optional; default https://storage.bunnycdn.com)
+	StorageKey      string // STORAGE_KEY (storage-zone read+write password)
+
 	// PendingS3Key is the object key the rebuilt pending.db is uploaded to.
 	PendingS3Key string // PENDING_S3_KEY (default "public/db/pending.db")
 }
+
+// UsesBunny reports whether the blob backend is Bunny Edge Storage.
+func (c *Config) UsesBunny() bool { return strings.EqualFold(c.StorageBackend, "bunny") }
 
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -79,12 +95,16 @@ func Load() (*Config, error) {
 		CorpusCatalogURL:   env("CORPUS_CATALOG_URL", ""),
 		CorpusCatalogS3Key: env("CORPUS_CATALOG_S3_KEY", ""),
 
+		StorageBackend:   env("STORAGE_BACKEND", "s3"),
 		S3Bucket:         env("S3_BUCKET", ""),
 		S3Region:         env("S3_REGION", "us-east-1"),
 		S3Endpoint:       env("S3_ENDPOINT", ""),
 		S3AccessKeyID:    os.Getenv("S3_ACCESS_KEY_ID"),
 		S3SecretKey:      os.Getenv("S3_SECRET_ACCESS_KEY"),
 		S3ForcePathStyle: envBool("S3_FORCE_PATH_STYLE", false),
+		StorageZone:      env("STORAGE_ZONE", ""),
+		StorageEndpoint:  env("STORAGE_ENDPOINT", ""),
+		StorageKey:       os.Getenv("STORAGE_KEY"),
 		PendingS3Key:     env("PENDING_S3_KEY", "public/db/pending.db"),
 	}
 	if cfg.DatabaseURL == "" {
@@ -105,7 +125,14 @@ func Load() (*Config, error) {
 // upload always needs S3.
 func (c *Config) PromotionReady() (bool, []string) {
 	var missing []string
-	if c.S3Bucket == "" {
+	if c.UsesBunny() {
+		if c.StorageZone == "" {
+			missing = append(missing, "STORAGE_ZONE")
+		}
+		if c.StorageKey == "" {
+			missing = append(missing, "STORAGE_KEY")
+		}
+	} else if c.S3Bucket == "" {
 		missing = append(missing, "S3_BUCKET")
 	}
 	if c.CorpusCatalogURL == "" && c.CorpusCatalogS3Key == "" {

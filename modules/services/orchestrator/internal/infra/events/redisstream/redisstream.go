@@ -145,18 +145,11 @@ func extractPayload(values map[string]any) []byte {
 
 // --- outbox relay ---
 
-// OutboxSource is the subset of the postgres repo the relay drains.
+// OutboxSource is the subset of the postgres repo the relay drains. The single
+// method claims a batch FOR UPDATE SKIP LOCKED and, in one tx, calls publish for
+// each row and marks it published — so racing relay replicas never double-XADD.
 type OutboxSource interface {
-	FetchUnpublished(ctx context.Context, limit int) ([]OutboxRow, error)
-	MarkPublished(ctx context.Context, seq int64) error
-}
-
-// OutboxRow mirrors the repo row (redeclared to avoid an import cycle with the
-// store package; fields are copied verbatim by the relay wiring).
-type OutboxRow struct {
-	Seq     int64
-	Topic   string
-	Payload []byte
+	DrainUnpublished(ctx context.Context, limit int, publish func(topic string, payload []byte) error) (int, error)
 }
 
 // Relay drains unpublished outbox rows to the broker, XADDing each with an
@@ -190,24 +183,18 @@ func (r *Relay) Run(ctx context.Context) error {
 }
 
 func (r *Relay) drain(ctx context.Context) {
-	rows, err := r.src.FetchUnpublished(ctx, r.batch)
-	if err != nil {
-		slog.WarnContext(ctx, "outbox_fetch_failed", "err", err.Error())
-		return
-	}
-	for _, row := range rows {
-		if err := r.rdb.XAdd(ctx, &redis.XAddArgs{
-			Stream: row.Topic,
+	// The claim + XADD + mark happen inside one DB tx (FOR UPDATE SKIP LOCKED) so
+	// concurrent relay replicas can't drain the same row twice. A failing XADD
+	// aborts the tx, so the whole batch stays unpublished and retries next tick
+	// (order preserved; at-least-once absorbed by idempotent consumers).
+	if _, err := r.src.DrainUnpublished(ctx, r.batch, func(topic string, payload []byte) error {
+		return r.rdb.XAdd(ctx, &redis.XAddArgs{
+			Stream: topic,
 			MaxLen: r.maxLen,
 			Approx: true,
-			Values: map[string]any{payloadField: string(row.Payload)},
-		}).Err(); err != nil {
-			slog.WarnContext(ctx, "xadd_failed", "topic", row.Topic, "err", err.Error())
-			return // stop; retry the whole batch next tick (order preserved)
-		}
-		if err := r.src.MarkPublished(ctx, row.Seq); err != nil {
-			slog.WarnContext(ctx, "outbox_mark_failed", "seq", row.Seq, "err", err.Error())
-			return
-		}
+			Values: map[string]any{payloadField: string(payload)},
+		}).Err()
+	}); err != nil {
+		slog.WarnContext(ctx, "outbox_drain_failed", "err", err.Error())
 	}
 }
