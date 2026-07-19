@@ -28,14 +28,24 @@ def publisher():
 
 
 async def test_redis_publish_xadds_payload(publisher) -> None:
-    ok = await publisher.publish(user_id="u1", url="https://y/1", jwt="tok")
+    import json
+
+    ok = await publisher.publish(
+        user_id="u1", url="https://y/1", jwt="tok", title="Lecture 1"
+    )
     assert ok is True
     entries = await publisher._client.xrange("ingest.request")
     assert len(entries) == 1
     _id, fields = entries[0]
-    assert fields[b"user_id"] == b"u1"
-    assert fields[b"url"] == b"https://y/1"
-    assert fields[b"jwt"] == b"tok"
+    # Single `payload` envelope decoded by the orchestrator's Request struct.
+    assert set(fields) == {b"payload"}
+    body = json.loads(fields[b"payload"])
+    assert body == {
+        "url": "https://y/1",
+        "token": "tok",
+        "user_id": "u1",
+        "title": "Lecture 1",
+    }
 
 
 async def test_redis_publish_soft_fails_on_error() -> None:
