@@ -45,6 +45,7 @@ func (f *fakeFetcher) Fetch(_ context.Context, _ string) (string, string, error)
 type fakeTranscriber struct {
 	lang  string
 	err   error
+	empty bool // when true, return a 200-but-empty transcript (no segments)
 	calls int
 }
 
@@ -52,6 +53,9 @@ func (t *fakeTranscriber) Transcribe(_ context.Context, _ string) (transcript.Ra
 	t.calls++
 	if t.err != nil {
 		return transcript.Raw{}, "", t.err
+	}
+	if t.empty {
+		return transcript.Raw{Language: t.lang}, t.lang, nil
 	}
 	raw := transcript.Raw{
 		Language: t.lang,
@@ -192,6 +196,32 @@ func TestProcess_Ready(t *testing.T) {
 	}
 	if last.AudioKey != audioKey || last.TranscriptKey != transcriptKey {
 		t.Fatalf("ready result keys wrong: %+v", last)
+	}
+}
+
+// A 200-but-empty transcription must NOT be announced as ready with an empty
+// transcript — it fails retriably so the attempt is retried (and dead-letters
+// as failed at the cap) rather than storing a useless ready track.
+func TestProcess_EmptyTranscript_FailedRetriable(t *testing.T) {
+	h := newHarness()
+	h.trans.empty = true
+
+	if err := h.svc.Process(context.Background(), "msg-empty", workPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("Process must ack (nil), got %v", err)
+	}
+	last := h.results.last()
+	if last.Phase != ingest.PhaseFailed || !last.Retriable {
+		t.Fatalf("expected retriable failed on empty transcript, got %+v", last)
+	}
+	// Nothing must have been announced ready, and no transcript blob stored.
+	for _, ph := range h.results.phases() {
+		if ph == ingest.PhaseReady {
+			t.Fatal("empty transcript must not reach ready")
+		}
+	}
+	hash := ingest.ContentID([]byte("audio-bytes"))
+	if _, ok := h.blob.objects["public/tracks/"+hash+"/transcripts/en.json"]; ok {
+		t.Fatal("empty transcript must not be stored")
 	}
 }
 

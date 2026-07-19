@@ -86,6 +86,14 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// Window the raw ASR segments into the reviewed artifact the corpus/app read
 	// (transcript.Reviewed — the exact shape + key the MCP pipeline stores).
 	reviewed := s.d.Reviewer.NormalizeTranscript(raw)
+	if len(reviewed.Blocks) == 0 {
+		// Deepgram returned 200 but no usable speech. Announcing this as ready
+		// would store an empty transcript the app/corpus can't use, with no
+		// recovery. Fail RETRIABLY (not ErrPermanent): a transient ASR hiccup
+		// clears on retry, and a genuinely silent source dead-letters as failed
+		// after the attempt cap rather than masquerading as a ready track.
+		return s.fail(ctx, cmd, fmt.Errorf("transcription produced no blocks"))
+	}
 	transcriptBody, err := json.Marshal(reviewed)
 	if err != nil {
 		return s.fail(ctx, cmd, fmt.Errorf("marshal transcript: %w", err))
