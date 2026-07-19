@@ -79,7 +79,11 @@ func NewConsumer(rdb *redis.Client, stream, group, consumer string, h Handler) *
 // iteration first reclaims stale pending entries (XAUTOCLAIM) then reads new
 // ones (XREADGROUP >).
 func (c *Consumer) Run(ctx context.Context) error {
-	if err := c.rdb.XGroupCreateMkStream(ctx, c.stream, c.group, "$").Err(); err != nil &&
+	// Create the group at "0", not "$": on a fresh deploy the relay may have
+	// XADDed ingest.work before this group existed, and "$" would skip that
+	// backlog permanently. The handler is idempotent, so replaying the
+	// (MAXLEN-bounded) head is safe. Matches publish/profile/chat.
+	if err := c.rdb.XGroupCreateMkStream(ctx, c.stream, c.group, "0").Err(); err != nil &&
 		!strings.Contains(err.Error(), "BUSYGROUP") {
 		return err
 	}
