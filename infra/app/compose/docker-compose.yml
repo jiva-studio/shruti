@@ -874,6 +874,78 @@ services:
       retries: 40
       start_period: 10s
 
+  # publish-postgres: publish-service's OWN Postgres (same own-DB isolation
+  # rationale as orchestrator-postgres / profile-postgres). Holds the publish
+  # projection (`publish.tracks`) + its transactional outbox; never contends
+  # with the shared instance. Stock postgres:16-alpine. Origin only.
+  publish-postgres:
+    profiles: [origin]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: publish
+      POSTGRES_PASSWORD: ${LECTORIUM_PUBLISH_POSTGRES_PASSWORD:?LECTORIUM_PUBLISH_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_DB: publish
+    volumes:
+      - publishdata:/var/lib/postgresql/data
+    networks: [lectorium]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U publish -d publish"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # publish-service: the PROMOTION plane of personal-library. Consumes
+  # track.ready (from the orchestrator) into its own publish.tracks; a ticker
+  # reconciles the corpus current.db catalog, emits track.published, and rebuilds
+  # the admin pending.db review artifact on S3. Single Go binary; `serve` applies
+  # embedded migrations on boot (advisory-locked, like orchestrator/profile).
+  # Talks ONLY to publish-postgres + the redis-streams broker + S3. Origin only.
+  publish-service:
+    profiles: [origin]
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/jiva-studio}/lectorium-publish-service:${LECTORIUM_PUBLISH_SERVICE_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
+    environment:
+      DATABASE_URL: postgresql://publish:${LECTORIUM_PUBLISH_POSTGRES_PASSWORD:?}@publish-postgres:5432/publish?sslmode=disable
+      # Dedicated Redis-Streams broker — consumes track.events (filters track.ready)
+      # and XADDs track.published here.
+      STREAMS_REDIS_URL: redis://redis-streams:6379/0
+      TRACK_EVENTS_STREAM: track.events
+      TRACK_PUBLISHED_STREAM: track.published
+      # S3 for the content-addressed catalog + the pending.db review artifact.
+      # publish-service reads S3 creds EXPLICITLY (not the AWS default chain), so
+      # map them from the env_file's AWS_* values.
+      S3_BUCKET: ${LECTORIUM_S3_BUCKET:-}
+      S3_REGION: ${AWS_REGION:-us-east-1}
+      S3_ENDPOINT: ${LECTORIUM_S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Corpus catalog current.db: read the published copy from the CDN, write the
+      # reconciled copy back to this S3 key (symmetric with pending.db).
+      CORPUS_CATALOG_URL: ${LECTORIUM_MEDIA_BASE_URL:-https://akds-lectorium.b-cdn.net}/public/db/current.db
+      CORPUS_CATALOG_S3_KEY: public/db/current.db
+      PENDING_S3_KEY: public/db/pending.db
+      PORT: "8087"
+      ENV: ${LECTORIUM_ENV:-dev}
+      SERVICE_VERSION: ${LECTORIUM_PUBLISH_SERVICE_TAG:-latest}
+    networks: [lectorium]
+    depends_on:
+      publish-postgres: { condition: service_healthy }
+      redis-streams: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/publish-service", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
 networks:
   lectorium:
 
@@ -886,3 +958,4 @@ volumes:
   corpusdata:
   profiledata:
   orchestratordata:
+  publishdata:
