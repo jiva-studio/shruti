@@ -358,6 +358,83 @@ async def test_orchestrator_payload_envelope_indexes(monkeypatch) -> None:
     assert db.chunks and all(r["kind"] == "user_track" for r in db.chunks)
 
 
+async def test_reclaim_redelivers_stranded_pending_entry(monkeypatch) -> None:
+    """A message left un-ACKed by a prior failed delivery sits in the group PEL;
+    the read loop only fetches new ('>') entries, so without reclaim it is lost
+    forever. `_reclaim` must XAUTOCLAIM it, re-run the handler (index + own), and
+    ACK it — the retry the consumer's contract promises."""
+    import json
+
+    db = FakePg()
+    monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
+    monkeypatch.setattr(tec, "get_pool", lambda: db)
+
+    reviewed = {
+        "trackId": "rt-strand", "language": "en", "version": 1,
+        "blocks": [{"type": "sentence", "start": 0, "end": 3000,
+                    "text": "The soul is never born and never dies."}],
+    }
+
+    async def _fake_fetch(key, settings=None):
+        return reviewed
+
+    monkeypatch.setattr("lectorium_chat.indexer.s3.fetch_transcript", _fake_fetch)
+
+    body = {
+        "id": "job-strand:ready", "type": "track.ready", "user_id": "userS",
+        "doc_id": "rt-strand", "track_id": "rt-strand",
+        "data": {"status": "ready", "track_id": "rt-strand", "lang": "en",
+                 "transcript_key": "public/tracks/rt-strand/transcripts/en.json"},
+    }
+
+    class _FakeRedis:
+        def __init__(self) -> None:
+            self.s: set[bytes] = set()
+            self.acked: list = []
+            self._claim_calls = 0
+
+        async def xautoclaim(self, stream, group, consumer, min_idle, *,
+                             start_id="0-0", count=16):
+            # First scan surfaces the one stranded entry; subsequent scans drain.
+            self._claim_calls += 1
+            if self._claim_calls == 1:
+                msg = ("1700000000000-0", {b"payload": json.dumps(body).encode()})
+                return (b"0-0", [msg], [])
+            return (b"0-0", [], [])
+
+        async def sadd(self, key, member):
+            if member in self.s:
+                return 0
+            self.s.add(member)
+            return 1
+
+        async def expire(self, *a):
+            return True
+
+        async def srem(self, key, member):
+            self.s.discard(member)
+            return 1
+
+        async def xack(self, stream, group, msg_id):
+            self.acked.append(msg_id)
+            return 1
+
+    consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
+    consumer._settings = _Settings()
+    consumer._embedder = FakeEmbedder()
+    consumer._processed_set = "test:processed"
+    consumer._stream = "track.events"
+    consumer._group = "chat"
+    consumer._consumer = "chat-1"
+    consumer._client = _FakeRedis()
+
+    await consumer._reclaim()
+
+    assert ("userS", "rt-strand") in db.owned
+    assert db.chunks and all(r["kind"] == "user_track" for r in db.chunks)
+    assert consumer._client.acked == ["1700000000000-0"]
+
+
 async def test_track_ready_indexes_and_owns(monkeypatch) -> None:
     import json
 

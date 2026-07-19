@@ -37,6 +37,11 @@ log = get_logger(__name__)
 
 _BLOCK_MS = 5000  # XREADGROUP block window; bounds shutdown latency
 _BATCH = 16
+# Reclaim PEL entries idle this long — a graft that raised (un-ACKed) or a
+# crashed consumer's in-flight message. The read loop only fetches new ('>')
+# entries, so without XAUTOCLAIM a non-ACKed message is never retried. The graft
+# is an idempotent no-op once applied, so a short window is safe across replicas.
+_RECLAIM_MIN_IDLE_MS = 120_000  # 2 min
 
 
 def _decode(v: Any) -> str:
@@ -102,6 +107,7 @@ class TrackPublishedConsumer:
             "track_published_consumer_started", stream=self._stream, group=self._group
         )
         while not stop_event.is_set():
+            await self._reclaim()
             try:
                 resp = await self._client.xreadgroup(
                     self._group,
@@ -120,6 +126,28 @@ class TrackPublishedConsumer:
                 for msg_id, fields in entries:
                     await self._process(msg_id, fields)
         log.info("track_published_consumer_stopped", stream=self._stream)
+
+    async def _reclaim(self) -> None:
+        """Redeliver PEL entries idle > _RECLAIM_MIN_IDLE_MS back to this consumer,
+        so a graft that failed transiently (un-ACKed) is retried rather than
+        stranded. Best-effort: a reclaim error is logged and skipped."""
+        try:
+            resp = await self._client.xautoclaim(
+                self._stream,
+                self._group,
+                self._consumer,
+                _RECLAIM_MIN_IDLE_MS,
+                start_id="0-0",
+                count=_BATCH,
+            )
+        except Exception as exc:  # noqa: BLE001 — reclaim is best-effort
+            log.warning("track_published_reclaim_failed", error=str(exc))
+            return
+        # redis-py returns [next_cursor, messages] (Redis 6.2) or
+        # [next_cursor, messages, deleted_ids] (Redis 7+); only messages matter.
+        messages = resp[1] if isinstance(resp, (list, tuple)) and len(resp) > 1 else []
+        for msg_id, fields in messages:
+            await self._process(msg_id, fields)
 
     async def _process(self, msg_id: Any, raw_fields: Any) -> None:
         fields = {_decode(k): _decode(v) for k, v in (raw_fields or {}).items()}

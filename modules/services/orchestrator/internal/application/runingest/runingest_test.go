@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -59,6 +60,15 @@ type fakeEvents struct {
 type published struct {
 	topic   string
 	payload []byte
+	delay   time.Duration
+}
+
+func (e *fakeEvents) PublishAfter(_ context.Context, _ ports.Tx, topic string, payload []byte, delay time.Duration) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	cp := append([]byte(nil), payload...)
+	e.list = append(e.list, published{topic: topic, payload: cp, delay: delay})
+	return nil
 }
 
 func (e *fakeEvents) Publish(_ context.Context, _ ports.Tx, topic string, payload []byte) error {
@@ -96,6 +106,20 @@ func (e *fakeEvents) works() []ingest.WorkCommand {
 		var w ingest.WorkCommand
 		if err := json.Unmarshal(p.payload, &w); err == nil {
 			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// workDelays returns the not-before delay each ingest.work row was published
+// with, in dispatch order — so a retry's backoff can be asserted.
+func (e *fakeEvents) workDelays() []time.Duration {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var out []time.Duration
+	for _, p := range e.list {
+		if p.topic == "ingest.work" {
+			out = append(out, p.delay)
 		}
 	}
 	return out
@@ -313,6 +337,35 @@ func TestResult_RetriableFailed_Redispatches(t *testing.T) {
 	}
 	if works[1].Attempt != 2 || works[1].URL != "https://x/y" {
 		t.Fatalf("re-dispatch command wrong: %+v", works[1])
+	}
+	// The initial dispatch is immediate; the retry carries a backoff so a
+	// transient outage isn't burned through in milliseconds.
+	delays := h.events.workDelays()
+	if delays[0] != 0 {
+		t.Fatalf("initial dispatch must be immediate, got delay %s", delays[0])
+	}
+	if delays[1] != retryBackoff(2) || delays[1] <= 0 {
+		t.Fatalf("retry delay = %s, want backoff %s", delays[1], retryBackoff(2))
+	}
+}
+
+func TestRetryBackoff(t *testing.T) {
+	if d := retryBackoff(1); d != 0 {
+		t.Fatalf("first attempt must be immediate, got %s", d)
+	}
+	// Monotonic, exponential, capped at 2m.
+	cases := map[int]time.Duration{
+		2: 15 * time.Second,
+		3: 30 * time.Second,
+		4: 60 * time.Second,
+		5: 2 * time.Minute, // 120s == cap
+		6: 2 * time.Minute, // capped
+		9: 2 * time.Minute, // capped, no int64 overflow on the shift
+	}
+	for attempt, want := range cases {
+		if got := retryBackoff(attempt); got != want {
+			t.Errorf("retryBackoff(%d) = %s, want %s", attempt, got, want)
+		}
 	}
 }
 
