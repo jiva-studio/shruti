@@ -64,7 +64,7 @@ type Applier interface {
 // PublishApplier is the subset of *service.Service the track.published consumer
 // needs.
 type PublishApplier interface {
-	MarkPublished(ctx context.Context, userID uuid.UUID, trackID, eventID string) error
+	MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error
 }
 
 // TrackEvent is one decoded `track.events` message. `type` selects the op: a
@@ -169,18 +169,19 @@ func (c *PublishedConsumer) process(ctx context.Context, msgID string, payload [
 		slog.WarnContext(ctx, "published_event_decode_failed", "msg_id", msgID, "err", err.Error())
 		return nil
 	}
-	return c.handle(ctx, msgID, ev)
+	return c.handle(ctx, ev)
 }
 
-func (c *PublishedConsumer) handle(ctx context.Context, msgID string, ev PublishedEvent) error {
+func (c *PublishedConsumer) handle(ctx context.Context, ev PublishedEvent) error {
 	if ev.TrackID == "" {
 		return nil // unprocessable — ack to drop
 	}
-	// Pass the stream message id as the event id: it is time-ordered (ms-seq),
-	// so the published flip's HLC sorts AFTER the earlier track.ready update on
-	// the same doc and wins last-writer-wins. A bare "<track>:published" token
-	// would fall to the hlc fnv-hash path and order randomly vs the ready HLC.
-	return c.Applier.MarkPublished(ctx, ev.OwnerID, ev.TrackID, msgID)
+	// MarkPublished stamps the origin flip with a TERMINAL hlc so it wins
+	// last-writer-wins over the earlier track.ready row unconditionally — the
+	// stream msg id is NOT threaded through, because an ms-based stamp would lose
+	// to track.ready's high fnv-hashed hlc. Redelivery is idempotent (the
+	// terminal stamp is constant per doc, collapsing on the change-log UNIQUE).
+	return c.Applier.MarkPublished(ctx, ev.OwnerID, ev.TrackID)
 }
 
 // --- shared redis-streams transport ---

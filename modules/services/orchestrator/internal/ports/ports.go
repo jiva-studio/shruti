@@ -22,8 +22,8 @@ type EventBus interface {
 
 // JobRepository persists the Job aggregate — the source of truth.
 //
-// The plain Create/Get/Save run against the pool; the CreateTx/SaveTx variants
-// run within a caller-supplied Tx so a job write and its outbox rows (via
+// Get runs against the pool; the CreateTx/SaveTx/GetForUpdateTx variants run
+// within a caller-supplied Tx so a job write and its outbox rows (via
 // EventBus.Publish) commit atomically — the transactional-outbox invariant.
 type JobRepository interface {
 	Get(ctx context.Context, id string) (*job.Job, error)

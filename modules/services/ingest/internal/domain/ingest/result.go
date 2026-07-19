@@ -36,14 +36,6 @@ type Result struct {
 	Retriable     bool   `json:"retriable,omitempty"`
 }
 
-// Marshal serializes the result for the `ingest.result` payload field.
+// Marshal serializes the result for the `ingest.result` payload field. The
+// worker only produces results; the orchestrator owns the decode side.
 func (r Result) Marshal() ([]byte, error) { return json.Marshal(r) }
-
-// DecodeResult parses a broker payload into a Result.
-func DecodeResult(b []byte) (Result, error) {
-	var r Result
-	if err := json.Unmarshal(b, &r); err != nil {
-		return Result{}, err
-	}
-	return r, nil
-}
