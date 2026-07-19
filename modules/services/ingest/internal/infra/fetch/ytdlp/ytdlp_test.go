@@ -2,12 +2,49 @@ package ytdlp
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 )
+
+// A permanent yt-dlp failure (deleted/private source) is classified
+// non-retriable via ingest.ErrPermanent so the orchestrator dead-letters
+// instead of burning its retry budget.
+func TestFetch_PermanentYtdlpError_IsPermanent(t *testing.T) {
+	f := New(Options{
+		Runner: func(context.Context, string, ...string) ([]byte, error) {
+			return nil, errors.New("ERROR: [youtube] x: Private video. Sign in if you've been granted access")
+		},
+	})
+	_, _, err := f.Fetch(context.Background(), "https://youtube.com/watch?v=1")
+	if !errors.Is(err, ingest.ErrPermanent) {
+		t.Fatalf("expected ErrPermanent, got %v", err)
+	}
+}
+
+// A transient yt-dlp failure (network) stays retriable (NOT ErrPermanent).
+func TestFetch_TransientYtdlpError_NotPermanent(t *testing.T) {
+	f := New(Options{
+		Runner: func(context.Context, string, ...string) ([]byte, error) {
+			return nil, errors.New("ERROR: unable to download webpage: connection reset by peer")
+		},
+	})
+	_, _, err := f.Fetch(context.Background(), "https://youtube.com/watch?v=1")
+	if err == nil || errors.Is(err, ingest.ErrPermanent) {
+		t.Fatalf("expected a transient (non-permanent) error, got %v", err)
+	}
+}
+
+// A malformed URL is a permanent input error.
+func TestFetch_InvalidURL_IsPermanent(t *testing.T) {
+	f := New(Options{})
+	if _, _, err := f.Fetch(context.Background(), "::not a url::"); !errors.Is(err, ingest.ErrPermanent) {
+		t.Fatalf("expected ErrPermanent for a malformed url, got %v", err)
+	}
+}
 
 func TestBreaker_OpensAfterThresholdAndRecovers(t *testing.T) {
 	now := time.Now()

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 
@@ -20,8 +21,10 @@ import (
 	"github.com/jiva-studio/lectorium/ingest/internal/config"
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/lectorium/ingest/internal/handler"
+	"github.com/jiva-studio/lectorium/ingest/internal/infra/blob/bunny"
 	blobs3 "github.com/jiva-studio/lectorium/ingest/internal/infra/blob/s3"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/events/redisstream"
+	"github.com/jiva-studio/lectorium/ingest/internal/ports"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/fetch/ytdlp"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/review"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/transcribe/deepgram"
@@ -75,14 +78,13 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 	if cfg.DeepgramAPIKey == "" {
 		missing = append(missing, "DEEPGRAM_API_KEY")
 	}
-	if cfg.S3Bucket == "" {
-		missing = append(missing, "S3_BUCKET")
-	}
 
-	blob, err := blobs3.New(ctx, cfg.S3Bucket, cfg.S3Region, cfg.S3Endpoint)
-	if cfg.S3Bucket != "" && err != nil {
-		missing = append(missing, "S3(config)")
-	}
+	// The blob store MUST target the same backend the public CDN serves from, or
+	// the app/chat can't fetch the audio + transcript. "bunny" (global) writes to
+	// Bunny Edge Storage over its HTTP API; "s3" (RU proxy / dev) uses the AWS SDK
+	// against AWS or an S3-compatible endpoint (Yandex).
+	blob, blobMissing := buildBlob(ctx, cfg)
+	missing = append(missing, blobMissing...)
 	if len(missing) > 0 {
 		return nil, false, missing
 	}
@@ -101,6 +103,40 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		Results:     resultAdapter{redisstream.NewResultPublisher(rdb, cfg.ResultStream, cfg.StreamMaxLen)},
 	})
 	return svc, true, nil
+}
+
+// buildBlob selects the content-addressed store by STORAGE_BACKEND. It returns
+// the list of missing config keys (so the caller can report a single
+// "consumer disabled" reason) instead of an error, and a nil store when a
+// required credential is absent.
+func buildBlob(ctx context.Context, cfg *config.Config) (ports.BlobStore, []string) {
+	switch strings.ToLower(cfg.StorageBackend) {
+	case "bunny":
+		var missing []string
+		if cfg.StorageZone == "" {
+			missing = append(missing, "STORAGE_ZONE")
+		}
+		if cfg.StorageKey == "" {
+			missing = append(missing, "STORAGE_KEY")
+		}
+		if len(missing) > 0 {
+			return nil, missing
+		}
+		store, err := bunny.New(cfg.StorageZone, cfg.StorageEndpoint, cfg.StorageKey)
+		if err != nil {
+			return nil, []string{"bunny(config)"}
+		}
+		return store, nil
+	default: // "s3" (and any unset value)
+		if cfg.S3Bucket == "" {
+			return nil, []string{"S3_BUCKET"}
+		}
+		store, err := blobs3.New(ctx, cfg.S3Bucket, cfg.S3Region, cfg.S3Endpoint)
+		if err != nil {
+			return nil, []string{"S3(config)"}
+		}
+		return store, nil
+	}
 }
 
 // resultAdapter bridges the domain-facing ports.ResultPublisher to the

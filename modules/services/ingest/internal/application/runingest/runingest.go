@@ -22,10 +22,10 @@ package runingest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/lectorium/ingest/internal/ports"
@@ -155,17 +155,13 @@ func (s *Service) emit(ctx context.Context, r ingest.Result) {
 }
 
 // retriable classifies a pipeline error. Clearly-permanent failures — an
-// unsupported/invalid URL, a 404, or a source that exceeds the size/duration
-// limits — are non-retriable (re-running can't help). Everything else
-// (network blips, 5xx, timeouts, transcribe/put faults) is transient.
+// unsupported/invalid URL, a deleted/private/age-restricted source, a 4xx, or a
+// source that exceeds the size/duration limits — are wrapped with
+// ingest.ErrPermanent by the fetch adapter and reported non-retriable
+// (re-running can't help). Everything else (network blips, 5xx, timeouts,
+// transcribe/put faults) is transient, so the orchestrator may re-dispatch.
 func retriable(err error) bool {
-	msg := err.Error()
-	for _, permanent := range []string{"invalid url", "status 404", "exceeds limit"} {
-		if strings.Contains(msg, permanent) {
-			return false
-		}
-	}
-	return true
+	return !errors.Is(err, ingest.ErrPermanent)
 }
 
 // --- blob keys (content-addressed public path; identical to the MCP pipeline) ---

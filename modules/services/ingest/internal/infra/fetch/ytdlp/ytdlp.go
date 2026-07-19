@@ -8,6 +8,7 @@ package ytdlp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,63 @@ import (
 
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 )
+
+// permanentYtdlpMarkers are yt-dlp stderr fragments (lowercased) that mean the
+// source is gone for good — re-running won't help. Kept conservative: a marker
+// here makes the failure NON-retriable, so only add unambiguous ones (a bare
+// "http error 403" or a network timeout stays retriable).
+var permanentYtdlpMarkers = []string{
+	"video unavailable",
+	"private video",
+	"this video has been removed",
+	"removed by the user",
+	"account associated with this video has been terminated",
+	"this video is no longer available",
+	"members-only",
+	"join this channel",
+	"sign in to confirm your age",
+	"age-restricted",
+	"not available in your country",
+	"blocked it in your country",
+	"unsupported url",
+	"is not a valid url",
+	"incomplete youtube id",
+	"http error 404",
+	"http error 410",
+	"requested format is not available",
+}
+
+// classifyDownloadErr wraps a yt-dlp failure with ingest.ErrPermanent when its
+// stderr identifies a permanent source condition. yt-dlp exits non-zero for both
+// transient (network) and permanent (deleted/private) failures with the same
+// "exit status 1", so the signal lives in stderr — which os/exec's Output()
+// captures into (*exec.ExitError).Stderr.
+func classifyDownloadErr(err error) error {
+	haystack := strings.ToLower(err.Error())
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+		haystack += "\n" + strings.ToLower(string(ee.Stderr))
+	}
+	for _, m := range permanentYtdlpMarkers {
+		if strings.Contains(haystack, m) {
+			return fmt.Errorf("yt-dlp (permanent): %w: %s", ingest.ErrPermanent, firstLine(ee, err))
+		}
+	}
+	return fmt.Errorf("yt-dlp: %w", err)
+}
+
+// firstLine returns a short, human-readable reason from the stderr (or the
+// error) for the failed result's Error field.
+func firstLine(ee *exec.ExitError, err error) string {
+	s := err.Error()
+	if ee != nil && len(ee.Stderr) > 0 {
+		s = string(ee.Stderr)
+	}
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
+}
 
 // Runner executes an external command and returns its combined stdout. Injected
 // so the extractor logic can be unit-tested without a real yt-dlp binary.
@@ -87,7 +145,7 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (string, string, err
 func (f *Fetcher) fetch(ctx context.Context, rawURL string) (string, string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return "", "", fmt.Errorf("fetch: invalid url %q", rawURL)
+		return "", "", fmt.Errorf("fetch: invalid url %q: %w", rawURL, ingest.ErrPermanent)
 	}
 	ext := f.reg.pick(u)
 
@@ -95,7 +153,7 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string) (string, string, err
 	// probe it cheaply.
 	if f.opts.MaxSeconds > 0 {
 		if dur, ok := ext.probeDuration(ctx, rawURL); ok && dur > f.opts.MaxSeconds {
-			return "", "", fmt.Errorf("fetch: source duration %ds exceeds limit %ds", dur, f.opts.MaxSeconds)
+			return "", "", fmt.Errorf("fetch: source duration %ds exceeds limit %ds: %w", dur, f.opts.MaxSeconds, ingest.ErrPermanent)
 		}
 	}
 
@@ -116,7 +174,7 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string) (string, string, err
 	}
 	if f.opts.MaxBytes > 0 && fi.Size() > f.opts.MaxBytes {
 		_ = os.RemoveAll(dir)
-		return "", "", fmt.Errorf("fetch: artifact %d bytes exceeds limit %d", fi.Size(), f.opts.MaxBytes)
+		return "", "", fmt.Errorf("fetch: artifact %d bytes exceeds limit %d: %w", fi.Size(), f.opts.MaxBytes, ingest.ErrPermanent)
 	}
 
 	b, err := os.ReadFile(path)
@@ -187,7 +245,7 @@ func (e *ytdlpExtractor) download(ctx context.Context, rawURL, destDir string) (
 	args = append(args, e.proxyArgs()...)
 	args = append(args, rawURL)
 	if _, err := e.opts.Runner(ctx, e.opts.Bin, args...); err != nil {
-		return "", fmt.Errorf("yt-dlp: %w", err)
+		return "", classifyDownloadErr(err)
 	}
 	return findAudio(destDir)
 }
@@ -236,6 +294,11 @@ func (e *mp3Extractor) download(ctx context.Context, rawURL, destDir string) (st
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		// 4xx is a permanent client error (gone / forbidden / not found); 5xx and
+		// the rest are transient and worth a retry.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return "", fmt.Errorf("mp3 fetch: status %d: %w", resp.StatusCode, ingest.ErrPermanent)
+		}
 		return "", fmt.Errorf("mp3 fetch: status %d", resp.StatusCode)
 	}
 	path := filepath.Join(destDir, "audio.mp3")
@@ -256,7 +319,7 @@ func (e *mp3Extractor) download(ctx context.Context, rawURL, destDir string) (st
 		return "", fmt.Errorf("mp3 write: %w", err)
 	}
 	if e.opts.MaxBytes > 0 && n > e.opts.MaxBytes {
-		return "", fmt.Errorf("mp3 fetch: body exceeds limit %d", e.opts.MaxBytes)
+		return "", fmt.Errorf("mp3 fetch: body exceeds limit %d: %w", e.opts.MaxBytes, ingest.ErrPermanent)
 	}
 	return path, nil
 }

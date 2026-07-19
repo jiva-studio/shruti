@@ -19,6 +19,7 @@ import (
 	"github.com/jiva-studio/lectorium/publish/internal/catalog"
 	"github.com/jiva-studio/lectorium/publish/internal/config"
 	"github.com/jiva-studio/lectorium/publish/internal/handler"
+	"github.com/jiva-studio/lectorium/publish/internal/infra/blob/bunny"
 	blobs3 "github.com/jiva-studio/lectorium/publish/internal/infra/blob/s3"
 	"github.com/jiva-studio/lectorium/publish/internal/infra/events/redisstream"
 	"github.com/jiva-studio/lectorium/publish/internal/pending"
@@ -77,7 +78,8 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	repo := store.New(pool)
 
 	// The relay drains the outbox (track.published) whenever the broker is up.
-	deps.Relay = redisstream.NewRelay(rdb, outboxAdapter{repo}, cfg.StreamMaxLen)
+	// *store.Repo implements redisstream.OutboxSource (DrainUnpublished) directly.
+	deps.Relay = redisstream.NewRelay(rdb, repo, cfg.StreamMaxLen)
 
 	// The track.ready consumer always runs when the broker is up — ingesting a
 	// ready track needs no S3/catalog config.
@@ -92,18 +94,15 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		slog.WarnContext(ctx, "promoter_disabled", "missing", missing)
 		return deps, nil
 	}
-	blob, err := blobs3.New(ctx, blobs3.Options{
-		Bucket:         cfg.S3Bucket,
-		Region:         cfg.S3Region,
-		Endpoint:       cfg.S3Endpoint,
-		AccessKeyID:    cfg.S3AccessKeyID,
-		SecretKey:      cfg.S3SecretKey,
-		ForcePathStyle: cfg.S3ForcePathStyle,
-	})
+	// The blob backend MUST match what the public CDN serves from: "bunny"
+	// (global) writes the pending.db + reads current.db from Bunny Edge Storage
+	// over its HTTP API; "s3" (RU / dev) uses the AWS SDK. Both expose the same
+	// Put/Get/Exists surface promote.Uploader + catalog.blobGetter require.
+	blob, err := buildBlob(ctx, cfg)
 	if err != nil {
 		pool.Close()
 		_ = rdb.Close()
-		return nil, fmt.Errorf("s3: %w", err)
+		return nil, fmt.Errorf("blob: %w", err)
 	}
 	var fetcher catalog.Fetcher
 	if cfg.CorpusCatalogURL != "" {
@@ -123,23 +122,27 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	return deps, nil
 }
 
-// outboxAdapter bridges the persistence repo's outbox drain to the relay's
-// transport-facing OutboxSource, converting the row type across the boundary so
-// neither package imports the other.
-type outboxAdapter struct{ repo *store.Repo }
-
-func (a outboxAdapter) FetchUnpublished(ctx context.Context, limit int) ([]redisstream.OutboxRow, error) {
-	rows, err := a.repo.FetchUnpublished(ctx, limit)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]redisstream.OutboxRow, len(rows))
-	for i, r := range rows {
-		out[i] = redisstream.OutboxRow{Seq: r.Seq, Topic: r.Topic, Payload: r.Payload}
-	}
-	return out, nil
+// blobStore is the Put/Get/Exists surface both blob backends expose and that the
+// promoter (Put) + catalog fetcher (Get) consume.
+type blobStore interface {
+	Put(ctx context.Context, key string, body []byte, contentType string) error
+	Get(ctx context.Context, key string) ([]byte, error)
+	Exists(ctx context.Context, key string) (bool, error)
 }
 
-func (a outboxAdapter) MarkPublished(ctx context.Context, seq int64) error {
-	return a.repo.MarkPublished(ctx, seq)
+// buildBlob selects the blob backend by STORAGE_BACKEND: "bunny" (Bunny Edge
+// Storage over its HTTP API) or "s3" (AWS SDK against AWS or an S3-compatible
+// endpoint). PromotionReady() has already verified the backend's credentials.
+func buildBlob(ctx context.Context, cfg *config.Config) (blobStore, error) {
+	if cfg.UsesBunny() {
+		return bunny.New(cfg.StorageZone, cfg.StorageEndpoint, cfg.StorageKey)
+	}
+	return blobs3.New(ctx, blobs3.Options{
+		Bucket:         cfg.S3Bucket,
+		Region:         cfg.S3Region,
+		Endpoint:       cfg.S3Endpoint,
+		AccessKeyID:    cfg.S3AccessKeyID,
+		SecretKey:      cfg.S3SecretKey,
+		ForcePathStyle: cfg.S3ForcePathStyle,
+	})
 }

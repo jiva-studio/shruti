@@ -82,7 +82,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	// The outbox relay always runs when the broker is up: it drains whatever the
 	// coordinator commits — both track.events AND ingest.work rows (it publishes
 	// each row to its own topic).
-	deps.Relay = redisstream.NewRelay(rdb, outboxAdapter{repo}, cfg.StreamMaxLen)
+	deps.Relay = redisstream.NewRelay(rdb, repo, cfg.StreamMaxLen)
 
 	// The consumers only start when the tier verifier is present; otherwise a
 	// consumed ingest.request would fail re-verification.
@@ -113,23 +113,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	return deps, nil
 }
 
-// outboxAdapter bridges the persistence repo's outbox drain to the relay's
-// transport-facing OutboxSource, converting the row type across the boundary so
-// neither package imports the other.
-type outboxAdapter struct{ repo *jobpg.Repo }
-
-func (a outboxAdapter) FetchUnpublished(ctx context.Context, limit int) ([]redisstream.OutboxRow, error) {
-	rows, err := a.repo.FetchUnpublished(ctx, limit)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]redisstream.OutboxRow, len(rows))
-	for i, r := range rows {
-		out[i] = redisstream.OutboxRow{Seq: r.Seq, Topic: r.Topic, Payload: r.Payload}
-	}
-	return out, nil
-}
-
-func (a outboxAdapter) MarkPublished(ctx context.Context, seq int64) error {
-	return a.repo.MarkPublished(ctx, seq)
-}
+// The persistence repo (*jobpg.Repo) implements redisstream.OutboxSource
+// directly via DrainUnpublished — the relay hands it an XADD callback, so the
+// claim + publish + mark all commit in one FOR UPDATE SKIP LOCKED transaction
+// and no row type crosses the package boundary.
