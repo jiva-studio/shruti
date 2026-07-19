@@ -53,10 +53,13 @@ _PROCESSED_TTL_S = 7 * 24 * 3600
 # handler error — or a crashed consumer's in-flight message) once they have sat
 # idle this long. The read loop only fetches new ('>') entries, so without an
 # explicit XAUTOCLAIM a non-ACKed message is NEVER re-read — the transient-failure
-# retry the design contract promises would silently never happen. Re-processing
-# is idempotent (processed-set guard + ON CONFLICT upserts), so a short window is
-# safe even if two replicas briefly both hold the entry.
-_RECLAIM_MIN_IDLE_MS = 120_000  # 2 min
+# retry the design contract promises would silently never happen. This MUST exceed
+# the slowest in-flight handle (a large transcript's embed) so a live-but-slow
+# message on one replica isn't reclaimed — and ACKed via the processed-set guard —
+# out from under it by another replica sharing this consumer name, which would drop
+# the index entirely. 15 min matches the Go consumers (ingest/orchestrator/profile),
+# which set the same window for the same reason.
+_RECLAIM_MIN_IDLE_MS = 900_000  # 15 min — parity with the Go services
 
 
 def _decode(v: Any) -> str:
