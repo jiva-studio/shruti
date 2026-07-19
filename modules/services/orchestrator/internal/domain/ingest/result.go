@@ -9,15 +9,13 @@ const (
 	PhaseProcessing = "processing"
 	// PhaseReady is the terminal success: audio + transcript were stored.
 	PhaseReady = "ready"
-	// PhaseLinked is the terminal dedup success (identical audio already stored).
-	PhaseLinked = "linked"
 	// PhaseFailed is the terminal failure; Retriable drives the retry decision.
 	PhaseFailed = "failed"
 )
 
 // Result is one decoded `ingest.result` message from the worker. JobID
 // correlates it back to the orchestrator's job (results are keyed on job_id,
-// NOT the broker message id). Artifact fields are set on ready/linked;
+// NOT the broker message id). Artifact fields are set on ready;
 // Error/Retriable on failed.
 type Result struct {
 	JobID string `json:"job_id"`

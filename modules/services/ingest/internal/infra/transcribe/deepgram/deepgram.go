@@ -39,15 +39,16 @@ func New(apiKey, model string) *Transcriber {
 	}
 }
 
-// Transcribe uploads the local audio file and returns the marshalled
-// transcript.Raw plus the detected language (ISO code, may be "").
-func (t *Transcriber) Transcribe(ctx context.Context, audioPath string) ([]byte, string, error) {
+// Transcribe uploads the local audio file and returns the transcript.Raw plus
+// the detected language (ISO code, may be ""). The worker sets TrackId and
+// windows the segments into the stored reviewed artifact.
+func (t *Transcriber) Transcribe(ctx context.Context, audioPath string) (transcript.Raw, string, error) {
 	if t.apiKey == "" {
-		return nil, "", fmt.Errorf("deepgram: DEEPGRAM_API_KEY not configured")
+		return transcript.Raw{}, "", fmt.Errorf("deepgram: DEEPGRAM_API_KEY not configured")
 	}
 	body, err := os.ReadFile(audioPath)
 	if err != nil {
-		return nil, "", fmt.Errorf("read audio: %w", err)
+		return transcript.Raw{}, "", fmt.Errorf("read audio: %w", err)
 	}
 
 	q := url.Values{}
@@ -59,33 +60,29 @@ func (t *Transcriber) Transcribe(ctx context.Context, audioPath string) ([]byte,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, listenURL+"?"+q.Encode(), bytes.NewReader(body))
 	if err != nil {
-		return nil, "", err
+		return transcript.Raw{}, "", err
 	}
 	req.Header.Set("Authorization", "Token "+t.apiKey)
 	req.Header.Set("Content-Type", "application/octet-stream")
 
 	resp, err := t.http.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("deepgram request: %w", err)
+		return transcript.Raw{}, "", fmt.Errorf("deepgram request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		var msg bytes.Buffer
 		_, _ = msg.ReadFrom(resp.Body)
-		return nil, "", fmt.Errorf("deepgram status %d: %s", resp.StatusCode, msg.String())
+		return transcript.Raw{}, "", fmt.Errorf("deepgram status %d: %s", resp.StatusCode, msg.String())
 	}
 
 	var dg dgResponse
 	if err := json.NewDecoder(resp.Body).Decode(&dg); err != nil {
-		return nil, "", fmt.Errorf("decode deepgram response: %w", err)
+		return transcript.Raw{}, "", fmt.Errorf("decode deepgram response: %w", err)
 	}
 
 	raw, lang := t.toRaw(dg)
-	out, err := json.Marshal(raw)
-	if err != nil {
-		return nil, "", err
-	}
-	return out, lang, nil
+	return raw, lang, nil
 }
 
 // toRaw maps the Deepgram response into a transcript.Raw. It prefers the

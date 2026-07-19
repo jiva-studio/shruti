@@ -3,17 +3,14 @@ package ingest
 import "encoding/json"
 
 // Ingest result phases published on the `ingest.result` stream. The worker
-// emits exactly one TERMINAL result (ready | linked | failed) per work item,
-// preceded by a best-effort non-terminal "processing" heartbeat.
+// emits exactly one TERMINAL result (ready | failed) per work item, preceded by
+// a best-effort non-terminal "processing" heartbeat.
 const (
 	// PhaseProcessing is a best-effort heartbeat emitted before the fetch —
 	// it moves the orchestrator's job from queued to running.
 	PhaseProcessing = "processing"
 	// PhaseReady is the terminal success: audio + transcript were stored.
 	PhaseReady = "ready"
-	// PhaseLinked is the terminal dedup success: identical audio was already
-	// stored by a prior job, so this owner is linked to it without re-work.
-	PhaseLinked = "linked"
 	// PhaseFailed is the terminal failure. Retriable distinguishes transient
 	// faults (the orchestrator may re-dispatch) from permanent ones.
 	PhaseFailed = "failed"
@@ -21,7 +18,7 @@ const (
 
 // Result is one `ingest.result` message: the worker's report on a work item.
 // JobID echoes the WorkCommand so the orchestrator loads the right job. The
-// artifact fields are populated on ready/linked; Error/Retriable on failed.
+// artifact fields are populated on ready; Error/Retriable on failed.
 type Result struct {
 	JobID string `json:"job_id"`
 	// Attempt echoes the WorkCommand's attempt number so the orchestrator can
