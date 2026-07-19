@@ -227,6 +227,13 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseFailed:
+		// Discard a stale/duplicate failed result. The in-flight attempt is
+		// j.Attempts+1 (the last dispatched ingest.work); a redelivered failure
+		// from an already-superseded attempt (res.Attempt < that) must NOT
+		// re-dispatch again or double-count — the newer attempt owns the job now.
+		if res.Attempt != j.Attempts+1 {
+			return nil
+		}
 		// Retry policy lives HERE: a retriable failure below the cap
 		// re-dispatches a fresh ingest.work (job stays non-terminal).
 		if res.Retriable && j.Attempts < h.d.MaxAttempts {

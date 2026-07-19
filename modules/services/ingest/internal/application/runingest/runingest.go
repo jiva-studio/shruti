@@ -56,7 +56,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	}
 
 	// Best-effort heartbeat: moves the orchestrator's job queued → running.
-	s.emit(ctx, ingest.Result{JobID: cmd.JobID, Phase: ingest.PhaseProcessing})
+	s.emit(ctx, ingest.Result{JobID: cmd.JobID, Attempt: cmd.Attempt, Phase: ingest.PhaseProcessing})
 
 	localPath, hash, err := s.d.Fetcher.Fetch(ctx, cmd.URL)
 	if err != nil {
@@ -74,6 +74,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	if already {
 		s.emit(ctx, ingest.Result{
 			JobID:         cmd.JobID,
+			Attempt:       cmd.Attempt,
 			Phase:         ingest.PhaseLinked,
 			TrackID:       hash,
 			Title:         cmd.Title,
@@ -120,6 +121,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 
 	s.emit(ctx, ingest.Result{
 		JobID:         cmd.JobID,
+		Attempt:       cmd.Attempt,
 		Phase:         ingest.PhaseReady,
 		TrackID:       hash,
 		Lang:          draft.Lang,
@@ -137,6 +139,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 func (s *Service) fail(ctx context.Context, cmd ingest.WorkCommand, cause error) error {
 	s.emit(ctx, ingest.Result{
 		JobID:     cmd.JobID,
+		Attempt:   cmd.Attempt,
 		Phase:     ingest.PhaseFailed,
 		Error:     cause.Error(),
 		Retriable: retriable(cause),

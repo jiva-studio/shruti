@@ -292,7 +292,8 @@ func TestResult_RetriableFailed_Redispatches(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	jobID := h.seedQueued(t, "msg-f", "https://x/y") // 1 ingest.work so far
 
-	failed := ingest.Result{JobID: jobID, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}
+	// The failed result echoes the in-flight attempt (1 — the initial dispatch).
+	failed := ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}
 	if err := h.res.Process(context.Background(), "any", resPayload(t, failed)); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
@@ -312,13 +313,36 @@ func TestResult_RetriableFailed_Redispatches(t *testing.T) {
 	}
 }
 
+// A redelivered failed result whose attempt was already superseded by a
+// re-dispatch must be ignored — no duplicate ingest.work, no double attempt count.
+func TestResult_StaleRetriableFailed_Ignored(t *testing.T) {
+	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-stale", "https://x/y") // 1 ingest.work, attempt 1
+
+	// First failure for attempt 1 → re-dispatches attempt 2, Attempts→1.
+	if err := h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true})); err != nil {
+		t.Fatalf("first failed: %v", err)
+	}
+	// Redelivery of that SAME attempt-1 failure (already superseded) → ignored.
+	if err := h.res.Process(context.Background(), "a-again", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true})); err != nil {
+		t.Fatalf("redelivered failed: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.Attempts != 1 {
+		t.Fatalf("stale redelivery double-counted attempts: %d, want 1", j.Attempts)
+	}
+	if n := len(h.events.works()); n != 2 {
+		t.Fatalf("stale redelivery re-dispatched: got %d ingest.work, want 2", n)
+	}
+}
+
 func TestResult_RetriableFailed_DeadLettersAtCap(t *testing.T) {
 	h := newHarness(1, fakeTier{userID: "user-1", pro: true}) // cap = 1
 	jobID := h.seedQueued(t, "msg-d", "https://x/y")
-	// First retriable failure: Attempts 0 < 1 → re-dispatch, Attempts→1.
-	_ = h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}))
-	// Second retriable failure: Attempts 1 >= cap → dead-letter.
-	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseFailed, Error: "boom2", Retriable: true})); err != nil {
+	// First retriable failure (attempt 1): Attempts 0 < 1 → re-dispatch, Attempts→1.
+	_ = h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "boom", Retriable: true}))
+	// Second retriable failure (attempt 2, the re-dispatch): Attempts 1 >= cap → dead-letter.
+	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{JobID: jobID, Attempt: 2, Phase: ingest.PhaseFailed, Error: "boom2", Retriable: true})); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
 	j, _ := h.repo.Get(context.Background(), jobID)
@@ -334,7 +358,7 @@ func TestResult_PermanentFailed_DeadLetters(t *testing.T) {
 	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
 	jobID := h.seedQueued(t, "msg-perm", "https://x/y")
 
-	failed := ingest.Result{JobID: jobID, Phase: ingest.PhaseFailed, Error: "unsupported", Retriable: false}
+	failed := ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "unsupported", Retriable: false}
 	if err := h.res.Process(context.Background(), "any", resPayload(t, failed)); err != nil {
 		t.Fatalf("Process: %v", err)
 	}

@@ -20,7 +20,11 @@ const (
 // NOT the broker message id). Artifact fields are set on ready/linked;
 // Error/Retriable on failed.
 type Result struct {
-	JobID         string `json:"job_id"`
+	JobID string `json:"job_id"`
+	// Attempt echoes the WorkCommand's attempt number so a stale/duplicate
+	// `failed` result (already superseded by a re-dispatch) can be discarded —
+	// keeping retry accounting idempotent under at-least-once redelivery.
+	Attempt       int    `json:"attempt,omitempty"`
 	Phase         string `json:"phase"`
 	TrackID       string `json:"track_id,omitempty"`
 	Lang          string `json:"lang,omitempty"`
