@@ -246,6 +246,46 @@ func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, colle
 	}, nil
 }
 
+// MarkPublished is the server-authored flip that records a library track has
+// been promoted into the published corpus (origin='published'). It is driven by
+// the publish-service's `track.published` event.
+//
+// In the server-authored ingest path a library_items row is keyed by
+// doc_id == track_id (the orchestrator's track.ready sets doc_id to the content
+// hash), so the flip targets doc_id = trackID. It MERGES origin into the
+// existing projection's data rather than overwriting, so the ready-time metadata
+// (title/lang/audio_key/…) is preserved. Idempotent: the event id
+// "<track_id>:published" yields a deterministic hlc, so a redelivery collapses
+// to one change-log row.
+func (s *Service) MarkPublished(ctx context.Context, userID uuid.UUID, trackID string) error {
+	if trackID == "" {
+		return badRequest("track_id is required")
+	}
+	// Read the current server-authored projection so origin is merged in, not
+	// clobbering the ready-time metadata.
+	master, found, err := s.Changes.Latest(ctx, s.Pool, userID, "library_items", trackID)
+	if err != nil {
+		return err
+	}
+	data := map[string]json.RawMessage{}
+	if found && len(master.Data) > 0 {
+		if err := json.Unmarshal(master.Data, &data); err != nil {
+			return fmt.Errorf("decode master data: %w", err)
+		}
+	}
+	data["origin"] = json.RawMessage(`"published"`)
+	if _, ok := data["track_id"]; !ok {
+		tid, _ := json.Marshal(trackID)
+		data["track_id"] = tid
+	}
+	merged, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	_, err = s.ApplyServerChange(ctx, userID, "library_items", trackID, "upsert", trackID+":published", merged)
+	return err
+}
+
 // Pull returns changes for the user with global_seq > cursor, excluding the
 // caller's own device (echo suppression), paginated. limit is clamped to the
 // hard maximum so a client cannot demand an unbounded page.

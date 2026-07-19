@@ -64,3 +64,57 @@ func TestHandleRemovedIsDelete(t *testing.T) {
 		t.Errorf("removal must map to delete, got %q", fa.op)
 	}
 }
+
+// A non-lifecycle event type (queued/processing/failed) is ignored — no write.
+func TestHandleIgnoresOtherTypes(t *testing.T) {
+	fa := &fakeApplier{}
+	c := &Consumer{Applier: fa}
+	for _, typ := range []string{"track.queued", "track.processing", "track.failed"} {
+		ev := TrackEvent{ID: "x", Type: typ, UserID: uuid.New(), DocID: "d"}
+		if err := c.handle(context.Background(), ev); err != nil {
+			t.Fatalf("handle %s: %v", typ, err)
+		}
+	}
+	if fa.calls != 0 {
+		t.Fatalf("non-lifecycle types must not write, got %d calls", fa.calls)
+	}
+}
+
+// fakePublishApplier records the last MarkPublished request.
+type fakePublishApplier struct {
+	userID  uuid.UUID
+	trackID string
+	calls   int
+}
+
+func (f *fakePublishApplier) MarkPublished(_ context.Context, userID uuid.UUID, trackID string) error {
+	f.calls++
+	f.userID, f.trackID = userID, trackID
+	return nil
+}
+
+// A track.published event flips the item's origin for its track_id.
+func TestPublishedConsumerMarksPublished(t *testing.T) {
+	fp := &fakePublishApplier{}
+	c := &PublishedConsumer{Applier: fp}
+	owner := uuid.New()
+	ev := PublishedEvent{Type: "track.published", TrackID: "trk-9", OwnerID: owner}
+	if err := c.handle(context.Background(), ev); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if fp.calls != 1 || fp.trackID != "trk-9" || fp.userID != owner {
+		t.Errorf("MarkPublished not called correctly: calls=%d track=%q user=%v", fp.calls, fp.trackID, fp.userID)
+	}
+}
+
+// A published event with no track_id is dropped (acked) without a write.
+func TestPublishedConsumerDropsEmptyTrackID(t *testing.T) {
+	fp := &fakePublishApplier{}
+	c := &PublishedConsumer{Applier: fp}
+	if err := c.handle(context.Background(), PublishedEvent{Type: "track.published"}); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if fp.calls != 0 {
+		t.Fatalf("empty track_id must not write")
+	}
+}
