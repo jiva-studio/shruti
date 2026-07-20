@@ -1,8 +1,8 @@
 # Personal library — deployment runbook
 
-Rolling out the personal-library feature is **not** an ordinary Watchtower auto-deploy, because it introduces **two new services** (`orchestrator` and the stateless `ingest` worker) and **new infra** (a dedicated `redis-streams` broker + `orchestrator-postgres`). Watchtower only rolls *existing* containers to a newer image; it cannot create containers that a changed `docker-compose.yml` adds. New containers require a **structural deploy via `deploy.sh`**. This runbook is the exact order. See [Personal library](../architecture/personal-library.md).
+Rolling out the personal-library feature is **not** an ordinary Watchtower auto-deploy, because it introduces **three new services** (`orchestrator`, the stateless `ingest` worker, and `publish-service`) and **new infra** (a dedicated `redis-streams` broker + `orchestrator-postgres` + `publish-postgres`) — **six new containers** in total. Watchtower only rolls *existing* containers to a newer image; it cannot create containers that a changed `docker-compose.yml` adds. New containers require a **structural deploy via `deploy.sh`**. This runbook is the exact order. See [Personal library](../architecture/personal-library.md).
 
-> **Prereq:** the 13 PRs are merged to `main` (wave-1 to `main`, then the integration branch to `main`), so CI has built the images. Nothing here works before that.
+> **Prereq:** the stacked PRs are merged to `main`, so CI has built the images. The stack is linear — its tip contains every earlier branch's content (several files *moved* between services in the last two PRs, so a branch whose head is not an ancestor of the tip may still be fully included). Nothing here works before the merge: the image build runs only on push to `main`.
 
 ## What ships how
 
@@ -10,8 +10,9 @@ Rolling out the personal-library feature is **not** an ordinary Watchtower auto-
 |---|---|
 | `chat`, `profile` image updates (existing services) | CI builds → **Watchtower** auto-rolls |
 | chat schema (`0043_chat_user_tracks`, `0044_chat_owned`) | **central `migrator`** (one-shot) — driven by `deploy.sh` |
-| **new** `orchestrator` + `ingest` services + `orchestrator-postgres` + `redis-streams` | **structural — `deploy.sh`** (Watchtower can't create them) |
+| **new** `orchestrator` + `ingest` + `publish-service` + `orchestrator-postgres` + `publish-postgres` + `redis-streams` | **structural — `deploy.sh`** (Watchtower can't create them) |
 | `orchestrator` schema (`jobs`, `outbox`) | self-migrates on boot (own DB, advisory-locked) |
+| `publish-service` schema (`publish.tracks`, outbox) | self-migrates on boot (own DB, advisory-locked) |
 | `profile` schema (`library_items`) | self-migrates on boot (own DB) |
 | `storage-sync` gains a `track.events` consumer + a health port | image update — **Watchtower**, but it needs the new env (see step 2) |
 | observability: second postgres-exporter, alert group, blackbox targets | **structural** on the obs-agent + obs hosts (separate compose projects) |
@@ -25,25 +26,33 @@ Because the change is **schema-coupled** (chat's tables must exist before the ne
 2. **Set host secrets** in `/opt/shruti/.env` (origin host) — real values, never committed:
    - `SHRUTI_DEEPGRAM_API_KEY` — **the one that silently breaks everything if missed.** Without it every ingest burns its full attempt budget and dead-letters; the symptom is a spinner that never resolves. Validate before deploying: a `GET https://api.deepgram.com/v1/projects` with `Authorization: Token <key>` must return `200`.
    - `SHRUTI_STORAGE_BACKEND=bunny` + `SHRUTI_STORAGE_ZONE` + `SHRUTI_STORAGE_KEY` — the ingest worker writes artifacts to Bunny, not S3.
-   - `ORCHESTRATOR_POSTGRES_PASSWORD` + the derived `ORCHESTRATOR_DATABASE_URL`
-   - `ORCHESTRATOR_PG_EXPORTER_PASSWORD` — the read-only role the orchestrator postgres-exporter connects as. Must match the value substituted into `postgres/orchestrator-init.sql`, or every ingest alert reads no data while looking perfectly healthy.
+   - `SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD` and `SHRUTI_PUBLISH_POSTGRES_PASSWORD` — **deploy-stoppers.** Both are declared `:?` in compose, so if either is missing `docker compose` fails while *parsing* and the deploy never starts. Do not invent a `DATABASE_URL` variable: compose derives each service's URL from these passwords. Note these are **not** generated for you on a server — `gen-dev-env.sh` generates them for local dev only.
+   - `ORCHESTRATOR_PG_EXPORTER_PASSWORD` — the read-only role the orchestrator postgres-exporter connects as; also `:?`. `postgres/orchestrator-init.sh` reads it from the container environment, so there is **nothing to substitute by hand** — an earlier version of this file was a `.sql` template whose placeholder nothing ever replaced (and `deploy.sh` rsyncs that directory with `--delete`, so a host-side edit would be reverted on the next deploy). If this password is wrong the exporter cannot authenticate and every ingest alert reads no data while looking perfectly healthy.
    - `PENDING_S3_BUCKET` / `PENDING_S3_KEY` (default `public/db/pending.db`) / `PENDING_S3_ENDPOINT` + creds — for the profile → pending.db producer
    - image tags if pinning (`SHRUTI_ORCHESTRATOR_TAG`, `SHRUTI_INGEST_TAG`, …)
    - (`STREAMS_REDIS_URL` is internal — `redis://redis-streams:6379/0` — no secret)
 
    **`SHRUTI_YTDLP_PROXY` is deliberately left empty.** It was assumed a residential proxy would be required, but a direct download from the origin host was measured against YouTube and works: no bot-check, native audio format, output identical to a residential run. Do not procure one on spec. The `--proxy` plumbing stays in the fetch adapter as the escape hatch if YouTube ever starts rate-limiting the host by volume — that failure surfaces as the download error text in the job's `error` column.
 
-3. **Structural deploy.** Run `deploy.sh` for the **origin** role. It rsyncs `infra/`, runs `docker compose --profile origin pull && up -d --remove-orphans`, which **creates** `orchestrator`, `orchestrator-postgres`, `redis-streams`, and re-runs the one-shot `migrator` (applies chat 0043/0044). `orchestrator`/`profile` self-migrate on boot; `/readyz` gates each until its schema is current.
+3. **Structural deploy.** Run `deploy.sh` for the **origin** role. It rsyncs `infra/`, runs `docker compose --profile origin pull && up -d --remove-orphans`, which **creates** all six new containers (`orchestrator`, `orchestrator-postgres`, `ingest`, `publish-service`, `publish-postgres`, `redis-streams`) and re-runs the one-shot `migrator` (applies chat 0043/0044). `orchestrator` / `publish-service` / `profile` self-migrate on boot; `/readyz` gates each until its schema is current.
+
+   Deploying before the secrets in step 2 exist is safe but pointless: compose aborts at parse time, so nothing is created and the *running* stack is untouched.
 
 4. **Push the Langfuse router prompt.** The `add-to-library` intent lives in a hosted Langfuse prompt that overrides the bundled `.md` at runtime. Until synced, chat's router never emits the intent and the feature is inert. Use `langfuse-prompts-sync` to push the router / response-shape sections.
 
 5. **Deploy the observability side** (separate compose projects, so `deploy.sh` for the app stack does not touch them):
    - obs-agent host: brings up `orchestrator-postgres-exporter` on `:9188` with `orchestrator-queries.yaml`.
    - obs host: the new `orchestrator-postgres-*` scrape job, the three added blackbox targets, and the `library-ingest` alert group.
-   - On an **existing** `orchestrator-postgres` volume the init script does not re-run — apply `postgres/orchestrator-init.sql` by hand once, or the exporter connects and returns nothing.
+   - On an **existing** `orchestrator-postgres` volume the init script does not re-run (initdb scripts fire only on a fresh data directory), so apply it by hand once — it is idempotent and doubles as the password-rotation path:
+
+     ```
+     docker compose exec -e ORCHESTRATOR_PG_EXPORTER_PASSWORD=<pw> \
+       orchestrator-postgres /docker-entrypoint-initdb.d/10-exporter.sh
+     ```
 
 6. **Verify.**
-   - `service-probe orchestrator` / `ingest` / `chat` / `profile` — healthy + expected build SHA.
+   - `service-probe orchestrator` / `ingest` / `publish-service` / `chat` / `profile` — healthy + expected build SHA.
+   - `publish-service` fetched the corpus catalog: it reads `current.db` on a 5-minute tick to learn which track ids are already live. It **never writes it back** — the only blob it uploads is `pending.db`. A failing catalog fetch shows up as a promotion that never happens, not as a corrupted catalog.
    - `orchestrator` `/healthz` + `/readyz` (schema applied), and it can `XREADGROUP` an empty `ingest.request`.
    - `storage-sync` `/readyz` returns `200 ready` (not `503 stale`) once a full pass has completed.
    - Exporter is actually reading: `shruti_orchestrator_oldest_unfinished_job_seconds` must be **present** in Prometheus. An absent series means the role/grants are wrong — and every ingest alert is silently blind.
