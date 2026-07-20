@@ -795,15 +795,20 @@ services:
     logging: *default-logging
     environment:
       POSTGRES_USER: orchestrator
-      POSTGRES_PASSWORD: ${LECTORIUM_ORCHESTRATOR_POSTGRES_PASSWORD:?LECTORIUM_ORCHESTRATOR_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_PASSWORD: ${LECTORIUM_ORCHESTRATOR_POSTGRES_PASSWORD:?LECTORIUM_ORCHESTRATOR_POSTGRES_PASSWORD must be set in .env (for dev use infra/app/scripts/gen-dev-env.sh)}
       POSTGRES_DB: orchestrator
+      # Read by the init script below to create the exporter role. Required, not
+      # defaulted: a wrong/absent password here means the ingest alerts read no
+      # data while every container still looks healthy — the one failure mode
+      # worth refusing to start over.
+      ORCHESTRATOR_PG_EXPORTER_PASSWORD: ${ORCHESTRATOR_PG_EXPORTER_PASSWORD:?ORCHESTRATOR_PG_EXPORTER_PASSWORD must be set in .env (for dev use infra/app/scripts/gen-dev-env.sh)}
     volumes:
       - orchestratordata:/var/lib/postgresql/data
       # Creates the lectorium_exporter role the orchestrator postgres-exporter
       # connects as. Runs only on a FRESH volume; on an existing one apply it by
       # hand (see infra/observability-agent/README.md). Without it the ingest
       # alerts silently read no data.
-      - ./postgres/orchestrator-init.sql:/docker-entrypoint-initdb.d/10-exporter.sql:ro
+      - ./postgres/orchestrator-init.sh:/docker-entrypoint-initdb.d/10-exporter.sh:ro
     networks: [lectorium]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U orchestrator -d orchestrator"]
@@ -968,8 +973,12 @@ services:
       S3_ENDPOINT: ${LECTORIUM_S3_ENDPOINT_URL:-}
       S3_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       S3_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      # Corpus catalog current.db: read the published copy from the CDN, write the
-      # reconciled copy back to this S3 key (symmetric with pending.db).
+      # Corpus catalog current.db is READ-ONLY here: it is fetched to learn which
+      # track ids are already live in the public corpus, so this service can
+      # promote its own matching rows. It is never written back — the only blob
+      # this service PUTs is pending.db. (current.db is owned by the published-
+      # corpus build; a writer here would corrupt the catalog every app pulls.)
+      # URL takes precedence; the S3 key is the fallback fetch source.
       CORPUS_CATALOG_URL: ${LECTORIUM_MEDIA_BASE_URL:-https://akds-lectorium.b-cdn.net}/public/db/current.db
       CORPUS_CATALOG_S3_KEY: public/db/current.db
       PENDING_S3_KEY: public/db/pending.db
