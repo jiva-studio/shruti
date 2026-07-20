@@ -19,12 +19,16 @@ const (
 // once known, and Data is the server-owned library_items projection applied
 // verbatim.
 type TrackEvent struct {
-	ID      string          `json:"id"`
-	Type    string          `json:"type"`
-	UserID  string          `json:"user_id"`
-	DocID   string          `json:"doc_id"`
-	TrackID string          `json:"track_id,omitempty"`
-	Data    json.RawMessage `json:"data,omitempty"`
+	ID   string `json:"id"`
+	Type string `json:"type"`
+	// RequestID is the originating chat turn's trace_id, carried onto the
+	// lifecycle stream so downstream consumers (profile, chat, storage-sync)
+	// stay on the same correlation chain as the pipeline that produced them.
+	RequestID string          `json:"request_id,omitempty"`
+	UserID    string          `json:"user_id"`
+	DocID     string          `json:"doc_id"`
+	TrackID   string          `json:"track_id,omitempty"`
+	Data      json.RawMessage `json:"data,omitempty"`
 }
 
 // Marshal serializes the event for the outbox payload column.

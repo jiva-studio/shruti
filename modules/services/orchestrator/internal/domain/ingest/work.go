@@ -17,11 +17,14 @@ import "encoding/json"
 // echo the correlation on every result; Attempt is owned by the orchestrator's
 // retry policy (the worker never increments it — it only reports outcomes).
 type WorkCommand struct {
-	JobID   string `json:"job_id"`
-	URL     string `json:"url"`
-	Title   string `json:"title,omitempty"`
-	OwnerID string `json:"owner_id,omitempty"`
-	Attempt int    `json:"attempt"`
+	JobID string `json:"job_id"`
+	// RequestID is the chat turn's trace_id, carried from the originating
+	// `ingest.request` so the worker's logs join the same correlation chain.
+	RequestID string `json:"request_id,omitempty"`
+	URL       string `json:"url"`
+	Title     string `json:"title,omitempty"`
+	OwnerID   string `json:"owner_id,omitempty"`
+	Attempt   int    `json:"attempt"`
 }
 
 // Marshal serializes the command for the `ingest.work` outbox payload column.

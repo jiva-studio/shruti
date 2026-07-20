@@ -67,12 +67,12 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 
 	// Every line for this message carries job_id + attempt, so one ingest is a
 	// single LogQL filter across the whole pipeline.
-	lg := slog.With("job_id", cmd.JobID, "attempt", cmd.Attempt)
+	lg := slog.With("job_id", cmd.JobID, "request_id", cmd.RequestID, "attempt", cmd.Attempt)
 	started := time.Now()
 	lg.InfoContext(ctx, "ingest_started", "url", cmd.URL)
 
 	// Best-effort heartbeat: moves the orchestrator's job queued → running.
-	s.emit(ctx, ingest.Result{JobID: cmd.JobID, Attempt: cmd.Attempt, Phase: ingest.PhaseProcessing})
+	s.emit(ctx, ingest.Result{JobID: cmd.JobID, RequestID: cmd.RequestID, Attempt: cmd.Attempt, Phase: ingest.PhaseProcessing})
 
 	stage := time.Now()
 	localPath, hash, err := s.d.Fetcher.Fetch(ctx, cmd.URL)
@@ -148,6 +148,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	lg.InfoContext(ctx, "ingest_ready", "lang", lang, "total_ms", ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:         cmd.JobID,
+		RequestID:     cmd.RequestID,
 		Attempt:       cmd.Attempt,
 		Phase:         ingest.PhaseReady,
 		TrackID:       hash,
@@ -177,6 +178,7 @@ func (s *Service) fail(ctx context.Context, lg *slog.Logger, cmd ingest.WorkComm
 	lg.Log(ctx, lvl, "ingest_failed", "error", cause.Error(), "retriable", retry)
 	return s.done(ctx, ingest.Result{
 		JobID:     cmd.JobID,
+		RequestID: cmd.RequestID,
 		Attempt:   cmd.Attempt,
 		Phase:     ingest.PhaseFailed,
 		Error:     cause.Error(),

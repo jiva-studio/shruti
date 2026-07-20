@@ -799,6 +799,11 @@ services:
       POSTGRES_DB: orchestrator
     volumes:
       - orchestratordata:/var/lib/postgresql/data
+      # Creates the shruti_exporter role the orchestrator postgres-exporter
+      # connects as. Runs only on a FRESH volume; on an existing one apply it by
+      # hand (see infra/observability-agent/README.md). Without it the ingest
+      # alerts silently read no data.
+      - ./postgres/orchestrator-init.sql:/docker-entrypoint-initdb.d/10-exporter.sql:ro
     networks: [shruti]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U orchestrator -d orchestrator"]

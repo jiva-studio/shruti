@@ -9,6 +9,7 @@ func TestDecodeTrackReadyRealEnvelope(t *testing.T) {
 	payload := []byte(`{
 	  "id": "job-1:ready",
 	  "type": "track.ready",
+	  "request_id": "trace-abc",
 	  "user_id": "3f6a1f0e-0000-4000-8000-000000000001",
 	  "doc_id": "job-1",
 	  "track_id": "hash123",
@@ -32,6 +33,11 @@ func TestDecodeTrackReadyRealEnvelope(t *testing.T) {
 	}
 	if got.TrackID != "hash123" {
 		t.Errorf("track_id = %q, want hash123", got.TrackID)
+	}
+	// The correlation id must survive the last hop: it is what joins a mirror
+	// copy to the chat turn that asked for the lecture.
+	if got.RequestID != "trace-abc" {
+		t.Errorf("request_id = %q, want trace-abc", got.RequestID)
 	}
 	want := []string{
 		"public/tracks/hash123/audio/original.mp3",

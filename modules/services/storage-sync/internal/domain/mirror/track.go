@@ -12,7 +12,12 @@ import "encoding/json"
 // 404s for them. Reacting to the event ships those two objects in seconds; the
 // periodic full pass stays as the reconciler and the safety net.
 type TrackReady struct {
-	TrackID       string
+	TrackID string
+	// RequestID is the originating chat turn's trace_id, carried through the
+	// whole pipeline so a mirror copy is greppable on the same id as the ingest
+	// that produced it. Empty for events from before the id was propagated, and
+	// for the periodic full pass (which has no originating request).
+	RequestID     string
 	AudioKey      string
 	TranscriptKey string
 }
@@ -31,12 +36,14 @@ func (t TrackReady) Keys() []string {
 }
 
 // trackEvent mirrors the wire shape the orchestrator's relay emits on
-// `track.events`: `{id, type, user_id, doc_id, track_id, data}` where the blob
+// `track.events`: `{id, type, request_id, user_id, doc_id, track_id, data}`
+// where the blob
 // keys live inside the server-owned `data` projection.
 type trackEvent struct {
-	Type    string `json:"type"`
-	TrackID string `json:"track_id"`
-	Data    struct {
+	Type      string `json:"type"`
+	RequestID string `json:"request_id"`
+	TrackID   string `json:"track_id"`
+	Data      struct {
 		TrackID       string `json:"track_id"`
 		AudioKey      string `json:"audio_key"`
 		TranscriptKey string `json:"transcript_key"`
@@ -64,6 +71,7 @@ func DecodeTrackReady(payload []byte) (TrackReady, bool, error) {
 	}
 	t := TrackReady{
 		TrackID:       trackID,
+		RequestID:     ev.RequestID,
 		AudioKey:      ev.Data.AudioKey,
 		TranscriptKey: ev.Data.TranscriptKey,
 	}

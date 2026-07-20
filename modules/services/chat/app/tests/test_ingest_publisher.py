@@ -41,11 +41,42 @@ async def test_redis_publish_xadds_payload(publisher) -> None:
     assert set(fields) == {b"payload"}
     body = json.loads(fields[b"payload"])
     assert body == {
+        "request_id": "",
         "url": "https://y/1",
         "token": "tok",
         "user_id": "u1",
         "title": "Lecture 1",
     }
+
+
+async def test_publish_carries_the_correlation_id(publisher) -> None:
+    """`request_id` is what joins a library ingest to the chat turn that asked
+    for it, across chat -> orchestrator -> ingest worker -> storage-sync. If it
+    is dropped here the whole chain loses its only shared key."""
+    import json
+
+    await publisher.publish(
+        user_id="u1", url="https://y/1", jwt="tok", request_id="trace-abc"
+    )
+    _id, fields = (await publisher._client.xrange("ingest.request"))[0]
+    assert json.loads(fields[b"payload"])["request_id"] == "trace-abc"
+
+
+async def test_publish_falls_back_to_the_ambient_turn_trace(publisher) -> None:
+    """The card-tap path reaches the publisher without threading the id down,
+    so it is recovered from the turn's structlog context instead."""
+    import json
+
+    import structlog
+
+    structlog.contextvars.bind_contextvars(trace_id="ambient-xyz")
+    try:
+        await publisher.publish(user_id="u1", url="https://y/1", jwt="tok")
+    finally:
+        structlog.contextvars.unbind_contextvars("trace_id")
+
+    _id, fields = (await publisher._client.xrange("ingest.request"))[0]
+    assert json.loads(fields[b"payload"])["request_id"] == "ambient-xyz"
 
 
 async def test_redis_publish_soft_fails_on_error() -> None:
