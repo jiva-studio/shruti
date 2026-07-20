@@ -9,11 +9,14 @@ import "encoding/json"
 // (advisory — surfaced back on results), and the attempt counter (owned by the
 // orchestrator's retry policy; the worker never increments it).
 type WorkCommand struct {
-	JobID   string `json:"job_id"`
-	URL     string `json:"url"`
-	Title   string `json:"title,omitempty"`
-	OwnerID string `json:"owner_id,omitempty"`
-	Attempt int    `json:"attempt"`
+	JobID string `json:"job_id"`
+	// RequestID is the chat turn's trace_id, carried unchanged from the user's
+	// original request so the worker's logs join the same correlation chain.
+	RequestID string `json:"request_id,omitempty"`
+	URL       string `json:"url"`
+	Title     string `json:"title,omitempty"`
+	OwnerID   string `json:"owner_id,omitempty"`
+	Attempt   int    `json:"attempt"`
 }
 
 // DecodeWork parses a broker payload into a WorkCommand.

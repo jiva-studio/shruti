@@ -36,6 +36,13 @@ scrape_configs:
       - targets: ['${PROD_HOST_TS_IP}:9187']
         labels: { host: prod-eu, db: shruti }
 
+  # Second exporter: the orchestrator has its own Postgres instance, so its
+  # job/outbox tables are unreachable from the `postgres-prod-eu` connection.
+  - job_name: orchestrator-postgres-prod-eu
+    static_configs:
+      - targets: ['${PROD_HOST_TS_IP}:9188']
+        labels: { host: prod-eu, db: orchestrator }
+
   - job_name: redis-prod-eu
     static_configs:
       - targets: ['${PROD_HOST_TS_IP}:9121']
@@ -51,6 +58,12 @@ scrape_configs:
           - http://auth:8081/auth/healthz
           - http://share-audio:8082/healthz
           - http://share-video:8083/healthz
+          - http://orchestrator:8086/healthz
+          - http://ingest:8088/healthz
+          # storage-sync exposes /readyz, not just /healthz: it reports stale
+          # once no full mirror pass has succeeded for three intervals, which is
+          # the failure worth paging on (a live process with a rotting mirror).
+          - http://storage-sync:8089/readyz
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

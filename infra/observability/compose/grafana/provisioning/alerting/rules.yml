@@ -1351,7 +1351,10 @@ groups:
         to: 0
       model:
         refId: A
-        expr: sum(rate({service="chat"}[10m]))
+        # The label is the value the app puts in its own `service` JSON field,
+        # which promtail promotes verbatim — that is "shruti-chat", not
+        # "chat". This matched nothing, so the alert could never fire.
+        expr: sum(rate({service="shruti-chat"}[10m]))
         queryType: instant
     - refId: B
       datasourceUid: __expr__
@@ -1564,5 +1567,213 @@ groups:
             type: gt
             params:
             - 1000
+    noDataState: OK
+    execErrState: OK
+- orgId: 1
+  name: library-ingest
+  folder: Shruti-Alerts
+  interval: 1m
+  rules:
+  # The headline signal. Every other failure mode in this pipeline eventually
+  # shows up here, because a job that is not progressing is exactly what the
+  # user experiences as a spinner that never resolves. Healthy steady-state is
+  # near zero regardless of volume: a normal ingest settles in minutes.
+  - uid: ingest_jobs_stalled
+    title: ingest_jobs_stalled
+    condition: B
+    for: 10m
+    labels:
+      severity: P1
+      service: orchestrator
+    annotations:
+      summary: oldest unfinished ingest job is {{ $values.A }}s old
+      description: |
+        orchestrator.jobs has a job stuck in queued/running for over 30 minutes.
+        A healthy ingest settles in minutes, so this means work is being accepted
+        but not completed. Nothing crashes in this failure mode — containers stay
+        green and healthz returns 200 — which is why this alert exists.
+
+        Most likely causes, cheapest first:
+          1. The ingest worker is not consuming. Check it is up and reading:
+             ssh prod-eu 'docker logs --tail=200 shruti-ingest-1'
+             Expect ingest_started / ingest_fetched lines. Total silence means it
+             is not receiving work — check the outbox alert below.
+          2. A dependency is down and every attempt is burning its retry budget.
+             Look for ingest_failed at level=error, and read the `error` field:
+             it is prefixed with the pipeline stage (fetch:/transcribe:/put ...).
+          3. Deepgram credentials missing or rejected — this is the single most
+             common cause after a fresh deploy. SHRUTI_DEEPGRAM_API_KEY must be
+             set in /opt/shruti/.env.
+
+        Inspect directly:
+          docker exec -i shruti-orchestrator-postgres-1 \
+            psql -U orchestrator -d orchestrator -c \
+            "SELECT id, state, attempts, error, created_at FROM orchestrator.jobs \
+              WHERE state IN ('queued','running') ORDER BY created_at LIMIT 20;"
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_orchestrator_oldest_unfinished_job_seconds)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 1800
+    noDataState: OK
+    execErrState: OK
+  # The relay draining orchestrator.outbox is a single goroutine. If it dies the
+  # process stays up and healthy while BOTH the ingest dispatch and the whole
+  # track.events lifecycle stop — the most silent failure in the system.
+  - uid: ingest_outbox_backlog
+    title: ingest_outbox_backlog
+    condition: B
+    for: 5m
+    labels:
+      severity: P1
+      service: orchestrator
+    annotations:
+      summary: orchestrator outbox has {{ $values.A }} row(s) overdue
+      description: |
+        orchestrator.outbox rows past their available_at and still unpublished.
+        The retry backoff is already accounted for, so these are genuinely due.
+        Healthy steady-state is 0 — the relay drains continuously.
+
+        Runbook:
+          1. ssh prod-eu 'docker logs --tail=200 shruti-orchestrator-1'
+             — look for outbox_drain_failed.
+          2. Verify the broker is reachable: the relay publishes to redis-streams,
+             not the app redis. Check that container is healthy.
+          3. Restarting the orchestrator is safe — the outbox is transactional and
+             publishing is idempotent downstream (event ids are derived from the
+             job id, so redelivery re-emits the same id).
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_orchestrator_outbox_backlog)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+  # A trickle of dead-letters is normal — users paste dead and private links. A
+  # spike is not: it means a dependency broke and every ingest is burning its
+  # full attempt budget before giving up. Threshold is deliberately above the
+  # organic rate so bad links alone never page anyone.
+  - uid: ingest_dead_letter_spike
+    title: ingest_dead_letter_spike
+    condition: B
+    for: 10m
+    labels:
+      severity: P2
+      service: orchestrator
+    annotations:
+      summary: '{{ $values.A }} ingest jobs dead-lettered in the last 15m'
+      description: |
+        Jobs reaching state=failed after exhausting their attempts. Some of this
+        is organic (dead/private source URLs); a sustained spike means a
+        dependency is failing for everyone.
+
+        Distinguish the two from the logs — job_dead_lettered carries an
+        `exhausted` field: true means the retry budget ran out (our dependency is
+        sick), false means the source was never ingestable (the user's link).
+          ssh prod-eu 'docker logs --tail=500 shruti-orchestrator-1 \
+            | grep job_dead_lettered'
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 900
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_orchestrator_failed_jobs_recent)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 10
+    noDataState: OK
+    execErrState: OK
+  # storage-sync reports itself stale via /readyz once no full mirror pass has
+  # succeeded for three intervals. Without this, a mirror that stops replicating
+  # is invisible: the process runs, the app says "ready", and only readers served
+  # by the Russia mirror see 404s on the audio.
+  - uid: storage_sync_mirror_stale
+    title: storage_sync_mirror_stale
+    condition: B
+    for: 15m
+    labels:
+      severity: P2
+      service: storage-sync
+    annotations:
+      summary: storage-sync mirror is stale (readyz failing)
+      description: |
+        No full Bunny -> Yandex pass has succeeded for three SYNC_INTERVALs.
+        Consequence is user-visible only in Russia: tracks the app reports as
+        "ready" whose audio 404s, because reads there are served from the mirror.
+
+        Runbook:
+          1. curl the detail — the body carries last_error and last_success_age:
+             ssh prod-eu 'docker exec shruti-storage-sync-1 \
+               wget -qO- localhost:8089/readyz'
+          2. ssh prod-eu 'docker logs --tail=200 shruti-storage-sync-1'
+             — sync_pass_failed carries the cause.
+          3. Most common: a rotated Bunny STORAGE_KEY (403 on list) or expired
+             Yandex credentials (403 on put). Both need an .env update, NOT a
+             restart — restarting will not fix a credential fault.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 900
+        to: 0
+      model:
+        refId: A
+        expr: min(probe_success{instance="http://storage-sync:8089/readyz"})
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
     noDataState: OK
     execErrState: OK

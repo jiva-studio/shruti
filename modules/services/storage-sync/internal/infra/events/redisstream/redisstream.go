@@ -157,7 +157,8 @@ func (c *Consumer) Handle(ctx context.Context, payload []byte) error {
 	if err != nil {
 		return err
 	}
-	slog.InfoContext(ctx, "track_mirrored", "track_id", t.TrackID, "copied", copied)
+	slog.InfoContext(ctx, "track_mirrored",
+		"track_id", t.TrackID, "request_id", t.RequestID, "copied", copied)
 	return nil
 }
 
