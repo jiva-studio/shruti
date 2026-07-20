@@ -13,6 +13,7 @@ export type { ITagRepository } from "./tagRepository.js"
 export type { ITranscriptRepository } from "./transcriptRepository.js"
 export type { INoteRepository, CreateNoteInput, UpdateNoteInput } from "./noteRepository.js"
 export type { IPlaylistItemRepository } from "./playlistItemRepository.js"
+export type { ILibraryItemRepository } from "./libraryItemRepository.js"
 export type {
   IListeningSessionRepository,
   ProgressEntry,

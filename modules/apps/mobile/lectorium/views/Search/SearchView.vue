@@ -77,6 +77,8 @@
       </TracksList>
     </div>
 
+    <MyLibraryShelf />
+
     <LibraryBanner
       :title="$t('search.smartLibrary.title')"
       :description="$t('search.smartLibrary.subtitle')"
@@ -139,6 +141,7 @@ import {
   LibraryBanner,
 } from "@ui/features/collections/index.js"
 import { SmartLibraryDialog } from "@ui/features/settings/index.js"
+import MyLibraryShelf from "@lectorium/views/Library/components/MyLibraryShelf.vue"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import RowDivider from "@ui/components/RowDivider.vue"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"

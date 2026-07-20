@@ -26,6 +26,9 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureAuthorProfileColumns(ctx, db); err != nil {
 		return fmt.Errorf("ensure author profile columns: %w", err)
 	}
+	if err := ensureTrackContributorColumn(ctx, db); err != nil {
+		return fmt.Errorf("ensure track contributor column: %w", err)
+	}
 	if err := ensureTrackVariantOutlineColumns(ctx, db); err != nil {
 		return fmt.Errorf("ensure track_variant outline columns: %w", err)
 	}
@@ -244,6 +247,31 @@ func ensureAuthorProfileColumns(ctx context.Context, db *sql.DB) error {
 				return fmt.Errorf("add authors.%s: %w", col, err)
 			}
 		}
+	}
+	return nil
+}
+
+// ensureTrackContributorColumn adds the nullable `contributor_user_id` column
+// to `tracks` when missing (Phase-2 admin promotion, issue #1234).
+//
+// A user-added "personal library" lecture the admin promotes into the shared
+// corpus keeps its stable track_id and becomes a normal corpus track for
+// everyone; the column records WHO contributed it, for attribution only. The
+// corpus stays ownerless — this is never an access-control owner, so it is a
+// purely additive column with NO scheme bump (older mobile binaries ignore
+// it, mirroring the additive author/outline columns). Idempotent: a no-op once
+// present.
+func ensureTrackContributorColumn(ctx context.Context, db *sql.DB) error {
+	has, err := columnExists(ctx, db, "tracks", "contributor_user_id")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx,
+		`ALTER TABLE tracks ADD COLUMN contributor_user_id TEXT`); err != nil {
+		return fmt.Errorf("add tracks.contributor_user_id: %w", err)
 	}
 	return nil
 }

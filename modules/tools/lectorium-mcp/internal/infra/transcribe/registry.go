@@ -3,7 +3,7 @@ package transcribereg
 import (
 	"sync"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcriber"
+	"github.com/jiva-studio/lectorium/pipeline/ports/transcriber"
 )
 
 // Registry implements transcriber.Registry.

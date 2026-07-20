@@ -156,6 +156,32 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  # Orchestrator DB metrics. A SECOND exporter, not extra queries on the one
+  # above: the orchestrator owns a separate Postgres instance (own container,
+  # own role/db), so its tables are simply not reachable from that connection.
+  # Scraped on :9188 — see orchestrator-queries.yaml for what these gauges are
+  # defending against (a pipeline that stops without anything crashing).
+  orchestrator-postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: lectorium-orchestrator-postgres-exporter
+    restart: unless-stopped
+    labels: *no-watchtower
+    command:
+      - --log.format=json
+    environment:
+      DATA_SOURCE_NAME: "postgresql://lectorium_exporter:${ORCHESTRATOR_PG_EXPORTER_PASSWORD:?ORCHESTRATOR_PG_EXPORTER_PASSWORD must be set}@orchestrator-postgres:5432/orchestrator?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+      PG_EXPORTER_AUTO_DISCOVER_DATABASES: "false"
+    volumes:
+      - ./orchestrator-queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    ports:
+      - "${PROD_EU_TS_IP}:9188:9187"
+    networks:
+      - lectorium
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   # Redis metrics. Hit-rate, memory, evictions, connected clients. Joins
   # the chat-stack network for service-DNS access to `redis`.
   redis-exporter:

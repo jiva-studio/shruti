@@ -15,7 +15,7 @@ import (
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/prompts"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
 var defaultSystemPrompt = prompts.System

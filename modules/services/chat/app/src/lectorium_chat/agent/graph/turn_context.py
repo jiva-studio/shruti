@@ -178,3 +178,17 @@ class TurnContext:
     # The research pipeline awaits this future instead of re-embedding;
     # non-research routes cancel it from the router node.
     embed_task: Any | None = None       # asyncio.Task[list[float]] | None
+
+    # ── Add-to-library (issue #1226) ────────────────────────────────────
+    # Verified JWT identity + raw token for the ingest.request payload
+    # ({user_id, url, jwt}) the add_to_library_worker publishes. user_id
+    # mirrors user_context.user_id; jwt is the raw bearer token so the
+    # ingest worker (#1224) can re-verify and act on the user's behalf.
+    user_id: str | None = None
+    jwt: str | None = None
+    # Multi-provider external-lecture search resolver (LectureSearchResolver)
+    # and the ingest-request broker publisher (IngestRequestPublisher), both
+    # built once by the composition root. None in tests / when unconfigured —
+    # the worker degrades (no candidates / no-op publish) rather than crash.
+    lecture_search: Any | None = None
+    ingest_publisher: Any | None = None

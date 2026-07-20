@@ -3,7 +3,7 @@ package review
 import (
 	"testing"
 
-	reviewport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
 func mkSeg(idx int, text string) reviewport.ChunkSegment {

@@ -347,6 +347,7 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterLibraryAttribution(s, deps.LibraryAttribution)
 	RegisterLibraryImport(s, deps)
 	RegisterLibraryPublish(s, deps)
+	RegisterPending(s, deps.Pending)
 	RegisterAdminConfigGet(s, deps)
 	RegisterAdminConfigSet(s, deps)
 }

@@ -37,14 +37,16 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 		hidden = 1
 	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tracks (id, author_id, location_id, date, hidden)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO tracks (id, author_id, location_id, date, hidden, contributor_user_id)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			author_id      = excluded.author_id,
-			location_id    = excluded.location_id,
-			date           = excluded.date,
-			hidden         = excluded.hidden`,
-		t.Id, t.AuthorID, t.LocationID, t.Date, hidden)
+			author_id           = excluded.author_id,
+			location_id         = excluded.location_id,
+			date                = excluded.date,
+			hidden              = excluded.hidden,
+			contributor_user_id = COALESCE(excluded.contributor_user_id, contributor_user_id)`,
+		t.Id, t.AuthorID, t.LocationID, t.Date, hidden,
+		sql.NullString{String: t.ContributorUserID, Valid: t.ContributorUserID != ""})
 	if err != nil {
 		return fmt.Errorf("upsert tracks: %w", err)
 	}

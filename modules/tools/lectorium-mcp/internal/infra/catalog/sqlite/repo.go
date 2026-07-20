@@ -280,11 +280,11 @@ func (r *Repo) UsageCount(ctx context.Context, kind catalog.Kind, id string) (in
 func (r *Repo) GetTrack(ctx context.Context, id string) (catalog.TrackRow, bool, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, COALESCE(author_id,''), COALESCE(location_id,''), COALESCE(date,''),
-		       hidden
+		       hidden, COALESCE(contributor_user_id,'')
 		FROM tracks WHERE id = ?`, id)
 	var t catalog.TrackRow
 	var hidden int
-	if err := row.Scan(&t.Id, &t.AuthorID, &t.LocationID, &t.Date, &hidden); err != nil {
+	if err := row.Scan(&t.Id, &t.AuthorID, &t.LocationID, &t.Date, &hidden, &t.ContributorUserID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return catalog.TrackRow{}, false, nil
 		}

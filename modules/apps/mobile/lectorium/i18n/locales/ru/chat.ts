@@ -341,6 +341,13 @@ export default {
   actionQueueNextTrackDone: "Добавлено в библиотеку.",
   actionQueueNextTrackError: "Не удалось добавить лекцию.",
 
+  // Личная библиотека (#1236): карточка кандидата — лекция, найденная в
+  // интернете; подтверждение запускает добавление в «Мою библиотеку».
+  actionAddToLibraryTitle: "Добавить в мою библиотеку",
+  actionAddToLibraryConfirm: "Добавить в библиотеку",
+  actionAddToLibraryDone: "Добавлено — идёт обработка.",
+  actionAddToLibraryError: "Не удалось добавить лекцию.",
+
   // CitationChip three-dot menu
   citationSaveAsNote: "Сохранить как заметку",
   citationOpenInStudio: "Открыть в Студии",

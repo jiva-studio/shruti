@@ -22,6 +22,13 @@ PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 # profile sync service's OWN Postgres — separate DB, so its own password,
 # generated the same way as the shared one above.
 PROFILE_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+# orchestrator + publish-service each own a separate Postgres (personal-library
+# ingest/publish planes), so each gets its own generated password.
+ORCHESTRATOR_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+PUBLISH_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+# Read-only role the orchestrator postgres-exporter connects as. Required by the
+# orchestrator-postgres init script, so compose refuses to start without it.
+ORCHESTRATOR_PG_EXPORTER_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 # Admin shared secret for chat /status + /reindex. Generated (not a fixed
 # "dev-token") so a fresh checkout doesn't ship a known admin token.
 APP_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
@@ -31,6 +38,9 @@ cat > "$ENV_FILE" <<EOF
 
 LECTORIUM_POSTGRES_PASSWORD=$PG_PASS
 LECTORIUM_PROFILE_POSTGRES_PASSWORD=$PROFILE_PG_PASS
+LECTORIUM_ORCHESTRATOR_POSTGRES_PASSWORD=$ORCHESTRATOR_PG_PASS
+LECTORIUM_PUBLISH_POSTGRES_PASSWORD=$PUBLISH_PG_PASS
+ORCHESTRATOR_PG_EXPORTER_PASSWORD=$ORCHESTRATOR_PG_EXPORTER_PASS
 LECTORIUM_ENV_FILE=../.env.dev
 LECTORIUM_JWT_KEYS_DIR=../../../../.config/lectorium/jwt
 LECTORIUM_IMAGE_TAG=dev

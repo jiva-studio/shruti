@@ -201,6 +201,22 @@ async def lifespan(app: FastAPI):
 
     reranker = get_reranker(s)
 
+    # Add-to-library (#1226): multi-provider external-lecture search resolver
+    # + ingest.request broker publisher. Both built unconditionally — a
+    # keyless deploy gets inert providers (a pasted URL still works), and an
+    # unconfigured broker gets a no-op publisher that logs the intent.
+    from lectorium_chat.infra.broker.publisher import build_ingest_publisher
+    from lectorium_chat.lecture_search.providers import build_default_providers
+    from lectorium_chat.lecture_search.resolver import LectureSearchResolver
+
+    lecture_search = LectureSearchResolver(
+        build_default_providers(s),
+        per_provider_timeout_s=s.lecture_search_timeout_s,
+    )
+    ingest_publisher = build_ingest_publisher(
+        s.streams_redis_url, stream=s.ingest_request_stream
+    )
+
     app.state.deps = AppDeps(
         settings=s,
         pool=pool,
@@ -217,6 +233,8 @@ async def lifespan(app: FastAPI):
         chat_graph=chat_graph,
         reranker=reranker,
         translation_service=translation_service,
+        lecture_search=lecture_search,
+        ingest_publisher=ingest_publisher,
     )
 
     # Wire the registered tool callables with their concrete adapters.
@@ -239,6 +257,36 @@ async def lifespan(app: FastAPI):
         name="indexer_scheduler",
     )
 
+    # Private per-user RAG (#1227): consume `track.events` (track.ready /
+    # track.linked / library.unlinked) to index user tracks under
+    # kind='user_track' and maintain the `owned` ACL projection. No-op when
+    # STREAMS_REDIS_URL is unset (build returns None) — the feature stays off
+    # without a broker, exactly like the ingest publisher.
+    from lectorium_chat.infra.broker.track_events_consumer import (
+        build_track_events_consumer,
+    )
+    track_events_consumer = build_track_events_consumer(s, embedder)
+    track_events_task = None
+    if track_events_consumer is not None:
+        track_events_task = asyncio.create_task(
+            track_events_consumer.run(stop_event),
+            name="track_events_consumer",
+        )
+
+    # Corpus-promotion graft (#1236): consume `track.published` to relabel a
+    # promoted user track's chunks onto the public corpus lane and drop its
+    # `owned` ACL. No-op when STREAMS_REDIS_URL is unset (build returns None).
+    from lectorium_chat.infra.broker.track_published_consumer import (
+        build_track_published_consumer,
+    )
+    track_published_consumer = build_track_published_consumer(s)
+    track_published_task = None
+    if track_published_consumer is not None:
+        track_published_task = asyncio.create_task(
+            track_published_consumer.run(stop_event),
+            name="track_published_consumer",
+        )
+
     log.info(
         "service_ready",
         ms_to_ready=int((time.monotonic() - started) * 1000),
@@ -254,6 +302,24 @@ async def lifespan(app: FastAPI):
             await scheduler_task
         except (asyncio.CancelledError, Exception):
             pass
+        # Track-events consumer drains on stop_event (blocking XREADGROUP
+        # unblocks within _BLOCK_MS); cancel as a hard backstop, then close
+        # its Redis client so a redeploy doesn't leak the connection.
+        if track_events_task is not None:
+            track_events_task.cancel()
+            try:
+                await track_events_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await _close_quietly(track_events_consumer, "close", "aclose")
+        # Same drain-then-cancel-then-close discipline for the promotion graft.
+        if track_published_task is not None:
+            track_published_task.cancel()
+            try:
+                await track_published_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await _close_quietly(track_published_consumer, "close", "aclose")
         # Cancel any in-flight detached chat-turn producers so the redeploy
         # terminates cleanly instead of abandoning tasks mid-run.
         await turn_runner.shutdown()
@@ -266,6 +332,7 @@ async def lifespan(app: FastAPI):
         await _close_quietly(idempotency_store, "close", "aclose")
         await _close_quietly(turn_store, "close", "aclose")
         await _close_quietly(reranker, "close", "aclose")
+        await _close_quietly(ingest_publisher, "close", "aclose")
         await close_pool()
         # Flush pending Langfuse traces last — close() above doesn't
         # block on the SDK's background flusher; if we exit before it

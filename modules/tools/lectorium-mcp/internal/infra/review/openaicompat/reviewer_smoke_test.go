@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
 // TestOpenAICompatReviewer_RealOpenRouter hits OpenRouter for one short

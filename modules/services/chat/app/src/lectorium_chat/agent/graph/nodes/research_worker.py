@@ -107,6 +107,19 @@ async def research_worker_node(
         else None
     )
 
+    # Private lecture-lane ACL (#1227): the tracks THIS user owns, resolved
+    # server-side from the `owned` projection keyed on the verified JWT `sub`
+    # (ctx.user_id) — NEVER from client-supplied recent_tracks. Best-effort:
+    # a failed lookup (projection absent, DB blip) degrades to public-corpus
+    # only rather than failing the turn.
+    owned_track_ids: list[str] | None = None
+    if ctx.user_id:
+        try:
+            owned_track_ids = await ctx.chunk_repo.get_owned_track_ids(ctx.user_id)
+        except Exception as exc:  # noqa: BLE001 — private lane is best-effort
+            log.warning("owned_track_ids_lookup_failed", error=str(exc))
+            owned_track_ids = None
+
     research_result = await run_research(
         question=user_query,
         lang=lang,
@@ -127,6 +140,7 @@ async def research_worker_node(
         reranker=reranker,
         precomputed_query_embedding_task=ctx.embed_task,
         callbacks=[cb] if cb is not None else None,
+        owned_track_ids=owned_track_ids,
     )
 
     # Flatten authoritative (PINNED) + research_chunks into a single

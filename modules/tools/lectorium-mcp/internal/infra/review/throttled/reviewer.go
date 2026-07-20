@@ -13,7 +13,7 @@ package throttledreview
 import (
 	"context"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/review"
+	"github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
 type Reviewer struct {

@@ -91,6 +91,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@lectorium/views/Tracks/TracksView.vue"),
       },
       {
+        // Personal library (epic #1236) — user-added lectures, NOT the corpus.
+        // Named `my-library` to avoid colliding with the library-language /
+        // landing "library" surfaces.
+        path: "search/my-library",
+        name: "my-library",
+        component: () => import("@lectorium/views/Library/MyLibraryView.vue"),
+      },
+      {
         // Single route for both Note-edit and Citation modes. Entry
         // points (NotesView, CitationChip) hand off the payload via
         // `useStudioHandoffStore` and then push here.
