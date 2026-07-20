@@ -25,8 +25,19 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 # Runtime carries yt-dlp + ffmpeg (the fetch stage shells out to them) plus CA
 # roots for outbound TLS (Deepgram, the proxy, S3/CDN).
+#
+# yt-dlp comes from PyPI, NOT `apk add yt-dlp`: the Alpine package is pinned to
+# the distro release (3.21 ships 2025.03.31) and YouTube breaks extractors every
+# few weeks. Measured on that version: signature extraction fails, the native
+# audio format is skipped and the download silently degrades to a 38-fragment
+# HLS fallback. It still produced a file, so the failure is invisible in the
+# happy path right up until the release where it isn't. Bump YTDLP_VERSION on a
+# cadence; a stale pin here is the single most likely cause of "YouTube stopped
+# working".
 FROM alpine:3.21
-RUN apk add --no-cache yt-dlp ffmpeg ca-certificates
+ARG YTDLP_VERSION=2026.7.4
+RUN apk add --no-cache ffmpeg ca-certificates python3 py3-pip \
+    && pip install --no-cache-dir --break-system-packages "yt-dlp==${YTDLP_VERSION}"
 COPY --from=build /out/ingest /ingest
 ARG SHRUTI_BUILD_SHA=dev
 ARG SHRUTI_BUILD_TIME=dev
