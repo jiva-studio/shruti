@@ -591,10 +591,19 @@ services:
       TRACK_EVENTS_STREAM: track.events
       CONSUMER_GROUP: storage-sync
       CONSUMER_NAME: ${SHRUTI_STORAGE_SYNC_CONSUMER:-storage-sync-1}
+      HTTP_ADDR: ":8089"
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_STORAGE_SYNC_TAG:-latest}
     depends_on:
       redis-streams: { condition: service_healthy }
+    # Health surface on :8089 — /healthz is liveness, /readyz reports STALE (503)
+    # once no full pass has succeeded for 3 intervals. That is the probe worth
+    # alerting on: a wedged mirror leaves the process happily running while
+    # Russia readers get 404s on audio the app already calls "ready".
+    #
+    # Intentionally NO container healthcheck: restarting the process does not fix
+    # a Bunny/Yandex credential fault, it only masks it behind a restart loop.
+    # This is a blackbox-probe target, not a restart trigger.
     networks: [shruti]
 
   # corpus-mcp: PUBLIC read-only MCP over the canonical corpus — shlokas

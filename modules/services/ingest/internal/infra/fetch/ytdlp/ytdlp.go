@@ -90,15 +90,15 @@ func execRunner(ctx context.Context, name string, args ...string) ([]byte, error
 
 // Options configure the Fetcher.
 type Options struct {
-	Bin          string        // yt-dlp binary (default "yt-dlp")
-	Proxy        string        // host-only proxy passed to --proxy (empty = none)
-	MaxBytes     int64         // reject artifacts larger than this (0 = unlimited)
-	MaxSeconds   int64         // reject sources longer than this (0 = unlimited)
-	WorkDir      string        // parent dir for per-fetch temp dirs (default os.TempDir)
-	BreakerN     int           // consecutive failures before the breaker opens
-	BreakerCool  time.Duration // breaker cooldown
-	Runner       Runner        // command runner (default exec)
-	HTTPClient   *http.Client  // client for the direct-mp3 extractor
+	Bin         string        // yt-dlp binary (default "yt-dlp")
+	Proxy       string        // host-only proxy passed to --proxy (empty = none)
+	MaxBytes    int64         // reject artifacts larger than this (0 = unlimited)
+	MaxSeconds  int64         // reject sources longer than this (0 = unlimited)
+	WorkDir     string        // parent dir for per-fetch temp dirs (default os.TempDir)
+	BreakerN    int           // consecutive failures before the breaker opens
+	BreakerCool time.Duration // breaker cooldown
+	Runner      Runner        // command runner (default exec)
+	HTTPClient  *http.Client  // client for the direct-mp3 extractor
 }
 
 // Fetcher is the ports.Fetcher implementation.
