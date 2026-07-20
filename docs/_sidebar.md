@@ -25,6 +25,7 @@
   * [Background playlist (Pro)](repos/shruti/architecture/background-playlist.md)
   * [Observability (Langfuse)](repos/shruti/architecture/observability.md)
   * [Profile sync](repos/shruti/architecture/profile-sync.md)
+  * [Personal library](repos/shruti/architecture/personal-library.md)
   * **Chat**
     * [Pipeline](repos/shruti/architecture/chat-pipeline.md)
     * [Intents & routing](repos/shruti/architecture/chat-intents.md)
@@ -73,6 +74,8 @@
   * [Testing & Qase](repos/shruti/runbooks/testing.md)
   * [shruti-mcp](repos/shruti/runbooks/shruti-mcp.md)
   * [track-selector](repos/shruti/runbooks/track-selector.md)
+  * [Personal library compliance](repos/shruti/runbooks/personal-library-compliance.md)
+  * [Personal library deploy](repos/shruti/runbooks/personal-library-deploy.md)
   * [RevenueCat webhook rotation](runbooks/rc-webhook-secret-rotation.md)
   * [App Store certificates](repos/shruti/runbooks/certificates.md)
   * [Storage (legacy)](repos/shruti/runbooks/storage.md)
