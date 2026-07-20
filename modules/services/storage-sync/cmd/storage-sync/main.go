@@ -22,12 +22,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/jiva-studio/shruti-storage-sync/internal/config"
+	"github.com/jiva-studio/shruti-storage-sync/internal/handler"
 	logpkg "github.com/jiva-studio/shruti-storage-sync/internal/logging"
 	"github.com/jiva-studio/shruti-storage-sync/internal/wire"
 )
@@ -54,6 +56,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Readiness reflects mirroring progress, not just process liveness — see the
+	// handler package for why that distinction matters here.
+	health := handler.NewHealth(cfg.StaleAfter())
+
 	// The event-driven fast path runs for the process lifetime.
 	if deps.Consumer != nil {
 		go func() {
@@ -64,13 +70,32 @@ func main() {
 	}
 
 	// One-shot mode: a single pass, then exit (the consumer never starts here in
-	// practice, since a job deployment has no broker configured).
+	// practice, since a job deployment has no broker configured). No HTTP server:
+	// nothing would be alive to probe it.
 	if cfg.Interval <= 0 {
-		runPass(ctx, deps)
+		runPass(ctx, deps, health)
 		return
 	}
 
-	go runPeriodic(ctx, deps, cfg.Interval)
+	if cfg.HTTPAddr != "" {
+		srv := &http.Server{
+			Addr:              cfg.HTTPAddr,
+			Handler:           handler.NewRouter(health),
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("http_server_failed", "err", err.Error())
+			}
+		}()
+		defer func() {
+			shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutCancel()
+			_ = srv.Shutdown(shutCtx)
+		}()
+	}
+
+	go runPeriodic(ctx, deps, cfg.Interval, health)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -81,9 +106,9 @@ func main() {
 }
 
 // runPeriodic runs a full pass immediately, then every interval until ctx ends.
-func runPeriodic(ctx context.Context, deps *wire.Deps, interval time.Duration) {
+func runPeriodic(ctx context.Context, deps *wire.Deps, interval time.Duration, health *handler.Health) {
 	for {
-		runPass(ctx, deps)
+		runPass(ctx, deps, health)
 		t := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
@@ -96,15 +121,17 @@ func runPeriodic(ctx context.Context, deps *wire.Deps, interval time.Duration) {
 
 // runPass executes one reconciling pass and logs the outcome. A failed pass is
 // logged, never fatal — the next tick retries.
-func runPass(ctx context.Context, deps *wire.Deps) {
+func runPass(ctx context.Context, deps *wire.Deps, health *handler.Health) {
 	t0 := time.Now()
 	res, err := deps.Mirror.FullPass(ctx)
 	if err != nil {
+		health.PassFailed(err.Error())
 		slog.ErrorContext(ctx, "sync_pass_failed",
 			"err", err.Error(), "source", res.Source, "copied", res.Copied,
 			"failed", res.Failed, "seconds", int(time.Since(t0).Seconds()))
 		return
 	}
+	health.PassSucceeded()
 	slog.InfoContext(ctx, "sync_pass_done",
 		"source", res.Source, "copied", res.Copied, "deleted", res.Deleted,
 		"seconds", int(time.Since(t0).Seconds()))
