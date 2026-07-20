@@ -45,14 +45,15 @@ type UseCase struct {
 	// one call (private artifacts/ prefix).
 	Artifacts *fsartifact.Writer
 
-	// runMemo dedups LLM calls for repeated raw strings within a single
-	// MCP-process lifetime (e.g. 1568 EN tracks all carrying author "Srila
-	// Prabhupada" produce one LLM call instead of 1568). Pure in-memory:
-	// dies with the process, never persisted, cannot drift relative to
-	// catalog. Cleared by FuzzyIndex.Rebuild on dict mutations is *not*
-	// strictly needed since stale names just yield commit-time lookup
-	// failures instead of silent FK regressions.
-	runMemo sync.Map // key string → resolveMemo
+	// runMemo dedups repeated raw strings WITHIN a single Run() walk (one
+	// track's author + location + references) so a name that recurs across those
+	// slots resolves with a single LLM call. It is a POINTER allocated fresh at
+	// the top of each Run (see Run) — so copies of the UseCase value made by the
+	// value-receiver methods share the current walk's memo, while different Runs
+	// never share (cross-Run dedup is deliberately NOT part of the contract).
+	// A pointer (not an embedded sync.Map value) also keeps the UseCase copyable
+	// without tripping `go vet` copylocks. Pure in-memory; nil outside a Run.
+	runMemo *sync.Map // key string → resolveMemo
 }
 
 type memoKey struct {
@@ -114,6 +115,7 @@ type Resolve struct {
 }
 
 func (uc UseCase) Run(ctx context.Context, id track.Id, srcPath string) (res Result, rerr error) {
+	uc.runMemo = &sync.Map{} // fresh per-Run memo, shared across this walk's resolveOne calls
 	stageKey := pipeline.Key{Stage: pipeline.StageMetadataExtracted}
 	claimed, err := uc.Registry.TryClaimStage(ctx, id, stageKey)
 	if err != nil {
@@ -233,6 +235,12 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, srcPath string) (res Res
 // but the payload no longer stores it; commit re-looks-up name → id
 // against the live catalog so manual catalog edits propagate.
 func (uc UseCase) resolveOne(ctx context.Context, kind catalog.Kind, query, language string) (catalogport.ResolveResponse, error) {
+	if uc.runMemo == nil {
+		// Called outside Run (e.g. a direct unit-test call): give this call its
+		// own throwaway memo so Load/Store are safe. Under Run the memo is
+		// already set and shared across the walk.
+		uc.runMemo = &sync.Map{}
+	}
 	// 1. Exact match by canonical name. Cheap, no LLM, no fuzziness.
 	if id, ok, err := uc.Catalog.LookupIDByName(ctx, kind, query, language); err == nil && ok {
 		return catalogport.ResolveResponse{

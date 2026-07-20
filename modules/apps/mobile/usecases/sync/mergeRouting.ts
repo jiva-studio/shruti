@@ -31,6 +31,9 @@ const SYNCED_COLLECTIONS: ReadonlySet<string> = new Set<SyncCollection>([
   "listening_sessions",
   "chat_sessions",
   "chat_messages",
+  // Personal library (epic #1236): server-owned and pull-only — merged by
+  // "apply the server's version" (see mergeChange).
+  "library_items",
 ])
 
 /** Narrow an arbitrary wire `collection` to a collection this engine handles.
@@ -92,6 +95,11 @@ export function mergeChange(
         data: merged.data === null ? null : playlistPayloadToWire(merged.docId, merged.data),
       }
     }
+    case "library_items":
+      // Server-owned, pull-only: the server is the single writer, so there is
+      // no local version to reconcile — apply its wire row wholesale. `local`
+      // is ignored on purpose (the client never journals this collection).
+      return remote
   }
 }
 

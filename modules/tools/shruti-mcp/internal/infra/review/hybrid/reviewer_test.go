@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/ports/review"
 )
 
 // fakeReviewer is a programmable inner reviewer for hybrid tests. It

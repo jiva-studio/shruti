@@ -43,6 +43,8 @@ import (
 	librarypublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/publish"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/normalize"
 	outlineuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/outline"
+	pendingrefresh "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/pending/refresh"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/promote"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/registeraudio"
 	reviewuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/review"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
@@ -73,6 +75,7 @@ import (
 	openrouterimage "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imagegen/openrouter"
 	sqliteregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
 	sqlitelibrary "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
+	sqlitepending "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/pending/sqlite"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/canonical"
 	openaicompatmeta "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/openaicompat"
@@ -99,7 +102,7 @@ import (
 	glossaryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/glossary"
 	outlineport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/outline"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
+	"github.com/jiva-studio/shruti/pipeline/ports/sentencesplit"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/worker"
 )
 
@@ -243,6 +246,7 @@ func main() {
 	catalogOpMutex := &sync.Mutex{}
 	currentDBPath := filepath.Join(cfg.Out, "artifacts", "catalog", "current.db")
 	libraryDBPath := filepath.Join(cfg.Out, "artifacts", "library", "library.db")
+	pendingDBPath := filepath.Join(cfg.Out, "artifacts", "pending", "pending.db")
 
 	// LLM extractor for metadata. Uses the shared openai-compat client
 	// pointed at OpenRouter (or any compatible upstream) — same model
@@ -926,6 +930,24 @@ func main() {
 			OutDir:  cfg.Out,
 			Targets: publishTargets,
 			OpMutex: catalogOpMutex, // share with catalog: never two concurrent publishes
+		},
+	}
+
+	// Corpus-promotion queue (issues #1232/#1233): self-fetch pending.db from the
+	// CDN, read it, and gate approvals into the corpus (zero-copy). The corpus
+	// write reuses the same catalog CommitRepository that track.commit uses.
+	pendingLazy := sqlitepending.NewLazy(pendingDBPath)
+	deps.Pending = tools.PendingDeps{
+		Refresh: pendingrefresh.UseCase{
+			OutDir:   cfg.Out,
+			CDN:      cdnSrc,
+			Verifier: sqlitepending.NewVerifier(),
+			OpMutex:  &sync.Mutex{}, // serialize refresh vs. approve's mark-consumed
+		},
+		Reader: pendingLazy,
+		Approve: promote.UseCase{
+			Pending: pendingLazy,
+			Catalog: sqlitecatalog.NewLazy(currentDBPath),
 		},
 	}
 	deps.Proactive = tools.ProactiveDeps{

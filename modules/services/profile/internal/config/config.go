@@ -31,6 +31,20 @@ type Config struct {
 	// network-only routing). Empty = network isolation is the only guard,
 	// matching the design doc's "no JWT" purge contract.
 	InternalAPIToken string
+
+	// --- Streams broker (dedicated redis-streams instance, see
+	// services/README-streams.md). Empty StreamsRedisURL disables the
+	// server-authored ingest consumers so the service still boots for pure sync
+	// (HTTP-only) ops. ---
+	StreamsRedisURL string // STREAMS_REDIS_URL, e.g. redis://redis-streams:6379/0
+	// TrackEventsStream is CONSUMED: the orchestrator's lifecycle stream, whose
+	// `track.ready` events project into library_items.
+	TrackEventsStream string // TRACK_EVENTS_STREAM (default "track.events")
+	// TrackPublishedStream is CONSUMED: the publish-service's promotion stream,
+	// whose events flip a library item's origin to 'published'.
+	TrackPublishedStream string // TRACK_PUBLISHED_STREAM (default "track.published")
+	// ConsumerName is this container's id within the consumer groups.
+	ConsumerName string // CONSUMER_NAME (default hostname)
 }
 
 func Load() (*Config, error) {
@@ -42,6 +56,11 @@ func Load() (*Config, error) {
 		ServiceVersion:   env("SERVICE_VERSION", "dev"),
 		PullMaxLimit:     envInt("PULL_MAX_LIMIT", 500),
 		InternalAPIToken: os.Getenv("INTERNAL_API_TOKEN"),
+
+		StreamsRedisURL:      env("STREAMS_REDIS_URL", ""),
+		TrackEventsStream:    env("TRACK_EVENTS_STREAM", "track.events"),
+		TrackPublishedStream: env("TRACK_PUBLISHED_STREAM", "track.published"),
+		ConsumerName:         env("CONSUMER_NAME", hostname()),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
@@ -66,4 +85,13 @@ func envInt(k string, def int) int {
 		}
 	}
 	return def
+}
+
+// hostname returns the container hostname (the natural per-consumer id within a
+// Redis consumer group); falls back to a constant if unavailable.
+func hostname() string {
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return "profile"
 }

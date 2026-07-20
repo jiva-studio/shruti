@@ -20,6 +20,7 @@ import {
 } from "@shruti/composables/useTrackUserState.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { requestSync } from "@shruti/services/syncEvents.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import { extractFollowups } from "@lib/chat/chatMarkers.js"
 import {
@@ -1537,6 +1538,8 @@ export const useChatStore = defineStore("chat", () => {
         if (!r.ok && r.error !== "already-in-playlist") {
           throw new Error(`queue next failed: ${r.error}`)
         }
+      } else if (action.kind === "add_to_library") {
+        await applyAddToLibrary(action)
       }
       await setActionState(messageId, actionId, "done")
     } catch (err) {
@@ -1615,6 +1618,32 @@ export const useChatStore = defineStore("chat", () => {
     if (filters.sourceIds) await store.setSources(filters.sourceIds)
     if (filters.locationIds) await store.setLocations(filters.locationIds)
     if (filters.languageCodes) await store.setLanguages(filters.languageCodes)
+  }
+
+  /**
+   * Confirm an `add_to_library` candidate card (personal library, epic #1236):
+   * PRO-gate, then trigger ingest of the external lecture. Mirrors
+   * `applyProactiveSmartLibrary` — adding external lectures is a Pro capability,
+   * so a non-subscriber is bounced through the paywall and nothing is ingested.
+   *
+   * The client→server call reuses the deployed add-to-library chat transport:
+   * we hand the candidate URL back as a turn so the server's add-to-library
+   * intent publishes the `ingest.request` (the only client→server path that
+   * reaches the ingest broker). We then fire `requestSync()` so the poller drops
+   * into its short cadence and surfaces the freshly-queued item (and its
+   * processing → ready flip) without waiting out the idle interval.
+   */
+  async function applyAddToLibrary(
+    action: Extract<ChatActionPayload, { kind: "add_to_library" }>
+  ): Promise<void> {
+    const { usePurchasesStore } = await import("@shruti/stores/usePurchasesStore.js")
+    if (!usePurchasesStore().isSubscribed) {
+      const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
+      usePaywallStore().requestOpen()
+      return
+    }
+    await sendMessage(action.url)
+    requestSync()
   }
 
   async function deleteSession(id: string): Promise<void> {

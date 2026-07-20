@@ -10,7 +10,7 @@ package alignpdfport
 import (
 	"context"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 // Request describes one alignment job. Both paths are absolute.

@@ -1,0 +1,62 @@
+# Custom postgres-exporter queries for the ORCHESTRATOR database.
+#
+# The orchestrator runs on its own Postgres instance (separate container, own
+# role/db), so it cannot share the app exporter — hence a second exporter and
+# this second query file.
+#
+# What we are defending against: the personal-library pipeline can stop dead
+# without anything crashing. The orchestrator keeps accepting `ingest.request`
+# and writing job rows while the ingest worker is gone, Deepgram is down, or the
+# outbox relay goroutine has died. Every container stays green, every healthz
+# returns 200, and the only symptom is users watching a spinner. These three
+# gauges are the difference between noticing that in minutes and hearing it in a
+# support ticket a day later.
+
+# Age of the oldest job that has not reached a terminal state. This is the
+# headline number: if work is flowing, it stays near zero regardless of volume.
+# It rises when the worker is not consuming, when results are lost, or when
+# retries are backing off without ever succeeding.
+shruti_orchestrator_oldest_unfinished_job_seconds:
+  query: |
+    SELECT COALESCE(
+             EXTRACT(EPOCH FROM (now() - min(created_at)))::bigint, 0
+           ) AS seconds
+      FROM orchestrator.jobs
+     WHERE state IN ('queued', 'running')
+  master: true
+  metrics:
+    - seconds:
+        usage: GAUGE
+        description: "Age of the oldest job still queued or running"
+
+# Outbox backlog. The relay drains rows whose available_at has come due; a
+# growing count of overdue-but-unpublished rows means the relay itself is stuck,
+# which silently stops BOTH the ingest dispatch and the track.events lifecycle.
+# available_at is respected so a job merely serving its retry backoff is not
+# counted as a backlog.
+shruti_orchestrator_outbox_backlog:
+  query: |
+    SELECT count(*)::bigint AS count
+      FROM orchestrator.outbox
+     WHERE published_at IS NULL
+       AND available_at < now() - interval '5 minutes'
+  master: true
+  metrics:
+    - count:
+        usage: GAUGE
+        description: "Outbox rows due for >5 minutes and still unpublished"
+
+# Recently dead-lettered jobs. A steady trickle is normal (users paste dead
+# links); a spike means a dependency broke and every ingest is burning its full
+# attempt budget before failing.
+shruti_orchestrator_failed_jobs_recent:
+  query: |
+    SELECT count(*)::bigint AS count
+      FROM orchestrator.jobs
+     WHERE state = 'failed'
+       AND updated_at > now() - interval '15 minutes'
+  master: true
+  metrics:
+    - count:
+        usage: GAUGE
+        description: "Jobs that dead-lettered in the last 15 minutes"

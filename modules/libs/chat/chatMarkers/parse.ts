@@ -10,6 +10,7 @@ export type ActionKind =
   | "configure_smart_library"
   | "upgrade_to_pro"
   | "queue_next_track"
+  | "add_to_library"
 
 export type ChatToken =
   | { readonly kind: "text"; readonly html: string }
@@ -467,7 +468,8 @@ function parseActionKind(raw: string): ActionKind | null {
     raw === "enable_daily_reminder" ||
     raw === "configure_smart_library" ||
     raw === "upgrade_to_pro" ||
-    raw === "queue_next_track"
+    raw === "queue_next_track" ||
+    raw === "add_to_library"
   ) {
     return raw
   }

@@ -341,6 +341,13 @@ export default {
   actionQueueNextTrackDone: "Added to library.",
   actionQueueNextTrackError: "Couldn't add this lecture.",
 
+  // Personal library (#1236): candidate card for an external lecture the chat
+  // found online — confirming triggers ingest into "My library".
+  actionAddToLibraryTitle: "Add to my library",
+  actionAddToLibraryConfirm: "Add to library",
+  actionAddToLibraryDone: "Added — we're processing it.",
+  actionAddToLibraryError: "Couldn't add this lecture.",
+
   citationSaveAsNote: "Save as note",
   citationOpenInStudio: "Open in Studio",
   citationAddLectureToPlaylist: "Add lecture to playlist",
