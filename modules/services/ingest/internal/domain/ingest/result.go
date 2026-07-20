@@ -21,6 +21,9 @@ const (
 // artifact fields are populated on ready; Error/Retriable on failed.
 type Result struct {
 	JobID string `json:"job_id"`
+	// RequestID echoes the WorkCommand's correlation id so the orchestrator's
+	// result-side logs rejoin the originating chat turn.
+	RequestID string `json:"request_id,omitempty"`
 	// Attempt echoes the WorkCommand's attempt number so the orchestrator can
 	// discard a stale/duplicate result whose attempt has already been superseded
 	// by a re-dispatch (idempotent retry accounting across redelivery).
