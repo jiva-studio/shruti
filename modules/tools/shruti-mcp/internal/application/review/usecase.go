@@ -23,11 +23,12 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/stagefail"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	pipelinereview "github.com/jiva-studio/shruti/pipeline/review"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 	glossaryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/glossary"
 	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
-	reviewport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
+	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/ports/sentencesplit"
 	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
@@ -288,7 +289,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	}
 
 	// Build chunks with overlap.
-	chunks := buildChunks(raw.Segments, chunkSize, overlap)
+	chunks := pipelinereview.BuildChunks(raw.Segments, chunkSize, overlap)
 
 	idxText := make(map[int]string, len(raw.Segments))
 	idxEdgeDist := make(map[int]int, len(raw.Segments)) // higher = better (farther from chunk edge)
@@ -305,11 +306,11 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	chunkSegs := make([][]reviewport.ChunkSegment, len(chunks))
 	prevTails := make([][]reviewport.ChunkSegment, len(chunks))
 	for i, ck := range chunks {
-		chunkSegs[i] = reviewport.ChunkSegmentsFromRaw(ck.segs)
+		chunkSegs[i] = reviewport.ChunkSegmentsFromRaw(ck.Segs)
 		if i == 0 {
 			prevTails[i] = nil
 		} else {
-			prevTails[i] = lastN(chunkSegs[i-1], overlap)
+			prevTails[i] = pipelinereview.LastN(chunkSegs[i-1], overlap)
 		}
 	}
 
@@ -364,8 +365,8 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 		// chose not to re-run.
 		if hasOnlyFilter {
 			if _, ok := onlyChunkSet[i]; !ok {
-				fb := make([]int, 0, len(chunks[i].segs))
-				for _, s := range chunks[i].segs {
+				fb := make([]int, 0, len(chunks[i].Segs))
+				for _, s := range chunks[i].Segs {
 					fb = append(fb, s.Idx)
 				}
 				results[i] = chunkResult{fallback: fb}
@@ -396,7 +397,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 				if maxH <= 0 {
 					maxH = 10
 				}
-				rawText := joinChunkText(chunkSegs[i])
+				rawText := pipelinereview.JoinChunkText(chunkSegs[i])
 				if hints := uc.Glossary.RenderHints(rawText, language, thr, maxH); hints != "" {
 					req.ExtraPrompt = hints
 				}
@@ -408,44 +409,44 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 			// Models[] from every superseded attempt is accumulated into
 			// the final chunk artifact (with Outcome=attempt-superseded)
 			// so cost and history are recorded fully.
-			var attempt chunkAttempt
+			var attempt pipelinereview.ChunkAttempt
 			var allRejected []reviewport.ModelEntry
 			for _, reviewer := range attemptReviewers {
-				attempt = tryReview(ctx, reviewer, req, retries)
-				if attempt.err == nil {
+				attempt = pipelinereview.TryReview(ctx, reviewer, req, retries)
+				if attempt.Err == nil {
 					break
 				}
-				allRejected = append(allRejected, tagOutcome(attempt.final.Models, reviewport.OutcomeAttemptSuperseded, nil, attempt.err.Error())...)
+				allRejected = append(allRejected, pipelinereview.TagOutcome(attempt.Final.Models, reviewport.OutcomeAttemptSuperseded, nil, attempt.Err.Error())...)
 			}
 			if len(allRejected) > 0 {
-				attempt.final.Models = append(append([]reviewport.ModelEntry{}, allRejected...), attempt.final.Models...)
+				attempt.Final.Models = append(append([]reviewport.ModelEntry{}, allRejected...), attempt.Final.Models...)
 			}
 			finishedAt := time.Now().UTC()
 
 			// Persist per-chunk artifact for audit/debug — even when the chunk
 			// fell back, we keep the (last) response so the failure can be
 			// inspected after the fact.
-			persistChunkArtifact(ctx, uc.Transcripts, id, language, i, chunks[i].segs, req, attempt, startedAt, finishedAt)
+			persistChunkArtifact(ctx, uc.Transcripts, id, language, i, chunks[i].Segs, req, attempt, startedAt, finishedAt)
 
-			if attempt.err != nil {
-				fb := make([]int, 0, len(chunks[i].segs))
-				for _, s := range chunks[i].segs {
+			if attempt.Err != nil {
+				fb := make([]int, 0, len(chunks[i].Segs))
+				for _, s := range chunks[i].Segs {
 					fb = append(fb, s.Idx)
 				}
 				results[i] = chunkResult{fallback: fb}
 				return
 			}
-			results[i] = chunkResult{segs: attempt.final.Segments, sentences: attempt.final.Sentences}
+			results[i] = chunkResult{segs: attempt.Final.Segments, sentences: attempt.Final.Sentences}
 		}()
 	}
 	wg.Wait()
 
 	// Per raw idx: best-edge-distance verdict on whether this idx ends a sentence.
-	boundaries := make([]idxBoundary, len(raw.Segments))
+	boundaries := make([]pipelinereview.IdxBoundary, len(raw.Segments))
 	idxToPos := make(map[int]int, len(raw.Segments))
 	for i, s := range raw.Segments {
 		idxToPos[s.Idx] = i
-		boundaries[i].edgeDist = -1
+		boundaries[i].EdgeDist = -1
 	}
 
 	chunksRun := len(chunks)
@@ -462,7 +463,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 		for i, s := range r.segs {
 			distFromLeft := i
 			distFromRight := len(r.segs) - 1 - i
-			dist := minInt(distFromLeft, distFromRight)
+			dist := pipelinereview.MinInt(distFromLeft, distFromRight)
 			if dist > idxEdgeDist[s.Idx] {
 				idxText[s.Idx] = s.Text
 				idxEdgeDist[s.Idx] = dist
@@ -474,7 +475,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 		// more text after idx N has a better view of whether N closes a
 		// sentence or the sentence continues into N+1.
 		// Validate sentences cover the chunk's idx set; if not, ignore.
-		endIdx, ok := buildEndSet(r.segs, r.sentences)
+		endIdx, ok := pipelinereview.BuildEndSet(r.segs, r.sentences)
 		if !ok {
 			continue
 		}
@@ -484,10 +485,10 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 			if !present {
 				continue
 			}
-			if distRight > boundaries[rp].edgeDist || !boundaries[rp].hasInfo {
-				boundaries[rp].edgeDist = distRight
-				boundaries[rp].isEnd = endIdx[s.Idx]
-				boundaries[rp].hasInfo = true
+			if distRight > boundaries[rp].EdgeDist || !boundaries[rp].HasInfo {
+				boundaries[rp].EdgeDist = distRight
+				boundaries[rp].IsEnd = endIdx[s.Idx]
+				boundaries[rp].HasInfo = true
 			}
 		}
 	}
@@ -497,14 +498,14 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	// review came back with broken sentence info, razdel reconstructs
 	// boundaries from the corrected (or raw fallback) text.
 	if uc.Splitter != nil {
-		if newBoundaries, ok := splitWithRazdel(ctx, uc.Splitter, raw.Segments, idxText); ok {
+		if newBoundaries, ok := pipelinereview.SplitWithRazdel(ctx, uc.Splitter, raw.Segments, idxText); ok {
 			boundaries = newBoundaries
 		}
 	}
 
 	// Force the very last raw segment to close the final sentence.
 	if n := len(raw.Segments); n > 0 {
-		boundaries[n-1].isEnd = true
+		boundaries[n-1].IsEnd = true
 	}
 
 	// Walk raw segments in order; emit one SentenceBlock per detected sentence.
@@ -525,7 +526,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 		if t := strings.TrimSpace(idxText[s.Idx]); t != "" {
 			curParts = append(curParts, t)
 		}
-		closeNow := boundaries[i].isEnd || !boundaries[i].hasInfo
+		closeNow := boundaries[i].IsEnd || !boundaries[i].HasInfo
 		if closeNow {
 			blocks = append(blocks, transcript.SentenceBlock{
 				Start: curStart,

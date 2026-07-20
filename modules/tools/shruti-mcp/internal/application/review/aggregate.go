@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
-	reviewport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/review"
+	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
+	pipelinereview "github.com/jiva-studio/shruti/pipeline/review"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
@@ -155,7 +156,7 @@ func persistChunkArtifact(
 	chunkIndex int,
 	segs []transcript.RawSegment,
 	req reviewport.ChunkRequest,
-	att chunkAttempt,
+	att pipelinereview.ChunkAttempt,
 	startedAt, finishedAt time.Time,
 ) {
 	if store == nil || len(segs) == 0 {
@@ -164,17 +165,17 @@ func persistChunkArtifact(
 	record := chunkArtifact{
 		ChunkIndex: chunkIndex,
 		Language:   language,
-		Models:     att.final.Models,
+		Models:     att.Final.Models,
 		FirstIdx:   segs[0].Idx,
 		LastIdx:    segs[len(segs)-1].Idx,
-		OK:         att.err == nil,
+		OK:         att.Err == nil,
 		StartedAt:  startedAt,
 		FinishedAt: finishedAt,
 		Request:    req,
-		Response:   att.final,
+		Response:   att.Final,
 	}
-	if att.err != nil {
-		record.Error = att.err.Error()
+	if att.Err != nil {
+		record.Error = att.Err.Error()
 		record.Degraded = DegradedRawWithRazdel
 	}
 	body, err := json.MarshalIndent(record, "", "  ")

@@ -35,6 +35,12 @@ services:
     ports:
       - "${SHRUTI_REDIS_PORT:-11083}:6379"
 
+  # Dedicated stream broker (personal-library events). Own host port so it
+  # can't collide with the cache Redis on 11083 while both run locally.
+  redis-streams:
+    ports:
+      - "${SHRUTI_STREAMS_REDIS_PORT:-11087}:6379"
+
   # Migrator image is private on GHCR; local dev builds it from
   # source so nobody needs a registry token to bring the stack up.
   migrator:
@@ -121,3 +127,16 @@ services:
       dockerfile: services/analytics/Dockerfile
     ports:
       - "${SHRUTI_ANALYTICS_PORT:-11086}:8086"
+
+  # orchestrator is in the `origin` profile, so a full `up` would otherwise try
+  # to PULL its private ghcr image. Build from source (same modules/ context)
+  # and expose the host port for local /healthz + admin probing. Container
+  # port 8086 (same as analytics) → distinct host port 11088.
+  orchestrator:
+    image: shruti-orchestrator:dev
+    pull_policy: never
+    build:
+      context: ../../../modules
+      dockerfile: services/orchestrator/Dockerfile
+    ports:
+      - "${SHRUTI_ORCHESTRATOR_PORT:-11088}:8086"

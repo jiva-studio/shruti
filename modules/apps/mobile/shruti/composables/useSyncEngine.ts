@@ -1,17 +1,19 @@
 import { onBeforeUnmount, onMounted, watch } from "vue"
 import { App as CapApp } from "@capacitor/app"
 import type { PluginListenerHandle } from "@capacitor/core"
-import { backfillLocal, runSync } from "@usecases/sync/index.js"
+import {
+  backfillLocal,
+  hasPendingLibraryItems,
+  nextSyncDelayMs,
+  runSync,
+} from "@usecases/sync/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
+import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { onSyncEvent } from "@shruti/services/syncEvents.js"
-
-/** Light background cadence — a full sync cycle every few minutes while the
- *  app is foregrounded, so remote changes land without user action. */
-const INTERVAL_MS = 3 * 60 * 1000
 /** Coalesce a burst of local mutations into one push cycle. */
 const DEBOUNCE_MS = 3000
 /** Device-local marker prefix: `${…}${userId}` records that this account's
@@ -50,7 +52,13 @@ export function useSyncEngine(): void {
   const app = useShruti()
   const auth = useAuthStore()
 
-  let interval: ReturnType<typeof setInterval> | null = null
+  /** Self-rescheduling poll timer (replaces the old flat interval): its delay
+   *  is recomputed after every cycle so a pending library item can shorten the
+   *  cadence (see `scheduleNextPoll`). */
+  let pollTimeout: ReturnType<typeof setTimeout> | null = null
+  /** Current pending short-poll backoff, or `null` when the last cycle found
+   *  nothing pending (so the next pending run starts fast). */
+  let pendingDelayMs: number | null = null
   let debounce: ReturnType<typeof setTimeout> | null = null
   let resumeHandle: PluginListenerHandle | null = null
   let unsubRequested: (() => void) | null = null
@@ -97,6 +105,16 @@ export function useSyncEngine(): void {
     if (collections.includes("chat_sessions") || collections.includes("chat_messages")) {
       await useChatStore()
         .refreshSessions()
+        .catch(() => undefined)
+    }
+    if (collections.includes("library_items")) {
+      // Personal library (epic #1236) is pull-only and server-owned. Refresh the
+      // "My library" store so the shelf/list + status badges reflect the merged
+      // rows (e.g. an item flipping processing → ready) on whatever screen is
+      // up. The poll loop shortens the cadence while any item is pending so this
+      // fires within seconds, not the flat idle interval.
+      await useLibraryStore()
+        .refresh()
         .catch(() => undefined)
     }
   }
@@ -234,14 +252,62 @@ export function useSyncEngine(): void {
 
   function requestDebounced(): void {
     if (debounce !== null) clearTimeout(debounce)
-    debounce = setTimeout(() => void sync(), DEBOUNCE_MS)
+    // A local mutation (e.g. the "Add to library" tap fires `requestSync`):
+    // run a cycle soon AND re-arm the poll so, if it pulled in a pending
+    // library item, we drop into the short cadence immediately rather than
+    // waiting out the idle interval already scheduled.
+    debounce = setTimeout(() => void resyncNow(), DEBOUNCE_MS)
+  }
+
+  /** Whether any personal-library item is still being ingested. Read straight
+   *  off the repo each cycle (the table is tiny) so the poll cadence tracks the
+   *  latest state without a store subscription. Best-effort: treat a not-yet-
+   *  open DB / read error as "nothing pending" so we fall back to idle. */
+  async function anyLibraryItemPending(): Promise<boolean> {
+    try {
+      const items = await app.repositories().libraryItems.listAll()
+      return hasPendingLibraryItems(items)
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Arm the next poll. The delay is short (and self-backing-off) while a
+   * library item is pending, else the flat idle interval — see
+   * `nextSyncDelayMs`. Runs on ANY screen: the engine is mounted once in
+   * `App.vue`, independent of the current route.
+   */
+  async function scheduleNextPoll(): Promise<void> {
+    if (pollTimeout !== null) {
+      clearTimeout(pollTimeout)
+      pollTimeout = null
+    }
+    const hasPending = await anyLibraryItemPending()
+    const delay = nextSyncDelayMs(hasPending, pendingDelayMs)
+    // Track the backoff only while pending; reset to null when idle so the next
+    // pending run restarts at the short minimum.
+    pendingDelayMs = hasPending ? delay : null
+    pollTimeout = setTimeout(() => void pollTick(), delay)
+  }
+
+  /** One poll cycle then re-arm with a delay based on fresh pending state. */
+  async function pollTick(): Promise<void> {
+    await sync()
+    await scheduleNextPoll()
+  }
+
+  /** Immediate cycle + re-arm — used by resume and the debounced local-change
+   *  path so a fresh pull re-evaluates the cadence right away. */
+  async function resyncNow(): Promise<void> {
+    await sync()
+    await scheduleNextPoll()
   }
 
   onMounted(() => {
-    void sync()
-    interval = setInterval(() => void sync(), INTERVAL_MS)
+    void resyncNow()
     void CapApp.addListener("appStateChange", (state) => {
-      if (state.isActive) void sync()
+      if (state.isActive) void resyncNow()
     }).then((handle) => {
       resumeHandle = handle
     })
@@ -261,9 +327,9 @@ export function useSyncEngine(): void {
   })
 
   onBeforeUnmount(() => {
-    if (interval !== null) {
-      clearInterval(interval)
-      interval = null
+    if (pollTimeout !== null) {
+      clearTimeout(pollTimeout)
+      pollTimeout = null
     }
     if (debounce !== null) {
       clearTimeout(debounce)

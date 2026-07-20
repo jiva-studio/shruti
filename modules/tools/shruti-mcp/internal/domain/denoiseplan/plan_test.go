@@ -3,7 +3,7 @@ package denoiseplan
 import (
 	"testing"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
 // speechSegs returns n confident-English segments starting at startMs, 3s each.

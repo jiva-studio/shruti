@@ -159,6 +159,54 @@ class Settings(BaseSettings):
     rerank_concurrency: int = 2
     rerank_timeout_s: float = 10.0
 
+    # ── Add-to-library: external lecture search + ingest broker (#1226) ──
+    # PRO-only "add an external lecture to my library". The multi-provider
+    # search resolver tries these in order; each adapter is inert until its
+    # credential is set (only YouTube Data API v3 is a real, keyed adapter —
+    # the rest are structured stubs). All optional: a keyless deploy simply
+    # finds no candidates for a non-URL query (a pasted link still works).
+    youtube_api_key: str | None = None          # YouTube Data API v3 (primary)
+    serpapi_api_key: str | None = None          # SerpApi (free tier fallback)
+    dataforseo_login: str | None = None         # DataForSEO Basic-auth login
+    dataforseo_password: str | None = None      # DataForSEO Basic-auth password
+    # Optional BCP-47 region bias for YouTube search results. Empty = global.
+    lecture_search_region: str = ""
+    # yt-dlp fallback is off by default (the container ships no yt_dlp binary
+    # / no egress). Flip on only where the package + network are present.
+    lecture_search_ytdlp_enabled: bool = False
+    # Per-provider hard timeout inside the resolver's ordered fallback.
+    lecture_search_timeout_s: float = 4.0
+
+    # Ingest broker (#1224). When a PRO user adds a lecture, chat XADDs an
+    # `ingest.request` onto this Redis Stream for the ingest worker to pick
+    # up. Distinct URL from the cache/rate-limit Redis so the broker can live
+    # on its own instance. Unset → the publisher no-ops (logs the intent),
+    # so the feature degrades gracefully before #1224 is deployed.
+    streams_redis_url: str | None = None
+    ingest_request_stream: str = "ingest.request"
+
+    # Track-lifecycle events for the private per-user RAG lane (#1227). The
+    # orchestrator / library emit `track.ready` (transcript indexed + owned),
+    # `track.linked` (owned), `library.unlinked` (owned removed) onto this
+    # Redis Stream. The chat service runs a consumer-group reader that indexes
+    # the transcript under kind='user_track' and maintains the `owned` ACL
+    # projection. Shares STREAMS_REDIS_URL with the ingest broker; unset URL ⇒
+    # the consumer never starts (feature off, no-op).
+    track_events_stream: str = "track.events"
+    track_events_group: str = "chat-indexer"
+    track_events_consumer: str = "chat-1"
+
+    # Corpus-promotion events (#1236). The publish-service emits `track.published`
+    # when an approved user track is promoted into the published corpus. The chat
+    # service consumes it to graft that track's already-indexed `user_track`
+    # chunks onto the public `track_transcript` lane and drop the `owned` ACL
+    # (see indexer.run._graft_promoted_track). Shares STREAMS_REDIS_URL; unset
+    # URL ⇒ the consumer never starts (feature off, no-op). The indexer-time
+    # (re)index of the public transcript remains the safety net.
+    track_published_stream: str = "track.published"
+    track_published_group: str = "chat-graft"
+    track_published_consumer: str = "chat-1"
+
     # ── Indexer ─────────────────────────────────────────────────────────
     catalog_dir: Path = Path("/var/lib/chat")
     # Fractional values are allowed (e.g. 0.25 = every 15 min). The loop

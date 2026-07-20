@@ -17,6 +17,7 @@ export type SyncCollection =
   | "notes"
   | "chat_sessions"
   | "chat_messages"
+  | "library_items"
 
 /** A change operation as journaled in the outbox / replicated over the wire. */
 export type SyncOp = "upsert" | "delete"
@@ -46,4 +47,36 @@ export interface PlaylistItemSyncData {
   readonly addedAt: number
   readonly archivedAt: number | null
   readonly collectionId: string | null
+}
+
+/**
+ * Payload the `library_items` rule reasons over. This collection is
+ * **server-owned and pull-only** — the client never writes it, so there is no
+ * field-level merge: the rule simply applies the server's version wholesale.
+ * The shape carries the projected `profile.library_items` columns (snake_case
+ * mapping happens at the infra boundary in `syncWire` / `mergeRouting`).
+ */
+export interface LibraryItemSyncData {
+  readonly id: string
+  readonly trackId: string | null
+  readonly status: string
+  readonly origin: string | null
+  readonly titleRaw: string | null
+  readonly authorRaw: string | null
+  readonly locationRaw: string | null
+  readonly dateRaw: string | null
+  readonly langHint: string | null
+  readonly authorId: string | null
+  readonly locationId: string | null
+  readonly date: string | null
+  readonly datePrecision: string | null
+  readonly lang: string | null
+  readonly langConfidence: number | null
+  readonly error: string | null
+  readonly audioKey: string | null
+  readonly transcriptKey: string | null
+  readonly duration: number | null
+  readonly coverKey: string | null
+  readonly createdAt: number | null
+  readonly updatedAt: number | null
 }

@@ -18,8 +18,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/jiva-studio/shruti/profile/internal/config"
+	"github.com/jiva-studio/shruti/profile/internal/events"
 	"github.com/jiva-studio/shruti/profile/internal/handler"
+	"github.com/jiva-studio/shruti/profile/internal/hlc"
 	"github.com/jiva-studio/shruti/profile/internal/jwt"
 	logpkg "github.com/jiva-studio/shruti/profile/internal/logging"
 	"github.com/jiva-studio/shruti/profile/internal/service"
@@ -119,6 +123,7 @@ func runServe() {
 		Cursors:      &store.CursorRepo{Pool: pool},
 		Maint:        &store.MaintenanceRepo{Pool: pool},
 		PullMaxLimit: cfg.PullMaxLimit,
+		HLC:          hlc.NewClock(),
 	}
 
 	root := handler.NewRouter(handler.RouterDeps{
@@ -134,6 +139,38 @@ func runServe() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	// Personal Library server-authored ingest: consume the orchestrator's
+	// `track.events` (project track.ready → library_items) and the
+	// publish-service's `track.published` (flip origin='published'), both via the
+	// server-authored write path. Disabled cleanly (logged warning) when the
+	// streams broker is absent, so local/dev still boots for pure sync.
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	var rdb *redis.Client
+	if cfg.StreamsRedisURL == "" {
+		slog.Warn("events_consumers_disabled", "reason", "STREAMS_REDIS_URL unset")
+	} else if rc, cerr := events.Connect(bootCtx, cfg.StreamsRedisURL); cerr != nil {
+		slog.ErrorContext(bootCtx, "streams_connect_failed", "err", cerr.Error())
+		os.Exit(1)
+	} else {
+		rdb = rc
+		defer rdb.Close()
+		ready := events.NewConsumer(svc, rdb, cfg.TrackEventsStream, "profile", cfg.ConsumerName)
+		published := events.NewPublishedConsumer(svc, rdb, cfg.TrackPublishedStream, "profile-published", cfg.ConsumerName)
+		slog.Info("events_consumers_starting",
+			"track_events", cfg.TrackEventsStream, "track_published", cfg.TrackPublishedStream)
+		go func() {
+			if err := ready.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("track_events_consumer_stopped", "err", err.Error())
+			}
+		}()
+		go func() {
+			if err := published.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("track_published_consumer_stopped", "err", err.Error())
+			}
+		}()
+	}
+
 	go func() {
 		slog.Info("server_listening", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -146,6 +183,7 @@ func runServe() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	slog.Info("shutdown_start")
+	workerCancel() // stop the events consumers before draining HTTP
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

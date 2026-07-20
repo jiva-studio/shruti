@@ -148,6 +148,42 @@ services:
       timeout: 3s
       retries: 20
 
+  # Dedicated broker for the personal-library event streams
+  # (ingest.request / track.events / library.unlinked). Deliberately a
+  # SEPARATE instance from the `redis` cache above: Redis Streams entries
+  # carry no TTL, so under the cache's `volatile-lru` + 1gb cap they would
+  # never be eligible for eviction and Redis would OOM — wedging chat's L2
+  # cache with it. Here the policy is `noeviction`: the broker never silently
+  # drops undelivered stream entries. Bounded memory is the PRODUCERS' job via
+  # mandatory `MAXLEN ~ N` trimming + consumer `XACK` (see
+  # modules/services/README-streams.md); if trimming ever stalls, `XADD` fails
+  # loudly at the maxmemory ceiling instead of consuming the whole host.
+  # Origin only — every stream producer/consumer (orchestrator, chat, profile)
+  # is origin-scoped; the RU proxy forwards those routes to global.
+  redis-streams:
+    profiles: [origin]
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - streamsdata:/data
+    networks: [shruti]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   chat:
     # origin only — proxy hosts forward /chat to global via Caddy.
     profiles: [origin]
@@ -171,6 +207,10 @@ services:
       DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
       CATALOG_DIR: /var/lib/chat
       REDIS_URL: redis://redis:6379/0
+      # Dedicated Redis-Streams broker (personal-library events). chat consumes
+      # track.events from the orchestrator here — a SEPARATE instance from the
+      # REDIS_URL cache above (see the redis-streams service comment).
+      STREAMS_REDIS_URL: redis://redis-streams:6379/0
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
       # SHRUTI_ENV comes from /opt/shruti/.env on the VPS (set to
       # "prod" there); local dev gets the "dev" default. SERVICE_VERSION
@@ -542,8 +582,28 @@ services:
       SYNC_INTERVAL: ${SHRUTI_STORAGE_SYNC_INTERVAL:-3600}
       SYNC_CONCURRENCY: ${SHRUTI_STORAGE_SYNC_CONCURRENCY:-16}
       SYNC_DELETE: ${SHRUTI_STORAGE_SYNC_DELETE:-false}
+      # Event-driven fast path: on `track.ready` the just-published audio +
+      # transcript are mirrored immediately instead of waiting up to a full
+      # SYNC_INTERVAL. Without this a reader served by the Russia mirror gets a
+      # track the app already calls "ready" whose audio 404s for up to an hour.
+      # Unset = periodic pass only (the pre-#1224 behaviour).
+      STREAMS_REDIS_URL: redis://redis-streams:6379/0
+      TRACK_EVENTS_STREAM: track.events
+      CONSUMER_GROUP: storage-sync
+      CONSUMER_NAME: ${SHRUTI_STORAGE_SYNC_CONSUMER:-storage-sync-1}
+      HTTP_ADDR: ":8089"
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_STORAGE_SYNC_TAG:-latest}
+    depends_on:
+      redis-streams: { condition: service_healthy }
+    # Health surface on :8089 — /healthz is liveness, /readyz reports STALE (503)
+    # once no full pass has succeeded for 3 intervals. That is the probe worth
+    # alerting on: a wedged mirror leaves the process happily running while
+    # Russia readers get 404s on audio the app already calls "ready".
+    #
+    # Intentionally NO container healthcheck: restarting the process does not fix
+    # a Bunny/Yandex credential fault, it only masks it behind a restart loop.
+    # This is a blackbox-probe target, not a restart trigger.
     networks: [shruti]
 
   # corpus-mcp: PUBLIC read-only MCP over the canonical corpus — shlokas
@@ -648,6 +708,10 @@ services:
     environment:
       DATABASE_URL: postgresql://profile:${SHRUTI_PROFILE_POSTGRES_PASSWORD:?}@profile-postgres:5432/profile?sslmode=disable
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
+      # Dedicated Redis-Streams broker (personal-library events). profile
+      # consumes track.events from the orchestrator here (see the redis-streams
+      # service comment for why it's a separate instance from the cache redis).
+      STREAMS_REDIS_URL: redis://redis-streams:6379/0
       PORT: "8085"
       # Hard cap the server clamps pull.limit to (client can't demand an
       # unbounded page). Code default is 500; override via SHRUTI_*.
@@ -665,6 +729,7 @@ services:
     # idempotent), so no separate one-shot migrate container is needed.
     depends_on:
       profile-postgres: { condition: service_healthy }
+      redis-streams: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "/profile", "healthz"]
       interval: 15s
@@ -715,6 +780,222 @@ services:
       retries: 40
       start_period: 10s
 
+  # orchestrator-postgres: the orchestrator's OWN Postgres — deliberately
+  # separate from the shared `shruti` DB (same isolation rationale as
+  # profile-postgres). The orchestrator's job store (jobs + attempts + the
+  # transactional outbox that feeds track.events) is the source of truth and
+  # never contends with chat/auth on the shared instance; it can be backed up
+  # / wiped independently. Stock postgres:16-alpine — core features only
+  # (IDENTITY / jsonb), no pgvector. Origin only; the RU proxy forwards the
+  # personal-library routes to global.
+  orchestrator-postgres:
+    profiles: [origin]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: orchestrator
+      POSTGRES_PASSWORD: ${SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD:?SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD must be set in .env (for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_DB: orchestrator
+      # Read by the init script below to create the exporter role. Required, not
+      # defaulted: a wrong/absent password here means the ingest alerts read no
+      # data while every container still looks healthy — the one failure mode
+      # worth refusing to start over.
+      ORCHESTRATOR_PG_EXPORTER_PASSWORD: ${ORCHESTRATOR_PG_EXPORTER_PASSWORD:?ORCHESTRATOR_PG_EXPORTER_PASSWORD must be set in .env (for dev use infra/app/scripts/gen-dev-env.sh)}
+    volumes:
+      - orchestratordata:/var/lib/postgresql/data
+      # Creates the shruti_exporter role the orchestrator postgres-exporter
+      # connects as. Runs only on a FRESH volume; on an existing one apply it by
+      # hand (see infra/observability-agent/README.md). Without it the ingest
+      # alerts silently read no data.
+      - ./postgres/orchestrator-init.sh:/docker-entrypoint-initdb.d/10-exporter.sh:ro
+    networks: [shruti]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orchestrator -d orchestrator"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # orchestrator: thin job COORDINATOR; first scenario is personal-library
+  # ingest. It does NOT fetch/transcribe/store — it dispatches that heavy work to
+  # the stateless `ingest` worker (ingest.work), reacts to ingest.result, and
+  # drives the track.events lifecycle. Single Go binary; `serve` applies the
+  # embedded migrations on boot (advisory-locked + idempotent, like profile), so
+  # no separate migrate container is needed. Consumes ingest.request +
+  # ingest.result and publishes track.events + ingest.work on the dedicated
+  # redis-streams broker; talks ONLY to orchestrator-postgres. Origin only —
+  # every stream producer/consumer is origin-scoped; the RU proxy forwards the
+  # personal-library routes to global.
+  orchestrator:
+    profiles: [origin]
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-orchestrator:${SHRUTI_ORCHESTRATOR_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../../.env}
+    environment:
+      DATABASE_URL: postgresql://orchestrator:${SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD:?}@orchestrator-postgres:5432/orchestrator?sslmode=disable
+      # Dedicated Redis-Streams broker (separate from the cache `redis`) — the
+      # coordinator XREADGROUPs ingest.request + ingest.result and XADDs
+      # track.events + ingest.work here.
+      STREAMS_REDIS_URL: redis://redis-streams:6379/0
+      PORT: "8086"
+      # PRO-tier re-verification key (RS256, kid=v1). Without it wire.go falls
+      # back to a nil verifier and the tier gate on ingest.request is OFF, so
+      # the mount + path must be present in every real deployment.
+      AUTH_JWT_PUBLIC_KEY_FILE: /secrets/public.pem
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_ORCHESTRATOR_TAG:-latest}
+    volumes:
+      - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}:/secrets:ro
+    networks: [shruti]
+    depends_on:
+      orchestrator-postgres: { condition: service_healthy }
+      redis-streams: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/orchestrator", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  # ingest: the STATELESS heavy-lifting worker behind the orchestrator. Consumes
+  # ingest.work, downloads (yt-dlp) + transcribes (Deepgram) + stores (S3) the
+  # audio, and reports ingest.result. No database — the orchestrator owns the
+  # job store and the retry policy. Unlike the other Go services its image is
+  # NOT FROM-scratch: the container ships yt-dlp + ffmpeg. Origin only — same
+  # stream-locality reasoning as the orchestrator.
+  #
+  # Build context is rooted at modules/ (dockerfile services/ingest/Dockerfile),
+  # because the image COPYs libs/pipeline/ alongside services/ingest/.
+  ingest:
+    profiles: [origin]
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-ingest:${SHRUTI_INGEST_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../../.env}
+    environment:
+      # Dedicated Redis-Streams broker — XREADGROUPs ingest.work, XADDs
+      # ingest.result.
+      STREAMS_REDIS_URL: redis://redis-streams:6379/0
+      # Deepgram transcription. Unset → the consumer stays disabled (the worker
+      # still boots + serves /healthz).
+      DEEPGRAM_API_KEY: ${SHRUTI_DEEPGRAM_API_KEY:-}
+      # Outbound proxy for yt-dlp source fetches (geo / rate shaping). Empty →
+      # direct egress.
+      YTDLP_PROXY: ${SHRUTI_YTDLP_PROXY:-}
+      # Blob store for the content-addressed audio + transcript artifacts. The
+      # backend MUST match what the public CDN (b-cdn) serves from, or the app +
+      # chat can't fetch them. Global = "bunny" (Bunny Edge Storage, not
+      # S3-compatible); RU proxy / dev = "s3" (Yandex/AWS). Same STORAGE_* env as
+      # the share-* services.
+      STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
+      STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
+      # s3 backend: creds from the env_file (AWS_* default chain).
+      S3_BUCKET: ${SHRUTI_S3_BUCKET:-}
+      S3_REGION: ${AWS_REGION:-us-east-1}
+      S3_ENDPOINT: ${SHRUTI_S3_ENDPOINT_URL:-}
+      PORT: "8088"
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_INGEST_TAG:-latest}
+    networks: [shruti]
+    depends_on:
+      redis-streams: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/ingest", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  # publish-postgres: publish-service's OWN Postgres (same own-DB isolation
+  # rationale as orchestrator-postgres / profile-postgres). Holds the publish
+  # projection (`publish.tracks`) + its transactional outbox; never contends
+  # with the shared instance. Stock postgres:16-alpine. Origin only.
+  publish-postgres:
+    profiles: [origin]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: publish
+      POSTGRES_PASSWORD: ${SHRUTI_PUBLISH_POSTGRES_PASSWORD:?SHRUTI_PUBLISH_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/app/scripts/gen-dev-env.sh)}
+      POSTGRES_DB: publish
+    volumes:
+      - publishdata:/var/lib/postgresql/data
+    networks: [shruti]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U publish -d publish"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # publish-service: the PROMOTION plane of personal-library. Consumes
+  # track.ready (from the orchestrator) into its own publish.tracks; a ticker
+  # reconciles the corpus current.db catalog, emits track.published, and rebuilds
+  # the admin pending.db review artifact on S3. Single Go binary; `serve` applies
+  # embedded migrations on boot (advisory-locked, like orchestrator/profile).
+  # Talks ONLY to publish-postgres + the redis-streams broker + S3. Origin only.
+  publish-service:
+    profiles: [origin]
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-publish-service:${SHRUTI_PUBLISH_SERVICE_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../../.env}
+    environment:
+      DATABASE_URL: postgresql://publish:${SHRUTI_PUBLISH_POSTGRES_PASSWORD:?}@publish-postgres:5432/publish?sslmode=disable
+      # Dedicated Redis-Streams broker — consumes track.events (filters track.ready)
+      # and XADDs track.published here.
+      STREAMS_REDIS_URL: redis://redis-streams:6379/0
+      TRACK_EVENTS_STREAM: track.events
+      TRACK_PUBLISHED_STREAM: track.published
+      # Blob backend for the catalog + the pending.db review artifact. Must match
+      # what the CDN serves from — global = "bunny", RU/dev = "s3".
+      STORAGE_BACKEND: ${SHRUTI_STORAGE_BACKEND:-s3}
+      STORAGE_ZONE: ${SHRUTI_STORAGE_ZONE:-shruti-engine-eu}
+      STORAGE_KEY: ${SHRUTI_STORAGE_KEY:-}
+      # s3 backend: publish-service reads S3 creds EXPLICITLY (not the AWS default
+      # chain), so map them from the env_file's AWS_* values.
+      S3_BUCKET: ${SHRUTI_S3_BUCKET:-}
+      S3_REGION: ${AWS_REGION:-us-east-1}
+      S3_ENDPOINT: ${SHRUTI_S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Corpus catalog current.db is READ-ONLY here: it is fetched to learn which
+      # track ids are already live in the public corpus, so this service can
+      # promote its own matching rows. It is never written back — the only blob
+      # this service PUTs is pending.db. (current.db is owned by the published-
+      # corpus build; a writer here would corrupt the catalog every app pulls.)
+      # URL takes precedence; the S3 key is the fallback fetch source.
+      CORPUS_CATALOG_URL: ${SHRUTI_MEDIA_BASE_URL:-https://cdn.shruti.local}/public/db/current.db
+      CORPUS_CATALOG_S3_KEY: public/db/current.db
+      PENDING_S3_KEY: public/db/pending.db
+      PORT: "8087"
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_PUBLISH_SERVICE_TAG:-latest}
+    networks: [shruti]
+    depends_on:
+      publish-postgres: { condition: service_healthy }
+      redis-streams: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/publish-service", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
 networks:
   shruti:
 
@@ -722,6 +1003,9 @@ volumes:
   pgdata:
   chatdata:
   redisdata:
+  streamsdata:
   share_video_scratch:
   corpusdata:
   profiledata:
+  orchestratordata:
+  publishdata:
