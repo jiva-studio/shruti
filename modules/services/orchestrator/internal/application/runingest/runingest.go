@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -88,10 +89,14 @@ func NewRequestHandler(d Deps) *RequestHandler {
 func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []byte) error {
 	req, err := ingest.DecodeRequest(payload)
 	if err != nil {
-		return nil // poison pill — unparseable; ack to drop it
+		// The only path with no job_id to correlate on — log it, or a malformed
+		// producer silently drops every request it sends.
+		slog.WarnContext(ctx, "request_poison_pill", "error", err.Error(), "msg_id", msgID)
+		return nil // unparseable; ack to drop it
 	}
 
 	jobID := uuid.NewSHA1(jobNamespace, []byte(msgID)).String()
+	lg := slog.With("job_id", jobID)
 	existing, err := h.d.Repo.Get(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("load job: %w", err)
@@ -101,6 +106,7 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 	// the ResultHandler. (Re-verifying here would let a token that lapsed AFTER
 	// acceptance fail a job whose ingest.work is still in flight.)
 	if existing != nil {
+		lg.InfoContext(ctx, "request_duplicate", "state", string(existing.State))
 		return nil
 	}
 
@@ -108,6 +114,7 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 	// token is a PERMANENT failure — create a failed job, emit track.failed, ack.
 	userID, pro, verr := h.d.Tier.VerifyPro(req.Token)
 	if verr != nil || !pro {
+		lg.WarnContext(ctx, "request_rejected_not_pro", "user_id", req.UserID)
 		return h.failNotPro(ctx, jobID, req, payload)
 	}
 
@@ -122,6 +129,7 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 		State:   job.StateQueued,
 		Spec:    payload,
 	}
+	lg.InfoContext(ctx, "job_created", "user_id", owner, "url", req.URL)
 	// One tx: the job row + the track.queued event + the ingest.work dispatch
 	// all commit together (transactional outbox), so the worker is invoked iff
 	// the job was durably created.
@@ -178,14 +186,20 @@ func NewResultHandler(d Deps) *ResultHandler {
 func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) error {
 	res, err := ingest.DecodeResult(payload)
 	if err != nil {
-		return nil // poison pill — unparseable; ack to drop it
+		slog.WarnContext(ctx, "result_poison_pill", "error", err.Error())
+		return nil // unparseable; ack to drop it
 	}
+	lg := slog.With("job_id", res.JobID, "attempt", res.Attempt)
 	j, err := h.d.Repo.Get(ctx, res.JobID)
 	if err != nil {
 		return fmt.Errorf("load job: %w", err)
 	}
 	if j == nil {
-		return nil // unknown job — nothing to do
+		// A result for a job we have no row for: the worker outlived a job the
+		// orchestrator never committed, or the streams were reset out from under
+		// it. Silent-dropping this made the pipeline look idle for no reason.
+		lg.WarnContext(ctx, "result_unknown_job")
+		return nil
 	}
 	if isSettled(j) {
 		return nil // already terminal — idempotent ack
@@ -217,6 +231,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		// the SAME doc_id as queued/processing/failed — so the row advances in
 		// place; the content hash rides along in track_id (via j.Result / the
 		// TrackEvent.TrackID field), not as the key.
+		lg.InfoContext(ctx, "job_done", "track_id", res.TrackID, "lang", res.Lang)
 		ev := event(res.JobID+":ready", ingest.EventReady, j.OwnerID, res.JobID, res.TrackID, j.Result)
 		return h.save(ctx, j, ev)
 
@@ -251,7 +266,12 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 				if err := h.d.Repo.SaveTx(ctx, tx, locked); err != nil {
 					return err
 				}
-				return h.dispatchWork(ctx, tx, res.JobID, req.URL, req.Title, locked.OwnerID, locked.Attempts+1)
+				next := locked.Attempts + 1
+				lg.WarnContext(ctx, "job_retry_scheduled",
+					"error", res.Error, "next_attempt", next,
+					"max_attempts", h.d.MaxAttempts,
+					"backoff_ms", retryBackoff(next).Milliseconds())
+				return h.dispatchWork(ctx, tx, res.JobID, req.URL, req.Title, locked.OwnerID, next)
 			})
 		}
 		if !j.State.IsTerminal() {
@@ -260,6 +280,14 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 			}
 		}
 		j.Err = res.Error
+		// Dead-letter. Log at Error regardless of the worker's retriable flag:
+		// reaching here means the user's track is permanently lost, which is an
+		// operational event even when the cause was "the link was dead". The
+		// `exhausted` field separates "we burned the attempt budget" (our
+		// dependency is sick) from "the source was never ingestable".
+		lg.ErrorContext(ctx, "job_dead_lettered",
+			"error", res.Error, "attempts", j.Attempts,
+			"exhausted", res.Retriable, "user_id", j.OwnerID)
 		ev := event(res.JobID+":failed", ingest.EventFailed, j.OwnerID, res.JobID, j.TrackID, failData(res.Error, specRequest(j).Title))
 		return h.save(ctx, j, ev)
 
@@ -355,5 +383,3 @@ func specRequest(j *job.Job) ingest.Request {
 	req, _ := ingest.DecodeRequest(j.Spec)
 	return req
 }
-
-// specURL is specRequest's URL — the source url carried through the lifecycle.

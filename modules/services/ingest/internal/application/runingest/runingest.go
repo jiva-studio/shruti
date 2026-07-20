@@ -24,8 +24,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/lectorium/ingest/internal/ports"
@@ -57,27 +59,42 @@ func New(d Deps) *Service { return &Service{d: d} }
 func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	cmd, err := ingest.DecodeWork(payload)
 	if err != nil {
-		return nil // poison pill — unparseable; ack to drop it
+		// Poison pill. This is the ONE path with no job_id to correlate on, so
+		// log it — otherwise a malformed producer drops messages invisibly.
+		slog.WarnContext(ctx, "ingest_poison_pill", "error", err.Error(), "bytes", len(payload))
+		return nil // unparseable; ack to drop it
 	}
+
+	// Every line for this message carries job_id + attempt, so one ingest is a
+	// single LogQL filter across the whole pipeline.
+	lg := slog.With("job_id", cmd.JobID, "attempt", cmd.Attempt)
+	started := time.Now()
+	lg.InfoContext(ctx, "ingest_started", "url", cmd.URL)
 
 	// Best-effort heartbeat: moves the orchestrator's job queued → running.
 	s.emit(ctx, ingest.Result{JobID: cmd.JobID, Attempt: cmd.Attempt, Phase: ingest.PhaseProcessing})
 
+	stage := time.Now()
 	localPath, hash, err := s.d.Fetcher.Fetch(ctx, cmd.URL)
 	if err != nil {
-		return s.fail(ctx, cmd, fmt.Errorf("fetch: %w", err))
+		return s.fail(ctx, lg, cmd, fmt.Errorf("fetch: %w", err))
 	}
 	defer os.RemoveAll(filepath.Dir(localPath))
+	lg = lg.With("track_id", hash) // known from here on — carry it forward
+	lg.InfoContext(ctx, "ingest_fetched", "duration_ms", ms(stage))
 
 	audio, err := os.ReadFile(localPath)
 	if err != nil {
-		return s.fail(ctx, cmd, fmt.Errorf("read audio: %w", err))
+		return s.fail(ctx, lg, cmd, fmt.Errorf("read audio: %w", err))
 	}
 
+	stage = time.Now()
 	raw, _, err := s.d.Transcriber.Transcribe(ctx, localPath)
 	if err != nil {
-		return s.fail(ctx, cmd, fmt.Errorf("transcribe: %w", err))
+		return s.fail(ctx, lg, cmd, fmt.Errorf("transcribe: %w", err))
 	}
+	lg.InfoContext(ctx, "ingest_transcribed",
+		"duration_ms", ms(stage), "lang", raw.Language, "audio_bytes", len(audio))
 	raw.TrackId = hash
 	if raw.Language == "" {
 		raw.Language = "und" // keep the transcripts/<lang>.json key well-formed
@@ -92,38 +109,43 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		// recovery. Fail RETRIABLY (not ErrPermanent): a transient ASR hiccup
 		// clears on retry, and a genuinely silent source dead-letters as failed
 		// after the attempt cap rather than masquerading as a ready track.
-		return s.fail(ctx, cmd, fmt.Errorf("transcription produced no blocks"))
+		return s.fail(ctx, lg, cmd, fmt.Errorf("transcription produced no blocks"))
 	}
 	transcriptBody, err := json.Marshal(reviewed)
 	if err != nil {
-		return s.fail(ctx, cmd, fmt.Errorf("marshal transcript: %w", err))
+		return s.fail(ctx, lg, cmd, fmt.Errorf("marshal transcript: %w", err))
 	}
 
 	draft := ingest.TrackDraft{TitleRaw: cmd.Title, LangHint: raw.Language}
 	if draft, err = s.d.Reviewer.Review(ctx, draft); err != nil {
-		return s.fail(ctx, cmd, fmt.Errorf("review: %w", err))
+		return s.fail(ctx, lg, cmd, fmt.Errorf("review: %w", err))
 	}
 	lang := draft.Lang
 
+	stage = time.Now()
 	aKey, tKey := audioKey(hash), transcriptKey(hash, lang)
 	if err := s.d.Blob.Put(ctx, aKey, audio, "audio/mpeg"); err != nil {
-		return s.fail(ctx, cmd, fmt.Errorf("put audio: %w", err))
+		return s.fail(ctx, lg, cmd, fmt.Errorf("put audio: %w", err))
 	}
 	if err := s.d.Blob.Put(ctx, tKey, transcriptBody, "application/json"); err != nil {
-		return s.fail(ctx, cmd, fmt.Errorf("put transcript: %w", err))
+		return s.fail(ctx, lg, cmd, fmt.Errorf("put transcript: %w", err))
 	}
 
 	// HEAD-verify both artifacts before announcing the track.
 	for _, k := range []string{aKey, tKey} {
 		exists, err := s.d.Blob.Exists(ctx, k)
 		if err != nil {
-			return s.fail(ctx, cmd, fmt.Errorf("verify %s: %w", k, err))
+			return s.fail(ctx, lg, cmd, fmt.Errorf("verify %s: %w", k, err))
 		}
 		if !exists {
-			return s.fail(ctx, cmd, fmt.Errorf("verify %s: missing after put", k))
+			return s.fail(ctx, lg, cmd, fmt.Errorf("verify %s: missing after put", k))
 		}
 	}
+	lg.InfoContext(ctx, "ingest_stored",
+		"duration_ms", ms(stage), "blocks", len(reviewed.Blocks),
+		"audio_key", aKey, "transcript_key", tKey)
 
+	lg.InfoContext(ctx, "ingest_ready", "lang", lang, "total_ms", ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:         cmd.JobID,
 		Attempt:       cmd.Attempt,
@@ -140,15 +162,30 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 // fail publishes a terminal failed result (classifying transient vs permanent).
 // It returns the publish error (if any) so a lost terminal result redelivers;
 // the orchestrator decides re-dispatch from the Retriable flag and its cap.
-func (s *Service) fail(ctx context.Context, cmd ingest.WorkCommand, cause error) error {
+//
+// Log level splits on the SAME classification: a permanent failure is a business
+// outcome (a dead or private URL — the user's problem, not ours) and logs at
+// Warn, while a retriable one means our own dependency misbehaved and logs at
+// Error. That keeps a corpus-wide "error rate" signal meaningful instead of
+// drowning it in bad links.
+func (s *Service) fail(ctx context.Context, lg *slog.Logger, cmd ingest.WorkCommand, cause error) error {
+	retry := retriable(cause)
+	lvl := slog.LevelError
+	if !retry {
+		lvl = slog.LevelWarn
+	}
+	lg.Log(ctx, lvl, "ingest_failed", "error", cause.Error(), "retriable", retry)
 	return s.done(ctx, ingest.Result{
 		JobID:     cmd.JobID,
 		Attempt:   cmd.Attempt,
 		Phase:     ingest.PhaseFailed,
 		Error:     cause.Error(),
-		Retriable: retriable(cause),
+		Retriable: retry,
 	})
 }
+
+// ms reports elapsed milliseconds for a stage timing attribute.
+func ms(since time.Time) int64 { return time.Since(since).Milliseconds() }
 
 // done publishes a TERMINAL result and propagates the publish error: the worker
 // acks only once the outcome is durable (a publish fault → redelivery re-runs).

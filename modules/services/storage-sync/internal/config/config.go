@@ -41,8 +41,22 @@ type Config struct {
 	ConsumerGroup     string // CONSUMER_GROUP
 	ConsumerName      string // CONSUMER_NAME
 
+	// Health surface. Empty HTTPAddr disables the server (one-shot job mode).
+	HTTPAddr string // HTTP_ADDR
+
 	Env            string // ENV
 	ServiceVersion string // SERVICE_VERSION
+}
+
+// StaleAfter is the readiness budget: how long the mirror may go without a
+// successful full pass before /readyz reports stale. Three intervals tolerates
+// a couple of transient failures (Bunny hiccup, Yandex 5xx) without flapping,
+// while still catching a genuinely wedged mirror well inside a working day.
+func (c *Config) StaleAfter() time.Duration {
+	if c.Interval <= 0 {
+		return 0 // one-shot mode — nothing to go stale
+	}
+	return 3 * c.Interval
 }
 
 func env(k, def string) string {
@@ -88,6 +102,8 @@ func Load() (*Config, error) {
 		TrackEventsStream: env("TRACK_EVENTS_STREAM", "track.events"),
 		ConsumerGroup:     env("CONSUMER_GROUP", "storage-sync"),
 		ConsumerName:      env("CONSUMER_NAME", "storage-sync-1"),
+
+		HTTPAddr: env("HTTP_ADDR", ":8089"),
 
 		Env:            env("ENV", "dev"),
 		ServiceVersion: env("SERVICE_VERSION", "dev"),

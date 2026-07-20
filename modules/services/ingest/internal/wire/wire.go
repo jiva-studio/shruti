@@ -24,10 +24,10 @@ import (
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/blob/bunny"
 	blobs3 "github.com/jiva-studio/lectorium/ingest/internal/infra/blob/s3"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/events/redisstream"
-	"github.com/jiva-studio/lectorium/ingest/internal/ports"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/fetch/ytdlp"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/review"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/transcribe/deepgram"
+	"github.com/jiva-studio/lectorium/ingest/internal/ports"
 )
 
 // Deps is the assembled dependency graph handed back to the entrypoint. The
