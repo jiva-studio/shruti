@@ -23,7 +23,7 @@ graph LR
     EV -->|consume request| ORC[orchestrator NEW thin coordinator]
     ORC -->|create job + dispatch ingest.work| EV
     EV -->|consume ingest.work| ING[ingest NEW stateless worker]
-    ING -->|yt-dlp via residential proxy| NET[YouTube / web mp3]
+    ING -->|yt-dlp direct egress| NET[YouTube / web mp3]
     ING -->|audio| DG[Deepgram transcript]
     ING -->|review usecase| SHARED[shared pipeline lib]
     ING -->|audio + transcript| S3[(S3/CDN public/tracks/track_id)]
@@ -54,7 +54,7 @@ Responsibilities are split so each service does one thing: **search is conversat
 | Detect "add to library" intent | `chat-service` | It already routes intents |
 | Search the internet for candidates | `chat-service` | Interactive: present candidates, user picks; metadata-only, no proxy |
 | Coordinate jobs, own lifecycle events + retry policy | `orchestrator` | Thin coordinator: owns the `jobs` table + outbox, maps `ingest.result` onto `track.events`, re-dispatches on retriable failure |
-| Download bytes | `ingest` | Needs residential egress; heavy/long-running; stateless worker |
+| Download bytes | `ingest` | Heavy/long-running; stateless worker. Egress is direct (measured working from the origin host); a proxy stays configurable behind the `Fetcher` port |
 | Transcribe / review / normalize | `ingest` (reusing the shared lib) | Same logic as corpus ingest |
 | Store per-user metadata | `profile` | Already the per-user data plane (sync, auth, anon, GDPR) |
 | Store audio/transcript blobs | S3 (content-addressed) | Enables dedup and cheap public promotion |
@@ -80,16 +80,16 @@ sequenceDiagram
         Chat->>Chat: multi-provider search -> candidate cards
         App->>Chat: taps "Add to library" on a candidate
     end
-    Chat->>EV: publish ingest.request payload {url, token, user_id, title}
+    Chat->>EV: publish ingest.request payload {request_id, url, token, user_id, title}
     Chat-->>App: "Added, processing…"
     EV->>Orc: consume ingest.request
     Note over Orc: one tx: create Job(queued) + track.queued event + ingest.work command
     Orc->>EV: emit track.queued (on track.events)
-    Orc->>EV: dispatch ingest.work {job_id, url, title, owner_id, attempt}
+    Orc->>EV: dispatch ingest.work {job_id, request_id, url, title, owner_id, attempt}
     EV->>Prof: consume track.queued -> library_item(status=queued)
     EV->>Ing: consume ingest.work
     Ing->>EV: emit ingest.result {job_id, phase=processing}
-    Ing->>Ing: fetch (yt-dlp via proxy) -> content hash = track_id
+    Ing->>Ing: fetch (yt-dlp) -> content hash = track_id
     Ing->>Ing: transcribe (Deepgram) -> window into reviewed transcript (shared lib)
     Ing->>S3: put audio/original.mp3 + transcripts/LANG.json (reviewed) + HEAD-verify
     Ing->>EV: emit ingest.result {job_id, phase=ready, track_id, keys, ...} then ack
@@ -150,7 +150,7 @@ modules/services/ingest/
     ports/
       driven.go                   # Transcriber, Reviewer, BlobStore, Fetcher, EventBus, Clock
     infra/
-      fetch/ytdlp/                # yt-dlp + residential proxy
+      fetch/ytdlp/                # yt-dlp (optional --proxy; direct by default)
       transcribe/deepgram/
       review/                     # wraps the shared pipeline lib
       blob/s3/
@@ -230,7 +230,7 @@ Added to the `profile` service as a sixth synced collection (see [Profile sync](
 | `author_id`, `location_id`, `date`, `date_precision`, `lang`, `lang_confidence` | resolved values; null when unresolved (`lang` is ASR-detected — authoritative) |
 | `status` | `queued` \| `processing` \| `ready` \| `failed` |
 | `origin` | `private` \| `published` |
-| `error` | user-visible failure reason |
+| `error_code` | stable machine code (`unauthorized` \| `unavailable` \| `unsupported` \| `too_large` \| `no_speech` \| `internal`) — **not** the internal error text, which would leak pipeline stages and vendor names onto the device and be unlocalizable; the raw text stays in `orchestrator.jobs.error` |
 | `audio_key`, `transcript_key`, `duration` | filled on ready |
 | `cover_key` | re-hosted YouTube thumbnail in S3; null → app shows a plain placeholder (no generated cover) |
 
@@ -398,6 +398,25 @@ graph TD
 - **First always-on writer to the corpus bucket.** Today corpus audio reaches `public/tracks/…` via an offline `aws s3 sync` from the curator box; the `ingest` worker would be the **first prod service** writing there. Scope its S3 credentials to hash-derived paths to bound blast radius on the real catalog.
 - **`storage-sync` mirrors it for free.** Writing to Bunny under `public/tracks/…` is automatically mirrored to the RU (Yandex) region by the existing hourly `storage-sync` — no extra multi-region work.
 
+## Observability
+
+The characteristic failure of this pipeline is **silent**. The orchestrator keeps accepting `ingest.request` and writing job rows while the worker is gone, Deepgram is rejecting credentials, or the outbox relay goroutine has died. Every container stays green, every `/healthz` returns `200`, and the only symptom is a user watching a spinner that never resolves. Nothing about that is visible from the container list, so the pipeline carries its own instrumentation.
+
+**One id follows one ingest.** `request_id` is the chat turn's `trace_id`, stamped onto `ingest.request` and carried unchanged through `ingest.work` → `ingest.result` → `track.events`. Together with `job_id` (and `track_id` once the content hash is known) it makes a whole ingest a single log filter across four services. The healthy sequence is:
+
+```
+job_created → ingest_started → ingest_fetched → ingest_transcribed
+            → ingest_stored → ingest_ready → job_done → track_mirrored
+```
+
+A gap identifies the broken stage without opening a database. Stage boundaries carry `duration_ms`, which is also the only latency signal these services expose.
+
+**Log level encodes the retriable/permanent split** the pipeline already computes. A permanent failure is a business outcome — a dead or private URL, the user's problem — and logs at `warn`; a retriable one means one of our own dependencies misbehaved and logs at `error`. Without that split a corpus-wide error-rate signal would be dominated by bad links and mean nothing. Dead-lettering always logs at `error` (losing a user's track is operational regardless of cause) and carries `exhausted` to separate "we burned the attempt budget" from "the source was never ingestable".
+
+**Four alerts** cover the ways it stops silently: oldest-unfinished-job age (the headline — near zero in steady state regardless of volume), outbox backlog (the relay is a single goroutine; if it dies both the dispatch *and* the whole lifecycle stop), dead-letter spike, and mirror staleness. The first three read gauges from a **second** postgres-exporter: the orchestrator owns its own Postgres instance, so its tables are simply unreachable from the app exporter's connection.
+
+**`storage-sync` distinguishes liveness from working.** `/healthz` reports the process; `/readyz` reports the *work*, going `503 stale` once no full pass has succeeded for three intervals. A wedged mirror — a rotated Bunny key, expired Yandex credentials — leaves the process perfectly alive while readers served by the RU mirror get 404s on audio the app already calls "ready". It is deliberately **not** wired as a container healthcheck: restarting does not fix a credential fault, it only hides it behind a restart loop.
+
 ## Compliance (non-technical track)
 
 Letting users add arbitrary internet lectures makes the app a **user-generated-content app**, which touches App Store (guideline 1.2) and Google Play UGC policy — but the exposure differs sharply by phase:
@@ -409,7 +428,7 @@ Phase 2 depends on a compliance workstream, not more architecture: a **DMCA/take
 
 ## Open questions
 
-1. **Egress proxy** — **decided:** a **configurable** proxy behind the `Fetcher` port, starting with a **commercial residential** provider (not the home machine / personal tailnet — that couples prod to a personal network and is a home SPOF). Provider is host-only config, kept out of committed docs. A **circuit-breaker + failed-job** path is required so a proxy/provider outage degrades to `status=failed` (retryable), not a stuck queue.
+1. **Egress proxy** — **closed: not needed.** The assumption was that a datacenter IP would be blocked and a commercial residential proxy would be required. Measured instead: a direct download from the origin host succeeds — no bot-check, the native audio format is selected, and the output is byte-identical to a residential run. The real defect the measurement exposed was elsewhere: the container was installing a **16-month-old** `yt-dlp` from the Alpine package, which fails signature extraction and degrades to a fragmented fallback *while still producing a file* — a failure invisible in the happy path. The image now pins a current `yt-dlp` from PyPI. The `--proxy` plumbing stays behind the `Fetcher` port as an escape hatch (blocks are usually volume-triggered, and this was one download at one moment), together with the **circuit-breaker + failed-job** path so an egress outage degrades to `status=failed` (retryable) rather than a stuck queue.
 2. **Copyright policy** — admin approves only copyright-clean content for publish (decided in principle). The simple storage design hosts audio at an unlisted-**public** CDN path (no signing); this needs a **legal go/no-go** — if declined, fall back to a private prefix + signed URLs. The per-lecture rights basis for promotion also needs legal sign-off.
 3. **How the offline admin sees user tracks** — because the admin `shruti-mcp` is a **local, offline daemon** (not a prod service, no prod-DB access), the list of **user-generated tracks** to review is delivered as a **published artifact** — a small `pending.db` on S3 that the MCP self-fetches exactly like it already fetches `current.db`. A prod producer (profile/orchestrator) exports the user-generated tracks into it (this is *not* a user-submitted queue — users never propose anything); `library.approve` writes back via `catalog.publish`. The prod producer is the remaining Phase-2 piece.
 
