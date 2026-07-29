@@ -94,6 +94,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
         tracks: repos.tracks,
         authors: repos.authors,
         transcripts: repos.transcripts,
+        libraryItems: repos.libraryItems,
       }
     )
     if (!detail.ok) {

@@ -1,6 +1,7 @@
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { IAuthorRepository } from "@lib/domain/ports/authorRepository.js"
+import type { ILibraryItemRepository } from "@lib/domain/ports/libraryItemRepository.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
 import type { Track } from "@lib/domain/track.js"
@@ -14,6 +15,9 @@ export interface LoadTrackDetailDeps {
   readonly tracks: ITrackRepository
   readonly authors: IAuthorRepository
   readonly transcripts: ITranscriptRepository
+  /** Personal-library fallback: a user-added lecture is NOT in the corpus
+   *  `tracks` table, so resolve it as a synthetic Track from `library_items`. */
+  readonly libraryItems: ILibraryItemRepository
 }
 
 export type LoadTrackDetailError = "not-found"
@@ -43,7 +47,11 @@ export async function loadTrackDetail(
   input: LoadTrackDetailInput,
   deps: LoadTrackDetailDeps
 ): Promise<Result<TrackDetail, LoadTrackDetailError>> {
-  const track = await deps.tracks.getById(input.trackId)
+  // Corpus first; fall back to the personal library (a user-added lecture has
+  // a content hash that isn't in the corpus `tracks` table).
+  const track =
+    (await deps.tracks.getById(input.trackId)) ??
+    (await deps.libraryItems.getTrackByTrackId(input.trackId))
   if (!track) return err("not-found")
 
   // Author + transcript languages are independent — fetch in parallel.
