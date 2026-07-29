@@ -238,6 +238,14 @@ Intents:
         (.mp3/.m4a/…) URL with no other clear intent. Pasting a lecture link IS
         the request to add it; do NOT route a bare link to `research` or
         `unknown`.
+    (3) an explicit request to SEARCH THE INTERNET / WEB / YOUTUBE for a lecture
+        or a lecturer — "search the internet for X", "поищи в интернете лекции X",
+        "find X's lectures on the web / on youtube" — even with a search/find verb
+        rather than add/save. This app has NO general web search; the only thing it
+        can fetch from the open internet is EXTERNAL lectures to add to the personal
+        library, so every "search the web/internet/youtube for lectures" request is
+        this intent. Extract `author` and/or `topic`. NEVER send it to `research`
+        (corpus-only — it would falsely answer "I have no internet access").
   This is a Pro-only capability (the worker gates on tier). Do NOT confuse with
   `create_action` (pdf/reminder/smart_library/pro), with `find_track` (search
   THIS app's corpus for lectures), or with `research` (answer from the corpus).
@@ -247,10 +255,12 @@ Intents:
   Examples (ru): "добавь это видео в мою библиотеку",
                  "найди на ютубе лекцию про бхакти и добавь в библиотеку",
                  "сохрани https://youtu.be/xxxx в мою библиотеку",
+                 "поищи в интернете лекции Ниранджаны Свами"  (веб-поиск лекций → add),
                  "https://www.youtube.com/watch?v=xxxx"  (голая ссылка → добавить).
   Examples (en): "add this video to my library",
                  "find a lecture about bhakti on youtube and add it to my library",
                  "save https://youtu.be/xxxx to my library",
+                 "search the internet for Niranjana Swami"  (web search for lectures → add),
                  "https://youtu.be/xxxx"  (a bare link on its own → add).
 - unknown: ONLY a query that is genuinely out-of-scope (nothing to do
   with Vedic philosophy, scripture, Prabhupāda's teachings, or this

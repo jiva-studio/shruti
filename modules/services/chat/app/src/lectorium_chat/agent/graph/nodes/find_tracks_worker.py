@@ -589,6 +589,17 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
     return {}
 
 
+# The follow-up chip is a chat turn re-sent verbatim when tapped, so it must
+# route back to `add-to-library` on its own. A terse "Search internet for X"
+# is ambiguous (search for a person?) and the router drops it to `unknown`;
+# the words "lectures" + "add to my library" pin the intent. Build the chip
+# deterministically per language instead of letting the LLM paraphrase it.
+_UNKNOWN_AUTHOR_CHIP = {
+    "ru": "Найти лекции {author} в интернете и добавить в библиотеку",
+    "en": "Find {author}'s lectures on the internet and add to my library",
+}
+
+
 async def _emit_unknown_author(
     ctx: TurnContext, writer, query: str, author: str
 ) -> dict:
@@ -601,10 +612,10 @@ async def _emit_unknown_author(
         f"The app's lecture corpus has NO lectures by '{author}'. In one short, "
         f"honest line tell the user the app has no lectures by {author} (do not "
         f"show or imply any other teacher's lectures), then offer to look them "
-        f"up on the internet and add them to their personal library. Provide "
-        f"exactly ONE follow-up chip that, when tapped, asks to find {author}'s "
-        f"lectures on the internet and add them to the library.",
+        f"up on the internet and add them to their personal library. No chips.",
     )
-    _emit_reply(writer, reply)
+    template = _UNKNOWN_AUTHOR_CHIP.get(ctx.lang, _UNKNOWN_AUTHOR_CHIP["en"])
+    chip = template.format(author=author)
+    _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[chip]))
     log.info("find_tracks_unknown_author", request_id=ctx.request_id, author=author[:60])
     return {}
