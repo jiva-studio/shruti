@@ -737,6 +737,15 @@ function unwrapInteractiveAction(wire: WireChatActionPayload): ChatActionPayload
         id: wire.id,
         items: wire.payload.items,
       }
+    case "add_to_library":
+      return {
+        kind: "add_to_library",
+        id: wire.id,
+        url: wire.payload.url,
+        title: wire.payload.title,
+        author: wire.payload.author,
+        thumbnail: wire.payload.thumbnail,
+      }
     case "enable_daily_reminder":
       return {
         kind: "enable_daily_reminder",

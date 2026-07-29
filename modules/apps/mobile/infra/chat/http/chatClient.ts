@@ -1202,5 +1202,19 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     const cmp = parseCommentaryPayload(body)
     return cmp ? { kind: "commentary", id, payload: cmp } : null
   }
+  if (kind === "add_to_library") {
+    const url = typeof body.url === "string" ? body.url : ""
+    if (!url) return null
+    return {
+      kind: "add_to_library",
+      id,
+      payload: {
+        url,
+        title: typeof body.title === "string" ? body.title : "",
+        author: typeof body.author === "string" ? body.author : null,
+        thumbnail: typeof body.thumbnail === "string" ? body.thumbnail : null,
+      },
+    }
+  }
   return null
 }
