@@ -103,6 +103,32 @@ def _concrete_lecture_url(text: str) -> str | None:
     return None
 
 
+async def _youtube_oembed(url: str) -> tuple[str, str, str]:
+    """Best-effort (title, author, thumbnail) for a YouTube URL via the keyless
+    oEmbed endpoint. Returns ("", "", "") for a non-YouTube url or any failure —
+    the caller falls back to the ingest worker's filename-derived title."""
+    if not _YT_ID_RE.search(url or ""):
+        return "", "", ""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(
+                "https://www.youtube.com/oembed",
+                params={"url": url, "format": "json"},
+            )
+        if resp.status_code != 200:
+            return "", "", ""
+        data = resp.json()
+    except Exception:  # noqa: BLE001 — metadata is best-effort, never fail the add
+        return "", "", ""
+    return (
+        str(data.get("title") or ""),
+        str(data.get("author_name") or ""),
+        str(data.get("thumbnail_url") or ""),
+    )
+
+
 async def add_to_library_worker_node(
     state: ChatState, runtime: Runtime[TurnContext]
 ) -> dict:
@@ -225,6 +251,11 @@ async def _publish_direct(ctx: TurnContext, writer, yield_event, url: str) -> di
     so the client shows the pending state instead of failing the turn.
     """
     publisher = getattr(ctx, "ingest_publisher", None) or NoopIngestPublisher()
+    # Resolve the real title up front so the pre-ready library card shows the
+    # lecture's name instead of "Untitled" — the client hands us only the URL,
+    # so the candidate metadata is gone by this turn. Best-effort: a miss just
+    # falls back to the ingest worker's filename-derived title.
+    title, author, thumbnail = await _youtube_oembed(url)
     # Publish silently: no `yield_event`, so no action event is emitted (the
     # client has no "done" card and would render an orphan marker as raw text).
     # The text line below plus the My Library shelf are the user's feedback.
@@ -232,6 +263,9 @@ async def _publish_direct(ctx: TurnContext, writer, yield_event, url: str) -> di
         url=url,
         user_id=ctx.user_id or "",
         jwt=ctx.jwt or "",
+        title=title,
+        author=author,
+        thumbnail=thumbnail,
         publisher=publisher,
     )
     reply = await localized_reply(

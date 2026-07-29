@@ -51,12 +51,14 @@ class _FakeLLM:
 class _FakePublisher:
     def __init__(self, ok: bool = True) -> None:
         self.calls: list[tuple[str, str, str]] = []
+        self.titles: list[str] = []
         self._ok = ok
 
     async def publish(
         self, *, user_id: str, url: str, jwt: str, title: str = ""
     ) -> bool:
         self.calls.append((user_id, url, jwt))
+        self.titles.append(title)
         return self._ok
 
 
@@ -68,6 +70,17 @@ class _FakeResolver:
     async def search(self, query: str, *, limit: int) -> list[Candidate]:
         self.calls.append(query)
         return list(self._results)
+
+
+@pytest.fixture(autouse=True)
+def _no_oembed_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the YouTube oEmbed lookup so the direct-publish path never touches
+    the network in tests. A title test overrides this locally."""
+
+    async def _stub(_url: str) -> tuple[str, str, str]:
+        return "", "", ""
+
+    monkeypatch.setattr(atl, "_youtube_oembed", _stub)
 
 
 @pytest.fixture
@@ -196,6 +209,26 @@ async def test_pro_youtube_url_publishes_directly_no_cards(_events) -> None:
     assert _actions(_events, "added_to_library") == []
     assert "[action:added_to_library" not in _delta_text(_events)
     assert "LINE" in _delta_text(_events)
+
+
+async def test_direct_publish_carries_oembed_title(
+    _events, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The client hands us only the URL, so the worker resolves the real title
+    # (oEmbed) and publishes it — the pre-ready library card shows the lecture's
+    # name instead of "Untitled".
+    async def _titled(_url: str) -> tuple[str, str, str]:
+        return "Kirtan Mela with Niranjana Swami", "Purusottam108", "https://img/x.jpg"
+
+    monkeypatch.setattr(atl, "_youtube_oembed", _titled)
+    pub = _FakePublisher(ok=True)
+    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=_FakeResolver([]))
+
+    await atl.add_to_library_worker_node(
+        {"user_query": "save https://youtu.be/abc123 to my library", "tier": "pro"},
+        _Runtime(ctx),
+    )
+    assert pub.titles == ["Kirtan Mela with Niranjana Swami"]
 
 
 async def test_pro_watch_url_with_params_publishes_once(_events) -> None:

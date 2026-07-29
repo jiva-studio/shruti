@@ -474,7 +474,31 @@ async def test_author_absent_from_corpus_says_so_and_offers_the_web(_events) -> 
     # the author and "lectures"/"library" so it routes back to add-to-library.
     full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
     assert "LINE[localized_reply]" in full
-    assert "[followup:Найти лекции Some Teacher в интернете и добавить в библиотеку]" in full
+    assert "[followup:Найти в интернете лекции Some Teacher и добавить в библиотеку]" in full
+
+
+async def test_unknown_author_chip_carries_the_topic(_events) -> None:
+    # The user asked for a teacher's lectures ON A TOPIC. The corpus lacks the
+    # teacher → the web-search chip must keep the topic, not drop it to a bare
+    # author search.
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "q")]]),
+        catalog_repo=_Catalog(titles={"t1": "Лекция"}, descriptions={"t1": "d"}),
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {
+            "user_query": "find niranjana swami lectures about devotee relationships",
+            "extracted_args": {"author": "Niranjana Swami", "topic": "devotee relationships"},
+        },
+        _Runtime(ctx),
+    )
+    full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert (
+        "[followup:Найти в интернете лекции Niranjana Swami про devotee relationships "
+        "и добавить в библиотеку]" in full
+    )
 
 
 async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
@@ -497,7 +521,7 @@ async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
     actions = [e for e in _events if e["type"] == "action"]
     assert [a for a in actions if a["data"]["kind"] in ("card", "cite_transcript")] == []
     full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert "[followup:Найти лекции Niranjana Swami в интернете и добавить в библиотеку]" in full
+    assert "[followup:Найти в интернете лекции Niranjana Swami и добавить в библиотеку]" in full
 
 
 async def test_author_strong_match_proceeds_to_search(_events) -> None:

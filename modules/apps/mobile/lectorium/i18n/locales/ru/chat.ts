@@ -347,6 +347,9 @@ export default {
   actionAddToLibraryConfirm: "Добавить в библиотеку",
   actionAddToLibraryDone: "Добавлено — идёт обработка.",
   actionAddToLibraryError: "Не удалось добавить лекцию.",
+  // Реплика, отправляемая в чат при тапе «Добавить» на карточке — читаемая
+  // команда (не голый URL), которая снова маршрутизируется в add-to-library.
+  addByLinkCommand: "Добавить лекцию по ссылке: {url}",
 
   // CitationChip three-dot menu
   citationSaveAsNote: "Сохранить как заметку",

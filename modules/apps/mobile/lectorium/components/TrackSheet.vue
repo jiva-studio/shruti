@@ -179,7 +179,12 @@ watch(
     const repos = app.repositories()
     const detail = await loadTrackDetail(
       { trackId: id },
-      { tracks: repos.tracks, authors: repos.authors, transcripts: repos.transcripts }
+      {
+        tracks: repos.tracks,
+        authors: repos.authors,
+        transcripts: repos.transcripts,
+        libraryItems: repos.libraryItems,
+      }
     )
     // A newer present() may have superseded this load — drop the stale result.
     if (!detail.ok || sheet.trackId !== id) return

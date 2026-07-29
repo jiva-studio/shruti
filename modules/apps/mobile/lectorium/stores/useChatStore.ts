@@ -1642,7 +1642,10 @@ export const useChatStore = defineStore("chat", () => {
       usePaywallStore().requestOpen()
       return
     }
-    await sendMessage(action.url)
+    // Send a readable command (not a bare URL) so the chat turn looks
+    // intentional; it still routes to add-to-library (the URL is present) and
+    // the worker resolves the title/metadata from it server-side.
+    await sendMessage(t("chat.addByLinkCommand", { url: action.url }))
     requestSync()
   }
 
