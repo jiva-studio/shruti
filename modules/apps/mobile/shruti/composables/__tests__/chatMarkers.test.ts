@@ -158,12 +158,16 @@ describe("extractFollowups", () => {
     expect(chips).toEqual([])
   })
 
-  it("rejects text containing pipe (drops the chip)", () => {
-    // Pipe is the marker field separator elsewhere; tolerating it
-    // inside followup text would force the LLM to escape and create
-    // grammar bleed with `[action:..|id=..]`.
-    const chips = extractFollowups("[followup:Сделай PDF | плейлист]")
-    expect(chips).toEqual([])
+  it("keeps the pipe — it is the label|query separator", () => {
+    // A followup may be `<label>|<query>` — a short pill label plus the full
+    // command re-sent on tap. extractFollowups returns the raw inner text; the
+    // label/query split happens at render time (ChatChips).
+    const chips = extractFollowups(
+      "[followup:Search the web|Find X's lectures on the internet and add to my library]"
+    )
+    expect(chips).toEqual([
+      "Search the web|Find X's lectures on the internet and add to my library",
+    ])
   })
 
   it("does not break on `]` inside text — strict stop on first `]`", () => {

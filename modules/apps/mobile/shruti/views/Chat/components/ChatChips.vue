@@ -6,13 +6,13 @@
     :role="ariaLabelKey ? 'list' : undefined"
   >
     <ChatChip
-      v-for="(text, i) in visible"
+      v-for="(chip, i) in visible"
       :key="i"
       :role="ariaLabelKey ? 'listitem' : undefined"
-      :aria-label="ariaLabelKey ? t(ariaLabelKey, { text }) : undefined"
-      @pick="$emit('pick', text)"
+      :aria-label="ariaLabelKey ? t(ariaLabelKey, { text: chip.label }) : undefined"
+      @pick="$emit('pick', chip.query)"
     >
-      {{ text }}
+      {{ chip.label }}
     </ChatChip>
   </div>
 </template>
@@ -45,7 +45,21 @@ defineEmits<{ pick: [text: string] }>()
 
 const { t } = useI18n()
 
-const visible = computed(() => props.items.filter((s) => typeof s === "string" && s.length > 0))
+// A chip is either a plain command (label == what's sent on tap) or the
+// `<label>|<query>` form — a SHORT label to show, and the FULL command to send
+// when tapped. Split on the first `|` so a chip can read compactly while still
+// carrying everything the router needs.
+const visible = computed(() =>
+  props.items
+    .filter((s): s is string => typeof s === "string" && s.length > 0)
+    .map((s) => {
+      const sep = s.indexOf("|")
+      return sep === -1
+        ? { label: s, query: s }
+        : { label: s.slice(0, sep).trim(), query: s.slice(sep + 1).trim() }
+    })
+    .filter((c) => c.label.length > 0 && c.query.length > 0)
+)
 </script>
 
 <style scoped>

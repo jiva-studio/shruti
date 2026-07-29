@@ -390,7 +390,9 @@ def _emit_reply(writer, reply, *, prefix_line: str = "", suffix: str = "") -> No
     if line:
         writer({"type": "delta", "data": {"text": prefix_line + line + suffix}})
     for chip in reply.chips[:3]:
-        chip = chip.replace("]", "").replace("|", "").strip()
+        # `]` / newline would break the marker; `|` is the valid label|query
+        # separator (see _UNKNOWN_AUTHOR_CHIP), so it stays.
+        chip = chip.replace("]", "").replace("\n", "").strip()
         if chip:
             writer({"type": "delta", "data": {"text": f"\n[followup:{chip}]"}})
 
@@ -594,19 +596,22 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
     return {}
 
 
-# The follow-up chip is a chat turn re-sent verbatim when tapped, so it must
-# route back to `add-to-library` on its own AND carry the WHOLE request (author
-# + topic) — a terse "Search internet for X" is ambiguous (search for a person?)
-# and the router drops it to `unknown`, and dropping the topic loses what the
-# user actually asked for. The words "lectures" + "add to my library" pin the
-# intent; build the chip deterministically per language rather than let the LLM
-# paraphrase (and shorten) it.
+# The follow-up chip is `[followup:<label>|<query>]`: a SHORT label shown on the
+# pill, and the FULL command re-sent as a chat turn when tapped. The command
+# must route back to `add-to-library` on its own AND carry the WHOLE request
+# (author + topic) — a terse "Search internet for X" is ambiguous (search for a
+# person?) and the router drops it to `unknown`, and dropping the topic loses
+# what the user asked for; "lectures" + "add to my library" pin the intent. The
+# label stays compact so the chip doesn't render as a sentence-long pill. Built
+# deterministically per language rather than let the LLM paraphrase (or bloat) it.
 _UNKNOWN_AUTHOR_CHIP = {
     "ru": {
+        "label": "Поискать в интернете",
         "topic": "Найти в интернете лекции {author} про {topic} и добавить в библиотеку",
         "plain": "Найти в интернете лекции {author} и добавить в библиотеку",
     },
     "en": {
+        "label": "Search the web",
         "topic": "Find {author}'s lectures about {topic} on the internet and add to my library",
         "plain": "Find {author}'s lectures on the internet and add to my library",
     },
@@ -629,11 +634,13 @@ async def _emit_unknown_author(
         f"up on the internet and add them to their personal library. No chips.",
     )
     templates = _UNKNOWN_AUTHOR_CHIP.get(ctx.lang, _UNKNOWN_AUTHOR_CHIP["en"])
-    chip = (
+    command = (
         templates["topic"].format(author=author, topic=topic)
         if topic
         else templates["plain"].format(author=author)
     )
+    # `<label>|<query>`: the pill shows the short label, the tap sends `command`.
+    chip = f"{templates['label']}|{command}"
     _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[chip]))
     log.info(
         "find_tracks_unknown_author",
