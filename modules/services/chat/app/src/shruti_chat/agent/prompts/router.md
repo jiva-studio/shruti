@@ -230,19 +230,28 @@ Intents:
   already in this app's corpus) to their OWN personal library — typically by
   pasting a link (YouTube / a video URL) or asking to "find <lecture> on
   YouTube and add it", "download this talk into my library", "save this video
-  to my library". The tell is an EXTERNAL source (a pasted http(s) link, or an
-  explicit "on YouTube / from the web") COMBINED with an add/save/import verb
-  aimed at the user's library. This is a Pro-only capability (the worker gates
-  on tier). Do NOT confuse with `create_action` (pdf/reminder/smart_library/
-  pro), with `find_track` (search THIS app's corpus for lectures), or with
-  `research` (answer from the corpus). A bare corpus lecture search stays
-  find_track; only an EXTERNAL add belongs here.
+  to my library". Two tells, EITHER is enough:
+    (1) an EXTERNAL source (a pasted http(s) link, or an explicit "on YouTube /
+        from the web") COMBINED with an add/save/import verb; OR
+    (2) a BARE external lecture link on its own — a pasted YouTube
+        (youtube.com/watch, youtu.be, /shorts/, /live/) or direct audio
+        (.mp3/.m4a/…) URL with no other clear intent. Pasting a lecture link IS
+        the request to add it; do NOT route a bare link to `research` or
+        `unknown`.
+  This is a Pro-only capability (the worker gates on tier). Do NOT confuse with
+  `create_action` (pdf/reminder/smart_library/pro), with `find_track` (search
+  THIS app's corpus for lectures), or with `research` (answer from the corpus).
+  A bare corpus lecture search stays find_track; only an EXTERNAL add belongs
+  here. (A bare link that is NOT a lecture — an article, a tweet — is not this;
+  fall through to research/unknown as usual.)
   Examples (ru): "добавь это видео в мою библиотеку",
                  "найди на ютубе лекцию про бхакти и добавь в библиотеку",
-                 "сохрани https://youtu.be/xxxx в мою библиотеку".
+                 "сохрани https://youtu.be/xxxx в мою библиотеку",
+                 "https://www.youtube.com/watch?v=xxxx"  (голая ссылка → добавить).
   Examples (en): "add this video to my library",
                  "find a lecture about bhakti on youtube and add it to my library",
-                 "save https://youtu.be/xxxx to my library".
+                 "save https://youtu.be/xxxx to my library",
+                 "https://youtu.be/xxxx"  (a bare link on its own → add).
 - unknown: ONLY a query that is genuinely out-of-scope (nothing to do
   with Vedic philosophy, scripture, Prabhupāda's teachings, or this
   app — e.g. "what's the weather", "write me Python code"), pure

@@ -77,6 +77,21 @@ _AUDIO_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# YouTube video id (the canonical 11-char token) out of any watch / shorts /
+# live / youtu.be url, so we can build the free cover image from it.
+_YT_ID_RE = re.compile(
+    r"(?:youtube\.com/(?:watch\?[^\s<>\]\)]*\bv=|shorts/|live/)|youtu\.be/)"
+    r"([\w-]{11})",
+    re.IGNORECASE,
+)
+
+
+def _youtube_thumb(url: str) -> str:
+    """Best-effort YouTube cover URL derived from the video id — free, no API
+    call. Returns "" for non-YouTube urls (or an unrecognizable id)."""
+    m = _YT_ID_RE.search(url or "")
+    return f"https://i.ytimg.com/vi/{m.group(1)}/hqdefault.jpg" if m else ""
+
 
 def _concrete_lecture_url(text: str) -> str | None:
     """Return the first concrete lecture URL (a YouTube watch/short link or a
@@ -168,7 +183,14 @@ async def _resolve_candidates(ctx: TurnContext, query: str) -> list[Candidate]:
         url = m.group(0).rstrip(".,)")
         # The rest of the message (minus the URL) is a decent title hint.
         title = _URL_RE.sub("", query).strip() or url
-        return [Candidate(url=url, title=title, provider="user_link")]
+        return [
+            Candidate(
+                url=url,
+                title=title,
+                thumbnail=_youtube_thumb(url),
+                provider="user_link",
+            )
+        ]
 
     resolver = getattr(ctx, "lecture_search", None)
     if resolver is None:
@@ -192,12 +214,14 @@ async def _publish_direct(ctx: TurnContext, writer, yield_event, url: str) -> di
     so the client shows the pending state instead of failing the turn.
     """
     publisher = getattr(ctx, "ingest_publisher", None) or NoopIngestPublisher()
+    # Publish silently: no `yield_event`, so no action event is emitted (the
+    # client has no "done" card and would render an orphan marker as raw text).
+    # The text line below plus the My Library shelf are the user's feedback.
     result = await add_to_library_publish(
         url=url,
         user_id=ctx.user_id or "",
         jwt=ctx.jwt or "",
         publisher=publisher,
-        yield_event=yield_event,
     )
     reply = await localized_reply(
         ctx,
@@ -207,12 +231,11 @@ async def _publish_direct(ctx: TurnContext, writer, yield_event, url: str) -> di
     )
     writer({"type": "status", "data": {"key": "composing_answer"}})
     _emit_line(writer, reply.line)
-    action_id = result.get("action_id")
-    if action_id:
-        writer({
-            "type": "delta",
-            "data": {"text": f"\n[action:added_to_library|id={action_id}]\n"},
-        })
+    # No action marker here: a concrete URL is already published, and the client
+    # has no card for a "done" state. The text line above tells the user it's
+    # processing; the My Library shelf shows the item and its processing→ready
+    # status. (Emitting `[action:added_to_library|…]` here surfaced as raw marker
+    # text on clients that only render the `add_to_library` candidate card.)
     log.info(
         "add_to_library_publish_direct",
         request_id=ctx.request_id,
@@ -249,27 +272,38 @@ async def _emit_upsell(ctx: TurnContext, writer, yield_event) -> dict:
 
 
 def _stream_candidate_cards(writer, candidates: list[Candidate]) -> None:
-    """One `library_candidate` action + `[card:<id>]` marker per candidate,
-    payload emitted BEFORE its marker (SSE ordering invariant)."""
+    """One `add_to_library` action + `[action:add_to_library|id=<id>]` marker per
+    candidate, payload emitted BEFORE its marker (SSE ordering invariant).
+
+    The kind (`add_to_library`) and the `[action:…]` marker match the shared
+    `ChatActionPayload` contract the mobile app renders (ActionCardAddToLibrary):
+    tapping "Add" re-sends `url` as a chat turn, which reaches the concrete-URL
+    branch above and publishes. An earlier revision emitted `library_candidate`
+    + a `[card:…]` marker that no client knew, so the card showed as raw text."""
     for i, c in enumerate(candidates):
         cid = f"cand_{i}"
         writer({
             "type": "action",
             "data": {
-                "kind": "library_candidate",
+                "kind": "add_to_library",
                 "id": cid,
                 "payload": {
                     "url": c.url,
                     "title": c.title,
                     "author": c.author,
                     "duration": c.duration,
-                    "thumbnail": c.thumbnail,
+                    # Fall back to the free YouTube cover when the provider gave
+                    # none, so the card always has art for a YouTube lecture.
+                    "thumbnail": c.thumbnail or _youtube_thumb(c.url),
                     "lang_hint": c.lang_hint,
                     "provider": c.provider,
                 },
             },
         })
-        writer({"type": "delta", "data": {"text": f"[card:{cid}]\n\n"}})
+        writer({
+            "type": "delta",
+            "data": {"text": f"[action:add_to_library|id={cid}]\n\n"},
+        })
 
 
 def _emit_line(writer, line: str) -> None:
