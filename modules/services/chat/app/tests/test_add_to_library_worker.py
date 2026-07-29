@@ -276,3 +276,20 @@ def test_youtube_thumb_from_various_url_shapes() -> None:
     assert thumb("https://cdn.example.org/talks/lecture-01.mp3") == ""
     assert thumb("https://example.com/some/article") == ""
     assert thumb("") == ""
+
+
+async def test_search_uses_extracted_topic_not_the_raw_command(_events) -> None:
+    # The router extracts a clean topic; the worker must search THAT, not the
+    # full command sentence (a keyword engine returns nothing for the latter).
+    res = _FakeResolver([Candidate(url="https://y/1", title="Bhakti", provider="serpapi")])
+    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=_FakePublisher(), lecture_search=res)
+    await atl.add_to_library_worker_node(
+        {
+            "user_query": "найди на ютубе лекцию про бхакти и добавь в мою библиотеку",
+            "tier": "pro",
+            "extracted_args": {"topic": "бхакти"},
+        },
+        _Runtime(ctx),
+    )
+    assert res.calls == ["бхакти"]
+    assert _actions(_events, "add_to_library")  # candidate card emitted
