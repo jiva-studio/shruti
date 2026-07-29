@@ -17,6 +17,16 @@ export type ChatActionPayload =
       readonly payload: { readonly items: readonly ChatSharePdfItemPayload[] }
     }
   | {
+      readonly kind: "add_to_library"
+      readonly id: string
+      readonly payload: {
+        readonly url: string
+        readonly title: string
+        readonly author: string | null
+        readonly thumbnail: string | null
+      }
+    }
+  | {
       readonly kind: "enable_daily_reminder"
       readonly id: string
       readonly payload: { readonly time: string }
