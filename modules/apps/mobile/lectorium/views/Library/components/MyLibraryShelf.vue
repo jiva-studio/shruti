@@ -1,26 +1,35 @@
 <template>
-  <div class="my-library-shelf">
+  <!-- Items present: header + horizontal preview of cover cards. -->
+  <div v-if="!library.isEmpty" class="my-library-shelf">
     <SectionHeader
       :title="$t('library.myLibrary.title')"
       see-all
       :see-all-label="$t('library.myLibrary.seeAll')"
       @more="openAll"
     />
-    <div v-if="!library.isEmpty" class="shelf-scroll">
+    <div class="shelf-scroll">
       <div v-for="item in preview" :key="item.id" class="shelf-cell">
         <LibraryItemCard :item="item" @select="onSelect" @retry="onRetry" />
       </div>
     </div>
-    <button v-else type="button" class="shelf-empty" @click="openAll">
-      {{ $t('library.myLibrary.emptyMessage') }}
-    </button>
   </div>
+  <!-- Empty: the SAME entry banner the Smart Library / whole-library rows use,
+       rendered as a direct sibling (NOT inside a wrapper) so it inherits the
+       banner's own gutter margins and lines up exactly with its neighbours. -->
+  <LibraryBanner
+    v-else
+    :title="$t('library.myLibrary.title')"
+    :description="$t('library.myLibrary.emptyMessage')"
+    background="/library/search-bg.webp"
+    background-dark="/library/search-bg-dark.webp"
+    @click="openAll"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue"
 import { useRouter } from "vue-router"
-import { SectionHeader } from "@ui/features/collections/index.js"
+import { SectionHeader, LibraryBanner } from "@ui/features/collections/index.js"
 import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
 import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
 import { useLectorium } from "@lectorium/lectorium.js"
@@ -31,11 +40,11 @@ import LibraryItemCard from "./LibraryItemCard.vue"
 /**
  * "My library" shelf on the Search landing — a horizontally-scrolling preview
  * of the user's personal-library items (epic #1236) with a "see all" chevron
- * into `MyLibraryView`. The header is ALWAYS shown so the personal library is
- * reachable even when empty (tapping through lands on MyLibraryView's empty
- * state); the card strip is replaced by a one-line prompt when there are no
- * items yet. Self-contained: owns its store read so `SearchView` only drops the
- * tag in.
+ * into `MyLibraryView`. When empty it collapses to a single `LibraryBanner`
+ * (the same entry-banner the Smart Library / whole-library rows use) so the
+ * personal library is always reachable AND visually consistent with its
+ * neighbours. Self-contained: owns its store read so `SearchView` only drops
+ * the tag in.
  */
 const SHELF_PREVIEW = 10
 
@@ -87,21 +96,5 @@ function onRetry(): void {
   flex: 0 0 auto;
   width: 132px;
   scroll-snap-align: start;
-}
-
-/* Empty state: a tappable one-line prompt that keeps the entry reachable,
-   aligned to the shared 16px list gutter. */
-.shelf-empty {
-  display: block;
-  width: calc(100% - 32px);
-  margin: 0 16px 4px;
-  padding: 0;
-  text-align: left;
-  background: none;
-  border: none;
-  color: var(--ion-color-medium, #92949c);
-  font-size: 13px;
-  line-height: 1.4;
-  cursor: pointer;
 }
 </style>
