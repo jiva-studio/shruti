@@ -1,16 +1,19 @@
 <template>
-  <div v-if="!library.isEmpty" class="my-library-shelf">
+  <div class="my-library-shelf">
     <SectionHeader
       :title="$t('library.myLibrary.title')"
       see-all
       :see-all-label="$t('library.myLibrary.seeAll')"
       @more="openAll"
     />
-    <div class="shelf-scroll">
+    <div v-if="!library.isEmpty" class="shelf-scroll">
       <div v-for="item in preview" :key="item.id" class="shelf-cell">
         <LibraryItemCard :item="item" @select="onSelect" @retry="onRetry" />
       </div>
     </div>
+    <button v-else type="button" class="shelf-empty" @click="openAll">
+      {{ $t('library.myLibrary.emptyMessage') }}
+    </button>
   </div>
 </template>
 
@@ -28,9 +31,11 @@ import LibraryItemCard from "./LibraryItemCard.vue"
 /**
  * "My library" shelf on the Search landing — a horizontally-scrolling preview
  * of the user's personal-library items (epic #1236) with a "see all" chevron
- * into `MyLibraryView`. Renders nothing when the personal library is empty, so
- * the landing is unchanged for users who never added a lecture. Self-contained:
- * owns its store read so `SearchView` only drops the tag in.
+ * into `MyLibraryView`. The header is ALWAYS shown so the personal library is
+ * reachable even when empty (tapping through lands on MyLibraryView's empty
+ * state); the card strip is replaced by a one-line prompt when there are no
+ * items yet. Self-contained: owns its store read so `SearchView` only drops the
+ * tag in.
  */
 const SHELF_PREVIEW = 10
 
@@ -82,5 +87,21 @@ function onRetry(): void {
   flex: 0 0 auto;
   width: 132px;
   scroll-snap-align: start;
+}
+
+/* Empty state: a tappable one-line prompt that keeps the entry reachable,
+   aligned to the shared 16px list gutter. */
+.shelf-empty {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 0 16px 4px;
+  padding: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--ion-color-medium, #92949c);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
 }
 </style>
