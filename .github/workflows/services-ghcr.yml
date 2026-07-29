@@ -41,6 +41,11 @@ on:
       - 'infra/app/compose/caddy/**'            # shared Caddy image (used by app + obs)
       - 'infra/app/db/migrations/**'            # services assert schema at boot
       - '.github/workflows/services-ghcr.yml'
+  # NOTE: workflow_dispatch tags images `branch-<ref>` (see the metadata step),
+  # NOT `latest` or `main-<sha>`. Those tags are for ad-hoc test builds only —
+  # prod/compose pull `:latest`, so a dispatch build does NOT produce a
+  # deployable image. To ship, land the change on `main`; the push trigger above
+  # is the only one that tags `latest`.
   workflow_dispatch:
     inputs:
       services:
