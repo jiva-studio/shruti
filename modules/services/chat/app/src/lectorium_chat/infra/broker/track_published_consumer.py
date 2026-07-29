@@ -37,6 +37,10 @@ log = get_logger(__name__)
 
 _BLOCK_MS = 5000  # XREADGROUP block window; bounds shutdown latency
 _BATCH = 16
+# See track_events_consumer for the rationale: redis-py's DEFAULT_SOCKET_TIMEOUT
+# (5s) equals _BLOCK_MS, so an idle blocking read races the server's empty reply
+# and logs a spurious `Timeout reading` every cycle. Give the socket headroom.
+_SOCKET_TIMEOUT_S = _BLOCK_MS / 1000 + 3
 # Reclaim PEL entries idle this long — a graft that raised (un-ACKed) or a
 # crashed consumer's in-flight message. The read loop only fetches new ('>')
 # entries, so without XAUTOCLAIM a non-ACKed message is never retried. Must exceed
@@ -82,6 +86,7 @@ class TrackPublishedConsumer:
             url,
             decode_responses=False,
             health_check_interval=30,
+            socket_timeout=_SOCKET_TIMEOUT_S,
         )
 
     async def ensure_group(self) -> None:

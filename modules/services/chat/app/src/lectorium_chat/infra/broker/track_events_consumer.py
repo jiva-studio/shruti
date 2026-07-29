@@ -45,6 +45,14 @@ log = get_logger(__name__)
 
 _BLOCK_MS = 5000  # XREADGROUP block window; bounds shutdown latency
 _BATCH = 16
+# The socket read deadline MUST exceed the block window. redis-py's
+# DEFAULT_SOCKET_TIMEOUT is 5s, exactly equal to _BLOCK_MS — so the client-side
+# read times out at the same instant the server returns its empty blocking reply,
+# raising a spurious `Timeout reading from redis-streams` on every idle cycle
+# (the read still works when a message arrives, so the group never lags — it's
+# pure log noise + a wasted retry). Give the socket a few seconds of headroom
+# past the block so the empty reply always arrives first.
+_SOCKET_TIMEOUT_S = _BLOCK_MS / 1000 + 3
 # Processed-track guard TTL — a track re-delivered within this window skips the
 # re-embed. Long enough to absorb consumer restarts / redeliveries, short
 # enough that a genuinely re-uploaded (re-transcribed) track re-indexes.
@@ -148,6 +156,7 @@ class TrackEventsConsumer:
             url,
             decode_responses=False,
             health_check_interval=30,
+            socket_timeout=_SOCKET_TIMEOUT_S,
         )
 
     async def ensure_group(self) -> None:
