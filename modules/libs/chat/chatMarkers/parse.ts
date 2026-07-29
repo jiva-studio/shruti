@@ -143,12 +143,14 @@ export const QUOTE_RE = /(?:^|\n)((?:[ \t]*>[^\n]*(?:\n|$))+)/g
 // so a malformed marker with a stray dash is still captured by the
 // outer pattern and then rejected by `parseActionKind` below.
 export const ACTION_RE = /\[action:([a-z][a-z0-9_]*)\|id=([A-Za-z0-9_-]+)\]/g
-// Follow-up chips are TEXT markers (no id, no payload). `text` is any
-// run of non-`]`/`|`/newline chars — strict on purpose so the LLM
-// cannot accidentally swallow neighbouring prose by forgetting the
-// closing bracket. Empty text is rejected (`+` not `*`). Cap on chip
-// count is applied in `extractFollowups`, not in the regex.
-export const FOLLOWUP_RE = /\[followup:([^\]|\n]+)\]/g
+// Follow-up chips are TEXT markers (no id, no payload). The inner text is
+// either `<text>` (label == the command sent on tap) or `<label>|<query>` —
+// a SHORT display label plus the FULL command re-sent when tapped, so a chip
+// can stay compact while still carrying everything the router needs. `text`
+// is any run of non-`]`/newline chars — strict on the bracket so the LLM
+// cannot swallow neighbouring prose. Empty text is rejected (`+` not `*`).
+// Cap on chip count is applied in `extractFollowups`, not in the regex.
+export const FOLLOWUP_RE = /\[followup:([^\]\n]+)\]/g
 /** Max chips surfaced under one bubble. The prompt asks the LLM for
  *  ≤3, but the parser enforces it so a misbehaving turn never floods
  *  the UI. */
@@ -370,11 +372,13 @@ function groupAdjacentCards(tokens: ChatToken[]): ChatToken[] {
 }
 
 /**
- * Extract `[followup:<text>]` chips from raw assistant content.
- * Strict parser (no regex fallback): malformed markers (`]` inside the
- * text, embedded `|`, empty text) are not recognised and leak into
- * prose — fixing them is the prompt's responsibility, never this
- * function's. Trims each chip text and caps at FOLLOWUP_MAX entries.
+ * Extract `[followup:<text>]` chips from raw assistant content. Each chip is
+ * returned verbatim as its inner text — either `<text>` or the
+ * `<label>|<query>` form (split for display vs. tap at render time, in
+ * `ChatChips`). Strict parser (no regex fallback): malformed markers (`]`
+ * inside the text, empty text) are not recognised and leak into prose — fixing
+ * them is the prompt's responsibility. Trims each chip and caps at
+ * FOLLOWUP_MAX entries.
  *
  * Returns an empty array when `input` is empty or contains no valid
  * markers. The order matches the message: first marker = first chip.
