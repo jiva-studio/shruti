@@ -34,10 +34,22 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # happy path right up until the release where it isn't. Bump YTDLP_VERSION on a
 # cadence; a stale pin here is the single most likely cause of "YouTube stopped
 # working".
+#
+# nodejs is required, not optional: yt-dlp 2026.07.04 needs a JavaScript runtime
+# to solve YouTube's `nsig` player challenge. Without one its debug prints
+# `No supported JavaScript runtime could be found` and it degrades to player
+# clients that return `LOGIN_REQUIRED` / bot-check. deno is yt-dlp's default but
+# Alpine only packages deno 2.0.6 which this yt-dlp rejects as unsupported, and
+# deno ships no musl build; node works natively on musl and yt-dlp accepts it, so
+# /etc/yt-dlp.conf pins `--js-runtimes node`. Measured 2026-07-29: a residential
+# egress downloads cleanly with this; the datacenter IP is bot-checked
+# regardless (that is what LECTORIUM_YTDLP_PROXY is for), so node alone is
+# necessary but not sufficient without a residential proxy.
 FROM alpine:3.21
 ARG YTDLP_VERSION=2026.7.4
-RUN apk add --no-cache ffmpeg ca-certificates python3 py3-pip \
-    && pip install --no-cache-dir --break-system-packages "yt-dlp==${YTDLP_VERSION}"
+RUN apk add --no-cache ffmpeg ca-certificates python3 py3-pip nodejs \
+    && pip install --no-cache-dir --break-system-packages "yt-dlp==${YTDLP_VERSION}" \
+    && printf -- '--js-runtimes node\n' > /etc/yt-dlp.conf
 COPY --from=build /out/ingest /ingest
 ARG LECTORIUM_BUILD_SHA=dev
 ARG LECTORIUM_BUILD_TIME=dev
