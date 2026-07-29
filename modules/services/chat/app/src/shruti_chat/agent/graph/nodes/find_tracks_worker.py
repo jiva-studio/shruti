@@ -239,6 +239,19 @@ async def find_tracks_worker_node(
         log.warning("find_tracks_missing_deps", request_id=ctx.request_id)
         return await _emit_empty(ctx, writer, query)
 
+    # The user named a teacher whose lectures the corpus does NOT have. Without
+    # this guard the unresolved author_id silently drops out of the filter, the
+    # semantic search returns SOME OTHER teacher's lectures, and synth then
+    # misattributes them ("Here are the lectures by <author>"). Instead: say we
+    # don't have them, and offer to fetch them from the web — the chip routes
+    # into add-to-library (the whole point of that feature).
+    requested_author = args.get("author")
+    if isinstance(requested_author, str) and requested_author.strip():
+        if await _resolve_id(ctx, "author", requested_author) is None:
+            return await _emit_unknown_author(
+                ctx, writer, query, requested_author.strip()
+            )
+
     embedding = await ctx.embedder.embed_query(query)
     ladder = await _build_filters(ctx, args)
 
@@ -557,4 +570,25 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
             log.exception("find_tracks_empty_intro_failed", request_id=ctx.request_id)
     if line:
         writer({"type": "delta", "data": {"text": line}})
+    return {}
+
+
+async def _emit_unknown_author(
+    ctx: TurnContext, writer, query: str, author: str
+) -> dict:
+    """The user asked for a teacher who is NOT in the corpus. Say so honestly
+    and offer to look them up on the internet — the follow-up chip routes into
+    the add-to-library flow (search the web + add to the personal library)."""
+    writer({"type": "status", "data": {"key": "composing_answer"}})
+    reply = await localized_reply(
+        ctx,
+        f"The app's lecture corpus has NO lectures by '{author}'. In one short, "
+        f"honest line tell the user the app has no lectures by {author} (do not "
+        f"show or imply any other teacher's lectures), then offer to look them "
+        f"up on the internet and add them to their personal library. Provide "
+        f"exactly ONE follow-up chip that, when tapped, asks to find {author}'s "
+        f"lectures on the internet and add them to the library.",
+    )
+    _emit_reply(writer, reply)
+    log.info("find_tracks_unknown_author", request_id=ctx.request_id, author=author[:60])
     return {}

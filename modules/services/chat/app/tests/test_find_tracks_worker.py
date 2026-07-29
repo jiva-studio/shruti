@@ -440,3 +440,32 @@ async def test_prefers_non_intro_chunk_for_quote(_events) -> None:
     await ftw.find_tracks_worker_node({"user_query": "x", "extracted_args": {}}, _Runtime(ctx))
     cite = next(e for e in _events if e["type"] == "action" and e["data"]["kind"] == "cite_transcript")
     assert cite["data"]["payload"]["text"] == "real passage"
+
+
+async def test_author_absent_from_corpus_says_so_and_offers_the_web(_events) -> None:
+    # The catalog fake resolves NO author (resolve() returns [] for author), so
+    # a teacher the corpus lacks must NOT be answered with some OTHER teacher's
+    # semantic hits. Say we don't have them + offer the web (a chip that routes
+    # into add-to-library).
+    chunks = [_sc("t1", 70000, 0.9, "t1 best quote")]
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([chunks]),
+        catalog_repo=_Catalog(titles={"t1": "Лекция А"}, descriptions={"t1": "d"}),
+        llm=_FakeLLM(),
+    )
+    out = await ftw.find_tracks_worker_node(
+        {
+            "user_query": "find lectures of some teacher",
+            "extracted_args": {"author": "Some Teacher"},
+        },
+        _Runtime(ctx),
+    )
+    assert out == {}
+    # NO lecture cards — we did not hand back a different teacher's lectures.
+    actions = [e for e in _events if e["type"] == "action"]
+    assert [a for a in actions if a["data"]["kind"] in ("card", "cite_transcript")] == []
+    # An honest localized line + a tappable follow-up chip (→ add-to-library).
+    full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert "LINE[localized_reply]" in full
+    assert "[followup:CHIP]" in full
