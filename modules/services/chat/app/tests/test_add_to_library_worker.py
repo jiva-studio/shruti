@@ -107,7 +107,7 @@ async def test_free_user_gets_upsell_and_no_publish(_events) -> None:
     # A free user never triggers a search or a publish.
     assert pub.calls == []
     assert res.calls == []
-    assert _actions(_events, "library_candidate") == []
+    assert _actions(_events, "add_to_library") == []
 
 
 async def test_anon_user_also_gets_upsell(_events) -> None:
@@ -138,12 +138,14 @@ async def test_pro_user_emits_candidate_cards_without_publishing(_events) -> Non
     assert res.calls == ["find a bhakti lecture on youtube and add it"]
     assert pub.calls == []
 
-    # Candidate cards: one library_candidate action + [card:cand_N] per result.
-    cands = _actions(_events, "library_candidate")
+    # Candidate cards: one add_to_library action + [action:add_to_library|id=…]
+    # marker per result — the shared contract the mobile card renders.
+    cands = _actions(_events, "add_to_library")
     assert [c["data"]["id"] for c in cands] == ["cand_0", "cand_1"]
     assert cands[0]["data"]["payload"]["url"] == "https://y/1"
     text = _delta_text(_events)
-    assert "[card:cand_0]" in text and "[card:cand_1]" in text
+    assert "[action:add_to_library|id=cand_0]" in text
+    assert "[action:add_to_library|id=cand_1]" in text
     # No speculative confirmation card — publishing hasn't happened yet.
     assert _actions(_events, "added_to_library") == []
     assert "[action:added_to_library" not in text
@@ -157,11 +159,12 @@ async def test_candidate_action_precedes_its_card_marker(_events) -> None:
     )
     action_idx = next(
         i for i, e in enumerate(_events)
-        if e["type"] == "action" and e["data"].get("kind") == "library_candidate"
+        if e["type"] == "action" and e["data"].get("kind") == "add_to_library"
     )
     marker_idx = next(
         i for i, e in enumerate(_events)
-        if e["type"] == "delta" and "[card:cand_0]" in e["data"]["text"]
+        if e["type"] == "delta"
+        and "[action:add_to_library|id=cand_0]" in e["data"]["text"]
     )
     assert action_idx < marker_idx
 
@@ -186,12 +189,13 @@ async def test_pro_youtube_url_publishes_directly_no_cards(_events) -> None:
     # ingest.request, and NO candidate cards.
     assert res.calls == []
     assert pub.calls == [("user-1", "https://youtu.be/abc123", "jwt-token")]
-    assert _actions(_events, "library_candidate") == []
-    # The confirmation is the added_to_library action + its inline marker.
-    confirms = _actions(_events, "added_to_library")
-    assert len(confirms) == 1
-    assert confirms[0]["data"]["payload"]["url"] == "https://youtu.be/abc123"
-    assert "[action:added_to_library|id=" in _delta_text(_events)
+    assert _actions(_events, "add_to_library") == []
+    # B2: a concrete URL publishes SILENTLY — no action event, no inline marker
+    # (the client has no "done" card, so a marker would render as raw text). The
+    # confirmation is the text line plus the My Library shelf.
+    assert _actions(_events, "added_to_library") == []
+    assert "[action:added_to_library" not in _delta_text(_events)
+    assert "LINE" in _delta_text(_events)
 
 
 async def test_pro_watch_url_with_params_publishes_once(_events) -> None:
@@ -206,7 +210,7 @@ async def test_pro_watch_url_with_params_publishes_once(_events) -> None:
     )
     assert len(pub.calls) == 1
     assert pub.calls[0][1] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s"
-    assert _actions(_events, "library_candidate") == []
+    assert _actions(_events, "add_to_library") == []
 
 
 async def test_pro_audio_url_publishes_directly(_events) -> None:
@@ -219,8 +223,9 @@ async def test_pro_audio_url_publishes_directly(_events) -> None:
     assert pub.calls == [
         ("user-1", "https://cdn.example.org/talks/lecture-01.mp3", "jwt-token")
     ]
-    assert _actions(_events, "added_to_library")
-    assert _actions(_events, "library_candidate") == []
+    # B2: silent publish — no action events of either kind.
+    assert _actions(_events, "added_to_library") == []
+    assert _actions(_events, "add_to_library") == []
 
 
 async def test_pro_broker_unconfigured_still_confirms(_events) -> None:
@@ -231,10 +236,11 @@ async def test_pro_broker_unconfigured_still_confirms(_events) -> None:
         _Runtime(ctx),
     )
     assert out == {}
-    # No broker → no crash; still confirms with a pending card.
-    confirms = _actions(_events, "added_to_library")
-    assert len(confirms) == 1
-    assert confirms[0]["data"]["payload"]["queued"] is False
+    # No broker → no crash; still confirms via the text line. B2 publishes
+    # silently, so there is no action event to carry a queued flag.
+    assert _actions(_events, "added_to_library") == []
+    assert _actions(_events, "add_to_library") == []
+    assert "LINE" in _delta_text(_events)
 
 
 # ── Empty result ─────────────────────────────────────────────────────────
@@ -250,3 +256,23 @@ async def test_pro_no_candidates_says_so_without_publishing(_events) -> None:
     assert pub.calls == []  # nothing found → nothing published
     assert _actions(_events, "library_candidate") == []
     assert "LINE" in _delta_text(_events)  # localized "couldn't find" line
+
+
+# ── YouTube cover derivation ─────────────────────────────────────────────
+
+
+def test_youtube_thumb_from_various_url_shapes() -> None:
+    thumb = atl._youtube_thumb
+    assert thumb("https://youtu.be/abcDEF12345") == (
+        "https://i.ytimg.com/vi/abcDEF12345/hqdefault.jpg"
+    )
+    assert thumb("https://www.youtube.com/watch?v=abcDEF12345&t=30s") == (
+        "https://i.ytimg.com/vi/abcDEF12345/hqdefault.jpg"
+    )
+    assert thumb("https://youtube.com/shorts/abcDEF12345") == (
+        "https://i.ytimg.com/vi/abcDEF12345/hqdefault.jpg"
+    )
+    # Non-YouTube (direct audio, article) → no cover.
+    assert thumb("https://cdn.example.org/talks/lecture-01.mp3") == ""
+    assert thumb("https://example.com/some/article") == ""
+    assert thumb("") == ""
