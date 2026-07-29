@@ -470,10 +470,11 @@ async def test_author_absent_from_corpus_says_so_and_offers_the_web(_events) -> 
     # NO lecture cards — we did not hand back a different teacher's lectures.
     actions = [e for e in _events if e["type"] == "action"]
     assert [a for a in actions if a["data"]["kind"] in ("card", "cite_transcript")] == []
-    # An honest localized line + a tappable follow-up chip (→ add-to-library).
+    # An honest localized line + a deterministic follow-up chip whose text names
+    # the author and "lectures"/"library" so it routes back to add-to-library.
     full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
     assert "LINE[localized_reply]" in full
-    assert "[followup:CHIP]" in full
+    assert "[followup:Найти лекции Some Teacher в интернете и добавить в библиотеку]" in full
 
 
 async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
@@ -496,7 +497,7 @@ async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
     actions = [e for e in _events if e["type"] == "action"]
     assert [a for a in actions if a["data"]["kind"] in ("card", "cite_transcript")] == []
     full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert "[followup:CHIP]" in full
+    assert "[followup:Найти лекции Niranjana Swami в интернете и добавить в библиотеку]" in full
 
 
 async def test_author_strong_match_proceeds_to_search(_events) -> None:
