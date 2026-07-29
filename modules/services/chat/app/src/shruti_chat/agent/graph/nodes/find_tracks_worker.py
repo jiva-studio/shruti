@@ -264,8 +264,13 @@ async def find_tracks_worker_node(
     requested_author = args.get("author")
     if isinstance(requested_author, str) and requested_author.strip():
         if not await _author_in_corpus(ctx, requested_author):
+            topic = args.get("topic")
             return await _emit_unknown_author(
-                ctx, writer, query, requested_author.strip()
+                ctx,
+                writer,
+                query,
+                requested_author.strip(),
+                topic.strip() if isinstance(topic, str) else "",
             )
 
     embedding = await ctx.embedder.embed_query(query)
@@ -590,22 +595,31 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
 
 
 # The follow-up chip is a chat turn re-sent verbatim when tapped, so it must
-# route back to `add-to-library` on its own. A terse "Search internet for X"
-# is ambiguous (search for a person?) and the router drops it to `unknown`;
-# the words "lectures" + "add to my library" pin the intent. Build the chip
-# deterministically per language instead of letting the LLM paraphrase it.
+# route back to `add-to-library` on its own AND carry the WHOLE request (author
+# + topic) — a terse "Search internet for X" is ambiguous (search for a person?)
+# and the router drops it to `unknown`, and dropping the topic loses what the
+# user actually asked for. The words "lectures" + "add to my library" pin the
+# intent; build the chip deterministically per language rather than let the LLM
+# paraphrase (and shorten) it.
 _UNKNOWN_AUTHOR_CHIP = {
-    "ru": "Найти лекции {author} в интернете и добавить в библиотеку",
-    "en": "Find {author}'s lectures on the internet and add to my library",
+    "ru": {
+        "topic": "Найти в интернете лекции {author} про {topic} и добавить в библиотеку",
+        "plain": "Найти в интернете лекции {author} и добавить в библиотеку",
+    },
+    "en": {
+        "topic": "Find {author}'s lectures about {topic} on the internet and add to my library",
+        "plain": "Find {author}'s lectures on the internet and add to my library",
+    },
 }
 
 
 async def _emit_unknown_author(
-    ctx: TurnContext, writer, query: str, author: str
+    ctx: TurnContext, writer, query: str, author: str, topic: str = ""
 ) -> dict:
     """The user asked for a teacher who is NOT in the corpus. Say so honestly
     and offer to look them up on the internet — the follow-up chip routes into
-    the add-to-library flow (search the web + add to the personal library)."""
+    the add-to-library flow (search the web + add to the personal library) and
+    carries the topic so the web search keeps what the user asked for."""
     writer({"type": "status", "data": {"key": "composing_answer"}})
     reply = await localized_reply(
         ctx,
@@ -614,8 +628,17 @@ async def _emit_unknown_author(
         f"show or imply any other teacher's lectures), then offer to look them "
         f"up on the internet and add them to their personal library. No chips.",
     )
-    template = _UNKNOWN_AUTHOR_CHIP.get(ctx.lang, _UNKNOWN_AUTHOR_CHIP["en"])
-    chip = template.format(author=author)
+    templates = _UNKNOWN_AUTHOR_CHIP.get(ctx.lang, _UNKNOWN_AUTHOR_CHIP["en"])
+    chip = (
+        templates["topic"].format(author=author, topic=topic)
+        if topic
+        else templates["plain"].format(author=author)
+    )
     _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[chip]))
-    log.info("find_tracks_unknown_author", request_id=ctx.request_id, author=author[:60])
+    log.info(
+        "find_tracks_unknown_author",
+        request_id=ctx.request_id,
+        author=author[:60],
+        has_topic=bool(topic),
+    )
     return {}

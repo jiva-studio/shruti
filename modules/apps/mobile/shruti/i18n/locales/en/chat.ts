@@ -347,6 +347,9 @@ export default {
   actionAddToLibraryConfirm: "Add to library",
   actionAddToLibraryDone: "Added — we're processing it.",
   actionAddToLibraryError: "Couldn't add this lecture.",
+  // The chat turn sent when the user taps "Add" on a candidate — a readable
+  // command (not a bare URL) that routes back into add-to-library.
+  addByLinkCommand: "Add lecture by this link: {url}",
 
   citationSaveAsNote: "Save as note",
   citationOpenInStudio: "Open in Studio",
