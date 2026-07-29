@@ -85,6 +85,22 @@ async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
     return hits[0].id if hits else None
 
 
+# A named teacher only counts as "in the corpus" above this confidence. The
+# catalog holds a handful of authors, so a query for an ABSENT teacher grazes a
+# common name word — "niranjana swami" matches "…Swami Prabhupada" at 0.5 — and
+# must NOT be treated as having their lectures. A real author match scores ~1.0.
+_AUTHOR_MIN_CONFIDENCE = 0.7
+
+
+async def _author_in_corpus(ctx: TurnContext, name: str) -> bool:
+    """True only if `name` resolves to a corpus author with real confidence."""
+    try:
+        hits = await ctx.catalog_repo.resolve("author", name, lang=ctx.lang, limit=1)  # type: ignore[arg-type]
+    except Exception:
+        return False
+    return bool(hits) and hits[0].confidence >= _AUTHOR_MIN_CONFIDENCE
+
+
 async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]:
     """Ordered (relaxed-label, filter-kwargs) ladder: index 0 is fully
     constrained, each next entry drops the narrowest remaining constraint."""
@@ -247,7 +263,7 @@ async def find_tracks_worker_node(
     # into add-to-library (the whole point of that feature).
     requested_author = args.get("author")
     if isinstance(requested_author, str) and requested_author.strip():
-        if await _resolve_id(ctx, "author", requested_author) is None:
+        if not await _author_in_corpus(ctx, requested_author):
             return await _emit_unknown_author(
                 ctx, writer, query, requested_author.strip()
             )
