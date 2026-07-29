@@ -66,8 +66,10 @@ def _track(tid: str, title: str | None) -> Track:
 class _Catalog:
     def __init__(
         self, *, titles=None, descriptions=None, eligible=None, sources=None,
-        ref_tracks=None,
+        ref_tracks=None, authors=None,
     ) -> None:
+        # authors: {query_text: (id, confidence)} for the author resolve.
+        self._authors = authors or {}
         self._titles = dict(titles or {})
         self._descriptions = descriptions or {}
         self._eligible = eligible
@@ -109,6 +111,9 @@ class _Catalog:
                         confidence=1.0, extra={"short_name": text.strip().upper()},
                     )
                 ]
+        if kind == "author" and text in self._authors:
+            aid, conf = self._authors[text]
+            return [ResolvedEntity(id=aid, full_name=text, confidence=conf, extra={})]
         return []
 
     async def source_short_label(self, source_id, *, lang):
@@ -469,3 +474,47 @@ async def test_author_absent_from_corpus_says_so_and_offers_the_web(_events) -> 
     full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
     assert "LINE[localized_reply]" in full
     assert "[followup:CHIP]" in full
+
+
+async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
+    # "niranjana swami" grazes "…Swami Prabhupada" at 0.5 — below the floor, so
+    # it must NOT hand back Prabhupada's lectures; say we don't have them.
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "q")]]),
+        catalog_repo=_Catalog(
+            titles={"t1": "Лекция"}, descriptions={"t1": "d"},
+            authors={"Niranjana Swami": ("prabhupada", 0.5)},
+        ),
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "find lectures of niranjana swami",
+         "extracted_args": {"author": "Niranjana Swami"}},
+        _Runtime(ctx),
+    )
+    actions = [e for e in _events if e["type"] == "action"]
+    assert [a for a in actions if a["data"]["kind"] in ("card", "cite_transcript")] == []
+    full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
+    assert "[followup:CHIP]" in full
+
+
+async def test_author_strong_match_proceeds_to_search(_events) -> None:
+    # A real corpus author (confidence 1.0) is above the floor → we search and
+    # surface cards, we do NOT emit the "not in the app" reply.
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "best quote")]]),
+        catalog_repo=_Catalog(
+            titles={"t1": "Лекция"}, descriptions={"t1": "d"},
+            authors={"Prabhupada": ("prabhupada", 1.0)},
+        ),
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "lectures by prabhupada",
+         "extracted_args": {"author": "Prabhupada"}},
+        _Runtime(ctx),
+    )
+    actions = [e for e in _events if e["type"] == "action"]
+    assert [a for a in actions if a["data"]["kind"] == "card"]  # cards emitted
