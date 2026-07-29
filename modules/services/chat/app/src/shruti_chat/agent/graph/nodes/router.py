@@ -10,7 +10,11 @@ from __future__ import annotations
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
-from shruti_chat.agent.classify import AddressClassifier, run_classifier_chain
+from shruti_chat.agent.classify import (
+    AddressClassifier,
+    LectureUrlClassifier,
+    run_classifier_chain,
+)
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prior_refs import extract_prior_track_refs
 from shruti_chat.application.followup_rewrite import resolve_followup_query
@@ -27,7 +31,7 @@ log = get_logger(__name__)
 # Deterministic classifiers tried before the LLM router. Stateless — built
 # once. Each claims a query (high precision) or passes; on a pass we fall
 # through to the LLM router below. The LLM is the LAST link in the chain.
-_DETERMINISTIC_CHAIN = [AddressClassifier()]
+_DETERMINISTIC_CHAIN = [AddressClassifier(), LectureUrlClassifier()]
 
 
 async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
