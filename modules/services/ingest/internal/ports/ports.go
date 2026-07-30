@@ -22,6 +22,20 @@ type Fetcher interface {
 	Fetch(ctx context.Context, url string) (localPath, contentHash string, err error)
 }
 
+// SourceInfo is best-effort metadata read off a source URL without downloading
+// its media. Used to fill fields the title lacks: the uploader/channel as an
+// author fallback, the publish date as a date fallback. Fields are empty when
+// the source can't provide them.
+type SourceInfo struct {
+	Uploader   string // channel / uploader name
+	UploadDate string // publish date as "YYYYMMDD" (yt-dlp), else ""
+}
+
+// SourceProber reads a source URL's metadata without fetching its media.
+type SourceProber interface {
+	ProbeSource(ctx context.Context, url string) (SourceInfo, error)
+}
+
 // Transcriber turns a local audio file into a raw ASR transcript and reports
 // the detected language. The worker windows the raw segments into the stored
 // reviewed artifact via Reviewer.NormalizeTranscript.
