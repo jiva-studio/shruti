@@ -306,11 +306,11 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     await db.execute(
       `INSERT OR REPLACE INTO library_items (
          id, track_id, status, origin, title_raw, author_raw, location_raw,
-         date_raw, lang_hint, author_id, location_id, date, date_precision,
-         lang, lang_confidence, error, audio_key, transcript_key, duration,
+         date_raw, lang_hint, author_id, location_id, date,
+         lang, error, audio_key, transcript_key, duration,
          cover_key, references_json, description, outline_json, source_url,
          created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         docId,
         wire.track_id ?? null,
@@ -324,9 +324,7 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         wire.author_id ?? null,
         wire.location_id ?? null,
         wire.date ?? null,
-        wire.date_precision ?? null,
         wire.lang ?? null,
-        wire.lang_confidence ?? null,
         wire.error ?? null,
         wire.audio_key ?? null,
         wire.transcript_key ?? null,

@@ -187,9 +187,7 @@ export interface LibraryItemWire {
   author_id: string | null
   location_id: string | null
   date: string | null
-  date_precision: string | null
   lang: string | null
-  lang_confidence: number | null
   error: string | null
   audio_key: string | null
   transcript_key: string | null
@@ -222,9 +220,7 @@ export function libraryItemRowToWire(row: LibraryItemRow): LibraryItemWire {
     author_id: row.author_id,
     location_id: row.location_id,
     date: row.date,
-    date_precision: row.date_precision,
     lang: row.lang,
-    lang_confidence: row.lang_confidence,
     error: row.error,
     audio_key: row.audio_key,
     transcript_key: row.transcript_key,

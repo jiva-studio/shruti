@@ -184,9 +184,7 @@ type libraryItemRow struct {
 	AuthorID       *string    `json:"author_id"`
 	LocationID     *string    `json:"location_id"`
 	Date           *string    `json:"date"`
-	DatePrecision  *string    `json:"date_precision"`
 	Lang           *string    `json:"lang"`
-	LangConfidence *float64   `json:"lang_confidence"`
 	AudioKey       *string    `json:"audio_key"`
 	TranscriptKey  *string    `json:"transcript_key"`
 	CoverKey       *string    `json:"cover_key"`
@@ -350,12 +348,12 @@ func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it wire
 		`INSERT INTO profile.library_items
 		     (user_id, doc_id, track_id, status, origin, error,
 		      title_raw, author_raw, location_raw, date_raw, lang_hint,
-		      author_id, location_id, date, date_precision, lang, lang_confidence,
+		      author_id, location_id, date, lang,
 		      audio_key, transcript_key, cover_key, duration, added_at)
 		 VALUES ($1, $2, $3, $4, $5, $6,
 		         $7, $8, $9, $10, $11,
-		         $12, $13, $14, $15, $16, $17,
-		         $18, $19, $20, $21, $22)
+		         $12, $13, $14, $15,
+		         $16, $17, $18, $19, $20)
 		 ON CONFLICT (user_id, doc_id) DO UPDATE SET
 		     track_id        = EXCLUDED.track_id,
 		     status          = EXCLUDED.status,
@@ -369,9 +367,7 @@ func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it wire
 		     author_id       = EXCLUDED.author_id,
 		     location_id     = EXCLUDED.location_id,
 		     date            = EXCLUDED.date,
-		     date_precision  = EXCLUDED.date_precision,
 		     lang            = EXCLUDED.lang,
-		     lang_confidence = EXCLUDED.lang_confidence,
 		     audio_key       = EXCLUDED.audio_key,
 		     transcript_key  = EXCLUDED.transcript_key,
 		     cover_key       = EXCLUDED.cover_key,
@@ -379,7 +375,7 @@ func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it wire
 		     added_at        = EXCLUDED.added_at`,
 		userID, it.DocID, row.TrackID, row.Status, row.Origin, row.Error,
 		row.TitleRaw, row.AuthorRaw, row.LocationRaw, row.DateRaw, row.LangHint,
-		row.AuthorID, row.LocationID, row.Date, row.DatePrecision, row.Lang, row.LangConfidence,
+		row.AuthorID, row.LocationID, row.Date, row.Lang,
 		row.AudioKey, row.TranscriptKey, row.CoverKey, row.Duration, tsArg(row.AddedAt),
 	)
 	return err

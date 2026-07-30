@@ -53,10 +53,8 @@ export interface LibraryItemRow {
   readonly location_id: string | null
   /** Resolved ISO date "YYYY-MM-DD", or NULL when unresolved. */
   readonly date: string | null
-  readonly date_precision: string | null
   /** ASR-detected content language — authoritative when present. */
   readonly lang: string | null
-  readonly lang_confidence: number | null
   /** User-visible failure reason on a `failed` row. */
   readonly error: string | null
   /** Full bucket key of the audio, filled on ready (e.g.
