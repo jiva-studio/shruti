@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jiva-studio/shruti/pipeline/blobpath"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func (s *Store) SourceArtifactPath(id track.Id) string {
 }
 
 func (s *Store) PublicAudioPath(id track.Id, version audioport.Version) string {
-	return filepath.Join(s.outDir, "public", "tracks", string(id), "audio", string(version)+".mp3")
+	return filepath.Join(s.outDir, filepath.FromSlash(blobpath.AudioKey(string(id), string(version))))
 }
 
 // MoveSourceFromInput moves srcPath into the artifact path. On the same
