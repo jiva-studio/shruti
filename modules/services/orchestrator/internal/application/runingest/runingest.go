@@ -29,6 +29,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,9 +40,34 @@ import (
 	"github.com/jiva-studio/lectorium/orchestrator/internal/ports"
 )
 
-// jobNamespace seeds the deterministic (UUIDv5) job id derived from a message
-// id, so redelivery is idempotent at the job level.
+// jobNamespace seeds the deterministic (UUIDv5) job id. Keying it on
+// (user, source) makes a re-add of the same lecture map to the SAME job, so
+// the existing-job check dedups it — no duplicate membership, no reprocess.
 var jobNamespace = uuid.MustParse("1b671a64-40d5-491e-99b0-da01ff1f3341")
+
+// ytIDRe pulls the 11-char YouTube video id out of any watch / shorts / live /
+// youtu.be URL so URL variants of one video share a dedup key.
+var ytIDRe = regexp.MustCompile(`(?:youtube\.com/(?:watch\?[^\s]*\bv=|shorts/|live/)|youtu\.be/)([\w-]{11})`)
+
+// sourceKey normalizes a source URL to a stable dedup key: the YouTube video id
+// when present (so watch?v= / youtu.be / extra params collapse to one), else
+// the trimmed URL.
+func sourceKey(rawURL string) string {
+	if m := ytIDRe.FindStringSubmatch(rawURL); m != nil {
+		return "yt:" + m[1]
+	}
+	return strings.TrimSpace(rawURL)
+}
+
+// jobIDFor derives the job id: per (user, source) when the user is known —
+// dedup across re-adds — else per broker message (redelivery-idempotent only).
+func jobIDFor(userID, msgID, url string) string {
+	seed := msgID
+	if strings.TrimSpace(userID) != "" {
+		seed = userID + "\x00" + sourceKey(url)
+	}
+	return uuid.NewSHA1(jobNamespace, []byte(seed)).String()
+}
 
 // errUnauthorized is a permanent (non-retryable) failure: the request's token
 // no longer grants an active PRO tier.
@@ -95,7 +122,7 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 		return nil // unparseable; ack to drop it
 	}
 
-	jobID := uuid.NewSHA1(jobNamespace, []byte(msgID)).String()
+	jobID := jobIDFor(req.UserID, msgID, req.URL)
 	lg := slog.With("job_id", jobID, "request_id", req.RequestID)
 	existing, err := h.d.Repo.Get(ctx, jobID)
 	if err != nil {
