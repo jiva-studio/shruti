@@ -81,6 +81,7 @@ export function rowToLibraryItem(row: LibraryItemRow): LibraryItem {
     description: row.description,
     outline: outlineJsonToChapters(row.outline_json),
     references: parseRefsJson(row.references_json) ?? [],
+    sourceUrl: row.source_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

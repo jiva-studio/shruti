@@ -19,6 +19,7 @@ import { migration_016_listening_sessions_dedupe_storm } from "./016_listening_s
 import { migration_017_library_items } from "./017_library_items.js"
 import { migration_018_library_items_references } from "./018_library_items_references.js"
 import { migration_019_library_items_outline } from "./019_library_items_outline.js"
+import { migration_020_library_items_source_url } from "./020_library_items_source_url.js"
 
 /**
  * Ordered list of user-DB migrations. Append new migrations at the end —
@@ -45,4 +46,5 @@ export const userMigrations: readonly Migration[] = [
   migration_017_library_items,
   migration_018_library_items_references,
   migration_019_library_items_outline,
+  migration_020_library_items_source_url,
 ]
