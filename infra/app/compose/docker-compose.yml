@@ -903,6 +903,15 @@ services:
       S3_BUCKET: ${SHRUTI_S3_BUCKET:-}
       S3_REGION: ${AWS_REGION:-us-east-1}
       S3_ENDPOINT: ${SHRUTI_S3_ENDPOINT_URL:-}
+      # LLM metadata extraction + transcript review (OpenRouter, shared pipeline
+      # lib). Reuse the OPENROUTER_API_KEY already in the env_file; models default
+      # to the same ones the corpus tool uses. Unset key → the step is skipped
+      # (raw title / deterministic normalize), never fatal.
+      METADATA_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
+      METADATA_LLM_MODEL: ${SHRUTI_METADATA_LLM_MODEL:-anthropic/claude-sonnet-4.6}
+      REVIEW_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
+      REVIEW_LLM_BASELINE: ${SHRUTI_REVIEW_LLM_BASELINE:-google/gemini-3.1-flash-lite}
+      REVIEW_LLM_PREMIUM: ${SHRUTI_REVIEW_LLM_PREMIUM:-google/gemini-3-flash-preview,google/gemini-3.1-pro-preview}
       PORT: "8088"
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_INGEST_TAG:-latest}
