@@ -14,7 +14,7 @@
 
       <!-- Compact add control, top-right over the cover. -->
       <button
-        v-if="state === 'pending'"
+        v-if="state === 'pending' && !alreadyInLibrary"
         class="add-btn"
         :aria-label="$t('chat.actionAddToLibraryConfirm')"
         @click="emit('confirm', actionId)"
@@ -24,9 +24,6 @@
       <span v-else-if="state === 'executing'" class="add-btn add-btn--busy" aria-hidden="true">
         <IonSpinner name="crescent" class="spinner" />
       </span>
-      <span v-else-if="state === 'done'" class="add-btn add-btn--done" aria-hidden="true">
-        <IconCheck :size="20" />
-      </span>
       <button
         v-else-if="state === 'error'"
         class="add-btn add-btn--error"
@@ -35,6 +32,13 @@
       >
         <IconRefresh :size="18" />
       </button>
+      <span
+        v-else
+        class="add-btn add-btn--done"
+        :aria-label="alreadyInLibrary ? $t('search.actions.alreadyInLibrary') : undefined"
+      >
+        <IconCheck :size="20" />
+      </span>
 
       <div class="overlay">
         <span class="title">{{ payload.title }}</span>
@@ -62,6 +66,8 @@ defineProps<{
   actionId: string
   payload?: Extract<ChatActionPayload, { kind: "add_to_library" }>
   state: ActionState
+  /** The user already has this lecture — show it as in-library, not addable. */
+  alreadyInLibrary?: boolean
 }>()
 
 const emit = defineEmits<{
