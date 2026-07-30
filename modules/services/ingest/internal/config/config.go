@@ -64,6 +64,15 @@ type Config struct {
 	MetadataLLMEndpoint string // METADATA_LLM_ENDPOINT (default OpenRouter)
 	MetadataLLMAPIKey   string // METADATA_LLM_API_KEY
 	MetadataLLMModel    string // METADATA_LLM_MODEL
+
+	// --- Transcript reviewer (LLM, OpenAI-compatible) ---
+	// OPTIONAL: an LLM cleanup/segmentation pass over the transcript runs only
+	// when both key and model are set; otherwise the deterministic per-segment
+	// normalize is used. Review never blocks an ingest.
+	ReviewLLMEndpoint  string // REVIEW_LLM_ENDPOINT (default OpenRouter)
+	ReviewLLMAPIKey    string // REVIEW_LLM_API_KEY
+	ReviewLLMModel     string // REVIEW_LLM_MODEL
+	ReviewLLMReasoning string // REVIEW_LLM_REASONING ("" | off | on | low|medium|high | <int>)
 }
 
 func Load() (*Config, error) {
@@ -100,6 +109,11 @@ func Load() (*Config, error) {
 		MetadataLLMEndpoint: env("METADATA_LLM_ENDPOINT", "https://openrouter.ai/api/v1"),
 		MetadataLLMAPIKey:   os.Getenv("METADATA_LLM_API_KEY"),
 		MetadataLLMModel:    env("METADATA_LLM_MODEL", ""),
+
+		ReviewLLMEndpoint:  env("REVIEW_LLM_ENDPOINT", "https://openrouter.ai/api/v1"),
+		ReviewLLMAPIKey:    os.Getenv("REVIEW_LLM_API_KEY"),
+		ReviewLLMModel:     env("REVIEW_LLM_MODEL", ""),
+		ReviewLLMReasoning: env("REVIEW_LLM_REASONING", ""),
 	}
 	if cfg.StreamMaxLen <= 0 {
 		cfg.StreamMaxLen = 10000

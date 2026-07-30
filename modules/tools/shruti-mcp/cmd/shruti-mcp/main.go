@@ -82,7 +82,7 @@ import (
 	fsoutline "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/outline/fs"
 	openaicompatoutline "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/outline/openaicompat"
 	reviewreg "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review"
-	openaicompatreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/openaicompat"
+	openaicompatreview "github.com/jiva-studio/shruti/pipeline/review/openaicompat"
 	throttledreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/throttled"
 	sqliteruns "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/runregistry/sqlite"
 	awss3 "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/s3/aws"
