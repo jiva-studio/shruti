@@ -28,44 +28,44 @@
     <ActionCardSharePdf
       v-else-if="token.kind === 'action' && token.actionKind === 'share_pdf'"
       :action-id="token.actionId"
-      :payload="sharePdfPayload(token.actionId)"
+      :payload="actionPayload(token.actionId, 'share_pdf')"
       :state="actionState(token.actionId)"
       @confirm="onConfirmAction"
     />
     <ActionCardEnableReminder
       v-else-if="token.kind === 'action' && token.actionKind === 'enable_daily_reminder'"
       :action-id="token.actionId"
-      :payload="enableReminderPayload(token.actionId)"
+      :payload="actionPayload(token.actionId, 'enable_daily_reminder')"
       :state="actionState(token.actionId)"
       @confirm="onConfirmAction"
     />
     <ActionCardConfigureSmartLibrary
       v-else-if="token.kind === 'action' && token.actionKind === 'configure_smart_library'"
       :action-id="token.actionId"
-      :payload="configureSmartLibraryPayload(token.actionId)"
+      :payload="actionPayload(token.actionId, 'configure_smart_library')"
       :state="actionState(token.actionId)"
       @confirm="onConfirmAction"
     />
     <ActionCardUpgradeToPro
       v-else-if="token.kind === 'action' && token.actionKind === 'upgrade_to_pro'"
       :action-id="token.actionId"
-      :payload="upgradeToProPayload(token.actionId)"
+      :payload="actionPayload(token.actionId, 'upgrade_to_pro')"
       :state="actionState(token.actionId)"
       @confirm="onConfirmAction"
     />
     <ActionCardQueueNextTrack
       v-else-if="token.kind === 'action' && token.actionKind === 'queue_next_track'"
       :action-id="token.actionId"
-      :payload="queueNextTrackPayload(token.actionId)"
+      :payload="actionPayload(token.actionId, 'queue_next_track')"
       :state="actionState(token.actionId)"
       @confirm="onConfirmAction"
     />
     <ActionCardAddToLibrary
       v-else-if="token.kind === 'action' && token.actionKind === 'add_to_library'"
       :action-id="token.actionId"
-      :payload="addToLibraryPayload(token.actionId)"
+      :payload="actionPayload(token.actionId, 'add_to_library')"
       :state="actionState(token.actionId)"
-      :already-in-library="library.hasSource(addToLibraryPayload(token.actionId)?.url ?? '')"
+      :already-in-library="library.hasSource(actionPayload(token.actionId, 'add_to_library')?.url ?? '')"
       @confirm="onConfirmAction"
     />
     <VerseCardContainer
@@ -214,46 +214,15 @@ function actionState(actionId: string): ActionState {
   return "pending"
 }
 
-function sharePdfPayload(
-  actionId: string
-): Extract<ChatActionPayload, { kind: "share_pdf" }> | undefined {
+// One narrowing lookup for every action card: returns the message's action
+// payload for `actionId` only when it is of the requested `kind`, else
+// undefined. Replaces six near-identical per-kind helpers.
+function actionPayload<K extends ChatActionPayload["kind"]>(
+  actionId: string,
+  kind: K
+): Extract<ChatActionPayload, { kind: K }> | undefined {
   const a = props.message.actions?.[actionId]
-  return a && a.kind === "share_pdf" ? a : undefined
-}
-
-function enableReminderPayload(
-  actionId: string
-): Extract<ChatActionPayload, { kind: "enable_daily_reminder" }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === "enable_daily_reminder" ? a : undefined
-}
-
-function configureSmartLibraryPayload(
-  actionId: string
-): Extract<ChatActionPayload, { kind: "configure_smart_library" }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === "configure_smart_library" ? a : undefined
-}
-
-function upgradeToProPayload(
-  actionId: string
-): Extract<ChatActionPayload, { kind: "upgrade_to_pro" }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === "upgrade_to_pro" ? a : undefined
-}
-
-function queueNextTrackPayload(
-  actionId: string
-): Extract<ChatActionPayload, { kind: "queue_next_track" }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === "queue_next_track" ? a : undefined
-}
-
-function addToLibraryPayload(
-  actionId: string
-): Extract<ChatActionPayload, { kind: "add_to_library" }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === "add_to_library" ? a : undefined
+  return a && a.kind === kind ? (a as Extract<ChatActionPayload, { kind: K }>) : undefined
 }
 
 async function onConfirmAction(actionId: string, override?: { time?: string }): Promise<void> {

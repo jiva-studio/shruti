@@ -71,6 +71,9 @@ type Deps struct {
 	// Glossary, when set, injects canonical Sanskrit/proper-noun hints into the
 	// LLM review (same dictionary as the corpus tool). Optional.
 	Glossary glossaryport.Matcher
+	// JobTimeout bounds one Process call so a hung stage can't wedge the
+	// single-goroutine consumer indefinitely. 0 disables the deadline.
+	JobTimeout time.Duration
 }
 
 // Service runs the pipeline.
@@ -94,6 +97,16 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		// log it — otherwise a malformed producer drops messages invisibly.
 		slog.WarnContext(ctx, "ingest_poison_pill", "error", err.Error(), "bytes", len(payload))
 		return nil // unparseable; ack to drop it
+	}
+
+	// Bound the whole pipeline: a hung stage (e.g. a stalled yt-dlp behind a
+	// proxy) would otherwise block the single-goroutine consumer forever. On
+	// timeout the stage's ctx-aware call fails, the job dead-letters/retries
+	// normally, and the consumer moves on.
+	if s.d.JobTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.d.JobTimeout)
+		defer cancel()
 	}
 
 	// Every line for this message carries job_id + attempt, so one ingest is a
@@ -224,6 +237,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		Description:   description,
 		Outline:       chapters,
 		CoverKey:      coverKey,
+		Duration:      info.Duration * 1000,
 		AudioKey:      aKey,
 		TranscriptKey: tKey,
 		SourceURL:     cmd.URL,

@@ -60,8 +60,20 @@ export function useTrackSheetDetail(options: { onAfterLoad?: () => void } = {}) 
           libraryItems: repos.libraryItems,
         }
       )
+      if (!detail.ok) {
+        // Genuine not-found for the CURRENT target (not a superseded load):
+        // clear so the sheet doesn't keep showing the previously-opened track.
+        if (sheet.trackId === id) {
+          track.value = null
+          authorEntity.value = null
+          authorRaw.value = null
+          locationRaw.value = null
+          selectedLanguage.value = null
+        }
+        return
+      }
       // A newer present() may have superseded this load — drop the stale result.
-      if (!detail.ok || sheet.trackId !== id) return
+      if (sheet.trackId !== id) return
       track.value = detail.value.track
       authorEntity.value = detail.value.author
       authorRaw.value = detail.value.authorRaw

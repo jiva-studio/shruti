@@ -115,6 +115,7 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		Outliner:    buildOutliner(ctx, cfg),
 		Prober:      fetcher,
 		Glossary:    buildGlossary(ctx),
+		JobTimeout:  cfg.JobTimeout,
 	})
 	return svc, true, nil
 }

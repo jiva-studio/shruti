@@ -18,6 +18,17 @@ import { rowToLibraryItem } from "./rowMappers.js"
  * hash exactly as it resolves a corpus track.
  */
 export function createSqlLibraryItemRepository(db: IDatabase): ILibraryItemRepository {
+  // Several membership rows can share a track_id across users, but on ONE device
+  // there is at most the local owner's single row per content hash. Prefer the
+  // most recently updated should a stale duplicate ever exist.
+  const byTrackId = (trackId: TrackId): Promise<LibraryItem | null> =>
+    queryOne<LibraryItemRow, LibraryItem>(
+      db,
+      "SELECT * FROM library_items WHERE track_id = ? ORDER BY updated_at DESC LIMIT 1",
+      [trackId],
+      rowToLibraryItem
+    )
+
   return {
     async getById(id: string): Promise<LibraryItem | null> {
       return queryOne<LibraryItemRow, LibraryItem>(
@@ -28,17 +39,7 @@ export function createSqlLibraryItemRepository(db: IDatabase): ILibraryItemRepos
       )
     },
 
-    async getByTrackId(trackId: TrackId): Promise<LibraryItem | null> {
-      // Several membership rows can share a track_id across users, but on ONE
-      // device there is at most the local owner's single row per content hash.
-      // Prefer the most recently updated should a stale duplicate ever exist.
-      return queryOne<LibraryItemRow, LibraryItem>(
-        db,
-        "SELECT * FROM library_items WHERE track_id = ? ORDER BY updated_at DESC LIMIT 1",
-        [trackId],
-        rowToLibraryItem
-      )
-    },
+    getByTrackId: byTrackId,
 
     async listAll(): Promise<readonly LibraryItem[]> {
       // Newest-added first. Prefer created_at, but a freshly ingested item may
@@ -54,12 +55,7 @@ export function createSqlLibraryItemRepository(db: IDatabase): ILibraryItemRepos
     },
 
     async getTrackByTrackId(trackId: TrackId): Promise<Track | null> {
-      const item = await queryOne<LibraryItemRow, LibraryItem>(
-        db,
-        "SELECT * FROM library_items WHERE track_id = ? ORDER BY updated_at DESC LIMIT 1",
-        [trackId],
-        rowToLibraryItem
-      )
+      const item = await byTrackId(trackId)
       return item ? libraryItemToTrack(item) : null
     },
   }

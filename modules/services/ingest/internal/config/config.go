@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config is the ingest worker's runtime configuration. The worker is STATELESS
@@ -35,6 +36,12 @@ type Config struct {
 	YtdlpBin        string // YTDLP_BIN (default "yt-dlp")
 	MaxAudioBytes   int64  // MAX_AUDIO_BYTES cap on a downloaded artifact
 	MaxAudioSeconds int64  // MAX_AUDIO_DURATION_SECONDS cap on source duration
+
+	// JobTimeout bounds a single ingest.work: the whole fetch → transcribe →
+	// store pipeline runs under a context with this deadline, so one hung yt-dlp
+	// (proxy stall, bot challenge) can't wedge the single-goroutine consumer
+	// forever. INGEST_JOB_TIMEOUT_SECONDS, 0 disables.
+	JobTimeout time.Duration
 
 	// --- Transcriber (Deepgram) ---
 	DeepgramAPIKey string // DEEPGRAM_API_KEY
@@ -106,6 +113,7 @@ func Load() (*Config, error) {
 		YtdlpBin:        env("YTDLP_BIN", "yt-dlp"),
 		MaxAudioBytes:   int64(envInt("MAX_AUDIO_BYTES", 512*1024*1024)),      // 512 MiB
 		MaxAudioSeconds: int64(envInt("MAX_AUDIO_DURATION_SECONDS", 4*60*60)), // 4h
+		JobTimeout:      time.Duration(envInt("INGEST_JOB_TIMEOUT_SECONDS", 45*60)) * time.Second,
 
 		DeepgramAPIKey: env("DEEPGRAM_API_KEY", ""),
 		DeepgramModel:  env("DEEPGRAM_MODEL", "nova-2"),

@@ -52,7 +52,12 @@ type Result struct {
 	Outline     []OutlineEntry `json:"outline,omitempty"`
 	// CoverKey is the public bucket key of the stored cover image, set when the
 	// worker fetched a thumbnail for the source. Empty when none was available.
-	CoverKey  string `json:"cover_key,omitempty"`
+	CoverKey string `json:"cover_key,omitempty"`
+	// Duration is the track length in MILLISECONDS (from the source probe), 0 if
+	// unknown. The orchestrator projects it onto the library_items row so the
+	// player and lists can show the lecture's length. Key matches the client's
+	// TrackAudio.duration contract.
+	Duration  int64  `json:"duration,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Retriable bool   `json:"retriable,omitempty"`
 }
