@@ -166,21 +166,23 @@ function onTap(): void {
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  color: #fff;
 }
 
 .status.processing {
-  background: rgba(var(--ion-color-primary-rgb), 0.92);
+  background: var(--ion-color-primary);
+  color: var(--ion-color-primary-contrast);
 }
 
 .status.retry {
   appearance: none;
-  background: rgba(var(--ion-color-danger-rgb, 235 68 90), 0.94);
+  background: var(--ion-color-danger);
+  color: var(--ion-color-danger-contrast);
   cursor: pointer;
 }
 
 .status-spinner {
   width: 14px;
   height: 12px;
+  color: inherit;
 }
 </style>
