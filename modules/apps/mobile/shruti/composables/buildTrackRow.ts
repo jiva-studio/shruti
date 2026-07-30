@@ -70,9 +70,13 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
     deps.preferredLanguage
   const title = resolveTrackTitle(track, contentLang) ?? track.id
   const author = track.authorId ? deps.authorsById.get(track.authorId) : null
-  const authorName = resolveLocalizedNameOrEmpty(author, contentLang)
+  // A personal-library track's author/location may be a raw label (no corpus
+  // entity) — fall back to it when the id doesn't resolve.
+  const authorName =
+    resolveLocalizedNameOrEmpty(author, contentLang) || track.authorRaw?.trim() || ""
   const location = track.locationId ? deps.locationsById?.get(track.locationId) : null
-  const locationName = resolveLocalizedNameOrEmpty(location, contentLang)
+  const locationName =
+    resolveLocalizedNameOrEmpty(location, contentLang) || track.locationRaw?.trim() || ""
 
   const references = groupReferences(track.references, deps.sourcesById, contentLang)
   // 0 (no playable audio) collapses to undefined so the duration field
