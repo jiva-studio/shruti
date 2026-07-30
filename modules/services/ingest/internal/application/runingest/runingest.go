@@ -64,6 +64,9 @@ type Deps struct {
 	// Optional: nil skips it. Best-effort — a failure leaves the track without an
 	// outline/description and never blocks the ingest.
 	Outliner outlineport.Generator
+	// Prober, when set, reads source metadata (uploader, publish date) to fill an
+	// author/date the title lacks. Optional and best-effort.
+	Prober ports.SourceProber
 }
 
 // Service runs the pipeline.
@@ -151,14 +154,19 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// already produced, so a missing key or an LLM hiccup must NOT fail the
 	// ingest — we just fall back to the raw title.
 	ex := s.extract(ctx, lg, cmd.Title)
+	// Source metadata fills what the title didn't carry: the uploader/channel as
+	// an author when none was parsed, and the publish date as a date fallback.
+	info := s.probeSource(ctx, lg, cmd.URL)
 	draft := ingest.TrackDraft{
 		TitleRaw:    firstNonEmpty(ex.Title, cmd.Title),
-		AuthorRaw:   ex.AuthorRaw,
+		AuthorRaw:   firstNonEmpty(ex.AuthorRaw, info.Uploader),
 		LocationRaw: ex.LocationRaw,
 		LangHint:    raw.Language,
 	}
 	if ex.Date != nil {
 		draft.DateRaw = ex.Date.Format("2006-01-02")
+	} else if d, ok := parseYtdlpDate(info.UploadDate); ok {
+		draft.DateRaw = d
 	}
 	if draft, err = s.d.Reviewer.Review(ctx, draft); err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("review: %w", err))
@@ -302,6 +310,30 @@ func (s *Service) outline(ctx context.Context, lg *slog.Logger, blocks []transcr
 		chapters[i] = ingest.OutlineEntry{Title: c.Title, Start: c.Start, End: c.End}
 	}
 	return res.Description, chapters
+}
+
+// probeSource reads best-effort source metadata (uploader, publish date). A nil
+// Prober or any error yields a zero SourceInfo — the pipeline just keeps
+// whatever the title extraction produced.
+func (s *Service) probeSource(ctx context.Context, lg *slog.Logger, url string) ports.SourceInfo {
+	if s.d.Prober == nil {
+		return ports.SourceInfo{}
+	}
+	info, err := s.d.Prober.ProbeSource(ctx, url)
+	if err != nil {
+		lg.WarnContext(ctx, "ingest_probe_failed", "error", err.Error())
+		return ports.SourceInfo{}
+	}
+	return info
+}
+
+// parseYtdlpDate turns yt-dlp's "YYYYMMDD" publish date into the canonical ISO
+// "YYYY-MM-DD"; ok is false for an empty or malformed value.
+func parseYtdlpDate(s string) (string, bool) {
+	if t, err := time.Parse("20060102", strings.TrimSpace(s)); err == nil {
+		return t.Format("2006-01-02"), true
+	}
+	return "", false
 }
 
 func firstNonEmpty(a, b string) string {
