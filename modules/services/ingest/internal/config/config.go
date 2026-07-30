@@ -56,6 +56,14 @@ type Config struct {
 	StorageZone     string // STORAGE_ZONE (Bunny storage-zone name, e.g. akds-lectorium-eu)
 	StorageEndpoint string // STORAGE_ENDPOINT (optional; default https://storage.bunnycdn.com)
 	StorageKey      string // STORAGE_KEY (storage-zone read+write password)
+
+	// --- Metadata extractor (LLM, OpenAI-compatible; OpenRouter by default) ---
+	// OPTIONAL: extraction runs only when both key and model are set. Without
+	// them the worker skips it and a track keeps just its raw title — extraction
+	// never blocks an ingest.
+	MetadataLLMEndpoint string // METADATA_LLM_ENDPOINT (default OpenRouter)
+	MetadataLLMAPIKey   string // METADATA_LLM_API_KEY
+	MetadataLLMModel    string // METADATA_LLM_MODEL
 }
 
 func Load() (*Config, error) {
@@ -88,6 +96,10 @@ func Load() (*Config, error) {
 		StorageZone:     env("STORAGE_ZONE", ""),
 		StorageEndpoint: env("STORAGE_ENDPOINT", ""),
 		StorageKey:      os.Getenv("STORAGE_KEY"),
+
+		MetadataLLMEndpoint: env("METADATA_LLM_ENDPOINT", "https://openrouter.ai/api/v1"),
+		MetadataLLMAPIKey:   os.Getenv("METADATA_LLM_API_KEY"),
+		MetadataLLMModel:    env("METADATA_LLM_MODEL", ""),
 	}
 	if cfg.StreamMaxLen <= 0 {
 		cfg.StreamMaxLen = 10000

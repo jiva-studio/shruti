@@ -35,8 +35,24 @@ type Result struct {
 	AudioKey      string `json:"audio_key,omitempty"`
 	TranscriptKey string `json:"transcript_key,omitempty"`
 	SourceURL     string `json:"source_url,omitempty"`
-	Error         string `json:"error,omitempty"`
-	Retriable     bool   `json:"retriable,omitempty"`
+	// Extracted metadata (best-effort, ready phase): the raw author/location,
+	// the ISO date, the kind tag, and any scripture references parsed from the
+	// title. Empty when the extractor is unconfigured or found nothing. The
+	// orchestrator projects these into the library_items row.
+	AuthorRaw   string `json:"author_raw,omitempty"`
+	LocationRaw string `json:"location_raw,omitempty"`
+	Date        string `json:"date,omitempty"`
+	KindTag     string `json:"kind_tag,omitempty"`
+	References  []Ref  `json:"references,omitempty"`
+	Error       string `json:"error,omitempty"`
+	Retriable   bool   `json:"retriable,omitempty"`
+}
+
+// Ref is one raw scripture reference extracted from the title (source code +
+// dot-joined tokens), before any catalog resolution.
+type Ref struct {
+	Source string `json:"source"`
+	Tokens string `json:"tokens,omitempty"`
 }
 
 // Marshal serializes the result for the `ingest.result` payload field. The

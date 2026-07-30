@@ -25,11 +25,16 @@ type Result struct {
 	// Attempt echoes the WorkCommand's attempt number so a stale/duplicate
 	// `failed` result (already superseded by a re-dispatch) can be discarded —
 	// keeping retry accounting idempotent under at-least-once redelivery.
-	Attempt       int    `json:"attempt,omitempty"`
-	Phase         string `json:"phase"`
-	TrackID       string `json:"track_id,omitempty"`
-	Lang          string `json:"lang,omitempty"`
-	Title         string `json:"title,omitempty"`
+	Attempt int    `json:"attempt,omitempty"`
+	Phase   string `json:"phase"`
+	TrackID string `json:"track_id,omitempty"`
+	Lang    string `json:"lang,omitempty"`
+	Title   string `json:"title,omitempty"`
+	// Extracted metadata (best-effort, ready phase) — projected into the
+	// library_items row so the card shows author / place / date, not just a title.
+	AuthorRaw     string `json:"author_raw,omitempty"`
+	LocationRaw   string `json:"location_raw,omitempty"`
+	Date          string `json:"date,omitempty"`
 	AudioKey      string `json:"audio_key,omitempty"`
 	TranscriptKey string `json:"transcript_key,omitempty"`
 	SourceURL     string `json:"source_url,omitempty"`
