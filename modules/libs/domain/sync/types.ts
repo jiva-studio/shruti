@@ -69,9 +69,7 @@ export interface LibraryItemSyncData {
   readonly authorId: string | null
   readonly locationId: string | null
   readonly date: string | null
-  readonly datePrecision: string | null
   readonly lang: string | null
-  readonly langConfidence: number | null
   readonly error: string | null
   readonly audioKey: string | null
   readonly transcriptKey: string | null

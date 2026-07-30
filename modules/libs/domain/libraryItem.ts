@@ -49,10 +49,8 @@ export interface LibraryItem {
   readonly authorId: AuthorId | null
   readonly locationId: LocationId | null
   readonly date: IsoDate
-  readonly datePrecision: string | null
   /** ASR-detected content language — authoritative when present. */
   readonly lang: LanguageCode | null
-  readonly langConfidence: number | null
   readonly error: string | null
   /** Full bucket key of the audio, present once ready. */
   readonly audioKey: string | null
