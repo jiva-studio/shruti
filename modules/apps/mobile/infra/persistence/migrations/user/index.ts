@@ -17,6 +17,7 @@ import { migration_014_sync_doc_hlc } from "./014_sync_doc_hlc.js"
 import { migration_015_proactive_state_scheduler_authored } from "./015_proactive_state_scheduler_authored.js"
 import { migration_016_listening_sessions_dedupe_storm } from "./016_listening_sessions_dedupe_storm.js"
 import { migration_017_library_items } from "./017_library_items.js"
+import { migration_018_library_items_references } from "./018_library_items_references.js"
 
 /**
  * Ordered list of user-DB migrations. Append new migrations at the end —
@@ -41,4 +42,5 @@ export const userMigrations: readonly Migration[] = [
   migration_015_proactive_state_scheduler_authored,
   migration_016_listening_sessions_dedupe_storm,
   migration_017_library_items,
+  migration_018_library_items_references,
 ]

@@ -6,7 +6,8 @@ import type {
 } from "@lib/persistence/user"
 import type { Note } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
-import { rowToNote, rowToPlaylistItem } from "./rowMappers.js"
+import type { Reference } from "@lib/domain/reference.js"
+import { parseRefsJson, rowToNote, rowToPlaylistItem } from "./rowMappers.js"
 
 /**
  * The single, shared set of client-native (snake_case) wire snapshots for the
@@ -188,6 +189,9 @@ export interface LibraryItemWire {
   transcript_key: string | null
   duration: number | null
   cover_key: string | null
+  /** Scripture references in the domain shape, as the server projects them
+   *  (raw `sourceName` today, resolved `sourceId` once normalized). */
+  references: readonly Reference[] | null
   created_at: number | null
   updated_at: number | null
 }
@@ -214,6 +218,7 @@ export function libraryItemRowToWire(row: LibraryItemRow): LibraryItemWire {
     transcript_key: row.transcript_key,
     duration: row.duration,
     cover_key: row.cover_key,
+    references: parseRefsJson(row.references_json),
     created_at: row.created_at,
     updated_at: row.updated_at,
   }

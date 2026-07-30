@@ -3,6 +3,7 @@ import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { LibraryItem, LibraryItemOrigin, LibraryItemStatus } from "@lib/domain/libraryItem.js"
+import type { Reference } from "@lib/domain/reference.js"
 import type {
   LibraryItemRow,
   ListeningSessionRow,
@@ -76,8 +77,22 @@ export function rowToLibraryItem(row: LibraryItemRow): LibraryItem {
     transcriptKey: row.transcript_key,
     duration: row.duration,
     coverKey: row.cover_key,
+    references: parseRefsJson(row.references_json) ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+/** Parse the stored `references_json` column into domain References, tolerating
+ *  NULL / malformed JSON (→ null). The column holds the `Reference` shape the
+ *  server projects verbatim, so this is a plain parse — no wire mapping. */
+export function parseRefsJson(json: string | null): readonly Reference[] | null {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? (parsed as Reference[]) : null
+  } catch {
+    return null
   }
 }
 

@@ -96,6 +96,7 @@ func readyResult(res ingest.Result) []byte {
 		"location_raw":   res.LocationRaw,
 		"date_raw":       res.Date,
 		"date":           res.Date,
+		"references":     res.References,
 		"cover_key":      res.CoverKey,
 		"audio_key":      res.AudioKey,
 		"transcript_key": res.TranscriptKey,
