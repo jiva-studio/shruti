@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/jiva-studio/shruti/orchestrator/internal/domain/ingest"
 	"github.com/jiva-studio/shruti/orchestrator/internal/domain/job"
 	"github.com/jiva-studio/shruti/orchestrator/internal/ports"
@@ -176,7 +174,6 @@ func resPayload(t *testing.T, r ingest.Result) []byte {
 	return b
 }
 
-func jobIDFor(msgID string) string { return uuid.NewSHA1(jobNamespace, []byte(msgID)).String() }
 
 func lastTrackType(evs []ingest.TrackEvent) string {
 	if len(evs) == 0 {
@@ -192,7 +189,7 @@ func TestRequest_CreatesJobAndDispatchesWork(t *testing.T) {
 	if err := h.req.Process(context.Background(), "msg-1", reqPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process: %v", err)
 	}
-	jobID := jobIDFor("msg-1")
+	jobID := jobIDFor("user-1", "msg-1", "https://x/y")
 	j, _ := h.repo.Get(context.Background(), jobID)
 	if j == nil || j.State != job.StateQueued {
 		t.Fatalf("job not queued: %+v", j)
@@ -218,7 +215,7 @@ func TestRequest_NotPro_FailsWithoutDispatch(t *testing.T) {
 	if err := h.req.Process(context.Background(), "msg-2", reqPayload(t, "https://x/y")); err != nil {
 		t.Fatalf("Process should ack (nil), got %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobIDFor("msg-2"))
+	j, _ := h.repo.Get(context.Background(), jobIDFor("user-1", "msg-2", "https://x/y"))
 	if j == nil || j.State != job.StateFailed {
 		t.Fatalf("job not failed: %+v", j)
 	}
@@ -245,6 +242,21 @@ func TestRequest_ExistingUnsettled_NoRedispatch(t *testing.T) {
 	}
 }
 
+func TestRequest_SameUrlReAdded_Deduped(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	// A later add of the same lecture (DIFFERENT broker message, same user+url)
+	// maps to the same job and must not re-dispatch or create a second job.
+	if err := h.req.Process(context.Background(), "msg-a", reqPayload(t, "https://youtu.be/2QezV4DhHVo")); err != nil {
+		t.Fatalf("first add: %v", err)
+	}
+	if err := h.req.Process(context.Background(), "msg-b", reqPayload(t, "https://www.youtube.com/watch?v=2QezV4DhHVo&t=30")); err != nil {
+		t.Fatalf("re-add: %v", err)
+	}
+	if n := len(h.events.works()); n != 1 {
+		t.Fatalf("re-add of the same lecture must not re-dispatch: got %d ingest.work", n)
+	}
+}
+
 // --- ResultHandler tests ---
 
 // seed creates a queued job the way the RequestHandler would.
@@ -253,7 +265,7 @@ func (h *harness) seedQueued(t *testing.T, msgID, url string) string {
 	if err := h.req.Process(context.Background(), msgID, reqPayload(t, url)); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	return jobIDFor(msgID)
+	return jobIDFor("user-1", msgID, url)
 }
 
 func TestResult_Processing_MovesToRunning(t *testing.T) {
