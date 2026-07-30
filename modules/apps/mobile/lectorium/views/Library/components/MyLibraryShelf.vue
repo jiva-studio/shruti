@@ -78,14 +78,18 @@ function onRetry(): void {
   margin-bottom: 4px;
 }
 
-/* Horizontal scroller aligned to the shared 16px list gutter. */
+/* Same horizontal carousel as the collections shelves (CollectionsCarousel):
+ * 16px side insets + scroll-padding so the first/last card get an edge gutter
+ * without shifting the container, and the scrollbar is hidden (it's a phone). */
 .shelf-scroll {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   overflow-x: auto;
-  padding: 0 16px 4px;
-  scroll-snap-type: x proximity;
+  scroll-snap-type: x mandatory;
+  padding: 0 16px 14px;
+  scroll-padding-inline: 16px;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 
 .shelf-scroll::-webkit-scrollbar {
