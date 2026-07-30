@@ -35,6 +35,7 @@ type Result struct {
 	AuthorRaw     string `json:"author_raw,omitempty"`
 	LocationRaw   string `json:"location_raw,omitempty"`
 	Date          string `json:"date,omitempty"`
+	CoverKey      string `json:"cover_key,omitempty"`
 	AudioKey      string `json:"audio_key,omitempty"`
 	TranscriptKey string `json:"transcript_key,omitempty"`
 	SourceURL     string `json:"source_url,omitempty"`

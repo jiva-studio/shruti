@@ -24,9 +24,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -164,6 +167,10 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		"duration_ms", ms(stage), "blocks", len(reviewed.Blocks),
 		"audio_key", aKey, "transcript_key", tKey)
 
+	// Cover is best-effort: fetch the source thumbnail and store it under the
+	// public cover key. A miss just means the track has no art — never fatal.
+	coverKey := s.storeCover(ctx, lg, cmd.URL, hash)
+
 	lg.InfoContext(ctx, "ingest_ready", "lang", lang, "total_ms", ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:         cmd.JobID,
@@ -178,6 +185,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		Date:          draft.Date,
 		KindTag:       ex.KindTag,
 		References:    toResultRefs(ex.References),
+		CoverKey:      coverKey,
 		AudioKey:      aKey,
 		TranscriptKey: tKey,
 		SourceURL:     cmd.URL,
@@ -267,6 +275,62 @@ func toResultRefs(refs []metadata.Ref) []ingest.Ref {
 		out = append(out, ingest.Ref{Source: r.SourceCode, Tokens: r.Tokens})
 	}
 	return out
+}
+
+// _ytIDRe pulls the 11-char video id out of any watch / shorts / live / youtu.be
+// URL so we can build the free cover image URL from it.
+var _ytIDRe = regexp.MustCompile(`(?:youtube\.com/(?:watch\?[^\s]*\bv=|shorts/|live/)|youtu\.be/)([\w-]{11})`)
+
+// storeCover fetches the source's thumbnail (YouTube only, from its free
+// i.ytimg.com cover) and stores it at the public cover key. Best-effort: no
+// derivable thumbnail, a fetch/put error, or an empty body all yield "" and the
+// track simply has no art — a cover miss never fails an ingest.
+func (s *Service) storeCover(ctx context.Context, lg *slog.Logger, sourceURL, hash string) string {
+	m := _ytIDRe.FindStringSubmatch(sourceURL)
+	if m == nil {
+		return ""
+	}
+	thumb := "https://i.ytimg.com/vi/" + m[1] + "/hqdefault.jpg"
+	body, ctype, err := httpGetImage(ctx, thumb)
+	if err != nil || len(body) == 0 {
+		if err != nil {
+			lg.WarnContext(ctx, "ingest_cover_fetch_failed", "error", err.Error())
+		}
+		return ""
+	}
+	key := blobpath.CoverKey(hash)
+	if ctype == "" {
+		ctype = "image/jpeg"
+	}
+	if err := s.d.Blob.Put(ctx, key, body, ctype); err != nil {
+		lg.WarnContext(ctx, "ingest_cover_put_failed", "error", err.Error())
+		return ""
+	}
+	return key
+}
+
+// httpGetImage fetches an image URL with a short timeout, returning its bytes
+// and content-type. Non-200 is an error.
+func httpGetImage(ctx context.Context, url string) ([]byte, string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("cover GET %s: HTTP %d", url, resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
+	if err != nil {
+		return nil, "", err
+	}
+	return body, resp.Header.Get("Content-Type"), nil
 }
 
 // --- blob keys (content-addressed public path; shared scheme with the MCP pipeline) ---

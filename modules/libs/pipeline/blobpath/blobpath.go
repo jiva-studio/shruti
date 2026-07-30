@@ -19,3 +19,9 @@ func AudioKey(trackID, version string) string {
 func TranscriptKey(trackID, lang string) string {
 	return "public/tracks/" + trackID + "/transcripts/" + lang + ".json"
 }
+
+// CoverKey is the public bucket key of a track's cover image:
+// public/tracks/{id}/cover.jpg
+func CoverKey(trackID string) string {
+	return "public/tracks/" + trackID + "/cover.jpg"
+}
