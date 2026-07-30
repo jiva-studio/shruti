@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/glossary"
 	catalogport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/catalog"
+	glossary "github.com/jiva-studio/lectorium/pipeline/glossary"
 )
 
 // FuzzyIndex builds one in-memory glossary.Glossary per dict kind on

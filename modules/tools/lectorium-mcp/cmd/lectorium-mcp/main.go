@@ -69,20 +69,17 @@ import (
 	openaicompattranslate "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/dicttranslate/openaicompat"
 	openaicompatembed "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/embed/openaicompat"
 	osfs "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/fs/os"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/glossary"
 	sha256hash "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/hashing/sha256"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
 	openrouterimage "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/imagegen/openrouter"
 	sqliteregistry "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
 	sqlitelibrary "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/library/sqlite"
-	sqlitepending "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/pending/sqlite"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/canonical"
 	openaicompatmeta "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/openaicompat"
 	fsoutline "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/outline/fs"
-	openaicompatoutline "github.com/jiva-studio/lectorium/pipeline/outline/openaicompat"
+	sqlitepending "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/pending/sqlite"
 	reviewreg "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
-	openaicompatreview "github.com/jiva-studio/lectorium/pipeline/review/openaicompat"
 	throttledreview "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/throttled"
 	sqliteruns "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/runregistry/sqlite"
 	awss3 "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/s3/aws"
@@ -99,11 +96,15 @@ import (
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/tools"
 	alignpdfport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
-	glossaryport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/glossary"
-	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
-	"github.com/jiva-studio/lectorium/pipeline/ports/sentencesplit"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/worker"
+	glossary "github.com/jiva-studio/lectorium/pipeline/glossary"
+	openaicompatoutline "github.com/jiva-studio/lectorium/pipeline/outline/openaicompat"
+	glossaryport "github.com/jiva-studio/lectorium/pipeline/ports/glossary"
+	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
+	"github.com/jiva-studio/lectorium/pipeline/ports/sentencesplit"
+	openaicompatreview "github.com/jiva-studio/lectorium/pipeline/review/openaicompat"
+	"gopkg.in/yaml.v3"
 )
 
 // runBackfillAssetHashes opens current.db and (re)hashes every published
@@ -1127,50 +1128,30 @@ func glossaryOrNil(g *glossary.Glossary) glossaryport.Matcher {
 	return g
 }
 
-// loadGlossaryOrNil resolves the glossary YAML and parses it.
-//
-// Resolution order:
-//  1. `override` if non-empty (operator override; taken verbatim).
-//  2. `<bin_dir>/glossary.yaml` (deployment: YAML shipped
-//     next to the binary).
-//  3. `<bin_dir>/../glossary.yaml` (dev: `make build` puts
-//     the binary in `bin/`, the YAML lives at the module root).
-//
-// Returns nil on any failure (missing file, bad YAML) — the use case
-// runs unchanged when the glossary is absent.
+// loadGlossaryOrNil returns the review glossary. `override`, when set, is an
+// operator YAML file taken verbatim; otherwise the curated dictionary embedded
+// in the shared glossary package is used. Returns nil only when even the
+// embedded data fails to parse — the use case runs unchanged without it.
 func loadGlossaryOrNil(override string) *glossary.Glossary {
-	var candidates []string
 	if override != "" {
-		candidates = []string{override}
-	} else {
-		exe, err := os.Executable()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[review] glossary disabled: cannot locate binary: %v\n", err)
-			return nil
-		}
-		binDir := filepath.Dir(exe)
-		candidates = []string{
-			filepath.Join(binDir, "glossary.yaml"),
-			filepath.Join(binDir, "..", "glossary.yaml"),
-		}
-	}
-	var path string
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			path = p
-			break
+		if body, err := os.ReadFile(override); err == nil {
+			var entries []glossary.Entry
+			if err := yaml.Unmarshal(body, &entries); err == nil {
+				fmt.Fprintf(os.Stderr, "[review] glossary loaded: %d entries from %s\n", len(entries), override)
+				return glossary.Build(entries)
+			} else {
+				fmt.Fprintf(os.Stderr, "[review] glossary override parse failed, using embedded: %v\n", err)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "[review] glossary override unreadable, using embedded: %v\n", err)
 		}
 	}
-	if path == "" {
-		fmt.Fprintf(os.Stderr, "[review] glossary disabled (no file found, tried %v)\n", candidates)
-		return nil
-	}
-	g, err := glossary.Load(path)
+	g, err := glossary.Embedded()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[review] glossary disabled: %v\n", err)
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "[review] glossary loaded: %d entries from %s\n", len(g.Entries), path)
+	fmt.Fprintf(os.Stderr, "[review] glossary loaded: %d embedded entries\n", len(g.Entries))
 	return g
 }
 

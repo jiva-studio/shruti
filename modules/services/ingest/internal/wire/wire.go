@@ -28,9 +28,11 @@ import (
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/review"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/transcribe/deepgram"
 	"github.com/jiva-studio/lectorium/ingest/internal/ports"
+	glossary "github.com/jiva-studio/lectorium/pipeline/glossary"
 	"github.com/jiva-studio/lectorium/pipeline/metadata"
 	openaicompatmeta "github.com/jiva-studio/lectorium/pipeline/metadata/openaicompat"
 	openaicompatoutline "github.com/jiva-studio/lectorium/pipeline/outline/openaicompat"
+	glossaryport "github.com/jiva-studio/lectorium/pipeline/ports/glossary"
 	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 	hybrid "github.com/jiva-studio/lectorium/pipeline/review/hybrid"
@@ -112,6 +114,7 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		LLMReviewer: buildReviewer(ctx, cfg),
 		Outliner:    buildOutliner(ctx, cfg),
 		Prober:      fetcher,
+		Glossary:    buildGlossary(ctx),
 	})
 	return svc, true, nil
 }
@@ -222,6 +225,17 @@ func buildOutliner(ctx context.Context, cfg *config.Config) outlineport.Generato
 		return nil
 	}
 	return gen
+}
+
+// buildGlossary builds the shared review glossary from its embedded dictionary;
+// nil (→ review runs without term hints) only if the embedded data fails.
+func buildGlossary(ctx context.Context) glossaryport.Matcher {
+	g, err := glossary.Embedded()
+	if err != nil {
+		slog.WarnContext(ctx, "ingest_glossary_disabled", "error", err.Error())
+		return nil
+	}
+	return g
 }
 
 // resultAdapter bridges the domain-facing ports.ResultPublisher to the

@@ -38,6 +38,7 @@ import (
 	"github.com/jiva-studio/lectorium/pipeline/blobpath"
 	"github.com/jiva-studio/lectorium/pipeline/metadata"
 	"github.com/jiva-studio/lectorium/pipeline/outline"
+	glossaryport "github.com/jiva-studio/lectorium/pipeline/ports/glossary"
 	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 	"github.com/jiva-studio/lectorium/pipeline/review"
@@ -67,6 +68,9 @@ type Deps struct {
 	// Prober, when set, reads source metadata (uploader, publish date) to fill an
 	// author/date the title lacks. Optional and best-effort.
 	Prober ports.SourceProber
+	// Glossary, when set, injects canonical Sanskrit/proper-noun hints into the
+	// LLM review (same dictionary as the corpus tool). Optional.
+	Glossary glossaryport.Matcher
 }
 
 // Service runs the pipeline.
@@ -134,7 +138,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// failures degrade to raw text inside ReviewTranscript, never fatal.
 	reviewed := s.d.Reviewer.NormalizeTranscript(raw)
 	if s.d.LLMReviewer != nil {
-		reviewed = review.ReviewTranscript(ctx, s.d.LLMReviewer, raw, review.Options{})
+		reviewed = review.ReviewTranscript(ctx, s.d.LLMReviewer, raw, review.Options{Glossary: s.d.Glossary})
 	}
 	if len(reviewed.Blocks) == 0 {
 		// Deepgram returned 200 but no usable speech. Announcing this as ready
