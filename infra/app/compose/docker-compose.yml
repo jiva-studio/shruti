@@ -912,6 +912,8 @@ services:
       REVIEW_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
       REVIEW_LLM_BASELINE: ${SHRUTI_REVIEW_LLM_BASELINE:-google/gemini-3.1-flash-lite}
       REVIEW_LLM_PREMIUM: ${SHRUTI_REVIEW_LLM_PREMIUM:-google/gemini-3-flash-preview,google/gemini-3.1-pro-preview}
+      OUTLINE_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
+      OUTLINE_LLM_MODEL: ${SHRUTI_OUTLINE_LLM_MODEL:-google/gemini-3-flash-preview}
       PORT: "8088"
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_INGEST_TAG:-latest}

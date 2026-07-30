@@ -7,7 +7,13 @@ import type {
 import type { Note } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { Reference } from "@lib/domain/reference.js"
-import { parseRefsJson, rowToNote, rowToPlaylistItem } from "./rowMappers.js"
+import {
+  parseOutlineJson,
+  parseRefsJson,
+  rowToNote,
+  rowToPlaylistItem,
+  type OutlineEntryJson,
+} from "./rowMappers.js"
 
 /**
  * The single, shared set of client-native (snake_case) wire snapshots for the
@@ -192,6 +198,10 @@ export interface LibraryItemWire {
   /** Scripture references in the domain shape, as the server projects them
    *  (raw `sourceName` today, resolved `sourceId` once normalized). */
   references: readonly Reference[] | null
+  /** LLM lecture overview, as the server projects it. */
+  description: string | null
+  /** Coarse chapter outline `[{title,start,end}]` (ms), as the server projects it. */
+  outline: readonly OutlineEntryJson[] | null
   created_at: number | null
   updated_at: number | null
 }
@@ -219,6 +229,8 @@ export function libraryItemRowToWire(row: LibraryItemRow): LibraryItemWire {
     duration: row.duration,
     cover_key: row.cover_key,
     references: parseRefsJson(row.references_json),
+    description: row.description,
+    outline: parseOutlineJson(row.outline_json),
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
