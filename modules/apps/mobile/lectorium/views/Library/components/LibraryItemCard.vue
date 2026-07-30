@@ -57,7 +57,7 @@ const isReady = computed(() => props.item.status === "ready")
 const coverUrl = computed(() => resolveAssetUrl(props.item.coverKey ?? undefined))
 const title = computed(() => props.item.titleRaw?.trim() || t("library.untitled"))
 const subtitle = computed(() => {
-  const parts = [props.item.authorRaw, props.item.dateRaw].filter(
+  const parts = [props.item.authorRaw, props.item.locationRaw, props.item.dateRaw].filter(
     (p): p is string => !!p && p.trim().length > 0
   )
   return parts.join(" · ")
