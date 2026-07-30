@@ -1,8 +1,6 @@
 package glossary
 
 import (
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -139,12 +137,10 @@ func TestRenderExtraPrompt_Format(t *testing.T) {
 	}
 }
 
-func TestLoad_RealGlossary(t *testing.T) {
-	_, file, _, _ := runtime.Caller(0)
-	path := filepath.Join(filepath.Dir(file), "..", "..", "..", "glossary.yaml")
-	g, err := Load(path)
+func TestEmbedded_RealGlossary(t *testing.T) {
+	g, err := Embedded()
 	if err != nil {
-		t.Fatalf("load: %v", err)
+		t.Fatalf("embedded: %v", err)
 	}
 	if len(g.Entries) < 100 {
 		t.Errorf("expected ≥100 entries, got %d", len(g.Entries))
@@ -178,4 +174,3 @@ func containsCanonical(hits []Hint, canonical string) bool {
 	}
 	return false
 }
-
