@@ -8,7 +8,12 @@ import type {
 } from "./core.js"
 import type { Reference } from "./reference.js"
 import type { Track } from "./track.js"
-import type { TrackAudio, TrackTranscriptRef, TrackVariant } from "./trackVariant.js"
+import type {
+  TrackAudio,
+  TrackOutlineChapter,
+  TrackTranscriptRef,
+  TrackVariant,
+} from "./trackVariant.js"
 import { pickPlayableAudio } from "./trackVariant.js"
 
 /** Ingest lifecycle of a personal-library item. Server-authored; the client
@@ -55,6 +60,10 @@ export interface LibraryItem {
   readonly transcriptKey: string | null
   readonly duration: number | null
   readonly coverKey: string | null
+  /** LLM overview of the lecture, generated on ready; null when not generated. */
+  readonly description: string | null
+  /** Coarse chapter outline (table of contents), null when not generated. */
+  readonly outline: readonly TrackOutlineChapter[] | null
   /** Raw scripture references parsed from the title (unresolved — carried as
    *  `sourceName` + tokens, rendered as-is). Empty when none. */
   readonly references: readonly Reference[]
@@ -103,8 +112,8 @@ export function libraryItemToTrack(item: LibraryItem): Track | null {
     audios,
     audio: pickPlayableAudio(audios),
     transcript,
-    outline: null,
-    description: null,
+    outline: item.outline,
+    description: item.description,
   }
 
   return {
