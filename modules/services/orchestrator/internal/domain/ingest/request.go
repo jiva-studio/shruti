@@ -15,6 +15,10 @@ type Request struct {
 	Token     string `json:"token"`
 	UserID    string `json:"user_id,omitempty"`
 	Title     string `json:"title,omitempty"`
+	// Author is the lecturer chat resolved (the searched-for author, or the
+	// source channel via oEmbed); forwarded so the worker fills it when the
+	// title carries no author. Empty when chat had none.
+	Author string `json:"author,omitempty"`
 }
 
 // DecodeRequest parses a broker payload into a Request.

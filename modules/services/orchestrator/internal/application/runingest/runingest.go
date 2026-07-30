@@ -340,6 +340,7 @@ func (c *core) dispatchWork(ctx context.Context, tx ports.Tx, jobID, owner strin
 		RequestID: req.RequestID,
 		URL:       req.URL,
 		Title:     req.Title,
+		Author:    req.Author,
 		OwnerID:   owner,
 		Attempt:   attempt,
 	}.Marshal()
