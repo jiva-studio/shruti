@@ -31,7 +31,7 @@ async def test_redis_publish_xadds_payload(publisher) -> None:
     import json
 
     ok = await publisher.publish(
-        user_id="u1", url="https://y/1", jwt="tok", title="Lecture 1"
+        user_id="u1", url="https://y/1", jwt="tok", title="Lecture 1", author="Some Swami"
     )
     assert ok is True
     entries = await publisher._client.xrange("ingest.request")
@@ -46,6 +46,7 @@ async def test_redis_publish_xadds_payload(publisher) -> None:
         "token": "tok",
         "user_id": "u1",
         "title": "Lecture 1",
+        "author": "Some Swami",
     }
 
 
