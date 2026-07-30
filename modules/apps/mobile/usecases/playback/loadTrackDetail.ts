@@ -5,6 +5,7 @@ import type { ILibraryItemRepository } from "@lib/domain/ports/libraryItemReposi
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
 import type { Track } from "@lib/domain/track.js"
+import { libraryItemToTrack } from "@lib/domain/libraryItem.js"
 import { err, ok, type Result } from "@kit/core"
 
 export interface LoadTrackDetailInput {
@@ -26,6 +27,11 @@ export interface TrackDetail {
   readonly track: Track
   readonly author: Author | null
   readonly availableLanguages: readonly LanguageCode[]
+  /** Raw author/location for a personal-library track whose catalog ids are
+   *  unresolved — the view shows these when there is no `author` entity /
+   *  resolved location. Null for corpus tracks. */
+  readonly authorRaw: string | null
+  readonly locationRaw: string | null
 }
 
 /**
@@ -49,9 +55,9 @@ export async function loadTrackDetail(
 ): Promise<Result<TrackDetail, LoadTrackDetailError>> {
   // Corpus first; fall back to the personal library (a user-added lecture has
   // a content hash that isn't in the corpus `tracks` table).
-  const track =
-    (await deps.tracks.getById(input.trackId)) ??
-    (await deps.libraryItems.getTrackByTrackId(input.trackId))
+  const corpusTrack = await deps.tracks.getById(input.trackId)
+  const libraryItem = corpusTrack ? null : await deps.libraryItems.getByTrackId(input.trackId)
+  const track = corpusTrack ?? (libraryItem ? libraryItemToTrack(libraryItem) : null)
   if (!track) return err("not-found")
 
   // Author + transcript languages are independent — fetch in parallel.
@@ -60,5 +66,11 @@ export async function loadTrackDetail(
     deps.transcripts.availableLanguages(input.trackId),
   ])
 
-  return ok({ track, author, availableLanguages })
+  return ok({
+    track,
+    author,
+    availableLanguages,
+    authorRaw: libraryItem?.authorRaw ?? null,
+    locationRaw: libraryItem?.locationRaw ?? null,
+  })
 }
