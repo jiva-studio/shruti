@@ -3,37 +3,41 @@
 // pipeline injects only the relevant canonical forms into the LLM prompt
 // (RAG-style) instead of every term. Shared by the corpus tool and the
 // personal-library ingest worker; the curated data is embedded so consumers
-// need no external file. Stdlib-only.
+// need no external file.
 package glossary
 
 import (
 	_ "embed"
-	"encoding/json"
 	"fmt"
+
+	"gopkg.in/yaml.v3"
 )
 
-// glossary.json is generated from the human-editable glossary.yaml in this
-// directory (yaml → json), and embedded so consumers need no external file.
-//
-//go:embed glossary.json
+//go:embed glossary.yaml
 var embedded []byte
 
 // Entry is one dictionary row.
 type Entry struct {
 	// Canonical maps ISO-639 lang code → canonical form for that language.
-	Canonical map[string]string `json:"canonical"`
-	Category  string            `json:"category"`
-	Hint      string            `json:"hint,omitempty"`
+	Canonical map[string]string `yaml:"canonical"`
+	Category  string            `yaml:"category"`
+	Hint      string            `yaml:"hint,omitempty"`
 	// Aliases maps lang → extra spellings that ALSO route to this entry; the
 	// hint shown to the LLM is always the Canonical form.
-	Aliases map[string][]string `json:"aliases,omitempty"`
+	Aliases map[string][]string `yaml:"aliases,omitempty"`
 }
 
 // Embedded builds the matcher from the compiled-in curated dictionary.
 func Embedded() (*Glossary, error) {
+	return Parse(embedded)
+}
+
+// Parse builds a matcher from glossary YAML bytes (used for an operator's
+// override file).
+func Parse(body []byte) (*Glossary, error) {
 	var entries []Entry
-	if err := json.Unmarshal(embedded, &entries); err != nil {
-		return nil, fmt.Errorf("glossary: parse embedded: %w", err)
+	if err := yaml.Unmarshal(body, &entries); err != nil {
+		return nil, fmt.Errorf("glossary: parse: %w", err)
 	}
 	return Build(entries), nil
 }
