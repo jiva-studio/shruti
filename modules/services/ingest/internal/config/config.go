@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config is the ingest worker's runtime configuration. The worker is STATELESS
@@ -66,13 +67,15 @@ type Config struct {
 	MetadataLLMModel    string // METADATA_LLM_MODEL
 
 	// --- Transcript reviewer (LLM, OpenAI-compatible) ---
-	// OPTIONAL: an LLM cleanup/segmentation pass over the transcript runs only
-	// when both key and model are set; otherwise the deterministic per-segment
-	// normalize is used. Review never blocks an ingest.
-	ReviewLLMEndpoint  string // REVIEW_LLM_ENDPOINT (default OpenRouter)
-	ReviewLLMAPIKey    string // REVIEW_LLM_API_KEY
-	ReviewLLMModel     string // REVIEW_LLM_MODEL
-	ReviewLLMReasoning string // REVIEW_LLM_REASONING ("" | off | on | low|medium|high | <int>)
+	// OPTIONAL: an LLM cleanup/segmentation pass over the transcript, using the
+	// SAME shared review pipeline (and the SAME hybrid baseline+premium chain) as
+	// the corpus tool. Runs only when key + baseline model are set; otherwise the
+	// deterministic per-segment normalize is used. Review never blocks an ingest.
+	ReviewLLMEndpoint  string   // REVIEW_LLM_ENDPOINT (default OpenRouter)
+	ReviewLLMAPIKey    string   // REVIEW_LLM_API_KEY
+	ReviewLLMBaseline  string   // REVIEW_LLM_BASELINE — the every-chunk model
+	ReviewLLMPremium   []string // REVIEW_LLM_PREMIUM — comma-sep per-island fixup chain
+	ReviewLLMReasoning string   // REVIEW_LLM_REASONING ("" | off | on | low|medium|high | <int>)
 }
 
 func Load() (*Config, error) {
@@ -112,7 +115,8 @@ func Load() (*Config, error) {
 
 		ReviewLLMEndpoint:  env("REVIEW_LLM_ENDPOINT", "https://openrouter.ai/api/v1"),
 		ReviewLLMAPIKey:    os.Getenv("REVIEW_LLM_API_KEY"),
-		ReviewLLMModel:     env("REVIEW_LLM_MODEL", ""),
+		ReviewLLMBaseline:  env("REVIEW_LLM_BASELINE", "google/gemini-3.1-flash-lite"),
+		ReviewLLMPremium:   csv(env("REVIEW_LLM_PREMIUM", "google/gemini-3-flash-preview,google/gemini-3.1-pro-preview")),
 		ReviewLLMReasoning: env("REVIEW_LLM_REASONING", ""),
 	}
 	if cfg.StreamMaxLen <= 0 {
@@ -128,6 +132,17 @@ func hostname() string {
 		return h
 	}
 	return "ingest"
+}
+
+// csv splits a comma-separated env value into trimmed, non-empty parts.
+func csv(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func env(k, def string) string {

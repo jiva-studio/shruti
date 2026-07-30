@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	hybridreview "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/hybrid"
+	hybridreview "github.com/jiva-studio/lectorium/pipeline/review/hybrid"
 	"github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 

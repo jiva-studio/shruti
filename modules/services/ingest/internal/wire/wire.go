@@ -31,6 +31,7 @@ import (
 	"github.com/jiva-studio/lectorium/pipeline/metadata"
 	openaicompatmeta "github.com/jiva-studio/lectorium/pipeline/metadata/openaicompat"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
+	hybrid "github.com/jiva-studio/lectorium/pipeline/review/hybrid"
 	openaicompatreview "github.com/jiva-studio/lectorium/pipeline/review/openaicompat"
 )
 
@@ -145,10 +146,8 @@ func buildBlob(ctx context.Context, cfg *config.Config) (ports.BlobStore, []stri
 	}
 }
 
-// buildExtractor assembles the shared LLM metadata extractor when an API key +
-// model are configured; otherwise returns nil so the pipeline skips extraction
-// (best-effort — a track keeps its raw title). A misconfigured extractor logs
-// and degrades to nil rather than blocking the consumer.
+// buildExtractor builds the shared LLM metadata extractor; nil (→ raw title
+// only) when unconfigured or on error.
 func buildExtractor(ctx context.Context, cfg *config.Config) metadata.Extractor {
 	if cfg.MetadataLLMAPIKey == "" || cfg.MetadataLLMModel == "" {
 		slog.WarnContext(ctx, "ingest_extractor_disabled",
@@ -167,28 +166,36 @@ func buildExtractor(ctx context.Context, cfg *config.Config) metadata.Extractor 
 	return ex
 }
 
-// buildReviewer assembles the shared LLM transcript reviewer when an API key +
-// model are configured; otherwise returns nil so the pipeline falls back to the
-// deterministic per-segment normalize (a misconfigured reviewer logs and
-// degrades to nil rather than blocking the consumer).
+// buildReviewer composes the same baseline + premium hybrid the corpus tool
+// uses; nil (→ deterministic normalize) when unconfigured or on error.
 func buildReviewer(ctx context.Context, cfg *config.Config) reviewport.Reviewer {
-	if cfg.ReviewLLMAPIKey == "" || cfg.ReviewLLMModel == "" {
+	if cfg.ReviewLLMAPIKey == "" || cfg.ReviewLLMBaseline == "" {
 		slog.WarnContext(ctx, "ingest_reviewer_disabled",
-			"reason", "REVIEW_LLM_API_KEY / REVIEW_LLM_MODEL unset")
+			"reason", "REVIEW_LLM_API_KEY / REVIEW_LLM_BASELINE unset")
 		return nil
 	}
-	rv, err := openaicompatreview.New(openaicompatreview.Config{
-		NameAlias: cfg.ReviewLLMModel,
-		Endpoint:  cfg.ReviewLLMEndpoint,
-		APIKey:    cfg.ReviewLLMAPIKey,
-		Model:     cfg.ReviewLLMModel,
-		Reasoning: cfg.ReviewLLMReasoning,
-	})
-	if err != nil {
-		slog.WarnContext(ctx, "ingest_reviewer_disabled", "error", err.Error())
-		return nil
+	mk := func(model string) (reviewport.Reviewer, error) {
+		return openaicompatreview.New(openaicompatreview.Config{
+			NameAlias: model,
+			Endpoint:  cfg.ReviewLLMEndpoint,
+			APIKey:    cfg.ReviewLLMAPIKey,
+			Model:     model,
+			Reasoning: cfg.ReviewLLMReasoning,
+		})
 	}
-	return rv
+	chain := make([]reviewport.Reviewer, 0, 1+len(cfg.ReviewLLMPremium))
+	for _, model := range append([]string{cfg.ReviewLLMBaseline}, cfg.ReviewLLMPremium...) {
+		rv, err := mk(model)
+		if err != nil {
+			slog.WarnContext(ctx, "ingest_reviewer_disabled", "model", model, "error", err.Error())
+			return nil
+		}
+		chain = append(chain, rv)
+	}
+	if len(chain) == 1 {
+		return chain[0]
+	}
+	return hybrid.New(chain, 0.70, 1, 8) // threshold, expand, premium_min_chars — corpus defaults
 }
 
 // resultAdapter bridges the domain-facing ports.ResultPublisher to the
