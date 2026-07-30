@@ -1,10 +1,17 @@
 <template>
-  <button
-    type="button"
+  <!-- role=button, NOT a native <button>: the card holds nested interactive
+       bits (the failed-status Retry). A <button> parent makes that invalid HTML
+       the parser hoists OUT of the card, so the status leaks over other
+       sections. A div can never reparent its children out. -->
+  <div
     class="lib-card"
     :class="{ pending: !isReady }"
-    :disabled="!isReady"
+    role="button"
+    :tabindex="isReady ? 0 : -1"
+    :aria-disabled="!isReady || undefined"
     @click="onTap"
+    @keydown.enter.prevent="onTap"
+    @keydown.space.prevent="onTap"
   >
     <div class="cover">
       <CachedImage v-if="coverUrl" :url="coverUrl" :alt="title" />
@@ -25,7 +32,7 @@
       />
       <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
     </div>
-  </button>
+  </div>
 </template>
 
 <script setup lang="ts">
