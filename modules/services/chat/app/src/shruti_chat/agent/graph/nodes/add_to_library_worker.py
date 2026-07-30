@@ -103,6 +103,17 @@ def _concrete_lecture_url(text: str) -> str | None:
     return None
 
 
+def _is_ingestable_url(url: str) -> bool:
+    """Whether an ingest worker can actually fetch this URL — currently a
+    YouTube link or a direct audio file (mirrors the ingest service's extractor
+    registry). Search candidates that fail this are dropped before display so we
+    never offer the user something we can't add. THIS is the extension point for
+    new sources: when a downloader for another site is added to ingest, add its
+    URL shape to `_concrete_lecture_url` and its candidates start flowing here
+    automatically."""
+    return _concrete_lecture_url(url) is not None
+
+
 async def _youtube_oembed(url: str) -> tuple[str, str, str]:
     """Best-effort (title, author, thumbnail) for a YouTube URL via the keyless
     oEmbed endpoint. Returns ("", "", "") for a non-YouTube url or any failure —
@@ -170,6 +181,10 @@ async def add_to_library_worker_node(
     topic = (args.get("topic") or "").strip()
     search_term = " ".join(p for p in (author, topic) if p) or query
     candidates = await _resolve_candidates(ctx, search_term)
+    # Only offer what an ingest worker can actually fetch — drop any candidate
+    # whose URL no downloader handles, so the user never taps "Add" on something
+    # we can't process.
+    candidates = [c for c in candidates if _is_ingestable_url(c.url)]
     if not candidates:
         reply = await localized_reply(
             ctx,
