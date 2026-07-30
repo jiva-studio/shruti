@@ -1,7 +1,7 @@
 <template>
   <div
     class="lib-card"
-    :class="{ pending: !isReady }"
+    :class="{ pending: !isReady, 'is-loaded': loaded }"
     role="button"
     :tabindex="isReady ? 0 : -1"
     :aria-disabled="!isReady || undefined"
@@ -9,21 +9,21 @@
     @keydown.enter.prevent="onTap"
     @keydown.space.prevent="onTap"
   >
-    <div class="cover">
-      <CachedImage v-if="coverUrl" :url="coverUrl" :alt="title" />
-      <div v-else class="cover-placeholder" aria-hidden="true">
-        <IconVinyl :size="28" />
-      </div>
-      <span v-if="isPending" class="status processing">
-        <IonSpinner name="dots" class="status-spinner" />
-        {{ $t("library.status.processing") }}
-      </span>
-      <span v-else-if="isFailed" class="status failed">
-        <IconAlertTriangle :size="13" />
-        {{ $t("library.status.failed") }}
-      </span>
+    <CachedImage v-if="coverUrl" :url="coverUrl" :alt="title" @loaded="loaded = true" />
+    <div v-else class="cover-placeholder" aria-hidden="true">
+      <IconVinyl :size="28" />
     </div>
 
+    <span v-if="isPending" class="status processing">
+      <IonSpinner name="dots" class="status-spinner" />
+      {{ $t("library.status.processing") }}
+    </span>
+    <span v-else-if="isFailed" class="status failed">
+      <IconAlertTriangle :size="13" />
+      {{ $t("library.status.failed") }}
+    </span>
+
+    <span class="scrim" aria-hidden="true" />
     <div class="meta">
       <span class="title">{{ title }}</span>
       <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
 import { IconVinyl, IconAlertTriangle } from "@tabler/icons-vue"
@@ -41,11 +41,13 @@ import { resolveAssetUrl } from "@lectorium/services/regionsRegistry.js"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
 
 /**
- * A single personal-library item as a cover card: cover art (via
+ * A single personal-library item as a square cover tile: cover art (via
  * `resolveAssetUrl(cover_key)`, falling back to the shared placeholder when the
- * key is null — no generated cover), title and a subtitle (author · location ·
- * date). While ingesting, a status pill sits on the cover — a spinner for
- * queued/processing, a Failed label otherwise. Ready items tap to `select`.
+ * key is null), with the title and subtitle (author · location · date) overlaid
+ * at the bottom over a readability scrim — the same treatment as the collection
+ * tiles it sits beside. While ingesting, a status pill sits at the top — a
+ * spinner for queued/processing, a Failed label otherwise. Ready items tap to
+ * `select`.
  */
 const props = defineProps<{ item: LibraryItem }>()
 
@@ -69,6 +71,8 @@ const subtitle = computed(() => {
   return parts.join(" · ")
 })
 
+const loaded = ref(false)
+
 function onTap(): void {
   if (isReady.value) emit("select", props.item)
 }
@@ -76,16 +80,17 @@ function onTap(): void {
 
 <style scoped>
 .lib-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  overflow: hidden;
   appearance: none;
   border: 0;
-  background: transparent;
-  padding: 0;
   margin: 0;
+  padding: 0;
   text-align: start;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  background: var(--ion-color-light, #f4f5f8);
   cursor: pointer;
 }
 
@@ -93,17 +98,9 @@ function onTap(): void {
   cursor: default;
 }
 
-.lib-card.pending .cover {
+.lib-card.pending :deep(.cached-image),
+.lib-card.pending .cover-placeholder {
   opacity: 0.85;
-}
-
-.cover {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--ion-color-light, #f4f5f8);
 }
 
 .cover-placeholder {
@@ -115,18 +112,41 @@ function onTap(): void {
   color: var(--ion-color-medium, #92949c);
 }
 
+/* Readability scrim behind the overlaid text — revealed with the cover once it
+   decodes, absent over the bare placeholder. Fixed espresso tones (not theme
+   vars, which invert) so the overlay stays legible over any cover. */
+.scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 62%;
+  background: linear-gradient(to top, rgba(61, 43, 31, 0.78), rgba(61, 43, 31, 0));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lib-card.is-loaded .scrim {
+  opacity: 1;
+}
+
 .meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
+  gap: 2px;
+  padding: 18px 10px 9px;
 }
 
 .title {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.25;
+  /* Dark over the bare placeholder, switching to cream once the cover + scrim
+     appear (fixed tone, doesn't invert) so it stays legible over the image. */
   color: var(--ion-text-color);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -137,16 +157,26 @@ function onTap(): void {
 
 .subtitle {
   font-size: 11px;
+  line-height: 1.3;
   color: var(--ion-color-medium, #92949c);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.lib-card.is-loaded .title {
+  color: var(--lectorium-scrim-cream);
+}
+
+.lib-card.is-loaded .subtitle {
+  color: var(--lectorium-scrim-cream);
+  opacity: 0.85;
+}
+
 .status {
   position: absolute;
   left: 6px;
-  bottom: 6px;
+  top: 6px;
   max-width: calc(100% - 12px);
   display: inline-flex;
   align-items: center;

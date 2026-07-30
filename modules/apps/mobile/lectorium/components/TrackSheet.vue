@@ -12,13 +12,7 @@
     </div>
     <IonContent ref="contentRef">
       <div class="sheet-body">
-        <div v-if="topicChips.length" class="topic-chips">
-          <span v-for="(name, i) in visibleChips" :key="i" class="topic-chip">
-            <IconHash :size="11" class="chip-hash" />
-            {{ name }}
-          </span>
-          <span v-if="overflowCount" class="topic-chip more">+{{ overflowCount }}</span>
-        </div>
+        <TopicChips :names="topicNames" />
         <p v-if="description" class="description">{{ description }}</p>
         <LectureOutline v-if="chapters.length" :chapters="chapters" />
       </div>
@@ -46,14 +40,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
-import { IconHash, IconPlaylistAdd, IconReload, IconShare, IconX } from "@tabler/icons-vue"
-import { loadTrackDetail } from "@usecases/playback/loadTrackDetail.js"
-import type { Author } from "@lib/domain/author.js"
-import type { LanguageCode, TrackId } from "@lib/domain/core.js"
-import type { Track } from "@lib/domain/track.js"
+import { IconPlaylistAdd, IconReload, IconShare, IconX } from "@tabler/icons-vue"
+import type { LanguageCode } from "@lib/domain/core.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import {
   preferredContentLanguage,
@@ -62,54 +53,33 @@ import {
   resolveTrackTitle,
 } from "@lib/domain/services/localizedName.js"
 import { formatTrackDate } from "@lectorium/composables/formatTrackDate.js"
-import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
-import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
-import { useShareTrack } from "@lectorium/composables/useShareTrack.js"
-import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
+import { useTrackSheetDetail } from "@lectorium/composables/useTrackSheetDetail.js"
+import { useTrackSheetActions } from "@lectorium/composables/useTrackSheetActions.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
-import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
-import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import LectureOutline from "@ui/components/LectureOutline.vue"
 import SimilarTracksRow from "@lectorium/components/SimilarTracksRow.vue"
+import TopicChips from "@lectorium/components/TopicChips.vue"
 
 const { t } = useI18n()
-const app = useLectorium()
 const appLanguage = useAppLanguage()
 const libraryLanguages = useLibraryLanguages()
 const sheet = useTrackSheetStore()
 const dictionaries = useDictionariesStore()
-const overlays = useOverlaysStore()
-const downloads = useDownloadStore()
-const playlist = usePlaylistStore()
-const { addToPlaylist } = useAddToPlaylist()
-const { presentShareMenu } = useShareTrack()
 
-const track = ref<Track | null>(null)
-const authorEntity = ref<Author | null>(null)
-const authorRaw = ref<string | null>(null)
-const locationRaw = ref<string | null>(null)
-const selectedLanguage = ref<LanguageCode | null>(null)
+const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
+
+// Opening a similar lecture swaps content in the same sheet — reset scroll so
+// the user starts at the top of the new lecture rather than mid-page.
+const { track, authorEntity, authorRaw, locationRaw, selectedLanguage } = useTrackSheetDetail({
+  onAfterLoad: () => void contentRef.value?.$el?.scrollToTop?.(300),
+})
+const { downloadFailed, alreadyInPlaylist, primaryActionLabel, onPrimaryAction, onShare } =
+  useTrackSheetActions(track)
 
 const open = computed(() => sheet.trackId !== null)
-// A failed/stuck download turns the primary button into a "Download again"
-// retry — the row no longer retries on tap, so the sheet is where the user
-// recovers from a download error.
-const downloadFailed = computed(
-  () => sheet.trackId !== null && downloads.getState(sheet.trackId as TrackId) === "failed"
-)
-// The "Add to playlist" action is disabled once the track is already there —
-// the playlist usecase rejects a duplicate add, so there is nothing to do. A
-// failed download takes priority (the track is in the playlist but still needs
-// a retry), so it stays actionable as "Download again".
-const alreadyInPlaylist = computed(() => sheet.trackId !== null && playlist.hasTrack(sheet.trackId))
-const primaryActionLabel = computed(() => {
-  if (downloadFailed.value) return t("search.actions.downloadAgain")
-  if (alreadyInPlaylist.value) return t("search.actions.alreadyInPlaylist")
-  return t("search.actions.addToPlaylist")
-})
 
 // Content language for this track: the library language it actually has, so the
 // title + transcript match the language the track was surfaced in. Falls back to
@@ -136,15 +106,16 @@ const author = computed(() => {
 })
 
 // Location + date read as a single label line under the author. Location is
-// resolved from the shared dictionaries cache (already hydrated above), and the
-// date is formatted to match the track lists / chat rows.
+// resolved from the shared dictionaries cache, and the date is formatted to
+// match the track lists / chat rows.
 const metaLine = computed(() => {
   if (!track.value) return ""
   const parts: string[] = []
   const location = track.value.locationId
     ? dictionaries.locationsById.get(track.value.locationId)
     : null
-  const loc = resolveLocalizedNameOrEmpty(location, appLanguage.value) || locationRaw.value?.trim() || ""
+  const loc =
+    resolveLocalizedNameOrEmpty(location, appLanguage.value) || locationRaw.value?.trim() || ""
   if (loc) parts.push(loc)
   if (track.value.date) parts.push(formatTrackDate(track.value.date, appLanguage.value))
   return parts.join(" · ")
@@ -156,99 +127,12 @@ const variant = computed(
 const description = computed(() => variant.value?.description ?? null)
 const chapters = computed<readonly TrackOutlineChapter[]>(() => variant.value?.outline ?? [])
 
-const VISIBLE_CHIPS = 4
-const topicChips = computed<string[]>(() =>
+const topicNames = computed<string[]>(() =>
   (track.value?.topicIds ?? []).map((id) => dictionaries.topicShortNamesById.get(id) ?? id)
-)
-const visibleChips = computed(() => topicChips.value.slice(0, VISIBLE_CHIPS))
-const overflowCount = computed(() => Math.max(0, topicChips.value.length - VISIBLE_CHIPS))
-
-const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
-
-watch(
-  () => sheet.trackId,
-  async (id) => {
-    if (id === null) {
-      track.value = null
-      authorEntity.value = null
-      authorRaw.value = null
-      locationRaw.value = null
-      selectedLanguage.value = null
-      overlays.actionSheetOpen = false
-      return
-    }
-    overlays.actionSheetOpen = true
-    void app.haptics.impact("light")
-    void dictionaries.ensureLoaded()
-    const repos = app.repositories()
-    const detail = await loadTrackDetail(
-      { trackId: id },
-      {
-        tracks: repos.tracks,
-        authors: repos.authors,
-        transcripts: repos.transcripts,
-        libraryItems: repos.libraryItems,
-      }
-    )
-    // A newer present() may have superseded this load — drop the stale result.
-    if (!detail.ok || sheet.trackId !== id) return
-    track.value = detail.value.track
-    authorEntity.value = detail.value.author
-    authorRaw.value = detail.value.authorRaw
-    locationRaw.value = detail.value.locationRaw
-    // Default the shown transcript to the track's content language (a library
-    // language it has), else its first available — the user can still switch.
-    const preferred = preferredContentLanguage(
-      detail.value.track,
-      libraryLanguages.value,
-      appLanguage.value
-    )
-    selectedLanguage.value =
-      detail.value.availableLanguages.find((l: LanguageCode) => l === preferred) ??
-      detail.value.availableLanguages[0] ??
-      null
-    // Opening a similar lecture swaps content in the same sheet — reset scroll
-    // so the user starts at the top of the new lecture rather than mid-page.
-    void contentRef.value?.$el?.scrollToTop?.(300)
-  }
 )
 
 function onDismiss(): void {
   sheet.close()
-}
-
-function onPrimaryAction(): void {
-  if (downloadFailed.value) {
-    onDownloadAgain()
-    return
-  }
-  onAddToPlaylist()
-}
-
-function onAddToPlaylist(): void {
-  const id = sheet.trackId
-  if (!id) return
-  void addToPlaylist(id)
-  sheet.close()
-}
-
-function onDownloadAgain(): void {
-  const id = sheet.trackId
-  if (!id) return
-  // Re-run the audio download for the first variant that has one;
-  // `ensureDownloaded` takes the retry path off the "failed" state.
-  const audioVariant = track.value?.variants.find((v) => v.audio)
-  if (audioVariant?.audio) {
-    void downloads.ensureDownloaded(id as TrackId, audioVariant.audio.path)
-  }
-  sheet.close()
-}
-
-function onShare(): void {
-  const id = sheet.trackId
-  if (!id) return
-  // Sharing is free; only the PDF export inside the menu is Pro-gated.
-  void presentShareMenu(id)
 }
 </script>
 
@@ -269,31 +153,6 @@ function onShare(): void {
 
 .sheet-body {
   padding: 4px var(--ion-padding, 16px) 16px;
-}
-
-.topic-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 6px;
-  margin: 0 0 16px;
-}
-
-.topic-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--ion-color-medium-shade, #666);
-  background: var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
-  padding: 2px 8px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-
-.chip-hash {
-  flex: none;
-  opacity: 0.55;
 }
 
 .sheet-heading {
