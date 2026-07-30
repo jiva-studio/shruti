@@ -108,8 +108,8 @@ func (e *Extractor) Extract(ctx context.Context, relPath string, sourceCodes []s
 	}
 
 	var out metadata.Extracted
-	if rr.Date != nil && *rr.Date != "" {
-		if t, err := time.Parse("2006-01-02", *rr.Date); err == nil {
+	if rr.Date != nil {
+		if t, ok := parseDate(*rr.Date); ok {
 			out.Date = &t
 		}
 	}
@@ -139,6 +139,28 @@ func (e *Extractor) Extract(ctx context.Context, relPath string, sourceCodes []s
 		})
 	}
 	return out, nil
+}
+
+// parseDate accepts the ISO date the prompt asks for, and tolerates a few
+// natural-language / partial layouts the LLM sometimes echoes verbatim
+// (e.g. "April 18, 2026", "2026", "2026-04"). A year- or month-only date is
+// filled to the first of the period, matching the prompt's YYYY-MM-01 rule.
+func parseDate(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{
+		"2006-01-02", "2006-01", "2006",
+		"January 2, 2006", "Jan 2, 2006",
+		"January 2 2006", "Jan 2 2006",
+		"2 January 2006", "2 Jan 2006",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func fallbackTitle(filename string) string {
