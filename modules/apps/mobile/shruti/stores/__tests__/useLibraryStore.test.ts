@@ -45,6 +45,7 @@ function makeItem(id: string, status: LibraryItem["status"]): LibraryItem {
     references: [],
     description: null,
     outline: null,
+    sourceUrl: null,
     createdAt: 1,
     updatedAt: 1,
   }

@@ -56,6 +56,15 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     return items.value.find((i) => i.id === id)
   }
 
+  /** Whether a source URL is already in the library — used to mark a search
+   *  candidate the user has added before. Matches on the normalized source
+   *  (YouTube URL variants collapse to their video id, mirroring the server). */
+  function hasSource(url: string): boolean {
+    if (!url.trim()) return false
+    const key = normalizeSource(url)
+    return items.value.some((i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key)
+  }
+
   return {
     items,
     isLoading,
@@ -66,5 +75,13 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     refresh,
     ensureLoaded,
     getById,
+    hasSource,
   }
 })
+
+const YT_ID = /(?:youtube\.com\/(?:watch\?[^\s]*\bv=|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/i
+
+function normalizeSource(url: string): string {
+  const m = YT_ID.exec(url)
+  return m ? `yt:${m[1]}` : url.trim()
+}

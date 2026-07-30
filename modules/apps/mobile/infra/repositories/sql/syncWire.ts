@@ -202,6 +202,8 @@ export interface LibraryItemWire {
   description: string | null
   /** Coarse chapter outline `[{title,start,end}]` (ms), as the server projects it. */
   outline: readonly OutlineEntryJson[] | null
+  /** URL the lecture was added from, as the server projects it. */
+  source_url: string | null
   created_at: number | null
   updated_at: number | null
 }
@@ -231,6 +233,7 @@ export function libraryItemRowToWire(row: LibraryItemRow): LibraryItemWire {
     references: parseRefsJson(row.references_json),
     description: row.description,
     outline: parseOutlineJson(row.outline_json),
+    source_url: row.source_url,
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
