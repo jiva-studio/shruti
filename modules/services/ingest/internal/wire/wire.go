@@ -30,6 +30,8 @@ import (
 	"github.com/jiva-studio/shruti/ingest/internal/ports"
 	"github.com/jiva-studio/shruti/pipeline/metadata"
 	openaicompatmeta "github.com/jiva-studio/shruti/pipeline/metadata/openaicompat"
+	openaicompatoutline "github.com/jiva-studio/shruti/pipeline/outline/openaicompat"
+	outlineport "github.com/jiva-studio/shruti/pipeline/ports/outline"
 	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
 	hybrid "github.com/jiva-studio/shruti/pipeline/review/hybrid"
 	openaicompatreview "github.com/jiva-studio/shruti/pipeline/review/openaicompat"
@@ -108,6 +110,7 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		Results:     resultAdapter{redisstream.NewResultPublisher(rdb, cfg.ResultStream, cfg.StreamMaxLen)},
 		Extractor:   buildExtractor(ctx, cfg),
 		LLMReviewer: buildReviewer(ctx, cfg),
+		Outliner:    buildOutliner(ctx, cfg),
 	})
 	return svc, true, nil
 }
@@ -196,6 +199,28 @@ func buildReviewer(ctx context.Context, cfg *config.Config) reviewport.Reviewer 
 		return chain[0]
 	}
 	return hybrid.New(chain, 0.70, 1, 8) // threshold, expand, premium_min_chars — corpus defaults
+}
+
+// buildOutliner builds the shared LLM outline + description generator; nil (→
+// no outline/description) when unconfigured or on error.
+func buildOutliner(ctx context.Context, cfg *config.Config) outlineport.Generator {
+	if cfg.OutlineLLMAPIKey == "" || cfg.OutlineLLMModel == "" {
+		slog.WarnContext(ctx, "ingest_outliner_disabled",
+			"reason", "OUTLINE_LLM_API_KEY / OUTLINE_LLM_MODEL unset")
+		return nil
+	}
+	gen, err := openaicompatoutline.New(openaicompatoutline.Config{
+		Endpoint:  cfg.OutlineLLMEndpoint,
+		APIKey:    cfg.OutlineLLMAPIKey,
+		Model:     cfg.OutlineLLMModel,
+		MaxTokens: cfg.OutlineLLMMaxTokens,
+		Reasoning: cfg.OutlineLLMReasoning,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "ingest_outliner_disabled", "error", err.Error())
+		return nil
+	}
+	return gen
 }
 
 // resultAdapter bridges the domain-facing ports.ResultPublisher to the
