@@ -76,6 +76,8 @@ export interface LibraryItemRow {
   /** Coarse chapter outline, stored as a JSON array `[{"title","start","end"}]`
    *  (ms spans); NULL when not generated / older rows. */
   readonly outline_json: string | null
+  /** Source URL the lecture was added from; NULL on older rows. */
+  readonly source_url: string | null
   readonly created_at: number | null
   readonly updated_at: number | null
 }

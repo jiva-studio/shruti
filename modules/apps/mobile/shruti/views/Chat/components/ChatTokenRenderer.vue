@@ -65,6 +65,7 @@
       :action-id="token.actionId"
       :payload="addToLibraryPayload(token.actionId)"
       :state="actionState(token.actionId)"
+      :already-in-library="library.hasSource(addToLibraryPayload(token.actionId)?.url ?? '')"
       @confirm="onConfirmAction"
     />
     <VerseCardContainer
@@ -135,6 +136,7 @@ import router from "@shruti/router/index.js"
 import { parseChatMarkers } from "@lib/chat/chatMarkers.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
+import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { CitationCoords } from "../composables/useCitationMeta.js"
 import AccentFrame from "@lib/ui/chat/AccentFrame.vue"
@@ -166,6 +168,10 @@ defineEmits<{
 }>()
 
 const chat = useChatStore()
+const library = useLibraryStore()
+// Needed so search candidates can be marked as already-in-library; guarded, so
+// repeated calls are free.
+void library.ensureLoaded()
 const app = useShruti()
 const { locale } = useI18n()
 
