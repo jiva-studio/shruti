@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
 )
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 	libraryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/library"
 )
 
