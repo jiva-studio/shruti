@@ -111,6 +111,7 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		Extractor:   buildExtractor(ctx, cfg),
 		LLMReviewer: buildReviewer(ctx, cfg),
 		Outliner:    buildOutliner(ctx, cfg),
+		Prober:      fetcher,
 	})
 	return svc, true, nil
 }

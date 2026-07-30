@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
+	"github.com/jiva-studio/lectorium/ingest/internal/ports"
 )
 
 // permanentYtdlpMarkers are yt-dlp stderr fragments (lowercased) that mean the
@@ -183,6 +184,40 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string) (string, string, err
 		return "", "", fmt.Errorf("fetch: read artifact: %w", err)
 	}
 	return path, ingest.ContentID(b), nil
+}
+
+// ProbeSource reads best-effort source metadata (uploader + publish date)
+// without downloading media, so the pipeline can fill an author/date the title
+// lacks. Empty fields (or a whole empty result) when yt-dlp can't provide them
+// — e.g. a direct-mp3 URL; a probe failure is never surfaced as an error.
+func (f *Fetcher) ProbeSource(ctx context.Context, rawURL string) (ports.SourceInfo, error) {
+	args := []string{"--no-playlist", "--skip-download", "--print", "%(uploader)s\n%(upload_date)s"}
+	if f.opts.Proxy != "" {
+		args = append(args, "--proxy", f.opts.Proxy)
+	}
+	args = append(args, rawURL)
+	out, err := f.opts.Runner(ctx, f.opts.Bin, args...)
+	if err != nil {
+		return ports.SourceInfo{}, nil
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	var info ports.SourceInfo
+	if len(lines) > 0 {
+		info.Uploader = naToEmpty(lines[0])
+	}
+	if len(lines) > 1 {
+		info.UploadDate = naToEmpty(lines[1])
+	}
+	return info, nil
+}
+
+// naToEmpty maps yt-dlp's "NA" placeholder (and blanks) to "".
+func naToEmpty(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "NA" {
+		return ""
+	}
+	return s
 }
 
 // --- extractor registry ---
