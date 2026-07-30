@@ -31,10 +31,8 @@ import { computed } from "vue"
 import { useRouter } from "vue-router"
 import { SectionHeader, LibraryBanner } from "@ui/features/collections/index.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
-import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
+import { useOpenLibraryItem } from "@shruti/composables/useOpenLibraryItem.js"
 import { useShruti } from "@shruti/shruti.js"
-import type { LibraryItem } from "@lib/domain/libraryItem.js"
-import type { TrackId } from "@lib/domain/core.js"
 import LibraryItemCard from "./LibraryItemCard.vue"
 
 /**
@@ -49,7 +47,7 @@ import LibraryItemCard from "./LibraryItemCard.vue"
 const SHELF_PREVIEW = 10
 
 const library = useLibraryStore()
-const trackActions = useTrackActionSheet()
+const onSelect = useOpenLibraryItem()
 const router = useRouter()
 const app = useShruti()
 
@@ -60,12 +58,6 @@ const preview = computed(() => library.items.slice(0, SHELF_PREVIEW))
 function openAll(): void {
   void app.haptics.impact("light")
   void router.push({ name: "my-library" })
-}
-
-function onSelect(item: LibraryItem): void {
-  if (!item.trackId) return
-  void app.haptics.impact("light")
-  void trackActions.present(item.trackId as TrackId)
 }
 </script>
 

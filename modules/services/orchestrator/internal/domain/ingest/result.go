@@ -35,6 +35,7 @@ type Result struct {
 	AuthorRaw   string `json:"author_raw,omitempty"`
 	LocationRaw string `json:"location_raw,omitempty"`
 	Date        string `json:"date,omitempty"`
+	KindTag     string `json:"kind_tag,omitempty"`
 	References  []Ref  `json:"references,omitempty"`
 	// Description + Outline (coarse chapters) generated from the transcript,
 	// projected onto the library_items row's variant so the track sheet shows
@@ -42,6 +43,7 @@ type Result struct {
 	Description   string         `json:"description,omitempty"`
 	Outline       []OutlineEntry `json:"outline,omitempty"`
 	CoverKey      string         `json:"cover_key,omitempty"`
+	Duration      int64          `json:"duration,omitempty"`
 	AudioKey      string         `json:"audio_key,omitempty"`
 	TranscriptKey string         `json:"transcript_key,omitempty"`
 	SourceURL     string         `json:"source_url,omitempty"`
