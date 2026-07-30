@@ -89,6 +89,8 @@ const { presentShareMenu } = useShareTrack()
 
 const track = ref<Track | null>(null)
 const authorEntity = ref<Author | null>(null)
+const authorRaw = ref<string | null>(null)
+const locationRaw = ref<string | null>(null)
 const selectedLanguage = ref<LanguageCode | null>(null)
 
 const open = computed(() => sheet.trackId !== null)
@@ -129,8 +131,8 @@ const title = computed(() => {
 })
 
 const author = computed(() => {
-  if (!authorEntity.value) return null
-  return resolveLocalizedName(authorEntity.value, appLanguage.value) ?? null
+  if (authorEntity.value) return resolveLocalizedName(authorEntity.value, appLanguage.value) ?? null
+  return authorRaw.value?.trim() || null
 })
 
 // Location + date read as a single label line under the author. Location is
@@ -142,7 +144,7 @@ const metaLine = computed(() => {
   const location = track.value.locationId
     ? dictionaries.locationsById.get(track.value.locationId)
     : null
-  const loc = resolveLocalizedNameOrEmpty(location, appLanguage.value)
+  const loc = resolveLocalizedNameOrEmpty(location, appLanguage.value) || locationRaw.value?.trim() || ""
   if (loc) parts.push(loc)
   if (track.value.date) parts.push(formatTrackDate(track.value.date, appLanguage.value))
   return parts.join(" · ")
@@ -169,6 +171,8 @@ watch(
     if (id === null) {
       track.value = null
       authorEntity.value = null
+      authorRaw.value = null
+      locationRaw.value = null
       selectedLanguage.value = null
       overlays.actionSheetOpen = false
       return
@@ -190,6 +194,8 @@ watch(
     if (!detail.ok || sheet.trackId !== id) return
     track.value = detail.value.track
     authorEntity.value = detail.value.author
+    authorRaw.value = detail.value.authorRaw
+    locationRaw.value = detail.value.locationRaw
     // Default the shown transcript to the track's content language (a library
     // language it has), else its first available — the user can still switch.
     const preferred = preferredContentLanguage(
