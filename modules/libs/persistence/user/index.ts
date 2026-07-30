@@ -68,6 +68,9 @@ export interface LibraryItemRow {
   readonly duration: number | null
   /** Re-hosted cover/thumbnail key; NULL → app shows a plain placeholder. */
   readonly cover_key: string | null
+  /** Raw scripture references extracted from the title, stored as a JSON array
+   *  `[{"source","tokens"}]`; NULL when none / older rows. */
+  readonly references_json: string | null
   readonly created_at: number | null
   readonly updated_at: number | null
 }

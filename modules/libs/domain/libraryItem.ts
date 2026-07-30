@@ -6,6 +6,7 @@ import type {
   TrackId,
   UnixMs,
 } from "./core.js"
+import type { Reference } from "./reference.js"
 import type { Track } from "./track.js"
 import type { TrackAudio, TrackTranscriptRef, TrackVariant } from "./trackVariant.js"
 import { pickPlayableAudio } from "./trackVariant.js"
@@ -54,6 +55,9 @@ export interface LibraryItem {
   readonly transcriptKey: string | null
   readonly duration: number | null
   readonly coverKey: string | null
+  /** Raw scripture references parsed from the title (unresolved — carried as
+   *  `sourceName` + tokens, rendered as-is). Empty when none. */
+  readonly references: readonly Reference[]
   readonly createdAt: UnixMs | null
   readonly updatedAt: UnixMs | null
 }
@@ -109,7 +113,7 @@ export function libraryItemToTrack(item: LibraryItem): Track | null {
     locationId: item.locationId,
     date: item.date,
     hidden: false,
-    references: [],
+    references: item.references,
     tagIds: [],
     topicIds: [],
     variants: [variant],

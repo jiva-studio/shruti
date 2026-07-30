@@ -35,12 +35,23 @@ type Result struct {
 	AuthorRaw     string `json:"author_raw,omitempty"`
 	LocationRaw   string `json:"location_raw,omitempty"`
 	Date          string `json:"date,omitempty"`
+	References    []Ref  `json:"references,omitempty"`
 	CoverKey      string `json:"cover_key,omitempty"`
 	AudioKey      string `json:"audio_key,omitempty"`
 	TranscriptKey string `json:"transcript_key,omitempty"`
 	SourceURL     string `json:"source_url,omitempty"`
 	Error         string `json:"error,omitempty"`
 	Retriable     bool   `json:"retriable,omitempty"`
+}
+
+// Ref is one scripture reference carried from the worker and projected verbatim
+// into the library_items row, in the client's domain `Reference` shape.
+// SourceName is the raw code (rendered as-is); SourceID is the resolved catalog
+// id when a normalize stage ran (empty today). Exactly one is set.
+type Ref struct {
+	SourceID   string   `json:"sourceId,omitempty"`
+	SourceName string   `json:"sourceName,omitempty"`
+	Tokens     []string `json:"tokens,omitempty"`
 }
 
 // DecodeResult parses a broker payload into a Result.

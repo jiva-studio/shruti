@@ -47,6 +47,7 @@ function makeItem(id: string, status: LibraryItem["status"]): LibraryItem {
     transcriptKey: null,
     duration: null,
     coverKey: null,
+    references: [],
     createdAt: 1,
     updatedAt: 1,
   }
