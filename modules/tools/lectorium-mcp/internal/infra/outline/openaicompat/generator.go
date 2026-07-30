@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 	outlineport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
 )
 

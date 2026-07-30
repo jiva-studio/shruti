@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	domaintopics "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/topics"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 )
 
 //go:embed prompt.name.txt

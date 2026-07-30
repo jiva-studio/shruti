@@ -1,10 +1,13 @@
-// Package openaicompat is a tiny chat-completions client used by every
-// LLM-backed component of the daemon (review, resolver, metadata
-// extractor, dict translator).
+// Package openaicompat is a tiny, dependency-free chat-completions client
+// shared by every LLM-backed component of the ingest pipeline (metadata
+// extractor, transcript reviewer, resolver, translators, …), across both the
+// lectorium-mcp tool and the ingest worker.
 //
-// It targets the OpenAI Chat Completions API surface — meaning OpenRouter,
-// native OpenAI, vLLM/Ollama in OpenAI-compat mode, DeepSeek, etc. all
-// work without code changes.
+// It lives in the pure `pipeline` library as an ADAPTER: it implements no
+// domain logic, only the OpenAI Chat Completions API surface — meaning
+// OpenRouter, native OpenAI, vLLM/Ollama in OpenAI-compat mode, DeepSeek, etc.
+// all work without code changes. Kept stdlib-only so the pipeline module stays
+// zero-dependency.
 package openaicompat
 
 import (
@@ -102,9 +105,9 @@ type chatMessage struct {
 }
 
 type reasoningOptions struct {
-	MaxTokens *int    `json:"max_tokens,omitempty"`
-	Enabled   *bool   `json:"enabled,omitempty"`
-	Effort    string  `json:"effort,omitempty"`
+	MaxTokens *int   `json:"max_tokens,omitempty"`
+	Enabled   *bool  `json:"enabled,omitempty"`
+	Effort    string `json:"effort,omitempty"`
 }
 
 // reasoningFromString turns the user-facing config string into a request

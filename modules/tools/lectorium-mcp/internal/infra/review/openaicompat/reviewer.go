@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/prompts"
 	"github.com/jiva-studio/lectorium/pipeline/ports/review"
 )

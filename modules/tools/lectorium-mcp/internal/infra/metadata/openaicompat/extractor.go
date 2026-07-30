@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 	metaport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/metadata"
 )
 

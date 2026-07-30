@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
 )
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
 	libraryport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/library"
 )
 
