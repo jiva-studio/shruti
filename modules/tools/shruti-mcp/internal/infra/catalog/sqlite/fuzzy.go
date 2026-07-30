@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
 	catalogport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/catalog"
+	glossary "github.com/jiva-studio/shruti/pipeline/glossary"
 )
 
 // FuzzyIndex builds one in-memory glossary.Glossary per dict kind on

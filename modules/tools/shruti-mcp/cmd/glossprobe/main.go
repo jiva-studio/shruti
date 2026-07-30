@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
+
+	glossary "github.com/jiva-studio/shruti/pipeline/glossary"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
-	g, err := glossary.Load(os.Args[1])
+	g, err := loadGlossary(os.Args[1])
 	if err != nil {
 		fmt.Println("err:", err)
 		return
@@ -20,4 +22,19 @@ func main() {
 			fmt.Printf("  %.3f  %s\n", h.Score, h.Canonical)
 		}
 	}
+}
+
+func loadGlossary(path string) (*glossary.Glossary, error) {
+	if path == "" || path == "-" {
+		return glossary.Embedded()
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var entries []glossary.Entry
+	if err := yaml.Unmarshal(body, &entries); err != nil {
+		return nil, err
+	}
+	return glossary.Build(entries), nil
 }

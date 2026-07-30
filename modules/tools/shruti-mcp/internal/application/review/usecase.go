@@ -25,7 +25,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 	pipelinereview "github.com/jiva-studio/shruti/pipeline/review"
 	"github.com/jiva-studio/shruti/pipeline/transcript"
-	glossaryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/glossary"
+	glossaryport "github.com/jiva-studio/shruti/pipeline/ports/glossary"
 	lakeport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/lake"
 	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
 	"github.com/jiva-studio/shruti/pipeline/ports/sentencesplit"
