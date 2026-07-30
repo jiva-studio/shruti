@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 	metaport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/metadata"
 )
 

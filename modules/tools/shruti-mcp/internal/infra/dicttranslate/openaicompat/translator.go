@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/openaicompat"
+	"github.com/jiva-studio/shruti/pipeline/openaicompat"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/dicttranslate"
 )
 
