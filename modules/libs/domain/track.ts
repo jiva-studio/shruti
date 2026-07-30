@@ -12,6 +12,11 @@ export interface Track {
   readonly authorId: AuthorId | null
   /** nullable — legacy recordings may have unknown location */
   readonly locationId: LocationId | null
+  /** Raw author/location labels for a personal-library track whose metadata
+   *  isn't a corpus entity (author/location ids null). Absent for corpus tracks;
+   *  resolvers fall back to these when the id doesn't resolve. */
+  readonly authorRaw?: string | null
+  readonly locationRaw?: string | null
   readonly date: IsoDate
   readonly hidden: boolean
   readonly references: readonly Reference[]

@@ -122,6 +122,8 @@ export function libraryItemToTrack(item: LibraryItem): Track | null {
     id: trackId,
     authorId: item.authorId,
     locationId: item.locationId,
+    authorRaw: item.authorRaw,
+    locationRaw: item.locationRaw,
     date: item.date,
     hidden: false,
     references: item.references,

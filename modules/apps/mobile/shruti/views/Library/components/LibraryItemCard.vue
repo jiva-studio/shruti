@@ -83,7 +83,9 @@ function onTap(): void {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 12px;
+  /* Match the sibling cover tiles (CollectionCard / media card) — one radius
+     for every square cover in the app. */
+  border-radius: 4px;
   overflow: hidden;
   appearance: none;
   border: 0;
