@@ -97,6 +97,8 @@ func readyResult(res ingest.Result) []byte {
 		"date_raw":       res.Date,
 		"date":           res.Date,
 		"references":     res.References,
+		"description":    res.Description,
+		"outline":        res.Outline,
 		"cover_key":      res.CoverKey,
 		"audio_key":      res.AudioKey,
 		"transcript_key": res.TranscriptKey,

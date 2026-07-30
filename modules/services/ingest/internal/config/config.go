@@ -76,6 +76,17 @@ type Config struct {
 	ReviewLLMBaseline  string   // REVIEW_LLM_BASELINE — the every-chunk model
 	ReviewLLMPremium   []string // REVIEW_LLM_PREMIUM — comma-sep per-island fixup chain
 	ReviewLLMReasoning string   // REVIEW_LLM_REASONING ("" | off | on | low|medium|high | <int>)
+
+	// --- Outline + description (LLM, OpenAI-compatible) ---
+	// OPTIONAL: the SAME shared pipeline/outline step the corpus tool uses to
+	// generate a lecture description and coarse chapter list from the reviewed
+	// transcript. Runs only when key + model are set; otherwise the track is
+	// stored without an outline/description. Never blocks an ingest.
+	OutlineLLMEndpoint  string // OUTLINE_LLM_ENDPOINT (default OpenRouter)
+	OutlineLLMAPIKey    string // OUTLINE_LLM_API_KEY
+	OutlineLLMModel     string // OUTLINE_LLM_MODEL
+	OutlineLLMMaxTokens int    // OUTLINE_LLM_MAX_TOKENS (0 → adapter default)
+	OutlineLLMReasoning string // OUTLINE_LLM_REASONING
 }
 
 func Load() (*Config, error) {
@@ -118,6 +129,12 @@ func Load() (*Config, error) {
 		ReviewLLMBaseline:  env("REVIEW_LLM_BASELINE", "google/gemini-3.1-flash-lite"),
 		ReviewLLMPremium:   csv(env("REVIEW_LLM_PREMIUM", "google/gemini-3-flash-preview,google/gemini-3.1-pro-preview")),
 		ReviewLLMReasoning: env("REVIEW_LLM_REASONING", ""),
+
+		OutlineLLMEndpoint:  env("OUTLINE_LLM_ENDPOINT", "https://openrouter.ai/api/v1"),
+		OutlineLLMAPIKey:    os.Getenv("OUTLINE_LLM_API_KEY"),
+		OutlineLLMModel:     env("OUTLINE_LLM_MODEL", ""),
+		OutlineLLMMaxTokens: envInt("OUTLINE_LLM_MAX_TOKENS", 0),
+		OutlineLLMReasoning: env("OUTLINE_LLM_REASONING", ""),
 	}
 	if cfg.StreamMaxLen <= 0 {
 		cfg.StreamMaxLen = 10000
