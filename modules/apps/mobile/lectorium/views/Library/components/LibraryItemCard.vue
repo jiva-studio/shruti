@@ -1,8 +1,4 @@
 <template>
-  <!-- role=button, NOT a native <button>: the card holds nested interactive
-       bits (the failed-status Retry). A <button> parent makes that invalid HTML
-       the parser hoists OUT of the card, so the status leaks over other
-       sections. A div can never reparent its children out. -->
   <div
     class="lib-card"
     :class="{ pending: !isReady }"
@@ -22,15 +18,7 @@
 
     <div class="meta">
       <span class="title">{{ title }}</span>
-      <!-- Status sits in the meta row (not overlaid on the cover corner, where
-           it read as clipped) and only when it's meaningful — a "ready" item is
-           the normal case and needs no label. -->
-      <LibraryItemStatusBadge
-        v-if="item.status !== 'ready'"
-        :status="item.status"
-        @retry="emit('retry', item)"
-      />
-      <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
+      <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
     </div>
   </div>
 </template>
@@ -42,20 +30,17 @@ import { IconVinyl } from "@tabler/icons-vue"
 import { CachedImage } from "@ui/primitives/index.js"
 import { resolveAssetUrl } from "@lectorium/services/regionsRegistry.js"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
-import LibraryItemStatusBadge from "./LibraryItemStatusBadge.vue"
 
 /**
  * A single personal-library item as a cover card: cover art (via
  * `resolveAssetUrl(cover_key)`, falling back to the shared placeholder when the
- * key is null — no generated cover), title, a subtitle (author · date) and the
- * ingest status badge. Ready items are tappable (`select`); pending ones are
- * disabled; a failed item's badge emits `retry`.
+ * key is null — no generated cover), title, and a subtitle (author · location ·
+ * date). Ready items are tappable (`select`); pending ones are disabled.
  */
 const props = defineProps<{ item: LibraryItem }>()
 
 const emit = defineEmits<{
   (e: "select", item: LibraryItem): void
-  (e: "retry", item: LibraryItem): void
 }>()
 
 const { t } = useI18n()
