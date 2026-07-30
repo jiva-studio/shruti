@@ -52,13 +52,22 @@ class _FakePublisher:
     def __init__(self, ok: bool = True) -> None:
         self.calls: list[tuple[str, str, str]] = []
         self.titles: list[str] = []
+        self.authors: list[str] = []
         self._ok = ok
 
     async def publish(
-        self, *, user_id: str, url: str, jwt: str, title: str = ""
+        self,
+        *,
+        user_id: str,
+        url: str,
+        jwt: str,
+        title: str = "",
+        author: str = "",
+        request_id: str = "",
     ) -> bool:
         self.calls.append((user_id, url, jwt))
         self.titles.append(title)
+        self.authors.append(author)
         return self._ok
 
 
