@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	hybridreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/hybrid"
+	hybridreview "github.com/jiva-studio/shruti/pipeline/review/hybrid"
 	"github.com/jiva-studio/shruti/pipeline/ports/review"
 )
 
