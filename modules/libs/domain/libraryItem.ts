@@ -67,6 +67,8 @@ export interface LibraryItem {
   /** Raw scripture references parsed from the title (unresolved — carried as
    *  `sourceName` + tokens, rendered as-is). Empty when none. */
   readonly references: readonly Reference[]
+  /** URL the lecture was added from; null on older rows. */
+  readonly sourceUrl: string | null
   readonly createdAt: UnixMs | null
   readonly updatedAt: UnixMs | null
 }

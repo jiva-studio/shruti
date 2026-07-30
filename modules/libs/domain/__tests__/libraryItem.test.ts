@@ -27,6 +27,7 @@ function readyItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
     description: null,
     outline: null,
     references: [],
+    sourceUrl: null,
     createdAt: 1000,
     updatedAt: 2000,
     ...overrides,
