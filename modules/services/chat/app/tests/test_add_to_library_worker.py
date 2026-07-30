@@ -164,6 +164,23 @@ async def test_pro_user_emits_candidate_cards_without_publishing(_events) -> Non
     assert "[action:added_to_library" not in text
 
 
+async def test_search_term_combines_author_and_topic(_events) -> None:
+    # A lecturer + topic web search must stay anchored to the PERSON — searching
+    # a bare topic ("karma") returns pop songs, not the teacher's lectures.
+    res = _FakeResolver([Candidate(url="https://y/1", title="X", provider="youtube_api")])
+    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=_FakePublisher(), lecture_search=res)
+
+    await atl.add_to_library_worker_node(
+        {
+            "user_query": "Find Niranjana Swami's lectures about karma and add to my library",
+            "tier": "pro",
+            "extracted_args": {"author": "Niranjana Swami", "topic": "karma"},
+        },
+        _Runtime(ctx),
+    )
+    assert res.calls == ["Niranjana Swami karma"]
+
+
 async def test_candidate_action_precedes_its_card_marker(_events) -> None:
     res = _FakeResolver([Candidate(url="https://y/1", title="T", provider="p")])
     ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=_FakePublisher(), lecture_search=res)
