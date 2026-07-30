@@ -5,16 +5,22 @@
     <span class="label">{{ $t("library.status.processing") }}</span>
   </span>
 
-  <!-- failed: an error chip with a retry affordance. -->
-  <button
+  <!-- failed: an error chip with a retry affordance. NOT a <button> — this
+       badge renders inside LibraryItemCard's <button>, and a button-in-button is
+       invalid HTML that the parser hoists OUT of the card (the "Retry" then
+       floats over unrelated content). A span[role=button] nests validly. -->
+  <span
     v-else-if="status === 'failed'"
-    type="button"
     class="badge failed"
+    role="button"
+    tabindex="0"
     @click.stop="emit('retry')"
+    @keydown.enter.stop.prevent="emit('retry')"
+    @keydown.space.stop.prevent="emit('retry')"
   >
     <IconAlertTriangle :size="14" />
     <span class="label">{{ $t("library.status.retry") }}</span>
-  </button>
+  </span>
 
   <!-- ready: a subtle "ready" chip (no CTA — the card itself is tappable). -->
   <span v-else class="badge ready">
