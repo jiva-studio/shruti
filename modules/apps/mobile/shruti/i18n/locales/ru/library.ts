@@ -4,7 +4,7 @@ export default {
   status: {
     processing: "Обработка",
     ready: "Готово",
-    retry: "Повторить",
+    failed: "Не удалось",
   },
   myLibrary: {
     title: "Моя библиотека",

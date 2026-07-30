@@ -4,7 +4,7 @@ export default {
   status: {
     processing: "Processing",
     ready: "Ready",
-    retry: "Retry",
+    failed: "Failed",
   },
   myLibrary: {
     title: "My library",
