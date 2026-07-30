@@ -9,7 +9,7 @@
     />
     <div class="shelf-scroll">
       <div v-for="item in preview" :key="item.id" class="shelf-cell">
-        <LibraryItemCard :item="item" @select="onSelect" @retry="onRetry" />
+        <LibraryItemCard :item="item" @select="onSelect" />
       </div>
     </div>
   </div>
@@ -66,10 +66,6 @@ function onSelect(item: LibraryItem): void {
   if (!item.trackId) return
   void app.haptics.impact("light")
   void trackActions.present(item.trackId as TrackId)
-}
-
-function onRetry(): void {
-  void library.retry()
 }
 </script>
 
