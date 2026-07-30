@@ -160,17 +160,15 @@ async def add_to_library_worker_node(
         return await _publish_direct(ctx, writer, _yield_event, concrete_url)
 
     # ── 3. Resolve candidates (search query) ────────────────────────────
-    # Search the CLEAN term the router extracted, not the raw command: a keyword
-    # search for a whole "find X on the web and add it" sentence returns nothing,
-    # while the bare topic returns the lectures. A "find lectures of <teacher>"
-    # turn extracts the name as `author` rather than `topic`, so try that too.
+    # Search the CLEAN terms the router extracted, not the raw command (a keyword
+    # search for a whole "find X on the web and add it" sentence returns nothing).
+    # COMBINE author + topic so a lecturer search stays anchored to the PERSON:
+    # "Niranjana Swami karma", not a bare topic "karma" that returns pop songs.
     # Fall back to the full query only when the router surfaced neither.
     args = state.get("extracted_args") or {}
-    search_term = (
-        (args.get("topic") or "").strip()
-        or (args.get("author") or "").strip()
-        or query
-    )
+    author = (args.get("author") or "").strip()
+    topic = (args.get("topic") or "").strip()
+    search_term = " ".join(p for p in (author, topic) if p) or query
     candidates = await _resolve_candidates(ctx, search_term)
     if not candidates:
         reply = await localized_reply(
