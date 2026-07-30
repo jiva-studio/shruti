@@ -23,8 +23,11 @@ type WorkCommand struct {
 	RequestID string `json:"request_id,omitempty"`
 	URL       string `json:"url"`
 	Title     string `json:"title,omitempty"`
-	OwnerID   string `json:"owner_id,omitempty"`
-	Attempt   int    `json:"attempt"`
+	// Author is the lecturer chat resolved, forwarded to the worker as an
+	// author fallback for a title that carries none. Empty when unknown.
+	Author  string `json:"author,omitempty"`
+	OwnerID string `json:"owner_id,omitempty"`
+	Attempt int    `json:"attempt"`
 }
 
 // Marshal serializes the command for the `ingest.work` outbox payload column.

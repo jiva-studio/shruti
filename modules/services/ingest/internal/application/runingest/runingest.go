@@ -159,7 +159,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	info := s.probeSource(ctx, lg, cmd.URL)
 	draft := ingest.TrackDraft{
 		TitleRaw:    firstNonEmpty(ex.Title, cmd.Title),
-		AuthorRaw:   firstNonEmpty(ex.AuthorRaw, info.Uploader),
+		AuthorRaw:   firstNonEmpty(ex.AuthorRaw, cmd.Author, info.Uploader),
 		LocationRaw: ex.LocationRaw,
 		LangHint:    raw.Language,
 	}
@@ -336,11 +336,13 @@ func parseYtdlpDate(s string) (string, bool) {
 	return "", false
 }
 
-func firstNonEmpty(a, b string) string {
-	if strings.TrimSpace(a) != "" {
-		return a
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
 	}
-	return b
+	return ""
 }
 
 func toResultRefs(refs []metadata.Ref) []ingest.Ref {
