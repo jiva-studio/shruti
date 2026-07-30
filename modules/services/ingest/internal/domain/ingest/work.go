@@ -15,11 +15,9 @@ type WorkCommand struct {
 	RequestID string `json:"request_id,omitempty"`
 	URL       string `json:"url"`
 	Title     string `json:"title,omitempty"`
-	// Author is the lecturer chat resolved (searched-for author or source
-	// channel); used as an author fallback when the title carries none.
-	Author  string `json:"author,omitempty"`
-	OwnerID string `json:"owner_id,omitempty"`
-	Attempt int    `json:"attempt"`
+	Author    string `json:"author,omitempty"`
+	OwnerID   string `json:"owner_id,omitempty"`
+	Attempt   int    `json:"attempt"`
 }
 
 // DecodeWork parses a broker payload into a WorkCommand.
