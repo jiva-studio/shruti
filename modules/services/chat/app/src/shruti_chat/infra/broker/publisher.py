@@ -3,7 +3,7 @@
 When a PRO user adds an external lecture, chat publishes one message to the
 `ingest.request` stream so the ingest worker (#1224) can fetch + transcribe
 + index it. The body travels in a single `payload` stream field as JSON
-`{request_id, url, token, user_id, title}` — the shared Redis-Streams envelope
+`{request_id, url, token, user_id, title, author}` — the shared Redis-Streams envelope
 convention every Shruti service uses (the orchestrator decodes it into its
 `Request`). `request_id` is the chat turn's trace_id, propagated so one library
 ingest is greppable end to end across chat, orchestrator, the ingest worker and
@@ -55,6 +55,7 @@ class IngestRequestPublisher(Protocol):
         url: str,
         jwt: str,
         title: str = "",
+        author: str = "",
         request_id: str = "",
     ) -> bool:
         """Publish one ingest request. Returns True on a confirmed enqueue,
@@ -73,6 +74,7 @@ class NoopIngestPublisher:
         url: str,
         jwt: str,
         title: str = "",
+        author: str = "",
         request_id: str = "",
     ) -> bool:
         log.info("ingest_publish_noop", user_id=user_id, url=url)
@@ -103,6 +105,7 @@ class RedisStreamsIngestPublisher:
         url: str,
         jwt: str,
         title: str = "",
+        author: str = "",
         request_id: str = "",
     ) -> bool:
         from redis.exceptions import RedisError
@@ -123,6 +126,7 @@ class RedisStreamsIngestPublisher:
             "token": jwt,
             "user_id": user_id,
             "title": title,
+            "author": author,
         }
         fields = {b"payload": json.dumps(body).encode()}
         try:
