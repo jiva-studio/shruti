@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
-	outlineport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/outline"
+	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 )
 
 //go:embed prompt.outline.txt

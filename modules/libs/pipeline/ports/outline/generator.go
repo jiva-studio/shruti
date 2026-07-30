@@ -1,12 +1,15 @@
-// Package outlineport defines the LLM-backed lecture-outline generator surface
-// consumed by the outline use case.
-package outlineport
+// Package outline defines the LLM-backed lecture-outline generator surface:
+// a granular-then-collapse chapter pass plus a short description. It is the
+// shared port both ingest paths speak — the lectorium-mcp corpus pipeline and
+// the personal-library ingest worker. Adapters live in the adapter ring (e.g.
+// outline/openaicompat over an LLM).
+package outline
 
 import "context"
 
-// Item is one coarse chapter heading the LLM proposes, anchored to a start
-// timecode (ms). The use case derives the end span and clamps it against the
-// lecture duration; the generator only proposes title + start.
+// Item is one chapter heading the LLM proposes, anchored to a start timecode
+// (ms). The caller derives the end span and clamps it against the lecture
+// duration; the generator only proposes title + start.
 type Item struct {
 	Title   string
 	StartMs int64
@@ -14,10 +17,8 @@ type Item struct {
 
 // OutlineResult carries both passes of one generation in a single LLM round:
 // the granular fine-grained heading list (the raw first pass) and the coarse
-// chapters it was collapsed to. Coarse is published to the catalog
-// (track_variants.outline); Granular is kept as a private, offline-only
-// artifact feeding the topic-vocabulary pipeline and is never shipped to the
-// client. Both are in chronological order (title + start ms).
+// chapters it was collapsed to. Coarse is what a catalog publishes; Granular
+// feeds the offline topic-vocabulary pipeline. Both are chronological.
 type OutlineResult struct {
 	Granular []Item
 	Coarse   []Item
