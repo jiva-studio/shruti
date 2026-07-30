@@ -30,6 +30,8 @@ import (
 	"github.com/jiva-studio/lectorium/ingest/internal/ports"
 	"github.com/jiva-studio/lectorium/pipeline/metadata"
 	openaicompatmeta "github.com/jiva-studio/lectorium/pipeline/metadata/openaicompat"
+	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
+	openaicompatreview "github.com/jiva-studio/lectorium/pipeline/review/openaicompat"
 )
 
 // Deps is the assembled dependency graph handed back to the entrypoint. The
@@ -104,6 +106,7 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		Blob:        blob,
 		Results:     resultAdapter{redisstream.NewResultPublisher(rdb, cfg.ResultStream, cfg.StreamMaxLen)},
 		Extractor:   buildExtractor(ctx, cfg),
+		LLMReviewer: buildReviewer(ctx, cfg),
 	})
 	return svc, true, nil
 }
@@ -162,6 +165,30 @@ func buildExtractor(ctx context.Context, cfg *config.Config) metadata.Extractor 
 		return nil
 	}
 	return ex
+}
+
+// buildReviewer assembles the shared LLM transcript reviewer when an API key +
+// model are configured; otherwise returns nil so the pipeline falls back to the
+// deterministic per-segment normalize (a misconfigured reviewer logs and
+// degrades to nil rather than blocking the consumer).
+func buildReviewer(ctx context.Context, cfg *config.Config) reviewport.Reviewer {
+	if cfg.ReviewLLMAPIKey == "" || cfg.ReviewLLMModel == "" {
+		slog.WarnContext(ctx, "ingest_reviewer_disabled",
+			"reason", "REVIEW_LLM_API_KEY / REVIEW_LLM_MODEL unset")
+		return nil
+	}
+	rv, err := openaicompatreview.New(openaicompatreview.Config{
+		NameAlias: cfg.ReviewLLMModel,
+		Endpoint:  cfg.ReviewLLMEndpoint,
+		APIKey:    cfg.ReviewLLMAPIKey,
+		Model:     cfg.ReviewLLMModel,
+		Reasoning: cfg.ReviewLLMReasoning,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "ingest_reviewer_disabled", "error", err.Error())
+		return nil
+	}
+	return rv
 }
 
 // resultAdapter bridges the domain-facing ports.ResultPublisher to the

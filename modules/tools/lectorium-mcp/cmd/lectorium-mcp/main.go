@@ -82,7 +82,7 @@ import (
 	fsoutline "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/outline/fs"
 	openaicompatoutline "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/outline/openaicompat"
 	reviewreg "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
-	openaicompatreview "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/openaicompat"
+	openaicompatreview "github.com/jiva-studio/lectorium/pipeline/review/openaicompat"
 	throttledreview "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/throttled"
 	sqliteruns "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/runregistry/sqlite"
 	awss3 "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/s3/aws"

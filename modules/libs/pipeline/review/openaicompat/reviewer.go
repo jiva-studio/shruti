@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/lectorium/pipeline/openaicompat"
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/prompts"
+	"github.com/jiva-studio/lectorium/pipeline/review/prompts"
 	"github.com/jiva-studio/lectorium/pipeline/ports/review"
 )
 
