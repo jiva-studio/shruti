@@ -28,6 +28,8 @@ import (
 	"github.com/jiva-studio/shruti/ingest/internal/infra/review"
 	"github.com/jiva-studio/shruti/ingest/internal/infra/transcribe/deepgram"
 	"github.com/jiva-studio/shruti/ingest/internal/ports"
+	"github.com/jiva-studio/shruti/pipeline/metadata"
+	openaicompatmeta "github.com/jiva-studio/shruti/pipeline/metadata/openaicompat"
 )
 
 // Deps is the assembled dependency graph handed back to the entrypoint. The
@@ -101,6 +103,7 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		Reviewer:    review.New(),
 		Blob:        blob,
 		Results:     resultAdapter{redisstream.NewResultPublisher(rdb, cfg.ResultStream, cfg.StreamMaxLen)},
+		Extractor:   buildExtractor(ctx, cfg),
 	})
 	return svc, true, nil
 }
@@ -137,6 +140,28 @@ func buildBlob(ctx context.Context, cfg *config.Config) (ports.BlobStore, []stri
 		}
 		return store, nil
 	}
+}
+
+// buildExtractor assembles the shared LLM metadata extractor when an API key +
+// model are configured; otherwise returns nil so the pipeline skips extraction
+// (best-effort — a track keeps its raw title). A misconfigured extractor logs
+// and degrades to nil rather than blocking the consumer.
+func buildExtractor(ctx context.Context, cfg *config.Config) metadata.Extractor {
+	if cfg.MetadataLLMAPIKey == "" || cfg.MetadataLLMModel == "" {
+		slog.WarnContext(ctx, "ingest_extractor_disabled",
+			"reason", "METADATA_LLM_API_KEY / METADATA_LLM_MODEL unset")
+		return nil
+	}
+	ex, err := openaicompatmeta.New(openaicompatmeta.Config{
+		Endpoint: cfg.MetadataLLMEndpoint,
+		APIKey:   cfg.MetadataLLMAPIKey,
+		Model:    cfg.MetadataLLMModel,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "ingest_extractor_disabled", "error", err.Error())
+		return nil
+	}
+	return ex
 }
 
 // resultAdapter bridges the domain-facing ports.ResultPublisher to the

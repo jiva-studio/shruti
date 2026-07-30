@@ -27,11 +27,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/shruti/ingest/internal/ports"
 	"github.com/jiva-studio/shruti/pipeline/blobpath"
+	"github.com/jiva-studio/shruti/pipeline/metadata"
 )
 
 // Deps bundles the ports the pipeline needs.
@@ -41,6 +43,9 @@ type Deps struct {
 	Reviewer    ports.Reviewer
 	Blob        ports.BlobStore
 	Results     ports.ResultPublisher
+	// Extractor parses title/metadata (LLM). Optional: nil skips extraction and
+	// the track keeps just its raw title — extraction never blocks an ingest.
+	Extractor metadata.Extractor
 }
 
 // Service runs the pipeline.
@@ -117,7 +122,20 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("marshal transcript: %w", err))
 	}
 
-	draft := ingest.TrackDraft{TitleRaw: cmd.Title, LangHint: raw.Language}
+	// Extract structured metadata from the title (date / author / location /
+	// clean title / references / kind). Best-effort: the audio + transcript are
+	// already produced, so a missing key or an LLM hiccup must NOT fail the
+	// ingest — we just fall back to the raw title.
+	ex := s.extract(ctx, lg, cmd.Title)
+	draft := ingest.TrackDraft{
+		TitleRaw:    firstNonEmpty(ex.Title, cmd.Title),
+		AuthorRaw:   ex.AuthorRaw,
+		LocationRaw: ex.LocationRaw,
+		LangHint:    raw.Language,
+	}
+	if ex.Date != nil {
+		draft.DateRaw = ex.Date.Format("2006-01-02")
+	}
 	if draft, err = s.d.Reviewer.Review(ctx, draft); err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("review: %w", err))
 	}
@@ -155,6 +173,11 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		TrackID:       hash,
 		Lang:          lang,
 		Title:         draft.TitleRaw,
+		AuthorRaw:     draft.AuthorRaw,
+		LocationRaw:   draft.LocationRaw,
+		Date:          draft.Date,
+		KindTag:       ex.KindTag,
+		References:    toResultRefs(ex.References),
 		AudioKey:      aKey,
 		TranscriptKey: tKey,
 		SourceURL:     cmd.URL,
@@ -210,6 +233,40 @@ func (s *Service) emit(ctx context.Context, r ingest.Result) {
 // transcribe/put faults) is transient, so the orchestrator may re-dispatch.
 func retriable(err error) bool {
 	return !errors.Is(err, ingest.ErrPermanent)
+}
+
+// extract runs the metadata extractor best-effort. No extractor configured (no
+// LLM key), a blank title, or any extract error all yield an empty result — the
+// caller falls back to the raw title. Extraction must never fail an ingest whose
+// audio + transcript are already stored.
+func (s *Service) extract(ctx context.Context, lg *slog.Logger, title string) metadata.Extracted {
+	if s.d.Extractor == nil || strings.TrimSpace(title) == "" {
+		return metadata.Extracted{}
+	}
+	ex, err := s.d.Extractor.Extract(ctx, title, nil)
+	if err != nil {
+		lg.WarnContext(ctx, "ingest_extract_failed", "error", err.Error())
+		return metadata.Extracted{}
+	}
+	return ex
+}
+
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return a
+	}
+	return b
+}
+
+func toResultRefs(refs []metadata.Ref) []ingest.Ref {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]ingest.Ref, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, ingest.Ref{Source: r.SourceCode, Tokens: r.Tokens})
+	}
+	return out
 }
 
 // --- blob keys (content-addressed public path; shared scheme with the MCP pipeline) ---
