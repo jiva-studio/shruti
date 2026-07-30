@@ -5,14 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jiva-studio/lectorium/pipeline/blobpath"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/jiva-studio/lectorium/pipeline/transcript"
 	fsartifact "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
 	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 type Store struct {
@@ -57,12 +58,12 @@ func (s *Store) reviewChunkPath(id track.Id, lang string, chunkIndex int) string
 }
 
 func (s *Store) PublicTranscriptPath(id track.Id, lang string) string {
-	return filepath.Join(s.OutDir, "public", "tracks", string(id), "transcripts", lang+".json")
+	return filepath.Join(s.OutDir, filepath.FromSlash(blobpath.TranscriptKey(string(id), lang)))
 }
 
 // PublicTranscriptKey returns the rsync-bound key (no leading /).
 func (s *Store) PublicTranscriptKey(id track.Id, lang string) string {
-	return fmt.Sprintf("public/tracks/%s/transcripts/%s.json", string(id), lang)
+	return blobpath.TranscriptKey(string(id), lang)
 }
 
 func (s *Store) WriteRaw(ctx context.Context, id track.Id, lang string, raw transcript.Raw) error {

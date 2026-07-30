@@ -31,6 +31,7 @@ import (
 
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/lectorium/ingest/internal/ports"
+	"github.com/jiva-studio/lectorium/pipeline/blobpath"
 )
 
 // Deps bundles the ports the pipeline needs.
@@ -211,9 +212,9 @@ func retriable(err error) bool {
 	return !errors.Is(err, ingest.ErrPermanent)
 }
 
-// --- blob keys (content-addressed public path; identical to the MCP pipeline) ---
+// --- blob keys (content-addressed public path; shared scheme with the MCP pipeline) ---
 
-func audioKey(trackID string) string { return "public/tracks/" + trackID + "/audio/original.mp3" }
+func audioKey(trackID string) string { return blobpath.AudioKey(trackID, "original") }
 func transcriptKey(trackID, lang string) string {
-	return "public/tracks/" + trackID + "/transcripts/" + lang + ".json"
+	return blobpath.TranscriptKey(trackID, lang)
 }
