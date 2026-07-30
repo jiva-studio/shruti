@@ -104,7 +104,6 @@ import (
 	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 	"github.com/jiva-studio/lectorium/pipeline/ports/sentencesplit"
 	openaicompatreview "github.com/jiva-studio/lectorium/pipeline/review/openaicompat"
-	"gopkg.in/yaml.v3"
 )
 
 // runBackfillAssetHashes opens current.db and (re)hashes every published
@@ -1135,10 +1134,9 @@ func glossaryOrNil(g *glossary.Glossary) glossaryport.Matcher {
 func loadGlossaryOrNil(override string) *glossary.Glossary {
 	if override != "" {
 		if body, err := os.ReadFile(override); err == nil {
-			var entries []glossary.Entry
-			if err := yaml.Unmarshal(body, &entries); err == nil {
-				fmt.Fprintf(os.Stderr, "[review] glossary loaded: %d entries from %s\n", len(entries), override)
-				return glossary.Build(entries)
+			if g, err := glossary.Parse(body); err == nil {
+				fmt.Fprintf(os.Stderr, "[review] glossary loaded: %d entries from %s\n", len(g.Entries), override)
+				return g
 			} else {
 				fmt.Fprintf(os.Stderr, "[review] glossary override parse failed, using embedded: %v\n", err)
 			}
