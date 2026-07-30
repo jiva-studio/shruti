@@ -5,7 +5,6 @@ import (
 	"os"
 
 	glossary "github.com/jiva-studio/lectorium/pipeline/glossary"
-	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -32,9 +31,5 @@ func loadGlossary(path string) (*glossary.Glossary, error) {
 	if err != nil {
 		return nil, err
 	}
-	var entries []glossary.Entry
-	if err := yaml.Unmarshal(body, &entries); err != nil {
-		return nil, err
-	}
-	return glossary.Build(entries), nil
+	return glossary.Parse(body)
 }
