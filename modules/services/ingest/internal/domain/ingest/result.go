@@ -51,11 +51,15 @@ type Result struct {
 	Retriable bool   `json:"retriable,omitempty"`
 }
 
-// Ref is one raw scripture reference extracted from the title (source code +
-// dot-joined tokens), before any catalog resolution.
+// Ref is one scripture reference extracted from the title, in the client's
+// domain `Reference` shape so it rides the sync payload straight into the model
+// with no wire-type in between. SourceName is the raw code (e.g. "BG"), rendered
+// as-is; SourceID is the resolved catalog id, populated only once a normalize
+// stage runs (empty today). Exactly one of the two is set.
 type Ref struct {
-	Source string `json:"source"`
-	Tokens string `json:"tokens,omitempty"`
+	SourceID   string   `json:"sourceId,omitempty"`
+	SourceName string   `json:"sourceName,omitempty"`
+	Tokens     []string `json:"tokens,omitempty"`
 }
 
 // Marshal serializes the result for the `ingest.result` payload field. The

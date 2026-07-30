@@ -272,7 +272,23 @@ func toResultRefs(refs []metadata.Ref) []ingest.Ref {
 	}
 	out := make([]ingest.Ref, 0, len(refs))
 	for _, r := range refs {
-		out = append(out, ingest.Ref{Source: r.SourceCode, Tokens: r.Tokens})
+		// Raw code → sourceName (unresolved, rendered as-is); dot-joined tokens
+		// → the token array the domain Reference carries.
+		out = append(out, ingest.Ref{SourceName: r.SourceCode, Tokens: splitTokens(r.Tokens)})
+	}
+	return out
+}
+
+// splitTokens turns "2.13" into ["2","13"], dropping empty segments.
+func splitTokens(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	var out []string
+	for _, t := range strings.Split(s, ".") {
+		if t = strings.TrimSpace(t); t != "" {
+			out = append(out, t)
+		}
 	}
 	return out
 }
