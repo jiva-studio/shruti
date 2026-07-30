@@ -314,17 +314,26 @@ var _ytIDRe = regexp.MustCompile(`(?:youtube\.com/(?:watch\?[^\s]*\bv=|shorts/|l
 // i.ytimg.com cover) and stores it at the public cover key. Best-effort: no
 // derivable thumbnail, a fetch/put error, or an empty body all yield "" and the
 // track simply has no art — a cover miss never fails an ingest.
+//
+// It prefers the 16:9 variants (maxresdefault, then the always-present
+// mqdefault); the 4:3 hqdefault YouTube pillar-boxes 16:9 footage into black
+// bars, which then survive the square crop on the client.
 func (s *Service) storeCover(ctx context.Context, lg *slog.Logger, sourceURL, hash string) string {
 	m := _ytIDRe.FindStringSubmatch(sourceURL)
 	if m == nil {
 		return ""
 	}
-	thumb := "https://i.ytimg.com/vi/" + m[1] + "/hqdefault.jpg"
-	body, ctype, err := httpGetImage(ctx, thumb)
-	if err != nil || len(body) == 0 {
-		if err != nil {
-			lg.WarnContext(ctx, "ingest_cover_fetch_failed", "error", err.Error())
+	var body []byte
+	var ctype string
+	for _, name := range []string{"maxresdefault", "mqdefault"} {
+		b, ct, err := httpGetImage(ctx, "https://i.ytimg.com/vi/"+m[1]+"/"+name+".jpg")
+		if err == nil && len(b) > 0 {
+			body, ctype = b, ct
+			break
 		}
+	}
+	if len(body) == 0 {
+		lg.WarnContext(ctx, "ingest_cover_fetch_failed", "video_id", m[1])
 		return ""
 	}
 	key := blobpath.CoverKey(hash)
