@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/shruti/pipeline/openaicompat"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/prompts"
+	"github.com/jiva-studio/shruti/pipeline/review/prompts"
 	"github.com/jiva-studio/shruti/pipeline/ports/review"
 )
 

@@ -37,6 +37,8 @@ import (
 	"github.com/jiva-studio/shruti/ingest/internal/ports"
 	"github.com/jiva-studio/shruti/pipeline/blobpath"
 	"github.com/jiva-studio/shruti/pipeline/metadata"
+	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/review"
 )
 
 // Deps bundles the ports the pipeline needs.
@@ -49,6 +51,11 @@ type Deps struct {
 	// Extractor parses title/metadata (LLM). Optional: nil skips extraction and
 	// the track keeps just its raw title — extraction never blocks an ingest.
 	Extractor metadata.Extractor
+	// LLMReviewer, when set, runs an LLM pass over the transcript (sentence
+	// cleanup/segmentation) via the shared review pipeline. Optional: nil falls
+	// back to the deterministic per-segment NormalizeTranscript. Best-effort —
+	// per-chunk failures degrade to raw text, never blocking the ingest.
+	LLMReviewer reviewport.Reviewer
 }
 
 // Service runs the pipeline.
@@ -109,9 +116,15 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		raw.Language = "und" // keep the transcripts/<lang>.json key well-formed
 	}
 
-	// Window the raw ASR segments into the reviewed artifact the corpus/app read
-	// (transcript.Reviewed — the exact shape + key the MCP pipeline stores).
+	// Turn raw ASR segments into the reviewed artifact the corpus/app read
+	// (transcript.Reviewed). With an LLM reviewer configured, run the shared
+	// review pipeline (chunk → LLM cleanup → sentence assembly); otherwise the
+	// deterministic per-segment windowing. LLM review is best-effort — per-chunk
+	// failures degrade to raw text inside ReviewTranscript, never fatal.
 	reviewed := s.d.Reviewer.NormalizeTranscript(raw)
+	if s.d.LLMReviewer != nil {
+		reviewed = review.ReviewTranscript(ctx, s.d.LLMReviewer, raw, review.Options{})
+	}
 	if len(reviewed.Blocks) == 0 {
 		// Deepgram returned 200 but no usable speech. Announcing this as ready
 		// would store an empty transcript the app/corpus can't use, with no
