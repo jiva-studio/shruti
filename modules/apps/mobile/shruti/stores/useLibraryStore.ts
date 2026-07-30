@@ -2,7 +2,6 @@ import { defineStore } from "pinia"
 import { computed, ref } from "vue"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
 import { isPendingLibraryItem } from "@usecases/sync/index.js"
-import { requestSync } from "@shruti/services/syncEvents.js"
 import { useShruti } from "@shruti/shruti.js"
 
 /**
@@ -57,16 +56,6 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     return items.value.find((i) => i.id === id)
   }
 
-  /**
-   * "Retry" a failed item. The collection is pull-only and holds no source URL
-   * to re-publish an `ingest.request` from, so retry re-pulls the server's view
-   * (the orchestrator may have retried the job) and refreshes the projection.
-   */
-  async function retry(): Promise<void> {
-    requestSync()
-    await refresh()
-  }
-
   return {
     items,
     isLoading,
@@ -77,6 +66,5 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     refresh,
     ensureLoaded,
     getById,
-    retry,
   }
 })

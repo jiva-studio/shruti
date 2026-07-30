@@ -18,15 +18,10 @@
         <IonSpinner name="dots" class="status-spinner" />
         {{ $t("library.status.processing") }}
       </span>
-      <button
-        v-else-if="isFailed"
-        type="button"
-        class="status retry"
-        @click.stop="emit('retry', item)"
-      >
+      <span v-else-if="isFailed" class="status failed">
         <IconAlertTriangle :size="13" />
-        {{ $t("library.status.retry") }}
-      </button>
+        {{ $t("library.status.failed") }}
+      </span>
     </div>
 
     <div class="meta">
@@ -50,14 +45,12 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
  * `resolveAssetUrl(cover_key)`, falling back to the shared placeholder when the
  * key is null — no generated cover), title and a subtitle (author · location ·
  * date). While ingesting, a status pill sits on the cover — a spinner for
- * queued/processing, a Retry button for failed (clipped to the cover, which is
- * position:relative + overflow:hidden). Ready items tap to `select`.
+ * queued/processing, a Failed label otherwise. Ready items tap to `select`.
  */
 const props = defineProps<{ item: LibraryItem }>()
 
 const emit = defineEmits<{
   (e: "select", item: LibraryItem): void
-  (e: "retry", item: LibraryItem): void
 }>()
 
 const { t } = useI18n()
@@ -173,11 +166,9 @@ function onTap(): void {
   color: var(--ion-color-primary-contrast);
 }
 
-.status.retry {
-  appearance: none;
+.status.failed {
   background: var(--ion-color-danger);
   color: var(--ion-color-danger-contrast);
-  cursor: pointer;
 }
 
 .status-spinner {
