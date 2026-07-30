@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/shruti/pipeline/openaicompat"
-	outlineport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/outline"
+	outlineport "github.com/jiva-studio/shruti/pipeline/ports/outline"
 )
 
 //go:embed prompt.outline.txt
