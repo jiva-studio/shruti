@@ -32,16 +32,29 @@ type Result struct {
 	Title   string `json:"title,omitempty"`
 	// Extracted metadata (best-effort, ready phase) — projected into the
 	// library_items row so the card shows author / place / date, not just a title.
-	AuthorRaw     string `json:"author_raw,omitempty"`
-	LocationRaw   string `json:"location_raw,omitempty"`
-	Date          string `json:"date,omitempty"`
-	References    []Ref  `json:"references,omitempty"`
-	CoverKey      string `json:"cover_key,omitempty"`
-	AudioKey      string `json:"audio_key,omitempty"`
-	TranscriptKey string `json:"transcript_key,omitempty"`
-	SourceURL     string `json:"source_url,omitempty"`
-	Error         string `json:"error,omitempty"`
-	Retriable     bool   `json:"retriable,omitempty"`
+	AuthorRaw   string `json:"author_raw,omitempty"`
+	LocationRaw string `json:"location_raw,omitempty"`
+	Date        string `json:"date,omitempty"`
+	References  []Ref  `json:"references,omitempty"`
+	// Description + Outline (coarse chapters) generated from the transcript,
+	// projected onto the library_items row's variant so the track sheet shows
+	// an overview and a table of contents.
+	Description   string         `json:"description,omitempty"`
+	Outline       []OutlineEntry `json:"outline,omitempty"`
+	CoverKey      string         `json:"cover_key,omitempty"`
+	AudioKey      string         `json:"audio_key,omitempty"`
+	TranscriptKey string         `json:"transcript_key,omitempty"`
+	SourceURL     string         `json:"source_url,omitempty"`
+	Error         string         `json:"error,omitempty"`
+	Retriable     bool           `json:"retriable,omitempty"`
+}
+
+// OutlineEntry is one chapter heading with its [start,end) span in ms, carried
+// verbatim from the worker and projected into the library_items row.
+type OutlineEntry struct {
+	Title string `json:"title"`
+	Start int64  `json:"start"`
+	End   int64  `json:"end"`
 }
 
 // Ref is one scripture reference carried from the worker and projected verbatim

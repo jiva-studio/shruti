@@ -44,11 +44,25 @@ type Result struct {
 	Date        string `json:"date,omitempty"`
 	KindTag     string `json:"kind_tag,omitempty"`
 	References  []Ref  `json:"references,omitempty"`
+	// Description is the LLM overview of the lecture; Outline is its coarse
+	// chapter list. Both are best-effort (ready phase) and empty when the
+	// outline generator is unconfigured or failed. The orchestrator projects
+	// them onto the library_items row's variant.
+	Description string         `json:"description,omitempty"`
+	Outline     []OutlineEntry `json:"outline,omitempty"`
 	// CoverKey is the public bucket key of the stored cover image, set when the
 	// worker fetched a thumbnail for the source. Empty when none was available.
 	CoverKey  string `json:"cover_key,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Retriable bool   `json:"retriable,omitempty"`
+}
+
+// OutlineEntry is one chapter heading with its [start,end) span in ms, matching
+// the shared pipeline/outline shape and the catalog's stored outline JSON.
+type OutlineEntry struct {
+	Title string `json:"title"`
+	Start int64  `json:"start"`
+	End   int64  `json:"end"`
 }
 
 // Ref is one scripture reference extracted from the title, in the client's
