@@ -5,10 +5,7 @@
     <span class="label">{{ $t("library.status.processing") }}</span>
   </span>
 
-  <!-- failed: an error chip with a retry affordance. NOT a <button> — this
-       badge renders inside LibraryItemCard's <button>, and a button-in-button is
-       invalid HTML that the parser hoists OUT of the card (the "Retry" then
-       floats over unrelated content). A span[role=button] nests validly. -->
+  <!-- span[role=button], not <button>: it nests inside the card's <button>. -->
   <span
     v-else-if="status === 'failed'"
     class="badge failed"
