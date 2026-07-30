@@ -26,6 +26,7 @@ export default {
     addToPlaylist: "Добавить в плейлист",
     downloadAgain: "Скачать снова",
     alreadyInPlaylist: "Уже в плейлисте",
+    alreadyInLibrary: "Уже в вашей библиотеке",
     openTranscript: "Открыть транскрипт",
     share: "Поделиться",
   },
