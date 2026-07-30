@@ -11,14 +11,19 @@
       <div v-else class="cover-placeholder" aria-hidden="true">
         <IconVinyl :size="28" />
       </div>
-      <div class="badge-slot">
-        <LibraryItemStatusBadge :status="item.status" @retry="emit('retry', item)" />
-      </div>
     </div>
 
     <div class="meta">
       <span class="title">{{ title }}</span>
-      <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
+      <!-- Status sits in the meta row (not overlaid on the cover corner, where
+           it read as clipped) and only when it's meaningful — a "ready" item is
+           the normal case and needs no label. -->
+      <LibraryItemStatusBadge
+        v-if="item.status !== 'ready'"
+        :status="item.status"
+        @retry="emit('retry', item)"
+      />
+      <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
     </div>
   </button>
 </template>
@@ -104,17 +109,11 @@ function onTap(): void {
   color: var(--ion-color-medium, #92949c);
 }
 
-.badge-slot {
-  position: absolute;
-  left: 6px;
-  bottom: 6px;
-  max-width: calc(100% - 12px);
-}
-
 .meta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
 }
 

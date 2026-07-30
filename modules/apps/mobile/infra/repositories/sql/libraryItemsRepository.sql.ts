@@ -41,9 +41,13 @@ export function createSqlLibraryItemRepository(db: IDatabase): ILibraryItemRepos
     },
 
     async listAll(): Promise<readonly LibraryItem[]> {
+      // Newest-added first. Prefer created_at, but a freshly ingested item may
+      // not have it stamped yet — fall back to updated_at (its last status
+      // flip), then to insertion order (rowid) — so the just-added lecture
+      // still sorts to the top instead of the bottom.
       return queryMany<LibraryItemRow, LibraryItem>(
         db,
-        "SELECT * FROM library_items ORDER BY created_at DESC",
+        "SELECT * FROM library_items ORDER BY COALESCE(created_at, updated_at, 0) DESC, rowid DESC",
         [],
         rowToLibraryItem
       )

@@ -6,6 +6,7 @@ import { createSqlLibraryItemRepository } from "./libraryItemsRepository.sql.js"
 import { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
 import { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
 import { createSqlTrackRepository } from "./tracksRepository.sql.js"
+import { createCompositeTrackRepository } from "./compositeTrackRepository.js"
 import { createSqlAuthorRepository } from "./authorsRepository.sql.js"
 import { createSqlLocationRepository } from "./locationsRepository.sql.js"
 import { createSqlSourceRepository } from "./sourcesRepository.sql.js"
@@ -174,12 +175,22 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
       }
     : {}
 
+  // Read-only + pull-only: the client never writes library_items. Built here
+  // (not inline below) so the corpus track repo can be composed with it into a
+  // single track source — a track lives in EITHER the corpus or the personal
+  // library, and both resolve to the same `Track` so the whole app (playlist /
+  // Up Next / player / sheet) treats them identically.
+  const libraryItems = createSqlLibraryItemRepository(deps.userDb)
+
   return {
     ...syncRepos,
-    tracks: createSqlTrackRepository({
-      contentDb: deps.contentDb,
-      getActiveLanguage: deps.getActiveLanguage,
-    }),
+    tracks: createCompositeTrackRepository(
+      createSqlTrackRepository({
+        contentDb: deps.contentDb,
+        getActiveLanguage: deps.getActiveLanguage,
+      }),
+      libraryItems
+    ),
     authors: createSqlAuthorRepository(deps.contentDb),
     locations: createSqlLocationRepository(deps.contentDb),
     sources: createSqlSourceRepository(deps.contentDb),
@@ -188,9 +199,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     topics: createSqlTopicRepository(deps.contentDb),
     notes: synced.notes,
     playlistItems: synced.playlistItems,
-    // Read-only + pull-only: not wrapped in the sync-journal decorator (the
-    // client never writes library_items), built straight on userDb.
-    libraryItems: createSqlLibraryItemRepository(deps.userDb),
+    libraryItems,
     listeningSessions: synced.listeningSessions,
     mediaItems: createSqlMediaItemRepository(deps.userDb),
     unitOfWork,
