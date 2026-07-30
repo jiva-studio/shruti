@@ -285,6 +285,8 @@ export const usePlaylistStore = defineStore("playlist", () => {
         const a = authorCache.get(track.authorId) ?? null
         author = a?.names.get(variant.language) ?? a?.names.values().next().value ?? ""
       }
+      // Personal-library track: author is a raw label, not a corpus entity.
+      if (!author) author = track.authorRaw?.trim() ?? ""
       out.push({
         itemId: item.id,
         url,
