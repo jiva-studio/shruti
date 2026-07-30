@@ -37,8 +37,11 @@ import (
 	"github.com/jiva-studio/lectorium/ingest/internal/ports"
 	"github.com/jiva-studio/lectorium/pipeline/blobpath"
 	"github.com/jiva-studio/lectorium/pipeline/metadata"
+	"github.com/jiva-studio/lectorium/pipeline/outline"
+	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 	"github.com/jiva-studio/lectorium/pipeline/review"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 // Deps bundles the ports the pipeline needs.
@@ -56,6 +59,11 @@ type Deps struct {
 	// back to the deterministic per-segment NormalizeTranscript. Best-effort —
 	// per-chunk failures degrade to raw text, never blocking the ingest.
 	LLMReviewer reviewport.Reviewer
+	// Outliner, when set, generates the lecture description + coarse chapter
+	// outline from the reviewed transcript via the shared pipeline/outline step.
+	// Optional: nil skips it. Best-effort — a failure leaves the track without an
+	// outline/description and never blocks the ingest.
+	Outliner outlineport.Generator
 }
 
 // Service runs the pipeline.
@@ -184,6 +192,9 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// public cover key. A miss just means the track has no art — never fatal.
 	coverKey := s.storeCover(ctx, lg, cmd.URL, hash)
 
+	// Description + chapter outline from the reviewed transcript (best-effort).
+	description, chapters := s.outline(ctx, lg, reviewed.Blocks, lang)
+
 	lg.InfoContext(ctx, "ingest_ready", "lang", lang, "total_ms", ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:         cmd.JobID,
@@ -198,6 +209,8 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		Date:          draft.Date,
 		KindTag:       ex.KindTag,
 		References:    toResultRefs(ex.References),
+		Description:   description,
+		Outline:       chapters,
 		CoverKey:      coverKey,
 		AudioKey:      aKey,
 		TranscriptKey: tKey,
@@ -270,6 +283,25 @@ func (s *Service) extract(ctx context.Context, lg *slog.Logger, title string) me
 		return metadata.Extracted{}
 	}
 	return ex
+}
+
+// outline generates the lecture description + coarse chapter list from the
+// reviewed transcript via the shared pipeline step. Best-effort: a nil Outliner
+// or any error yields empty results — the track is stored without an outline.
+func (s *Service) outline(ctx context.Context, lg *slog.Logger, blocks []transcript.Block, lang string) (string, []ingest.OutlineEntry) {
+	if s.d.Outliner == nil {
+		return "", nil
+	}
+	res, err := outline.Generate(ctx, s.d.Outliner, blocks, lang)
+	if err != nil {
+		lg.WarnContext(ctx, "ingest_outline_failed", "error", err.Error())
+		return "", nil
+	}
+	chapters := make([]ingest.OutlineEntry, len(res.Coarse))
+	for i, c := range res.Coarse {
+		chapters[i] = ingest.OutlineEntry{Title: c.Title, Start: c.Start, End: c.End}
+	}
+	return res.Description, chapters
 }
 
 func firstNonEmpty(a, b string) string {
