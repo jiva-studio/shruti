@@ -190,7 +190,7 @@ type libraryItemRow struct {
 	AudioKey       *string    `json:"audio_key"`
 	TranscriptKey  *string    `json:"transcript_key"`
 	CoverKey       *string    `json:"cover_key"`
-	Duration       *int       `json:"duration"`
+	Duration       *int       `json:"duration"` // milliseconds
 	AddedAt        *epochTime `json:"added_at"`
 }
 

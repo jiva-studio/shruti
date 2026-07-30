@@ -34,7 +34,7 @@ CREATE TABLE profile.library_items (
     audio_key       text,
     transcript_key  text,
     cover_key       text,
-    duration        int,                     -- seconds, nullable until known
+    duration        int,                     -- milliseconds, nullable until known (matches the client TrackAudio.duration contract)
     added_at        timestamptz,
     PRIMARY KEY (user_id, doc_id)
 );
