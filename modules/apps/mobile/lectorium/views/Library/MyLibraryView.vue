@@ -10,9 +10,13 @@
     </FlatHeader>
 
     <IonContent :fullscreen="true">
-      <IonText v-if="library.error" color="danger" class="ion-padding">
-        <p>{{ library.error }}</p>
+      <IonText v-if="library.error && library.isEmpty" color="danger" class="ion-padding">
+        <p>{{ $t("library.myLibrary.loadError") }}</p>
       </IonText>
+
+      <div v-else-if="library.isEmpty && library.isLoading" class="loading">
+        <IonSpinner name="dots" />
+      </div>
 
       <div v-else-if="library.isEmpty && !library.isLoading" class="empty">
         <div class="empty-badge">
@@ -40,6 +44,7 @@ import {
   IonButtons,
   IonContent,
   IonPage,
+  IonSpinner,
   IonText,
   IonTitle,
   IonToolbar,
@@ -48,10 +53,7 @@ import {
 import { IconVinyl } from "@tabler/icons-vue"
 import { FlatHeader } from "@ui/primitives/index.js"
 import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
-import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
-import { useLectorium } from "@lectorium/lectorium.js"
-import type { LibraryItem } from "@lib/domain/libraryItem.js"
-import type { TrackId } from "@lib/domain/core.js"
+import { useOpenLibraryItem } from "@lectorium/composables/useOpenLibraryItem.js"
 import LibraryItemCard from "./components/LibraryItemCard.vue"
 
 /**
@@ -61,23 +63,13 @@ import LibraryItemCard from "./components/LibraryItemCard.vue"
  * collection; the sync poller flips `processing → ready` in place.
  */
 const library = useLibraryStore()
-const trackActions = useTrackActionSheet()
-const app = useLectorium()
+const onSelect = useOpenLibraryItem()
 
 void library.ensureLoaded()
 
 onIonViewWillEnter(() => {
   void library.ensureLoaded()
 })
-
-function onSelect(item: LibraryItem): void {
-  // A ready item plays through the same track surface as a corpus lecture —
-  // #1228 wired the synthetic Track adapter so the content-addressed path
-  // resolves. Guard on the content hash existing.
-  if (!item.trackId) return
-  void app.haptics.impact("light")
-  void trackActions.present(item.trackId as TrackId)
-}
 </script>
 
 <style scoped>
@@ -97,6 +89,13 @@ function onSelect(item: LibraryItem): void {
   min-height: 60vh;
   padding: 24px;
   text-align: center;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
 }
 
 .empty-badge {

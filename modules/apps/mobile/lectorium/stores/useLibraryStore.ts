@@ -40,7 +40,11 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load library"
-      items.value = []
+      // Keep the last-good list (don't blank the shelf on a transient read
+      // failure), and leave `loaded` false so `ensureLoaded` retries rather than
+      // sticking on an empty view forever. refreshStores also re-runs on the
+      // next successful pull.
+      loaded = false
     } finally {
       isLoading.value = false
     }

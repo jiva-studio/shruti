@@ -14,6 +14,7 @@ import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
 } from "@lib/domain/services/localizedName.js"
+import { resolveTrackAuthorName } from "@lib/domain/services/trackAuthor.js"
 
 export interface BuildTrackRowDeps {
   /** UI language — used only for the locale-formatted date. Author/location/
@@ -71,9 +72,9 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
   const title = resolveTrackTitle(track, contentLang) ?? track.id
   const author = track.authorId ? deps.authorsById.get(track.authorId) : null
   // A personal-library track's author/location may be a raw label (no corpus
-  // entity) — fall back to it when the id doesn't resolve.
-  const authorName =
-    resolveLocalizedNameOrEmpty(author, contentLang) || track.authorRaw?.trim() || ""
+  // entity) — fall back to it when the id doesn't resolve. Author resolution is
+  // shared with the native player queue so the two can't drift apart.
+  const authorName = resolveTrackAuthorName(track, author ?? null, contentLang)
   const location = track.locationId ? deps.locationsById?.get(track.locationId) : null
   const locationName =
     resolveLocalizedNameOrEmpty(location, contentLang) || track.locationRaw?.trim() || ""

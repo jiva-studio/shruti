@@ -14,6 +14,7 @@ import type { Author } from "@lib/domain/author.js"
 import { isCompleted } from "@lib/domain/listeningSession.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
+import { resolveTrackAuthorName } from "@lib/domain/services/trackAuthor.js"
 import type { TrackVariant } from "@lib/domain/trackVariant.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import type { Result } from "@kit/core"
@@ -274,7 +275,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
       const probe = buildServerUrl(app.activeServer.value, path)
       const local = await app.mediaDownloader.resolveLocalUrl(probe).catch(() => null)
       const url = local ?? app.storagePublicUrl.get(path)
-      let author = ""
+      let authorEntity: Author | null = null
       if (track.authorId) {
         if (!authorCache.has(track.authorId)) {
           authorCache.set(
@@ -282,11 +283,12 @@ export const usePlaylistStore = defineStore("playlist", () => {
             await repos.authors.getById(track.authorId).catch(() => null)
           )
         }
-        const a = authorCache.get(track.authorId) ?? null
-        author = a?.names.get(variant.language) ?? a?.names.values().next().value ?? ""
+        authorEntity = authorCache.get(track.authorId) ?? null
       }
-      // Personal-library track: author is a raw label, not a corpus entity.
-      if (!author) author = track.authorRaw?.trim() ?? ""
+      // Resolve identically to the list rows (buildTrackRow) — including the
+      // personal-library raw-author fallback — so the lock screen and the list
+      // can't disagree on a track's author.
+      const author = resolveTrackAuthorName(track, authorEntity, variant.language)
       out.push({
         itemId: item.id,
         url,

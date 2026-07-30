@@ -29,6 +29,7 @@ type Fetcher interface {
 type SourceInfo struct {
 	Uploader   string // channel / uploader name
 	UploadDate string // publish date as "YYYYMMDD" (yt-dlp), else ""
+	Duration   int64  // source duration in seconds, 0 if unknown
 }
 
 // SourceProber reads a source URL's metadata without fetching its media.

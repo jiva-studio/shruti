@@ -46,8 +46,11 @@ import (
 var jobNamespace = uuid.MustParse("1b671a64-40d5-491e-99b0-da01ff1f3341")
 
 // ytIDRe pulls the 11-char YouTube video id out of any watch / shorts / live /
-// youtu.be URL so URL variants of one video share a dedup key.
-var ytIDRe = regexp.MustCompile(`(?:youtube\.com/(?:watch\?[^\s]*\bv=|shorts/|live/)|youtu\.be/)([\w-]{11})`)
+// youtu.be URL so URL variants of one video share a dedup key. Case-insensitive
+// to match the client's `hasSource` check (useLibraryStore YT_ID has /i), so a
+// mixed-case host can't make the two disagree on whether a video is already
+// added.
+var ytIDRe = regexp.MustCompile(`(?i)(?:youtube\.com/(?:watch\?[^\s]*\bv=|shorts/|live/)|youtu\.be/)([\w-]{11})`)
 
 // sourceKey normalizes a source URL to a stable dedup key: the YouTube video id
 // when present (so watch?v= / youtu.be / extra params collapse to one), else

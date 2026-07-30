@@ -139,7 +139,14 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (string, string, err
 		return "", "", ErrCircuitOpen
 	}
 	localPath, hash, err := f.fetch(ctx, rawURL)
-	f.breaker.record(err == nil)
+	// A permanent error is a user-fault source (dead / private / age-restricted /
+	// too-long link), not our dependency misbehaving. Leave the breaker untouched
+	// so a run of bad links can't open it against healthy ingests — nor reset a
+	// genuine infra-failure streak. Only infra (network/5xx/timeout) outcomes
+	// move the breaker.
+	if !errors.Is(err, ingest.ErrPermanent) {
+		f.breaker.record(err == nil)
+	}
 	return localPath, hash, err
 }
 
@@ -191,7 +198,7 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string) (string, string, err
 // lacks. Empty fields (or a whole empty result) when yt-dlp can't provide them
 // — e.g. a direct-mp3 URL; a probe failure is never surfaced as an error.
 func (f *Fetcher) ProbeSource(ctx context.Context, rawURL string) (ports.SourceInfo, error) {
-	args := []string{"--no-playlist", "--skip-download", "--print", "%(uploader)s\n%(upload_date)s"}
+	args := []string{"--no-playlist", "--skip-download", "--print", "%(uploader)s\n%(upload_date)s\n%(duration)s"}
 	if f.opts.Proxy != "" {
 		args = append(args, "--proxy", f.opts.Proxy)
 	}
@@ -207,6 +214,13 @@ func (f *Fetcher) ProbeSource(ctx context.Context, rawURL string) (ports.SourceI
 	}
 	if len(lines) > 1 {
 		info.UploadDate = naToEmpty(lines[1])
+	}
+	if len(lines) > 2 {
+		// yt-dlp prints duration in seconds (integer, or a float for some
+		// extractors); truncate to whole seconds — sub-second is irrelevant here.
+		if sec, perr := strconv.ParseFloat(naToEmpty(lines[2]), 64); perr == nil && sec > 0 {
+			info.Duration = int64(sec)
+		}
 	}
 	return info, nil
 }
