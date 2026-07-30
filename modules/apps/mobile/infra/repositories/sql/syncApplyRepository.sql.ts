@@ -308,8 +308,8 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
          id, track_id, status, origin, title_raw, author_raw, location_raw,
          date_raw, lang_hint, author_id, location_id, date, date_precision,
          lang, lang_confidence, error, audio_key, transcript_key, duration,
-         cover_key, references_json, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         cover_key, references_json, description, outline_json, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         docId,
         wire.track_id ?? null,
@@ -332,6 +332,8 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         wire.duration ?? null,
         wire.cover_key ?? null,
         wire.references && wire.references.length > 0 ? JSON.stringify(wire.references) : null,
+        wire.description ?? null,
+        wire.outline && wire.outline.length > 0 ? JSON.stringify(wire.outline) : null,
         wire.created_at ?? null,
         wire.updated_at ?? null,
       ]
