@@ -677,7 +677,7 @@ func TestApplyServerChangeProjectsLibraryItem(t *testing.T) {
 		"track_id":"trk-7","status":"ready","origin":"upload","error":null,
 		"title_raw":"Raw Title","author_raw":"Raw Author","location_raw":"Vrindavan",
 		"date_raw":"1972","lang_hint":"en","author_id":"auth-1","location_id":"loc-1",
-		"date":"1972-08","date_precision":"month","lang":"en","lang_confidence":0.87,
+		"date":"1972-08","lang":"en",
 		"audio_key":"a/1.mp3","transcript_key":"t/1.json","cover_key":"c/1.jpg",
 		"duration":3600,"added_at":"2026-02-03T04:05:06Z"
 	}`
@@ -690,16 +690,15 @@ func TestApplyServerChangeProjectsLibraryItem(t *testing.T) {
 	}
 
 	var (
-		trackID, status, lang, datePrecision *string
-		langConf                             *float64
-		duration                             *int
-		addedAt                              *time.Time
+		trackID, status, lang *string
+		duration              *int
+		addedAt               *time.Time
 	)
 	if err := pool.QueryRow(ctx,
-		`SELECT track_id, status, lang, date_precision, lang_confidence, duration, added_at
+		`SELECT track_id, status, lang, duration, added_at
 		   FROM profile.library_items WHERE user_id=$1 AND doc_id=$2`,
 		uid, "lib-a",
-	).Scan(&trackID, &status, &lang, &datePrecision, &langConf, &duration, &addedAt); err != nil {
+	).Scan(&trackID, &status, &lang, &duration, &addedAt); err != nil {
 		t.Fatalf("read library_items: %v", err)
 	}
 	if trackID == nil || *trackID != "trk-7" {
@@ -710,12 +709,6 @@ func TestApplyServerChangeProjectsLibraryItem(t *testing.T) {
 	}
 	if lang == nil || *lang != "en" {
 		t.Errorf("lang: want en, got %v", lang)
-	}
-	if datePrecision == nil || *datePrecision != "month" {
-		t.Errorf("date_precision: want month, got %v", datePrecision)
-	}
-	if langConf == nil || *langConf != 0.87 {
-		t.Errorf("lang_confidence: want 0.87, got %v", langConf)
 	}
 	if duration == nil || *duration != 3600 {
 		t.Errorf("duration: want 3600, got %v", duration)
