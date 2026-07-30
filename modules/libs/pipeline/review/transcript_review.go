@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	glossaryport "github.com/jiva-studio/lectorium/pipeline/ports/glossary"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
@@ -15,14 +16,21 @@ type Options struct {
 	Overlap     int // window overlap between chunks (default 10)
 	Retries     int // per-chunk idx-mismatch retries (default 1)
 	Concurrency int // max concurrent chunk reviews (default 4)
+	// Glossary, when set, injects canonical-term hints (RAG-style) into each
+	// chunk's ExtraPrompt so the LLM corrects ASR spellings of Sanskrit terms
+	// and proper nouns. Threshold/MaxHints fall back to 0.55 / 10.
+	Glossary          glossaryport.Matcher
+	GlossaryThreshold float64
+	GlossaryMaxHints  int
 }
 
 // ReviewTranscript runs an LLM reviewer over a raw transcript and assembles the
 // corrected, sentence-segmented Reviewed artifact. It is the PURE core of the
 // review pipeline — the chunk → review → edge-distance merge → boundary voting →
 // block assembly loop — with none of the corpus tool's persistence, resume,
-// glossary, attempt-chain, or splitter machinery (a stateless worker can run it
-// with just a reviewer + prompts). A chunk whose review fails falls back to its
+// attempt-chain, or splitter machinery (a stateless worker can run it with just
+// a reviewer + prompts, plus an optional glossary via Options). A chunk whose
+// review fails falls back to its
 // raw text, so the result always covers every segment. The reviewer never sees
 // timestamps; they are carried verbatim from the raw segments.
 func ReviewTranscript(
@@ -86,9 +94,10 @@ func ReviewTranscript(
 			defer wg.Done()
 			defer func() { <-sem }()
 			att := TryReview(ctx, reviewer, reviewport.ChunkRequest{
-				Language: lang,
-				Segments: chunkSegs[i],
-				PrevTail: prevTails[i],
+				Language:    lang,
+				Segments:    chunkSegs[i],
+				PrevTail:    prevTails[i],
+				ExtraPrompt: glossaryHints(opts, chunkSegs[i], lang),
 			}, retries)
 			if att.Err == nil {
 				results[i] = chunkResult{segs: att.Final.Segments, sentences: att.Final.Sentences, ok: true}
@@ -178,4 +187,26 @@ func ReviewTranscript(
 		Version:  1,
 		Blocks:   blocks,
 	}
+}
+
+// glossaryHints renders the canonical-term hint block for one chunk (empty when
+// no glossary is configured or nothing matches).
+func glossaryHints(opts Options, segs []reviewport.ChunkSegment, lang string) string {
+	if opts.Glossary == nil {
+		return ""
+	}
+	thr := opts.GlossaryThreshold
+	if thr <= 0 {
+		thr = 0.55
+	}
+	maxH := opts.GlossaryMaxHints
+	if maxH <= 0 {
+		maxH = 10
+	}
+	var b strings.Builder
+	for _, s := range segs {
+		b.WriteString(s.Text)
+		b.WriteByte(' ')
+	}
+	return opts.Glossary.RenderHints(b.String(), lang, thr, maxH)
 }
