@@ -28,6 +28,7 @@
           :key="item.id"
           :item="item"
           @select="onSelect"
+          @retry="onRetry"
         />
       </div>
     </IonContent>
@@ -77,6 +78,10 @@ function onSelect(item: LibraryItem): void {
   if (!item.trackId) return
   void app.haptics.impact("light")
   void trackActions.present(item.trackId as TrackId)
+}
+
+function onRetry(): void {
+  void library.retry()
 }
 </script>
 

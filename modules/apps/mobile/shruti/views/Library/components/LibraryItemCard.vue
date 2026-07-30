@@ -14,6 +14,19 @@
       <div v-else class="cover-placeholder" aria-hidden="true">
         <IconVinyl :size="28" />
       </div>
+      <span v-if="isPending" class="status processing">
+        <IonSpinner name="dots" class="status-spinner" />
+        {{ $t("library.status.processing") }}
+      </span>
+      <button
+        v-else-if="isFailed"
+        type="button"
+        class="status retry"
+        @click.stop="emit('retry', item)"
+      >
+        <IconAlertTriangle :size="13" />
+        {{ $t("library.status.retry") }}
+      </button>
     </div>
 
     <div class="meta">
@@ -26,7 +39,8 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
-import { IconVinyl } from "@tabler/icons-vue"
+import { IonSpinner } from "@ionic/vue"
+import { IconVinyl, IconAlertTriangle } from "@tabler/icons-vue"
 import { CachedImage } from "@ui/primitives/index.js"
 import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
@@ -34,18 +48,25 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
 /**
  * A single personal-library item as a cover card: cover art (via
  * `resolveAssetUrl(cover_key)`, falling back to the shared placeholder when the
- * key is null — no generated cover), title, and a subtitle (author · location ·
- * date). Ready items are tappable (`select`); pending ones are disabled.
+ * key is null — no generated cover), title and a subtitle (author · location ·
+ * date). While ingesting, a status pill sits on the cover — a spinner for
+ * queued/processing, a Retry button for failed (clipped to the cover, which is
+ * position:relative + overflow:hidden). Ready items tap to `select`.
  */
 const props = defineProps<{ item: LibraryItem }>()
 
 const emit = defineEmits<{
   (e: "select", item: LibraryItem): void
+  (e: "retry", item: LibraryItem): void
 }>()
 
 const { t } = useI18n()
 
 const isReady = computed(() => props.item.status === "ready")
+const isPending = computed(
+  () => props.item.status === "queued" || props.item.status === "processing"
+)
+const isFailed = computed(() => props.item.status === "failed")
 const coverUrl = computed(() => resolveAssetUrl(props.item.coverKey ?? undefined))
 const title = computed(() => props.item.titleRaw?.trim() || t("library.untitled"))
 const subtitle = computed(() => {
@@ -127,5 +148,39 @@ function onTap(): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.status {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  max-width: calc(100% - 12px);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: #fff;
+}
+
+.status.processing {
+  background: rgba(var(--ion-color-primary-rgb), 0.92);
+}
+
+.status.retry {
+  appearance: none;
+  background: rgba(var(--ion-color-danger-rgb, 235 68 90), 0.94);
+  cursor: pointer;
+}
+
+.status-spinner {
+  width: 14px;
+  height: 12px;
 }
 </style>
