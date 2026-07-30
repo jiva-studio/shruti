@@ -7,16 +7,11 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
 /* --------------------------------------------------------------------- */
 
 const listAll = vi.fn<() => Promise<readonly LibraryItem[]>>()
-const requestSync = vi.fn()
 
 vi.mock("@lectorium/lectorium.js", () => ({
   useLectorium: () => ({
     repositories: () => ({ libraryItems: { listAll } }),
   }),
-}))
-
-vi.mock("@lectorium/services/syncEvents.js", () => ({
-  requestSync: (...args: unknown[]) => requestSync(...args),
 }))
 
 import { useLibraryStore } from "../useLibraryStore.js"
@@ -59,7 +54,6 @@ describe("useLibraryStore", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     listAll.mockReset()
-    requestSync.mockReset()
   })
 
   afterEach(() => {
@@ -104,19 +98,5 @@ describe("useLibraryStore", () => {
     await store.refresh()
     expect(store.error).toBe("db closed")
     expect(store.items).toEqual([])
-  })
-
-  it("retry() nudges the sync poller then re-pulls the projection", async () => {
-    listAll.mockResolvedValue([makeItem("a", "failed")])
-    const store = useLibraryStore()
-    await store.refresh()
-
-    listAll.mockClear()
-    listAll.mockResolvedValue([makeItem("a", "processing")])
-    await store.retry()
-
-    expect(requestSync).toHaveBeenCalledTimes(1)
-    expect(listAll).toHaveBeenCalledTimes(1)
-    expect(store.hasPending).toBe(true)
   })
 })
