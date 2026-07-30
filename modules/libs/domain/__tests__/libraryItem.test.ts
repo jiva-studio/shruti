@@ -24,6 +24,8 @@ function readyItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
     transcriptKey: null,
     duration: 3_600_000,
     coverKey: null,
+    description: null,
+    outline: null,
     references: [],
     createdAt: 1000,
     updatedAt: 2000,
