@@ -44,8 +44,11 @@ type Result struct {
 	Date        string `json:"date,omitempty"`
 	KindTag     string `json:"kind_tag,omitempty"`
 	References  []Ref  `json:"references,omitempty"`
-	Error       string `json:"error,omitempty"`
-	Retriable   bool   `json:"retriable,omitempty"`
+	// CoverKey is the public bucket key of the stored cover image, set when the
+	// worker fetched a thumbnail for the source. Empty when none was available.
+	CoverKey  string `json:"cover_key,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Retriable bool   `json:"retriable,omitempty"`
 }
 
 // Ref is one raw scripture reference extracted from the title (source code +
