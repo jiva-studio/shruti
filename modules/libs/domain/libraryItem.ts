@@ -58,6 +58,8 @@ export interface LibraryItem {
   readonly audioKey: string | null
   /** Full bucket key of the JSON transcript, present once ready. */
   readonly transcriptKey: string | null
+  /** Track length in MILLISECONDS (feeds the synthetic TrackAudio.duration),
+   *  null until known. */
   readonly duration: number | null
   readonly coverKey: string | null
   /** LLM overview of the lecture, generated on ready; null when not generated. */
