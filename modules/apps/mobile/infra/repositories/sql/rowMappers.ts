@@ -4,6 +4,7 @@ import type { Note, NoteMeta } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { LibraryItem, LibraryItemOrigin, LibraryItemStatus } from "@lib/domain/libraryItem.js"
 import type { Reference } from "@lib/domain/reference.js"
+import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type {
   LibraryItemRow,
   ListeningSessionRow,
@@ -77,10 +78,38 @@ export function rowToLibraryItem(row: LibraryItemRow): LibraryItem {
     transcriptKey: row.transcript_key,
     duration: row.duration,
     coverKey: row.cover_key,
+    description: row.description,
+    outline: outlineJsonToChapters(row.outline_json),
     references: parseRefsJson(row.references_json) ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+/** One stored outline entry as the server projects it: title + [start,end) span
+ *  in ms. The domain `TrackOutlineChapter` renames these to startMs/endMs. */
+export interface OutlineEntryJson {
+  readonly title: string
+  readonly start: number
+  readonly end: number
+}
+
+/** Parse the stored `outline_json` column into the raw entry array, tolerating
+ *  NULL / malformed JSON (→ null). */
+export function parseOutlineJson(json: string | null): readonly OutlineEntryJson[] | null {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? (parsed as OutlineEntryJson[]) : null
+  } catch {
+    return null
+  }
+}
+
+function outlineJsonToChapters(json: string | null): readonly TrackOutlineChapter[] | null {
+  const raw = parseOutlineJson(json)
+  if (!raw) return null
+  return raw.map((e) => ({ title: e.title, startMs: e.start, endMs: e.end }))
 }
 
 /** Parse the stored `references_json` column into domain References, tolerating
