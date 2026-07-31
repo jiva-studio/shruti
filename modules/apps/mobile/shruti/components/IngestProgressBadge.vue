@@ -93,9 +93,4 @@ const offset = computed(() => {
     transform: rotate(360deg);
   }
 }
-
-.label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 </style>
