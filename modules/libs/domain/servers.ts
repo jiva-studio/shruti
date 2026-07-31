@@ -79,6 +79,16 @@ export interface CdnServer extends KitCdnServer {
    *  When absent the sync engine stays off — a published config carries this
    *  field before sync is enabled for the region. */
   readonly profileBaseUrl?: string
+  /** Base URL of the shruti `orchestrator` ingest control plane for this
+   *  region. The ingest HTTP client appends `/orchestrator/ingest[/{id}]` to it.
+   *  The orchestrator is origin-only, reached over the same Caddy edge as chat
+   *  but on its own `/orchestrator/*` routes — a distinct service. Read through a
+   *  getter at call time, like `chatBaseUrl`, so a region flip routes ingest
+   *  traffic to the new backend without a restart.
+   *
+   *  Optional so a `config.json` predating the ingest API stays valid. When
+   *  absent the client falls back to the (retired) chat add-to-library path. */
+  readonly orchestratorBaseUrl?: string
 }
 
 // sslip.io resolves <ip-dashed>.sslip.io → the literal IP without us
@@ -98,6 +108,7 @@ export const SERVERS: readonly CdnServer[] = [
     authBaseUrl: `${HOST}/auth`,
     chatBaseUrl: HOST,
     profileBaseUrl: HOST,
+    orchestratorBaseUrl: HOST,
   },
   {
     id: "russia",
@@ -116,6 +127,7 @@ export const SERVERS: readonly CdnServer[] = [
     authBaseUrl: `${HOST_RU}/auth`,
     chatBaseUrl: HOST_RU,
     profileBaseUrl: HOST_RU,
+    orchestratorBaseUrl: HOST_RU,
   },
   {
     // The former `global` origin — the AWS S3 bucket. Retired as the
@@ -132,5 +144,6 @@ export const SERVERS: readonly CdnServer[] = [
     authBaseUrl: `${HOST}/auth`,
     chatBaseUrl: HOST,
     profileBaseUrl: HOST,
+    orchestratorBaseUrl: HOST,
   },
 ]

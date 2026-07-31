@@ -32,10 +32,15 @@ type RouterDeps struct {
 
 // NewRouter wires:
 //
-//	GET  /healthz        (liveness)
-//	GET  /readyz         (gates traffic until migrations are current)
-//	POST /ingest         (submit a lecture for ingest; returns job id + state)
-//	GET  /ingest/{id}    (live job status for the owner)
+//	GET  /healthz                    (liveness)
+//	GET  /readyz                     (gates traffic until migrations are current)
+//	POST /orchestrator/ingest        (submit a lecture for ingest; returns job id + state)
+//	GET  /orchestrator/ingest/{id}   (live job status for the owner)
+//
+// The client-facing routes carry the `/orchestrator` prefix: the Caddy edge
+// routes `/orchestrator/*` to this service (no strip, mirroring `/profile/*` →
+// profile), so the service owns its own namespace and future orchestrator
+// endpoints slot in under the same prefix.
 func NewRouter(d RouterDeps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
@@ -44,8 +49,10 @@ func NewRouter(d RouterDeps) http.Handler {
 	r.Get("/readyz", readyzHandler(d.Pool))
 
 	api := &ingestAPI{submit: d.Submitter, jobs: d.Jobs, verifier: d.Verifier}
-	r.Post("/ingest", api.create)
-	r.Get("/ingest/{id}", api.status)
+	r.Route("/orchestrator", func(r chi.Router) {
+		r.Post("/ingest", api.create)
+		r.Get("/ingest/{id}", api.status)
+	})
 
 	return r
 }

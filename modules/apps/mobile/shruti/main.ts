@@ -50,6 +50,7 @@ import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.j
 import { useHttpServerProber } from "@infra/servers/index.js"
 import { createHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatService.js"
 import { createHttpSyncClient } from "@infra/sync/http/syncClient.js"
+import { createHttpIngestClient } from "@infra/ingest/http/ingestClient.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
 import {
   useWebRemoteFilesStorage,
@@ -139,6 +140,21 @@ const syncClient = createHttpSyncClient({
   request: withNetworkErrorContext((path, init) => profileHttp.request(path, init)),
 })
 
+// Orchestrator ingest control-plane failover client. Routes ONLY on
+// `orchestratorBaseUrl` — no chat fallback. A region whose published config
+// predates the ingest API has none; the library store then falls back to the
+// legacy chat add path (the client gates on presence, like profile-sync).
+const orchestratorHttp = createFailoverClient({
+  getServers: () => getRegions(),
+  getPreferredId: () => useShruti().activeServer.value.id,
+  pickBaseUrl: (s) => s.orchestratorBaseUrl ?? "",
+  onPromoteFallback: (id) => useShruti().setActiveServerById(id),
+})
+const ingestClient = createHttpIngestClient({
+  getAccessToken: () => useShruti().auth.getAccessToken(),
+  request: withNetworkErrorContext((path, init) => orchestratorHttp.request(path, init)),
+})
+
 initShruti({
   appConfig: config,
   persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
@@ -219,6 +235,10 @@ initShruti({
   // is the transport the `useSyncEngine` composable drives when enabled.
   getDeviceId,
   syncClient,
+  // Orchestrator ingest control plane (POST /orchestrator/ingest, GET
+  // /orchestrator/ingest/{id}) — the direct add/retry + live-status transport
+  // the library store drives; nil-URL regions fall back to the chat path.
+  ingestClient,
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)
