@@ -12,18 +12,15 @@
         <IconVinyl :size="40" />
       </div>
 
-      <!-- Live ingest progress pill (stage + download percent) while the lecture
-           ingests — takes over the corner control so the user watches it advance
-           without leaving chat. -->
-      <span
+      <!-- Live ingest progress (shared badge: ring + stage/percent) while the
+           lecture ingests — takes over the corner control so the user watches it
+           advance without leaving chat. -->
+      <IngestProgressBadge
         v-if="liveStatus?.kind === 'pending'"
-        class="stage-pill"
-        role="status"
-        :aria-label="liveStatus.label"
-      >
-        <IonSpinner name="crescent" class="spinner" />
-        {{ liveStatus.label }}
-      </span>
+        class="stage-badge"
+        :percent="liveStatus.percent"
+        :label="liveStatus.label"
+      />
       <button
         v-else-if="liveStatus?.kind === 'failed' || state === 'error'"
         class="add-btn add-btn--error"
@@ -64,6 +61,7 @@
 <script setup lang="ts">
 import { IonSpinner } from "@ionic/vue"
 import { IconVinyl, IconPlus, IconCheck, IconRefresh } from "@tabler/icons-vue"
+import IngestProgressBadge from "@shruti/components/IngestProgressBadge.vue"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ActionState } from "@shruti/stores/useChatStore.js"
 
@@ -82,8 +80,8 @@ defineProps<{
   /** The user already has this lecture — show it as in-library, not addable. */
   alreadyInLibrary?: boolean
   /** Live ingest status of the matching library item (from the status poll),
-   *  driving the inline progress pill / retry. Undefined once ready or unadded. */
-  liveStatus?: { kind: "pending" | "failed"; label: string }
+   *  driving the inline progress badge / retry. Undefined once ready or unadded. */
+  liveStatus?: { kind: "pending" | "failed"; label: string; percent?: number }
 }>()
 
 const emit = defineEmits<{
@@ -151,23 +149,12 @@ const emit = defineEmits<{
   cursor: default;
 }
 
-/* Live-progress pill: same top-right corner as the add control, widened to hold
-   the stage label + percent. Mirrors the library card's "Downloading" badge. */
-.stage-pill {
+/* Shared ingest-progress badge in the same top-right corner as the add control. */
+.stage-badge {
   position: absolute;
   top: 8px;
   right: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   max-width: calc(100% - 16px);
-  padding: 6px 12px;
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 .spinner {
