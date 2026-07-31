@@ -271,11 +271,9 @@ def route_after_research(state: ChatState) -> str:
 
 
 def route_after_find_tracks(state: ChatState) -> str:
-    """After find_tracks_worker: normally a terminal (it already streamed cards
-    or the empty line → END). But when the corpus had NO lecture for a "find
-    lectures" request, find_tracks sets `web_fallback` and we hand off to
-    add_to_library_worker (web discovery + candidate cards) instead of leaving
-    the user at a dead end.
+    """After find_tracks_worker: terminal (it streamed cards or a line) unless it
+    set `web_fallback` — a corpus miss on a "find lectures" request — in which
+    case route to add_to_library_worker for web discovery of candidates to add.
     """
     if state.get("web_fallback"):
         return "add_to_library_worker"
