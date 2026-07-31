@@ -102,6 +102,11 @@ class ChatState(TypedDict, total=False):
     # (disabled / no-LLM / build failure). `route_after_planner` reads it to
     # branch into `corpus_fallback`.
     corpus_insufficient: bool
+    # Set by `find_tracks_worker` when a "find lectures" query matched nothing in
+    # the corpus and it wasn't a bare scripture ref / date probe. `route_after_
+    # find_tracks` reads it to route into `add_to_library_worker` (web discovery
+    # of candidate lectures to add), which reads the same `user_query`.
+    web_fallback: bool
     # Set by `corpus_fallback_node` once the memory-pass succeeds. The
     # synthesizer reads `fallback_mode` to swap the `grounding` section for
     # `fallback` (disclaimer + faithful draft + opportunistic citations, never
