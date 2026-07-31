@@ -399,23 +399,24 @@ async def test_date_query_with_no_lectures_says_so(_events) -> None:
     assert "LINE[localized_reply]" in text  # localized "no lectures for that date"
 
 
-async def test_empty_topic_query_offers_web_search(_events) -> None:
-    # A topical query (no scripture ref) with no results is NOT a dead end: it
-    # offers a "search the web" chip that routes into add-to-library, carrying
-    # the user's request (so they tap once instead of re-typing it).
+async def test_empty_topic_query_routes_to_web_fallback(_events) -> None:
+    # A topical query (no scripture ref) with no corpus results is NOT a dead
+    # end: find_tracks sets `web_fallback` so the graph hands off to
+    # add_to_library_worker (web discovery). It streams no "couldn't find" line
+    # and no cards itself.
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[]]),
         catalog_repo=_Catalog(),
         llm=_FakeLLM(),
     )
-    await ftw.find_tracks_worker_node(
+    result = await ftw.find_tracks_worker_node(
         {"user_query": "очищение сердца", "extracted_args": {}}, _Runtime(ctx)
     )
+    assert result.get("web_fallback") is True
+    assert not [e for e in _events if e["type"] == "action"]
     text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert "[followup:" in text
-    assert "очищение сердца" in text  # the chip command carries the raw request
-    assert "add to my library" in text.lower() or "добавить" in text.lower()
+    assert "[followup:" not in text
 
 
 async def test_uncatalogued_track_dropped(_events) -> None:

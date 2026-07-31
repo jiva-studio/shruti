@@ -57,6 +57,7 @@ from langgraph.pregel import Pregel
 from shruti_chat.agent.graph.conditional import (
     route_after_action,
     route_after_catalog,
+    route_after_find_tracks,
     route_after_planner,
     route_after_research,
     route_after_router,
@@ -169,7 +170,11 @@ def build_chat_graph() -> Pregel:
     # find_tracks_worker is a fully deterministic terminal: it retrieves
     # lectures, force-emits each card + verbatim why-quote, and writes the
     # global + per-lecture headers (the only LLM hop) itself — no synthesizer.
-    builder.add_edge("find_tracks_worker", END)
+    builder.add_conditional_edges(
+        "find_tracks_worker",
+        route_after_find_tracks,
+        {"add_to_library_worker": "add_to_library_worker", END: END},
+    )
     # add_to_library_worker is a deterministic terminal too: it PRO-gates,
     # searches providers, emits candidate cards, and publishes the top match
     # to the ingest broker itself — no synthesizer.
