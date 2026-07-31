@@ -53,6 +53,19 @@ export function mergeChatSession<T>(local: SyncDoc<T>, remote: SyncDoc<T>): Sync
 }
 
 /**
+ * `library_memberships` — **last-write-wins** by HLC. The user's remove/re-add
+ * intent is a toggle (`archivedAt` set = removed, null = active); the latest
+ * decision wins wholesale, NOT add-wins like playlist — a remove racing a
+ * re-add must resolve to whichever the user did last, not bias toward active.
+ * The client only upserts (remove sets `archivedAt`, re-add clears it), so this
+ * rule need not special-case a tombstone; a delete, if one ever arrives,
+ * competes on the same HLC footing.
+ */
+export function mergeLibraryMembership<T>(local: SyncDoc<T>, remote: SyncDoc<T>): SyncDoc<T> {
+  return pickByHlc(local, remote)
+}
+
+/**
  * `chat_messages` — **append-only union, last-write-wins on finalize**. A
  * message is journaled once, when its turn completes (never mid-stream), so
  * two devices never write the same message id with diverging content; the LWW

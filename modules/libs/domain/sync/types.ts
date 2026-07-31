@@ -18,6 +18,7 @@ export type SyncCollection =
   | "chat_sessions"
   | "chat_messages"
   | "library_items"
+  | "library_memberships"
 
 /** A change operation as journaled in the outbox / replicated over the wire. */
 export type SyncOp = "upsert" | "delete"
@@ -76,5 +77,18 @@ export interface LibraryItemSyncData {
   readonly duration: number | null
   readonly coverKey: string | null
   readonly createdAt: number | null
+  readonly updatedAt: number | null
+}
+
+/**
+ * Payload the `library_memberships` rule reasons over — the user's remove/re-add
+ * intent for a personal-library item, the CLIENT-owned companion to the
+ * server-owned {@link LibraryItemSyncData}. `docId` is the library item id.
+ * `archivedAt` is a unix-ms timestamp when removed, `null` when active. The
+ * client only upserts (a remove sets `archivedAt`, a re-add clears it), so an
+ * absent row and `archivedAt === null` both mean active. Merged last-write-wins.
+ */
+export interface LibraryMembershipSyncData {
+  readonly archivedAt: number | null
   readonly updatedAt: number | null
 }

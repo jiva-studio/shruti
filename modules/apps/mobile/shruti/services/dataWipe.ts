@@ -58,6 +58,7 @@ export async function wipeLocalUserData(app: Shruti): Promise<void> {
   // 1. On-disk wipe.
   await repos.notes.clearAll()
   await repos.playlistItems.clearAll()
+  await repos.libraryMemberships.clearAll()
   await repos.mediaItems.clearAll()
   await repos.listeningSessions.clearAll()
   // Chat sessions + messages live in the user DB; `chat.clearAll()`

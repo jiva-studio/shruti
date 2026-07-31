@@ -9,12 +9,13 @@ import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 
 /**
  * Single source of truth for the user's **personal library** — lectures the
- * user added that are not in the shared corpus (epic #1236). Mirrors
- * `usePlaylistStore` in shape, but read-only: `library_items` is a server-owned,
- * pull-only synced collection, so this store never writes it. It just projects
- * the on-device rows (via `ILibraryItemRepository`) into the "My library" shelf
- * (Search tab) and the full `MyLibraryView`, and `useSyncEngine.refreshStores`
- * calls `refresh()` when a pull merges new `library_items`.
+ * user added that are not in the shared corpus (epic #1236).
+ *
+ * Two collections back this store. `library_items` (server-owned, pull-only) is
+ * the ingest FACTS — the store never writes it. `library_memberships` (CLIENT-
+ * owned, synced) is the user's remove/re-add INTENT — the store writes it via
+ * the journaled repo. The visible `items` is the join: a library item shown iff
+ * it is NOT archived in `library_memberships` (absent membership = active).
  *
  * NOTE: distinct from `useLibraryLandingStore` (Search landing sections) and
  * `useLibraryLanguages` (content-language facet) — "library" is overloaded in
@@ -23,11 +24,15 @@ import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 export const useLibraryStore = defineStore("personalLibrary", () => {
   const app = useShruti()
 
-  const items = ref<readonly LibraryItem[]>([])
+  // Raw facts + the archived-membership overlay; `items` is the active join.
+  const allItems = ref<readonly LibraryItem[]>([])
+  const archivedIds = ref<ReadonlySet<string>>(new Set())
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
 
+  /** Items the user has NOT removed — the visible library. */
+  const items = computed(() => allItems.value.filter((i) => !archivedIds.value.has(i.id)))
   /** Items still being ingested (server will flip them to ready/failed). */
   const pendingItems = computed(() => items.value.filter(isPendingLibraryItem))
   const hasPending = computed(() => pendingItems.value.length > 0)
@@ -37,92 +42,134 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     isLoading.value = true
     error.value = null
     try {
-      // Always present (does not depend on the sync `getDeviceId` gate); the
-      // sync-apply adapter fills the table when the engine runs.
-      items.value = await app.repositories().libraryItems.listAll()
+      // Facts + the archived overlay. Both always present (not gated on the sync
+      // `getDeviceId`); the sync-apply adapter fills the tables when the engine
+      // runs, and the local writes below fill memberships even without it.
+      const repos = app.repositories()
+      const [rows, archived] = await Promise.all([
+        repos.libraryItems.listAll(),
+        repos.libraryMemberships.listArchivedIds(),
+      ])
+      allItems.value = rows
+      archivedIds.value = archived
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load library"
       // Keep the last-good list (don't blank the shelf on a transient read
-      // failure), and leave `loaded` false so `ensureLoaded` retries rather than
-      // sticking on an empty view forever. refreshStores also re-runs on the
-      // next successful pull.
+      // failure), and leave `loaded` false so `ensureLoaded` retries.
       loaded = false
     } finally {
       isLoading.value = false
     }
   }
 
-  /** Lazy refresh — only refetches if we've never loaded. Cheap to call from
-   *  every view's `onMounted`. */
+  /** Lazy refresh — only refetches if we've never loaded. */
   async function ensureLoaded(): Promise<void> {
     if (!loaded) await refresh()
   }
 
   function getById(id: string): LibraryItem | undefined {
-    return items.value.find((i) => i.id === id)
+    return allItems.value.find((i) => i.id === id)
   }
 
-  /** Whether a source URL is already in the library — used to mark a search
-   *  candidate the user has added before. Matches on the normalized source
-   *  (YouTube URL variants collapse to their video id, mirroring the server). */
+  /** Whether a source URL is already an ACTIVE library item — used to mark a
+   *  search candidate the user has added. Matches on the normalized source. */
   function hasSource(url: string): boolean {
     if (!url.trim()) return false
     const key = normalizeSource(url)
     return items.value.some((i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key)
   }
 
+  /** Find a library item by source across ALL items (including removed ones),
+   *  so a re-add of a previously-removed lecture is recognised. */
+  function findBySource(url: string): LibraryItem | undefined {
+    if (!url.trim()) return undefined
+    const key = normalizeSource(url)
+    return allItems.value.find(
+      (i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key
+    )
+  }
+
   /**
-   * Trigger ingest of a lecture by URL through the orchestrator ingest API — the
-   * SINGLE client→server path (chat never ingests). The orchestrator dedups a
-   * re-add and restarts a dead-lettered job, so this one call serves BOTH a
-   * fresh add and a retry. `requestSync` then surfaces the freshly-queued
-   * `library_items` row. This does not write `library_items` itself — the server
-   * authors it and it arrives over sync, keeping the store's pull-only invariant.
-   *
-   * PRO-gated: a non-subscriber (or a server `not_pro` rejection) is bounced to
-   * the paywall. A transport failure surfaces as an error — it never falls back
-   * to a chat turn.
+   * Patch an item's lifecycle status (and track id) from a live status poll,
+   * ahead of the authoritative sync pull. No-op when the item isn't loaded yet
+   * or nothing changed; on a terminal transition the poller reconciles the full
+   * row via requestSync.
    */
-  async function addByUrl(url: string, hints?: { title?: string; author?: string }): Promise<void> {
+  function applyLiveStatus(id: string, status: LibraryItemStatus, trackId: TrackId | null): void {
+    const idx = allItems.value.findIndex((i) => i.id === id)
+    if (idx === -1) return
+    const cur = allItems.value[idx]
+    if (!cur) return
+    const nextTrackId = trackId ?? cur.trackId
+    if (cur.status === status && cur.trackId === nextTrackId) return
+    const next = allItems.value.slice()
+    next[idx] = { ...cur, status, trackId: nextTrackId }
+    allItems.value = next
+  }
+
+  /**
+   * Remove a lecture from the library — a client-owned soft delete: archive its
+   * membership (synced across the user's devices) and hide it locally. The
+   * `library_items` facts (and the stored content) are kept, so a later re-add
+   * is instant (see addByUrl) with no re-ingest.
+   */
+  async function remove(id: string): Promise<void> {
+    await app.repositories().libraryMemberships.setArchived(id)
+    requestSync()
+    await refresh()
+  }
+
+  /**
+   * Add / retry / re-add a lecture by URL. Resolves the right action locally so
+   * chat is never involved:
+   *   - not in the library        → submit to the ingest API (fresh add)
+   *   - removed (archived)         → un-archive locally (instant, no re-ingest);
+   *                                  also submit if it had failed
+   *   - present but failed         → submit (the orchestrator restarts the job)
+   *   - present and not failed      → no-op (already in the library / in progress)
+   * PRO-gated; a non-subscriber (or a server not_pro) is bounced to the paywall.
+   */
+  async function addByUrl(
+    url: string,
+    hints?: { title?: string; author?: string }
+  ): Promise<void> {
     if (!url.trim()) return
     const { usePurchasesStore } = await import("@shruti/stores/usePurchasesStore.js")
     if (!usePurchasesStore().isSubscribed) {
-      const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
-      usePaywallStore().requestOpen()
+      await openPaywall()
       return
     }
+    const existing = findBySource(url)
+    if (existing) {
+      const wasArchived = archivedIds.value.has(existing.id)
+      if (wasArchived) {
+        await app.repositories().libraryMemberships.setActive(existing.id)
+        requestSync()
+        await refresh()
+      }
+      // A failed item still needs a re-run; a healthy present item is done.
+      if (existing.status !== "failed") return
+    }
+    await submitIngest(url, hints)
+  }
+
+  async function submitIngest(url: string, hints?: { title?: string; author?: string }): Promise<void> {
     try {
       await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
       requestSync()
     } catch (err) {
       if (err instanceof IngestGatewayError && err.code === "not_pro") {
-        const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
-        usePaywallStore().requestOpen()
+        await openPaywall()
         return
       }
       error.value = err instanceof Error ? err.message : "Failed to add lecture"
     }
   }
 
-  /**
-   * Patch an item's lifecycle status (and track id) from a live status poll,
-   * ahead of the authoritative sync pull — the real-time bridge that flips a
-   * card queued → processing → ready without waiting out the sync cadence. A
-   * no-op when the item isn't in the store yet (its queued row hasn't synced) or
-   * nothing changed. On a terminal transition the poller reconciles the full row
-   * (audio keys, metadata) via requestSync.
-   */
-  function applyLiveStatus(id: string, status: LibraryItemStatus, trackId: TrackId | null): void {
-    const idx = items.value.findIndex((i) => i.id === id)
-    if (idx === -1) return
-    const cur = items.value[idx]
-    if (!cur) return
-    const nextTrackId = trackId ?? cur.trackId
-    if (cur.status === status && cur.trackId === nextTrackId) return
-    const next = items.value.slice()
-    next[idx] = { ...cur, status, trackId: nextTrackId }
-    items.value = next
+  async function openPaywall(): Promise<void> {
+    const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
+    usePaywallStore().requestOpen()
   }
 
   return {
@@ -136,8 +183,10 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     ensureLoaded,
     getById,
     hasSource,
-    addByUrl,
+    findBySource,
     applyLiveStatus,
+    remove,
+    addByUrl,
   }
 })
 

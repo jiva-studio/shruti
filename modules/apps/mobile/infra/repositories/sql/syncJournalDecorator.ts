@@ -5,7 +5,8 @@ import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepo
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
 import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionRepository.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
-import type { ListeningSessionRow } from "@lib/persistence/user"
+import type { ILibraryMembershipRepository } from "@lib/domain/ports/libraryMembershipRepository.js"
+import type { ListeningSessionRow, LibraryMembershipRow } from "@lib/persistence/user"
 import { hlcNow, hlcToString, parseHlc, type SyncOp } from "@lib/domain"
 import {
   noteToWire,
@@ -13,6 +14,7 @@ import {
   sessionRowToWire,
   chatSessionRowToWire,
   chatMessageRowToWire,
+  libraryMembershipRowToWire,
   type ChatSessionWire,
   type ChatMessageWire,
 } from "./syncWire.js"
@@ -80,6 +82,7 @@ export interface JournaledUserRepositories {
   readonly listeningSessions: IListeningSessionRepository
   readonly chatSessions: IChatSessionRepository
   readonly chatMessages: IChatMessageRepository
+  readonly libraryMemberships: ILibraryMembershipRepository
 }
 
 const PLAYLIST_ITEMS = "playlist_items"
@@ -87,6 +90,7 @@ const NOTES = "notes"
 const LISTENING_SESSIONS = "listening_sessions"
 const CHAT_SESSIONS = "chat_sessions"
 const CHAT_MESSAGES = "chat_messages"
+const LIBRARY_MEMBERSHIPS = "library_memberships"
 
 /** Wrap the synced repositories so every mutation is journaled to the outbox
  *  atomically. Read methods are delegated untouched. */
@@ -309,5 +313,44 @@ export function withSyncJournaling(
       }),
   }
 
-  return { notes, playlistItems, listeningSessions, chatSessions, chatMessages }
+  /* -------------------------- library memberships ------------------------- */
+
+  /** Snapshot the membership row and journal it as an upsert. The client never
+   *  deletes a membership (remove/re-add are both upserts), so no tombstone. */
+  async function journalMembership(id: string): Promise<void> {
+    const rows = await userDb.query<LibraryMembershipRow>(
+      "SELECT id, archived_at, updated_at FROM library_memberships WHERE id = ?",
+      [id]
+    )
+    const row = rows[0]
+    if (!row) return
+    await journal(LIBRARY_MEMBERSHIPS, row.id, "upsert", libraryMembershipRowToWire(row))
+  }
+
+  const libraryMemberships: ILibraryMembershipRepository = {
+    listArchivedIds: () => base.libraryMemberships.listArchivedIds(),
+    getById: (id) => base.libraryMemberships.getById(id),
+    clearAll: () => base.libraryMemberships.clearAll(),
+
+    setArchived: (id) =>
+      unitOfWork.run(async () => {
+        await base.libraryMemberships.setArchived(id)
+        await journalMembership(id)
+      }),
+
+    setActive: (id) =>
+      unitOfWork.run(async () => {
+        await base.libraryMemberships.setActive(id)
+        await journalMembership(id)
+      }),
+  }
+
+  return {
+    notes,
+    playlistItems,
+    listeningSessions,
+    chatSessions,
+    chatMessages,
+    libraryMemberships,
+  }
 }

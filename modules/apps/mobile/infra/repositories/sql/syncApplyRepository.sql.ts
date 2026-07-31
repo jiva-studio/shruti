@@ -7,6 +7,7 @@ import type {
   PlaylistItemRow,
   ListeningSessionRow,
   LibraryItemRow,
+  LibraryMembershipRow,
   SyncDocHlcRow,
 } from "@lib/persistence/user"
 import { createIdGenerator } from "./idGenerator.js"
@@ -15,12 +16,14 @@ import {
   playlistRowToWire,
   sessionRowToWire,
   libraryItemRowToWire,
+  libraryMembershipRowToWire,
   type NoteWire,
   type PlaylistWire,
   type SessionWire,
   type ChatSessionWire,
   type ChatMessageWire,
   type LibraryItemWire,
+  type LibraryMembershipWire,
 } from "./syncWire.js"
 
 /**
@@ -112,6 +115,14 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         ])
         return rows[0] ? libraryItemRowToWire(rows[0]) : null
       }
+      case "library_memberships": {
+        // doc_id is the library item id; the row shape maps 1:1 to the wire.
+        const rows = await db.query<LibraryMembershipRow>(
+          "SELECT id, archived_at, updated_at FROM library_memberships WHERE id = ?",
+          [docId]
+        )
+        return rows[0] ? libraryMembershipRowToWire(rows[0]) : null
+      }
       default:
         throw new Error(`syncApply: unknown collection "${collection}"`)
     }
@@ -139,6 +150,8 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         return upsertChatMessage(docId, data as ChatMessageWire)
       case "library_items":
         return upsertLibraryItem(docId, data as LibraryItemWire)
+      case "library_memberships":
+        return upsertLibraryMembership(docId, data as LibraryMembershipWire)
       default:
         throw new Error(`syncApply: unknown collection "${collection}"`)
     }
@@ -169,6 +182,12 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         // Server-authored removal (e.g. "remove from My library") arrives as a
         // tombstone; drop the local membership row.
         await db.execute("DELETE FROM library_items WHERE id = ?", [docId])
+        return
+      case "library_memberships":
+        // The client never emits a membership tombstone (remove/re-add are
+        // upserts), but a delete would revert to the active default — so drop
+        // the row.
+        await db.execute("DELETE FROM library_memberships WHERE id = ?", [docId])
         return
       default:
         throw new Error(`syncApply: unknown collection "${collection}"`)
@@ -337,6 +356,19 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         wire.created_at ?? null,
         wire.updated_at ?? null,
       ]
+    )
+  }
+
+  async function upsertLibraryMembership(
+    docId: string,
+    wire: LibraryMembershipWire
+  ): Promise<void> {
+    // Client-owned toggle applied wholesale, keyed on the sync doc_id (= library
+    // item id). archived_at NULL = active, set = removed.
+    await db.execute(
+      `INSERT INTO library_memberships (id, archived_at, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET archived_at = excluded.archived_at, updated_at = excluded.updated_at`,
+      [docId, wire.archived_at ?? null, wire.updated_at ?? null]
     )
   }
 

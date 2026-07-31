@@ -15,6 +15,10 @@ export type { INoteRepository, CreateNoteInput, UpdateNoteInput } from "./noteRe
 export type { IPlaylistItemRepository } from "./playlistItemRepository.js"
 export type { ILibraryItemRepository } from "./libraryItemRepository.js"
 export type {
+  ILibraryMembershipRepository,
+  LibraryMembership,
+} from "./libraryMembershipRepository.js"
+export type {
   IListeningSessionRepository,
   ProgressEntry,
   RecentTrackProgress,
