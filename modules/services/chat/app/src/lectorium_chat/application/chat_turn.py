@@ -385,12 +385,11 @@ async def run_chat_turn(
             kv_cache=deps.kv_cache,
             embed_task=embed_task,
             # Add-to-library (#1226): identity for the ingest.request payload,
-            # plus the provider resolver + broker publisher from the deps.
-            # `getattr` tolerates test AppDeps doubles that predate the fields.
+            # plus the provider resolver from the deps. `getattr` tolerates test
+            # AppDeps doubles that predate the field.
             user_id=(user_context.user_id if user_context else None),
             jwt=jwt,
             lecture_search=getattr(deps, "lecture_search", None),
-            ingest_publisher=getattr(deps, "ingest_publisher", None),
         )
 
         # A stale Pro claim (auth minted tier="pro" but tier_expires_at is in

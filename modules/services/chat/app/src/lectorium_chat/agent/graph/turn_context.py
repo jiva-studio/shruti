@@ -187,8 +187,7 @@ class TurnContext:
     user_id: str | None = None
     jwt: str | None = None
     # Multi-provider external-lecture search resolver (LectureSearchResolver)
-    # and the ingest-request broker publisher (IngestRequestPublisher), both
     # built once by the composition root. None in tests / when unconfigured —
-    # the worker degrades (no candidates / no-op publish) rather than crash.
+    # the worker degrades (no candidates) rather than crash. Chat never ingests;
+    # the client submits the chosen candidate to the orchestrator ingest API.
     lecture_search: Any | None = None
-    ingest_publisher: Any | None = None

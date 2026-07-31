@@ -1,27 +1,10 @@
-"""Ingest-request broker publisher.
+"""Broker adapters for the chat service.
 
-The `add-to-library` flow hands a chosen external lecture off to the ingest
-worker (#1224) by publishing to a broker stream. This package defines the
-small publisher port and two implementations:
-
-- `RedisStreamsIngestPublisher` — XADDs onto the configured Redis Stream.
-- `NoopIngestPublisher` — logs + no-ops when no broker is configured (the
-  #1224 broker may not exist yet), so the feature degrades instead of
-  crashing.
+Redis-Streams consumers that keep the chat corpus / RAG index in sync with the
+ingest + publish pipelines. They are imported by module path (e.g.
+`lectorium_chat.infra.broker.track_events_consumer`), so nothing is re-exported
+here. (The former ingest-request publisher is gone — the client now submits to
+the orchestrator ingest API directly; chat never ingests.)
 """
 
 from __future__ import annotations
-
-from lectorium_chat.infra.broker.publisher import (
-    IngestRequestPublisher,
-    NoopIngestPublisher,
-    RedisStreamsIngestPublisher,
-    build_ingest_publisher,
-)
-
-__all__ = [
-    "IngestRequestPublisher",
-    "NoopIngestPublisher",
-    "RedisStreamsIngestPublisher",
-    "build_ingest_publisher",
-]

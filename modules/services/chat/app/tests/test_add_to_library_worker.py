@@ -1,15 +1,14 @@
 """Tests for `agent/graph/nodes/add_to_library_worker` (intent=add-to-library).
 
 The worker is a deterministic terminal (no synthesizer), so the tests capture
-the SSE writer stream and assert on its structure: the PRO gate (free → upsell,
-no publish), a SEARCH query → candidate cards only with NO publish (+ action-
-before-marker ordering), a CONCRETE lecture URL → exactly one direct publish
-with NO candidate cards, and the empty result.
+the SSE writer stream and assert on its structure: the PRO gate (free → upsell),
+a SEARCH query → candidate cards (+ action-before-marker ordering), a CONCRETE
+lecture URL → a SINGLE candidate card (no search), and the empty result.
 
-A search query never publishes `ingest.request` — that happens when the user
-taps a card's "Add to library" action. A concrete lecture URL (YouTube
-watch/short link or a direct audio file) is an explicit target and IS published
-directly, PRO-gated, with a confirmation card instead of candidate cards.
+Chat is discovery only — it NEVER ingests. Every path ends at a candidate card;
+the user taps "Add to library" (+) and the client submits the URL to the ingest
+API. A concrete lecture URL (YouTube watch/short link or a direct audio file) is
+an explicit target, so it skips the search but is still offered as one card.
 """
 
 from __future__ import annotations
@@ -208,58 +207,53 @@ async def test_candidate_action_precedes_its_card_marker(_events) -> None:
     assert action_idx < marker_idx
 
 
-# ── Concrete lecture URL → direct publish ────────────────────────────────
+# ── Concrete lecture URL → a single candidate card ───────────────────────
+# Chat never ingests: a pasted concrete URL is offered as ONE candidate card,
+# the same as a search result. The user taps "Add to library" (+) and the client
+# submits to the ingest API.
 
 
-async def test_pro_youtube_url_publishes_directly_no_cards(_events) -> None:
-    pub = _FakePublisher(ok=True)
+async def test_pro_youtube_url_emits_single_card_no_search(_events) -> None:
     res = _FakeResolver([Candidate(url="https://other", title="X")])
-    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=res)
+    ctx = _Ctx(llm=_FakeLLM(), lecture_search=res)
 
     out = await atl.add_to_library_worker_node(
-        {
-            "user_query": "save https://youtu.be/abc123 to my library",
-            "tier": "pro",
-        },
+        {"user_query": "save https://youtu.be/abc123 to my library", "tier": "pro"},
         _Runtime(ctx),
     )
     assert out == {}
-    # A concrete lecture URL is published DIRECTLY: no search, exactly one
-    # ingest.request, and NO candidate cards.
+    # A concrete URL skips the search and becomes one candidate card — nothing
+    # is published, and there is no speculative "done" confirmation.
     assert res.calls == []
-    assert pub.calls == [("user-1", "https://youtu.be/abc123", "jwt-token")]
-    assert _actions(_events, "add_to_library") == []
-    # B2: a concrete URL publishes SILENTLY — no action event, no inline marker
-    # (the client has no "done" card, so a marker would render as raw text). The
-    # confirmation is the text line plus the My Library shelf.
+    cands = _actions(_events, "add_to_library")
+    assert len(cands) == 1
+    assert cands[0]["data"]["payload"]["url"] == "https://youtu.be/abc123"
+    assert "[action:add_to_library|id=" in _delta_text(_events)
     assert _actions(_events, "added_to_library") == []
-    assert "[action:added_to_library" not in _delta_text(_events)
-    assert "LINE" in _delta_text(_events)
 
 
-async def test_direct_publish_carries_oembed_title(
+async def test_concrete_url_card_carries_oembed_title(
     _events, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The client hands us only the URL, so the worker resolves the real title
-    # (oEmbed) and publishes it — the pre-ready library card shows the lecture's
-    # name instead of "Untitled".
+    # (oEmbed) for the card — it shows the lecture's name instead of "Untitled".
     async def _titled(_url: str) -> tuple[str, str, str]:
         return "Kirtan Mela with Niranjana Swami", "Purusottam108", "https://img/x.jpg"
 
     monkeypatch.setattr(atl, "_youtube_oembed", _titled)
-    pub = _FakePublisher(ok=True)
-    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=_FakeResolver([]))
+    ctx = _Ctx(llm=_FakeLLM(), lecture_search=_FakeResolver([]))
 
     await atl.add_to_library_worker_node(
         {"user_query": "save https://youtu.be/abc123 to my library", "tier": "pro"},
         _Runtime(ctx),
     )
-    assert pub.titles == ["Kirtan Mela with Niranjana Swami"]
+    cands = _actions(_events, "add_to_library")
+    assert len(cands) == 1
+    assert cands[0]["data"]["payload"]["title"] == "Kirtan Mela with Niranjana Swami"
 
 
-async def test_pro_watch_url_with_params_publishes_once(_events) -> None:
-    pub = _FakePublisher(ok=True)
-    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=_FakeResolver([]))
+async def test_pro_watch_url_with_params_emits_one_card(_events) -> None:
+    ctx = _Ctx(llm=_FakeLLM(), lecture_search=_FakeResolver([]))
     await atl.add_to_library_worker_node(
         {
             "user_query": "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s add it",
@@ -267,39 +261,23 @@ async def test_pro_watch_url_with_params_publishes_once(_events) -> None:
         },
         _Runtime(ctx),
     )
-    assert len(pub.calls) == 1
-    assert pub.calls[0][1] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s"
-    assert _actions(_events, "add_to_library") == []
+    cands = _actions(_events, "add_to_library")
+    assert len(cands) == 1
+    assert (
+        cands[0]["data"]["payload"]["url"]
+        == "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s"
+    )
 
 
-async def test_pro_audio_url_publishes_directly(_events) -> None:
-    pub = _FakePublisher(ok=True)
-    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=_FakeResolver([]))
+async def test_pro_audio_url_emits_one_card(_events) -> None:
+    ctx = _Ctx(llm=_FakeLLM(), lecture_search=_FakeResolver([]))
     await atl.add_to_library_worker_node(
         {"user_query": "add https://cdn.example.org/talks/lecture-01.mp3", "tier": "pro"},
         _Runtime(ctx),
     )
-    assert pub.calls == [
-        ("user-1", "https://cdn.example.org/talks/lecture-01.mp3", "jwt-token")
-    ]
-    # B2: silent publish — no action events of either kind.
-    assert _actions(_events, "added_to_library") == []
-    assert _actions(_events, "add_to_library") == []
-
-
-async def test_pro_broker_unconfigured_still_confirms(_events) -> None:
-    # No ingest_publisher (STREAMS_REDIS_URL unset → NoopIngestPublisher).
-    ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=None, lecture_search=_FakeResolver([]))
-    out = await atl.add_to_library_worker_node(
-        {"user_query": "add https://youtu.be/xyz789", "tier": "pro"},
-        _Runtime(ctx),
-    )
-    assert out == {}
-    # No broker → no crash; still confirms via the text line. B2 publishes
-    # silently, so there is no action event to carry a queued flag.
-    assert _actions(_events, "added_to_library") == []
-    assert _actions(_events, "add_to_library") == []
-    assert "LINE" in _delta_text(_events)
+    cands = _actions(_events, "add_to_library")
+    assert len(cands) == 1
+    assert cands[0]["data"]["payload"]["url"] == "https://cdn.example.org/talks/lecture-01.mp3"
 
 
 # ── Empty result ─────────────────────────────────────────────────────────
