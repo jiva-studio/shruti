@@ -399,9 +399,10 @@ async def test_date_query_with_no_lectures_says_so(_events) -> None:
     assert "LINE[localized_reply]" in text  # localized "no lectures for that date"
 
 
-async def test_empty_topic_query_still_flat_empty(_events) -> None:
-    # A topical query (no scripture ref) with no results keeps the old flat
-    # empty line — clarify is only for bare references.
+async def test_empty_topic_query_offers_web_search(_events) -> None:
+    # A topical query (no scripture ref) with no results is NOT a dead end: it
+    # offers a "search the web" chip that routes into add-to-library, carrying
+    # the user's request (so they tap once instead of re-typing it).
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[]]),
@@ -412,7 +413,9 @@ async def test_empty_topic_query_still_flat_empty(_events) -> None:
         {"user_query": "очищение сердца", "extracted_args": {}}, _Runtime(ctx)
     )
     text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert "[followup:" not in text
+    assert "[followup:" in text
+    assert "очищение сердца" in text  # the chip command carries the raw request
+    assert "add to my library" in text.lower() or "добавить" in text.lower()
 
 
 async def test_uncatalogued_track_dropped(_events) -> None:
