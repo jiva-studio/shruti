@@ -65,7 +65,10 @@
       :action-id="token.actionId"
       :payload="actionPayload(token.actionId, 'add_to_library')"
       :state="actionState(token.actionId)"
-      :already-in-library="library.hasSource(actionPayload(token.actionId, 'add_to_library')?.url ?? '')"
+      :already-in-library="
+        library.hasSource(actionPayload(token.actionId, 'add_to_library')?.url ?? '')
+      "
+      :live-status="ingestStatus(actionPayload(token.actionId, 'add_to_library')?.url)"
       @confirm="onConfirmAction"
     />
     <VerseCardContainer
@@ -173,7 +176,31 @@ const library = useLibraryStore()
 // repeated calls are free.
 void library.ensureLoaded()
 const app = useLectorium()
-const { locale } = useI18n()
+const { locale, t, te } = useI18n()
+
+/**
+ * Live ingest status for an add-to-library candidate, matched to its library
+ * item by source URL. Drives the card's inline progress (stage + download
+ * percent) while the lecture ingests, so the user sees it advance without
+ * leaving chat. Undefined once ready / never added — the card falls back to its
+ * add / done chrome.
+ */
+function ingestStatus(
+  url: string | undefined
+): { kind: "pending" | "failed"; label: string } | undefined {
+  if (!url) return undefined
+  const item = library.findBySource(url)
+  if (!item) return undefined
+  if (item.status === "failed") return { kind: "failed", label: t("library.status.failed") }
+  if (item.status === "queued" || item.status === "processing") {
+    const stage = library.liveStages.get(item.id)
+    const key = stage ? `library.status.stages.${stage}` : ""
+    const base = key && te(key) ? t(key) : t("library.status.processing")
+    const pct = library.livePercents.get(item.id)
+    return { kind: "pending", label: pct !== undefined ? `${base} ${pct}%` : base }
+  }
+  return undefined
+}
 
 // MediaCard turns a relative storage path into the active server's CDN URL.
 const storagePublicUrlGet = (path: string): string => app.storagePublicUrl.get(path)
