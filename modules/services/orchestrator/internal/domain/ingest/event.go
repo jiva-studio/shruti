@@ -24,11 +24,15 @@ type TrackEvent struct {
 	// RequestID is the originating chat turn's trace_id, carried onto the
 	// lifecycle stream so downstream consumers (profile, chat, storage-sync)
 	// stay on the same correlation chain as the pipeline that produced them.
-	RequestID string          `json:"request_id,omitempty"`
-	UserID    string          `json:"user_id"`
-	DocID     string          `json:"doc_id"`
-	TrackID   string          `json:"track_id,omitempty"`
-	Data      json.RawMessage `json:"data,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	UserID    string `json:"user_id"`
+	DocID     string `json:"doc_id"`
+	// Generation is the job's re-run counter (0 for the original run), carried so
+	// the profile projection can stamp a retry's lifecycle above the prior run's
+	// terminal state. Omitted for a generation-0 event, decoding back to 0.
+	Generation int             `json:"generation,omitempty"`
+	TrackID    string          `json:"track_id,omitempty"`
+	Data       json.RawMessage `json:"data,omitempty"`
 }
 
 // Marshal serializes the event for the outbox payload column.

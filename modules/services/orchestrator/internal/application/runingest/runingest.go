@@ -167,7 +167,7 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
 			return err
 		}
-		queued := event(jobID+":queued", ingest.EventQueued, req.RequestID, owner, jobID, "", statusData("queued", req.Title))
+		queued := event(jobID+":queued", ingest.EventQueued, req.RequestID, owner, jobID, "", j.Generation, statusData("queued", req.Title))
 		if err := h.publishEvent(ctx, tx, queued); err != nil {
 			return err
 		}
@@ -191,7 +191,7 @@ func (h *RequestHandler) failNotPro(ctx context.Context, jobID string, req inges
 		return fmt.Errorf("to failed: %w", err)
 	}
 	j.Err = errUnauthorized.Error()
-	ev := event(jobID+":failed", ingest.EventFailed, req.RequestID, j.OwnerID, jobID, j.TrackID, failData(errUnauthorized.Error(), req.Title))
+	ev := event(jobID+":failed", ingest.EventFailed, req.RequestID, j.OwnerID, jobID, j.TrackID, j.Generation, failData(errUnauthorized.Error(), req.Title))
 	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
 		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
 			return err
@@ -243,7 +243,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		if err := j.To(job.StateRunning); err != nil {
 			return fmt.Errorf("to running: %w", err)
 		}
-		ev := event(res.JobID+":processing", ingest.EventProcessing, res.RequestID, j.OwnerID, res.JobID, "", statusData("processing", specRequest(j).Title))
+		ev := event(res.JobID+":processing", ingest.EventProcessing, res.RequestID, j.OwnerID, res.JobID, "", j.Generation, statusData("processing", specRequest(j).Title))
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseReady:
@@ -262,7 +262,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		// place; the content hash rides along in track_id (via j.Result / the
 		// TrackEvent.TrackID field), not as the key.
 		lg.InfoContext(ctx, "job_done", "track_id", res.TrackID, "lang", res.Lang)
-		ev := event(res.JobID+":ready", ingest.EventReady, res.RequestID, j.OwnerID, res.JobID, res.TrackID, j.Result)
+		ev := event(res.JobID+":ready", ingest.EventReady, res.RequestID, j.OwnerID, res.JobID, res.TrackID, j.Generation, j.Result)
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseFailed:
@@ -318,7 +318,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		lg.ErrorContext(ctx, "job_dead_lettered",
 			"error", res.Error, "attempts", j.Attempts,
 			"exhausted", res.Retriable, "user_id", j.OwnerID)
-		ev := event(res.JobID+":failed", ingest.EventFailed, res.RequestID, j.OwnerID, res.JobID, j.TrackID, failData(res.Error, specRequest(j).Title))
+		ev := event(res.JobID+":failed", ingest.EventFailed, res.RequestID, j.OwnerID, res.JobID, j.TrackID, j.Generation, failData(res.Error, specRequest(j).Title))
 		return h.save(ctx, j, ev)
 
 	default:
@@ -404,16 +404,18 @@ func retryBackoff(attempt int) time.Duration {
 
 // event builds a lifecycle event. Its ID is derived from the JOB id + type so
 // redelivery (on either stream) re-emits the SAME id, keeping downstream
-// projections idempotent.
-func event(id, typ, requestID, userID, docID, trackID string, data []byte) ingest.TrackEvent {
+// projections idempotent. generation is the job's re-run counter, carried so a
+// retry's projection sorts above the prior run's terminal state.
+func event(id, typ, requestID, userID, docID, trackID string, generation int, data []byte) ingest.TrackEvent {
 	return ingest.TrackEvent{
-		ID:        id,
-		Type:      typ,
-		RequestID: requestID,
-		UserID:    userID,
-		DocID:     docID,
-		TrackID:   trackID,
-		Data:      data,
+		ID:         id,
+		Type:       typ,
+		RequestID:  requestID,
+		UserID:     userID,
+		DocID:      docID,
+		Generation: generation,
+		TrackID:    trackID,
+		Data:       data,
 	}
 }
 

@@ -46,8 +46,15 @@ type Job struct {
 	TrackID   string // content hash; empty until fetched
 	Err       string
 	Attempts  int
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// Generation counts re-runs of this job. 0 is the original run; a
+	// user-initiated retry of a dead-lettered (failed) job increments it so the
+	// re-run's track.events lifecycle stamps sort above the prior run's terminal
+	// state (see the profile projection's rank-ordered hlc). Attempts stay
+	// monotonic ACROSS generations so a stale result from a prior run is still
+	// discarded by its attempt number alone.
+	Generation int
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // allowedTransitions encodes the state machine.
