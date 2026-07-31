@@ -172,9 +172,13 @@ type chatMessageRow struct {
 // server-authored path ships in its data blob (there is no client user.db
 // counterpart — the client only reads this collection).
 type libraryItemRow struct {
-	TrackID        *string    `json:"track_id"` // nullable until fetched
-	Status         *string    `json:"status"`
-	Origin         *string    `json:"origin"`
+	TrackID *string `json:"track_id"` // nullable until fetched
+	Status  *string `json:"status"`
+	Origin  *string `json:"origin"`
+	// Error is the STABLE, client-localizable failure code (e.g. "unavailable"),
+	// not a raw internal message — see runingest failData. It lands in the error
+	// column and syncs down; a non-failed state carries none, clearing it on the
+	// replace-all upsert.
 	Error          *string    `json:"error"`
 	TitleRaw       *string    `json:"title_raw"`
 	AuthorRaw      *string    `json:"author_raw"`
