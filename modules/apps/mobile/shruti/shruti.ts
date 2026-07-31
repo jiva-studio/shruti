@@ -127,8 +127,7 @@ export interface Shruti {
   /**
    * Orchestrator ingest control-plane transport (POST /orchestrator/ingest,
    * GET /orchestrator/ingest/{id}). The library store drives it for direct
-   * add/retry and live status polling; a region without `orchestratorBaseUrl`
-   * leaves it unused and the store falls back to the chat add path.
+   * add/retry and live status polling.
    */
   readonly ingestClient: IIngestClient
   /**
