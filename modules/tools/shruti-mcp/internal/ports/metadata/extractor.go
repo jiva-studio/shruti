@@ -16,3 +16,15 @@ type Extractor interface {
 	// the extractor (e.g. ["BG", "SB", "CC"]) — improves reference parsing.
 	Extract(ctx context.Context, relPath string, sourceCodes []string) (track.Metadata, error)
 }
+
+// Reader returns metadata an importer stored in a file next to the audio,
+// already normalized — no filename grammar, no LLM. Stages read it directly:
+// ingest for the language it records on the file row, the metadata stage for
+// the full record.
+type Reader interface {
+	// Read takes the audio path as the caller sees it and returns the
+	// importer's record. ok=false means there is no metadata file for that
+	// path, which is not an error — the caller falls back to its own
+	// derivation.
+	Read(path string) (md track.Metadata, ok bool, err error)
+}
