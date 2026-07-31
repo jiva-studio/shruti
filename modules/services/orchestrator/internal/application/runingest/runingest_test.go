@@ -424,15 +424,26 @@ func TestResult_ProcessingStage_RecordsProgress(t *testing.T) {
 		t.Fatalf("status = %+v, want processing/transcribing", st)
 	}
 
-	// A later heartbeat updates the stage in place (no new track event needed).
+	// A downloading heartbeat carries a completion percent, surfaced by the status.
 	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{
-		JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing, Stage: "storing",
+		JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing, Stage: "downloading", Percent: 40,
 	})); err != nil {
 		t.Fatalf("processing 2: %v", err)
 	}
 	j, _ = h.repo.Get(context.Background(), jobID)
-	if st := StatusOf(j); st.Stage != "storing" {
-		t.Fatalf("status stage = %q, want storing", st.Stage)
+	if st := StatusOf(j); st.Stage != "downloading" || st.Percent != 40 {
+		t.Fatalf("status = %+v, want downloading/40", st)
+	}
+
+	// A later stage with no measure clears the percent (not a stale 40%).
+	if err := h.res.Process(context.Background(), "c", resPayload(t, ingest.Result{
+		JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing, Stage: "storing",
+	})); err != nil {
+		t.Fatalf("processing 3: %v", err)
+	}
+	j, _ = h.repo.Get(context.Background(), jobID)
+	if st := StatusOf(j); st.Stage != "storing" || st.Percent != 0 {
+		t.Fatalf("status = %+v, want storing/0", st)
 	}
 }
 

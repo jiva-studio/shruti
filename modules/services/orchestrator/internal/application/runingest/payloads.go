@@ -9,9 +9,15 @@ import (
 
 // progressData is the jobs.progress blob for a pipeline-stage heartbeat — the
 // poll-only granular status the ingest API serves (not a track.events payload,
-// never projected into library_items). Minimal + stable shape.
-func progressData(stage string) []byte {
-	b, _ := json.Marshal(map[string]any{"stage": stage})
+// never projected into library_items). Minimal + stable shape. percent is
+// carried only when meaningful (>0, the downloading stage), so a stage with no
+// measure doesn't advertise a bogus 0%.
+func progressData(stage string, percent int) []byte {
+	m := map[string]any{"stage": stage}
+	if percent > 0 {
+		m["percent"] = percent
+	}
+	b, _ := json.Marshal(m)
 	return b
 }
 

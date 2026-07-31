@@ -49,6 +49,9 @@ export interface IngestStatusResponse {
   /** Granular pipeline stage while processing (downloading / transcribing /
    *  reviewing / storing) — poll-only, shown live, never persisted. */
   readonly stage?: string
+  /** Download completion (0-100), present only on the downloading stage —
+   *  poll-only, refines the stage label ("Downloading 40%"). */
+  readonly percent?: number
 }
 
 /**
