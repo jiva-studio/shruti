@@ -18,7 +18,6 @@ import { migration_015_proactive_state_scheduler_authored } from "./015_proactiv
 import { migration_016_listening_sessions_dedupe_storm } from "./016_listening_sessions_dedupe_storm.js"
 import { migration_017_library_items } from "./017_library_items.js"
 import { migration_018_library_items_references } from "./018_library_items_references.js"
-import { migration_019_library_items_outline } from "./019_library_items_outline.js"
 import { migration_020_library_items_source_url } from "./020_library_items_source_url.js"
 import { migration_021_library_memberships } from "./021_library_memberships.js"
 import { migration_022_library_items_variants } from "./022_library_items_variants.js"
@@ -47,7 +46,6 @@ export const userMigrations: readonly Migration[] = [
   migration_016_listening_sessions_dedupe_storm,
   migration_017_library_items,
   migration_018_library_items_references,
-  migration_019_library_items_outline,
   migration_020_library_items_source_url,
   migration_021_library_memberships,
   migration_022_library_items_variants,

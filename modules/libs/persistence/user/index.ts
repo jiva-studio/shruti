@@ -73,11 +73,6 @@ export interface LibraryItemRow {
   /** Raw scripture references extracted from the title, stored as a JSON array
    *  `[{"source","tokens"}]`; NULL when none / older rows. */
   readonly references_json: string | null
-  /** LLM overview of the lecture, filled on ready; NULL when not generated. */
-  readonly description: string | null
-  /** Coarse chapter outline, stored as a JSON array `[{"title","start","end"}]`
-   *  (ms spans); NULL when not generated / older rows. */
-  readonly outline_json: string | null
   /** Source URL the lecture was added from; NULL on older rows. */
   readonly source_url: string | null
   readonly created_at: number | null
