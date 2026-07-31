@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -158,29 +159,6 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		raw.Language = "und" // keep the transcripts/<lang>.json key well-formed
 	}
 
-	// Turn raw ASR segments into the reviewed artifact the corpus/app read
-	// (transcript.Reviewed). With an LLM reviewer configured, run the shared
-	// review pipeline (chunk → LLM cleanup → sentence assembly); otherwise the
-	// deterministic per-segment windowing. LLM review is best-effort — per-chunk
-	// failures degrade to raw text inside ReviewTranscript, never fatal.
-	s.progress(ctx, cmd, ingest.StageReviewing)
-	reviewed := s.d.Reviewer.NormalizeTranscript(raw)
-	if s.d.LLMReviewer != nil {
-		reviewed = review.ReviewTranscript(ctx, s.d.LLMReviewer, raw, review.Options{Glossary: s.d.Glossary})
-	}
-	if len(reviewed.Blocks) == 0 {
-		// Deepgram returned 200 but no usable speech. Announcing this as ready
-		// would store an empty transcript the app/corpus can't use, with no
-		// recovery. Fail RETRIABLY (not ErrPermanent): a transient ASR hiccup
-		// clears on retry, and a genuinely silent source dead-letters as failed
-		// after the attempt cap rather than masquerading as a ready track.
-		return s.fail(ctx, lg, cmd, fmt.Errorf("transcription produced no blocks"))
-	}
-	transcriptBody, err := json.Marshal(reviewed)
-	if err != nil {
-		return s.fail(ctx, lg, cmd, fmt.Errorf("marshal transcript: %w", err))
-	}
-
 	// Source metadata fills what the request didn't carry: the source's own
 	// title as a fallback when no hint was passed (a direct URL add), the
 	// uploader/channel as an author, and the publish date as a date fallback.
@@ -205,20 +183,30 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	if draft, err = s.d.Reviewer.Review(ctx, draft); err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("review: %w", err))
 	}
-	lang := draft.Lang
+
+	// Split the transcript by language, review each group into its own
+	// transcripts/<lang>.json, and generate that language's overview — a
+	// lecturer+translator recording yields one variant per language; a
+	// single-language track yields exactly one.
+	s.progress(ctx, cmd, ingest.StageReviewing)
+	variants, primaryLang, err := s.reviewSplit(ctx, lg, hash, raw, draft.Lang)
+	if err != nil {
+		return s.fail(ctx, lg, cmd, err)
+	}
 
 	s.progress(ctx, cmd, ingest.StageStoring)
 	stage = time.Now()
-	aKey, tKey := audioKey(hash), transcriptKey(hash, lang)
+	aKey := audioKey(hash)
 	if err := s.d.Blob.Put(ctx, aKey, audio, "audio/mpeg"); err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("put audio: %w", err))
 	}
-	if err := s.d.Blob.Put(ctx, tKey, transcriptBody, "application/json"); err != nil {
-		return s.fail(ctx, lg, cmd, fmt.Errorf("put transcript: %w", err))
-	}
 
-	// HEAD-verify both artifacts before announcing the track.
-	for _, k := range []string{aKey, tKey} {
+	// HEAD-verify the audio and every stored transcript before announcing.
+	verify := []string{aKey}
+	for _, v := range variants {
+		verify = append(verify, v.TranscriptKey)
+	}
+	for _, k := range verify {
 		exists, err := s.d.Blob.Exists(ctx, k)
 		if err != nil {
 			return s.fail(ctx, lg, cmd, fmt.Errorf("verify %s: %w", k, err))
@@ -228,38 +216,98 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		}
 	}
 	lg.InfoContext(ctx, "ingest_stored",
-		"duration_ms", ms(stage), "blocks", len(reviewed.Blocks),
-		"audio_key", aKey, "transcript_key", tKey)
+		"duration_ms", ms(stage), "languages", len(variants),
+		"primary_lang", primaryLang, "audio_key", aKey)
 
 	// Cover is best-effort: fetch the source thumbnail and store it under the
 	// public cover key. A miss just means the track has no art — never fatal.
 	coverKey := s.storeCover(ctx, lg, cmd.URL, hash)
 
-	// Description + chapter outline from the reviewed transcript (best-effort).
-	description, chapters := s.outline(ctx, lg, reviewed.Blocks, lang)
-
-	lg.InfoContext(ctx, "ingest_ready", "lang", lang, "total_ms", ms(started))
+	lg.InfoContext(ctx, "ingest_ready", "lang", primaryLang, "languages", len(variants), "total_ms", ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:         cmd.JobID,
 		RequestID:     cmd.RequestID,
 		Attempt:       cmd.Attempt,
 		Phase:         ingest.PhaseReady,
 		TrackID:       hash,
-		Lang:          lang,
+		Lang:          primaryLang,
 		Title:         draft.TitleRaw,
 		AuthorRaw:     draft.AuthorRaw,
 		LocationRaw:   draft.LocationRaw,
 		Date:          draft.Date,
 		KindTag:       ex.KindTag,
 		References:    toResultRefs(ex.References),
-		Description:   description,
-		Outline:       chapters,
 		CoverKey:      coverKey,
 		Duration:      info.Duration * 1000,
 		AudioKey:      aKey,
-		TranscriptKey: tKey,
+		TranscriptKey: transcriptKey(hash, primaryLang),
+		Variants:      variants,
 		SourceURL:     cmd.URL,
 	})
+}
+
+// reviewSplit groups the raw segments by language, reviews each kept group into
+// its own transcript, stores it at transcripts/<lang>.json, generates that
+// language's overview (description + outline), and returns the variants plus the
+// primary (largest surviving) language.
+//
+// A language becomes its own variant only when it clears the threshold
+// (langSplitThreshold); below-threshold segments fold into the primary
+// transcript so a stray mis-tagged sentence never spawns a junk variant and no
+// content is lost. A group that reviews to zero blocks is dropped. The whole
+// ingest fails (no_speech) only when NO group produced any blocks.
+func (s *Service) reviewSplit(
+	ctx context.Context, lg *slog.Logger, hash string, raw transcript.Raw, primary string,
+) ([]ingest.Variant, string, error) {
+	groups := splitSegmentsByLanguage(raw.Segments, primary)
+
+	var variants []ingest.Variant
+	primaryStored := false
+	for _, lang := range orderedLanguages(groups, primary) {
+		segs := groups[lang]
+		reindexed := make([]transcript.RawSegment, len(segs))
+		for i, sg := range segs {
+			sg.Idx = i
+			reindexed[i] = sg
+		}
+		sub := transcript.Raw{TrackId: hash, Language: lang, Segments: reindexed, Provider: raw.Provider, Model: raw.Model}
+		reviewed := s.d.Reviewer.NormalizeTranscript(sub)
+		if s.d.LLMReviewer != nil {
+			reviewed = review.ReviewTranscript(ctx, s.d.LLMReviewer, sub, review.Options{Glossary: s.d.Glossary})
+		}
+		if len(reviewed.Blocks) == 0 {
+			lg.WarnContext(ctx, "ingest_language_empty", "lang", lang)
+			continue
+		}
+		body, err := json.Marshal(reviewed)
+		if err != nil {
+			return nil, "", fmt.Errorf("marshal transcript %s: %w", lang, err)
+		}
+		tKey := transcriptKey(hash, lang)
+		if err := s.d.Blob.Put(ctx, tKey, body, "application/json"); err != nil {
+			return nil, "", fmt.Errorf("put transcript %s: %w", lang, err)
+		}
+		// Overview generated FROM this language's own blocks (best-effort).
+		description, chapters := s.outline(ctx, lg, reviewed.Blocks, lang)
+		variants = append(variants, ingest.Variant{
+			Lang:          lang,
+			TranscriptKey: tKey,
+			Description:   description,
+			Outline:       chapters,
+		})
+		if lang == primary {
+			primaryStored = true
+		}
+	}
+	if len(variants) == 0 {
+		return nil, "", fmt.Errorf("transcription produced no blocks")
+	}
+	// The primary group can be dropped as empty while a secondary survives; the
+	// first stored variant then becomes the primary label.
+	if !primaryStored {
+		primary = variants[0].Lang
+	}
+	return variants, primary, nil
 }
 
 // fail publishes a terminal failed result (classifying transient vs permanent).
@@ -396,6 +444,64 @@ func parseYtdlpDate(s string) (string, bool) {
 		return t.Format("2006-01-02"), true
 	}
 	return "", false
+}
+
+// langSplitThreshold is the minimum share of sentences (of the total) a
+// language needs to earn its own transcript variant, plus an absolute floor of
+// langSplitMinSentences so a short recording can't spin a variant off a single
+// mis-tagged phrase. Below either, the segments fold into the primary transcript.
+const (
+	langSplitThreshold    = 0.10
+	langSplitMinSentences = 3
+)
+
+// splitSegmentsByLanguage buckets segments into per-language groups. A language
+// clears the split only with ≥ langSplitThreshold of the sentences AND ≥
+// langSplitMinSentences; every other segment (below-threshold or untagged) folds
+// into the primary group, so nothing is dropped. The primary is always its own
+// group.
+func splitSegmentsByLanguage(segs []transcript.RawSegment, primary string) map[string][]transcript.RawSegment {
+	total := len(segs)
+	counts := map[string]int{}
+	for _, sg := range segs {
+		counts[sg.Language]++
+	}
+	minCount := langSplitMinSentences
+	if t := int(float64(total)*langSplitThreshold + 0.999); t > minCount {
+		minCount = t
+	}
+	kept := map[string]bool{primary: true}
+	for lang, n := range counts {
+		if lang != "" && n >= minCount {
+			kept[lang] = true
+		}
+	}
+	groups := map[string][]transcript.RawSegment{}
+	for _, sg := range segs {
+		lang := sg.Language
+		if lang == "" || !kept[lang] {
+			lang = primary
+		}
+		groups[lang] = append(groups[lang], sg)
+	}
+	return groups
+}
+
+// orderedLanguages returns the group languages with the primary first, then the
+// rest alphabetically — a stable, deterministic review/store order.
+func orderedLanguages(groups map[string][]transcript.RawSegment, primary string) []string {
+	rest := make([]string, 0, len(groups))
+	for lang := range groups {
+		if lang != primary {
+			rest = append(rest, lang)
+		}
+	}
+	sort.Strings(rest)
+	out := make([]string, 0, len(groups))
+	if _, ok := groups[primary]; ok {
+		out = append(out, primary)
+	}
+	return append(out, rest...)
 }
 
 func firstNonEmpty(vals ...string) string {

@@ -22,8 +22,7 @@ function readyItem(overrides: Partial<LibraryItem> = {}): LibraryItem {
     transcriptKey: null,
     duration: 3_600_000,
     coverKey: null,
-    description: null,
-    outline: null,
+    variants: [],
     references: [],
     sourceUrl: null,
     createdAt: 1000,
@@ -91,5 +90,37 @@ describe("libraryItemToTrack — synthetic Track adapter", () => {
     expect(track!.variants[0]!.transcript).toBeNull()
     // Audio path is still derivable once the content hash exists.
     expect(track!.variants[0]!.audio?.path).toBe("public/tracks/hash-abc/audio/original.mp3")
+  })
+
+  it("emits one Track variant per stored language, each with its own transcript + overview", () => {
+    const track = libraryItemToTrack(
+      readyItem({
+        lang: "en",
+        variants: [
+          {
+            language: "en",
+            transcriptKey: "public/tracks/hash-abc/transcripts/en.json",
+            description: "English overview",
+            outline: [{ title: "Intro", startMs: 0, endMs: 1000 }],
+          },
+          {
+            language: "ru",
+            transcriptKey: "public/tracks/hash-abc/transcripts/ru.json",
+            description: "Русский обзор",
+            outline: [{ title: "Вступление", startMs: 0, endMs: 1000 }],
+          },
+        ],
+      })
+    )!
+    expect(track.variants).toHaveLength(2)
+    const en = track.variants.find((v) => v.language === "en")!
+    const ru = track.variants.find((v) => v.language === "ru")!
+    expect(en.transcript?.path).toBe("public/tracks/hash-abc/transcripts/en.json")
+    expect(en.description).toBe("English overview")
+    expect(ru.transcript?.path).toBe("public/tracks/hash-abc/transcripts/ru.json")
+    expect(ru.description).toBe("Русский обзор")
+    expect(ru.outline?.[0]!.title).toBe("Вступление")
+    // Audio is the one shared file for every language.
+    expect(en.audio?.path).toBe(ru.audio?.path)
   })
 })

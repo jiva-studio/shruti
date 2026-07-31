@@ -10,57 +10,68 @@ export interface UseTranscriptLoaderOptions {
   getTranscripts: () => ITranscriptRepository
 }
 
+/** One loaded language + its transcript document, in the order the languages
+ *  were requested. Time-merged into the view by `buildMergedTranscriptViewData`. */
+export interface LoadedTranscript {
+  readonly language: LanguageCode
+  readonly transcript: Transcript
+}
+
 export interface UseTranscriptLoaderReturn {
-  transcript: Ref<Transcript | null>
+  transcripts: Ref<readonly LoadedTranscript[]>
   isLoading: Ref<boolean>
   error: Ref<string | null>
-  /** Loads (or clears) the transcript for a `(trackId, language)` pair.
-   *  A monotonic token ensures stale responses are dropped. */
-  reload: (trackId: TrackId | undefined, language: LanguageCode | undefined) => Promise<void>
+  /** Loads (or clears) the transcripts for a track's active languages. Each is
+   *  fetched in parallel; a monotonic token ensures stale responses are dropped.
+   *  Languages with no transcript are simply omitted. */
+  reload: (trackId: TrackId | undefined, languages: readonly LanguageCode[]) => Promise<void>
 }
 
 /**
- * Owns the asynchronous load of a transcript document. Uses a monotonic
- * token so a slow earlier request never overwrites a faster newer one.
- * "no-transcript-available" is treated as a successful empty load
- * rather than an error so the dialog can show its empty state.
+ * Owns the asynchronous load of a track's transcript documents (one per active
+ * language). Uses a monotonic token so a slow earlier request never overwrites
+ * a faster newer one. "no-transcript-available" is treated as a successful empty
+ * load rather than an error so the dialog can show its empty state.
  */
 export function useTranscriptLoader(
   options: UseTranscriptLoaderOptions
 ): UseTranscriptLoaderReturn {
-  const transcript = ref<Transcript | null>(null)
+  const transcripts = ref<readonly LoadedTranscript[]>([])
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loadToken = 0
 
   async function reload(
     trackId: TrackId | undefined,
-    language: LanguageCode | undefined
+    languages: readonly LanguageCode[]
   ): Promise<void> {
-    if (!trackId || !language) {
-      transcript.value = null
+    if (!trackId || languages.length === 0) {
+      transcripts.value = []
       return
     }
     const token = ++loadToken
     isLoading.value = true
     try {
-      const result = await loadTranscript(
-        { trackId, preferredLanguage: language },
-        { transcripts: options.getTranscripts() }
+      const repo = options.getTranscripts()
+      const loaded = await Promise.all(
+        languages.map(async (language) => {
+          const result = await loadTranscript(
+            { trackId, preferredLanguage: language },
+            { transcripts: repo }
+          )
+          if (result.ok) return { language, transcript: result.value.transcript }
+          if (result.error !== "no-transcript-available") {
+            error.value = `Transcript failed to load: ${result.error}`
+          }
+          return null
+        })
       )
       if (token !== loadToken) return
-      if (result.ok) {
-        transcript.value = result.value.transcript
-      } else {
-        transcript.value = null
-        if (result.error !== "no-transcript-available") {
-          error.value = `Transcript failed to load: ${result.error}`
-        }
-      }
+      transcripts.value = loaded.filter((x): x is LoadedTranscript => x !== null)
     } finally {
       if (token === loadToken) isLoading.value = false
     }
   }
 
-  return { transcript, isLoading, error, reload }
+  return { transcripts, isLoading, error, reload }
 }

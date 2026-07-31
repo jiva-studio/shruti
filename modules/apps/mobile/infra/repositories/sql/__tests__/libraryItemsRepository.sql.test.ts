@@ -25,7 +25,7 @@ async function applySchema(db: IDatabase): Promise<void> {
     author_id TEXT, location_id TEXT, date TEXT, date_precision TEXT,
     lang TEXT, lang_confidence REAL, error TEXT, audio_key TEXT, transcript_key TEXT,
     duration INTEGER, cover_key TEXT, references_json TEXT, description TEXT, outline_json TEXT,
-    source_url TEXT, created_at INTEGER, updated_at INTEGER
+    variants_json TEXT, source_url TEXT, created_at INTEGER, updated_at INTEGER
   )`)
   await db.execute(`CREATE TABLE outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT, collection TEXT NOT NULL, doc_id TEXT NOT NULL,
@@ -59,8 +59,7 @@ function wire(overrides: Partial<LibraryItemWire> = {}): LibraryItemWire {
     duration: 3_600_000,
     cover_key: null,
     references: null,
-    description: null,
-    outline: null,
+    variants: null,
     source_url: null,
     created_at: 1000,
     updated_at: 2000,

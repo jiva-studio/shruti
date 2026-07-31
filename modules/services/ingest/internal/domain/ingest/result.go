@@ -52,7 +52,12 @@ type Result struct {
 	Title         string `json:"title,omitempty"`
 	AudioKey      string `json:"audio_key,omitempty"`
 	TranscriptKey string `json:"transcript_key,omitempty"`
-	SourceURL     string `json:"source_url,omitempty"`
+	// Variants lists every stored per-language transcript (a bilingual
+	// lecturer+translator recording yields one per language). Lang/TranscriptKey
+	// above mirror the PRIMARY (largest) variant for back-compat; Variants carries
+	// them all. Single-language tracks have one entry.
+	Variants  []Variant `json:"variants,omitempty"`
+	SourceURL string    `json:"source_url,omitempty"`
 	// Extracted metadata (best-effort, ready phase): the raw author/location,
 	// the ISO date, the kind tag, and any scripture references parsed from the
 	// title. Empty when the extractor is unconfigured or found nothing. The
@@ -62,12 +67,6 @@ type Result struct {
 	Date        string `json:"date,omitempty"`
 	KindTag     string `json:"kind_tag,omitempty"`
 	References  []Ref  `json:"references,omitempty"`
-	// Description is the LLM overview of the lecture; Outline is its coarse
-	// chapter list. Both are best-effort (ready phase) and empty when the
-	// outline generator is unconfigured or failed. The orchestrator projects
-	// them onto the library_items row's variant.
-	Description string         `json:"description,omitempty"`
-	Outline     []OutlineEntry `json:"outline,omitempty"`
 	// CoverKey is the public bucket key of the stored cover image, set when the
 	// worker fetched a thumbnail for the source. Empty when none was available.
 	CoverKey string `json:"cover_key,omitempty"`
@@ -78,6 +77,17 @@ type Result struct {
 	Duration  int64  `json:"duration,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Retriable bool   `json:"retriable,omitempty"`
+}
+
+// Variant is one stored per-language transcript for the track: its language, the
+// bucket key of its transcripts/<lang>.json (only that language's blocks), and
+// the overview (description + chapter outline) generated FROM that language.
+// Audio is shared across variants, so it is not repeated here.
+type Variant struct {
+	Lang          string         `json:"lang"`
+	TranscriptKey string         `json:"transcript_key"`
+	Description   string         `json:"description,omitempty"`
+	Outline       []OutlineEntry `json:"outline,omitempty"`
 }
 
 // OutlineEntry is one chapter heading with its [start,end) span in ms, matching

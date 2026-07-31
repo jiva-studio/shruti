@@ -11,6 +11,11 @@ type RawSegment struct {
 	End        int64   `json:"end"`   // ms
 	Text       string  `json:"text"`
 	Confidence float64 `json:"confidence"`
+	// Language is this segment's language code as the provider reports it — the
+	// same value that keys transcripts/<lang>.json (Deepgram multi returns
+	// 2-letter codes, e.g. "en"/"ru"). Empty when the provider doesn't tag per
+	// segment. Drives the ingest per-language split; ignored elsewhere.
+	Language string `json:"language,omitempty"`
 }
 
 // Raw is the language-tagged ASR output for one (track, language).

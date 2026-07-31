@@ -55,19 +55,20 @@ export function createCompositeTrackRepository(
       const path = await corpus.getTranscriptPath(trackId, language)
       if (path !== null) return path
       const t = await library.getTrackByTrackId(trackId)
-      return t?.variants[0]?.transcript?.path ?? null
+      // Resolve the REQUESTED language's variant, not variants[0] — a bilingual
+      // library track has one transcript per language.
+      return t?.variants.find((v) => v.language === language)?.transcript?.path ?? null
     },
 
     async listTranscriptLanguages(trackId: TrackId): Promise<readonly LanguageCode[]> {
       const langs = await corpus.listTranscriptLanguages(trackId)
       if (langs.length > 0) return langs
-      const variant = (await library.getTrackByTrackId(trackId))?.variants[0]
-      return variant?.transcript ? [variant.language] : []
+      const t = await library.getTrackByTrackId(trackId)
+      // Every variant that has a transcript is a selectable language.
+      return (t?.variants ?? []).filter((v) => v.transcript).map((v) => v.language)
     },
 
-    async getDurationsMs(
-      trackIds: readonly TrackId[]
-    ): Promise<ReadonlyMap<TrackId, number>> {
+    async getDurationsMs(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>> {
       const map = new Map(await corpus.getDurationsMs(trackIds))
       await Promise.all(
         trackIds

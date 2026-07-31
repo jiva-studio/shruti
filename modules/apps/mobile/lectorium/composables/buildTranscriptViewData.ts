@@ -1,6 +1,6 @@
 import type { LanguageCode, NoteId } from "@lib/domain/core.js"
 import type { Source } from "@lib/domain/source.js"
-import type { Transcript } from "@lib/domain/transcript.js"
+import type { Transcript, TranscriptBlock } from "@lib/domain/transcript.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type {
   UiTranscriptBlockRaw,
@@ -59,6 +59,20 @@ export interface BuildTranscriptViewDataOpts {
    * reader can render an inline heading there. Empty / omitted → no splits.
    */
   readonly chapters?: readonly TrackOutlineChapter[]
+  /**
+   * When merging multiple languages, force a fresh paragraph whenever the block
+   * language changes, so a paragraph never mixes languages. Single-language
+   * builds ignore it. Defaults to false (only the char threshold / markers break).
+   */
+  readonly breakOnLanguageChange?: boolean
+}
+
+/** One block paired with the language of the transcript it came from — the unit
+ *  the grouper consumes, so a merged multi-language view keeps each block's own
+ *  language for hyphenation/font. */
+interface LangBlock {
+  readonly block: TranscriptBlock
+  readonly language: LanguageCode
 }
 
 /**
@@ -72,10 +86,39 @@ export function buildTranscriptViewData(
   opts: BuildTranscriptViewDataOpts
 ): readonly UiTranscriptBlocksGroup[] {
   if (!transcript) return []
+  return groupLangBlocks(
+    transcript.blocks.map((block) => ({ block, language: transcript.language })),
+    opts
+  )
+}
 
+/**
+ * Merge SEVERAL per-language transcripts into one interleaved view: every
+ * enabled language's blocks are combined and ordered by time, each block
+ * keeping its own language. Used by the multi-language transcript viewer (a
+ * lecturer+translator recording). A stable sort with a language tiebreak keeps
+ * equal-start blocks in a deterministic order.
+ */
+export function buildMergedTranscriptViewData(
+  transcripts: readonly { readonly language: LanguageCode; readonly transcript: Transcript }[],
+  opts: BuildTranscriptViewDataOpts
+): readonly UiTranscriptBlocksGroup[] {
+  const merged: LangBlock[] = transcripts.flatMap((t) =>
+    t.transcript.blocks.map((block) => ({ block, language: t.language }))
+  )
+  merged.sort((a, b) => a.block.start - b.block.start || a.language.localeCompare(b.language))
+  return groupLangBlocks(merged, opts)
+}
+
+/** Core: group a time-ordered list of (block, language) into paragraph groups. */
+function groupLangBlocks(
+  entries: readonly LangBlock[],
+  opts: BuildTranscriptViewDataOpts
+): readonly UiTranscriptBlocksGroup[] {
   const groups: UiTranscriptBlocksGroup[] = []
   let current: UiTranscriptBlockView[] = []
   let lastSpeaker: string | undefined = undefined
+  let lastLanguage: LanguageCode | undefined = undefined
   let charsAccum = 0
 
   // Outline chapters sorted by start; `chapterIdx` walks forward as blocks
@@ -133,16 +176,22 @@ export function buildTranscriptViewData(
     }
     current = []
     lastSpeaker = undefined
+    lastLanguage = undefined
     charsAccum = 0
     // The heading belongs to the group just flushed; the next group starts
     // headless until another chapter boundary opens one.
     currentHeading = undefined
   }
 
-  for (const block of transcript.blocks) {
+  for (const { block, language: blockLang } of entries) {
     if (block.type === "paragraph") {
       flush()
       continue
+    }
+
+    // Multi-language merge: never let a paragraph span two languages.
+    if (opts.breakOnLanguageChange && current.length > 0 && blockLang !== lastLanguage) {
+      flush()
     }
 
     // Outline boundary: if this block is the first to reach the next
@@ -223,10 +272,11 @@ export function buildTranscriptViewData(
     const overlap = collectOverlap(raw.start, raw.end)
     current.push({
       block: raw,
-      language: transcript.language,
+      language: blockLang,
       bookmarked: overlap.bookmarked,
       noteIds: overlap.noteIds,
     })
+    lastLanguage = blockLang
 
     if (block.type === "sentence") {
       lastSpeaker = block.speaker

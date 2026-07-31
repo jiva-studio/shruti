@@ -3,7 +3,10 @@ import type { LanguageCode, NoteId, SourceId, TrackId } from "@lib/domain/core.j
 import type { Reference } from "@lib/domain/reference.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Transcript, TranscriptBlock } from "@lib/domain/transcript.js"
-import { buildTranscriptViewData } from "../buildTranscriptViewData.js"
+import {
+  buildTranscriptViewData,
+  buildMergedTranscriptViewData,
+} from "../buildTranscriptViewData.js"
 
 function sentence(start: number, end: number, text: string): TranscriptBlock {
   return { type: "sentence", start, end, text }
@@ -20,6 +23,54 @@ function makeTranscript(blocks: TranscriptBlock[]): Transcript {
 
 const EN: LanguageCode = "en" as LanguageCode
 const RU: LanguageCode = "ru" as LanguageCode
+
+function transcriptIn(language: LanguageCode, blocks: TranscriptBlock[]): Transcript {
+  return { trackId: "t1" as TrackId, language, version: 1, blocks }
+}
+
+describe("buildMergedTranscriptViewData — multi-language interleave", () => {
+  // A lecturer(en)+translator(ru) recording: sentences alternate in time.
+  const en = transcriptIn(EN, [
+    sentence(0, 900, "Forgiveness is important."),
+    sentence(2000, 2900, "One should never desire to be the cause."),
+  ])
+  const ru = transcriptIn(RU, [
+    sentence(1000, 1900, "Прощение важно."),
+    sentence(3000, 3900, "Не следует желать быть причиной."),
+  ])
+
+  it("orders every language's blocks by time, each keeping its own language", () => {
+    const groups = buildMergedTranscriptViewData(
+      [
+        { language: EN, transcript: en },
+        { language: RU, transcript: ru },
+      ],
+      { paragraphChars: 9999, breakOnLanguageChange: true }
+    )
+    const flat = groups.flatMap((g) => g.blocks)
+    expect(flat.map((b) => b.block.start)).toEqual([0, 1000, 2000, 3000])
+    expect(flat.map((b) => b.language)).toEqual([EN, RU, EN, RU])
+  })
+
+  it("never mixes languages in one paragraph when breakOnLanguageChange is set", () => {
+    const groups = buildMergedTranscriptViewData(
+      [
+        { language: EN, transcript: en },
+        { language: RU, transcript: ru },
+      ],
+      { paragraphChars: 9999, breakOnLanguageChange: true }
+    )
+    // Each alternation forces a fresh group → every group is single-language.
+    for (const g of groups) {
+      const langs = new Set(g.blocks.map((b) => b.language))
+      expect(langs.size).toBe(1)
+    }
+  })
+
+  it("returns [] for no transcripts", () => {
+    expect(buildMergedTranscriptViewData([], { paragraphChars: 100 })).toEqual([])
+  })
+})
 
 function makeSources(): ReadonlyMap<string, Source> {
   return new Map<string, Source>([

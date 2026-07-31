@@ -12,7 +12,7 @@ import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import router from "@lectorium/router/index.js"
-import { buildTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
+import { buildMergedTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import { resolveLocalizedName } from "@lib/domain/services/localizedName.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
@@ -87,7 +87,6 @@ export function useTranscriptDialogController(
   const chatStore = useChatStore()
   const appLanguage = useAppLanguage()
   const libraryLanguages = useLibraryLanguages()
-  const allowMultipleLanguages = ref<boolean>(false)
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
   const autoScrollCfg = useConfig<boolean>("settings.autoScroll", false)
   /**
@@ -252,6 +251,13 @@ export function useTranscriptDialogController(
   // default after eyeballing 30-min lectures (~5-10 paragraphs each).
   const paragraphChars = useConfig<number>("settings.transcript.paragraphChars", 350)
 
+  // When several languages are shown at once, keep each paragraph single-language
+  // (break at every language switch). No UI toggle yet — config-only.
+  const breakParagraphOnLanguage = useConfig<boolean>(
+    "settings.transcript.breakParagraphOnLanguageChange",
+    true
+  )
+
   // Lecture overview (description + chapter outline) for the displayed
   // language, rendered at the top of the transcript — the same data the track
   // bottom-sheet shows. Falls back to the playable variant when the active
@@ -269,12 +275,13 @@ export function useTranscriptDialogController(
   )
 
   const blockGroups = computed(() =>
-    buildTranscriptViewData(loader.transcript.value, {
+    buildMergedTranscriptViewData(loader.transcripts.value, {
       paragraphChars: paragraphChars.value,
       sourcesById: dictionaries.sourcesById,
       lang: appLanguage.value,
       notes: notesForTrack.value,
       chapters: chapters.value,
+      breakOnLanguageChange: breakParagraphOnLanguage.value,
     })
   )
   // Preview mode (Search → Open transcript with no track playing, or a
@@ -294,6 +301,12 @@ export function useTranscriptDialogController(
     hydration.availableLanguages.value.map((code) => ({ code, name: code.toUpperCase() }))
   )
 
+  // Multi-select (flags) only makes sense when the track has more than one
+  // transcript language; a single-language track shows no selector.
+  const allowMultipleLanguages = computed<boolean>(
+    () => hydration.availableLanguages.value.length > 1
+  )
+
   // True only after hydration settles — i.e. we know the track has zero
   // advertised transcripts, not "we haven't checked yet". Drives the
   // dialog's empty-state copy.
@@ -311,7 +324,7 @@ export function useTranscriptDialogController(
       if (!id) {
         hydration.reset()
         notesForTrack.value = []
-        await loader.reload(undefined, undefined)
+        await loader.reload(undefined, [])
         return
       }
       // Hydrate the sources dictionary so verse references resolve to
@@ -320,7 +333,7 @@ export function useTranscriptDialogController(
       // either view has been visited (e.g. tutorial deep-link).
       void dictionaries.ensureLoaded()
       await hydration.hydrate(id)
-      await loader.reload(id, hydration.activeLanguages.value[0])
+      await loader.reload(id, hydration.activeLanguages.value)
       // Load saved notes after the transcript so the first paint of the
       // block list already has `bookmarked` set on the right paragraphs.
       await refreshNotesForTrack()
@@ -329,7 +342,7 @@ export function useTranscriptDialogController(
   )
 
   watch(hydration.activeLanguages, async (langs) => {
-    if (transcriptStore.trackId) await loader.reload(transcriptStore.trackId, langs[0])
+    if (transcriptStore.trackId) await loader.reload(transcriptStore.trackId, langs)
   })
 
   function onClose(): void {

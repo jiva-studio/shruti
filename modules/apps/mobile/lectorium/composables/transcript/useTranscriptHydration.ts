@@ -108,15 +108,18 @@ export function useTranscriptHydration(
     }
 
     availableLanguages.value = await repos.transcripts.availableLanguages(trackId)
-    // Default the shown transcript to the track's content language (a library
-    // language it has), else the first available — the user can still switch.
+    // Show ALL available languages by default (merged, interleaved by time); the
+    // user can toggle any off via the flags. The preferred content language is
+    // ordered first so the overview (which follows activeLanguages[0]) matches
+    // the language the lecture was surfaced in.
     const ui = toValue(options.preferredLanguage)
-    const lang = track
+    const preferred = track
       ? (preferredContentLanguage(track, toValue(options.libraryLanguages), ui) ?? ui)
       : ui
-    const firstActive =
-      availableLanguages.value.find((l) => l === lang) ?? availableLanguages.value[0]
-    activeLanguages.value = firstActive ? [firstActive] : []
+    const all = availableLanguages.value
+    activeLanguages.value = all.includes(preferred)
+      ? [preferred, ...all.filter((l) => l !== preferred)]
+      : [...all]
   }
 
   function reset(): void {
