@@ -20,6 +20,15 @@
       :percent="livePercent"
       :label="stageLabel"
     />
+    <button
+      v-else-if="isFailed && canRetry"
+      type="button"
+      class="status failed as-button"
+      @click.stop="onRetry"
+    >
+      <IconReload :size="13" />
+      {{ $t("library.status.retry") }}
+    </button>
     <span v-else-if="isFailed" class="status failed">
       <IconAlertTriangle :size="13" />
       {{ $t("library.status.failed") }}
@@ -30,10 +39,6 @@
       <span class="title">{{ title }}</span>
       <span v-if="isFailed" class="subtitle error">{{ errorMessage }}</span>
       <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
-      <button v-if="canRetry" type="button" class="retry" @click.stop="onRetry">
-        <IconReload :size="13" />
-        {{ $t("library.status.retry") }}
-      </button>
     </div>
   </div>
 </template>
@@ -222,23 +227,6 @@ function onRetry(): void {
   opacity: 1;
 }
 
-.retry {
-  align-self: flex-start;
-  margin-top: 6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  border-radius: 999px;
-  padding: 5px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast);
-}
-
 .status {
   position: absolute;
   left: 6px;
@@ -260,6 +248,12 @@ function onRetry(): void {
 .status.failed {
   background: var(--ion-color-danger);
   color: var(--ion-color-danger-contrast);
+}
+
+/* The failed badge doubles as the retry control when a re-run is possible. */
+.status.as-button {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Shared ingest-progress badge (ring + stage/percent), positioned like .status. */
