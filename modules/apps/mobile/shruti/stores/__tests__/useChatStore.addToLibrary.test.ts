@@ -55,6 +55,13 @@ vi.mock("@shruti/services/syncEvents.js", () => ({
   requestSync: (...args: unknown[]) => requestSync(...args),
 }))
 
+// Chat is discovery only now — a candidate confirm delegates to the library
+// store's ingest-API path (which owns the PRO gate + paywall), never a chat turn.
+const addByUrl = vi.fn().mockResolvedValue(undefined)
+vi.mock("@shruti/stores/useLibraryStore.js", () => ({
+  useLibraryStore: () => ({ addByUrl }),
+}))
+
 vi.mock("@shruti/stores/usePlaylistStore.js", () => ({
   usePlaylistStore: () => ({ add: vi.fn().mockResolvedValue({ ok: true }) }),
 }))
@@ -137,36 +144,22 @@ describe("useChatStore.executeAction — add_to_library candidate", () => {
     requestSync.mockClear()
     runChatTurn.mockClear()
     updateActionStates.mockClear()
+    addByUrl.mockClear()
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it("PRO-gates: a non-subscriber is bounced to the paywall, no ingest", async () => {
-    isSubscribedRef.value = false
+  it("delegates the candidate to the library store's ingest-API path, never a chat turn", async () => {
     const store = seedAddToLibraryAction()
 
     await store.executeAction("m1", "a1")
 
-    expect(requestOpen).toHaveBeenCalledTimes(1)
-    // No client→server dispatch and no poller nudge for a gated user.
+    // Chat does NOT ingest: the URL is handed to the library store (which owns
+    // the PRO gate + the ingest-API submit), and no chat turn is dispatched.
+    expect(addByUrl).toHaveBeenCalledTimes(1)
+    expect(addByUrl.mock.calls[0]?.[0]).toBe(CANDIDATE_URL)
     expect(runChatTurn).not.toHaveBeenCalled()
-    expect(requestSync).not.toHaveBeenCalled()
-  })
-
-  it("subscriber: dispatches the ingest turn with the URL and nudges the poller", async () => {
-    isSubscribedRef.value = true
-    const store = seedAddToLibraryAction()
-
-    await store.executeAction("m1", "a1")
-
-    expect(requestOpen).not.toHaveBeenCalled()
-    // The client→server call carried the candidate URL as the turn text.
-    expect(runChatTurn).toHaveBeenCalledTimes(1)
-    const input = runChatTurn.mock.calls[0]?.[0] as { text: string }
-    expect(input.text).toBe(CANDIDATE_URL)
-    // Poller nudged so the freshly-queued item surfaces on the short cadence.
-    expect(requestSync).toHaveBeenCalledTimes(1)
   })
 })
