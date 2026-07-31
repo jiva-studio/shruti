@@ -137,6 +137,14 @@ async def add_to_library_worker_node(
     bind_node_role("add_to_library_worker")
     ctx = runtime.context
     writer = get_stream_writer()
+
+    # Capability gate: adding from the web surfaces candidate cards the client
+    # submits to the ingest API. A client that didn't advertise `personal_library`
+    # (older build) can't render or submit them, so degrade to a plain line
+    # instead of streaming cards into the void.
+    if not ctx.capabilities.get("personal_library"):
+        return await _emit_no_capability(ctx, writer)
+
     writer({"type": "status", "data": {"key": "preparing_action"}})
 
     def _yield_event(event_type: str, data: dict[str, Any]) -> None:
@@ -277,6 +285,21 @@ async def _emit_upsell(ctx: TurnContext, writer, yield_event) -> dict:
         "data": {"text": f"\n[action:upgrade_to_pro|id={action_id}]\n"},
     })
     log.info("add_to_library_upsell", request_id=ctx.request_id, tier="free")
+    return {}
+
+
+async def _emit_no_capability(ctx: TurnContext, writer) -> dict:
+    """The client build can't render add-to-library cards. Tell the user, in one
+    plain line (no card), to update the app to add lectures from the web."""
+    writer({"type": "status", "data": {"key": "composing_answer"}})
+    reply = await localized_reply(
+        ctx,
+        "Adding lectures from the internet needs a newer version of the app. Tell "
+        "the user in one short, friendly line to update the app to add lectures. "
+        "No chips.",
+    )
+    _emit_line(writer, reply.line)
+    log.info("add_to_library_no_capability", request_id=ctx.request_id)
     return {}
 
 

@@ -33,6 +33,7 @@ class _Ctx:
     jwt: str | None = "jwt-token"
     ingest_publisher: Any | None = None
     lecture_search: Any | None = None
+    capabilities: dict = field(default_factory=lambda: {"personal_library": True})
 
 
 @dataclass
