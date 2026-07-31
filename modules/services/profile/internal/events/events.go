@@ -61,7 +61,7 @@ func Connect(ctx context.Context, url string) (*redis.Client, error) {
 // tests. rank orders the lifecycle states under last-writer-wins (see
 // hlc.Clock.Ranked): a later state must win regardless of broker arrival order.
 type Applier interface {
-	ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, docID, op string, rank int, data json.RawMessage) (wire.Change, error)
+	ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, docID, op string, generation, rank int, data json.RawMessage) (wire.Change, error)
 }
 
 // PublishApplier is the subset of *service.Service the track.published consumer
@@ -75,15 +75,21 @@ type PublishApplier interface {
 // orchestrator's jobID) shared by every state of one ingest. Data is the
 // server-owned library_items payload projected verbatim.
 //
-// Idempotency comes from the rank-derived hlc (same state → same stamp → the
-// change-log UNIQUE collides on redelivery), not from ID; ID is retained only
-// for logging/back-compat.
+// Idempotency comes from the (generation, rank)-derived hlc (same state → same
+// stamp → the change-log UNIQUE collides on redelivery), not from ID; ID is
+// retained only for logging/back-compat.
+//
+// Generation is the orchestrator's re-run counter: 0 for a job's original run,
+// incremented on each user-initiated retry of a dead-lettered job so the re-run's
+// lifecycle stamps sort above the prior run's terminal state (see hlc.Ranked).
+// Absent on the wire for a generation-0 event, so it decodes to 0.
 type TrackEvent struct {
-	ID     string          `json:"id"`
-	Type   string          `json:"type"`
-	UserID uuid.UUID       `json:"user_id"`
-	DocID  string          `json:"doc_id"`
-	Data   json.RawMessage `json:"data"`
+	ID         string          `json:"id"`
+	Type       string          `json:"type"`
+	UserID     uuid.UUID       `json:"user_id"`
+	DocID      string          `json:"doc_id"`
+	Generation int             `json:"generation"`
+	Data       json.RawMessage `json:"data"`
 }
 
 // Consumer reads track.events and applies each as a server-authored change.
@@ -131,7 +137,7 @@ func (c *Consumer) handle(ctx context.Context, ev TrackEvent) error {
 	if !ok {
 		return nil // unknown type — ack to drop
 	}
-	_, err := c.Applier.ApplyLibraryLifecycle(ctx, ev.UserID, ev.DocID, op, rank, ev.Data)
+	_, err := c.Applier.ApplyLibraryLifecycle(ctx, ev.UserID, ev.DocID, op, ev.Generation, rank, ev.Data)
 	return err
 }
 
