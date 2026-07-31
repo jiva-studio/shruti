@@ -23,7 +23,7 @@ import type {
   IShareVideoService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
-import type { IProactiveChatService, ISyncClient } from "@lib/contracts"
+import type { IProactiveChatService, ISyncClient, IIngestClient } from "@lib/contracts"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
@@ -125,6 +125,13 @@ export interface Shruti {
    */
   readonly syncClient: ISyncClient
   /**
+   * Orchestrator ingest control-plane transport (POST /orchestrator/ingest,
+   * GET /orchestrator/ingest/{id}). The library store drives it for direct
+   * add/retry and live status polling; a region without `orchestratorBaseUrl`
+   * leaves it unused and the store falls back to the chat add path.
+   */
+  readonly ingestClient: IIngestClient
+  /**
    * Resolves this device's stable id (Capacitor `Device.getId()`) — the HLC
    * tiebreak, the `sync_state` key, and the pull `X-Device-Id`. Wiring it also
    * turns on the sync-journal decorator + engine repositories in the bundle.
@@ -198,6 +205,8 @@ export interface InitShrutiSeed {
   readonly proactiveChat: IProactiveChatService
   /** Profile-sync transport (Lane D). */
   readonly syncClient: ISyncClient
+  /** Orchestrator ingest control-plane transport (add/retry + live status). */
+  readonly ingestClient: IIngestClient
   /** Stable device-id provider; enables journaling + the sync engine repos. */
   readonly getDeviceId: () => Promise<string>
   /** Factory invoked inside `initShruti` with a `() => databases.user`
@@ -304,6 +313,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     chatFeedbackService,
     chatResumeService,
     syncClient: seed.syncClient,
+    ingestClient: seed.ingestClient,
     getDeviceId: seed.getDeviceId,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,
