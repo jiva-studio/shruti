@@ -120,11 +120,14 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	s.progress(ctx, cmd, ingest.StageDownloading)
 
 	stage := time.Now()
-	// Forward download percent as heartbeats, throttled to 10% steps so a chatty
-	// yt-dlp progress bar can't flood the result stream (≤10 extra heartbeats).
-	lastBucket := 0
+	// Forward download percent as heartbeats. Throttle to whole-number steps of
+	// progressStep so a chatty yt-dlp progress bar can't flood the result stream,
+	// while staying fine-grained enough to look smooth (≤20 extra heartbeats). On
+	// a fragmented download the real floor is the fragment count, not this step.
+	const progressStep = 5
+	lastBucket := -1
 	onProgress := func(pct int) {
-		if b := pct / 10; b > lastBucket {
+		if b := pct / progressStep; b > lastBucket {
 			lastBucket = b
 			s.progressPct(ctx, cmd, ingest.StageDownloading, pct)
 		}

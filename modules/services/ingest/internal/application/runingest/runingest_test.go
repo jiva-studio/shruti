@@ -223,11 +223,11 @@ func TestProcess_Ready(t *testing.T) {
 	}
 	// A processing heartbeat per pipeline stage precedes the terminal ready, plus
 	// the throttled download-percent heartbeats (fetcher reports 5/40/100 → the
-	// 10%-bucket filter emits 40 and 100 on top of the initial downloading tick).
+	// 5%-step filter emits all three on top of the initial downloading tick).
 	if got, want := h.results.phases(), []string{
 		ingest.PhaseProcessing, ingest.PhaseProcessing, ingest.PhaseProcessing,
 		ingest.PhaseProcessing, ingest.PhaseProcessing, ingest.PhaseProcessing,
-		ingest.PhaseReady,
+		ingest.PhaseProcessing, ingest.PhaseReady,
 	}; !equal(got, want) {
 		t.Fatalf("phases = %v, want %v", got, want)
 	}
@@ -235,12 +235,14 @@ func TestProcess_Ready(t *testing.T) {
 	// repeats for its percent updates).
 	if got, want := h.results.stages(), []string{
 		ingest.StageDownloading, ingest.StageDownloading, ingest.StageDownloading,
+		ingest.StageDownloading,
 		ingest.StageTranscribing, ingest.StageReviewing, ingest.StageStoring,
 	}; !equal(got, want) {
 		t.Fatalf("stages = %v, want %v", got, want)
 	}
-	// The download heartbeats carry the throttled completion percent.
-	if got, want := h.results.downloadPercents(), []int{40, 100}; !equalInts(got, want) {
+	// The download heartbeats carry the completion percent (5%-step filter passes
+	// all of the fetcher's 5/40/100).
+	if got, want := h.results.downloadPercents(), []int{5, 40, 100}; !equalInts(got, want) {
 		t.Fatalf("download percents = %v, want %v", got, want)
 	}
 	last := h.results.last()
