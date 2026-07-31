@@ -5,6 +5,15 @@ export default {
     processing: "Processing",
     ready: "Ready",
     failed: "Failed",
+    retry: "Retry",
+    errors: {
+      unauthorized: "Adding lectures is a Pro feature.",
+      unavailable: "This source isn't available.",
+      unsupported: "This link can't be added.",
+      too_large: "This lecture is too long to add.",
+      no_speech: "No speech was found to transcribe.",
+      internal: "Something went wrong.",
+    },
   },
   myLibrary: {
     title: "My library",

@@ -1636,6 +1636,18 @@ export const useChatStore = defineStore("chat", () => {
   async function applyAddToLibrary(
     action: Extract<ChatActionPayload, { kind: "add_to_library" }>
   ): Promise<void> {
+    await sendAddToLibrary(action.url)
+  }
+
+  /**
+   * PRO-gate, then trigger ingest of an external lecture by URL through the
+   * deployed add-to-library chat transport (see {@link applyAddToLibrary}).
+   * Shared by the candidate-card confirm and the failed-library-item retry: a
+   * re-add of a dead-lettered source maps to the same orchestrator job, which
+   * restarts it in place. A non-subscriber is bounced through the paywall and
+   * nothing is sent.
+   */
+  async function sendAddToLibrary(url: string): Promise<void> {
     const { usePurchasesStore } = await import("@lectorium/stores/usePurchasesStore.js")
     if (!usePurchasesStore().isSubscribed) {
       const { usePaywallStore } = await import("@lectorium/stores/usePaywallStore.js")
@@ -1645,7 +1657,7 @@ export const useChatStore = defineStore("chat", () => {
     // Send a readable command (not a bare URL) so the chat turn looks
     // intentional; it still routes to add-to-library (the URL is present) and
     // the worker resolves the title/metadata from it server-side.
-    await sendMessage(t("chat.addByLinkCommand", { url: action.url }))
+    await sendMessage(t("chat.addByLinkCommand", { url }))
     requestSync()
   }
 
@@ -1782,6 +1794,7 @@ export const useChatStore = defineStore("chat", () => {
     startNewSession,
     ensureActiveSession,
     sendMessage,
+    sendAddToLibrary,
     cancelStream,
     retryLast,
     executeAction,
