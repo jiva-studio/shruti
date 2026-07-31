@@ -17,6 +17,7 @@ import (
 	fsport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/fs"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/hashing"
 	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
+	metaport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/metadata"
 )
 
 // ErrSkipExtra means the path lives under outbox/sorted/<lang>/extra/...
@@ -31,6 +32,10 @@ type UseCase struct {
 	FS         fsport.Stat
 	Hasher     hashing.Hasher
 	Rollbacker commitport.Rollbacker // optional; nil disables cascade rollback (callers using ingest in isolation can omit it)
+	// Meta serves lakes that don't follow the outbox/sorted/<lang>/ layout:
+	// the importer's record carries the language the file row needs. Optional;
+	// nil keeps path-only derivation.
+	Meta metaport.Reader
 }
 
 type Result struct {
@@ -102,11 +107,27 @@ func (uc UseCase) Run(ctx context.Context, path string) (res Result, rerr error)
 		return Result{}, err
 	}
 
+	lang := languageFromPath(abs)
+	if lang == "" && uc.Meta != nil {
+		md, ok, err := uc.Meta.Read(abs)
+		if err != nil {
+			return Result{}, err
+		}
+		if ok {
+			for _, l := range md.Languages() {
+				if l != "" {
+					lang = l
+					break
+				}
+			}
+		}
+	}
+
 	src := track.SourceFile{
 		Path:         abs,
 		SHA256:       sum,
 		Size:         stat.SizeBytes,
-		Language:     languageFromPath(abs),
+		Language:     lang,
 		DiscoveredAt: time.Now().UTC(),
 	}
 	id, changed, err := uc.Registry.UpsertFile(ctx, src)

@@ -76,6 +76,7 @@ import (
 	sqlitelibrary "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/library/sqlite"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/canonical"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/filemeta"
 	openaicompatmeta "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/openaicompat"
 	fsoutline "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/outline/fs"
 	sqlitepending "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/pending/sqlite"
@@ -261,12 +262,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("metadata extractor: %v", err)
 	}
-	// Dedup-canonical files (paths under <lake>/sorted/<lang>/...) parse
-	// deterministically without an LLM call; everything else falls through
-	// to the LLM extractor.
-	extractor := canonical.ChainExtractor{
-		InDir:    cfg.In,
-		Fallback: llmExtractor,
+	// A track imported with real metadata carries a meta.json next to the mp3
+	// and needs no parsing at all. Dedup-canonical files (paths under
+	// <lake>/sorted/<lang>/...) parse deterministically without an LLM call;
+	// everything else falls through to the LLM extractor.
+	extractor := filemeta.Extractor{
+		InDir: cfg.In,
+		Fallback: canonical.ChainExtractor{
+			InDir:    cfg.In,
+			Fallback: llmExtractor,
+		},
 	}
 
 	// S3 targets for publish + immediate artifact upload. AWS is required
@@ -720,6 +725,7 @@ func main() {
 			FS:         osfs,
 			Hasher:     hasher,
 			Rollbacker: commitUC,
+			Meta:       extractor,
 		},
 		Normalize: normalize.UseCase{
 			Registry:   registry,
