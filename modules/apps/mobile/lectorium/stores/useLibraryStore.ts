@@ -3,6 +3,8 @@ import { computed, ref } from "vue"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
 import { isPendingLibraryItem } from "@usecases/sync/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { requestSync } from "@lectorium/services/syncEvents.js"
+import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 
 /**
  * Single source of truth for the user's **personal library** — lectures the
@@ -69,6 +71,39 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     return items.value.some((i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key)
   }
 
+  /**
+   * Trigger ingest of a lecture by URL through the orchestrator ingest API — the
+   * SINGLE client→server path (chat never ingests). The orchestrator dedups a
+   * re-add and restarts a dead-lettered job, so this one call serves BOTH a
+   * fresh add and a retry. `requestSync` then surfaces the freshly-queued
+   * `library_items` row. This does not write `library_items` itself — the server
+   * authors it and it arrives over sync, keeping the store's pull-only invariant.
+   *
+   * PRO-gated: a non-subscriber (or a server `not_pro` rejection) is bounced to
+   * the paywall. A transport failure surfaces as an error — it never falls back
+   * to a chat turn.
+   */
+  async function addByUrl(url: string, hints?: { title?: string; author?: string }): Promise<void> {
+    if (!url.trim()) return
+    const { usePurchasesStore } = await import("@lectorium/stores/usePurchasesStore.js")
+    if (!usePurchasesStore().isSubscribed) {
+      const { usePaywallStore } = await import("@lectorium/stores/usePaywallStore.js")
+      usePaywallStore().requestOpen()
+      return
+    }
+    try {
+      await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
+      requestSync()
+    } catch (err) {
+      if (err instanceof IngestGatewayError && err.code === "not_pro") {
+        const { usePaywallStore } = await import("@lectorium/stores/usePaywallStore.js")
+        usePaywallStore().requestOpen()
+        return
+      }
+      error.value = err instanceof Error ? err.message : "Failed to add lecture"
+    }
+  }
+
   return {
     items,
     isLoading,
@@ -80,6 +115,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     ensureLoaded,
     getById,
     hasSource,
+    addByUrl,
   }
 })
 
