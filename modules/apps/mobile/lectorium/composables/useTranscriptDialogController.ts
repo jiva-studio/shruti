@@ -251,11 +251,12 @@ export function useTranscriptDialogController(
   // default after eyeballing 30-min lectures (~5-10 paragraphs each).
   const paragraphChars = useConfig<number>("settings.transcript.paragraphChars", 350)
 
-  // When several languages are shown at once, keep each paragraph single-language
-  // (break at every language switch). No UI toggle yet — config-only.
+  // When several languages are shown at once, blocks group together across
+  // languages (a sentence and its translation stay in one paragraph). Set true
+  // to force a fresh paragraph at every language switch. No UI toggle — config-only.
   const breakParagraphOnLanguage = useConfig<boolean>(
     "settings.transcript.breakParagraphOnLanguageChange",
-    true
+    false
   )
 
   // Lecture overview (description + chapter outline) for the displayed
@@ -298,7 +299,11 @@ export function useTranscriptDialogController(
   const duration = computed(() => (mirrorsActivePlayer.value ? Math.max(0, player.durationMs) : 0))
 
   const availableLanguages = computed<readonly UiTranscriptLanguage[]>(() =>
-    hydration.availableLanguages.value.map((code) => ({ code, name: code.toUpperCase() }))
+    hydration.availableLanguages.value.map((code) => ({
+      code,
+      name: code.toUpperCase(),
+      icon: languageFlag(code),
+    }))
   )
 
   // Multi-select (flags) only makes sense when the track has more than one
@@ -441,4 +446,25 @@ export function useTranscriptDialogController(
     onSelectionDismissed,
     onPickStart,
   }
+}
+
+/** Country-flag emoji for a transcript language code (the corpus languages);
+ *  undefined for anything unmapped so the selector shows the code alone rather
+ *  than a placeholder. A language isn't a country — this is a best-effort label. */
+function languageFlag(code: string): string | undefined {
+  const flags: Record<string, string> = {
+    en: "🇬🇧",
+    ru: "🇷🇺",
+    hi: "🇮🇳",
+    es: "🇪🇸",
+    fr: "🇫🇷",
+    de: "🇩🇪",
+    pt: "🇵🇹",
+    it: "🇮🇹",
+    ja: "🇯🇵",
+    nl: "🇳🇱",
+    uk: "🇺🇦",
+    bn: "🇧🇩",
+  }
+  return flags[code.toLowerCase()]
 }
