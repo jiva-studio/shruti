@@ -80,21 +80,34 @@ func (c *Clock) Terminal() string {
 	return format(physicalMod-1, 0, c.nodeID)
 }
 
-// Ranked stamps a server HLC from a fixed lifecycle RANK rather than an event
-// id. A library membership advances through ordered states — queued < processing
-// < ready|failed — with a promotion flip above all of them (see Terminal).
-// Encoding the rank as the physical field makes the higher state deterministically
-// win last-writer-wins on BOTH the server projection and the client (which
-// re-resolves state from the pulled change log by hlc), while staying idempotent:
-// the same rank always yields the same stamp, so a redelivered event collides on
-// UNIQUE(user_id, collection, doc_id, hlc) and appends exactly one row. Ranks MUST
+// lifecycleRankStride is the per-generation physical block a ranked stamp
+// occupies. It bounds the rank field (queued..removed = 1..4), so generation g
+// owns physical [g*stride, g*stride+stride) and generation g+1 sorts strictly
+// above every rank of generation g. Ample headroom below Terminal.
+const lifecycleRankStride = 16
+
+// Ranked stamps a server HLC from a lifecycle RANK within a job GENERATION,
+// rather than an event id. A library membership advances through ordered states
+// — queued < processing < ready|failed — with a promotion flip above all of them
+// (see Terminal). Encoding generation*stride+rank as the physical field makes the
+// higher state deterministically win last-writer-wins on BOTH the server
+// projection and the client (which re-resolves state from the pulled change log
+// by hlc), while staying idempotent: the same (generation, rank) always yields
+// the same stamp, so a redelivered event collides on UNIQUE(user_id, collection,
+// doc_id, hlc) and appends exactly one row.
+//
+// The generation lifts a RE-RUN of the same membership (a user-initiated retry of
+// a dead-lettered job) above the prior run's terminal stamp: without it a retry's
+// ready|failed (rank 3) would tie the earlier failed (rank 3) and collide away on
+// the UNIQUE index, leaving the card stuck on the dead state. Generation 0 is the
+// original run, so a never-restarted job stamps exactly as before. Stamps MUST
 // stay below Terminal (physicalMod-1) so a publish flip supersedes every state.
 //
 // Sound ONLY for a server-owned, pull-only collection (library_items): no client
 // ever mints a millisecond-physical stamp on the same doc that a tiny
 // rank-physical would spuriously lose to.
-func (c *Clock) Ranked(rank int) string {
-	p := int64(rank)
+func (c *Clock) Ranked(generation, rank int) string {
+	p := int64(generation)*lifecycleRankStride + int64(rank)
 	if p < 0 {
 		p = 0
 	}
