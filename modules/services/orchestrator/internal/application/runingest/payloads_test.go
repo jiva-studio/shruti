@@ -14,7 +14,7 @@ import (
 func TestFailDataNeverShipsTheRawError(t *testing.T) {
 	raw := "transcribe: deepgram: 503 Service Unavailable"
 	var got map[string]any
-	if err := json.Unmarshal(failData(raw, "A talk"), &got); err != nil {
+	if err := json.Unmarshal(failData(raw, "A talk", "https://x/y"), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
@@ -27,7 +27,7 @@ func TestFailDataNeverShipsTheRawError(t *testing.T) {
 
 	// Belt and braces: no fragment of the internal text may appear anywhere in
 	// the serialized payload.
-	blob := string(failData(raw, "A talk"))
+	blob := string(failData(raw, "A talk", "https://x/y"))
 	for _, leak := range []string{"deepgram", "503", "transcribe"} {
 		if strings.Contains(strings.ToLower(blob), leak) {
 			t.Errorf("payload leaks %q: %s", leak, blob)
@@ -71,13 +71,13 @@ func TestFailCodeUnknownDegradesToInternal(t *testing.T) {
 // statusData stays untouched by the above — the pre-ready cards carry no error.
 func TestStatusDataShape(t *testing.T) {
 	var got map[string]any
-	if err := json.Unmarshal(statusData("queued", "A talk"), &got); err != nil {
+	if err := json.Unmarshal(statusData("queued", "A talk", "https://x/y"), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got["status"] != "queued" || got["title_raw"] != "A talk" {
+	if got["status"] != "queued" || got["title_raw"] != "A talk" || got["source_url"] != "https://x/y" {
 		t.Fatalf("unexpected payload: %v", got)
 	}
-	if len(got) != 2 {
+	if len(got) != 3 {
 		t.Errorf("statusData grew unexpectedly: %v", got)
 	}
 }
