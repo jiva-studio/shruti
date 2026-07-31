@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jiva-studio/shruti/ingest/internal/domain/ingest"
@@ -107,27 +108,50 @@ func execRunner(ctx context.Context, name string, args ...string) ([]byte, error
 // Runner with no percent.
 type ProgressRunner func(ctx context.Context, onLine func(string), name string, args ...string) error
 
-// execProgressRunner runs a command, scanning stdout for progress lines while
-// capturing stderr so a failure can still be classified (permanent vs transient)
-// and surfaced as a human reason — the same signal the buffered Runner path gets
-// from (*exec.ExitError).Stderr.
+// execProgressRunner runs a command, scanning BOTH stdout and stderr for
+// progress lines — yt-dlp writes its progress bar to one or the other depending
+// on version / TTY, so watching only stdout silently loses every percent. It
+// still captures stderr text so a failure can be classified (permanent vs
+// transient) and surfaced as a human reason, like (*exec.ExitError).Stderr.
 func execProgressRunner(ctx context.Context, onLine func(string), name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		return err
 	}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	sc := bufio.NewScanner(stdout)
-	for sc.Scan() {
-		onLine(sc.Text())
+
+	var mu sync.Mutex
+	var stderrBuf strings.Builder
+	var wg sync.WaitGroup
+	scan := func(r io.Reader, capture bool) {
+		defer wg.Done()
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for sc.Scan() {
+			line := sc.Text()
+			mu.Lock()
+			if capture {
+				stderrBuf.WriteString(line)
+				stderrBuf.WriteByte('\n')
+			}
+			onLine(line) // serialized, so onProgress's throttle stays single-threaded
+			mu.Unlock()
+		}
 	}
+	wg.Add(2)
+	go scan(stdout, false)
+	go scan(stderrPipe, true)
+	wg.Wait()
+
 	if err := cmd.Wait(); err != nil {
-		return &runError{err: err, stderr: stderr.String()}
+		return &runError{err: err, stderr: stderrBuf.String()}
 	}
 	return nil
 }
@@ -162,29 +186,54 @@ func firstStderrLine(s string) string {
 }
 
 // progressTemplate + progressPrefix tag yt-dlp's download progress so we can
-// pick our percent lines out of its other stdout chatter. _percent_str is like
-// "  42.3%".
+// pick our percent lines out of its other chatter. We emit the byte percent
+// AND the fragment index/count, pipe-separated, because a fragmented (HLS/DASH)
+// YouTube download reports "_percent_str" as "NA%" (no known total) — there the
+// fragment ratio is the only real measure. A line looks like:
+//
+//	PCT:  42.3%|12|50
 const (
-	progressPrefix   = "PCT:"
-	progressTemplate = "download:" + progressPrefix + "%(progress._percent_str)s"
+	progressPrefix = "PCT:"
+	progressTemplate = "download:" + progressPrefix +
+		"%(progress._percent_str)s|%(progress.fragment_index)s|%(progress.fragment_count)s"
 )
 
 // parsePercent extracts a 0-100 integer from a tagged progress line
-// ("PCT:  42.3%"); ok is false for any other line.
+// ("PCT:  42.3%|12|50"), preferring the byte percent and falling back to the
+// fragment ratio when the byte total is unknown ("NA%"). ok is false for any
+// other line or when neither measure is available.
 func parsePercent(line string) (int, bool) {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, progressPrefix) {
 		return 0, false
 	}
-	s := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(strings.TrimPrefix(line, progressPrefix)), "%"))
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil || f < 0 {
-		return 0, false
+	fields := strings.Split(strings.TrimPrefix(line, progressPrefix), "|")
+
+	// Byte percent (yt-dlp's _percent_str, e.g. "  42.3%"); "NA%" won't parse.
+	pctStr := strings.TrimSuffix(strings.TrimSpace(fields[0]), "%")
+	if f, err := strconv.ParseFloat(pctStr, 64); err == nil && f >= 0 {
+		return clampPercent(f), true
+	}
+
+	// Fallback: fragment_index / fragment_count for fragmented downloads.
+	if len(fields) >= 3 {
+		idx, e1 := strconv.Atoi(strings.TrimSpace(fields[1]))
+		cnt, e2 := strconv.Atoi(strings.TrimSpace(fields[2]))
+		if e1 == nil && e2 == nil && cnt > 0 && idx >= 0 {
+			return clampPercent(float64(idx) * 100 / float64(cnt)), true
+		}
+	}
+	return 0, false
+}
+
+func clampPercent(f float64) int {
+	if f < 0 {
+		return 0
 	}
 	if f > 100 {
-		f = 100
+		return 100
 	}
-	return int(f), true
+	return int(f)
 }
 
 // Options configure the Fetcher.

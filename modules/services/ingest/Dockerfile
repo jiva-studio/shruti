@@ -45,11 +45,20 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # egress downloads cleanly with this; the datacenter IP is bot-checked
 # regardless (that is what SHRUTI_YTDLP_PROXY is for), so node alone is
 # necessary but not sufficient without a residential proxy.
+#
+# `--remote-components ejs:github` is ALSO required (added 2026-07-31): a JS
+# runtime is only half of it — yt-dlp needs the actual EJS challenge-solver
+# script, which it does NOT bundle. Without this flag it logs `Remote component
+# challenge solver script (node) was skipped` and STILL fails the `n` challenge,
+# so every YouTube fetch dies with the misleading `This video is not available`
+# even through the residential proxy. Measured 2026-07-31: node + this flag
+# resolves a real lecture that failed on all 6 attempts before. The solver is
+# fetched from GitHub on first use and cached in the container.
 FROM alpine:3.21
 ARG YTDLP_VERSION=2026.7.4
 RUN apk add --no-cache ffmpeg ca-certificates python3 py3-pip nodejs \
     && pip install --no-cache-dir --break-system-packages "yt-dlp==${YTDLP_VERSION}" \
-    && printf -- '--js-runtimes node\n' > /etc/yt-dlp.conf
+    && printf -- '--js-runtimes node\n--remote-components ejs:github\n' > /etc/yt-dlp.conf
 COPY --from=build /out/ingest /ingest
 ARG SHRUTI_BUILD_SHA=dev
 ARG SHRUTI_BUILD_TIME=dev
