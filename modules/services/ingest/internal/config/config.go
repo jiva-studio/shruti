@@ -45,7 +45,7 @@ type Config struct {
 
 	// --- Transcriber (Deepgram) ---
 	DeepgramAPIKey string // DEEPGRAM_API_KEY
-	DeepgramModel  string // DEEPGRAM_MODEL (default "nova-2")
+	DeepgramModel  string // DEEPGRAM_MODEL (default "nova-3")
 
 	// --- BlobStore ---
 	// StorageBackend selects where content-addressed artifacts are written:
@@ -116,7 +116,7 @@ func Load() (*Config, error) {
 		JobTimeout:      time.Duration(envInt("INGEST_JOB_TIMEOUT_SECONDS", 45*60)) * time.Second,
 
 		DeepgramAPIKey: env("DEEPGRAM_API_KEY", ""),
-		DeepgramModel:  env("DEEPGRAM_MODEL", "nova-2"),
+		DeepgramModel:  env("DEEPGRAM_MODEL", "nova-3"),
 
 		StorageBackend: env("STORAGE_BACKEND", "s3"),
 

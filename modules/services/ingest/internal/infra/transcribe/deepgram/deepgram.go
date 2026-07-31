@@ -27,10 +27,11 @@ type Transcriber struct {
 	http   *http.Client
 }
 
-// New builds a Transcriber. model defaults to "nova-2" when empty.
+// New builds a Transcriber. model defaults to "nova-3" when empty (required for
+// language=multi).
 func New(apiKey, model string) *Transcriber {
 	if model == "" {
-		model = "nova-2"
+		model = "nova-3"
 	}
 	return &Transcriber{
 		apiKey: apiKey,
@@ -56,7 +57,10 @@ func (t *Transcriber) Transcribe(ctx context.Context, audioPath string) (transcr
 	q.Set("smart_format", "true")
 	q.Set("punctuate", "true")
 	q.Set("paragraphs", "true")
-	q.Set("detect_language", "true")
+	// language=multi (nova-3) transcribes each language in its own script and
+	// handles code-switching. detect_language mis-tagged English lectures that
+	// carry Sanskrit terms as Hindi and rendered them in Devanagari.
+	q.Set("language", "multi")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, listenURL+"?"+q.Encode(), bytes.NewReader(body))
 	if err != nil {
@@ -99,6 +103,11 @@ func (t *Transcriber) toRaw(dg dgResponse) (transcript.Raw, string) {
 		return raw, ch.DetectedLanguage
 	}
 	alt := ch.Alternatives[0]
+	// In multi mode detected_language is empty; tag the track with the language
+	// most of its words are in.
+	if lang := majorityLanguage(alt.Words); lang != "" {
+		raw.Language = lang
+	}
 
 	idx := 0
 	for _, p := range alt.Paragraphs.Paragraphs {
@@ -122,7 +131,27 @@ func (t *Transcriber) toRaw(dg dgResponse) (transcript.Raw, string) {
 			Idx: 0, Start: 0, End: secToMs(end), Text: alt.Transcript, Confidence: alt.Confidence,
 		})
 	}
-	return raw, ch.DetectedLanguage
+	return raw, raw.Language
+}
+
+// majorityLanguage returns the language most of the words are in (multi mode
+// tags each word). It labels the transcript file + the track's filter bucket;
+// the transcript content itself keeps every word in its own language. Empty
+// when no word carries a language.
+func majorityLanguage(words []dgWord) string {
+	counts := map[string]int{}
+	for _, w := range words {
+		if w.Language != "" {
+			counts[w.Language]++
+		}
+	}
+	best, bestN := "", 0
+	for lang, n := range counts {
+		if n > bestN {
+			best, bestN = lang, n
+		}
+	}
+	return best
 }
 
 func secToMs(s float64) int64 { return int64(s * 1000) }
@@ -174,4 +203,5 @@ type dgWord struct {
 	Start      float64 `json:"start"`
 	End        float64 `json:"end"`
 	Confidence float64 `json:"confidence"`
+	Language   string  `json:"language"` // per-word language in multi mode
 }
