@@ -107,7 +107,7 @@ export function useSyncEngine(): void {
         .refreshSessions()
         .catch(() => undefined)
     }
-    if (collections.includes("library_items")) {
+    if (collections.includes("library_items") || collections.includes("library_memberships")) {
       // Personal library (epic #1236) is pull-only and server-owned. Refresh the
       // "My library" store so the shelf/list + status badges reflect the merged
       // rows (e.g. an item flipping processing → ready) on whatever screen is

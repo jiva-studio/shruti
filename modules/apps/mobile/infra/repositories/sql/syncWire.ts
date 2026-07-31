@@ -3,6 +3,7 @@ import type {
   PlaylistItemRow,
   ListeningSessionRow,
   LibraryItemRow,
+  LibraryMembershipRow,
 } from "@lib/persistence/user"
 import type { Note } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
@@ -231,6 +232,22 @@ export function libraryItemRowToWire(row: LibraryItemRow): LibraryItemWire {
     outline: parseOutlineJson(row.outline_json),
     source_url: row.source_url,
     created_at: row.created_at,
+    updated_at: row.updated_at,
+  }
+}
+
+/** `library_memberships` wire row — the user's remove/re-add intent. `id` is the
+ *  library item id (the sync doc_id); `archived_at` NULL = active, set = removed. */
+export interface LibraryMembershipWire {
+  readonly id: string
+  readonly archived_at: number | null
+  readonly updated_at: number | null
+}
+
+export function libraryMembershipRowToWire(row: LibraryMembershipRow): LibraryMembershipWire {
+  return {
+    id: row.id,
+    archived_at: row.archived_at,
     updated_at: row.updated_at,
   }
 }

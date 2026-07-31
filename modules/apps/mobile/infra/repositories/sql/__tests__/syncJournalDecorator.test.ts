@@ -8,6 +8,7 @@ import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepo
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
 import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionRepository.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
+import type { ILibraryMembershipRepository } from "@lib/domain/ports/libraryMembershipRepository.js"
 import type { ListeningSessionRow } from "@lib/persistence/user"
 import { compareHlcString } from "@lib/domain"
 import { withSyncJournaling } from "../syncJournalDecorator.js"
@@ -193,6 +194,16 @@ function stubChatMessages(): IChatMessageRepository {
   }
 }
 
+function stubLibraryMemberships(): ILibraryMembershipRepository {
+  return {
+    listArchivedIds: async () => new Set<string>(),
+    getById: async () => null,
+    setArchived: async () => {},
+    setActive: async () => {},
+    clearAll: async () => {},
+  }
+}
+
 describe("withSyncJournaling", () => {
   let sessions: Map<string, ListeningSessionRow>
   let playlist: Map<string, { id: string; track_id: string }>
@@ -213,6 +224,7 @@ describe("withSyncJournaling", () => {
         listeningSessions: stubSessions(sessions),
         chatSessions: stubChatSessions(),
         chatMessages: stubChatMessages(),
+        libraryMemberships: stubLibraryMemberships(),
       },
       { userDb: db, unitOfWork: passthroughUow, getDeviceId: async () => "dev-test" }
     )

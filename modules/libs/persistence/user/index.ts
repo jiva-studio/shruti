@@ -80,6 +80,19 @@ export interface LibraryItemRow {
   readonly updated_at: number | null
 }
 
+/**
+ * Personal-library membership row (021 migration) — the user's remove/re-add
+ * intent, CLIENT-owned and pushed like `playlist_items`. `id` is the library
+ * item id (= `library_items.id` / the membership uuid, and the sync doc_id).
+ * `archived_at` NULL = active (in the library); set = removed. A row exists only
+ * once the user has acted on the item — absence means active.
+ */
+export interface LibraryMembershipRow {
+  readonly id: string
+  readonly archived_at: number | null
+  readonly updated_at: number | null
+}
+
 export interface ListeningSessionRow {
   readonly id: string
   readonly item_id: string

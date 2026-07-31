@@ -79,6 +79,7 @@ describe("chat sync journaling", () => {
         notes: {} as never,
         playlistItems: {} as never,
         listeningSessions: {} as never,
+        libraryMemberships: {} as never,
         chatSessions: createSqlChatSessionRepository(db),
         chatMessages: createSqlChatMessageRepository(db),
       },
