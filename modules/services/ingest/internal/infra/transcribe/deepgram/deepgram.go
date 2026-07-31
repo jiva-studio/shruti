@@ -118,6 +118,7 @@ func (t *Transcriber) toRaw(dg dgResponse) (transcript.Raw, string) {
 				End:        secToMs(s.End),
 				Text:       s.Text,
 				Confidence: avgWordConfidence(alt.Words, s.Start, s.End),
+				Language:   rangeLanguage(alt.Words, s.Start, s.End),
 			})
 			idx++
 		}
@@ -142,6 +143,24 @@ func majorityLanguage(words []dgWord) string {
 	counts := map[string]int{}
 	for _, w := range words {
 		if w.Language != "" {
+			counts[w.Language]++
+		}
+	}
+	best, bestN := "", 0
+	for lang, n := range counts {
+		if n > bestN {
+			best, bestN = lang, n
+		}
+	}
+	return best
+}
+
+// rangeLanguage returns the language most of the words inside [start,end] are
+// in — one sentence's language. Drives the per-language transcript split.
+func rangeLanguage(words []dgWord, start, end float64) string {
+	counts := map[string]int{}
+	for _, w := range words {
+		if w.Start >= start && w.End <= end && w.Language != "" {
 			counts[w.Language]++
 		}
 	}

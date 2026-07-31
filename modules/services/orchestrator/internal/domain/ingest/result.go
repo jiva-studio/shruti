@@ -39,23 +39,32 @@ type Result struct {
 	Title   string `json:"title,omitempty"`
 	// Extracted metadata (best-effort, ready phase) — projected into the
 	// library_items row so the card shows author / place / date, not just a title.
-	AuthorRaw   string `json:"author_raw,omitempty"`
-	LocationRaw string `json:"location_raw,omitempty"`
-	Date        string `json:"date,omitempty"`
-	KindTag     string `json:"kind_tag,omitempty"`
-	References  []Ref  `json:"references,omitempty"`
-	// Description + Outline (coarse chapters) generated from the transcript,
-	// projected onto the library_items row's variant so the track sheet shows
-	// an overview and a table of contents.
+	AuthorRaw     string `json:"author_raw,omitempty"`
+	LocationRaw   string `json:"location_raw,omitempty"`
+	Date          string `json:"date,omitempty"`
+	KindTag       string `json:"kind_tag,omitempty"`
+	References    []Ref  `json:"references,omitempty"`
+	CoverKey      string `json:"cover_key,omitempty"`
+	Duration      int64  `json:"duration,omitempty"`
+	AudioKey      string `json:"audio_key,omitempty"`
+	TranscriptKey string `json:"transcript_key,omitempty"`
+	// Variants lists every stored per-language transcript; Lang/TranscriptKey
+	// mirror the primary. Projected into library_items.variants for the client's
+	// multi-language transcript viewer.
+	Variants  []Variant `json:"variants,omitempty"`
+	SourceURL string    `json:"source_url,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	Retriable bool      `json:"retriable,omitempty"`
+}
+
+// Variant is one stored per-language transcript: its language, the bucket key of
+// transcripts/<lang>.json, and the overview generated from that language. Audio
+// is shared, so not repeated here.
+type Variant struct {
+	Lang          string         `json:"lang"`
+	TranscriptKey string         `json:"transcript_key"`
 	Description   string         `json:"description,omitempty"`
 	Outline       []OutlineEntry `json:"outline,omitempty"`
-	CoverKey      string         `json:"cover_key,omitempty"`
-	Duration      int64          `json:"duration,omitempty"`
-	AudioKey      string         `json:"audio_key,omitempty"`
-	TranscriptKey string         `json:"transcript_key,omitempty"`
-	SourceURL     string         `json:"source_url,omitempty"`
-	Error         string         `json:"error,omitempty"`
-	Retriable     bool           `json:"retriable,omitempty"`
 }
 
 // OutlineEntry is one chapter heading with its [start,end) span in ms, carried
