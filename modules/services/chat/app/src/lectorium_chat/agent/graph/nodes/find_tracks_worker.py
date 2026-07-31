@@ -263,7 +263,6 @@ async def find_tracks_worker_node(
     if isinstance(requested_author, str) and requested_author.strip():
         if not await _author_in_corpus(ctx, requested_author):
             if not ctx.capabilities.get("personal_library"):
-                # The client can't ingest → don't offer the web; say we lack them.
                 return await _emit_empty(ctx, writer, query)
             log.info(
                 "find_tracks_unknown_author_web_fallback",
@@ -307,10 +306,8 @@ async def find_tracks_worker_node(
             return await _probe_and_answer_date(
                 ctx, writer, date_from, date_to, anniversary,
             )
-        # No lecture in the corpus for this request (not a bare scripture ref /
-        # date probe). Route to add-to-library web discovery — but only when the
-        # client advertised it can render the candidate cards; an older client
-        # gets the plain "not found" instead of a card stream it can't show.
+        # No lecture in the corpus (not a bare scripture ref / date probe):
+        # route to add-to-library web discovery, read by route_after_find_tracks.
         if not ctx.capabilities.get("personal_library"):
             return await _emit_empty(ctx, writer, query)
         log.info("find_tracks_empty_web_fallback", request_id=ctx.request_id, query=query[:80])

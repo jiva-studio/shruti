@@ -24,13 +24,9 @@ import type {
 } from "@lib/contracts"
 import type { FocusFragmentPayload, UserContextPayload } from "./buildChatUserContext.js"
 
-/** Render capabilities this app build advertises to the chat server.
- *  The server adapts its output to what we can render:
- *  - `commentary_card` → purports arrive as `commentary` action payloads +
- *    `[commentary:N]` markers (rendered as cards) instead of inline blockquotes.
- *  - `personal_library` → the server may surface web-discovered lectures as
- *    add-to-library candidate cards; an older build without this key gets a
- *    plain "not found" instead of cards it can't render or submit.
+/** Render capabilities this build advertises to the chat server, which adapts
+ *  its output: `commentary_card` → purports as cards not inline blockquotes;
+ *  `personal_library` → web-discovered lectures as add-to-library cards.
  *  Additive; a server that doesn't know a key ignores it. */
 const CLIENT_CAPABILITIES = { commentary_card: true, personal_library: true } as const
 
