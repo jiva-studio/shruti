@@ -38,6 +38,11 @@ type Region struct {
 	// config.json predating this field stays valid — mirrors the app's optional
 	// `profileBaseUrl?` in servers.ts / isValidRegion. Present ⇒ turns sync on.
 	ProfileBaseURL string `json:"profileBaseUrl,omitempty"`
+	// OrchestratorBaseURL is OPTIONAL (omitempty): the ingest control-plane base
+	// (POST/GET /orchestrator/ingest). Absent ⇒ the client's add-by-url / status
+	// polling stays off for the region; a config.json predating this field stays
+	// valid — mirrors the app's optional `orchestratorBaseUrl?` in servers.ts.
+	OrchestratorBaseURL string `json:"orchestratorBaseUrl,omitempty"`
 }
 
 // ValidationError carries the offending field so the MCP layer can surface it
@@ -73,6 +78,7 @@ func validate(r Region) (Region, error) {
 	r.AuthBaseURL = strings.TrimSpace(r.AuthBaseURL)
 	r.ChatBaseURL = strings.TrimSpace(r.ChatBaseURL)
 	r.ProfileBaseURL = strings.TrimSpace(r.ProfileBaseURL)
+	r.OrchestratorBaseURL = strings.TrimSpace(r.OrchestratorBaseURL)
 
 	if !idRe.MatchString(r.ID) {
 		return Region{}, &ValidationError{Field: "id", Message: "must be non-empty and match [a-z0-9-]+"}
@@ -100,6 +106,12 @@ func validate(r Region) (Region, error) {
 	if r.ProfileBaseURL != "" {
 		if err := requireHTTPS(r.ProfileBaseURL); err != nil {
 			return Region{}, &ValidationError{Field: "profileBaseUrl", Message: err.Error()}
+		}
+	}
+	// orchestratorBaseUrl is optional; validate only when supplied.
+	if r.OrchestratorBaseURL != "" {
+		if err := requireHTTPS(r.OrchestratorBaseURL); err != nil {
+			return Region{}, &ValidationError{Field: "orchestratorBaseUrl", Message: err.Error()}
 		}
 	}
 	return r, nil
