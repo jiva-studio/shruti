@@ -70,6 +70,7 @@ func registerRegionsUpsert(s *server.MCPServer, deps RegionsDeps) {
 		mcp.WithString("authBaseUrl", mcp.Required(), mcp.Description("Auth service base URL, e.g. \"https://host/auth\".")),
 		mcp.WithString("chatBaseUrl", mcp.Required(), mcp.Description("Chat service base URL, e.g. \"https://host\".")),
 		mcp.WithString("profileBaseUrl", mcp.Description("OPTIONAL profile-sync service base URL, e.g. \"https://host\". Omit/empty ⇒ the region ships without it and the client's profile-sync engine stays OFF (no chatBaseUrl fallback); set it to turn read-only chat-history sync on. Must be https when supplied.")),
+		mcp.WithString("orchestratorBaseUrl", mcp.Description("OPTIONAL ingest control-plane base URL, e.g. \"https://host\" (routes /orchestrator/ingest). Omit/empty ⇒ the region ships without it and the client's add-by-url / status polling stays OFF; set it to turn direct ingest on. Must be https when supplied.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		fields := map[string]string{}
@@ -81,14 +82,15 @@ func registerRegionsUpsert(s *server.MCPServer, deps RegionsDeps) {
 			fields[key] = v
 		}
 		out, err := deps.UseCase.Upsert(regions.Region{
-			ID:             fields["id"],
-			Name:           fields["name"],
-			URLTemplate:    fields["urlTemplate"],
-			ShareAudioURL:  fields["shareAudioUrl"],
-			ShareVideoURL:  fields["shareVideoUrl"],
-			AuthBaseURL:    fields["authBaseUrl"],
-			ChatBaseURL:    fields["chatBaseUrl"],
-			ProfileBaseURL: req.GetString("profileBaseUrl", ""),
+			ID:                  fields["id"],
+			Name:                fields["name"],
+			URLTemplate:         fields["urlTemplate"],
+			ShareAudioURL:       fields["shareAudioUrl"],
+			ShareVideoURL:       fields["shareVideoUrl"],
+			AuthBaseURL:         fields["authBaseUrl"],
+			ChatBaseURL:         fields["chatBaseUrl"],
+			ProfileBaseURL:      req.GetString("profileBaseUrl", ""),
+			OrchestratorBaseURL: req.GetString("orchestratorBaseUrl", ""),
 		})
 		if err != nil {
 			return envelopeFromRegionsError(kind, err), nil

@@ -140,10 +140,7 @@ const syncClient = createHttpSyncClient({
   request: withNetworkErrorContext((path, init) => profileHttp.request(path, init)),
 })
 
-// Orchestrator ingest control-plane failover client. Routes ONLY on
-// `orchestratorBaseUrl` — no chat fallback. A region whose published config
-// predates the ingest API has none; the library store then falls back to the
-// legacy chat add path (the client gates on presence, like profile-sync).
+// Orchestrator ingest control-plane failover client.
 const orchestratorHttp = createFailoverClient({
   getServers: () => getRegions(),
   getPreferredId: () => useLectorium().activeServer.value.id,
