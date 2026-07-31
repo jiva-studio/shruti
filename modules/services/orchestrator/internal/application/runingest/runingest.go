@@ -26,6 +26,7 @@ package runingest
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -157,17 +158,22 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 	if owner == "" {
 		owner = userID
 	}
+	lg.InfoContext(ctx, "job_created", "user_id", owner, "url", req.URL)
+	return h.createJob(ctx, jobID, owner, req, payload)
+}
+
+// createJob commits a brand-new job together with its track.queued event and
+// the first ingest.work dispatch in ONE transaction (the transactional-outbox
+// invariant), so the worker is invoked iff the job was durably created. spec is
+// the stored ingest.Request payload (recovered by specRequest on a later retry).
+func (h *RequestHandler) createJob(ctx context.Context, jobID, owner string, req ingest.Request, spec []byte) error {
 	j := &job.Job{
 		ID:      jobID,
 		Kind:    job.KindLibraryIngest,
 		OwnerID: owner,
 		State:   job.StateQueued,
-		Spec:    payload,
+		Spec:    spec,
 	}
-	lg.InfoContext(ctx, "job_created", "user_id", owner, "url", req.URL)
-	// One tx: the job row + the track.queued event + the ingest.work dispatch
-	// all commit together (transactional outbox), so the worker is invoked iff
-	// the job was durably created.
 	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
 		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
 			return err
@@ -203,6 +209,105 @@ func (h *RequestHandler) failNotPro(ctx context.Context, jobID string, req inges
 		}
 		return h.publishEvent(ctx, tx, ev)
 	})
+}
+
+// SubmitResult is the outcome of an API-driven ingest submission: the
+// deterministic job id — which is also the library membership id the client
+// keys its library row on and polls for status — and the job's current state.
+type SubmitResult struct {
+	JobID string
+	State job.State
+}
+
+// ErrNotPro rejects an API ingest submission whose token does not grant an
+// active pro tier. Unlike the stream path (failNotPro) the API creates NOTHING
+// on a bad token — it is a plain 4xx the client renders, not a dead-lettered job.
+var ErrNotPro = errors.New("pro tier not verified")
+
+// Submit is the synchronous API entry for an ingest request (POST /ingest). It
+// verifies the token and keys the job on the VERIFIED subject — so a
+// client-supplied user_id can neither misattribute the job nor split the dedup
+// (the anon-dedup fix) — then creates / dedups / restarts and returns the job id
+// and current state for the client to poll. A dead-lettered job restarts in
+// place (the same retry path the stream uses); an in-flight or done job is
+// returned as-is.
+func (h *RequestHandler) Submit(ctx context.Context, req ingest.Request) (SubmitResult, error) {
+	userID, pro, err := h.d.Tier.VerifyPro(req.Token)
+	if err != nil || !pro {
+		return SubmitResult{}, ErrNotPro
+	}
+	req.UserID = userID // authoritative subject — never trust the client-supplied id
+	jobID := jobIDFor(userID, "", req.URL)
+	lg := slog.With("job_id", jobID, "request_id", req.RequestID)
+
+	existing, err := h.d.Repo.Get(ctx, jobID)
+	if err != nil {
+		return SubmitResult{}, fmt.Errorf("load job: %w", err)
+	}
+	if existing != nil {
+		if existing.State == job.StateFailed {
+			if err := h.restartFailed(ctx, existing, req); err != nil {
+				return SubmitResult{}, err
+			}
+			return SubmitResult{JobID: jobID, State: job.StateQueued}, nil
+		}
+		lg.InfoContext(ctx, "submit_duplicate", "state", string(existing.State))
+		return SubmitResult{JobID: jobID, State: existing.State}, nil
+	}
+
+	spec, err := json.Marshal(req)
+	if err != nil {
+		return SubmitResult{}, fmt.Errorf("marshal spec: %w", err)
+	}
+	lg.InfoContext(ctx, "job_created", "user_id", userID, "url", req.URL)
+	if err := h.createJob(ctx, jobID, userID, req, spec); err != nil {
+		return SubmitResult{}, err
+	}
+	return SubmitResult{JobID: jobID, State: job.StateQueued}, nil
+}
+
+// StatusLabel maps the internal job state onto the client-facing lifecycle
+// vocabulary the library card and the synced library_items.status use, so the
+// live poll and the eventual sync agree on the word.
+func StatusLabel(s job.State) string {
+	switch s {
+	case job.StateQueued:
+		return "queued"
+	case job.StateRunning:
+		return "processing"
+	case job.StateDone:
+		return "ready"
+	case job.StateFailed:
+		return "failed"
+	case job.StateCancelled:
+		return "cancelled"
+	default:
+		return string(s)
+	}
+}
+
+// JobStatus is the live status the API serves for GET /ingest/{id}. State uses
+// the client lifecycle vocabulary; ErrorCode is the STABLE failure code (never
+// the raw internal error); TrackID is set once the content hash is known.
+type JobStatus struct {
+	State     string `json:"state"`
+	Attempts  int    `json:"attempts"`
+	ErrorCode string `json:"error,omitempty"`
+	TrackID   string `json:"track_id,omitempty"`
+}
+
+// StatusOf projects a job aggregate into the API status DTO, mapping the raw
+// failure text to a stable client code so no internal detail leaks to the device.
+func StatusOf(j *job.Job) JobStatus {
+	s := JobStatus{
+		State:    StatusLabel(j.State),
+		Attempts: j.Attempts,
+		TrackID:  j.TrackID,
+	}
+	if j.State == job.StateFailed && j.Err != "" {
+		s.ErrorCode = failCode(j.Err)
+	}
+	return s
 }
 
 // restartFailed re-runs a DEAD-LETTERED job on a user-initiated retry (a re-add
