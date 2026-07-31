@@ -23,11 +23,17 @@ func progressData(stage string, percent int) []byte {
 
 // statusData is the track.queued / track.processing event payload (the
 // server-owned library_items projection applied verbatim by the profile
-// consumer). title_raw is carried so the pre-ready card has a title — the
-// projection is a replace-all upsert, so every state must ship the fields it
-// wants visible. Shape is part of the downstream contract — keep it stable.
-func statusData(status, title string) []byte {
-	b, _ := json.Marshal(map[string]any{"status": status, "title_raw": title})
+// consumer). title_raw is carried so the pre-ready card has a title, and
+// source_url so the client can match the row to its origin URL BEFORE the ready
+// projection (the chat card / add flow key on it) — the projection is a
+// replace-all upsert, so every state must ship the fields it wants visible.
+// Shape is part of the downstream contract — keep it stable.
+func statusData(status, title, sourceURL string) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"status":     status,
+		"title_raw":  title,
+		"source_url": sourceURL,
+	})
 	return b
 }
 
@@ -43,11 +49,12 @@ func statusData(status, title string) []byte {
 // in orchestrator.jobs.error and in the logs, which is where debugging belongs.
 // The key is `error` to match the library_items `error` column the whole
 // downstream chain (profile projection, sync wire, client row) already maps.
-func failData(msg, title string) []byte {
+func failData(msg, title, sourceURL string) []byte {
 	b, _ := json.Marshal(map[string]any{
-		"status":    "failed",
-		"error":     failCode(msg),
-		"title_raw": title,
+		"status":     "failed",
+		"error":      failCode(msg),
+		"title_raw":  title,
+		"source_url": sourceURL,
 	})
 	return b
 }

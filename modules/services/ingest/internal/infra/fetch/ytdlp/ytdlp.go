@@ -445,7 +445,10 @@ func (e *ytdlpExtractor) probeDuration(ctx context.Context, rawURL string) (int6
 
 func (e *ytdlpExtractor) download(ctx context.Context, rawURL, destDir string, onProgress func(int)) (string, error) {
 	tmpl := filepath.Join(destDir, "audio.%(ext)s")
-	args := []string{"-x", "--audio-format", "mp3", "--no-playlist", "-o", tmpl}
+	// --concurrent-fragments parallelizes the per-fragment fetches of a DASH/HLS
+	// audio stream. Each fragment is a round-trip through the (slow) residential
+	// proxy, so fetching several at once is the biggest lever on download time.
+	args := []string{"-x", "--audio-format", "mp3", "--no-playlist", "--concurrent-fragments", "4", "-o", tmpl}
 	if e.opts.MaxBytes > 0 {
 		args = append(args, "--max-filesize", strconv.FormatInt(e.opts.MaxBytes, 10))
 	}

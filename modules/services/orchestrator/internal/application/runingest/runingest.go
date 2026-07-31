@@ -127,7 +127,7 @@ func (h *RequestHandler) createJob(ctx context.Context, jobID, owner string, req
 		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
 			return err
 		}
-		queued := event(jobID+":queued", ingest.EventQueued, req.RequestID, owner, jobID, "", j.Generation, statusData("queued", req.Title))
+		queued := event(jobID+":queued", ingest.EventQueued, req.RequestID, owner, jobID, "", j.Generation, statusData("queued", req.Title, req.URL))
 		if err := h.publishEvent(ctx, tx, queued); err != nil {
 			return err
 		}
@@ -296,7 +296,7 @@ func (h *RequestHandler) restartFailed(ctx context.Context, j *job.Job, req inge
 		if err := h.d.Repo.SaveTx(ctx, tx, locked); err != nil {
 			return err
 		}
-		queued := event(locked.ID+":queued", ingest.EventQueued, disp.RequestID, locked.OwnerID, locked.ID, "", locked.Generation, statusData("queued", disp.Title))
+		queued := event(locked.ID+":queued", ingest.EventQueued, disp.RequestID, locked.OwnerID, locked.ID, "", locked.Generation, statusData("queued", disp.Title, disp.URL))
 		if err := h.publishEvent(ctx, tx, queued); err != nil {
 			return err
 		}
@@ -370,7 +370,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		if err := j.To(job.StateRunning); err != nil {
 			return fmt.Errorf("to running: %w", err)
 		}
-		ev := event(res.JobID+":processing", ingest.EventProcessing, res.RequestID, j.OwnerID, res.JobID, "", j.Generation, statusData("processing", specRequest(j).Title))
+		ev := event(res.JobID+":processing", ingest.EventProcessing, res.RequestID, j.OwnerID, res.JobID, "", j.Generation, statusData("processing", specRequest(j).Title, specRequest(j).URL))
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseReady:
@@ -445,7 +445,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		lg.ErrorContext(ctx, "job_dead_lettered",
 			"error", res.Error, "attempts", j.Attempts,
 			"exhausted", res.Retriable, "user_id", j.OwnerID)
-		ev := event(res.JobID+":failed", ingest.EventFailed, res.RequestID, j.OwnerID, res.JobID, j.TrackID, j.Generation, failData(res.Error, specRequest(j).Title))
+		ev := event(res.JobID+":failed", ingest.EventFailed, res.RequestID, j.OwnerID, res.JobID, j.TrackID, j.Generation, failData(res.Error, specRequest(j).Title, specRequest(j).URL))
 		return h.save(ctx, j, ev)
 
 	default:
