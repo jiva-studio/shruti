@@ -61,10 +61,56 @@ func Generate(
 		return Result{}, err
 	}
 	return Result{
-		Coarse:      buildEntries(res.Coarse, duration),
+		// The coarse chapters are the ones rendered as headings, so thin them: a
+		// short lecture must not sprout a heading every couple of sentences.
+		Coarse:      thinChapters(buildEntries(res.Coarse, duration), duration),
 		Granular:    buildEntries(res.Granular, duration),
 		Description: desc,
 	}, nil
+}
+
+const (
+	// minChapterGapMs is the smallest spacing between two coarse chapter
+	// headings — a heading closer than this to the previous one is dropped, so a
+	// 3-minute lecture gets a handful of chapters, not one per sentence.
+	minChapterGapMs = 60_000
+	// maxCoarseChapters caps the coarse outline; more than this is downsampled
+	// evenly. Keeps even a multi-hour lecture to a scannable table of contents.
+	maxCoarseChapters = 8
+)
+
+// thinChapters enforces a minimum time gap between coarse chapters and caps the
+// count, re-deriving each kept chapter's [start,end) span. The first chapter is
+// always kept.
+func thinChapters(entries []Entry, duration int64) []Entry {
+	if len(entries) <= 1 {
+		return entries
+	}
+	kept := []Entry{entries[0]}
+	for _, e := range entries[1:] {
+		if e.Start-kept[len(kept)-1].Start >= minChapterGapMs {
+			kept = append(kept, e)
+		}
+	}
+	if len(kept) > maxCoarseChapters {
+		sampled := make([]Entry, 0, maxCoarseChapters)
+		step := float64(len(kept)) / float64(maxCoarseChapters)
+		for i := 0; i < maxCoarseChapters; i++ {
+			sampled = append(sampled, kept[int(float64(i)*step)])
+		}
+		kept = sampled
+	}
+	for i := range kept {
+		if i+1 < len(kept) {
+			kept[i].End = kept[i+1].Start
+		} else {
+			kept[i].End = duration
+		}
+		if kept[i].End < kept[i].Start {
+			kept[i].End = kept[i].Start
+		}
+	}
+	return kept
 }
 
 // lectureFromBlocks renders the reviewed transcript as time-coded lines
