@@ -131,11 +131,16 @@ func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []by
 	if err != nil {
 		return fmt.Errorf("load job: %w", err)
 	}
-	// A job for this request already exists — settled or in flight. Ack without
-	// touching it: PRO was verified when it was created, and any retry belongs to
-	// the ResultHandler. (Re-verifying here would let a token that lapsed AFTER
-	// acceptance fail a job whose ingest.work is still in flight.)
+	// A job for this request already exists. A re-add of a DEAD-LETTERED (failed)
+	// job is a user-initiated RETRY — restart it in place. Any other existing
+	// state is a true duplicate: ack without touching it. A done job must not
+	// re-run (the lecture is already in the library); an in-flight job's retry
+	// belongs to the ResultHandler, and re-verifying PRO here would let a token
+	// that lapsed AFTER acceptance fail work that is still running.
 	if existing != nil {
+		if existing.State == job.StateFailed {
+			return h.restartFailed(ctx, existing, req)
+		}
 		lg.InfoContext(ctx, "request_duplicate", "state", string(existing.State))
 		return nil
 	}
@@ -198,6 +203,66 @@ func (h *RequestHandler) failNotPro(ctx context.Context, jobID string, req inges
 		}
 		return h.publishEvent(ctx, tx, ev)
 	})
+}
+
+// restartFailed re-runs a DEAD-LETTERED job on a user-initiated retry (a re-add
+// of a source whose job already dead-lettered). It re-verifies PRO from the
+// fresh request token — the tier may have lapsed since the job first failed, and
+// a failed job is terminal so this is not the in-flight case failNotPro guards
+// against — then bumps the generation so the re-run's lifecycle stamps sort above
+// the prior run's terminal state, and dispatches a fresh ingest.work in one tx
+// with the track.queued event.
+//
+// Attempts stay MONOTONIC across the restart (never reset), so the in-flight
+// attempt number is unique across every generation and a stale result from the
+// prior run is discarded by ResultHandler's attempt filter alone — no generation
+// needs to round-trip through the worker. The restart is re-checked under a row
+// lock so two racing retries (a double-tap, a redelivery) restart exactly once;
+// the loser sees a non-failed state and no-ops.
+func (h *RequestHandler) restartFailed(ctx context.Context, j *job.Job, req ingest.Request) error {
+	lg := slog.With("job_id", j.ID, "request_id", req.RequestID)
+	if _, pro, verr := h.d.Tier.VerifyPro(req.Token); verr != nil || !pro {
+		lg.WarnContext(ctx, "retry_rejected_not_pro", "user_id", req.UserID)
+		return nil // not PRO — leave the job dead-lettered, ack
+	}
+	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
+		locked, err := h.d.Repo.GetForUpdateTx(ctx, tx, j.ID)
+		if err != nil {
+			return err
+		}
+		if locked == nil || locked.State != job.StateFailed {
+			lg.InfoContext(ctx, "retry_superseded", "state", stateOf(locked))
+			return nil // another retry already restarted it, or it is gone
+		}
+		if err := locked.To(job.StateQueued); err != nil {
+			return fmt.Errorf("restart to queued: %w", err)
+		}
+		locked.Generation++
+		locked.Err = ""
+		// Re-dispatch from the ORIGINAL validated spec (same source — the
+		// deterministic job id guarantees it), carrying the retry's correlation id
+		// so the re-run's logs and events join the turn that triggered it.
+		disp := specRequest(locked)
+		disp.RequestID = req.RequestID
+		attempt := locked.Attempts + 1
+		lg.InfoContext(ctx, "job_restarted", "generation", locked.Generation, "attempt", attempt, "owner", locked.OwnerID)
+		if err := h.d.Repo.SaveTx(ctx, tx, locked); err != nil {
+			return err
+		}
+		queued := event(locked.ID+":queued", ingest.EventQueued, disp.RequestID, locked.OwnerID, locked.ID, "", locked.Generation, statusData("queued", disp.Title))
+		if err := h.publishEvent(ctx, tx, queued); err != nil {
+			return err
+		}
+		return h.dispatchWork(ctx, tx, locked.ID, locked.OwnerID, disp, attempt)
+	})
+}
+
+// stateOf renders a possibly-nil job's state for a log field.
+func stateOf(j *job.Job) string {
+	if j == nil {
+		return "gone"
+	}
+	return string(j.State)
 }
 
 // ResultHandler processes `ingest.result` (ingest → orchestrator).

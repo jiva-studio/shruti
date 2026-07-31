@@ -182,6 +182,25 @@ func lastTrackType(evs []ingest.TrackEvent) string {
 	return evs[len(evs)-1].Type
 }
 
+func lastTrackEvent(evs []ingest.TrackEvent) ingest.TrackEvent {
+	if len(evs) == 0 {
+		return ingest.TrackEvent{}
+	}
+	return evs[len(evs)-1]
+}
+
+// deadLetter seeds a queued job and drives it to a permanent (non-retriable)
+// dead-letter, returning the job id.
+func (h *harness) deadLetter(t *testing.T, msgID, url string) string {
+	t.Helper()
+	jobID := h.seedQueued(t, msgID, url)
+	failed := ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseFailed, Error: "unsupported url", Retriable: false}
+	if err := h.res.Process(context.Background(), "dl", resPayload(t, failed)); err != nil {
+		t.Fatalf("dead-letter: %v", err)
+	}
+	return jobID
+}
+
 // --- RequestHandler tests ---
 
 func TestRequest_CreatesJobAndDispatchesWork(t *testing.T) {
@@ -254,6 +273,82 @@ func TestRequest_SameUrlReAdded_Deduped(t *testing.T) {
 	}
 	if n := len(h.events.works()); n != 1 {
 		t.Fatalf("re-add of the same lecture must not re-dispatch: got %d ingest.work", n)
+	}
+}
+
+func TestRequest_RetryDeadLettered_RestartsWithNewGeneration(t *testing.T) {
+	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
+	jobID := h.deadLetter(t, "msg-dl", "https://x/y")
+
+	// User re-adds the same lecture (a DIFFERENT broker message, same user+url →
+	// same job) — a dead-lettered job restarts in place.
+	if err := h.req.Process(context.Background(), "msg-retry", reqPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateQueued || j.Generation != 1 || j.Attempts != 0 {
+		t.Fatalf("restart wrong: state=%s gen=%d attempts=%d", j.State, j.Generation, j.Attempts)
+	}
+	// A fresh ingest.work dispatched at attempt 1 (the new run's first attempt).
+	works := h.events.works()
+	if len(works) != 2 || works[len(works)-1].Attempt != 1 {
+		t.Fatalf("retry must re-dispatch at attempt 1: %+v", works)
+	}
+	// The restart's queued event carries generation 1 so it sorts above the prior
+	// run's failed stamp in the downstream projection.
+	q := lastTrackEvent(h.events.trackEvents())
+	if q.Type != ingest.EventQueued || q.Generation != 1 {
+		t.Fatalf("restart queued event wrong: type=%s gen=%d", q.Type, q.Generation)
+	}
+	// Drive the re-run to ready — the terminal event also carries generation 1.
+	_ = h.res.Process(context.Background(), "p", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing}))
+	if err := h.res.Process(context.Background(), "r", resPayload(t, ingest.Result{JobID: jobID, Attempt: 1, Phase: ingest.PhaseReady, TrackID: "h"})); err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	ready := lastTrackEvent(h.events.trackEvents())
+	if ready.Type != ingest.EventReady || ready.Generation != 1 {
+		t.Fatalf("re-run ready event wrong: type=%s gen=%d", ready.Type, ready.Generation)
+	}
+	if jj, _ := h.repo.Get(context.Background(), jobID); jj.State != job.StateDone {
+		t.Fatalf("re-run not done: %s", jj.State)
+	}
+}
+
+func TestRequest_RetryDeadLettered_NotPro_NoRestart(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: false})
+	// First add fails PRO verification → dead-lettered without dispatch.
+	if err := h.req.Process(context.Background(), "msg-1", reqPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	jobID := jobIDFor("user-1", "msg-1", "https://x/y")
+	// A retry from a still-not-PRO user must NOT restart: leave it dead-lettered.
+	if err := h.req.Process(context.Background(), "msg-2", reqPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateFailed || j.Generation != 0 {
+		t.Fatalf("not-pro retry must not restart: state=%s gen=%d", j.State, j.Generation)
+	}
+	if n := len(h.events.works()); n != 0 {
+		t.Fatalf("not-pro retry must not dispatch: got %d", n)
+	}
+}
+
+func TestRequest_ReAddDoneJob_NoRestart(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-1", "https://x/y")
+	_ = h.res.Process(context.Background(), "r", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"}))
+	worksBefore := len(h.events.works())
+	// Re-adding a lecture that already ingested must not re-run it.
+	if err := h.req.Process(context.Background(), "msg-2", reqPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("re-add: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateDone || j.Generation != 0 {
+		t.Fatalf("done re-add must not restart: state=%s gen=%d", j.State, j.Generation)
+	}
+	if n := len(h.events.works()); n != worksBefore {
+		t.Fatalf("done re-add must not dispatch: got %d want %d", n, worksBefore)
 	}
 }
 
