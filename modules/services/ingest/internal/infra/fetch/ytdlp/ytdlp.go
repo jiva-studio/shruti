@@ -303,7 +303,7 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string, onProgress func(int)
 // lacks. Empty fields (or a whole empty result) when yt-dlp can't provide them
 // — e.g. a direct-mp3 URL; a probe failure is never surfaced as an error.
 func (f *Fetcher) ProbeSource(ctx context.Context, rawURL string) (ports.SourceInfo, error) {
-	args := []string{"--no-playlist", "--skip-download", "--print", "%(uploader)s\n%(upload_date)s\n%(duration)s"}
+	args := []string{"--no-playlist", "--skip-download", "--print", "%(title)s\n%(uploader)s\n%(upload_date)s\n%(duration)s"}
 	if f.opts.Proxy != "" {
 		args = append(args, "--proxy", f.opts.Proxy)
 	}
@@ -315,15 +315,18 @@ func (f *Fetcher) ProbeSource(ctx context.Context, rawURL string) (ports.SourceI
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	var info ports.SourceInfo
 	if len(lines) > 0 {
-		info.Uploader = naToEmpty(lines[0])
+		info.Title = naToEmpty(lines[0])
 	}
 	if len(lines) > 1 {
-		info.UploadDate = naToEmpty(lines[1])
+		info.Uploader = naToEmpty(lines[1])
 	}
 	if len(lines) > 2 {
+		info.UploadDate = naToEmpty(lines[2])
+	}
+	if len(lines) > 3 {
 		// yt-dlp prints duration in seconds (integer, or a float for some
 		// extractors); truncate to whole seconds — sub-second is irrelevant here.
-		if sec, perr := strconv.ParseFloat(naToEmpty(lines[2]), 64); perr == nil && sec > 0 {
+		if sec, perr := strconv.ParseFloat(naToEmpty(lines[3]), 64); perr == nil && sec > 0 {
 			info.Duration = int64(sec)
 		}
 	}

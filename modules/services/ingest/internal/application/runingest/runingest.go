@@ -178,16 +178,18 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("marshal transcript: %w", err))
 	}
 
-	// Extract structured metadata from the title (date / author / location /
-	// clean title / references / kind). Best-effort: the audio + transcript are
-	// already produced, so a missing key or an LLM hiccup must NOT fail the
-	// ingest — we just fall back to the raw title.
-	ex := s.extract(ctx, lg, cmd.Title)
-	// Source metadata fills what the title didn't carry: the uploader/channel as
-	// an author when none was parsed, and the publish date as a date fallback.
+	// Source metadata fills what the request didn't carry: the source's own
+	// title as a fallback when no hint was passed (a direct URL add), the
+	// uploader/channel as an author, and the publish date as a date fallback.
 	info := s.probeSource(ctx, lg, cmd.URL)
+	// Extract structured metadata from the best title we have — the caller's hint
+	// if any, else the source's own title — so a direct URL add still gets a real
+	// title, not "Untitled". Best-effort: the audio + transcript are already
+	// produced, so a missing key or an LLM hiccup must NOT fail the ingest.
+	rawTitle := firstNonEmpty(cmd.Title, info.Title)
+	ex := s.extract(ctx, lg, rawTitle)
 	draft := ingest.TrackDraft{
-		TitleRaw:    firstNonEmpty(ex.Title, cmd.Title),
+		TitleRaw:    firstNonEmpty(ex.Title, rawTitle),
 		AuthorRaw:   firstNonEmpty(ex.AuthorRaw, cmd.Author, info.Uploader),
 		LocationRaw: ex.LocationRaw,
 		LangHint:    raw.Language,

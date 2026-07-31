@@ -12,9 +12,30 @@
         <IconVinyl :size="40" />
       </div>
 
+      <!-- Live ingest progress pill (stage + download percent) while the lecture
+           ingests — takes over the corner control so the user watches it advance
+           without leaving chat. -->
+      <span
+        v-if="liveStatus?.kind === 'pending'"
+        class="stage-pill"
+        role="status"
+        :aria-label="liveStatus.label"
+      >
+        <IonSpinner name="crescent" class="spinner" />
+        {{ liveStatus.label }}
+      </span>
+      <button
+        v-else-if="liveStatus?.kind === 'failed' || state === 'error'"
+        class="add-btn add-btn--error"
+        :aria-label="$t('chat.actionRetry')"
+        @click="emit('confirm', actionId)"
+      >
+        <IconRefresh :size="18" />
+      </button>
+
       <!-- Compact add control, top-right over the cover. -->
       <button
-        v-if="state === 'pending' && !alreadyInLibrary"
+        v-else-if="state === 'pending' && !alreadyInLibrary"
         class="add-btn"
         :aria-label="$t('chat.actionAddToLibraryConfirm')"
         @click="emit('confirm', actionId)"
@@ -24,14 +45,6 @@
       <span v-else-if="state === 'executing'" class="add-btn add-btn--busy" aria-hidden="true">
         <IonSpinner name="crescent" class="spinner" />
       </span>
-      <button
-        v-else-if="state === 'error'"
-        class="add-btn add-btn--error"
-        :aria-label="$t('chat.actionRetry')"
-        @click="emit('confirm', actionId)"
-      >
-        <IconRefresh :size="18" />
-      </button>
       <span
         v-else
         class="add-btn add-btn--done"
@@ -68,6 +81,9 @@ defineProps<{
   state: ActionState
   /** The user already has this lecture — show it as in-library, not addable. */
   alreadyInLibrary?: boolean
+  /** Live ingest status of the matching library item (from the status poll),
+   *  driving the inline progress pill / retry. Undefined once ready or unadded. */
+  liveStatus?: { kind: "pending" | "failed"; label: string }
 }>()
 
 const emit = defineEmits<{
@@ -133,6 +149,25 @@ const emit = defineEmits<{
 .add-btn--busy,
 .add-btn--error {
   cursor: default;
+}
+
+/* Live-progress pill: same top-right corner as the add control, widened to hold
+   the stage label + percent. Mirrors the library card's "Downloading" badge. */
+.stage-pill {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+  padding: 6px 12px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .spinner {

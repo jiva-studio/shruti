@@ -10,7 +10,7 @@ export default {
     stages: {
       downloading: "Downloading",
       transcribing: "Transcribing",
-      reviewing: "Reviewing",
+      reviewing: "Proofreading",
       storing: "Saving",
     },
     errors: {

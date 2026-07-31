@@ -108,10 +108,16 @@ import ChatChips from "./components/ChatChips.vue"
 import ChatSessionHeader from "./components/ChatSessionHeader.vue"
 import { useChatController } from "./ChatView.controller.js"
 import { useChatSuggestions } from "./composables/useChatSuggestions.js"
+import { useIngestStatusPolling } from "@shruti/composables/useIngestStatusPolling.js"
 
 const inputBarRef = ref<InstanceType<typeof ChatInputBar> | null>(null)
 
 const { t } = useI18n()
+
+// Poll in-flight ingests while chat is open, so an add-to-library candidate
+// card shows live stage/percent as its lecture ingests (same poll the library
+// views use — it patches the shared store).
+useIngestStatusPolling()
 
 const {
   messages,

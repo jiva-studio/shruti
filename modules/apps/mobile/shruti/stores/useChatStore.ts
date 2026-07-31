@@ -1629,7 +1629,12 @@ export const useChatStore = defineStore("chat", () => {
     action: Extract<ChatActionPayload, { kind: "add_to_library" }>
   ): Promise<void> {
     const { useLibraryStore } = await import("@shruti/stores/useLibraryStore.js")
-    await useLibraryStore().addByUrl(action.url)
+    // Pass the candidate's title/author as hints so the pre-ready card (and the
+    // worker's metadata fallback) has a real title, not "Untitled".
+    await useLibraryStore().addByUrl(action.url, {
+      title: action.title,
+      author: action.author ?? undefined,
+    })
   }
 
   async function deleteSession(id: string): Promise<void> {
