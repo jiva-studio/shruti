@@ -1,6 +1,7 @@
 export default {
   youMightLike: "Вам может понравиться",
   untitled: "Лекция без названия",
+  remove: "Убрать из моей библиотеки",
   status: {
     processing: "Обработка",
     ready: "Готово",

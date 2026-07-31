@@ -1,6 +1,7 @@
 export default {
   youMightLike: "You Might Like",
   untitled: "Untitled lecture",
+  remove: "Remove from My library",
   status: {
     processing: "Processing",
     ready: "Ready",
