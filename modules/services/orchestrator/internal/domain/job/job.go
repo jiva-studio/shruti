@@ -43,6 +43,7 @@ type Job struct {
 	State     State
 	Spec      []byte // kind-specific request (JSON)
 	Result    []byte // terminal payload (JSON); nil until done
+	Progress  []byte // kind-specific progress (JSON), poll-only; latest stage while running
 	TrackID   string // content hash; empty until fetched
 	Err       string
 	Attempts  int

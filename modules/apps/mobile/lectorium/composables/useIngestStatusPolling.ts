@@ -56,6 +56,8 @@ export function useIngestStatusPolling(): void {
             const status = toLibraryStatus(s.state)
             if (!status) return
             library.applyLiveStatus(item.id, status, (s.track_id as TrackId | undefined) ?? null)
+            // Granular stage only while processing; cleared otherwise.
+            library.setLiveStage(item.id, status === "processing" ? s.stage : undefined)
             if (status === "ready" || status === "failed") sawTerminal = true
           } catch {
             // Transient poll failure — try again next tick; sync remains the

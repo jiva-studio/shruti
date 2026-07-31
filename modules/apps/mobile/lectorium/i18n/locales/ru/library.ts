@@ -7,6 +7,12 @@ export default {
     ready: "Готово",
     failed: "Не удалось",
     retry: "Повторить",
+    stages: {
+      downloading: "Загрузка",
+      transcribing: "Транскрибация",
+      reviewing: "Вычитка",
+      storing: "Сохранение",
+    },
     errors: {
       unauthorized: "Добавление лекций доступно в Pro.",
       unavailable: "Источник недоступен.",

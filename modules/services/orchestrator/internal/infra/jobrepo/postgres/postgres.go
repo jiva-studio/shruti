@@ -104,19 +104,20 @@ func (r *Repo) GetForUpdateTx(ctx context.Context, t ports.Tx, id string) (*job.
 
 func getJob(ctx context.Context, q querier, id, lock string) (*job.Job, error) {
 	var (
-		j       job.Job
-		kind    string
-		state   string
-		owner   *string
-		trackID *string
-		errStr  *string
-		spec    []byte
-		result  []byte
+		j        job.Job
+		kind     string
+		state    string
+		owner    *string
+		trackID  *string
+		errStr   *string
+		spec     []byte
+		result   []byte
+		progress []byte
 	)
 	err := q.QueryRow(ctx, `
-		SELECT id, kind, owner_id::text, state, spec, result, track_id, error, attempts, generation, created_at, updated_at
+		SELECT id, kind, owner_id::text, state, spec, result, progress, track_id, error, attempts, generation, created_at, updated_at
 		  FROM orchestrator.jobs WHERE id=$1`+lock, id).
-		Scan(&j.ID, &kind, &owner, &state, &spec, &result, &trackID, &errStr, &j.Attempts, &j.Generation, &j.CreatedAt, &j.UpdatedAt)
+		Scan(&j.ID, &kind, &owner, &state, &spec, &result, &progress, &trackID, &errStr, &j.Attempts, &j.Generation, &j.CreatedAt, &j.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -127,10 +128,22 @@ func getJob(ctx context.Context, q querier, id, lock string) (*job.Job, error) {
 	j.State = job.State(state)
 	j.Spec = spec
 	j.Result = result
+	j.Progress = progress
 	j.OwnerID = deref(owner)
 	j.TrackID = deref(trackID)
 	j.Err = deref(errStr)
 	return &j, nil
+}
+
+// UpdateProgress writes only the job's progress blob — a lightweight,
+// off-the-hot-path update for the frequent per-stage heartbeats, so it never
+// contends with the state/attempt writes. Best-effort at the call site.
+func (r *Repo) UpdateProgress(ctx context.Context, id string, progress []byte) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE orchestrator.jobs SET progress = COALESCE($2::jsonb, '{}'::jsonb), updated_at = now() WHERE id = $1`,
+		id, jsonbOrNil(progress),
+	)
+	return err
 }
 
 // Publish implements ports.EventBus: it appends an event to the outbox in the

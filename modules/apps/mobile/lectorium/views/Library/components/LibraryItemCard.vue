@@ -16,7 +16,7 @@
 
     <span v-if="isPending" class="status processing">
       <IonSpinner name="dots" class="status-spinner" />
-      {{ $t("library.status.processing") }}
+      {{ stageLabel }}
     </span>
     <span v-else-if="isFailed" class="status failed">
       <IconAlertTriangle :size="13" />
@@ -43,6 +43,7 @@ import { IonSpinner } from "@ionic/vue"
 import { IconVinyl, IconAlertTriangle, IconReload } from "@tabler/icons-vue"
 import { CachedImage } from "@ui/primitives/index.js"
 import { resolveAssetUrl } from "@lectorium/services/regionsRegistry.js"
+import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
 
 /**
@@ -63,12 +64,21 @@ const emit = defineEmits<{
 }>()
 
 const { t, te } = useI18n()
+const library = useLibraryStore()
 
 const isReady = computed(() => props.item.status === "ready")
 const isPending = computed(
   () => props.item.status === "queued" || props.item.status === "processing"
 )
 const isFailed = computed(() => props.item.status === "failed")
+
+// Live pipeline stage from the status poll (Downloading / Transcribing / …),
+// falling back to a plain "Processing" before the first heartbeat / unknown code.
+const stageLabel = computed(() => {
+  const stage = library.liveStages.get(props.item.id)
+  const key = stage ? `library.status.stages.${stage}` : ""
+  return key && te(key) ? t(key) : t("library.status.processing")
+})
 const coverUrl = computed(() => resolveAssetUrl(props.item.coverKey ?? undefined))
 const title = computed(() => props.item.titleRaw?.trim() || t("library.untitled"))
 const subtitle = computed(() => {

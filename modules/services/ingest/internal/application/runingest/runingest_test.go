@@ -115,6 +115,20 @@ func (r *fakeResults) phases() []string {
 	return out
 }
 
+// stages returns the Stage of every non-empty-stage result, in order — the
+// granular pipeline heartbeats.
+func (r *fakeResults) stages() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, res := range r.list {
+		if res.Stage != "" {
+			out = append(out, res.Stage)
+		}
+	}
+	return out
+}
+
 func (r *fakeResults) last() ingest.Result {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -187,8 +201,20 @@ func TestProcess_Ready(t *testing.T) {
 	if rev.TrackId != hash || rev.Language != "en" || rev.Version != 1 || len(rev.Blocks) != 1 {
 		t.Fatalf("reviewed transcript wrong: %+v", rev)
 	}
-	if got, want := h.results.phases(), []string{ingest.PhaseProcessing, ingest.PhaseReady}; !equal(got, want) {
+	// One processing heartbeat per pipeline stage (download / transcribe /
+	// review / store) precedes the terminal ready.
+	if got, want := h.results.phases(), []string{
+		ingest.PhaseProcessing, ingest.PhaseProcessing, ingest.PhaseProcessing,
+		ingest.PhaseProcessing, ingest.PhaseReady,
+	}; !equal(got, want) {
 		t.Fatalf("phases = %v, want %v", got, want)
+	}
+	// The heartbeats carry the stage labels, in pipeline order.
+	if got, want := h.results.stages(), []string{
+		ingest.StageDownloading, ingest.StageTranscribing,
+		ingest.StageReviewing, ingest.StageStoring,
+	}; !equal(got, want) {
+		t.Fatalf("stages = %v, want %v", got, want)
 	}
 	last := h.results.last()
 	if last.JobID != "job-1" || last.TrackID != hash || last.Lang != "en" {

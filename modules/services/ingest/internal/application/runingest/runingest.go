@@ -115,8 +115,9 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	started := time.Now()
 	lg.InfoContext(ctx, "ingest_started", "url", cmd.URL)
 
-	// Best-effort heartbeat: moves the orchestrator's job queued → running.
-	s.emit(ctx, ingest.Result{JobID: cmd.JobID, RequestID: cmd.RequestID, Attempt: cmd.Attempt, Phase: ingest.PhaseProcessing})
+	// Best-effort heartbeat: moves the orchestrator's job queued → running, and
+	// reports the first stage (downloading) for granular status.
+	s.progress(ctx, cmd, ingest.StageDownloading)
 
 	stage := time.Now()
 	localPath, hash, err := s.d.Fetcher.Fetch(ctx, cmd.URL)
@@ -132,6 +133,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("read audio: %w", err))
 	}
 
+	s.progress(ctx, cmd, ingest.StageTranscribing)
 	stage = time.Now()
 	raw, _, err := s.d.Transcriber.Transcribe(ctx, localPath)
 	if err != nil {
@@ -149,6 +151,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// review pipeline (chunk → LLM cleanup → sentence assembly); otherwise the
 	// deterministic per-segment windowing. LLM review is best-effort — per-chunk
 	// failures degrade to raw text inside ReviewTranscript, never fatal.
+	s.progress(ctx, cmd, ingest.StageReviewing)
 	reviewed := s.d.Reviewer.NormalizeTranscript(raw)
 	if s.d.LLMReviewer != nil {
 		reviewed = review.ReviewTranscript(ctx, s.d.LLMReviewer, raw, review.Options{Glossary: s.d.Glossary})
@@ -190,6 +193,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	}
 	lang := draft.Lang
 
+	s.progress(ctx, cmd, ingest.StageStoring)
 	stage = time.Now()
 	aKey, tKey := audioKey(hash), transcriptKey(hash, lang)
 	if err := s.d.Blob.Put(ctx, aKey, audio, "audio/mpeg"); err != nil {
@@ -283,6 +287,19 @@ func (s *Service) done(ctx context.Context, r ingest.Result) error {
 // fatal because the terminal result still carries the outcome.
 func (s *Service) emit(ctx context.Context, r ingest.Result) {
 	_ = s.d.Results.Publish(ctx, r)
+}
+
+// progress emits a best-effort processing heartbeat carrying the current
+// pipeline stage, so the orchestrator can serve granular status to a polling
+// client. Fire-and-forget — a dropped heartbeat only means a coarser spinner.
+func (s *Service) progress(ctx context.Context, cmd ingest.WorkCommand, stage string) {
+	s.emit(ctx, ingest.Result{
+		JobID:     cmd.JobID,
+		RequestID: cmd.RequestID,
+		Attempt:   cmd.Attempt,
+		Phase:     ingest.PhaseProcessing,
+		Stage:     stage,
+	})
 }
 
 // retriable classifies a pipeline error. Clearly-permanent failures — an

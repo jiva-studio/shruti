@@ -27,6 +27,9 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   // Raw facts + the archived-membership overlay; `items` is the active join.
   const allItems = ref<readonly LibraryItem[]>([])
   const archivedIds = ref<ReadonlySet<string>>(new Set())
+  // Live granular pipeline stage per in-flight item (poll-only, ephemeral) —
+  // the card shows it instead of a bare "Processing" while an item ingests.
+  const liveStages = ref<ReadonlyMap<string, string>>(new Map())
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
@@ -85,9 +88,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   function findBySource(url: string): LibraryItem | undefined {
     if (!url.trim()) return undefined
     const key = normalizeSource(url)
-    return allItems.value.find(
-      (i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key
-    )
+    return allItems.value.find((i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key)
   }
 
   /**
@@ -106,6 +107,17 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     const next = allItems.value.slice()
     next[idx] = { ...cur, status, trackId: nextTrackId }
     allItems.value = next
+  }
+
+  /** Set (or clear) the live pipeline stage for an in-flight item, from a status
+   *  poll. Replaces the map so the card re-renders reactively. */
+  function setLiveStage(id: string, stage: string | undefined): void {
+    const cur = liveStages.value.get(id)
+    if (cur === stage) return
+    const next = new Map(liveStages.value)
+    if (stage) next.set(id, stage)
+    else next.delete(id)
+    liveStages.value = next
   }
 
   /**
@@ -130,10 +142,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
    *   - present and not failed      → no-op (already in the library / in progress)
    * PRO-gated; a non-subscriber (or a server not_pro) is bounced to the paywall.
    */
-  async function addByUrl(
-    url: string,
-    hints?: { title?: string; author?: string }
-  ): Promise<void> {
+  async function addByUrl(url: string, hints?: { title?: string; author?: string }): Promise<void> {
     if (!url.trim()) return
     const { usePurchasesStore } = await import("@lectorium/stores/usePurchasesStore.js")
     if (!usePurchasesStore().isSubscribed) {
@@ -154,7 +163,10 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     await submitIngest(url, hints)
   }
 
-  async function submitIngest(url: string, hints?: { title?: string; author?: string }): Promise<void> {
+  async function submitIngest(
+    url: string,
+    hints?: { title?: string; author?: string }
+  ): Promise<void> {
     try {
       await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
       requestSync()
@@ -185,6 +197,8 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     hasSource,
     findBySource,
     applyLiveStatus,
+    liveStages,
+    setLiveStage,
     remove,
     addByUrl,
   }
