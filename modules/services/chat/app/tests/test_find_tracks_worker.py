@@ -32,6 +32,7 @@ class _Ctx:
     translator: Any | None = None
     request_id: str = "req-test"
     kv_cache: Any | None = None
+    capabilities: dict = field(default_factory=lambda: {"personal_library": True})
 
 
 @dataclass
@@ -415,6 +416,22 @@ async def test_empty_topic_query_routes_to_web_fallback(_events) -> None:
     assert not [e for e in _events if e["type"] == "action"]
     text = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
     assert "[followup:" not in text
+
+
+async def test_no_corpus_match_without_capability_skips_web_fallback(_events) -> None:
+    # A build that can't add lectures from the web never gets routed there: the
+    # same empty-corpus query yields a plain not-found, no `web_fallback`.
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),
+        catalog_repo=_Catalog(),
+        llm=_FakeLLM(),
+        capabilities={},
+    )
+    result = await ftw.find_tracks_worker_node(
+        {"user_query": "очищение сердца", "extracted_args": {}}, _Runtime(ctx)
+    )
+    assert result.get("web_fallback") is not True
 
 
 async def test_uncatalogued_track_dropped(_events) -> None:
