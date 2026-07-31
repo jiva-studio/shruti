@@ -7,6 +7,12 @@ export default {
     ready: "Ready",
     failed: "Failed",
     retry: "Retry",
+    stages: {
+      downloading: "Downloading",
+      transcribing: "Transcribing",
+      reviewing: "Reviewing",
+      storing: "Saving",
+    },
     errors: {
       unauthorized: "Adding lectures is a Pro feature.",
       unavailable: "This source isn't available.",

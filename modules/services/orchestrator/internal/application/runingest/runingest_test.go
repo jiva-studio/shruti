@@ -15,14 +15,29 @@ import (
 // --- fakes (the hexagonal design makes these cheap) ---
 
 type fakeRepo struct {
-	mu   sync.Mutex
-	jobs map[string]job.Job
+	mu       sync.Mutex
+	jobs     map[string]job.Job
+	progress map[string][]byte
 }
 
-func newRepo() *fakeRepo { return &fakeRepo{jobs: map[string]job.Job{}} }
+func newRepo() *fakeRepo {
+	return &fakeRepo{jobs: map[string]job.Job{}, progress: map[string][]byte{}}
+}
 
 func (r *fakeRepo) CreateTx(_ context.Context, _ ports.Tx, j *job.Job) error { return r.put(j) }
 func (r *fakeRepo) SaveTx(_ context.Context, _ ports.Tx, j *job.Job) error   { return r.put(j) }
+
+func (r *fakeRepo) UpdateProgress(_ context.Context, id string, progress []byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.progress[id] = progress
+	// Mirror onto the stored job so a later Get/StatusOf sees the live stage.
+	if j, ok := r.jobs[id]; ok {
+		j.Progress = progress
+		r.jobs[id] = j
+	}
+	return nil
+}
 
 func (r *fakeRepo) GetForUpdateTx(_ context.Context, _ ports.Tx, id string) (*job.Job, error) {
 	return r.Get(context.Background(), id)
@@ -31,7 +46,13 @@ func (r *fakeRepo) GetForUpdateTx(_ context.Context, _ ports.Tx, id string) (*jo
 func (r *fakeRepo) put(j *job.Job) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.jobs[j.ID] = *j // store a value copy — the caller keeps mutating j
+	cp := *j // store a value copy — the caller keeps mutating j
+	// Mirror postgres: Create/SaveTx don't write the progress column, so a job
+	// write must not clobber a stage recorded by UpdateProgress.
+	if cp.Progress == nil {
+		cp.Progress = r.jobs[j.ID].Progress
+	}
+	r.jobs[j.ID] = cp
 	return nil
 }
 
@@ -376,6 +397,56 @@ func TestResult_Processing_MovesToRunning(t *testing.T) {
 	}
 	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventProcessing {
 		t.Fatalf("last track event = %q, want track.processing", got)
+	}
+}
+
+func TestResult_ProcessingStage_RecordsProgress(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-st", "https://x/y")
+
+	// A stage heartbeat moves queued→running and records the granular stage.
+	if err := h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{
+		JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing, Stage: "transcribing",
+	})); err != nil {
+		t.Fatalf("processing: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateRunning {
+		t.Fatalf("not running: %s", j.State)
+	}
+	if st := StatusOf(j); st.State != "processing" || st.Stage != "transcribing" {
+		t.Fatalf("status = %+v, want processing/transcribing", st)
+	}
+
+	// A later heartbeat updates the stage in place (no new track event needed).
+	if err := h.res.Process(context.Background(), "b", resPayload(t, ingest.Result{
+		JobID: jobID, Attempt: 1, Phase: ingest.PhaseProcessing, Stage: "storing",
+	})); err != nil {
+		t.Fatalf("processing 2: %v", err)
+	}
+	j, _ = h.repo.Get(context.Background(), jobID)
+	if st := StatusOf(j); st.Stage != "storing" {
+		t.Fatalf("status stage = %q, want storing", st.Stage)
+	}
+}
+
+func TestResult_ProcessingStaleAttempt_Ignored(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.seedQueued(t, "msg-sa", "https://x/y")
+
+	// Attempt 2 while the in-flight attempt is 1 (j.Attempts=0) → discarded: no
+	// state move, no progress recorded.
+	if err := h.res.Process(context.Background(), "a", resPayload(t, ingest.Result{
+		JobID: jobID, Attempt: 2, Phase: ingest.PhaseProcessing, Stage: "transcribing",
+	})); err != nil {
+		t.Fatalf("processing: %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), jobID)
+	if j.State != job.StateQueued {
+		t.Fatalf("a stale heartbeat must not move state: %s", j.State)
+	}
+	if len(j.Progress) != 0 {
+		t.Fatalf("a stale heartbeat must not record progress: %s", j.Progress)
 	}
 }
 

@@ -16,6 +16,17 @@ const (
 	PhaseFailed = "failed"
 )
 
+// Pipeline stages reported on a processing heartbeat's Stage, so the client can
+// show granular progress (Downloading / Transcribing / …). Poll-only — the
+// orchestrator records the latest stage on the job for the status API; it is
+// never projected into library_items. Stable strings the client localizes.
+const (
+	StageDownloading  = "downloading"
+	StageTranscribing = "transcribing"
+	StageReviewing    = "reviewing"
+	StageStoring      = "storing"
+)
+
 // Result is one `ingest.result` message: the worker's report on a work item.
 // JobID echoes the WorkCommand so the orchestrator loads the right job. The
 // artifact fields are populated on ready; Error/Retriable on failed.
@@ -27,8 +38,11 @@ type Result struct {
 	// Attempt echoes the WorkCommand's attempt number so the orchestrator can
 	// discard a stale/duplicate result whose attempt has already been superseded
 	// by a re-dispatch (idempotent retry accounting across redelivery).
-	Attempt       int    `json:"attempt,omitempty"`
-	Phase         string `json:"phase"`
+	Attempt int    `json:"attempt,omitempty"`
+	Phase   string `json:"phase"`
+	// Stage is the current pipeline stage on a processing heartbeat (see the
+	// Stage* constants); empty on the terminal ready/failed results.
+	Stage         string `json:"stage,omitempty"`
 	TrackID       string `json:"track_id,omitempty"`
 	Lang          string `json:"lang,omitempty"`
 	Title         string `json:"title,omitempty"`

@@ -27,6 +27,10 @@ type Result struct {
 	// keeping retry accounting idempotent under at-least-once redelivery.
 	Attempt int    `json:"attempt,omitempty"`
 	Phase   string `json:"phase"`
+	// Stage is the pipeline stage on a processing heartbeat (downloading /
+	// transcribing / reviewing / storing); empty on terminal results. Recorded on
+	// the job for the live status API — poll-only, never projected to the client.
+	Stage   string `json:"stage,omitempty"`
 	TrackID string `json:"track_id,omitempty"`
 	Lang    string `json:"lang,omitempty"`
 	Title   string `json:"title,omitempty"`
