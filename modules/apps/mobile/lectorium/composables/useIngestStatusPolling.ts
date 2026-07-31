@@ -20,6 +20,9 @@ import type { IngestState } from "@lib/contracts"
  * library item id (`library_items.id`), so `item.id` addresses both.
  */
 const POLL_INTERVAL_MS = 3000
+// While a lecture is actively downloading, poll faster so the progress ring
+// advances smoothly rather than jumping once every 3s.
+const FAST_POLL_INTERVAL_MS = 1200
 
 /** Map the ingest wire state onto the library card's status vocabulary. Only the
  *  four card states are applied; `cancelled` is left for sync to reconcile. */
@@ -38,16 +41,24 @@ function toLibraryStatus(state: IngestState): LibraryItemStatus | null {
 export function useIngestStatusPolling(): void {
   const app = useLectorium()
   const library = useLibraryStore()
-  let timer: ReturnType<typeof setInterval> | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let stopped = false
   let inFlightTick = false
+  // True after a tick that saw a downloading item — the scheduler then uses the
+  // fast interval so the percent ring animates rather than stepping every 3s.
+  let downloadActive = false
 
   async function tick(): Promise<void> {
     if (inFlightTick) return
     if (!app.activeServer.value.orchestratorBaseUrl) return
     const pending = library.pendingItems
-    if (pending.length === 0) return
+    if (pending.length === 0) {
+      downloadActive = false
+      return
+    }
     inFlightTick = true
     let sawTerminal = false
+    let sawDownloading = false
     try {
       await Promise.all(
         pending.map(async (item) => {
@@ -63,6 +74,7 @@ export function useIngestStatusPolling(): void {
               processing ? s.stage : undefined,
               processing ? s.percent : undefined
             )
+            if (processing && s.stage === "downloading") sawDownloading = true
             if (status === "ready" || status === "failed") sawTerminal = true
           } catch {
             // Transient poll failure — try again next tick; sync remains the
@@ -73,17 +85,29 @@ export function useIngestStatusPolling(): void {
     } finally {
       inFlightTick = false
     }
+    downloadActive = sawDownloading
     // A job finished: pull the full authoritative row (keys/metadata the status
     // poll doesn't carry) so the now-ready card is immediately playable.
     if (sawTerminal) requestSync()
   }
 
+  // Self-scheduling loop: the delay tightens while a download is in flight.
+  function schedule(): void {
+    if (stopped) return
+    timer = setTimeout(
+      () => {
+        void tick().finally(schedule)
+      },
+      downloadActive ? FAST_POLL_INTERVAL_MS : POLL_INTERVAL_MS
+    )
+  }
+
   onMounted(() => {
-    void tick()
-    timer = setInterval(() => void tick(), POLL_INTERVAL_MS)
+    void tick().finally(schedule)
   })
   onUnmounted(() => {
-    if (timer !== null) clearInterval(timer)
+    stopped = true
+    if (timer !== null) clearTimeout(timer)
     timer = null
   })
 }
