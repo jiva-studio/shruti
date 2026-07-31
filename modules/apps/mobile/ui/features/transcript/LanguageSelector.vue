@@ -10,7 +10,8 @@
       }"
       @click="onLanguageClicked(lang.code)"
     >
-      {{ lang.icon ?? "🏁" }} {{ lang.name }}
+      <span v-if="lang.icon" class="flag">{{ lang.icon }}</span>
+      {{ lang.name }}
     </span>
   </div>
 </template>
@@ -54,9 +55,13 @@ function onLanguageClicked(language: string) {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-bottom: 16px;
+  margin: 16px 0;
   gap: 1rem;
   font-size: 0.75rem;
+}
+
+.flag {
+  margin-right: 4px;
 }
 
 .language {
