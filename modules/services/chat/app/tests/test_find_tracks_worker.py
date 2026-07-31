@@ -400,10 +400,8 @@ async def test_date_query_with_no_lectures_says_so(_events) -> None:
 
 
 async def test_empty_topic_query_routes_to_web_fallback(_events) -> None:
-    # A topical query (no scripture ref) with no corpus results is NOT a dead
-    # end: find_tracks sets `web_fallback` so the graph hands off to
-    # add_to_library_worker (web discovery). It streams no "couldn't find" line
-    # and no cards itself.
+    # A topical query with no corpus match sets `web_fallback` (graph then routes
+    # to add_to_library_worker); find_tracks itself streams no line or card.
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[]]),
