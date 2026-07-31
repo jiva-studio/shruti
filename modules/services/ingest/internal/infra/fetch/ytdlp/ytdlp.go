@@ -250,6 +250,7 @@ type Options struct {
 	// live (default exec). A test may leave it nil to force the buffered path.
 	ProgressRunner ProgressRunner
 	HTTPClient     *http.Client // client for the direct-mp3 extractor
+	FFmpegBin      string       // ffmpeg binary for the CBR re-encode (default "ffmpeg")
 }
 
 // Fetcher is the ports.Fetcher implementation.
@@ -273,6 +274,9 @@ func New(opts Options) *Fetcher {
 	}
 	if opts.HTTPClient == nil {
 		opts.HTTPClient = &http.Client{Timeout: 10 * time.Minute}
+	}
+	if opts.FFmpegBin == "" {
+		opts.FFmpegBin = "ffmpeg"
 	}
 	if opts.WorkDir == "" {
 		opts.WorkDir = os.TempDir()
@@ -329,6 +333,20 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string, onProgress func(int)
 		return "", "", err
 	}
 
+	// Re-encode to constant-bitrate mp3 (same libmp3lame -b:a 128k the corpus
+	// pipeline uses). A VBR mp3 — what yt-dlp and many direct sources produce —
+	// carries only a coarse 100-point Xing seek table, so a browser estimates
+	// currentTime / seek by interpolating between those points and drifts by
+	// seconds on a long lecture, desyncing the transcript highlight. CBR makes
+	// byte-offset ↔ time exact. Both the stored audio AND the transcript are
+	// derived from this file, so they stay consistent.
+	if reenc, rerr := f.reencodeCBR(ctx, path); rerr != nil {
+		_ = os.RemoveAll(dir)
+		return "", "", fmt.Errorf("fetch: reencode: %w", rerr)
+	} else {
+		path = reenc
+	}
+
 	fi, err := os.Stat(path)
 	if err != nil {
 		_ = os.RemoveAll(dir)
@@ -345,6 +363,24 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string, onProgress func(int)
 		return "", "", fmt.Errorf("fetch: read artifact: %w", err)
 	}
 	return path, ingest.ContentID(b), nil
+}
+
+// reencodeCBR transcodes the downloaded audio to constant-bitrate mp3 in place,
+// matching the corpus pipeline's `libmp3lame -b:a 128k`, and returns the new
+// path (the source file is removed). A re-encode fault is returned so the ingest
+// retries rather than silently storing a seek-broken VBR file.
+func (f *Fetcher) reencodeCBR(ctx context.Context, path string) (string, error) {
+	out := path + ".cbr.mp3"
+	if _, err := f.opts.Runner(ctx, f.opts.FFmpegBin,
+		"-y", "-hide_banner", "-loglevel", "error",
+		"-i", path,
+		"-c:a", "libmp3lame", "-b:a", "128k",
+		out,
+	); err != nil {
+		return "", err
+	}
+	_ = os.Remove(path)
+	return out, nil
 }
 
 // ProbeSource reads best-effort source metadata (uploader + publish date)
