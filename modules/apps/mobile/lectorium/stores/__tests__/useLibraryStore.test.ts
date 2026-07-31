@@ -7,10 +7,14 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
 /* --------------------------------------------------------------------- */
 
 const listAll = vi.fn<() => Promise<readonly LibraryItem[]>>()
+const listArchivedIds = vi.fn<() => Promise<ReadonlySet<string>>>()
 
 vi.mock("@lectorium/lectorium.js", () => ({
   useLectorium: () => ({
-    repositories: () => ({ libraryItems: { listAll } }),
+    repositories: () => ({
+      libraryItems: { listAll },
+      libraryMemberships: { listArchivedIds },
+    }),
   }),
 }))
 
@@ -53,6 +57,8 @@ describe("useLibraryStore", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     listAll.mockReset()
+    listArchivedIds.mockReset()
+    listArchivedIds.mockResolvedValue(new Set())
   })
 
   afterEach(() => {

@@ -3,6 +3,7 @@ import type { OutboxEntry } from "@lib/domain/ports/outboxRepository.js"
 import {
   mergeChatMessage,
   mergeChatSession,
+  mergeLibraryMembership,
   mergeListeningSession,
   mergeNote,
   mergePlaylistItem,
@@ -34,6 +35,9 @@ const SYNCED_COLLECTIONS: ReadonlySet<string> = new Set<SyncCollection>([
   // Personal library (epic #1236): server-owned and pull-only — merged by
   // "apply the server's version" (see mergeChange).
   "library_items",
+  // The user's remove/re-add intent for a library item — CLIENT-owned, pushed
+  // and merged last-write-wins (see mergeChange).
+  "library_memberships",
 ])
 
 /** Narrow an arbitrary wire `collection` to a collection this engine handles.
@@ -100,6 +104,10 @@ export function mergeChange(
       // no local version to reconcile — apply its wire row wholesale. `local`
       // is ignored on purpose (the client never journals this collection).
       return remote
+    case "library_memberships":
+      // Client-owned toggle (archived/active): last-write-wins by HLC on the
+      // opaque wire row, no field-level merge.
+      return mergeLibraryMembership(local, remote)
   }
 }
 

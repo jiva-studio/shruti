@@ -3,6 +3,7 @@ import type { LanguageCode } from "@lib/domain/core.js"
 import { createSqlNoteRepository } from "./notesRepository.sql.js"
 import { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
 import { createSqlLibraryItemRepository } from "./libraryItemsRepository.sql.js"
+import { createSqlLibraryMembershipRepository } from "./libraryMembershipsRepository.sql.js"
 import { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
 import { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
 import { createSqlTrackRepository } from "./tracksRepository.sql.js"
@@ -30,6 +31,7 @@ export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
 export { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
 export { createSqlLibraryItemRepository } from "./libraryItemsRepository.sql.js"
+export { createSqlLibraryMembershipRepository } from "./libraryMembershipsRepository.sql.js"
 export { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
 export { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
 export { createSqlUnitOfWork } from "./unitOfWork.sql.js"
@@ -75,6 +77,10 @@ export interface SqlAppRepositories {
    *  `profile`. Always present (does not depend on the sync `getDeviceId`
    *  gate; the sync-apply adapter fills the table when the engine runs). */
   readonly libraryItems: ReturnType<typeof createSqlLibraryItemRepository>
+  /** The user's remove/re-add intent for library items (epic #1236) — CLIENT-
+   *  owned and synced, wrapped by the journal decorator when the sync engine is
+   *  enabled. The store joins it against `libraryItems` to hide removed items. */
+  readonly libraryMemberships: ReturnType<typeof createSqlLibraryMembershipRepository>
   readonly listeningSessions: ReturnType<typeof createSqlListeningSessionRepository>
   readonly mediaItems: ReturnType<typeof createSqlMediaItemRepository>
   readonly unitOfWork: ReturnType<typeof createReentrantUnitOfWork>
@@ -151,6 +157,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     listeningSessions: createSqlListeningSessionRepository(deps.userDb),
     chatSessions: createSqlChatSessionRepository(deps.userDb),
     chatMessages: createSqlChatMessageRepository(deps.userDb),
+    libraryMemberships: createSqlLibraryMembershipRepository(deps.userDb),
   }
   const synced = deps.getDeviceId
     ? withSyncJournaling(baseSynced, {
@@ -200,6 +207,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     notes: synced.notes,
     playlistItems: synced.playlistItems,
     libraryItems,
+    libraryMemberships: synced.libraryMemberships,
     listeningSessions: synced.listeningSessions,
     mediaItems: createSqlMediaItemRepository(deps.userDb),
     unitOfWork,
