@@ -20,7 +20,6 @@ import {
 } from "@shruti/composables/useTrackUserState.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
-import { requestSync } from "@shruti/services/syncEvents.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import { extractFollowups } from "@lib/chat/chatMarkers.js"
 import {
@@ -1622,43 +1621,15 @@ export const useChatStore = defineStore("chat", () => {
 
   /**
    * Confirm an `add_to_library` candidate card (personal library, epic #1236):
-   * PRO-gate, then trigger ingest of the external lecture. Mirrors
-   * `applyProactiveSmartLibrary` — adding external lectures is a Pro capability,
-   * so a non-subscriber is bounced through the paywall and nothing is ingested.
-   *
-   * The client→server call reuses the deployed add-to-library chat transport:
-   * we hand the candidate URL back as a turn so the server's add-to-library
-   * intent publishes the `ingest.request` (the only client→server path that
-   * reaches the ingest broker). We then fire `requestSync()` so the poller drops
-   * into its short cadence and surfaces the freshly-queued item (and its
-   * processing → ready flip) without waiting out the idle interval.
+   * trigger ingest of the external lecture. Chat is DISCOVERY ONLY — it never
+   * ingests; the actual submit goes through the orchestrator ingest API in the
+   * library store (which PRO-gates and bounces a non-subscriber to the paywall).
    */
   async function applyAddToLibrary(
     action: Extract<ChatActionPayload, { kind: "add_to_library" }>
   ): Promise<void> {
-    await sendAddToLibrary(action.url)
-  }
-
-  /**
-   * PRO-gate, then trigger ingest of an external lecture by URL through the
-   * deployed add-to-library chat transport (see {@link applyAddToLibrary}).
-   * Shared by the candidate-card confirm and the failed-library-item retry: a
-   * re-add of a dead-lettered source maps to the same orchestrator job, which
-   * restarts it in place. A non-subscriber is bounced through the paywall and
-   * nothing is sent.
-   */
-  async function sendAddToLibrary(url: string): Promise<void> {
-    const { usePurchasesStore } = await import("@shruti/stores/usePurchasesStore.js")
-    if (!usePurchasesStore().isSubscribed) {
-      const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
-      usePaywallStore().requestOpen()
-      return
-    }
-    // Send a readable command (not a bare URL) so the chat turn looks
-    // intentional; it still routes to add-to-library (the URL is present) and
-    // the worker resolves the title/metadata from it server-side.
-    await sendMessage(t("chat.addByLinkCommand", { url }))
-    requestSync()
+    const { useLibraryStore } = await import("@shruti/stores/useLibraryStore.js")
+    await useLibraryStore().addByUrl(action.url)
   }
 
   async function deleteSession(id: string): Promise<void> {
@@ -1794,7 +1765,6 @@ export const useChatStore = defineStore("chat", () => {
     startNewSession,
     ensureActiveSession,
     sendMessage,
-    sendAddToLibrary,
     cancelStream,
     retryLast,
     executeAction,
