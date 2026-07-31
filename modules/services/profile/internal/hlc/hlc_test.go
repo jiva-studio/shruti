@@ -86,20 +86,20 @@ func TestTerminalWinsOverEveryOrdinaryStamp(t *testing.T) {
 // (queued < processing < ready|failed < published).
 func TestRankedOrderingAndTerminalDominance(t *testing.T) {
 	c := NewClock()
-	// Stable for the same rank (idempotent redelivery collides on hlc).
-	if a, b := c.Ranked(2), c.Ranked(2); a != b {
+	// Stable for the same (generation, rank) (idempotent redelivery collides on hlc).
+	if a, b := c.Ranked(0, 2), c.Ranked(0, 2); a != b {
 		t.Fatalf("ranked stamp not stable: %q != %q", a, b)
 	}
 	// Well-formed wire shape.
-	if parts := strings.SplitN(c.Ranked(3), ":", 3); len(parts) != 3 ||
+	if parts := strings.SplitN(c.Ranked(0, 3), ":", 3); len(parts) != 3 ||
 		len(parts[0]) != physicalDigits || len(parts[1]) != counterDigits || parts[2] != ServerNodeID {
-		t.Fatalf("ranked stamp malformed: %q", c.Ranked(3))
+		t.Fatalf("ranked stamp malformed: %q", c.Ranked(0, 3))
 	}
 	// Strictly increasing across the lifecycle ranks, and every rank below Terminal.
 	term := c.Terminal()
-	prev := c.Ranked(0)
+	prev := c.Ranked(0, 0)
 	for rank := 1; rank <= 4; rank++ {
-		cur := c.Ranked(rank)
+		cur := c.Ranked(0, rank)
 		if !(cur > prev) {
 			t.Errorf("rank %d stamp %q not greater than rank %d stamp %q", rank, cur, rank-1, prev)
 		}
@@ -107,6 +107,25 @@ func TestRankedOrderingAndTerminalDominance(t *testing.T) {
 			t.Errorf("terminal %q must sort after rank %d stamp %q", term, rank, cur)
 		}
 		prev = cur
+	}
+}
+
+// A higher generation sorts strictly above EVERY rank of the lower generation —
+// so a retry's queued (gen 1, rank 1) beats the prior run's failed (gen 0, rank
+// 3), the invariant that lets a dead-lettered card recover in place. Every
+// generation still sorts below Terminal.
+func TestRankedGenerationDominatesPriorRun(t *testing.T) {
+	c := NewClock()
+	term := c.Terminal()
+	priorFailed := c.Ranked(0, 3)
+	for rank := 1; rank <= 4; rank++ {
+		retry := c.Ranked(1, rank)
+		if !(retry > priorFailed) {
+			t.Errorf("gen 1 rank %d stamp %q must beat gen 0 failed %q", rank, retry, priorFailed)
+		}
+		if !(term > retry) {
+			t.Errorf("terminal %q must sort after gen 1 rank %d stamp %q", term, rank, retry)
+		}
 	}
 }
 

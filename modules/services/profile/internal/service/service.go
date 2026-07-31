@@ -189,9 +189,11 @@ func (s *Service) ApplyServerChange(ctx context.Context, userID uuid.UUID, colle
 // (queued/processing/ready/failed → upsert, removed → delete) under a RANK-ordered
 // hlc so a later state deterministically wins last-writer-wins regardless of
 // broker arrival order (see hlc.Clock.Ranked). All states of one ingest share the
-// membership doc_id, so the row advances in place.
-func (s *Service) ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, docID, op string, rank int, data json.RawMessage) (wire.Change, error) {
-	return s.applyServerChange(ctx, userID, "library_items", docID, op, s.clock().Ranked(rank), data)
+// membership doc_id, so the row advances in place. generation lifts a re-run
+// (retry of a dead-lettered job) above the prior run's terminal stamp; it is 0
+// for the original run.
+func (s *Service) ApplyLibraryLifecycle(ctx context.Context, userID uuid.UUID, docID, op string, generation, rank int, data json.RawMessage) (wire.Change, error) {
+	return s.applyServerChange(ctx, userID, "library_items", docID, op, s.clock().Ranked(generation, rank), data)
 }
 
 // applyServerChange is the shared server-authored write with a caller-supplied

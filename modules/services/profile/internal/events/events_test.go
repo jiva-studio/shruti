@@ -12,15 +12,16 @@ import (
 
 // fakeApplier records the last lifecycle change the consumer requested.
 type fakeApplier struct {
-	docID, op string
-	rank      int
-	data      json.RawMessage
-	calls     int
+	docID, op  string
+	generation int
+	rank       int
+	data       json.RawMessage
+	calls      int
 }
 
-func (f *fakeApplier) ApplyLibraryLifecycle(_ context.Context, _ uuid.UUID, docID, op string, rank int, data json.RawMessage) (wire.Change, error) {
+func (f *fakeApplier) ApplyLibraryLifecycle(_ context.Context, _ uuid.UUID, docID, op string, generation, rank int, data json.RawMessage) (wire.Change, error) {
 	f.calls++
-	f.docID, f.op, f.rank, f.data = docID, op, rank, data
+	f.docID, f.op, f.generation, f.rank, f.data = docID, op, generation, rank, data
 	return wire.Change{Collection: libraryItemsCollection, DocID: docID, Op: op, Data: data}, nil
 }
 
@@ -104,6 +105,30 @@ func TestHandleProjectsLifecycleWithMonotonicRank(t *testing.T) {
 	}
 	if fa.calls != 0 {
 		t.Fatalf("unknown type must not write, got %d calls", fa.calls)
+	}
+}
+
+// A re-run event carries its generation through to the applier so the stamp can
+// lift the retry above the prior run's terminal state. A generation-0 (original)
+// event, and one where the field is absent from the wire, both project at 0.
+func TestHandlePropagatesGeneration(t *testing.T) {
+	fa := &fakeApplier{}
+	c := &Consumer{Applier: fa}
+	ev := TrackEvent{ID: "y", Type: "track.ready", UserID: uuid.New(), DocID: "d", Generation: 2,
+		Data: json.RawMessage(`{"status":"ready"}`)}
+	if err := c.handle(context.Background(), ev); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if fa.generation != 2 {
+		t.Errorf("want generation 2 propagated, got %d", fa.generation)
+	}
+
+	var decoded TrackEvent
+	if err := json.Unmarshal([]byte(`{"id":"z","type":"track.queued","doc_id":"d"}`), &decoded); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if decoded.Generation != 0 {
+		t.Errorf("absent generation must decode to 0, got %d", decoded.Generation)
 	}
 }
 
