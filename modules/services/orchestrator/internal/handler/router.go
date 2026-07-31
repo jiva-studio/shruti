@@ -20,21 +20,32 @@ var (
 	buildTime = os.Getenv("LECTORIUM_BUILD_TIME")
 )
 
-// RouterDeps bundles everything NewRouter needs.
+// RouterDeps bundles everything NewRouter needs. Submitter/Jobs/Verifier are the
+// ingest control plane; any of them nil (no auth key / no broker at boot) makes
+// the /ingest routes report 503 while health/readiness stay up.
 type RouterDeps struct {
-	Pool *pgxpool.Pool
+	Pool      *pgxpool.Pool
+	Submitter ingestSubmitter
+	Jobs      jobReader
+	Verifier  tokenVerifier
 }
 
 // NewRouter wires:
 //
-//	GET /healthz   (liveness)
-//	GET /readyz    (gates traffic until migrations are current)
+//	GET  /healthz        (liveness)
+//	GET  /readyz         (gates traffic until migrations are current)
+//	POST /ingest         (submit a lecture for ingest; returns job id + state)
+//	GET  /ingest/{id}    (live job status for the owner)
 func NewRouter(d RouterDeps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
 
 	r.Get("/healthz", healthz)
 	r.Get("/readyz", readyzHandler(d.Pool))
+
+	api := &ingestAPI{submit: d.Submitter, jobs: d.Jobs, verifier: d.Verifier}
+	r.Post("/ingest", api.create)
+	r.Get("/ingest/{id}", api.status)
 
 	return r
 }
