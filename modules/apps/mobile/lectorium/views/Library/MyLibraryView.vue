@@ -56,6 +56,7 @@ import { FlatHeader } from "@ui/primitives/index.js"
 import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
 import { useOpenLibraryItem } from "@lectorium/composables/useOpenLibraryItem.js"
 import { useRetryLibraryItem } from "@lectorium/composables/useRetryLibraryItem.js"
+import { useIngestStatusPolling } from "@lectorium/composables/useIngestStatusPolling.js"
 import LibraryItemCard from "./components/LibraryItemCard.vue"
 
 /**
@@ -67,6 +68,8 @@ import LibraryItemCard from "./components/LibraryItemCard.vue"
 const library = useLibraryStore()
 const onSelect = useOpenLibraryItem()
 const onRetry = useRetryLibraryItem()
+
+useIngestStatusPolling()
 
 void library.ensureLoaded()
 
