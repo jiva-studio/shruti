@@ -255,23 +255,19 @@ async def find_tracks_worker_node(
         log.warning("find_tracks_missing_deps", request_id=ctx.request_id)
         return await _emit_empty(ctx, writer, query)
 
-    # The user named a teacher whose lectures the corpus does NOT have. Without
-    # this guard the unresolved author_id silently drops out of the filter, the
-    # semantic search returns SOME OTHER teacher's lectures, and synth then
-    # misattributes them ("Here are the lectures by <author>"). Instead: say we
-    # don't have them, and offer to fetch them from the web — the chip routes
-    # into add-to-library (the whole point of that feature).
+    # The user named a teacher whose lectures the corpus does NOT have. Guard
+    # here so the unresolved author_id can't drop out of the filter and let the
+    # semantic search return SOME OTHER teacher's lectures (which synth would then
+    # misattribute). Route to add-to-library web discovery for the named teacher.
     requested_author = args.get("author")
     if isinstance(requested_author, str) and requested_author.strip():
         if not await _author_in_corpus(ctx, requested_author):
-            topic = args.get("topic")
-            return await _emit_unknown_author(
-                ctx,
-                writer,
-                query,
-                requested_author.strip(),
-                topic.strip() if isinstance(topic, str) else "",
+            log.info(
+                "find_tracks_unknown_author_web_fallback",
+                request_id=ctx.request_id,
+                author=requested_author.strip()[:60],
             )
+            return {"web_fallback": True}
 
     embedding = await ctx.embedder.embed_query(query)
     ladder = await _build_filters(ctx, args)
@@ -395,7 +391,7 @@ def _emit_reply(writer, reply, *, prefix_line: str = "", suffix: str = "") -> No
         writer({"type": "delta", "data": {"text": prefix_line + line + suffix}})
     for chip in reply.chips[:3]:
         # `]` / newline would break the marker; `|` is the valid label|query
-        # separator (see _UNKNOWN_AUTHOR_CHIP), so it stays.
+        # separator, so it stays.
         chip = chip.replace("]", "").replace("\n", "").strip()
         if chip:
             writer({"type": "delta", "data": {"text": f"\n[followup:{chip}]"}})
@@ -600,56 +596,3 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
     return {}
 
 
-# The follow-up chip is `[followup:<label>|<query>]`: a SHORT label shown on the
-# pill, and the FULL command re-sent as a chat turn when tapped. The command
-# must route back to `add-to-library` on its own AND carry the WHOLE request
-# (author + topic) — a terse "Search internet for X" is ambiguous (search for a
-# person?) and the router drops it to `unknown`, and dropping the topic loses
-# what the user asked for; "lectures" + "add to my library" pin the intent. The
-# label stays compact so the chip doesn't render as a sentence-long pill. Built
-# deterministically per language rather than let the LLM paraphrase (or bloat) it.
-_UNKNOWN_AUTHOR_CHIP = {
-    "ru": {
-        "label": "Поискать в интернете",
-        "topic": "Найти в интернете лекции {author} про {topic} и добавить в библиотеку",
-        "plain": "Найти в интернете лекции {author} и добавить в библиотеку",
-    },
-    "en": {
-        "label": "Search the web",
-        "topic": "Find {author}'s lectures about {topic} on the internet and add to my library",
-        "plain": "Find {author}'s lectures on the internet and add to my library",
-    },
-}
-
-
-async def _emit_unknown_author(
-    ctx: TurnContext, writer, query: str, author: str, topic: str = ""
-) -> dict:
-    """The user asked for a teacher who is NOT in the corpus. Say so honestly
-    and offer to look them up on the internet — the follow-up chip routes into
-    the add-to-library flow (search the web + add to the personal library) and
-    carries the topic so the web search keeps what the user asked for."""
-    writer({"type": "status", "data": {"key": "composing_answer"}})
-    reply = await localized_reply(
-        ctx,
-        f"The app's lecture corpus has NO lectures by '{author}'. In one short, "
-        f"honest line tell the user the app has no lectures by {author} (do not "
-        f"show or imply any other teacher's lectures), then offer to look them "
-        f"up on the internet and add them to their personal library. No chips.",
-    )
-    templates = _UNKNOWN_AUTHOR_CHIP.get(ctx.lang, _UNKNOWN_AUTHOR_CHIP["en"])
-    command = (
-        templates["topic"].format(author=author, topic=topic)
-        if topic
-        else templates["plain"].format(author=author)
-    )
-    # `<label>|<query>`: the pill shows the short label, the tap sends `command`.
-    chip = f"{templates['label']}|{command}"
-    _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[chip]))
-    log.info(
-        "find_tracks_unknown_author",
-        request_id=ctx.request_id,
-        author=author[:60],
-        has_topic=bool(topic),
-    )
-    return {}
