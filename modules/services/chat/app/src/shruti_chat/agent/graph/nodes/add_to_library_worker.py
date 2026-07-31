@@ -1,36 +1,29 @@
 """Add-to-library worker — DETERMINISTIC (intent=add-to-library).
 
 A PRO-only capability: the user points at an external lecture — a YouTube
-link, or a description we search for across providers — and we add it to
-their personal library by publishing an `ingest.request` for the ingest
-worker (#1224) to fetch + transcribe + index.
+link, or a description we search for across providers — and chat surfaces it
+as a tappable candidate CARD. Chat is DISCOVERY ONLY: it NEVER ingests. The
+user taps "Add to library" (+) on a card and the mobile client submits the URL
+to the orchestrator ingest API (`POST /orchestrator/ingest`), which fetches +
+transcribes + indexes it (#1224). This worker publishes nothing to the broker.
 
 Flow (no synthesizer — terminates at END like find_tracks_worker):
 
 1. PRO gate. `tier != "pro"` (free / anon) → emit an `upgrade_to_pro`
-   upsell card + a localized line, and stop. No search, no publish (saves
-   the external-API cost for users who can't use the result anyway).
+   upsell card + a localized line, and stop. No search (saves the external-API
+   cost for users who can't use the result anyway).
 2. Concrete lecture URL? If the message points AT a specific lecture — a
-   YouTube watch/short link or a direct http(s) audio file — the user has
-   already chosen it (pasted a link, or tapped "Add to library" on a
-   candidate card, which the mobile app re-sends as a chat turn). Skip the
-   search and publish `ingest.request` for that URL DIRECTLY (via the
-   `add_to_library_publish` action-tool → XADD {user_id, url, jwt}), then
-   confirm "added, processing". No candidate cards.
+   YouTube watch/short link or a direct http(s) audio file — the user pasted an
+   exact target. Skip the search and offer that URL as a SINGLE candidate card
+   (with a resolved title/thumbnail).
 3. Otherwise it's a search query. Resolve candidates (a bare non-lecture URL
    is taken verbatim; a description goes through the multi-provider resolver:
-   YouTube API → yt-dlp → SerpApi → DataForSEO).
+   YouTube API → yt-dlp → SerpApi → DataForSEO), keeping only ingestable URLs.
 4. Nothing found → localized "couldn't find it" line, stop.
 5. Emit each candidate as a card — a server-resolved `action` payload FIRST
    (kind=`library_candidate`), then its `[card:…]` marker (action-before-
-   marker, same invariant as find_tracks_worker).
-
-For a SEARCH query the worker does not publish `ingest.request` itself:
-publishing happens when the user taps a candidate card's "Add to library"
-action, which re-sends the concrete URL as a new chat turn (step 2) or invokes
-the `add_to_library_publish` action-tool. Only a concrete lecture URL — an
-explicit, user-chosen target — publishes directly. Every publish is best-effort
-and the broker no-ops when `STREAMS_REDIS_URL` is unset.
+   marker, same invariant as find_tracks_worker). The tap → the client's
+   ingest-API submit; the worker's job ends at the card.
 """
 
 from __future__ import annotations
@@ -45,8 +38,6 @@ from shruti_chat.agent.graph.nodes._worker_common import localized_reply
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.agent.tools.actions import _new_action_id
-from shruti_chat.agent.tools.add_to_library import add_to_library_publish
-from shruti_chat.infra.broker.publisher import NoopIngestPublisher
 from shruti_chat.lecture_search.models import Candidate
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
@@ -162,29 +153,40 @@ async def add_to_library_worker_node(
     if tier != "pro":
         return await _emit_upsell(ctx, writer, _yield_event)
 
-    # ── 2. Concrete lecture URL → publish ingest.request directly ───────
-    # The user pointed AT a specific lecture (pasted a link, or tapped
-    # "Add to library" on a candidate card — the mobile app re-sends the URL
-    # as a chat turn). Skip search and publish for it; no candidate cards.
+    # ── 2. Concrete lecture URL → a single candidate card ───────────────
+    # The user pointed AT a specific lecture (pasted a link). Chat NEVER ingests
+    # — it only surfaces a card; the user taps "Add to library" (+) and the
+    # client submits to the ingest API. So skip the search but still offer the
+    # URL as one card (with a resolved title/thumbnail), reusing the card path.
     concrete_url = _concrete_lecture_url(query)
     if concrete_url:
-        return await _publish_direct(ctx, writer, _yield_event, concrete_url)
-
-    # ── 3. Resolve candidates (search query) ────────────────────────────
-    # Search the CLEAN terms the router extracted, not the raw command (a keyword
-    # search for a whole "find X on the web and add it" sentence returns nothing).
-    # COMBINE author + topic so a lecturer search stays anchored to the PERSON:
-    # "Niranjana Swami karma", not a bare topic "karma" that returns pop songs.
-    # Fall back to the full query only when the router surfaced neither.
-    args = state.get("extracted_args") or {}
-    author = (args.get("author") or "").strip()
-    topic = (args.get("topic") or "").strip()
-    search_term = " ".join(p for p in (author, topic) if p) or query
-    candidates = await _resolve_candidates(ctx, search_term)
-    # Only offer what an ingest worker can actually fetch — drop any candidate
-    # whose URL no downloader handles, so the user never taps "Add" on something
-    # we can't process.
-    candidates = [c for c in candidates if _is_ingestable_url(c.url)]
+        title, author, thumbnail = await _youtube_oembed(concrete_url)
+        candidates = [
+            Candidate(
+                url=concrete_url,
+                title=title or concrete_url,
+                author=author or "",
+                thumbnail=thumbnail or _youtube_thumb(concrete_url),
+                provider="user_link",
+            )
+        ]
+    else:
+        # ── 3. Resolve candidates (search query) ────────────────────────
+        # Search the CLEAN terms the router extracted, not the raw command (a
+        # keyword search for a whole "find X on the web and add it" sentence
+        # returns nothing). COMBINE author + topic so a lecturer search stays
+        # anchored to the PERSON: "Niranjana Swami karma", not a bare topic
+        # "karma" that returns pop songs. Fall back to the full query when the
+        # router surfaced neither.
+        args = state.get("extracted_args") or {}
+        author = (args.get("author") or "").strip()
+        topic = (args.get("topic") or "").strip()
+        search_term = " ".join(p for p in (author, topic) if p) or query
+        candidates = await _resolve_candidates(ctx, search_term)
+        # Only offer what an ingest worker can actually fetch — drop any candidate
+        # whose URL no downloader handles, so the user never taps "Add" on
+        # something we can't process.
+        candidates = [c for c in candidates if _is_ingestable_url(c.url)]
     if not candidates:
         reply = await localized_reply(
             ctx,
@@ -200,10 +202,9 @@ async def add_to_library_worker_node(
     writer({"type": "status", "data": {"key": "composing_answer"}})
 
     # ── 5. Offer the candidates ────────────────────────────────────────
-    # We do NOT publish here. The worker only surfaces tappable candidate
-    # cards; the actual `ingest.request` is published solely when the user
-    # taps a card's "Add to library" action (the `add_to_library_publish`
-    # action-tool). This avoids adding a lecture the user never chose.
+    # The worker only surfaces tappable candidate cards — it never ingests. The
+    # tap is handled entirely on the client: it submits the card's URL to the
+    # orchestrator ingest API. This avoids adding a lecture the user never chose.
     top = candidates[0]
     lead = await localized_reply(
         ctx,
@@ -251,56 +252,6 @@ async def _resolve_candidates(ctx: TurnContext, query: str) -> list[Candidate]:
     except Exception:  # noqa: BLE001 — a resolver blow-up degrades to "not found"
         log.exception("add_to_library_search_failed", request_id=ctx.request_id)
         return []
-
-
-async def _publish_direct(ctx: TurnContext, writer, yield_event, url: str) -> dict:
-    """Concrete lecture URL: publish exactly one `ingest.request` for `url`
-    and confirm — no search, no candidate cards.
-
-    Delegates to the `add_to_library_publish` action-tool (the same one the
-    card tap uses): it publishes once, then emits the `added_to_library`
-    confirmation action. The publish is best-effort — a down/absent broker
-    (or an unset `STREAMS_REDIS_URL`, → NoopIngestPublisher) still confirms
-    so the client shows the pending state instead of failing the turn.
-    """
-    publisher = getattr(ctx, "ingest_publisher", None) or NoopIngestPublisher()
-    # Resolve the real title up front so the pre-ready library card shows the
-    # lecture's name instead of "Untitled" — the client hands us only the URL,
-    # so the candidate metadata is gone by this turn. Best-effort: a miss just
-    # falls back to the ingest worker's filename-derived title.
-    title, author, thumbnail = await _youtube_oembed(url)
-    # Publish silently: no `yield_event`, so no action event is emitted (the
-    # client has no "done" card and would render an orphan marker as raw text).
-    # The text line below plus the My Library shelf are the user's feedback.
-    result = await add_to_library_publish(
-        url=url,
-        user_id=ctx.user_id or "",
-        jwt=ctx.jwt or "",
-        title=title,
-        author=author,
-        thumbnail=thumbnail,
-        publisher=publisher,
-    )
-    reply = await localized_reply(
-        ctx,
-        f"Tell the user their lecture «{url}» was added to their personal "
-        "library and is now being processed (transcribed and indexed). One "
-        "short, friendly line. No chips.",
-    )
-    writer({"type": "status", "data": {"key": "composing_answer"}})
-    _emit_line(writer, reply.line)
-    # No action marker here: a concrete URL is already published, and the client
-    # has no card for a "done" state. The text line above tells the user it's
-    # processing; the My Library shelf shows the item and its processing→ready
-    # status. (Emitting `[action:added_to_library|…]` here surfaced as raw marker
-    # text on clients that only render the `add_to_library` candidate card.)
-    log.info(
-        "add_to_library_publish_direct",
-        request_id=ctx.request_id,
-        url=url,
-        published=result.get("published"),
-    )
-    return {}
 
 
 async def _emit_upsell(ctx: TurnContext, writer, yield_event) -> dict:
