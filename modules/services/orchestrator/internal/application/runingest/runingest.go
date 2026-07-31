@@ -294,6 +294,9 @@ type JobStatus struct {
 	Attempts  int    `json:"attempts"`
 	ErrorCode string `json:"error,omitempty"`
 	TrackID   string `json:"track_id,omitempty"`
+	// Stage is the granular pipeline step (downloading / transcribing / …), set
+	// only while running. Poll-only — the client shows it live, never persists it.
+	Stage string `json:"stage,omitempty"`
 }
 
 // StatusOf projects a job aggregate into the API status DTO, mapping the raw
@@ -306,6 +309,16 @@ func StatusOf(j *job.Job) JobStatus {
 	}
 	if j.State == job.StateFailed && j.Err != "" {
 		s.ErrorCode = failCode(j.Err)
+	}
+	// The pipeline stage is meaningful only while running; decode the poll-only
+	// progress blob the worker's heartbeats recorded.
+	if j.State == job.StateRunning && len(j.Progress) > 0 {
+		var p struct {
+			Stage string `json:"stage"`
+		}
+		if json.Unmarshal(j.Progress, &p) == nil {
+			s.Stage = p.Stage
+		}
 	}
 	return s
 }
@@ -407,8 +420,23 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 
 	switch res.Phase {
 	case ingest.PhaseProcessing:
+		// Attempt-guard: discard a heartbeat from a SUPERSEDED attempt (a
+		// re-dispatch owns the job now) so a straggler can't move state or
+		// overwrite the live run's progress. Lenient when the result carries no
+		// attempt (0) — legacy/attempt-less heartbeats stay best-effort.
+		if res.Attempt != 0 && res.Attempt != j.Attempts+1 {
+			return nil
+		}
+		// Record the granular pipeline stage for the live status poll. Best-effort
+		// and off the hot path — a lost write only means a coarser spinner, and it
+		// must not fail the ingest. Every heartbeat (not just the first) updates it.
+		if res.Stage != "" {
+			if err := h.d.Repo.UpdateProgress(ctx, res.JobID, progressData(res.Stage)); err != nil {
+				lg.WarnContext(ctx, "progress_update_failed", "err", err.Error())
+			}
+		}
 		if j.State != job.StateQueued {
-			return nil // already running — no-op
+			return nil // already running — the stage write above is the only effect
 		}
 		if err := j.To(job.StateRunning); err != nil {
 			return fmt.Errorf("to running: %w", err)

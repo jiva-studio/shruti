@@ -46,6 +46,9 @@ export interface IngestStatusResponse {
   readonly error?: string
   /** Content hash, present once the fetch step has computed it. */
   readonly track_id?: string
+  /** Granular pipeline stage while processing (downloading / transcribing /
+   *  reviewing / storing) — poll-only, shown live, never persisted. */
+  readonly stage?: string
 }
 
 /**

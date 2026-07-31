@@ -37,6 +37,9 @@ type JobRepository interface {
 	GetForUpdateTx(ctx context.Context, q Tx, id string) (*job.Job, error)
 	CreateTx(ctx context.Context, q Tx, j *job.Job) error
 	SaveTx(ctx context.Context, q Tx, j *job.Job) error
+	// UpdateProgress writes ONLY the job's progress blob (the frequent per-stage
+	// heartbeat), off the hot path so it never contends with state/attempt writes.
+	UpdateProgress(ctx context.Context, id string, progress []byte) error
 	// WithTx runs fn inside a transaction so a job write and its outbox rows
 	// commit atomically.
 	WithTx(ctx context.Context, fn func(Tx) error) error

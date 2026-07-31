@@ -7,6 +7,14 @@ import (
 	"github.com/jiva-studio/shruti/orchestrator/internal/domain/ingest"
 )
 
+// progressData is the jobs.progress blob for a pipeline-stage heartbeat — the
+// poll-only granular status the ingest API serves (not a track.events payload,
+// never projected into library_items). Minimal + stable shape.
+func progressData(stage string) []byte {
+	b, _ := json.Marshal(map[string]any{"stage": stage})
+	return b
+}
+
 // statusData is the track.queued / track.processing event payload (the
 // server-owned library_items projection applied verbatim by the profile
 // consumer). title_raw is carried so the pre-ready card has a title — the
