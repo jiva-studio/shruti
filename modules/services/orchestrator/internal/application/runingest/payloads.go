@@ -20,18 +20,20 @@ func statusData(status, title string) []byte {
 // failData is the track.failed event payload. Carries title_raw (same replace-all
 // reason as statusData) so the failed card still shows the lecture's title.
 //
-// It ships a STABLE machine code, not the raw internal error. This payload is
-// projected into library_items and synced down to the user's device, so putting
-// `transcribe: deepgram: 503` in it would leak our internals and our vendors
-// into a user-visible row, and would hand the client an unlocalizable string it
-// can only render verbatim. A code the client can switch on and translate is
-// both safer and more useful. The raw text is not lost — it stays in
-// orchestrator.jobs.error and in the logs, which is where debugging belongs.
+// The `error` field is a STABLE machine code, not the raw internal error. This
+// payload is projected into library_items and synced down to the user's device,
+// so putting `transcribe: deepgram: 503` in it would leak our internals and our
+// vendors into a user-visible row, and would hand the client an unlocalizable
+// string it can only render verbatim. A code the client can switch on and
+// translate is both safer and more useful. The raw text is not lost — it stays
+// in orchestrator.jobs.error and in the logs, which is where debugging belongs.
+// The key is `error` to match the library_items `error` column the whole
+// downstream chain (profile projection, sync wire, client row) already maps.
 func failData(msg, title string) []byte {
 	b, _ := json.Marshal(map[string]any{
-		"status":     "failed",
-		"error_code": failCode(msg),
-		"title_raw":  title,
+		"status":    "failed",
+		"error":     failCode(msg),
+		"title_raw": title,
 	})
 	return b
 }
