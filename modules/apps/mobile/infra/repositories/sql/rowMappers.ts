@@ -2,9 +2,13 @@ import type { ListeningSession } from "@lib/domain/listeningSession.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
-import type { LibraryItem, LibraryItemOrigin, LibraryItemStatus } from "@lib/domain/libraryItem.js"
+import type {
+  LibraryItem,
+  LibraryItemOrigin,
+  LibraryItemStatus,
+  LibraryItemVariant,
+} from "@lib/domain/libraryItem.js"
 import type { Reference } from "@lib/domain/reference.js"
-import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type {
   LibraryItemRow,
   ListeningSessionRow,
@@ -74,10 +78,9 @@ export function rowToLibraryItem(row: LibraryItemRow): LibraryItem {
     error: row.error,
     audioKey: row.audio_key,
     transcriptKey: row.transcript_key,
+    variants: variantsJsonToDomain(row.variants_json),
     duration: row.duration,
     coverKey: row.cover_key,
-    description: row.description,
-    outline: outlineJsonToChapters(row.outline_json),
     references: parseRefsJson(row.references_json) ?? [],
     sourceUrl: row.source_url,
     createdAt: row.created_at,
@@ -85,30 +88,13 @@ export function rowToLibraryItem(row: LibraryItemRow): LibraryItem {
   }
 }
 
-/** One stored outline entry as the server projects it: title + [start,end) span
- *  in ms. The domain `TrackOutlineChapter` renames these to startMs/endMs. */
+/** One stored outline entry as the server projects it inside a variant: title +
+ *  [start,end) span in ms. The domain `TrackOutlineChapter` renames these to
+ *  startMs/endMs. */
 export interface OutlineEntryJson {
   readonly title: string
   readonly start: number
   readonly end: number
-}
-
-/** Parse the stored `outline_json` column into the raw entry array, tolerating
- *  NULL / malformed JSON (→ null). */
-export function parseOutlineJson(json: string | null): readonly OutlineEntryJson[] | null {
-  if (!json) return null
-  try {
-    const parsed = JSON.parse(json)
-    return Array.isArray(parsed) ? (parsed as OutlineEntryJson[]) : null
-  } catch {
-    return null
-  }
-}
-
-function outlineJsonToChapters(json: string | null): readonly TrackOutlineChapter[] | null {
-  const raw = parseOutlineJson(json)
-  if (!raw) return null
-  return raw.map((e) => ({ title: e.title, startMs: e.start, endMs: e.end }))
 }
 
 /** Parse the stored `references_json` column into domain References, tolerating
@@ -122,6 +108,42 @@ export function parseRefsJson(json: string | null): readonly Reference[] | null 
   } catch {
     return null
   }
+}
+
+/** One stored transcript variant as the server projects it: language, the bucket
+ *  key of its `transcripts/<lang>.json`, and the overview (description + outline)
+ *  generated from that language. The domain `LibraryItemVariant` renames the
+ *  keys and maps the outline spans. */
+export interface VariantJson {
+  readonly lang: string
+  readonly transcript_key: string
+  readonly description?: string | null
+  readonly outline?: readonly OutlineEntryJson[] | null
+}
+
+/** Parse the stored `variants_json` column into the raw entry array, tolerating
+ *  NULL / malformed JSON (→ null). */
+export function parseVariantsJson(json: string | null): readonly VariantJson[] | null {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? (parsed as VariantJson[]) : null
+  } catch {
+    return null
+  }
+}
+
+function variantsJsonToDomain(json: string | null): readonly LibraryItemVariant[] {
+  const raw = parseVariantsJson(json)
+  if (!raw) return []
+  return raw.map((v) => ({
+    language: v.lang,
+    transcriptKey: v.transcript_key,
+    description: v.description ?? null,
+    outline: v.outline
+      ? v.outline.map((e) => ({ title: e.title, startMs: e.start, endMs: e.end }))
+      : null,
+  }))
 }
 
 function narrowLibraryStatus(raw: string): LibraryItemStatus {

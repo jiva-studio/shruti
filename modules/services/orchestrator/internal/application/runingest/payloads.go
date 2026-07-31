@@ -121,12 +121,11 @@ func readyResult(res ingest.Result) []byte {
 		"date":           res.Date,
 		"kind_tag":       res.KindTag,
 		"references":     res.References,
-		"description":    res.Description,
-		"outline":        res.Outline,
 		"cover_key":      res.CoverKey,
 		"duration":       res.Duration,
 		"audio_key":      res.AudioKey,
 		"transcript_key": res.TranscriptKey,
+		"variants":       res.Variants,
 		"source_url":     res.SourceURL,
 	})
 	return b

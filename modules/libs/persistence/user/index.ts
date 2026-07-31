@@ -60,8 +60,12 @@ export interface LibraryItemRow {
   /** Full bucket key of the audio, filled on ready (e.g.
    *  "public/tracks/<track_id>/audio/original.mp3"). */
   readonly audio_key: string | null
-  /** Full bucket key of the JSON transcript, filled on ready. */
+  /** Full bucket key of the JSON transcript, filled on ready (the PRIMARY
+   *  variant). */
   readonly transcript_key: string | null
+  /** Per-language transcripts, stored as a JSON array
+   *  `[{"lang","transcript_key"}]`; NULL on single-language / older rows. */
+  readonly variants_json: string | null
   /** Audio duration in milliseconds, filled on ready. */
   readonly duration: number | null
   /** Re-hosted cover/thumbnail key; NULL → app shows a plain placeholder. */
