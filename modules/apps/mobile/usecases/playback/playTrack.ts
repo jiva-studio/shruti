@@ -2,6 +2,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Author } from "@lib/domain/author.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackAudio, TrackVariant } from "@lib/domain/trackVariant.js"
+import { resolveTrackAuthorName } from "@lib/domain/services/trackAuthor.js"
 import { err, ok, type Result } from "@kit/core"
 
 export interface PlayTrackInput {
@@ -50,11 +51,6 @@ function pickVariantWithAudio(
   return track.variants.find((v) => v.audio) ?? null
 }
 
-function resolveAuthorName(author: Author | null | undefined, language: LanguageCode): string {
-  if (!author) return ""
-  return author.names.get(language) ?? author.names.values().next().value ?? ""
-}
-
 /**
  * Turn a Track + optional preferred language into a playback command.
  * Keeps the variant-selection rule, item-id scheme, and author-name
@@ -77,7 +73,10 @@ export async function playTrack(
     variant,
     audio: variant.audio,
     title: variant.title,
-    authorName: resolveAuthorName(input.author, variant.language),
+    // Resolved corpus author, else the raw label an ingested track carries — the
+    // same helper the track rows / lock-screen queue use, so the FloatingPlayer
+    // never blanks the author of a lecture whose card shows one.
+    authorName: resolveTrackAuthorName(input.track, input.author ?? null, variant.language),
     language: variant.language,
     matchesPreferred,
   })
