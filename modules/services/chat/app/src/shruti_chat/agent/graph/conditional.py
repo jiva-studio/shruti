@@ -34,6 +34,8 @@ research_worker is code-driven and never sees the anchor (#4).
 
 from __future__ import annotations
 
+from langgraph.graph import END
+
 from shruti_chat.agent.graph.state import ChatState
 
 
@@ -266,6 +268,18 @@ def route_after_research(state: ChatState) -> str:
     if state.get("intent") == "create_action":
         return "action_worker"
     return "synthesizer"
+
+
+def route_after_find_tracks(state: ChatState) -> str:
+    """After find_tracks_worker: normally a terminal (it already streamed cards
+    or the empty line → END). But when the corpus had NO lecture for a "find
+    lectures" request, find_tracks sets `web_fallback` and we hand off to
+    add_to_library_worker (web discovery + candidate cards) instead of leaving
+    the user at a dead end.
+    """
+    if state.get("web_fallback"):
+        return "add_to_library_worker"
+    return END
 
 
 def route_after_planner(state: ChatState) -> str:
