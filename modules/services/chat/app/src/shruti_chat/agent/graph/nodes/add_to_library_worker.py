@@ -286,9 +286,9 @@ def _stream_candidate_cards(writer, candidates: list[Candidate]) -> None:
 
     The kind (`add_to_library`) and the `[action:…]` marker match the shared
     `ChatActionPayload` contract the mobile app renders (ActionCardAddToLibrary):
-    tapping "Add" re-sends `url` as a chat turn, which reaches the concrete-URL
-    branch above and publishes. An earlier revision emitted `library_candidate`
-    + a `[card:…]` marker that no client knew, so the card showed as raw text."""
+    tapping "Add" submits `url` to the orchestrator ingest API on the client —
+    chat never ingests. An earlier revision emitted `library_candidate` + a
+    `[card:…]` marker that no client knew, so the card showed as raw text."""
     for i, c in enumerate(candidates):
         cid = f"cand_{i}"
         writer({

@@ -61,11 +61,11 @@ class AppDeps:
     # the per-turn flag, not its presence, gates whether it runs.
     translation_service: TranslationService | None = None
     # Add-to-library (#1226). Multi-provider external-lecture search resolver
-    # and the ingest.request broker publisher. Always built (a keyless /
-    # brokerless deploy gets inert providers + a no-op publisher), so the
-    # add_to_library_worker can always read them off the deps.
+    # the multi-provider external-lecture search resolver. Always built (a
+    # keyless deploy gets inert providers), so the add_to_library_worker can
+    # always read it off the deps. Chat never ingests — the client submits the
+    # chosen candidate URL to the orchestrator ingest API.
     lecture_search: Any | None = None
-    ingest_publisher: Any | None = None
 
 
 def get_deps(request: Request) -> AppDeps:
