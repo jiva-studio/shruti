@@ -20,6 +20,10 @@
     </IonContent>
 
     <IonFooter class="ion-no-border">
+      <button v-if="isLibraryItem" type="button" class="remove-link" @click="onRemove">
+        <IconTrash :size="15" />
+        {{ t("library.remove") }}
+      </button>
       <div class="sheet-actions">
         <IonButton fill="clear" class="act share-btn" @click="onShare">
           <IconShare slot="start" :size="18" />
@@ -43,7 +47,7 @@
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
-import { IconPlaylistAdd, IconReload, IconShare, IconX } from "@tabler/icons-vue"
+import { IconPlaylistAdd, IconReload, IconShare, IconTrash, IconX } from "@tabler/icons-vue"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import {
@@ -59,6 +63,7 @@ import { useTrackSheetDetail } from "@shruti/composables/useTrackSheetDetail.js"
 import { useTrackSheetActions } from "@shruti/composables/useTrackSheetActions.js"
 import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
+import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import LectureOutline from "@ui/components/LectureOutline.vue"
 import SimilarTracksRow from "@shruti/components/SimilarTracksRow.vue"
 import TopicChips from "@shruti/components/TopicChips.vue"
@@ -68,6 +73,22 @@ const appLanguage = useAppLanguage()
 const libraryLanguages = useLibraryLanguages()
 const sheet = useTrackSheetStore()
 const dictionaries = useDictionariesStore()
+const library = useLibraryStore()
+
+// The personal-library item backing this track, if any (matched by content
+// hash). Present only for a user-added lecture — a corpus track has none, so
+// the "Remove from My library" action stays hidden for it.
+const libraryItem = computed(() =>
+  sheet.trackId ? library.items.find((i) => i.trackId === sheet.trackId) : undefined
+)
+const isLibraryItem = computed(() => libraryItem.value !== undefined)
+
+async function onRemove(): Promise<void> {
+  const item = libraryItem.value
+  if (!item) return
+  await library.remove(item.id)
+  onDismiss()
+}
 
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
 
@@ -216,6 +237,24 @@ function onDismiss(): void {
   padding: 10px 16px calc(10px + var(--ion-safe-area-bottom, 0px));
   background: var(--ion-background-color, #fff);
   border-top: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.08));
+}
+
+/* Quiet destructive link above the primary actions — a user-added lecture can
+   be taken out of the personal library from its own sheet. */
+.remove-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 16px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ion-color-danger);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 .act {
