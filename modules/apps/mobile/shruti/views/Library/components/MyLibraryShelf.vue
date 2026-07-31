@@ -33,6 +33,7 @@ import { SectionHeader, LibraryBanner } from "@ui/features/collections/index.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { useOpenLibraryItem } from "@shruti/composables/useOpenLibraryItem.js"
 import { useRetryLibraryItem } from "@shruti/composables/useRetryLibraryItem.js"
+import { useIngestStatusPolling } from "@shruti/composables/useIngestStatusPolling.js"
 import { useShruti } from "@shruti/shruti.js"
 import LibraryItemCard from "./LibraryItemCard.vue"
 
@@ -50,6 +51,7 @@ const SHELF_PREVIEW = 10
 const library = useLibraryStore()
 const onSelect = useOpenLibraryItem()
 const onRetry = useRetryLibraryItem()
+useIngestStatusPolling()
 const router = useRouter()
 const app = useShruti()
 

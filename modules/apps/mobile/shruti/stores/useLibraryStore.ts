@@ -1,6 +1,7 @@
 import { defineStore } from "pinia"
 import { computed, ref } from "vue"
-import type { LibraryItem } from "@lib/domain/libraryItem.js"
+import type { LibraryItem, LibraryItemStatus } from "@lib/domain/libraryItem.js"
+import type { TrackId } from "@lib/domain/core.js"
 import { isPendingLibraryItem } from "@usecases/sync/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { requestSync } from "@shruti/services/syncEvents.js"
@@ -104,6 +105,26 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     }
   }
 
+  /**
+   * Patch an item's lifecycle status (and track id) from a live status poll,
+   * ahead of the authoritative sync pull — the real-time bridge that flips a
+   * card queued → processing → ready without waiting out the sync cadence. A
+   * no-op when the item isn't in the store yet (its queued row hasn't synced) or
+   * nothing changed. On a terminal transition the poller reconciles the full row
+   * (audio keys, metadata) via requestSync.
+   */
+  function applyLiveStatus(id: string, status: LibraryItemStatus, trackId: TrackId | null): void {
+    const idx = items.value.findIndex((i) => i.id === id)
+    if (idx === -1) return
+    const cur = items.value[idx]
+    if (!cur) return
+    const nextTrackId = trackId ?? cur.trackId
+    if (cur.status === status && cur.trackId === nextTrackId) return
+    const next = items.value.slice()
+    next[idx] = { ...cur, status, trackId: nextTrackId }
+    items.value = next
+  }
+
   return {
     items,
     isLoading,
@@ -116,6 +137,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     getById,
     hasSource,
     addByUrl,
+    applyLiveStatus,
   }
 })
 
