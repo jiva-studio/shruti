@@ -138,10 +138,6 @@ async def add_to_library_worker_node(
     ctx = runtime.context
     writer = get_stream_writer()
 
-    # Capability gate: adding from the web surfaces candidate cards the client
-    # submits to the ingest API. A client that didn't advertise `personal_library`
-    # (older build) can't render or submit them, so degrade to a plain line
-    # instead of streaming cards into the void.
     if not ctx.capabilities.get("personal_library"):
         return await _emit_no_capability(ctx, writer)
 
@@ -289,8 +285,7 @@ async def _emit_upsell(ctx: TurnContext, writer, yield_event) -> dict:
 
 
 async def _emit_no_capability(ctx: TurnContext, writer) -> dict:
-    """The client build can't render add-to-library cards. Tell the user, in one
-    plain line (no card), to update the app to add lectures from the web."""
+    """The client can't render add-to-library cards — ask it to update, no card."""
     writer({"type": "status", "data": {"key": "composing_answer"}})
     reply = await localized_reply(
         ctx,
