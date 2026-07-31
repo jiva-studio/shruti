@@ -77,7 +77,9 @@ const isFailed = computed(() => props.item.status === "failed")
 const stageLabel = computed(() => {
   const stage = library.liveStages.get(props.item.id)
   const key = stage ? `library.status.stages.${stage}` : ""
-  return key && te(key) ? t(key) : t("library.status.processing")
+  const label = key && te(key) ? t(key) : t("library.status.processing")
+  const percent = library.livePercents.get(props.item.id)
+  return percent !== undefined ? `${label} ${percent}%` : label
 })
 const coverUrl = computed(() => resolveAssetUrl(props.item.coverKey ?? undefined))
 const title = computed(() => props.item.titleRaw?.trim() || t("library.untitled"))

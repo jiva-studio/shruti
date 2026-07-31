@@ -42,7 +42,11 @@ type Result struct {
 	Phase   string `json:"phase"`
 	// Stage is the current pipeline stage on a processing heartbeat (see the
 	// Stage* constants); empty on the terminal ready/failed results.
-	Stage         string `json:"stage,omitempty"`
+	Stage string `json:"stage,omitempty"`
+	// Percent is the download completion (0-100) on a StageDownloading heartbeat,
+	// the one stage that exposes a reliable measure. 0 (omitted) on every other
+	// stage and on terminal results. Refines the stage for the live status card.
+	Percent       int    `json:"percent,omitempty"`
 	TrackID       string `json:"track_id,omitempty"`
 	Lang          string `json:"lang,omitempty"`
 	Title         string `json:"title,omitempty"`

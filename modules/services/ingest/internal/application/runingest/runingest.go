@@ -120,7 +120,16 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	s.progress(ctx, cmd, ingest.StageDownloading)
 
 	stage := time.Now()
-	localPath, hash, err := s.d.Fetcher.Fetch(ctx, cmd.URL)
+	// Forward download percent as heartbeats, throttled to 10% steps so a chatty
+	// yt-dlp progress bar can't flood the result stream (≤10 extra heartbeats).
+	lastBucket := 0
+	onProgress := func(pct int) {
+		if b := pct / 10; b > lastBucket {
+			lastBucket = b
+			s.progressPct(ctx, cmd, ingest.StageDownloading, pct)
+		}
+	}
+	localPath, hash, err := s.d.Fetcher.Fetch(ctx, cmd.URL, onProgress)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("fetch: %w", err))
 	}
@@ -299,6 +308,19 @@ func (s *Service) progress(ctx context.Context, cmd ingest.WorkCommand, stage st
 		Attempt:   cmd.Attempt,
 		Phase:     ingest.PhaseProcessing,
 		Stage:     stage,
+	})
+}
+
+// progressPct is a stage heartbeat carrying a completion percent (the downloading
+// stage), so the status card can show "Downloading 40%". Same best-effort emit.
+func (s *Service) progressPct(ctx context.Context, cmd ingest.WorkCommand, stage string, percent int) {
+	s.emit(ctx, ingest.Result{
+		JobID:     cmd.JobID,
+		RequestID: cmd.RequestID,
+		Attempt:   cmd.Attempt,
+		Phase:     ingest.PhaseProcessing,
+		Stage:     stage,
+		Percent:   percent,
 	})
 }
 

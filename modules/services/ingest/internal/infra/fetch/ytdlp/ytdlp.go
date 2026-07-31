@@ -7,6 +7,7 @@
 package ytdlp
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -60,21 +61,31 @@ func classifyDownloadErr(err error) error {
 	if errors.As(err, &ee) && len(ee.Stderr) > 0 {
 		haystack += "\n" + strings.ToLower(string(ee.Stderr))
 	}
+	var re *runError
+	if errors.As(err, &re) && re.stderr != "" {
+		haystack += "\n" + strings.ToLower(re.stderr)
+	}
 	for _, m := range permanentYtdlpMarkers {
 		if strings.Contains(haystack, m) {
-			return fmt.Errorf("yt-dlp (permanent): %w: %s", ingest.ErrPermanent, firstLine(ee, err))
+			return fmt.Errorf("yt-dlp (permanent): %w: %s", ingest.ErrPermanent, firstLine(err))
 		}
 	}
 	return fmt.Errorf("yt-dlp: %w", err)
 }
 
-// firstLine returns a short, human-readable reason from the stderr (or the
-// error) for the failed result's Error field.
-func firstLine(ee *exec.ExitError, err error) string {
-	s := err.Error()
-	if ee != nil && len(ee.Stderr) > 0 {
-		s = string(ee.Stderr)
+// firstLine returns a short, human-readable reason for the failed result's Error
+// field, preferring the stderr the exit error (buffered path) or runError
+// (streaming path) carries over the bare "exit status 1".
+func firstLine(err error) string {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+		return firstStderrLine(string(ee.Stderr))
 	}
+	var re *runError
+	if errors.As(err, &re) && re.stderr != "" {
+		return firstStderrLine(re.stderr)
+	}
+	s := err.Error()
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = s[:i]
 	}
@@ -89,6 +100,93 @@ func execRunner(ctx context.Context, name string, args ...string) ([]byte, error
 	return exec.CommandContext(ctx, name, args...).Output()
 }
 
+// ProgressRunner streams a command's stdout line-by-line to onLine as it runs,
+// so the yt-dlp download's progress lines can be parsed live. It returns only
+// the terminal error (with stderr attached for classification). Injected so the
+// streaming path stays testable; nil falls the download back to the buffered
+// Runner with no percent.
+type ProgressRunner func(ctx context.Context, onLine func(string), name string, args ...string) error
+
+// execProgressRunner runs a command, scanning stdout for progress lines while
+// capturing stderr so a failure can still be classified (permanent vs transient)
+// and surfaced as a human reason — the same signal the buffered Runner path gets
+// from (*exec.ExitError).Stderr.
+func execProgressRunner(ctx context.Context, onLine func(string), name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	sc := bufio.NewScanner(stdout)
+	for sc.Scan() {
+		onLine(sc.Text())
+	}
+	if err := cmd.Wait(); err != nil {
+		return &runError{err: err, stderr: stderr.String()}
+	}
+	return nil
+}
+
+// runError carries a streamed download's stderr so classifyDownloadErr can both
+// classify the failure and surface a human reason — the StdoutPipe path leaves
+// (*exec.ExitError).Stderr empty, so we attach it here explicitly.
+type runError struct {
+	err    error
+	stderr string
+}
+
+func (e *runError) Error() string {
+	if s := strings.TrimSpace(firstStderrLine(e.stderr)); s != "" {
+		return s
+	}
+	return e.err.Error()
+}
+
+func (e *runError) Unwrap() error { return e.err }
+
+// firstStderrLine returns the last non-empty stderr line — yt-dlp prints the
+// actual "ERROR: …" reason at the end, after any progress/warning chatter.
+func firstStderrLine(s string) string {
+	lines := strings.Split(s, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if l := strings.TrimSpace(lines[i]); l != "" {
+			return l
+		}
+	}
+	return ""
+}
+
+// progressTemplate + progressPrefix tag yt-dlp's download progress so we can
+// pick our percent lines out of its other stdout chatter. _percent_str is like
+// "  42.3%".
+const (
+	progressPrefix   = "PCT:"
+	progressTemplate = "download:" + progressPrefix + "%(progress._percent_str)s"
+)
+
+// parsePercent extracts a 0-100 integer from a tagged progress line
+// ("PCT:  42.3%"); ok is false for any other line.
+func parsePercent(line string) (int, bool) {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, progressPrefix) {
+		return 0, false
+	}
+	s := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(strings.TrimPrefix(line, progressPrefix)), "%"))
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil || f < 0 {
+		return 0, false
+	}
+	if f > 100 {
+		f = 100
+	}
+	return int(f), true
+}
+
 // Options configure the Fetcher.
 type Options struct {
 	Bin         string        // yt-dlp binary (default "yt-dlp")
@@ -99,7 +197,10 @@ type Options struct {
 	BreakerN    int           // consecutive failures before the breaker opens
 	BreakerCool time.Duration // breaker cooldown
 	Runner      Runner        // command runner (default exec)
-	HTTPClient  *http.Client  // client for the direct-mp3 extractor
+	// ProgressRunner streams yt-dlp's download so the percent can be reported
+	// live (default exec). A test may leave it nil to force the buffered path.
+	ProgressRunner ProgressRunner
+	HTTPClient     *http.Client // client for the direct-mp3 extractor
 }
 
 // Fetcher is the ports.Fetcher implementation.
@@ -118,6 +219,9 @@ func New(opts Options) *Fetcher {
 	if opts.Runner == nil {
 		opts.Runner = execRunner
 	}
+	if opts.ProgressRunner == nil {
+		opts.ProgressRunner = execProgressRunner
+	}
 	if opts.HTTPClient == nil {
 		opts.HTTPClient = &http.Client{Timeout: 10 * time.Minute}
 	}
@@ -133,12 +237,13 @@ func New(opts Options) *Fetcher {
 }
 
 // Fetch downloads url, enforces limits, and returns the local audio path plus
-// the content hash (track_id).
-func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (string, string, error) {
+// the content hash (track_id). onProgress (nil-safe) receives download-percent
+// updates while the bytes arrive.
+func (f *Fetcher) Fetch(ctx context.Context, rawURL string, onProgress func(int)) (string, string, error) {
 	if !f.breaker.allow() {
 		return "", "", ErrCircuitOpen
 	}
-	localPath, hash, err := f.fetch(ctx, rawURL)
+	localPath, hash, err := f.fetch(ctx, rawURL, onProgress)
 	// A permanent error is a user-fault source (dead / private / age-restricted /
 	// too-long link), not our dependency misbehaving. Leave the breaker untouched
 	// so a run of bad links can't open it against healthy ingests — nor reset a
@@ -150,7 +255,7 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (string, string, err
 	return localPath, hash, err
 }
 
-func (f *Fetcher) fetch(ctx context.Context, rawURL string) (string, string, error) {
+func (f *Fetcher) fetch(ctx context.Context, rawURL string, onProgress func(int)) (string, string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "", "", fmt.Errorf("fetch: invalid url %q: %w", rawURL, ingest.ErrPermanent)
@@ -169,7 +274,7 @@ func (f *Fetcher) fetch(ctx context.Context, rawURL string) (string, string, err
 	if err != nil {
 		return "", "", fmt.Errorf("fetch: tempdir: %w", err)
 	}
-	path, err := ext.download(ctx, rawURL, dir)
+	path, err := ext.download(ctx, rawURL, dir, onProgress)
 	if err != nil {
 		_ = os.RemoveAll(dir)
 		return "", "", err
@@ -237,10 +342,11 @@ func naToEmpty(s string) string {
 // --- extractor registry ---
 
 // extractor downloads a URL to a local file and can probe its duration.
+// onProgress (nil-safe) reports download percent while the bytes arrive.
 type extractor interface {
 	// handles reports whether this extractor claims the URL.
 	handles(u *url.URL) bool
-	download(ctx context.Context, rawURL, destDir string) (string, error)
+	download(ctx context.Context, rawURL, destDir string, onProgress func(int)) (string, error)
 	probeDuration(ctx context.Context, rawURL string) (int64, bool)
 }
 
@@ -285,7 +391,7 @@ func (e *ytdlpExtractor) probeDuration(ctx context.Context, rawURL string) (int6
 	return 0, false
 }
 
-func (e *ytdlpExtractor) download(ctx context.Context, rawURL, destDir string) (string, error) {
+func (e *ytdlpExtractor) download(ctx context.Context, rawURL, destDir string, onProgress func(int)) (string, error) {
 	tmpl := filepath.Join(destDir, "audio.%(ext)s")
 	args := []string{"-x", "--audio-format", "mp3", "--no-playlist", "-o", tmpl}
 	if e.opts.MaxBytes > 0 {
@@ -293,6 +399,23 @@ func (e *ytdlpExtractor) download(ctx context.Context, rawURL, destDir string) (
 	}
 	args = append(args, e.proxyArgs()...)
 	args = append(args, rawURL)
+
+	// Stream the download to report live percent when a progress sink is wired
+	// (production). A test with no ProgressRunner, or a caller passing no sink,
+	// falls back to the buffered Runner — identical behaviour, just no percent.
+	if e.opts.ProgressRunner != nil && onProgress != nil {
+		streamArgs := append([]string{"--newline", "--progress-template", progressTemplate}, args...)
+		onLine := func(line string) {
+			if pct, ok := parsePercent(line); ok {
+				onProgress(pct)
+			}
+		}
+		if err := e.opts.ProgressRunner(ctx, onLine, e.opts.Bin, streamArgs...); err != nil {
+			return "", classifyDownloadErr(err)
+		}
+		return findAudio(destDir)
+	}
+
 	if _, err := e.opts.Runner(ctx, e.opts.Bin, args...); err != nil {
 		return "", classifyDownloadErr(err)
 	}
@@ -321,6 +444,30 @@ func findAudio(destDir string) (string, error) {
 	return "", fmt.Errorf("yt-dlp: no audio artifact in %s", destDir)
 }
 
+// progressWriter counts bytes written and reports the running download percent.
+// It only forwards when the whole-number percent advances, so a large body
+// yields at most 100 callbacks (the worker throttles further).
+type progressWriter struct {
+	total     int64
+	written   int64
+	last      int
+	onPercent func(int)
+}
+
+func (w *progressWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	w.written += int64(n)
+	pct := int(w.written * 100 / w.total)
+	if pct > 100 {
+		pct = 100
+	}
+	if pct > w.last {
+		w.last = pct
+		w.onPercent(pct)
+	}
+	return n, nil
+}
+
 // --- direct-mp3 extractor ---
 
 type mp3Extractor struct{ opts *Options }
@@ -332,7 +479,7 @@ func (*mp3Extractor) handles(u *url.URL) bool {
 // probeDuration is not cheap for a bare file; skip it (size limit still applies).
 func (*mp3Extractor) probeDuration(context.Context, string) (int64, bool) { return 0, false }
 
-func (e *mp3Extractor) download(ctx context.Context, rawURL, destDir string) (string, error) {
+func (e *mp3Extractor) download(ctx context.Context, rawURL, destDir string, onProgress func(int)) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", err
@@ -363,7 +510,13 @@ func (e *mp3Extractor) download(ctx context.Context, rawURL, destDir string) (st
 		// truncated.
 		reader = io.LimitReader(resp.Body, e.opts.MaxBytes+1)
 	}
-	n, err := io.Copy(out, reader)
+	// Report percent against Content-Length when the server advertises it — a
+	// bare stream (no length) simply reports no progress.
+	var writer io.Writer = out
+	if onProgress != nil && resp.ContentLength > 0 {
+		writer = io.MultiWriter(out, &progressWriter{total: resp.ContentLength, onPercent: onProgress})
+	}
+	n, err := io.Copy(writer, reader)
 	if err != nil {
 		return "", fmt.Errorf("mp3 write: %w", err)
 	}

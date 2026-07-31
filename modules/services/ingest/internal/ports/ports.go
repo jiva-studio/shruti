@@ -18,8 +18,12 @@ import (
 
 // Fetcher downloads a concrete source URL (via a configurable proxy) and
 // returns the local path to the fetched audio plus its content hash (track_id).
+// onProgress, when non-nil, is called with the download completion percent
+// (0-100) as bytes arrive — best-effort and possibly never (a source/extractor
+// that doesn't expose progress); the worker throttles and forwards it as a
+// granular status heartbeat.
 type Fetcher interface {
-	Fetch(ctx context.Context, url string) (localPath, contentHash string, err error)
+	Fetch(ctx context.Context, url string, onProgress func(percent int)) (localPath, contentHash string, err error)
 }
 
 // SourceInfo is best-effort metadata read off a source URL without downloading

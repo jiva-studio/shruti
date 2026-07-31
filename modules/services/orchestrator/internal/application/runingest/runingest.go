@@ -221,6 +221,9 @@ type JobStatus struct {
 	// Stage is the granular pipeline step (downloading / transcribing / …), set
 	// only while running. Poll-only — the client shows it live, never persists it.
 	Stage string `json:"stage,omitempty"`
+	// Percent is the download completion (0-100), set only while the downloading
+	// stage is running. Poll-only, alongside Stage.
+	Percent int `json:"percent,omitempty"`
 }
 
 // StatusOf projects a job aggregate into the API status DTO, mapping the raw
@@ -238,10 +241,12 @@ func StatusOf(j *job.Job) JobStatus {
 	// progress blob the worker's heartbeats recorded.
 	if j.State == job.StateRunning && len(j.Progress) > 0 {
 		var p struct {
-			Stage string `json:"stage"`
+			Stage   string `json:"stage"`
+			Percent int    `json:"percent"`
 		}
 		if json.Unmarshal(j.Progress, &p) == nil {
 			s.Stage = p.Stage
+			s.Percent = p.Percent
 		}
 	}
 	return s
@@ -355,7 +360,7 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		// and off the hot path — a lost write only means a coarser spinner, and it
 		// must not fail the ingest. Every heartbeat (not just the first) updates it.
 		if res.Stage != "" {
-			if err := h.d.Repo.UpdateProgress(ctx, res.JobID, progressData(res.Stage)); err != nil {
+			if err := h.d.Repo.UpdateProgress(ctx, res.JobID, progressData(res.Stage, res.Percent)); err != nil {
 				lg.WarnContext(ctx, "progress_update_failed", "err", err.Error())
 			}
 		}

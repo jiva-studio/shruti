@@ -21,13 +21,19 @@ import (
 // real content hash, so runingest's os.ReadFile / content-addressing is
 // exercised end-to-end.
 type fakeFetcher struct {
-	content []byte
-	err     error
-	calls   int
+	content  []byte
+	err      error
+	calls    int
+	progress []int // percents reported through onProgress
 }
 
-func (f *fakeFetcher) Fetch(_ context.Context, _ string) (string, string, error) {
+func (f *fakeFetcher) Fetch(_ context.Context, _ string, onProgress func(int)) (string, string, error) {
 	f.calls++
+	if onProgress != nil {
+		for _, p := range []int{5, 40, 100} {
+			onProgress(p)
+		}
+	}
 	if f.err != nil {
 		return "", "", f.err
 	}
@@ -129,6 +135,20 @@ func (r *fakeResults) stages() []string {
 	return out
 }
 
+// downloadPercents returns the Percent of every download heartbeat that carried
+// one, in order — the throttled progress ticks.
+func (r *fakeResults) downloadPercents() []int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []int
+	for _, res := range r.list {
+		if res.Stage == ingest.StageDownloading && res.Percent > 0 {
+			out = append(out, res.Percent)
+		}
+	}
+	return out
+}
+
 func (r *fakeResults) last() ingest.Result {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -201,20 +221,27 @@ func TestProcess_Ready(t *testing.T) {
 	if rev.TrackId != hash || rev.Language != "en" || rev.Version != 1 || len(rev.Blocks) != 1 {
 		t.Fatalf("reviewed transcript wrong: %+v", rev)
 	}
-	// One processing heartbeat per pipeline stage (download / transcribe /
-	// review / store) precedes the terminal ready.
+	// A processing heartbeat per pipeline stage precedes the terminal ready, plus
+	// the throttled download-percent heartbeats (fetcher reports 5/40/100 → the
+	// 10%-bucket filter emits 40 and 100 on top of the initial downloading tick).
 	if got, want := h.results.phases(), []string{
 		ingest.PhaseProcessing, ingest.PhaseProcessing, ingest.PhaseProcessing,
-		ingest.PhaseProcessing, ingest.PhaseReady,
+		ingest.PhaseProcessing, ingest.PhaseProcessing, ingest.PhaseProcessing,
+		ingest.PhaseReady,
 	}; !equal(got, want) {
 		t.Fatalf("phases = %v, want %v", got, want)
 	}
-	// The heartbeats carry the stage labels, in pipeline order.
+	// The heartbeats carry the stage labels, in pipeline order (downloading
+	// repeats for its percent updates).
 	if got, want := h.results.stages(), []string{
-		ingest.StageDownloading, ingest.StageTranscribing,
-		ingest.StageReviewing, ingest.StageStoring,
+		ingest.StageDownloading, ingest.StageDownloading, ingest.StageDownloading,
+		ingest.StageTranscribing, ingest.StageReviewing, ingest.StageStoring,
 	}; !equal(got, want) {
 		t.Fatalf("stages = %v, want %v", got, want)
+	}
+	// The download heartbeats carry the throttled completion percent.
+	if got, want := h.results.downloadPercents(), []int{40, 100}; !equalInts(got, want) {
+		t.Fatalf("download percents = %v, want %v", got, want)
 	}
 	last := h.results.last()
 	if last.JobID != "job-1" || last.TrackID != hash || last.Lang != "en" {
@@ -318,6 +345,18 @@ func TestProcess_PoisonPill_Dropped(t *testing.T) {
 // --- helpers ---
 
 func equal(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func equalInts(a, b []int) bool {
 	if len(a) != len(b) {
 		return false
 	}

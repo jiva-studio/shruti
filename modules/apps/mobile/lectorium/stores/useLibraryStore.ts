@@ -30,6 +30,9 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   // Live granular pipeline stage per in-flight item (poll-only, ephemeral) —
   // the card shows it instead of a bare "Processing" while an item ingests.
   const liveStages = ref<ReadonlyMap<string, string>>(new Map())
+  // Live download percent per in-flight item (poll-only) — refines the
+  // downloading stage into "Downloading 40%". Cleared with the stage.
+  const livePercents = ref<ReadonlyMap<string, number>>(new Map())
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
@@ -109,15 +112,24 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     allItems.value = next
   }
 
-  /** Set (or clear) the live pipeline stage for an in-flight item, from a status
-   *  poll. Replaces the map so the card re-renders reactively. */
-  function setLiveStage(id: string, stage: string | undefined): void {
-    const cur = liveStages.value.get(id)
-    if (cur === stage) return
-    const next = new Map(liveStages.value)
-    if (stage) next.set(id, stage)
-    else next.delete(id)
-    liveStages.value = next
+  /** Set (or clear) the live pipeline stage — and its download percent — for an
+   *  in-flight item, from a status poll. Replaces the maps so the card re-renders
+   *  reactively. `percent` is undefined off the downloading stage. */
+  function setLiveStage(id: string, stage: string | undefined, percent?: number): void {
+    const curStage = liveStages.value.get(id)
+    if (curStage !== stage) {
+      const next = new Map(liveStages.value)
+      if (stage) next.set(id, stage)
+      else next.delete(id)
+      liveStages.value = next
+    }
+    const curPct = livePercents.value.get(id)
+    if (curPct !== percent) {
+      const next = new Map(livePercents.value)
+      if (percent !== undefined) next.set(id, percent)
+      else next.delete(id)
+      livePercents.value = next
+    }
   }
 
   /**
@@ -198,6 +210,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     findBySource,
     applyLiveStatus,
     liveStages,
+    livePercents,
     setLiveStage,
     remove,
     addByUrl,
