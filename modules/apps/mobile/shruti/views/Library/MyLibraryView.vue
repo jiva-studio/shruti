@@ -32,6 +32,7 @@
           :key="item.id"
           :item="item"
           @select="onSelect"
+          @retry="onRetry"
         />
       </div>
     </IonContent>
@@ -54,6 +55,7 @@ import { IconVinyl } from "@tabler/icons-vue"
 import { FlatHeader } from "@ui/primitives/index.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
 import { useOpenLibraryItem } from "@shruti/composables/useOpenLibraryItem.js"
+import { useRetryLibraryItem } from "@shruti/composables/useRetryLibraryItem.js"
 import LibraryItemCard from "./components/LibraryItemCard.vue"
 
 /**
@@ -64,6 +66,7 @@ import LibraryItemCard from "./components/LibraryItemCard.vue"
  */
 const library = useLibraryStore()
 const onSelect = useOpenLibraryItem()
+const onRetry = useRetryLibraryItem()
 
 void library.ensureLoaded()
 

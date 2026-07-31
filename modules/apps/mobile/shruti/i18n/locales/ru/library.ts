@@ -5,6 +5,15 @@ export default {
     processing: "Обработка",
     ready: "Готово",
     failed: "Не удалось",
+    retry: "Повторить",
+    errors: {
+      unauthorized: "Добавление лекций доступно в Pro.",
+      unavailable: "Источник недоступен.",
+      unsupported: "Эту ссылку нельзя добавить.",
+      too_large: "Лекция слишком длинная для добавления.",
+      no_speech: "Не удалось распознать речь.",
+      internal: "Что-то пошло не так.",
+    },
   },
   myLibrary: {
     title: "Моя библиотека",
