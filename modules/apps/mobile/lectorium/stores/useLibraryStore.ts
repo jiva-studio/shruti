@@ -33,6 +33,11 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   // Live download percent per in-flight item (poll-only) — refines the
   // downloading stage into "Downloading 40%". Cleared with the stage.
   const livePercents = ref<ReadonlyMap<string, number>>(new Map())
+  // normalized source URL → job id, recorded at submit time. The job id IS the
+  // library item id (deterministic), so a just-submitted lecture can be matched
+  // to its live status BEFORE its row syncs down (where sourceUrl isn't yet set
+  // during processing) — used to show ingest progress on the chat candidate card.
+  const submittedIngestIds = ref<ReadonlyMap<string, string>>(new Map())
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
@@ -92,6 +97,15 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     if (!url.trim()) return undefined
     const key = normalizeSource(url)
     return allItems.value.find((i) => i.sourceUrl != null && normalizeSource(i.sourceUrl) === key)
+  }
+
+  /** The ingest job id for a source URL, if this device just submitted it — the
+   *  id equals the (deterministic) library item id, so live status can be shown
+   *  before the row (which lacks sourceUrl while processing) syncs down. Falls
+   *  back to a matched item so it also works after a reload / on another view. */
+  function ingestIdForUrl(url: string): string | undefined {
+    if (!url.trim()) return undefined
+    return submittedIngestIds.value.get(normalizeSource(url)) ?? findBySource(url)?.id
   }
 
   /**
@@ -180,7 +194,10 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     hints?: { title?: string; author?: string }
   ): Promise<void> {
     try {
-      await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
+      const res = await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
+      const next = new Map(submittedIngestIds.value)
+      next.set(normalizeSource(url), res.job_id)
+      submittedIngestIds.value = next
       requestSync()
     } catch (err) {
       if (err instanceof IngestGatewayError && err.code === "not_pro") {
@@ -208,6 +225,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     getById,
     hasSource,
     findBySource,
+    ingestIdForUrl,
     applyLiveStatus,
     liveStages,
     livePercents,

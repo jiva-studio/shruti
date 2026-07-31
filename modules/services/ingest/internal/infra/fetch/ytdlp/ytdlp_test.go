@@ -129,12 +129,16 @@ func TestParsePercent(t *testing.T) {
 		want int
 		ok   bool
 	}{
-		{"PCT:  42.3%", 42, true},
-		{"PCT:100.0%", 100, true},
-		{"PCT: 0.0%", 0, true},
-		{"PCT:150%", 100, true}, // clamp
+		{"PCT:  42.3%|12|50", 42, true}, // byte percent wins
+		{"PCT:100.0%|NA|NA", 100, true},
+		{"PCT: 0.0%|NA|NA", 0, true},
+		{"PCT:150%|NA|NA", 100, true},  // clamp
+		{"PCT:NA%|12|50", 24, true},    // fragment fallback 12/50
+		{"PCT:NA%|50|50", 100, true},   // last fragment
+		{"PCT:NA%|NA|NA", 0, false},    // neither measure
+		{"PCT:NA%|3|0", 0, false},      // no fragment count
+		{"PCT:  42.3%", 42, true},      // legacy single-field line still parses
 		{"[download] Destination: audio.webm", 0, false},
-		{"PCT:NA%", 0, false},
 		{"", 0, false},
 	}
 	for _, c := range cases {
