@@ -583,7 +583,11 @@ def _stream_cards(writer, cards: list[tuple[str, dict]]) -> None:
 
 
 async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
-    """No lectures found — one localized line, nothing else."""
+    """No lectures found — a localized line PLUS a "search the web" chip so a
+    corpus miss isn't a dead end. The chip routes straight into add-to-library
+    (web discovery + add), carrying the user's original request, so instead of
+    re-typing the whole ask they tap once. Same mechanism as the unknown-author
+    path, but generic: here the corpus simply has nothing, whatever the reason."""
     writer({"type": "status", "data": {"key": "composing_answer"}})
     line = ""
     if ctx.llm is not None and query:
@@ -591,8 +595,11 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
             line = await _intro(ctx, query, 0, "")
         except Exception:
             log.exception("find_tracks_empty_intro_failed", request_id=ctx.request_id)
-    if line:
-        writer({"type": "delta", "data": {"text": line}})
+    chips: list[str] = []
+    if query:
+        t = _EMPTY_WEB_CHIP.get(ctx.lang, _EMPTY_WEB_CHIP["en"])
+        chips = [f"{t['label']}|{t['command'].format(query=query)}"]
+    _emit_reply(writer, LocalizedReply(line=line or "", chips=chips))
     return {}
 
 
@@ -614,6 +621,21 @@ _UNKNOWN_AUTHOR_CHIP = {
         "label": "Search the web",
         "topic": "Find {author}'s lectures about {topic} on the internet and add to my library",
         "plain": "Find {author}'s lectures on the internet and add to my library",
+    },
+}
+
+# Generic "not found anywhere in the corpus" fallback chip (no parsed author).
+# Carries the user's raw request so add-to-library's web discovery keeps the
+# subject; "lectures … add to my library" pins the intent so the router sends it
+# to add-to-library rather than dropping it to `unknown` (same rule as above).
+_EMPTY_WEB_CHIP = {
+    "ru": {
+        "label": "Поискать в интернете",
+        "command": "Найти эти лекции в интернете и добавить в мою библиотеку: {query}",
+    },
+    "en": {
+        "label": "Search the web",
+        "command": "Find these lectures on the internet and add to my library: {query}",
     },
 }
 
