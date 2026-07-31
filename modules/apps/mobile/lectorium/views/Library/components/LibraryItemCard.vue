@@ -14,10 +14,12 @@
       <IconVinyl :size="28" />
     </div>
 
-    <span v-if="isPending" class="status processing">
-      <IonSpinner name="dots" class="status-spinner" />
-      {{ stageLabel }}
-    </span>
+    <IngestProgressBadge
+      v-if="isPending"
+      class="status-badge"
+      :percent="livePercent"
+      :label="stageLabel"
+    />
     <span v-else-if="isFailed" class="status failed">
       <IconAlertTriangle :size="13" />
       {{ $t("library.status.failed") }}
@@ -39,11 +41,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonSpinner } from "@ionic/vue"
 import { IconVinyl, IconAlertTriangle, IconReload } from "@tabler/icons-vue"
 import { CachedImage } from "@ui/primitives/index.js"
 import { resolveAssetUrl } from "@lectorium/services/regionsRegistry.js"
 import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
+import IngestProgressBadge from "@lectorium/components/IngestProgressBadge.vue"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
 
 /**
@@ -74,12 +76,12 @@ const isFailed = computed(() => props.item.status === "failed")
 
 // Live pipeline stage from the status poll (Downloading / Transcribing / …),
 // falling back to a plain "Processing" before the first heartbeat / unknown code.
+const livePercent = computed(() => library.livePercents.get(props.item.id))
+// Stage name only — the progress ring conveys the percent, no need to repeat it.
 const stageLabel = computed(() => {
   const stage = library.liveStages.get(props.item.id)
   const key = stage ? `library.status.stages.${stage}` : ""
-  const label = key && te(key) ? t(key) : t("library.status.processing")
-  const percent = library.livePercents.get(props.item.id)
-  return percent !== undefined ? `${label} ${percent}%` : label
+  return key && te(key) ? t(key) : t("library.status.processing")
 })
 const coverUrl = computed(() => resolveAssetUrl(props.item.coverKey ?? undefined))
 const title = computed(() => props.item.titleRaw?.trim() || t("library.untitled"))
@@ -255,19 +257,16 @@ function onRetry(): void {
   white-space: nowrap;
 }
 
-.status.processing {
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast);
-}
-
 .status.failed {
   background: var(--ion-color-danger);
   color: var(--ion-color-danger-contrast);
 }
 
-.status-spinner {
-  width: 14px;
-  height: 12px;
-  color: inherit;
+/* Shared ingest-progress badge (ring + stage/percent), positioned like .status. */
+.status-badge {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  max-width: calc(100% - 12px);
 }
 </style>

@@ -21,6 +21,10 @@
 
     <IonFooter class="ion-no-border">
       <div class="sheet-actions">
+        <IonButton v-if="isLibraryItem" fill="clear" class="act remove-btn" @click="onRemove">
+          <IconTrash slot="start" :size="18" />
+          {{ t("library.remove") }}
+        </IonButton>
         <IonButton fill="clear" class="act share-btn" @click="onShare">
           <IconShare slot="start" :size="18" />
           {{ t("search.actions.share") }}
@@ -33,10 +37,6 @@
           <IconReload v-if="downloadFailed" slot="start" :size="18" />
           <IconPlaylistAdd v-else slot="start" :size="18" />
           {{ primaryActionLabel }}
-        </IonButton>
-        <IonButton v-if="isLibraryItem" fill="clear" class="act remove-btn" @click="onRemove">
-          <IconTrash slot="start" :size="18" />
-          {{ t("library.remove") }}
         </IonButton>
       </div>
     </IonFooter>

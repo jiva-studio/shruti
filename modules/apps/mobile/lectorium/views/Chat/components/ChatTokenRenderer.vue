@@ -187,7 +187,7 @@ const { locale, t, te } = useI18n()
  */
 function ingestStatus(
   url: string | undefined
-): { kind: "pending" | "failed"; label: string } | undefined {
+): { kind: "pending" | "failed"; label: string; percent?: number } | undefined {
   if (!url) return undefined
   // Match by the deterministic job id (= item id), which exists from submit —
   // the processing row lacks sourceUrl, so a source match alone would miss it.
@@ -197,11 +197,11 @@ function ingestStatus(
   if (status === "ready") return undefined // done → the card's checkmark
   if (status === "failed") return { kind: "failed", label: t("library.status.failed") }
   // queued / processing, or just-submitted before its row synced: show progress.
+  // The ring shows the percent, so the label is the stage name only.
   const stage = library.liveStages.get(id)
   const key = stage ? `library.status.stages.${stage}` : ""
   const base = key && te(key) ? t(key) : t("library.status.processing")
-  const pct = library.livePercents.get(id)
-  return { kind: "pending", label: pct !== undefined ? `${base} ${pct}%` : base }
+  return { kind: "pending", label: base, percent: library.livePercents.get(id) }
 }
 
 // MediaCard turns a relative storage path into the active server's CDN URL.
