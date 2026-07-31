@@ -63,6 +63,10 @@ var Collections = map[string]bool{
 	// (Service.ApplyServerChange). Whitelisted here so ApplyState / pull treat
 	// it as a first-class collection; clients pull it but never push it.
 	"library_items": true,
+	// library_memberships is the CLIENT-owned companion to library_items — the
+	// user's remove/re-add intent. Pushed and merged like playlist_items; NOT in
+	// ServerOwned.
+	"library_memberships": true,
 }
 
 // ServerOwned is the subset of Collections whose documents are authored ONLY by
@@ -97,6 +101,8 @@ func ApplyState(ctx context.Context, q querier, userID uuid.UUID, it wire.PushIt
 		return upsertChatMessage(ctx, q, userID, it)
 	case "library_items":
 		return upsertLibraryItem(ctx, q, userID, it)
+	case "library_memberships":
+		return upsertLibraryMembership(ctx, q, userID, it)
 	default:
 		return fmt.Errorf("unknown collection %q", it.Collection)
 	}
@@ -117,12 +123,13 @@ func deleteState(ctx context.Context, q querier, userID uuid.UUID, collection, d
 }
 
 var stateTable = map[string]string{
-	"playlist_items":     "profile.playlist_items",
-	"listening_sessions": "profile.listening_sessions",
-	"notes":              "profile.notes",
-	"chat_sessions":      "profile.chat_sessions",
-	"chat_messages":      "profile.chat_messages",
-	"library_items":      "profile.library_items",
+	"playlist_items":      "profile.playlist_items",
+	"listening_sessions":  "profile.listening_sessions",
+	"notes":               "profile.notes",
+	"chat_sessions":       "profile.chat_sessions",
+	"chat_messages":       "profile.chat_messages",
+	"library_items":       "profile.library_items",
+	"library_memberships": "profile.library_memberships",
 }
 
 // --- typed row shapes (json tags == user.db / DDL column names) -----------
@@ -179,21 +186,21 @@ type libraryItemRow struct {
 	// not a raw internal message — see runingest failData. It lands in the error
 	// column and syncs down; a non-failed state carries none, clearing it on the
 	// replace-all upsert.
-	Error          *string    `json:"error"`
-	TitleRaw       *string    `json:"title_raw"`
-	AuthorRaw      *string    `json:"author_raw"`
-	LocationRaw    *string    `json:"location_raw"`
-	DateRaw        *string    `json:"date_raw"`
-	LangHint       *string    `json:"lang_hint"`
-	AuthorID       *string    `json:"author_id"`
-	LocationID     *string    `json:"location_id"`
-	Date           *string    `json:"date"`
-	Lang           *string    `json:"lang"`
-	AudioKey       *string    `json:"audio_key"`
-	TranscriptKey  *string    `json:"transcript_key"`
-	CoverKey       *string    `json:"cover_key"`
-	Duration       *int       `json:"duration"` // milliseconds
-	AddedAt        *epochTime `json:"added_at"`
+	Error         *string    `json:"error"`
+	TitleRaw      *string    `json:"title_raw"`
+	AuthorRaw     *string    `json:"author_raw"`
+	LocationRaw   *string    `json:"location_raw"`
+	DateRaw       *string    `json:"date_raw"`
+	LangHint      *string    `json:"lang_hint"`
+	AuthorID      *string    `json:"author_id"`
+	LocationID    *string    `json:"location_id"`
+	Date          *string    `json:"date"`
+	Lang          *string    `json:"lang"`
+	AudioKey      *string    `json:"audio_key"`
+	TranscriptKey *string    `json:"transcript_key"`
+	CoverKey      *string    `json:"cover_key"`
+	Duration      *int       `json:"duration"` // milliseconds
+	AddedAt       *epochTime `json:"added_at"`
 }
 
 func decode(it wire.PushItem, dst any) error {
@@ -381,6 +388,33 @@ func upsertLibraryItem(ctx context.Context, q querier, userID uuid.UUID, it wire
 		row.TitleRaw, row.AuthorRaw, row.LocationRaw, row.DateRaw, row.LangHint,
 		row.AuthorID, row.LocationID, row.Date, row.Lang,
 		row.AudioKey, row.TranscriptKey, row.CoverKey, row.Duration, tsArg(row.AddedAt),
+	)
+	return err
+}
+
+// libraryMembershipRow is the CLIENT-authored personal-library membership — the
+// user's remove/re-add intent (json tags == wire snake_case). archived_at NULL
+// means active (in the library); set means removed. The client only ever
+// upserts (a remove sets archived_at, a re-add clears it), so "no row" and
+// "archived_at IS NULL" both mean active; a delete tombstone would also revert
+// to active via deleteState.
+type libraryMembershipRow struct {
+	ArchivedAt *epochTime `json:"archived_at"`
+	UpdatedAt  *epochTime `json:"updated_at"`
+}
+
+func upsertLibraryMembership(ctx context.Context, q querier, userID uuid.UUID, it wire.PushItem) error {
+	var row libraryMembershipRow
+	if err := decode(it, &row); err != nil {
+		return err
+	}
+	_, err := q.Exec(ctx,
+		`INSERT INTO profile.library_memberships (user_id, doc_id, archived_at, updated_at)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (user_id, doc_id) DO UPDATE SET
+		     archived_at = EXCLUDED.archived_at,
+		     updated_at  = EXCLUDED.updated_at`,
+		userID, it.DocID, tsArg(row.ArchivedAt), tsArg(row.UpdatedAt),
 	)
 	return err
 }
