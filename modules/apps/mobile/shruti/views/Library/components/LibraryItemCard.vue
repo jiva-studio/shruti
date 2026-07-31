@@ -26,7 +26,12 @@
     <span class="scrim" aria-hidden="true" />
     <div class="meta">
       <span class="title">{{ title }}</span>
-      <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
+      <span v-if="isFailed" class="subtitle error">{{ errorMessage }}</span>
+      <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
+      <button v-if="canRetry" type="button" class="retry" @click.stop="onRetry">
+        <IconReload :size="13" />
+        {{ $t("library.status.retry") }}
+      </button>
     </div>
   </div>
 </template>
@@ -35,7 +40,7 @@
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
-import { IconVinyl, IconAlertTriangle } from "@tabler/icons-vue"
+import { IconVinyl, IconAlertTriangle, IconReload } from "@tabler/icons-vue"
 import { CachedImage } from "@ui/primitives/index.js"
 import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 import type { LibraryItem } from "@lib/domain/libraryItem.js"
@@ -47,15 +52,17 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
  * at the bottom over a readability scrim — the same treatment as the collection
  * tiles it sits beside. While ingesting, a status pill sits at the top — a
  * spinner for queued/processing, a Failed label otherwise. Ready items tap to
- * `select`.
+ * `select`; a failed item shows the localized reason and a Retry button that
+ * re-runs the ingest (`retry`).
  */
 const props = defineProps<{ item: LibraryItem }>()
 
 const emit = defineEmits<{
   (e: "select", item: LibraryItem): void
+  (e: "retry", item: LibraryItem): void
 }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const isReady = computed(() => props.item.status === "ready")
 const isPending = computed(
@@ -70,11 +77,24 @@ const subtitle = computed(() => {
   )
   return parts.join(" · ")
 })
+// The server ships a STABLE failure code (e.g. "unavailable"); map it to a
+// localized reason, falling back to the generic message for an unknown code.
+const errorMessage = computed(() => {
+  const key = `library.status.errors.${props.item.error ?? "internal"}`
+  return te(key) ? t(key) : t("library.status.errors.internal")
+})
+// A failed item can be retried only when we still know the source URL to re-add
+// (older rows predate source_url).
+const canRetry = computed(() => isFailed.value && !!props.item.sourceUrl)
 
 const loaded = ref(false)
 
 function onTap(): void {
   if (isReady.value) emit("select", props.item)
+}
+
+function onRetry(): void {
+  emit("retry", props.item)
 }
 </script>
 
@@ -173,6 +193,36 @@ function onTap(): void {
 .lib-card.is-loaded .subtitle {
   color: var(--shruti-scrim-cream);
   opacity: 0.85;
+}
+
+.subtitle.error {
+  color: var(--ion-color-danger);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.lib-card.is-loaded .subtitle.error {
+  color: var(--shruti-scrim-cream);
+  opacity: 1;
+}
+
+.retry {
+  align-self: flex-start;
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  background: var(--ion-color-primary);
+  color: var(--ion-color-primary-contrast);
 }
 
 .status {
