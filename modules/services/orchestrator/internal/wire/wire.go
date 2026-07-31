@@ -33,12 +33,11 @@ import (
 // Relay are nil when the streams broker (or the tier verifier) is not
 // configured — the service still serves HTTP in that case.
 type Deps struct {
-	Pool            *pgxpool.Pool
-	Redis           *redis.Client
-	Handler         http.Handler
-	RequestConsumer *redisstream.Consumer
-	ResultConsumer  *redisstream.Consumer
-	Relay           *redisstream.Relay
+	Pool           *pgxpool.Pool
+	Redis          *redis.Client
+	Handler        http.Handler
+	ResultConsumer *redisstream.Consumer
+	Relay          *redisstream.Relay
 }
 
 // Build connects the pool, applies migrations, verifies the schema, wires the
@@ -106,18 +105,15 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	// each row to its own topic).
 	deps.Relay = redisstream.NewRelay(rdb, repo, cfg.StreamMaxLen)
 
-	// The consumers only start when the tier verifier is present; otherwise a
-	// consumed ingest.request would fail re-verification. (The `ingest.request`
-	// stream is the legacy chat-driven entry, retired in favour of the API; the
-	// consumer stays as a dormant fallback until the producer is removed.)
+	// The result consumer only starts when the tier verifier is present (it
+	// shares the ingest deps). The `ingest.request` stream is retired: submits
+	// arrive over the HTTP API (POST /orchestrator/ingest → RequestHandler.Submit),
+	// so only the worker's `ingest.result` is consumed here.
 	if verifier == nil {
-		slog.WarnContext(ctx, "ingest_consumers_disabled", "missing", "AUTH_JWT_PUBLIC_KEY_FILE")
+		slog.WarnContext(ctx, "result_consumer_disabled", "missing", "AUTH_JWT_PUBLIC_KEY_FILE")
 		return deps, nil
 	}
 	d := ingestDeps(cfg, repo, verifier)
-	deps.RequestConsumer = redisstream.NewConsumer(
-		rdb, cfg.IngestStream, cfg.ConsumerGroup, cfg.ConsumerName, runingest.NewRequestHandler(d),
-	)
 	deps.ResultConsumer = redisstream.NewConsumer(
 		rdb, cfg.ResultStream, cfg.ResultConsumerGroup, cfg.ConsumerName, runingest.NewResultHandler(d),
 	)

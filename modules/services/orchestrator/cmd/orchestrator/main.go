@@ -106,23 +106,16 @@ func runServe() {
 	}
 
 	// Broker-driven coordinator: the outbox relay drains lifecycle events AND
-	// ingest.work dispatches, the request consumer processes ingest.request, and
-	// the result consumer processes ingest.result from the ingest worker. All
-	// run for the process lifetime and are torn down when the root context is
-	// cancelled on shutdown.
+	// ingest.work dispatches, and the result consumer processes ingest.result
+	// from the ingest worker. Submits arrive over the HTTP API, not a stream.
+	// Both run for the process lifetime and are torn down when the root context
+	// is cancelled on shutdown.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 	if deps.Relay != nil {
 		go func() {
 			if err := deps.Relay.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
 				slog.Error("relay_stopped", "err", err.Error())
-			}
-		}()
-	}
-	if deps.RequestConsumer != nil {
-		go func() {
-			if err := deps.RequestConsumer.Run(workerCtx); err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("request_consumer_stopped", "err", err.Error())
 			}
 		}()
 	}
