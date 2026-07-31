@@ -8,11 +8,8 @@ import type { Track } from "@lib/domain/track.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
-import {
-  preferredContentLanguage,
-  resolveLocalizedName,
-  resolveTrackTitle,
-} from "@lib/domain/services/localizedName.js"
+import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
+import { resolveTrackAuthorName } from "@lib/domain/services/trackAuthor.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 
@@ -79,9 +76,13 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     return resolveTrackTitle(track.value, lang) ?? track.value.id
   })
 
+  // Resolve the corpus author entity, else fall back to the raw author label an
+  // ingested personal-library track carries — the same helper the track rows /
+  // native queue use, so the FloatingPlayer can't show a blank author for a
+  // lecture whose card shows one.
   const authorName = computed(() => {
-    if (!author.value) return track.value?.authorId ?? ""
-    return resolveLocalizedName(author.value, appLanguage.value) ?? author.value.id
+    if (!track.value) return ""
+    return resolveTrackAuthorName(track.value, author.value, appLanguage.value)
   })
 
   const hasAudio = computed(() => track.value?.variants.some((v) => v.audio !== null) ?? false)
