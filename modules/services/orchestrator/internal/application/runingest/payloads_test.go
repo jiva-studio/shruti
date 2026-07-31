@@ -9,7 +9,8 @@ import (
 // The whole point of failData: nothing internal reaches the user's device. The
 // payload is projected into library_items and synced down, so a raw
 // "transcribe: deepgram: 503" would leak both our pipeline stages and our
-// vendors into a row on the user's phone.
+// vendors into a row on the user's phone. The `error` field carries only the
+// STABLE code (the key the whole downstream chain maps), never the raw text.
 func TestFailDataNeverShipsTheRawError(t *testing.T) {
 	raw := "transcribe: deepgram: 503 Service Unavailable"
 	var got map[string]any
@@ -17,11 +18,8 @@ func TestFailDataNeverShipsTheRawError(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	if _, present := got["error"]; present {
-		t.Error("the raw `error` field must not be part of the client payload")
-	}
-	if got["error_code"] != codeInternal {
-		t.Errorf("error_code = %v, want %q", got["error_code"], codeInternal)
+	if got["error"] != codeInternal {
+		t.Errorf("error = %v, want the stable code %q", got["error"], codeInternal)
 	}
 	if got["status"] != "failed" || got["title_raw"] != "A talk" {
 		t.Errorf("status/title must survive, got %v", got)
