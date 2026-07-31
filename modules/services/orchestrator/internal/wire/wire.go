@@ -58,13 +58,37 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		return nil, fmt.Errorf("schema not ready: %w", err)
 	}
 
+	repo := jobpg.New(pool)
+
+	// The token verifier gates BOTH the ingest API and the stream consumers (a
+	// consumed ingest.request must re-verify pro). Built once from the auth key;
+	// nil when unset/invalid, which disables both.
+	var verifier *authjwt.Verifier
+	if v, verr := authjwt.NewFromFile(cfg.AuthPublicKeyFile); cfg.AuthPublicKeyFile != "" && verr == nil {
+		verifier = v
+	} else if verr != nil {
+		slog.WarnContext(ctx, "auth_verifier_disabled", "reason", "AUTH_JWT_PUBLIC_KEY_FILE(invalid)")
+	}
+
+	// The ingest control-plane API (POST /ingest + GET /ingest/{id}) needs only
+	// the job store and the verifier — NOT the broker. So it comes up whenever the
+	// auth key is configured, independent of Redis: the create tx writes the
+	// outbox, which the relay drains once the broker is present. The routes report
+	// 503 while the verifier is absent.
+	routerDeps := handler.RouterDeps{Pool: pool, Jobs: repo}
+	if verifier != nil {
+		routerDeps.Submitter = runingest.NewRequestHandler(ingestDeps(cfg, repo, verifier))
+		routerDeps.Verifier = verifier
+	}
+
 	deps := &Deps{
 		Pool:    pool,
-		Handler: handler.NewRouter(handler.RouterDeps{Pool: pool}),
+		Handler: handler.NewRouter(routerDeps),
 	}
 
 	// The broker is optional: without STREAMS_REDIS_URL the service is
-	// HTTP-only (health/readiness), which keeps local/dev boots trivial.
+	// HTTP-only (health/readiness + the ingest API), which keeps local/dev boots
+	// trivial.
 	if cfg.StreamsRedisURL == "" {
 		slog.WarnContext(ctx, "streams_disabled", "reason", "STREAMS_REDIS_URL unset")
 		return deps, nil
@@ -77,33 +101,20 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	}
 	deps.Redis = rdb
 
-	repo := jobpg.New(pool)
-
 	// The outbox relay always runs when the broker is up: it drains whatever the
 	// coordinator commits — both track.events AND ingest.work rows (it publishes
 	// each row to its own topic).
 	deps.Relay = redisstream.NewRelay(rdb, repo, cfg.StreamMaxLen)
 
 	// The consumers only start when the tier verifier is present; otherwise a
-	// consumed ingest.request would fail re-verification.
-	verifier, err := authjwt.NewFromFile(cfg.AuthPublicKeyFile)
-	if cfg.AuthPublicKeyFile == "" || err != nil {
-		reason := "AUTH_JWT_PUBLIC_KEY_FILE"
-		if err != nil {
-			reason = "AUTH_JWT_PUBLIC_KEY_FILE(invalid)"
-		}
-		slog.WarnContext(ctx, "ingest_consumers_disabled", "missing", reason)
+	// consumed ingest.request would fail re-verification. (The `ingest.request`
+	// stream is the legacy chat-driven entry, retired in favour of the API; the
+	// consumer stays as a dormant fallback until the producer is removed.)
+	if verifier == nil {
+		slog.WarnContext(ctx, "ingest_consumers_disabled", "missing", "AUTH_JWT_PUBLIC_KEY_FILE")
 		return deps, nil
 	}
-
-	d := runingest.Deps{
-		Repo:              repo,
-		Events:            repo,
-		Tier:              verifier,
-		MaxAttempts:       cfg.MaxAttempts,
-		TrackEventsStream: cfg.TrackEventsStream,
-		WorkStream:        cfg.WorkStream,
-	}
+	d := ingestDeps(cfg, repo, verifier)
 	deps.RequestConsumer = redisstream.NewConsumer(
 		rdb, cfg.IngestStream, cfg.ConsumerGroup, cfg.ConsumerName, runingest.NewRequestHandler(d),
 	)
@@ -111,6 +122,20 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		rdb, cfg.ResultStream, cfg.ResultConsumerGroup, cfg.ConsumerName, runingest.NewResultHandler(d),
 	)
 	return deps, nil
+}
+
+// ingestDeps assembles the runingest.Deps shared by the HTTP submitter and the
+// stream consumers — the job store (both repository and outbox event bus) plus
+// the tier verifier and the stream-name/attempt config.
+func ingestDeps(cfg *config.Config, repo *jobpg.Repo, verifier *authjwt.Verifier) runingest.Deps {
+	return runingest.Deps{
+		Repo:              repo,
+		Events:            repo,
+		Tier:              verifier,
+		MaxAttempts:       cfg.MaxAttempts,
+		TrackEventsStream: cfg.TrackEventsStream,
+		WorkStream:        cfg.WorkStream,
+	}
 }
 
 // The persistence repo (*jobpg.Repo) implements redisstream.OutboxSource
