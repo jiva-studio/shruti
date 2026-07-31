@@ -160,10 +160,10 @@ import role-proxy.conf
         zone chat {
             match {
                 # Negative match so this fires on the root catch-all but
-                # NOT on /auth/*, /share/* or /profile/*. Order matters:
-                # more specific zones above were already checked.
+                # NOT on /auth/*, /share/*, /profile/* or /orchestrator/*.
+                # Order matters: more specific zones above were already checked.
                 not {
-                    path /auth/* /share/* /profile/* /analytics/*
+                    path /auth/* /share/* /profile/* /orchestrator/* /analytics/*
                 }
             }
             key {client_ip}
