@@ -14,9 +14,7 @@ import { mutate, queryMany, queryOne } from "@kit/persistence"
  * delete — so the "absent = active" invariant holds. The sync-journal decorator
  * wraps `setArchived` / `setActive` to push the change; merged last-write-wins.
  */
-export function createSqlLibraryMembershipRepository(
-  db: IDatabase
-): ILibraryMembershipRepository {
+export function createSqlLibraryMembershipRepository(db: IDatabase): ILibraryMembershipRepository {
   return {
     async listArchivedIds(): Promise<ReadonlySet<string>> {
       const ids = await queryMany<{ id: string }, string>(
