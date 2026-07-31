@@ -31,6 +31,7 @@ type Fetcher interface {
 // author fallback, the publish date as a date fallback. Fields are empty when
 // the source can't provide them.
 type SourceInfo struct {
+	Title      string // source-reported title (e.g. the YouTube video title)
 	Uploader   string // channel / uploader name
 	UploadDate string // publish date as "YYYYMMDD" (yt-dlp), else ""
 	Duration   int64  // source duration in seconds, 0 if unknown

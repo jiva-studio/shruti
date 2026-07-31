@@ -20,10 +20,6 @@
     </IonContent>
 
     <IonFooter class="ion-no-border">
-      <button v-if="isLibraryItem" type="button" class="remove-link" @click="onRemove">
-        <IconTrash :size="15" />
-        {{ t("library.remove") }}
-      </button>
       <div class="sheet-actions">
         <IonButton fill="clear" class="act share-btn" @click="onShare">
           <IconShare slot="start" :size="18" />
@@ -37,6 +33,10 @@
           <IconReload v-if="downloadFailed" slot="start" :size="18" />
           <IconPlaylistAdd v-else slot="start" :size="18" />
           {{ primaryActionLabel }}
+        </IonButton>
+        <IonButton v-if="isLibraryItem" fill="clear" class="act remove-btn" @click="onRemove">
+          <IconTrash slot="start" :size="18" />
+          {{ t("library.remove") }}
         </IonButton>
       </div>
     </IonFooter>
@@ -118,7 +118,9 @@ const effectiveLang = computed<LanguageCode>(() => selectedLanguage.value ?? con
 // UI language.
 const title = computed(() => {
   if (!track.value) return ""
-  return resolveTrackTitle(track.value, contentLang.value) ?? track.value.id
+  // Never surface the content-hash id as a title — an ingested lecture whose
+  // metadata hasn't resolved shows the neutral placeholder, like the card.
+  return resolveTrackTitle(track.value, contentLang.value) || t("library.untitled")
 })
 
 const author = computed(() => {
@@ -239,22 +241,13 @@ function onDismiss(): void {
   border-top: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.08));
 }
 
-/* Quiet destructive link above the primary actions — a user-added lecture can
-   be taken out of the personal library from its own sheet. */
-.remove-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  margin: 0;
-  padding: 10px 16px 0;
-  border: 0;
-  background: transparent;
-  color: var(--ion-color-danger);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
+/* Quiet destructive action in the same button stack — a user-added lecture can
+   be taken out of the personal library from its own sheet. Matches the share
+   button's soft chrome, tinted danger. */
+.remove-btn {
+  --background: rgba(var(--ion-color-danger-rgb), 0.1);
+  --background-hover: rgba(var(--ion-color-danger-rgb), 0.16);
+  --color: var(--ion-color-danger);
 }
 
 .act {
