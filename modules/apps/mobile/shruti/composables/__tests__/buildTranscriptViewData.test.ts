@@ -67,6 +67,20 @@ describe("buildMergedTranscriptViewData — multi-language interleave", () => {
     }
   })
 
+  it("allows a paragraph to span languages when breakOnLanguageChange is off", () => {
+    // High char threshold + no language break → all four alternating blocks
+    // accumulate into ONE mixed-language group.
+    const groups = buildMergedTranscriptViewData(
+      [
+        { language: EN, transcript: en },
+        { language: RU, transcript: ru },
+      ],
+      { paragraphChars: 9999, breakOnLanguageChange: false }
+    )
+    expect(groups).toHaveLength(1)
+    expect(new Set(groups[0].blocks.map((b) => b.language))).toEqual(new Set([EN, RU]))
+  })
+
   it("returns [] for no transcripts", () => {
     expect(buildMergedTranscriptViewData([], { paragraphChars: 100 })).toEqual([])
   })
