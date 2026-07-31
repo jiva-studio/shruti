@@ -1,25 +1,26 @@
 // Package runingest is the orchestrator's coordination core. The orchestrator
 // is a THIN coordinator: it does NOT fetch, transcribe, or store anything —
 // that is the stateless `ingest` worker's job. This package holds the two
-// broker handlers that make up the seam:
+// entry handlers that make up the seam:
 //
-//   - RequestHandler consumes `ingest.request` (chat → orchestrator): it
-//     creates the job, re-verifies the PRO tier, and — in ONE transaction —
-//     commits the job, a `track.queued` outbox event, and an `ingest.work`
-//     outbox command that dispatches the heavy lifting to the ingest worker.
+//   - RequestHandler.Submit is the synchronous HTTP entry (POST /orchestrator/
+//     ingest): it verifies the PRO tier, keys the job on the verified subject,
+//     and — in ONE transaction — commits the job, a `track.queued` outbox event,
+//     and an `ingest.work` command that dispatches the heavy lifting to the
+//     worker. A re-submit of a dead-lettered job restarts it in place.
 //   - ResultHandler consumes `ingest.result` (ingest → orchestrator): it maps
 //     the worker's phase reports (processing / ready / failed) onto job state
-//     transitions and the `track.events` lifecycle, and owns the RETRY policy —
-//     a retriable failure below the attempt cap re-dispatches a fresh
-//     `ingest.work`; otherwise the job dead-letters with `track.failed`.
+//     transitions and the `track.events` lifecycle, records the granular stage
+//     for the status API, and owns the RETRY policy — a retriable failure below
+//     the attempt cap re-dispatches; otherwise the job dead-letters.
 //
 // Guarantees:
 //   - The job is the source of truth. Its id is derived deterministically
-//     (UUIDv5) from the `ingest.request` message id, so a redelivered request
-//     maps to the SAME job (idempotent create).
-//   - `track.events` ids are derived from the JOB id (not the broker message
-//     id), so queued/processing/ready/failed for one job are stable across the
-//     two streams and any redelivery — downstream projections stay idempotent.
+//     (UUIDv5) from the VERIFIED (user, source), so a re-submit maps to the SAME
+//     job (idempotent create + dedup).
+//   - `track.events` ids are derived from the JOB id, so queued/processing/
+//     ready/failed for one job are stable across redelivery — downstream
+//     projections stay idempotent.
 //   - Everything is driven through ports, so the whole seam is exercised with
 //     fakes (no Postgres, no broker).
 package runingest
@@ -73,10 +74,6 @@ func jobIDFor(userID, msgID, url string) string {
 	return uuid.NewSHA1(jobNamespace, []byte(seed)).String()
 }
 
-// errUnauthorized is a permanent (non-retryable) failure: the request's token
-// no longer grants an active PRO tier.
-var errUnauthorized = errors.New("pro tier not verified")
-
 // Deps bundles the ports both handlers share.
 type Deps struct {
 	Repo   ports.JobRepository
@@ -103,7 +100,8 @@ func (d *Deps) applyDefaults() {
 // core carries the shared deps + helpers the two handlers reuse.
 type core struct{ d Deps }
 
-// RequestHandler processes `ingest.request` (chat → orchestrator).
+// RequestHandler is the ingest submission entry — its Submit method backs
+// POST /orchestrator/ingest.
 type RequestHandler struct{ core }
 
 // NewRequestHandler builds the request handler, defaulting the attempt cap and
@@ -111,55 +109,6 @@ type RequestHandler struct{ core }
 func NewRequestHandler(d Deps) *RequestHandler {
 	d.applyDefaults()
 	return &RequestHandler{core{d}}
-}
-
-// Process handles one `ingest.request`. It returns nil when the entry is safe
-// to XACK and a non-nil error only to leave it pending for redelivery (a
-// transient persistence fault). No pipeline work happens here — the job is
-// created and the heavy lifting is dispatched to the ingest worker.
-func (h *RequestHandler) Process(ctx context.Context, msgID string, payload []byte) error {
-	req, err := ingest.DecodeRequest(payload)
-	if err != nil {
-		// The only path with no job_id to correlate on — log it, or a malformed
-		// producer silently drops every request it sends.
-		slog.WarnContext(ctx, "request_poison_pill", "error", err.Error(), "msg_id", msgID)
-		return nil // unparseable; ack to drop it
-	}
-
-	jobID := jobIDFor(req.UserID, msgID, req.URL)
-	lg := slog.With("job_id", jobID, "request_id", req.RequestID)
-	existing, err := h.d.Repo.Get(ctx, jobID)
-	if err != nil {
-		return fmt.Errorf("load job: %w", err)
-	}
-	// A job for this request already exists. A re-add of a DEAD-LETTERED (failed)
-	// job is a user-initiated RETRY — restart it in place. Any other existing
-	// state is a true duplicate: ack without touching it. A done job must not
-	// re-run (the lecture is already in the library); an in-flight job's retry
-	// belongs to the ResultHandler, and re-verifying PRO here would let a token
-	// that lapsed AFTER acceptance fail work that is still running.
-	if existing != nil {
-		if existing.State == job.StateFailed {
-			return h.restartFailed(ctx, existing, req)
-		}
-		lg.InfoContext(ctx, "request_duplicate", "state", string(existing.State))
-		return nil
-	}
-
-	// First time we see this request: verify PRO from the JWT. A lapsed / invalid
-	// token is a PERMANENT failure — create a failed job, emit track.failed, ack.
-	userID, pro, verr := h.d.Tier.VerifyPro(req.Token)
-	if verr != nil || !pro {
-		lg.WarnContext(ctx, "request_rejected_not_pro", "user_id", req.UserID)
-		return h.failNotPro(ctx, jobID, req, payload)
-	}
-
-	owner := req.UserID
-	if owner == "" {
-		owner = userID
-	}
-	lg.InfoContext(ctx, "job_created", "user_id", owner, "url", req.URL)
-	return h.createJob(ctx, jobID, owner, req, payload)
 }
 
 // createJob commits a brand-new job together with its track.queued event and
@@ -183,31 +132,6 @@ func (h *RequestHandler) createJob(ctx context.Context, jobID, owner string, req
 			return err
 		}
 		return h.dispatchWork(ctx, tx, jobID, owner, req, 1)
-	})
-}
-
-// failNotPro settles a brand-new job that failed PRO verification: create it
-// directly in the failed state, emit track.failed (id job:failed), and ack.
-// Only reached for a request with no existing job (an in-flight/settled job is
-// never re-judged), so the job is always new.
-func (h *RequestHandler) failNotPro(ctx context.Context, jobID string, req ingest.Request, payload []byte) error {
-	j := &job.Job{
-		ID:      jobID,
-		Kind:    job.KindLibraryIngest,
-		OwnerID: req.UserID,
-		State:   job.StateQueued,
-		Spec:    payload,
-	}
-	if err := j.To(job.StateFailed); err != nil {
-		return fmt.Errorf("to failed: %w", err)
-	}
-	j.Err = errUnauthorized.Error()
-	ev := event(jobID+":failed", ingest.EventFailed, req.RequestID, j.OwnerID, jobID, j.TrackID, j.Generation, failData(errUnauthorized.Error(), req.Title))
-	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
-		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
-			return err
-		}
-		return h.publishEvent(ctx, tx, ev)
 	})
 }
 

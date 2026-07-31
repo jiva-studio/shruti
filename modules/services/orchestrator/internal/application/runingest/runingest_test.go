@@ -3,6 +3,7 @@ package runingest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -155,35 +156,39 @@ func (t fakeTier) VerifyPro(string) (string, bool, error) { return t.userID, t.p
 // --- harness ---
 
 type harness struct {
-	repo   *fakeRepo
-	events *fakeEvents
-	tier   fakeTier
-	req    *RequestHandler
-	res    *ResultHandler
+	repo        *fakeRepo
+	events      *fakeEvents
+	maxAttempts int
+	req         *RequestHandler
+	res         *ResultHandler
 }
 
 func newHarness(maxAttempts int, tier fakeTier) *harness {
-	h := &harness{repo: newRepo(), events: &fakeEvents{}, tier: tier}
+	h := &harness{repo: newRepo(), events: &fakeEvents{}, maxAttempts: maxAttempts}
+	h.wire(tier)
+	return h
+}
+
+// wire (re)builds the handlers with a tier, sharing the repo + event bus — so a
+// test can flip the PRO entitlement mid-run (e.g. a lapsed subscription).
+func (h *harness) wire(tier fakeTier) {
 	d := Deps{
 		Repo:              h.repo,
 		Events:            h.events,
-		Tier:              h.tier,
-		MaxAttempts:       maxAttempts,
+		Tier:              tier,
+		MaxAttempts:       h.maxAttempts,
 		TrackEventsStream: "track.events",
 		WorkStream:        "ingest.work",
 	}
 	h.req = NewRequestHandler(d)
 	h.res = NewResultHandler(d)
-	return h
 }
 
-func reqPayload(t *testing.T, url string) []byte {
-	t.Helper()
-	b, err := json.Marshal(ingest.Request{URL: url, Token: "tok", Title: "A talk", UserID: "user-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
+// setPro flips the caller's PRO entitlement for subsequent submits.
+func (h *harness) setPro(pro bool) { h.wire(fakeTier{userID: "user-1", pro: pro}) }
+
+func reqObj(url string) ingest.Request {
+	return ingest.Request{URL: url, Token: "tok", Title: "A talk", UserID: "user-1"}
 }
 
 func resPayload(t *testing.T, r ingest.Result) []byte {
@@ -194,7 +199,6 @@ func resPayload(t *testing.T, r ingest.Result) []byte {
 	}
 	return b
 }
-
 
 func lastTrackType(evs []ingest.TrackEvent) string {
 	if len(evs) == 0 {
@@ -222,14 +226,18 @@ func (h *harness) deadLetter(t *testing.T, msgID, url string) string {
 	return jobID
 }
 
-// --- RequestHandler tests ---
+// --- RequestHandler (Submit) tests ---
 
-func TestRequest_CreatesJobAndDispatchesWork(t *testing.T) {
+func TestSubmit_CreatesJobAndDispatchesWork(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
-	if err := h.req.Process(context.Background(), "msg-1", reqPayload(t, "https://x/y")); err != nil {
-		t.Fatalf("Process: %v", err)
+	res, err := h.req.Submit(context.Background(), reqObj("https://x/y"))
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
 	}
-	jobID := jobIDFor("user-1", "msg-1", "https://x/y")
+	jobID := jobIDFor("user-1", "", "https://x/y")
+	if res.JobID != jobID || res.State != job.StateQueued {
+		t.Fatalf("submit result wrong: %+v", res)
+	}
 	j, _ := h.repo.Get(context.Background(), jobID)
 	if j == nil || j.State != job.StateQueued {
 		t.Fatalf("job not queued: %+v", j)
@@ -250,60 +258,59 @@ func TestRequest_CreatesJobAndDispatchesWork(t *testing.T) {
 	}
 }
 
-func TestRequest_NotPro_FailsWithoutDispatch(t *testing.T) {
+func TestSubmit_NotPro_RejectsWithoutJob(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: false})
-	if err := h.req.Process(context.Background(), "msg-2", reqPayload(t, "https://x/y")); err != nil {
-		t.Fatalf("Process should ack (nil), got %v", err)
+	// The API REJECTS a non-pro submit and creates NOTHING (unlike the retired
+	// stream path, which dead-lettered a failed job).
+	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); !errors.Is(err, ErrNotPro) {
+		t.Fatalf("want ErrNotPro, got %v", err)
 	}
-	j, _ := h.repo.Get(context.Background(), jobIDFor("user-1", "msg-2", "https://x/y"))
-	if j == nil || j.State != job.StateFailed {
-		t.Fatalf("job not failed: %+v", j)
-	}
-	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventFailed {
-		t.Fatalf("last track event = %q, want track.failed", got)
+	if j, _ := h.repo.Get(context.Background(), jobIDFor("user-1", "", "https://x/y")); j != nil {
+		t.Fatalf("no job should be created for a non-pro submit: %+v", j)
 	}
 	if n := len(h.events.works()); n != 0 {
 		t.Fatalf("no ingest.work should be dispatched for non-pro, got %d", n)
 	}
 }
 
-func TestRequest_ExistingUnsettled_NoRedispatch(t *testing.T) {
+func TestSubmit_ExistingUnsettled_NoRedispatch(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
-	// First request dispatches once.
-	if err := h.req.Process(context.Background(), "msg-3", reqPayload(t, "https://x/y")); err != nil {
+	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	// Redelivery of the SAME request (same msg id → same job) must not re-dispatch.
-	if err := h.req.Process(context.Background(), "msg-3", reqPayload(t, "https://x/y")); err != nil {
-		t.Fatalf("redelivery: %v", err)
+	// A second submit for the same source dedups to the same in-flight job.
+	res, err := h.req.Submit(context.Background(), reqObj("https://x/y"))
+	if err != nil {
+		t.Fatalf("dup: %v", err)
+	}
+	if res.State != job.StateQueued {
+		t.Fatalf("dup state = %s, want queued", res.State)
 	}
 	if n := len(h.events.works()); n != 1 {
-		t.Fatalf("redelivery must not re-dispatch: got %d ingest.work", n)
+		t.Fatalf("dup must not re-dispatch: got %d ingest.work", n)
 	}
 }
 
-func TestRequest_SameUrlReAdded_Deduped(t *testing.T) {
+func TestSubmit_SameUrlReAdded_Deduped(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
-	// A later add of the same lecture (DIFFERENT broker message, same user+url)
-	// maps to the same job and must not re-dispatch or create a second job.
-	if err := h.req.Process(context.Background(), "msg-a", reqPayload(t, "https://youtu.be/2QezV4DhHVo")); err != nil {
+	// Two URL variants of the same YouTube video collapse to one job.
+	if _, err := h.req.Submit(context.Background(), reqObj("https://youtu.be/2QezV4DhHVo")); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
-	if err := h.req.Process(context.Background(), "msg-b", reqPayload(t, "https://www.youtube.com/watch?v=2QezV4DhHVo&t=30")); err != nil {
+	if _, err := h.req.Submit(context.Background(), reqObj("https://www.youtube.com/watch?v=2QezV4DhHVo&t=30")); err != nil {
 		t.Fatalf("re-add: %v", err)
 	}
 	if n := len(h.events.works()); n != 1 {
-		t.Fatalf("re-add of the same lecture must not re-dispatch: got %d ingest.work", n)
+		t.Fatalf("same lecture must not re-dispatch: got %d ingest.work", n)
 	}
 }
 
-func TestRequest_RetryDeadLettered_RestartsWithNewGeneration(t *testing.T) {
+func TestSubmit_RetryDeadLettered_RestartsWithNewGeneration(t *testing.T) {
 	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
 	jobID := h.deadLetter(t, "msg-dl", "https://x/y")
 
-	// User re-adds the same lecture (a DIFFERENT broker message, same user+url →
-	// same job) — a dead-lettered job restarts in place.
-	if err := h.req.Process(context.Background(), "msg-retry", reqPayload(t, "https://x/y")); err != nil {
+	// User re-submits the same lecture — a dead-lettered job restarts in place.
+	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
 	j, _ := h.repo.Get(context.Background(), jobID)
@@ -335,34 +342,32 @@ func TestRequest_RetryDeadLettered_RestartsWithNewGeneration(t *testing.T) {
 	}
 }
 
-func TestRequest_RetryDeadLettered_NotPro_NoRestart(t *testing.T) {
-	h := newHarness(3, fakeTier{userID: "user-1", pro: false})
-	// First add fails PRO verification → dead-lettered without dispatch.
-	if err := h.req.Process(context.Background(), "msg-1", reqPayload(t, "https://x/y")); err != nil {
-		t.Fatalf("first: %v", err)
-	}
-	jobID := jobIDFor("user-1", "msg-1", "https://x/y")
-	// A retry from a still-not-PRO user must NOT restart: leave it dead-lettered.
-	if err := h.req.Process(context.Background(), "msg-2", reqPayload(t, "https://x/y")); err != nil {
-		t.Fatalf("retry: %v", err)
+func TestSubmit_RetryDeadLettered_NotPro_NoRestart(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	jobID := h.deadLetter(t, "msg-dl", "https://x/y")
+	// Subscription lapsed after the job dead-lettered — a retry must NOT restart.
+	h.setPro(false)
+	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); !errors.Is(err, ErrNotPro) {
+		t.Fatalf("want ErrNotPro, got %v", err)
 	}
 	j, _ := h.repo.Get(context.Background(), jobID)
 	if j.State != job.StateFailed || j.Generation != 0 {
 		t.Fatalf("not-pro retry must not restart: state=%s gen=%d", j.State, j.Generation)
 	}
-	if n := len(h.events.works()); n != 0 {
-		t.Fatalf("not-pro retry must not dispatch: got %d", n)
-	}
 }
 
-func TestRequest_ReAddDoneJob_NoRestart(t *testing.T) {
+func TestSubmit_ReAddDoneJob_NoRestart(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
 	jobID := h.seedQueued(t, "msg-1", "https://x/y")
 	_ = h.res.Process(context.Background(), "r", resPayload(t, ingest.Result{JobID: jobID, Phase: ingest.PhaseReady, TrackID: "h"}))
 	worksBefore := len(h.events.works())
-	// Re-adding a lecture that already ingested must not re-run it.
-	if err := h.req.Process(context.Background(), "msg-2", reqPayload(t, "https://x/y")); err != nil {
+	// Re-submitting a lecture that already ingested must not re-run it.
+	res, err := h.req.Submit(context.Background(), reqObj("https://x/y"))
+	if err != nil {
 		t.Fatalf("re-add: %v", err)
+	}
+	if res.State != job.StateDone {
+		t.Fatalf("done re-add state = %s, want done", res.State)
 	}
 	j, _ := h.repo.Get(context.Background(), jobID)
 	if j.State != job.StateDone || j.Generation != 0 {
@@ -375,10 +380,11 @@ func TestRequest_ReAddDoneJob_NoRestart(t *testing.T) {
 
 // --- ResultHandler tests ---
 
-// seed creates a queued job the way the RequestHandler would.
+// seedQueued creates a queued job via the API entry (Submit), the way a real
+// add does. msgID is retained only for a stable per-test label.
 func (h *harness) seedQueued(t *testing.T, msgID, url string) string {
 	t.Helper()
-	if err := h.req.Process(context.Background(), msgID, reqPayload(t, url)); err != nil {
+	if _, err := h.req.Submit(context.Background(), reqObj(url)); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	return jobIDFor("user-1", msgID, url)
