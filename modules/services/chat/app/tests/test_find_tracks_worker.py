@@ -449,11 +449,10 @@ async def test_prefers_non_intro_chunk_for_quote(_events) -> None:
     assert cite["data"]["payload"]["text"] == "real passage"
 
 
-async def test_author_absent_from_corpus_says_so_and_offers_the_web(_events) -> None:
-    # The catalog fake resolves NO author (resolve() returns [] for author), so
-    # a teacher the corpus lacks must NOT be answered with some OTHER teacher's
-    # semantic hits. Say we don't have them + offer the web (a chip that routes
-    # into add-to-library).
+async def test_author_absent_from_corpus_routes_to_web(_events) -> None:
+    # The catalog fake resolves NO author, so a teacher the corpus lacks must NOT
+    # be answered with some OTHER teacher's semantic hits — it sets web_fallback
+    # (graph → add_to_library_worker) and streams no line/card of its own.
     chunks = [_sc("t1", 70000, 0.9, "t1 best quote")]
     ctx = _Ctx(
         embedder=_Embedder(),
@@ -468,44 +467,16 @@ async def test_author_absent_from_corpus_says_so_and_offers_the_web(_events) -> 
         },
         _Runtime(ctx),
     )
-    assert out == {}
-    # NO lecture cards — we did not hand back a different teacher's lectures.
+    assert out == {"web_fallback": True}
     actions = [e for e in _events if e["type"] == "action"]
     assert [a for a in actions if a["data"]["kind"] in ("card", "cite_transcript")] == []
-    # An honest localized line + a deterministic follow-up chip whose text names
-    # the author and "lectures"/"library" so it routes back to add-to-library.
     full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert "LINE[localized_reply]" in full
-    assert "[followup:Поискать в интернете|Найти в интернете лекции Some Teacher и добавить в библиотеку]" in full
-
-
-async def test_unknown_author_chip_carries_the_topic(_events) -> None:
-    # The user asked for a teacher's lectures ON A TOPIC. The corpus lacks the
-    # teacher → the web-search chip must keep the topic, not drop it to a bare
-    # author search.
-    ctx = _Ctx(
-        embedder=_Embedder(),
-        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "q")]]),
-        catalog_repo=_Catalog(titles={"t1": "Лекция"}, descriptions={"t1": "d"}),
-        llm=_FakeLLM(),
-    )
-    await ftw.find_tracks_worker_node(
-        {
-            "user_query": "find niranjana swami lectures about devotee relationships",
-            "extracted_args": {"author": "Niranjana Swami", "topic": "devotee relationships"},
-        },
-        _Runtime(ctx),
-    )
-    full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert (
-        "[followup:Поискать в интернете|Найти в интернете лекции Niranjana Swami про "
-        "devotee relationships и добавить в библиотеку]" in full
-    )
+    assert "[followup:" not in full
 
 
 async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
     # "niranjana swami" grazes "…Swami Prabhupada" at 0.5 — below the floor, so
-    # it must NOT hand back Prabhupada's lectures; say we don't have them.
+    # it must NOT hand back Prabhupada's lectures; route to web discovery.
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "q")]]),
@@ -515,15 +486,14 @@ async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
         ),
         llm=_FakeLLM(),
     )
-    await ftw.find_tracks_worker_node(
+    out = await ftw.find_tracks_worker_node(
         {"user_query": "find lectures of niranjana swami",
          "extracted_args": {"author": "Niranjana Swami"}},
         _Runtime(ctx),
     )
+    assert out == {"web_fallback": True}
     actions = [e for e in _events if e["type"] == "action"]
     assert [a for a in actions if a["data"]["kind"] in ("card", "cite_transcript")] == []
-    full = "".join(e["data"]["text"] for e in _events if e["type"] == "delta")
-    assert "[followup:Поискать в интернете|Найти в интернете лекции Niranjana Swami и добавить в библиотеку]" in full
 
 
 async def test_author_strong_match_proceeds_to_search(_events) -> None:
