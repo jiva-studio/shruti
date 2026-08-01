@@ -84,6 +84,26 @@ describe("buildMergedTranscriptViewData — multi-language interleave", () => {
   it("returns [] for no transcripts", () => {
     expect(buildMergedTranscriptViewData([], { paragraphChars: 100 })).toEqual([])
   })
+
+  it("sentence-paired: aligned translations pair into one stacked group per sentence", () => {
+    const enA = transcriptIn(EN, [sentence(0, 1000, "Hello"), sentence(1000, 2000, "World")])
+    const ruA = transcriptIn(RU, [sentence(0, 1000, "Привет"), sentence(1000, 2000, "Мир")])
+    const groups = buildMergedTranscriptViewData(
+      [
+        { language: EN, transcript: enA },
+        { language: RU, transcript: ruA },
+      ],
+      { paragraphChars: 9999, sentencePaired: true }
+    )
+    expect(groups).toHaveLength(2) // one group per sentence
+    for (const g of groups) {
+      expect(g.paired).toBe(true)
+      // Source (the transcripts[] order → EN first) then the translation.
+      expect(g.blocks.map((b) => b.language)).toEqual([EN, RU])
+    }
+    const texts = groups[0].blocks.map((b) => (b.block.type === "sentence" ? b.block.text : ""))
+    expect(texts).toEqual(["Hello", "Привет"])
+  })
 })
 
 function makeSources(): ReadonlyMap<string, Source> {
