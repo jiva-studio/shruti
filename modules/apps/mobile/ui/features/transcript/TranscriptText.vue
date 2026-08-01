@@ -176,17 +176,20 @@ span {
   transition: none;
 }
 
-/* Sentence-paired: original on its own line, translation stacked directly
-   beneath (tight) and slightly dimmed so the pair reads as one unit; the space
-   BETWEEN pairs is larger than the space within one. */
+/* Sentence-paired: original on top, translation stacked directly beneath and
+   slightly dimmed so the pair reads as one unit. A flex column with a tiny gap
+   pins the within-pair spacing exactly (no inherited line-box gap); the space
+   BETWEEN pairs (margin-bottom) is deliberately larger. */
 .paired {
-  margin-bottom: 0.9em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 0.85em;
 }
 .paired-line {
   display: block;
 }
 .paired-line:not(:first-child) {
   opacity: 0.7;
-  margin-top: 0.15em;
 }
 </style>
