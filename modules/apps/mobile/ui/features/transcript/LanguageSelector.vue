@@ -11,7 +11,7 @@
       }"
       @click="onLanguageClicked(lang)"
     >
-      <IonSpinner v-if="lang.busy" name="dots" class="busy" />
+      <IonSpinner v-if="lang.busy" name="crescent" class="busy" />
       <span v-else-if="lang.icon" class="flag">{{ lang.icon }}</span>
       {{ lang.name }}
     </span>
