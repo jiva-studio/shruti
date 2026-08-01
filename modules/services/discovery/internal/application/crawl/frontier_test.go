@@ -189,3 +189,31 @@ func TestFrontierRootSeedScopesEverything(t *testing.T) {
 		}
 	}
 }
+
+// No depth given means no bound. Setting it right would need advance knowledge
+// of somebody else's tree, and guessing it wrong silently truncates an archive
+// — which it did twice before this was removed.
+func TestFrontierHasNoDepthBoundByDefault(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/"}, 0, nil)
+	f.add("https://a.example/very/deep/one", 40)
+
+	if _, depth, ok := f.next(); !ok || depth != 40 {
+		t.Errorf("depth 40 with no bound: ok=%v depth=%d", ok, depth)
+	}
+}
+
+// An explicit bound is still honoured, for a site that generates endlessly
+// long addresses.
+func TestFrontierHonoursAnExplicitDepthBound(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/"}, 3, nil)
+	f.add("https://a.example/ok", 3)
+	f.add("https://a.example/too-deep", 4)
+
+	got, _, _ := f.next()
+	if got != "https://a.example/ok" {
+		t.Fatalf("first = %q", got)
+	}
+	if _, _, more := f.next(); more {
+		t.Error("depth 4 should not be queued when the bound is 3")
+	}
+}

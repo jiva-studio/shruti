@@ -18,7 +18,17 @@ type Source struct {
 	SeedURLs     []string `json:"seed_urls"`
 	Enabled      bool     `json:"enabled"`
 	CrawlDelayMS int      `json:"crawl_delay_ms"`
-	MaxDepth     int      `json:"max_depth"`
+	// MaxDepth bounds how far from the seed a crawl will follow links. Zero,
+	// the default, means no bound.
+	//
+	// It guards against a site that generates endlessly long addresses — a
+	// calendar with a perpetual "next month", a faceted filter, a looping
+	// breadcrumb — which the visited set cannot catch because every address is
+	// new. It is not a way to shape a crawl: setting it right needs advance
+	// knowledge of how somebody else's site is laid out, which is the one thing
+	// this service is built not to assume, and guessing it wrong silently
+	// truncates an archive.
+	MaxDepth int `json:"max_depth"`
 
 	// AuthHeaders are sent with every request to this source. They are
 	// credentials: never returned by the API, only set.
@@ -28,9 +38,6 @@ type Source struct {
 func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
 	if s.CrawlDelayMS <= 0 {
 		s.CrawlDelayMS = 1000
-	}
-	if s.MaxDepth <= 0 {
-		s.MaxDepth = 6
 	}
 	// A nil map marshals to `null`, not `{}`, and the clause below only
 	// recognised `{}` — so saving a source without its credentials silently
