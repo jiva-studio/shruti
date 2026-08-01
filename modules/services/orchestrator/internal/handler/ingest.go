@@ -111,6 +111,10 @@ func (a *ingestAPI) run(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusPaymentRequired, "not_pro", "this action requires an active pro subscription")
 		return
 	}
+	if errors.Is(err, runingest.ErrMembershipNotFound) {
+		writeErr(w, http.StatusNotFound, "not_found", "no such track")
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "submit_failed", "could not submit run")
 		return
