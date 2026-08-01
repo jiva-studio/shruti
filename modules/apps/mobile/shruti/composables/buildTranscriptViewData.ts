@@ -124,20 +124,19 @@ export function buildMergedTranscriptViewData(
 }
 
 /** Post-pass for the sentence-paired layout: the grouper emitted one sentence per
- *  group, so merge the consecutive single-sentence groups that share a start time
- *  (a sentence and its translation) into ONE group, ordering the blocks by the
- *  transcripts' order (source first). */
+ *  group in (time, language) order, so — because the transcripts are aligned 1:1
+ *  — every N consecutive groups are the SAME sentence in the N languages. Merge
+ *  each such run into one group, ordered by the transcripts' order (source first).
+ *  Index-based (not exact-timestamp) so a small timing drift between the original
+ *  and its translation still pairs them. */
 function pairSentenceGroups(
   groups: readonly UiTranscriptBlocksGroup[],
   langOrder: readonly LanguageCode[]
 ): readonly UiTranscriptBlocksGroup[] {
+  const n = Math.max(1, langOrder.length)
   const out: UiTranscriptBlocksGroup[] = []
-  let i = 0
-  while (i < groups.length) {
-    const startMs = groups[i].blocks[0]?.block.start
-    let j = i + 1
-    while (j < groups.length && groups[j].blocks[0]?.block.start === startMs) j++
-    const cluster = groups.slice(i, j)
+  for (let i = 0; i < groups.length; i += n) {
+    const cluster = groups.slice(i, i + n)
     const blocks = cluster
       .flatMap((g) => g.blocks)
       .slice()
@@ -148,7 +147,6 @@ function pairSentenceGroups(
       headingStartMs: cluster.find((g) => g.headingStartMs !== undefined)?.headingStartMs,
       paired: blocks.length > 1,
     })
-    i = j
   }
   return out
 }
