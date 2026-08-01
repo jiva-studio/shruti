@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -58,6 +59,20 @@ func (s *Store) Put(ctx context.Context, key string, body []byte, contentType st
 		return fmt.Errorf("put %s: %w", key, err)
 	}
 	return nil
+}
+
+// Get reads the object at key (used by the translate op to load an already-
+// stored transcript).
+func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
+	out, err := s.api.GetObject(ctx, &awss3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get %s: %w", key, err)
+	}
+	defer out.Body.Close()
+	return io.ReadAll(out.Body)
 }
 
 // Exists HEAD-verifies a key. A genuine 404 is (false, nil); other errors
