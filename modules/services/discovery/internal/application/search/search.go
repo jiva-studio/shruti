@@ -130,8 +130,14 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 		args = append(args, value)
 		where = append(where, fmt.Sprintf(clause, len(args)))
 	}
+	// Asked for a speaker, answer for the speaker rather than for a spelling:
+	// the same person is filed as "Radha Gopinath Prabhu", "HG Radha Gopinath
+	// Das" and "Radha Gopinath Pr", and a match on the text of one returns a
+	// third of their talks. The key ignores the forms of address; the
+	// substring match stays as a fallback for a partial name.
 	if q.Author != "" {
-		add("i.author ILIKE $%d", "%"+q.Author+"%")
+		add("(i.author_key = discovery.author_key($%[1]d) OR i.author ILIKE '%%' || $%[1]d || '%%')",
+			q.Author)
 	}
 	if q.Language != "" {
 		add("i.language = $%d", q.Language)
@@ -181,13 +187,19 @@ const hitCols = `i.id, i.media_url, coalesce(p.url,''), coalesce(i.title,''),
 
 // collectionJoin hangs the cycle off each hit. LEFT so a recording that
 // belongs to none still comes back.
+//
+// A cycle with one part in it is not shown, matching what the listing will
+// hand back if the reader follows it: an occasion that a single recording
+// named — a Sunday programme, a festival — is not a series, and offering it as
+// one leads to a page with the recording you already had on it.
 const collectionJoin = `
 	LEFT JOIN LATERAL (
-		SELECT col.id, col.title, col.url, m.ordinal,
-		       (SELECT count(*) FROM discovery.collection_members k WHERE k.collection_id = col.id)
+		SELECT col.id, col.title, col.url, m.ordinal, k.n
 		FROM discovery.collection_members m
 		JOIN discovery.collections col ON col.id = m.collection_id
-		WHERE m.item_id = i.id
+		CROSS JOIN LATERAL (SELECT count(*) FROM discovery.collection_members x
+		                    WHERE x.collection_id = col.id) k(n)
+		WHERE m.item_id = i.id AND (col.url IS NOT NULL OR k.n >= 2)
 		ORDER BY col.id LIMIT 1
 	) coll(id, title, url, ordinal, of) ON TRUE`
 
