@@ -74,6 +74,15 @@ that the schedule applied only to where a run started, and every page reachable
 by a link was refetched on every tick — so the backing off from one day to
 thirty, the whole economy of recrawling, did nothing for them.
 
+A crawl follows links as deep as they go. `max_depth` on a source bounds that,
+but it defaults to no bound: setting it right needs advance knowledge of how
+somebody else's site is laid out, which is the one thing this service is built
+not to assume, and guessing it wrong silently truncates an archive. What stops
+a run running away is its page limit. The bound is there for a site that
+generates endlessly long addresses — a calendar with a perpetual "next month",
+a faceted filter — which the visited set cannot catch because every address is
+genuinely new.
+
 A sitemap is read where a host publishes one, but only the part inside the
 source. One archive lists four hundred and thirty-seven addresses; a source
 pointed at one speaker's Bhagavad-gita wants its own dozen. Preferring what is

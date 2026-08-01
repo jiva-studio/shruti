@@ -5,6 +5,8 @@ import (
 	"encoding/xml"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 )
@@ -13,6 +15,29 @@ import (
 // An index pointing at hundreds is a crawl of its own, and the link frontier
 // covers the rest.
 const maxSitemaps = 25
+
+// sitemapTTL is how long a read of a host's sitemap is trusted, matching the
+// robots.txt cache.
+//
+// A tick that has nothing to do was still fetching robots.txt and the whole
+// sitemap every time: on one archive that is eighty kilobytes, a hundred and
+// forty-four times a day, twelve megabytes to learn nothing. Worse, the run
+// reported "0 pages" while doing it, because service requests are not pages.
+const sitemapTTL = 24 * time.Hour
+
+// sitemapCache remembers what a host's sitemap listed, with the validators to
+// ask cheaply whether it still says the same.
+type sitemapCache struct {
+	mu      sync.Mutex
+	entries map[string]*sitemapEntry
+}
+
+type sitemapEntry struct {
+	urls         []string
+	etag         string
+	lastModified string
+	readAt       time.Time
+}
 
 // sitemapDoc covers both shapes the sitemap protocol defines: an index of
 // sitemaps and a set of URLs.
@@ -38,6 +63,10 @@ func (s *Service) SitemapURLs(ctx context.Context, seed string, req fetch.Reques
 		return nil
 	}
 	origin := base.Scheme + "://" + base.Host
+
+	if urls, ok := s.cachedSitemap(origin); ok {
+		return urls
+	}
 
 	queue := s.declaredSitemaps(ctx, origin, req)
 	if len(queue) == 0 {
@@ -69,7 +98,30 @@ func (s *Service) SitemapURLs(ctx context.Context, seed string, req fetch.Reques
 			}
 		}
 	}
+	s.rememberSitemap(origin, out)
 	return out
+}
+
+func (s *Service) cachedSitemap(origin string) ([]string, bool) {
+	if s.sitemaps == nil {
+		return nil, false
+	}
+	s.sitemaps.mu.Lock()
+	defer s.sitemaps.mu.Unlock()
+	e, ok := s.sitemaps.entries[origin]
+	if !ok || s.now().Sub(e.readAt) > sitemapTTL {
+		return nil, false
+	}
+	return e.urls, true
+}
+
+func (s *Service) rememberSitemap(origin string, urls []string) {
+	if s.sitemaps == nil {
+		s.sitemaps = &sitemapCache{entries: map[string]*sitemapEntry{}}
+	}
+	s.sitemaps.mu.Lock()
+	defer s.sitemaps.mu.Unlock()
+	s.sitemaps.entries[origin] = &sitemapEntry{urls: urls, readAt: s.now()}
 }
 
 // declaredSitemaps reads the Sitemap: lines out of robots.txt, which is where
