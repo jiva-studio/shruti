@@ -47,6 +47,13 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	}
 
 	repo := store.NewRepo(pool)
+	// Anything left open by the previous process was cut short by whatever
+	// stopped it; it cannot still be going now.
+	if n, err := repo.MarkInterruptedRuns(ctx); err != nil {
+		slog.WarnContext(ctx, "interrupted_runs_not_marked", "err", err.Error())
+	} else if n > 0 {
+		slog.InfoContext(ctx, "runs_marked_interrupted", "count", n)
+	}
 	fetcher := buildFetcher(cfg)
 	normalizer := buildNormalizer(ctx, cfg)
 	embedder := buildEmbedder(ctx, cfg)
