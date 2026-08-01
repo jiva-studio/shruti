@@ -286,6 +286,16 @@ export function useTranscriptDialogController(
   // translated title when its language is active, falling back to the track's.
   const title = computed<string>(() => overviewVariant.value?.title || hydration.title.value)
 
+  // A translation shows the same sentences in each language, aligned 1:1 (same
+  // block count) — render it sentence-paired. A lecturer+translator recording has
+  // different per-language content (different counts) and stays time-merged.
+  const sentencePaired = computed(() => {
+    const ts = loader.transcripts.value
+    if (ts.length < 2) return false
+    const n = ts[0].transcript.blocks.length
+    return n > 0 && ts.every((t) => t.transcript.blocks.length === n)
+  })
+
   const blockGroups = computed(() =>
     buildMergedTranscriptViewData(loader.transcripts.value, {
       paragraphChars: paragraphChars.value,
@@ -294,6 +304,7 @@ export function useTranscriptDialogController(
       notes: notesForTrack.value,
       chapters: chapters.value,
       breakOnLanguageChange: breakParagraphOnLanguage.value,
+      sentencePaired: sentencePaired.value,
     })
   )
   // Preview mode (Search → Open transcript with no track playing, or a
