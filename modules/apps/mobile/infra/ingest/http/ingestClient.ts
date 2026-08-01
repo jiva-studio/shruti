@@ -84,11 +84,11 @@ export function createHttpIngestClient(deps: HttpIngestClientDeps): IIngestClien
 
   return {
     async submit(req: IngestSubmitRequest): Promise<IngestSubmitResponse> {
-      const res = await call("POST", "/orchestrator/ingest", req)
+      const res = await call("POST", "/orchestrator/run", req)
       return parse<IngestSubmitResponse>(res)
     },
-    async status(jobId: string): Promise<IngestStatusResponse> {
-      const res = await call("GET", `/orchestrator/ingest/${encodeURIComponent(jobId)}`)
+    async status(runId: string): Promise<IngestStatusResponse> {
+      const res = await call("GET", `/orchestrator/run/${encodeURIComponent(runId)}`)
       return parse<IngestStatusResponse>(res)
     },
   }

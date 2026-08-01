@@ -196,7 +196,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     try {
       const res = await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
       const next = new Map(submittedIngestIds.value)
-      next.set(normalizeSource(url), res.job_id)
+      next.set(normalizeSource(url), res.membership_id)
       submittedIngestIds.value = next
       requestSync()
     } catch (err) {
