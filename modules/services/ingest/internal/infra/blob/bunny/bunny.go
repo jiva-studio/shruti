@@ -75,6 +75,25 @@ func (s *Store) Put(ctx context.Context, key string, body []byte, contentType st
 	return nil
 }
 
+// Get reads the object at key (used by the translate op to load an already-
+// stored transcript). Bunny serves the body straight from the storage zone.
+func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.objURL(key), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("AccessKey", s.accessKey)
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("bunny get %s: %w", key, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bunny get %s: %s", key, resp.Status)
+	}
+	return io.ReadAll(resp.Body)
+}
+
 // Exists reports whether key is present. Bunny has no per-object HEAD, so it
 // lists the parent directory and looks for the file entry.
 func (s *Store) Exists(ctx context.Context, key string) (bool, error) {

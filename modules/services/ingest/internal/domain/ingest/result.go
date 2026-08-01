@@ -25,6 +25,7 @@ const (
 	StageTranscribing = "transcribing"
 	StageReviewing    = "reviewing"
 	StageStoring      = "storing"
+	StageTranslating  = "translating" // op=translate: rendering the transcript into a new language
 )
 
 // Result is one `ingest.result` message: the worker's report on a work item.
@@ -58,6 +59,12 @@ type Result struct {
 	// them all. Single-language tracks have one entry.
 	Variants  []Variant `json:"variants,omitempty"`
 	SourceURL string    `json:"source_url,omitempty"`
+	// Op is the operation that produced this result ("ingest" | "translate"; empty
+	// = ingest). MembershipID links it to the track projection the orchestrator
+	// merges into — a translate result carries a single added variant, not a full
+	// ingest payload.
+	Op           string `json:"op,omitempty"`
+	MembershipID string `json:"membership_id,omitempty"`
 	// Extracted metadata (best-effort, ready phase): the raw author/location,
 	// the ISO date, the kind tag, and any scripture references parsed from the
 	// title. Empty when the extractor is unconfigured or found nothing. The
