@@ -16,25 +16,49 @@
       >
         {{ group.heading }}
       </h2>
-      <p :class="{ prompter: true, paragraph: isActiveGroup(group) }">
-        <Timestamp
-          v-if="group.blocks[0]?.block.start && group.blocks[0].block.type !== 'verse:text'"
-          :start="group.blocks[0]?.block.start"
-          :duration="duration"
-          :show-remaining="enableActiveProminence !== false"
-        />
-        <TranscriptBlockRenderer
-          v-for="(block, blockIdx) in group.blocks"
-          :key="blockIdx"
-          :block="block"
-          :position="position"
-          :display-speaker-icon="displaySpeakerIcons"
-          :should-highlight-current="shouldHighlightCurrentSentence"
-          :is-first-in-group="blockIdx === 0"
-          :selection-range="selectionRange"
-          @seek="(pos) => emit('seek', pos)"
-          @note-tapped="(payload) => emit('noteTapped', payload)"
-        />
+      <p :class="{ prompter: true, paragraph: isActiveGroup(group), paired: group.paired }">
+        <!-- Sentence-paired: each language on its own line (original on top,
+             translation beneath); the timestamp sits on the first line. -->
+        <template v-if="group.paired">
+          <span v-for="(block, blockIdx) in group.blocks" :key="blockIdx" class="paired-line">
+            <Timestamp
+              v-if="blockIdx === 0 && block.block.start && block.block.type !== 'verse:text'"
+              :start="block.block.start"
+              :duration="duration"
+              :show-remaining="enableActiveProminence !== false"
+            />
+            <TranscriptBlockRenderer
+              :block="block"
+              :position="position"
+              :display-speaker-icon="displaySpeakerIcons"
+              :should-highlight-current="shouldHighlightCurrentSentence"
+              :is-first-in-group="blockIdx === 0"
+              :selection-range="selectionRange"
+              @seek="(pos) => emit('seek', pos)"
+              @note-tapped="(payload) => emit('noteTapped', payload)"
+            />
+          </span>
+        </template>
+        <template v-else>
+          <Timestamp
+            v-if="group.blocks[0]?.block.start && group.blocks[0].block.type !== 'verse:text'"
+            :start="group.blocks[0]?.block.start"
+            :duration="duration"
+            :show-remaining="enableActiveProminence !== false"
+          />
+          <TranscriptBlockRenderer
+            v-for="(block, blockIdx) in group.blocks"
+            :key="blockIdx"
+            :block="block"
+            :position="position"
+            :display-speaker-icon="displaySpeakerIcons"
+            :should-highlight-current="shouldHighlightCurrentSentence"
+            :is-first-in-group="blockIdx === 0"
+            :selection-range="selectionRange"
+            @seek="(pos) => emit('seek', pos)"
+            @note-tapped="(payload) => emit('noteTapped', payload)"
+          />
+        </template>
       </p>
     </template>
   </TextSelector>
@@ -150,5 +174,17 @@ span {
   transform: none;
   opacity: 1;
   transition: none;
+}
+
+/* Sentence-paired: original on its own line, translation stacked beneath and
+   slightly dimmed so the pair reads as one unit. */
+.paired {
+  margin-bottom: 0.7em;
+}
+.paired-line {
+  display: block;
+}
+.paired-line:not(:first-child) {
+  opacity: 0.7;
 }
 </style>

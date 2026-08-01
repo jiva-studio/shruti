@@ -65,6 +65,14 @@ export interface BuildTranscriptViewDataOpts {
    * builds ignore it. Defaults to false (only the char threshold / markers break).
    */
   readonly breakOnLanguageChange?: boolean
+  /**
+   * Sentence-paired layout for a translation: emit ONE group per sentence, each
+   * carrying the same sentence in every active language (source first, by the
+   * `transcripts[]` order), so the reader shows the original with its translation
+   * directly beneath — instead of time-merged paragraphs. Only meaningful when
+   * the active transcripts are aligned 1:1 (a translation, not lecturer+translator).
+   */
+  readonly sentencePaired?: boolean
 }
 
 /** One block paired with the language of the transcript it came from — the unit
@@ -107,7 +115,42 @@ export function buildMergedTranscriptViewData(
     t.transcript.blocks.map((block) => ({ block, language: t.language }))
   )
   merged.sort((a, b) => a.block.start - b.block.start || a.language.localeCompare(b.language))
-  return groupLangBlocks(merged, opts)
+  const groups = groupLangBlocks(merged, opts)
+  if (!opts.sentencePaired) return groups
+  return pairSentenceGroups(
+    groups,
+    transcripts.map((t) => t.language)
+  )
+}
+
+/** Post-pass for the sentence-paired layout: the grouper emitted one sentence per
+ *  group, so merge the consecutive single-sentence groups that share a start time
+ *  (a sentence and its translation) into ONE group, ordering the blocks by the
+ *  transcripts' order (source first). */
+function pairSentenceGroups(
+  groups: readonly UiTranscriptBlocksGroup[],
+  langOrder: readonly LanguageCode[]
+): readonly UiTranscriptBlocksGroup[] {
+  const out: UiTranscriptBlocksGroup[] = []
+  let i = 0
+  while (i < groups.length) {
+    const startMs = groups[i].blocks[0]?.block.start
+    let j = i + 1
+    while (j < groups.length && groups[j].blocks[0]?.block.start === startMs) j++
+    const cluster = groups.slice(i, j)
+    const blocks = cluster
+      .flatMap((g) => g.blocks)
+      .slice()
+      .sort((a, b) => langOrder.indexOf(a.language) - langOrder.indexOf(b.language))
+    out.push({
+      blocks,
+      heading: cluster.find((g) => g.heading !== undefined)?.heading,
+      headingStartMs: cluster.find((g) => g.headingStartMs !== undefined)?.headingStartMs,
+      paired: blocks.length > 1,
+    })
+    i = j
+  }
+  return out
 }
 
 /** Core: group a time-ordered list of (block, language) into paragraph groups. */
@@ -281,6 +324,11 @@ function groupLangBlocks(
     if (block.type === "sentence") {
       lastSpeaker = block.speaker
       charsAccum += block.text.length
+    }
+    // Sentence-paired: one sentence per group, so a later pass can pair each
+    // sentence with its same-timestamp translation.
+    if (opts.sentencePaired && block.type === "sentence") {
+      flush()
     }
   }
 

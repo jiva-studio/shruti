@@ -86,4 +86,7 @@ export interface UiTranscriptBlocksGroup {
   readonly heading?: string
   /** Start time (ms) of that chapter — lets a tap on the heading seek there. */
   readonly headingStartMs?: number
+  /** Sentence-paired group: the SAME sentence in several languages (source first),
+   *  rendered stacked (original on top, translation beneath) rather than inline. */
+  readonly paired?: boolean
 }
