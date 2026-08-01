@@ -32,7 +32,7 @@
               :position="position"
               :display-speaker-icon="displaySpeakerIcons"
               :should-highlight-current="shouldHighlightCurrentSentence"
-              :is-first-in-group="blockIdx === 0"
+              :is-first-in-group="true"
               :selection-range="selectionRange"
               @seek="(pos) => emit('seek', pos)"
               @note-tapped="(payload) => emit('noteTapped', payload)"
