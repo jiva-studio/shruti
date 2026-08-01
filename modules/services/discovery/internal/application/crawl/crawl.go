@@ -77,10 +77,24 @@ func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*st
 		return nil, err
 	}
 	frontier := newFrontier(src.SeedURLs, src.MaxDepth, yields)
+	// A full sweep is a deliberate request to ignore the schedule; an ordinary
+	// pass honours it, for links as much as for where it starts.
+	if !opts.Full {
+		if frontier.notDue, err = s.Repo.NotDueURLs(ctx, src.ID, s.now()); err != nil {
+			return nil, err
+		}
+	}
 	for _, seed := range src.SeedURLs {
 		frontier.add(seed, 0)
+		// A sitemap catalogues the whole site. A source pointed at one
+		// speaker's Bhagavad-gita wants its part of it and not the other four
+		// hundred addresses: preferring what is inside only orders the queue,
+		// and once everything inside is up to date the rest is all that is
+		// left, so the crawl wanders off into the archive.
 		for _, u := range s.SitemapURLs(ctx, seed, sourceRequest(src)) {
-			frontier.add(u, 1)
+			if frontier.within(u) {
+				frontier.add(u, 1)
+			}
 		}
 	}
 	if !opts.Full && !opts.DryRun {
@@ -262,6 +276,10 @@ type frontier struct {
 	// insideSeed are the directory paths the seeds point at. Anything under
 	// one of them is where this source was asked to look.
 	insideSeed []string
+	// notDue are pages whose next check has not come around. A link to one is
+	// not followed: the schedule is what keeps a settled archive from being
+	// refetched in full every time the scheduler ticks.
+	notDue map[string]bool
 }
 
 type frontierEntry struct {
@@ -348,7 +366,7 @@ func (f *frontier) allowHostOf(rawURL string) {
 }
 
 func (f *frontier) add(rawURL string, depth int) {
-	if depth > f.maxDepth || f.seen[rawURL] {
+	if depth > f.maxDepth || f.seen[rawURL] || f.notDue[rawURL] {
 		return
 	}
 	u, err := url.Parse(rawURL)

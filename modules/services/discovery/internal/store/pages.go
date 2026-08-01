@@ -221,3 +221,37 @@ func (r *Repo) ShapeYields(ctx context.Context, sourceID string) (map[string]Sha
 	}
 	return out, rows.Err()
 }
+
+// notDueLimit bounds how much of a source's schedule is held in memory for one
+// run. Past it the crawl simply visits more than it strictly needs to, which
+// is the old behaviour and not a failure.
+const notDueLimit = 200000
+
+// NotDueURLs are the pages of a source whose next check has not come around.
+//
+// The crawl consults this before following a link. Without it the schedule
+// only ever applied to pages the run started from, and every page reachable by
+// a link was refetched on every tick — so the backing off from one day to
+// thirty, which is the whole economy of recrawling, did nothing at all for
+// them.
+func (r *Repo) NotDueURLs(ctx context.Context, sourceID string, now time.Time) (map[string]bool, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT url FROM discovery.pages
+		WHERE ($1 = '' OR source_id = $1)
+		  AND next_check_at IS NOT NULL AND next_check_at > $2
+		LIMIT $3`, sourceID, now, notDueLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]bool{}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, err
+		}
+		out[u] = true
+	}
+	return out, rows.Err()
+}

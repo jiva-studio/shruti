@@ -145,3 +145,47 @@ func TestFrontierCapsTheYield(t *testing.T) {
 		t.Errorf("first = %q; four hundred files on one page outside should not drag the crawl out", got)
 	}
 }
+
+// A page whose next check has not come around is not followed. Without this
+// the backing off from one day to thirty applied only to where a run started,
+// and every page reachable by a link was refetched on every tick.
+func TestFrontierSkipsPagesNotDueYet(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/"}, 4, nil)
+	f.notDue = map[string]bool{"https://a.example/settled": true}
+	f.addAll([]string{"https://a.example/settled", "https://a.example/fresh"}, 1)
+
+	got, _, ok := f.next()
+	if !ok || got != "https://a.example/fresh" {
+		t.Fatalf("first = %q, want the one that is due", got)
+	}
+	if _, _, more := f.next(); more {
+		t.Error("the settled page should not be queued at all")
+	}
+}
+
+// A site-wide sitemap must not drag a scoped source across the whole archive.
+// One real archive publishes four hundred and thirty-seven addresses; a source
+// pointed at one speaker's Bhagavad-gita wants its own dozen.
+func TestFrontierScopeFiltersASitemap(t *testing.T) {
+	seed := "https://a.example/index.php?q=f&f=%2FSwamis%2FBhakti_Caitanya_Swami%2FBhagavad_Gita"
+	f := newFrontier([]string{seed}, 4, nil)
+
+	inside := "https://a.example/index.php?q=f&f=%2FSwamis%2FBhakti_Caitanya_Swami%2FBhagavad_Gita%2FChapter-01"
+	outside := "https://a.example/index.php?q=f&f=%2FChowpatty"
+	if !f.within(inside) {
+		t.Error("a chapter under the seed should count as inside")
+	}
+	if f.within(outside) {
+		t.Error("an unrelated section should not")
+	}
+}
+
+// A source seeded at the root owns the whole site, so nothing is filtered out.
+func TestFrontierRootSeedScopesEverything(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/"}, 4, nil)
+	for _, u := range []string{"https://a.example/anything", "https://a.example/deep/page"} {
+		if !f.within(u) {
+			t.Errorf("%s should be inside a root seed", u)
+		}
+	}
+}
