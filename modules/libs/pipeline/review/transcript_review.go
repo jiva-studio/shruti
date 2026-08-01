@@ -150,24 +150,30 @@ func ReviewTranscript(
 	// No boundary info for an idx → treat it as its own sentence (never drop).
 	blocks := make([]transcript.Block, 0, len(raw.Segments))
 	var (
-		curStart int64
-		curParts []string
-		curOpen  bool
+		curStart    int64
+		curParts    []string
+		curSpeakers map[string]int
+		curOpen     bool
 	)
 	for i, s := range raw.Segments {
 		if !curOpen {
 			curStart = s.Start
 			curParts = curParts[:0]
+			curSpeakers = map[string]int{}
 			curOpen = true
+		}
+		if s.Speaker != "" {
+			curSpeakers[s.Speaker]++
 		}
 		if t := strings.TrimSpace(idxText[s.Idx]); t != "" {
 			curParts = append(curParts, t)
 		}
 		if boundaries[i].IsEnd || !boundaries[i].HasInfo {
 			blocks = append(blocks, transcript.SentenceBlock{
-				Start: curStart,
-				End:   s.End,
-				Text:  strings.Join(curParts, " "),
+				Start:   curStart,
+				End:     s.End,
+				Text:    strings.Join(curParts, " "),
+				Speaker: dominantSpeaker(curSpeakers),
 			})
 			curOpen = false
 		}
@@ -175,9 +181,10 @@ func ReviewTranscript(
 	if curOpen && len(raw.Segments) > 0 {
 		last := raw.Segments[len(raw.Segments)-1]
 		blocks = append(blocks, transcript.SentenceBlock{
-			Start: curStart,
-			End:   last.End,
-			Text:  strings.Join(curParts, " "),
+			Start:   curStart,
+			End:     last.End,
+			Text:    strings.Join(curParts, " "),
+			Speaker: dominantSpeaker(curSpeakers),
 		})
 	}
 
@@ -187,6 +194,20 @@ func ReviewTranscript(
 		Version:  1,
 		Blocks:   blocks,
 	}
+}
+
+// dominantSpeaker returns the most-voted diarizer label across the segments
+// merged into one sentence, ties broken by the lower label for determinism;
+// "" when no segment carried a speaker.
+func dominantSpeaker(counts map[string]int) string {
+	best := ""
+	bestN := 0
+	for label, n := range counts {
+		if n > bestN || (n == bestN && best != "" && label < best) {
+			best, bestN = label, n
+		}
+	}
+	return best
 }
 
 // glossaryHints renders the canonical-term hint block for one chunk (empty when
