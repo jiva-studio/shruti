@@ -116,6 +116,7 @@ export function parseRefsJson(json: string | null): readonly Reference[] | null 
  *  keys and maps the outline spans. */
 export interface VariantJson {
   readonly lang: string
+  readonly title?: string | null
   readonly transcript_key: string
   readonly description?: string | null
   readonly outline?: readonly OutlineEntryJson[] | null
@@ -138,6 +139,7 @@ function variantsJsonToDomain(json: string | null): readonly LibraryItemVariant[
   if (!raw) return []
   return raw.map((v) => ({
     language: v.lang,
+    title: v.title ?? null,
     transcriptKey: v.transcript_key,
     description: v.description ?? null,
     outline: v.outline

@@ -79,6 +79,9 @@ export interface LibraryItem {
  *  is shared across a track's variants, so it is not repeated here. */
 export interface LibraryItemVariant {
   readonly language: LanguageCode
+  /** Title in this language — the source title for the primary, translated for
+   *  the others. Null when the ingest didn't produce one. */
+  readonly title: string | null
   readonly transcriptKey: string
   readonly description: string | null
   readonly outline: readonly TrackOutlineChapter[] | null
@@ -123,6 +126,7 @@ export function libraryItemToTrack(item: LibraryItem): Track | null {
       : [
           {
             language: primaryLang,
+            title: item.titleRaw,
             transcriptKey:
               item.transcriptKey ?? `public/tracks/${trackId}/transcripts/${primaryLang}.json`,
             description: null,
@@ -133,7 +137,7 @@ export function libraryItemToTrack(item: LibraryItem): Track | null {
   const variants: TrackVariant[] = langVariants.map((v) => ({
     trackId,
     language: v.language,
-    title: item.titleRaw ?? "",
+    title: v.title ?? item.titleRaw ?? "",
     audios,
     audio,
     transcript: hasTranscript ? { path: v.transcriptKey, kind: "generated" } : null,
