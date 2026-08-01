@@ -914,6 +914,11 @@ services:
       REVIEW_LLM_PREMIUM: ${LECTORIUM_REVIEW_LLM_PREMIUM:-google/gemini-3-flash-preview,google/gemini-3.1-pro-preview}
       OUTLINE_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
       OUTLINE_LLM_MODEL: ${LECTORIUM_OUTLINE_LLM_MODEL:-google/gemini-3-flash-preview}
+      # Title + transcript translator (on-demand translate op + ingest-time
+      # translated variants). Reuses the OpenRouter key; own model knob. Unset key
+      # → no translation, never fatal.
+      TRANSLATE_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
+      TRANSLATE_LLM_MODEL: ${LECTORIUM_TRANSLATE_LLM_MODEL:-google/gemini-3-flash-preview}
       PORT: "8088"
       ENV: ${LECTORIUM_ENV:-dev}
       SERVICE_VERSION: ${LECTORIUM_INGEST_TAG:-latest}
