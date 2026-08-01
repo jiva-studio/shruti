@@ -10,6 +10,8 @@ import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
+import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { requestSync } from "@shruti/services/syncEvents.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import router from "@shruti/router/index.js"
 import { buildMergedTranscriptViewData } from "@shruti/composables/buildTranscriptViewData.js"
@@ -38,6 +40,7 @@ export interface TranscriptDialogState {
   readonly description: ComputedRef<string | null>
   readonly chapters: ComputedRef<readonly TrackOutlineChapter[]>
   readonly availableLanguages: ComputedRef<readonly UiTranscriptLanguage[]>
+  onTranslateLanguage(code: string): Promise<void>
   readonly activeLanguages: Ref<readonly LanguageCode[]>
   readonly blockGroups: ComputedRef<readonly UiTranscriptBlocksGroup[]>
   readonly position: ComputedRef<number>
@@ -80,6 +83,10 @@ export function useTranscriptDialogController(
 ): TranscriptDialogState {
   const app = useShruti()
   const transcriptStore = useTranscriptStore()
+  const library = useLibraryStore()
+  // Languages currently being translated on demand (drives the ghost chip's
+  // spinner). Stored as a replaced Set so the computed chips stay reactive.
+  const translating = ref<Set<string>>(new Set())
   const player = usePlayerStore()
   const playlist = usePlaylistStore()
   const dictionaries = useDictionariesStore()
@@ -301,13 +308,104 @@ export function useTranscriptDialogController(
   const position = computed(() => (mirrorsActivePlayer.value ? Math.max(0, player.positionMs) : 0))
   const duration = computed(() => (mirrorsActivePlayer.value ? Math.max(0, player.durationMs) : 0))
 
-  const availableLanguages = computed<readonly UiTranscriptLanguage[]>(() =>
-    hydration.availableLanguages.value.map((code) => ({
+  // The library item behind the currently open track (only a personal-library
+  // track has one) — its id is the membership the translate run advances, and
+  // its stored languages are the source to translate from.
+  const libraryItem = computed(() => {
+    const id = transcriptStore.trackId
+    return id ? library.items.find((i) => i.trackId === id) : undefined
+  })
+  // The language to translate FROM: the first stored transcript (guaranteed to
+  // exist on disk for the worker to read).
+  const sourceLanguage = computed<string | undefined>(() => hydration.availableLanguages.value[0])
+
+  const availableLanguages = computed<readonly UiTranscriptLanguage[]>(() => {
+    const chips: UiTranscriptLanguage[] = hydration.availableLanguages.value.map((code) => ({
       code,
       name: code.toUpperCase(),
       icon: languageFlag(code),
+      available: true,
     }))
-  )
+    // On a personal-library track, always offer the interface language: if it
+    // isn't a stored transcript yet, add it as a ghost chip that translates on
+    // tap. Skip when it IS the source or already present.
+    const appLang = appLanguage.value
+    const source = sourceLanguage.value
+    if (
+      libraryItem.value &&
+      appLang &&
+      source &&
+      appLang !== source &&
+      !hydration.availableLanguages.value.includes(appLang)
+    ) {
+      chips.push({
+        code: appLang,
+        name: appLang.toUpperCase(),
+        icon: languageFlag(appLang),
+        available: false,
+        busy: translating.value.has(appLang),
+      })
+    }
+    return chips
+  })
+
+  // Request an on-demand translation of the track into `code`, poll the run, and
+  // re-hydrate so the new language becomes a real, selectable transcript.
+  async function onTranslateLanguage(code: string): Promise<void> {
+    const trackId = transcriptStore.trackId
+    const item = libraryItem.value
+    const source = sourceLanguage.value
+    if (!trackId || !item || !source || code === source || translating.value.has(code)) {
+      return
+    }
+    translating.value = new Set(translating.value).add(code)
+    try {
+      const res = await app.ingestClient.submit({
+        op: "translate",
+        membership_id: item.id,
+        track: trackId,
+        source_lang: source,
+        target_lang: code,
+      })
+      const ok = await pollRun(res.run_id)
+      // Only refresh if the same track is still open (the user may have moved on).
+      if (ok && transcriptStore.trackId === trackId) {
+        // The run is ready, but the new variant reaches this device via sync —
+        // pull it, then re-hydrate until the language lands (bounded).
+        requestSync()
+        for (let i = 0; i < 20 && transcriptStore.trackId === trackId; i++) {
+          await hydration.hydrate(trackId)
+          if (hydration.availableLanguages.value.includes(code)) {
+            await loader.reload(trackId, hydration.activeLanguages.value)
+            break
+          }
+          await new Promise((r) => setTimeout(r, 2000))
+        }
+      }
+    } catch (err) {
+      loader.error.value = err instanceof Error ? err.message : "Translation failed"
+    } finally {
+      const next = new Set(translating.value)
+      next.delete(code)
+      translating.value = next
+    }
+  }
+
+  // Poll a translate run to completion. Bounded so a stuck run can't spin
+  // forever; sync remains the authoritative fallback for the produced variant.
+  async function pollRun(runId: string): Promise<boolean> {
+    for (let i = 0; i < 120; i++) {
+      await new Promise((r) => setTimeout(r, 3000))
+      try {
+        const s = await app.ingestClient.status(runId)
+        if (s.state === "ready") return true
+        if (s.state === "failed" || s.state === "cancelled") return false
+      } catch {
+        // Transient poll failure — retry next tick.
+      }
+    }
+    return false
+  }
 
   // Multi-select (flags) only makes sense when the track has more than one
   // transcript language; a single-language track shows no selector.
@@ -427,6 +525,7 @@ export function useTranscriptDialogController(
     description,
     chapters,
     availableLanguages,
+    onTranslateLanguage,
     activeLanguages: hydration.activeLanguages as Ref<readonly LanguageCode[]>,
     blockGroups,
     position,
