@@ -71,9 +71,9 @@ func (r *Repo) SaveTx(ctx context.Context, t ports.Tx, j *job.Job) error {
 
 func (r *Repo) insert(ctx context.Context, q querier, j *job.Job) error {
 	_, err := q.Exec(ctx, `
-		INSERT INTO orchestrator.jobs (id, kind, owner_id, state, spec, result, track_id, error, attempts, generation)
-		VALUES ($1,$2,$3,$4,COALESCE($5::jsonb,'{}'::jsonb),$6::jsonb,$7,$8,$9,$10)`,
-		j.ID, string(j.Kind), nullUUID(j.OwnerID), string(j.State),
+		INSERT INTO orchestrator.jobs (id, kind, op, membership_id, owner_id, state, spec, result, track_id, error, attempts, generation)
+		VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::jsonb,'{}'::jsonb),$8::jsonb,$9,$10,$11,$12)`,
+		j.ID, string(j.Kind), j.Op, nullStr(j.MembershipID), nullUUID(j.OwnerID), string(j.State),
 		jsonbOrNil(j.Spec), jsonbOrNil(j.Result), nullStr(j.TrackID), nullStr(j.Err), j.Attempts, j.Generation,
 	)
 	return err
@@ -106,6 +106,8 @@ func getJob(ctx context.Context, q querier, id, lock string) (*job.Job, error) {
 	var (
 		j        job.Job
 		kind     string
+		op       string
+		membID   *string
 		state    string
 		owner    *string
 		trackID  *string
@@ -115,9 +117,9 @@ func getJob(ctx context.Context, q querier, id, lock string) (*job.Job, error) {
 		progress []byte
 	)
 	err := q.QueryRow(ctx, `
-		SELECT id, kind, owner_id::text, state, spec, result, progress, track_id, error, attempts, generation, created_at, updated_at
+		SELECT id, kind, op, membership_id, owner_id::text, state, spec, result, progress, track_id, error, attempts, generation, created_at, updated_at
 		  FROM orchestrator.jobs WHERE id=$1`+lock, id).
-		Scan(&j.ID, &kind, &owner, &state, &spec, &result, &progress, &trackID, &errStr, &j.Attempts, &j.Generation, &j.CreatedAt, &j.UpdatedAt)
+		Scan(&j.ID, &kind, &op, &membID, &owner, &state, &spec, &result, &progress, &trackID, &errStr, &j.Attempts, &j.Generation, &j.CreatedAt, &j.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -125,6 +127,8 @@ func getJob(ctx context.Context, q querier, id, lock string) (*job.Job, error) {
 		return nil, err
 	}
 	j.Kind = job.Kind(kind)
+	j.Op = op
+	j.MembershipID = deref(membID)
 	j.State = job.State(state)
 	j.Spec = spec
 	j.Result = result

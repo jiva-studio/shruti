@@ -115,32 +115,54 @@ func NewRequestHandler(d Deps) *RequestHandler {
 // the first ingest.work dispatch in ONE transaction (the transactional-outbox
 // invariant), so the worker is invoked iff the job was durably created. spec is
 // the stored ingest.Request payload (recovered by specRequest on a later retry).
-func (h *RequestHandler) createJob(ctx context.Context, jobID, owner string, req ingest.Request, spec []byte) error {
+func (h *RequestHandler) createJob(ctx context.Context, runID, owner string, req ingest.Request, spec []byte) error {
 	j := &job.Job{
-		ID:      jobID,
-		Kind:    job.KindLibraryIngest,
-		OwnerID: owner,
-		State:   job.StateQueued,
-		Spec:    spec,
+		ID:           runID,
+		Kind:         job.KindLibraryIngest,
+		Op:           req.Op,
+		MembershipID: req.MembershipID,
+		OwnerID:      owner,
+		State:        job.StateQueued,
+		Spec:         spec,
 	}
 	return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
 		if err := h.d.Repo.CreateTx(ctx, tx, j); err != nil {
 			return err
 		}
-		queued := event(jobID+":queued", ingest.EventQueued, req.RequestID, owner, jobID, "", j.Generation, statusData("queued", req.Title, req.URL))
-		if err := h.publishEvent(ctx, tx, queued); err != nil {
-			return err
+		// Ingest drives the library row's lifecycle (the queued spinner). Translate
+		// runs against an ALREADY-ready track, so it must not reset that row's
+		// status — its only library effect is the merged variant on completion.
+		// Its progress is polled on the run itself instead.
+		if req.Op == job.OpIngest {
+			queued := event(runID+":queued", ingest.EventQueued, req.RequestID, owner, req.MembershipID, "", j.Generation, statusData("queued", req.Title, req.URL))
+			if err := h.publishEvent(ctx, tx, queued); err != nil {
+				return err
+			}
 		}
-		return h.dispatchWork(ctx, tx, jobID, owner, req, 1)
+		return h.dispatchWork(ctx, tx, runID, owner, req, 1)
 	})
+}
+
+// runIdentity derives the run id and the membership it advances. Ingest keys the
+// run per (user, source) — a re-add maps to the same run — and the membership IS
+// that run (one per track). Translate is a separate run per (membership, target
+// language) that advances the SAME membership the ingest created.
+func runIdentity(userID string, req ingest.Request) (runID, membershipID string) {
+	if req.Op == job.OpTranslate {
+		seed := userID + "\x00translate\x00" + req.MembershipID + "\x00" + req.TargetLang
+		return uuid.NewSHA1(jobNamespace, []byte(seed)).String(), req.MembershipID
+	}
+	id := jobIDFor(userID, "", req.URL)
+	return id, id
 }
 
 // SubmitResult is the outcome of an API-driven ingest submission: the
 // deterministic job id — which is also the library membership id the client
 // keys its library row on and polls for status — and the job's current state.
 type SubmitResult struct {
-	JobID string
-	State job.State
+	JobID        string
+	MembershipID string
+	State        job.State
 }
 
 // ErrNotPro rejects an API ingest submission whose token does not grant an
@@ -161,10 +183,14 @@ func (h *RequestHandler) Submit(ctx context.Context, req ingest.Request) (Submit
 		return SubmitResult{}, ErrNotPro
 	}
 	req.UserID = userID // authoritative subject — never trust the client-supplied id
-	jobID := jobIDFor(userID, "", req.URL)
-	lg := slog.With("job_id", jobID, "request_id", req.RequestID)
+	runID, membership := runIdentity(userID, req)
+	if req.Op == "" {
+		req.Op = job.OpIngest
+	}
+	req.MembershipID = membership // carried into the spec so a retry re-dispatches it
+	lg := slog.With("run_id", runID, "op", req.Op, "request_id", req.RequestID)
 
-	existing, err := h.d.Repo.Get(ctx, jobID)
+	existing, err := h.d.Repo.Get(ctx, runID)
 	if err != nil {
 		return SubmitResult{}, fmt.Errorf("load job: %w", err)
 	}
@@ -173,10 +199,10 @@ func (h *RequestHandler) Submit(ctx context.Context, req ingest.Request) (Submit
 			if err := h.restartFailed(ctx, existing, req); err != nil {
 				return SubmitResult{}, err
 			}
-			return SubmitResult{JobID: jobID, State: job.StateQueued}, nil
+			return SubmitResult{JobID: runID, MembershipID: membership, State: job.StateQueued}, nil
 		}
 		lg.InfoContext(ctx, "submit_duplicate", "state", string(existing.State))
-		return SubmitResult{JobID: jobID, State: existing.State}, nil
+		return SubmitResult{JobID: runID, MembershipID: membership, State: existing.State}, nil
 	}
 
 	spec, err := json.Marshal(req)
@@ -184,10 +210,10 @@ func (h *RequestHandler) Submit(ctx context.Context, req ingest.Request) (Submit
 		return SubmitResult{}, fmt.Errorf("marshal spec: %w", err)
 	}
 	lg.InfoContext(ctx, "job_created", "user_id", userID, "url", req.URL)
-	if err := h.createJob(ctx, jobID, userID, req, spec); err != nil {
+	if err := h.createJob(ctx, runID, userID, req, spec); err != nil {
 		return SubmitResult{}, err
 	}
-	return SubmitResult{JobID: jobID, State: job.StateQueued}, nil
+	return SubmitResult{JobID: runID, MembershipID: membership, State: job.StateQueued}, nil
 }
 
 // StatusLabel maps the internal job state onto the client-facing lifecycle
@@ -501,6 +527,11 @@ func (c *core) dispatchWork(ctx context.Context, tx ports.Tx, jobID, owner strin
 		OwnerID:        owner,
 		Attempt:        attempt,
 		TranslateLangs: req.TranslateLangs,
+		Op:             req.Op,
+		MembershipID:   req.MembershipID,
+		Track:          req.Track,
+		SourceLang:     req.SourceLang,
+		TargetLang:     req.TargetLang,
 	}.Marshal()
 	if err != nil {
 		return err

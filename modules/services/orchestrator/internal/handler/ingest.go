@@ -43,22 +43,28 @@ type ingestAPI struct {
 	verifier tokenVerifier
 }
 
-// createBody is the POST /ingest request. Only url is required; title/author are
-// optional hints chat (or any caller) resolved, seeding the pipeline's metadata.
-// Kept open for future optional hints without breaking older clients.
-type createBody struct {
-	URL            string   `json:"url"`
+// runBody is the POST /run request — one generic entry for every orchestrated
+// operation. `op` selects the task ("ingest" | "translate"; empty = ingest).
+// Ingest reads url/title/author/translate_langs; translate reads membership_id
+// (the track's library row) + track/source_lang/target_lang.
+type runBody struct {
+	Op             string   `json:"op,omitempty"`
+	URL            string   `json:"url,omitempty"`
 	Title          string   `json:"title,omitempty"`
 	Author         string   `json:"author,omitempty"`
 	TranslateLangs []string `json:"translate_langs,omitempty"`
+	MembershipID   string   `json:"membership_id,omitempty"`
+	Track          string   `json:"track,omitempty"`
+	SourceLang     string   `json:"source_lang,omitempty"`
+	TargetLang     string   `json:"target_lang,omitempty"`
 }
 
-// create handles POST /ingest: verify pro (inside Submit), create/dedup/restart
-// the job keyed on the verified subject, and return the job id + state so the
-// client can immediately render a pending card and poll it.
-func (a *ingestAPI) create(w http.ResponseWriter, r *http.Request) {
+// run handles POST /run: verify pro (inside Submit), create/dedup/restart the run
+// keyed on the verified subject, and return the run id + membership id + state so
+// the client can render a pending card / spinner and poll it.
+func (a *ingestAPI) run(w http.ResponseWriter, r *http.Request) {
 	if a == nil || a.submit == nil {
-		writeErr(w, http.StatusServiceUnavailable, "not_configured", "ingest api unavailable")
+		writeErr(w, http.StatusServiceUnavailable, "not_configured", "orchestrator api unavailable")
 		return
 	}
 	token := bearerToken(r)
@@ -66,33 +72,53 @@ func (a *ingestAPI) create(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "missing_token", "bearer token required")
 		return
 	}
-	var body createBody
+	var body runBody
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad_request", "invalid json body")
 		return
 	}
-	if strings.TrimSpace(body.URL) == "" {
-		writeErr(w, http.StatusBadRequest, "bad_request", "url is required")
+	if body.Op == "" {
+		body.Op = job.OpIngest
+	}
+	switch body.Op {
+	case job.OpIngest:
+		if strings.TrimSpace(body.URL) == "" {
+			writeErr(w, http.StatusBadRequest, "bad_request", "url is required")
+			return
+		}
+	case job.OpTranslate:
+		if body.MembershipID == "" || body.TargetLang == "" || strings.TrimSpace(body.Track) == "" {
+			writeErr(w, http.StatusBadRequest, "bad_request", "membership_id, track and target_lang are required")
+			return
+		}
+	default:
+		writeErr(w, http.StatusBadRequest, "bad_request", "unknown op")
 		return
 	}
 	res, err := a.submit.Submit(r.Context(), ingest.Request{
+		Op:             body.Op,
 		URL:            strings.TrimSpace(body.URL),
 		Title:          body.Title,
 		Author:         body.Author,
-		Token:          token,
 		TranslateLangs: body.TranslateLangs,
+		MembershipID:   body.MembershipID,
+		Track:          strings.TrimSpace(body.Track),
+		SourceLang:     body.SourceLang,
+		TargetLang:     body.TargetLang,
+		Token:          token,
 	})
 	if errors.Is(err, runingest.ErrNotPro) {
-		writeErr(w, http.StatusPaymentRequired, "not_pro", "adding lectures requires an active pro subscription")
+		writeErr(w, http.StatusPaymentRequired, "not_pro", "this action requires an active pro subscription")
 		return
 	}
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "submit_failed", "could not submit ingest")
+		writeErr(w, http.StatusInternalServerError, "submit_failed", "could not submit run")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
-		"job_id": res.JobID,
-		"state":  runingest.StatusLabel(res.State),
+		"run_id":        res.JobID,
+		"membership_id": res.MembershipID,
+		"state":         runingest.StatusLabel(res.State),
 	})
 }
 
