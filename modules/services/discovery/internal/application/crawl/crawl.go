@@ -115,11 +115,8 @@ func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*st
 		for _, p := range due {
 			frontier.add(p.URL, 0)
 		}
-		// Where the crawl has got to is not the same question as what is due
-		// to be looked at again. A settled page still holds the only route to
-		// what lies beyond it, and it will not be fetched to give that route
-		// up: taken from the links table instead, the walk carries on through
-		// pages nobody needs to ask the host about.
+		// A page that is not due still holds the route to what lies beyond it.
+		// Those links come from the table rather than from fetching it again.
 		unvisited, err := s.Repo.UnvisitedLinks(ctx, src.ID, opts.Limit)
 		if err != nil {
 			return nil, err

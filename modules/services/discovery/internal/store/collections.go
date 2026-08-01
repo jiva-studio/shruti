@@ -66,11 +66,8 @@ func (r *Repo) CollectionByURL(ctx context.Context, sourceID, url string) (*Coll
 }
 
 // CollectionByTitle finds a cycle reconstructed from what its parts call it.
-//
-// The speaker is part of the identity: two lecturers can give courses of the
-// same name, and the name alone would fold them into one. It is the speaker's
-// key that decides, not the spelling — otherwise the same course filed under
-// "Shyamananda Prabhu" and under "HG Shyamananda Das" becomes two.
+// The speaker is part of the identity, by key rather than by spelling: two
+// lecturers can give courses of the same name.
 func (r *Repo) CollectionByTitle(ctx context.Context, sourceID, title, author string) (*Collection, error) {
 	var c Collection
 	err := r.pool.QueryRow(ctx, `
@@ -226,15 +223,9 @@ type CollectionMember struct {
 	RecordedOn *time.Time `json:"recorded_on,omitempty"`
 }
 
-// minMembers is the fewest parts a cycle can be shown with. A course of one
-// lecture is not a course.
-//
-// It bites on the cycles reconstructed from what the parts called themselves,
-// where the name is often an occasion rather than a series: "Sunday Feast" and
-// "Gaura Purnima Festival" are what happened that day, not a set of talks given
-// together, and the archive holds hundreds of them under one speaker each. A
-// page that presents a cycle is taken at its word — it says what it is, and may
-// legitimately list one part so far.
+// minMembers is the fewest parts a cycle reconstructed from its parts' own
+// words can be shown with: a course of one lecture is not a course. A page that
+// presents a cycle is taken at its word and may list one part so far.
 const minMembers = 2
 
 // Collections lists what we know of a source's cycles.
@@ -301,9 +292,7 @@ func (r *Repo) members(ctx context.Context, collectionID int64) ([]CollectionMem
 	return members, pending, rows.Err()
 }
 
-// ReplacePageLinks stores what a page pointed at, for every page. It is what a
-// cycle is decided from later, and what the crawl walks through when a page is
-// not due to be fetched again.
+// ReplacePageLinks stores what a page pointed at, for every page.
 func (r *Repo) ReplacePageLinks(ctx context.Context, pageID int64, urls []string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -324,15 +313,8 @@ func (r *Repo) ReplacePageLinks(ctx context.Context, pageID int64, urls []string
 	return tx.Commit(ctx)
 }
 
-// UnvisitedLinks are the addresses this source's pages point at that have
-// never become pages themselves.
-//
-// This is the edge of the crawl, and it has to be a query rather than a walk.
-// The queue is fed by fetching pages, but a page whose recheck has not come
-// around is not fetched — so once a first sweep settles, every route onwards
-// is behind a page nobody will open, and the crawl finds nothing for ever
-// while most of the archive is still unseen. What those pages pointed at is
-// already recorded; asking the table is the whole of the fix.
+// UnvisitedLinks are the addresses this source's pages point at that have never
+// become pages themselves — the edge of the crawl.
 func (r *Repo) UnvisitedLinks(ctx context.Context, sourceID string, limit int) ([]string, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT DISTINCT l.url

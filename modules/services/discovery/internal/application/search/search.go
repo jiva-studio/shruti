@@ -42,8 +42,11 @@ type HitCollection struct {
 
 // Query is free text plus the structured filters that narrow it.
 type Query struct {
-	Text      string
-	Author    string
+	Text   string
+	Author string
+	// AuthorIDs are the people Author resolved to, filled in before the query
+	// runs so the filter can be an indexed equality rather than a text match.
+	AuthorIDs []int64
 	Language  string
 	Source    string
 	RefSource string
@@ -96,10 +99,70 @@ const (
 	rrfK = 60
 )
 
+// resolveAuthors turns a written name into the people it could mean, running
+// over the authors rather than over the recordings so that the filter itself
+// can stay an indexed equality.
+//
+// A name that names somebody exactly means that person and nobody else.
+// Widening to everyone whose name merely starts the same way would answer
+// "Radhanath Swami" with a dozen people, most of them joint recordings he
+// happens to appear in. Only a name that matches nobody falls back to a loose
+// match, which is what makes a partial name work.
+func (s *Service) resolveAuthors(ctx context.Context, name string) ([]int64, error) {
+	rows, err := s.Pool.Query(ctx, `
+		WITH exact AS (
+			SELECT k.author_id AS id FROM discovery.author_keys k
+			WHERE k.key = discovery.author_key($1)
+		)
+		SELECT id FROM exact
+		UNION
+		SELECT a.id
+		FROM discovery.authors a
+		LEFT JOIN discovery.author_keys k ON k.author_id = a.id
+		WHERE NOT EXISTS (SELECT 1 FROM exact)
+		  AND (k.key LIKE discovery.author_key($1) || '%' OR a.name ILIKE '%' || $1 || '%')`, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// noAuthor stands in when a name matches nobody, so the search returns nothing
+// rather than dropping the filter.
+const noAuthor = -1
+
+func (s *Service) prepare(ctx context.Context, q *Query) error {
+	if q.Author == "" || len(q.AuthorIDs) > 0 {
+		return nil
+	}
+	ids, err := s.resolveAuthors(ctx, q.Author)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		ids = []int64{noAuthor}
+	}
+	q.AuthorIDs = ids
+	return nil
+}
+
 // Search runs both lanes and fuses them.
 func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 	if q.Limit <= 0 || q.Limit > 100 {
 		q.Limit = 20
+	}
+	if err := s.prepare(ctx, &q); err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(q.Text) == "" {
 		return s.filterOnly(ctx, q)
@@ -130,14 +193,10 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 		args = append(args, value)
 		where = append(where, fmt.Sprintf(clause, len(args)))
 	}
-	// Asked for a speaker, answer for the speaker rather than for a spelling:
-	// the same person is filed as "Radha Gopinath Prabhu", "HG Radha Gopinath
-	// Das" and "Radha Gopinath Pr", and a match on the text of one returns a
-	// third of their talks. The key ignores the forms of address; the
-	// substring match stays as a fallback for a partial name.
-	if q.Author != "" {
-		add("(i.author_key = discovery.author_key($%[1]d) OR i.author ILIKE '%%' || $%[1]d || '%%')",
-			q.Author)
+	// The name is resolved to people before the query runs; a text match here
+	// would cost both lanes their index on items.
+	if len(q.AuthorIDs) > 0 {
+		add("i.author_id = ANY($%d)", q.AuthorIDs)
 	}
 	if q.Language != "" {
 		add("i.language = $%d", q.Language)
@@ -174,7 +233,7 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 }
 
 func (q Query) filtered() bool {
-	return q.Author != "" || q.Language != "" || q.Source != "" ||
+	return len(q.AuthorIDs) > 0 || q.Language != "" || q.Source != "" ||
 		q.RefSource != "" || q.RefTokens != "" || q.Collection != "" ||
 		q.DateFrom != nil || q.DateTo != nil
 }
@@ -186,12 +245,7 @@ const hitCols = `i.id, i.media_url, coalesce(p.url,''), coalesce(i.title,''),
 	coll.id, coll.title, coll.url, coll.ordinal, coll.of, c.text`
 
 // collectionJoin hangs the cycle off each hit. LEFT so a recording that
-// belongs to none still comes back.
-//
-// A cycle with one part in it is not shown, matching what the listing will
-// hand back if the reader follows it: an occasion that a single recording
-// named — a Sunday programme, a festival — is not a series, and offering it as
-// one leads to a page with the recording you already had on it.
+// belongs to none still comes back, and a cycle of one part is not offered.
 const collectionJoin = `
 	LEFT JOIN LATERAL (
 		SELECT col.id, col.title, col.url, m.ordinal, k.n

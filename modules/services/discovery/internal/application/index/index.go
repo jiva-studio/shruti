@@ -168,13 +168,10 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 // series; it is a page with a recording on it.
 const minSeriesParts = 2
 
-// storeSeries records what a page pointed at and asks whether a page that
-// offered no audio presents a cycle.
-//
-// The links are kept for every page, whether or not it carried audio. They are
-// the raw material for deciding about a cycle later, and they are also the only
-// way the crawl can walk through a page whose recheck has not come around
-// without asking the host for it again.
+// storeSeries records what a page pointed at, and asks whether a page that
+// offered no audio presents a cycle. Links are kept for every page: they are
+// what a cycle is decided from later, and how the crawl walks through a page it
+// is not due to fetch.
 //
 // The question itself is only put when at least two of those links reach
 // recordings we already have. Most pages on any site carry no audio: menus,
@@ -458,6 +455,11 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		if err != nil {
 			return err
 		}
+		// The written name is resolved to a person before the recording is
+		// stored.
+		if item.AuthorID, err = s.Repo.ResolveAuthor(ctx, item.Author); err != nil {
+			return err
+		}
 		isNew, err := s.Repo.SaveItem(ctx, item)
 		if err != nil {
 			return err
@@ -640,13 +642,9 @@ func metadataLine(item *store.Item, extracted domain.Item) string {
 	return strings.Join(parts, " — ")
 }
 
-// refsInLine caps how many passages go into the line that gets embedded.
-//
-// A talk on a whole chapter is filed as a range and expands to every verse in
-// it: one recording carried thirty-seven, and the sentence describing it was
-// nine tenths "SB 10.33.n". The vector then says almost nothing about the talk.
-// Every reference is still stored and still searchable by itself — this is
-// only what the sentence says out loud.
+// refsInLine caps how many passages go into the embedded line. A talk on a
+// whole chapter expands to every verse in it, and the vector would say more
+// about the range than about the talk. All of them are still stored.
 const refsInLine = 3
 
 func parseDate(s string) *time.Time {

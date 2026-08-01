@@ -1,19 +1,6 @@
--- One speaker was arriving under four names. The archive writes whatever the
--- person who filed the recording wrote — "Radha Gopinath Prabhu", "HG Radha
--- Gopinath Das", "Radha Gopinath Pr" — and the normalizer copies it, which is
--- right: it must not guess at a name nobody wrote. But 608 spellings covered
--- rather fewer people, and "everything by this speaker" returned a third of it.
---
--- The forms of address are not part of the name. His Grace, His Holiness, Sri,
--- Srila and Prabhu are how one addresses a person, not how one identifies
--- them; Swami and Das are worth keeping in what we display, and still must not
--- separate a talk filed under one from a talk filed under the other. So the
--- stored name is left exactly as found and a key is derived beside it.
---
--- The key is deliberately coarser than the name. It cannot tell a hypothetical
--- "Govinda Swami" from "Govinda Prabhu" — but the names themselves still can,
--- and a search that finds both is a better failure than one that finds half of
--- one.
+-- A key derived from the written name, with the forms of address folded away,
+-- so that one speaker filed under several spellings is one speaker. The name
+-- itself is left exactly as the archive wrote it.
 
 CREATE OR REPLACE FUNCTION discovery.author_key(a text) RETURNS text
 LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE AS $fn$
@@ -26,14 +13,11 @@ BEGIN
         RETURN NULL;
     END IF;
     k := lower(a);
-    -- Dasi and Mataji say the speaker is a woman, and that is the one thing in
-    -- a form of address that distinguishes rather than decorates: folding them
-    -- away merged "Govinda Prabhu" with "HG Govinda Dasi Mataji", two people.
-    -- The marker is levelled to one token instead of dropped, so that "Kalindi
-    -- Mataji" and "Kalindi Devi Dasi" still meet.
+    -- Dasi and Mataji mark a woman, so they distinguish rather than decorate.
+    -- Levelled to one token rather than dropped, so that "Kalindi Mataji" and
+    -- "Kalindi Devi Dasi" meet while "Govinda Prabhu" stays apart.
     female := k ~ '(^|\s)(dasi|mataji|mtj)(\s|\.|$)';
-    -- Both ends are stripped until neither changes: "HG Sri Radha Gopinath
-    -- Devi Dasi" carries two of each, and one pass would leave one of each.
+    -- Until neither end changes: a name can carry two of each.
     LOOP
         prev := k;
         k := regexp_replace(k,
@@ -61,10 +45,8 @@ ALTER TABLE discovery.collections
     ADD COLUMN IF NOT EXISTS author_key text
     GENERATED ALWAYS AS (discovery.author_key(author)) STORED;
 
--- A cycle's identity moves onto the key for the same reason. "Gaur Purnima
--- Festival" by "Shyamananda Prabhu" and by "HG Shyamananda Das" were two
--- cycles; folding the spellings folds them. Members move to the lowest id and
--- the emptied rows go, so the unique index below has something to be true of.
+-- A cycle's identity moves onto the key too. Members move to the lowest id and
+-- the emptied rows go, so the unique index below holds.
 WITH grp AS (
     SELECT id,
            first_value(id) OVER (PARTITION BY source_id, title, coalesce(discovery.author_key(author), '')
