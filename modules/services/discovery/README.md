@@ -69,6 +69,17 @@ its own shape, there is nothing to group, and the order falls back to the one
 links came in. Pointing the seed at where the recordings are is still the
 strongest lever there is.
 
+A link to a page whose next check has not come around is not followed. Without
+that the schedule applied only to where a run started, and every page reachable
+by a link was refetched on every tick — so the backing off from one day to
+thirty, the whole economy of recrawling, did nothing for them.
+
+A sitemap is read where a host publishes one, but only the part inside the
+source. One archive lists four hundred and thirty-seven addresses; a source
+pointed at one speaker's Bhagavad-gita wants its own dozen. Preferring what is
+inside only orders the queue — once everything inside is up to date the rest is
+all that is left, and the crawl wanders off into the archive.
+
 ## Not crawling by accident
 
 Three separate things have to be true before anything is fetched on its own:
