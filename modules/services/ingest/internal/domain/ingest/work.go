@@ -22,6 +22,15 @@ type WorkCommand struct {
 	// transcript) for these languages when they were not spoken in the
 	// recording. Empty translates nothing.
 	TranslateLangs []string `json:"translate_langs,omitempty"`
+	// Op selects the worker branch ("ingest" | "translate"); empty means ingest.
+	// MembershipID links the run to the track projection it advances.
+	Op           string `json:"op,omitempty"`
+	MembershipID string `json:"membership_id,omitempty"`
+	// Translate-op fields: the already-ingested track to translate, its source
+	// language (which stored transcript to read), and the target language.
+	Track      string `json:"track,omitempty"`
+	SourceLang string `json:"source_lang,omitempty"`
+	TargetLang string `json:"target_lang,omitempty"`
 }
 
 // DecodeWork parses a broker payload into a WorkCommand.

@@ -21,6 +21,15 @@ type Request struct {
 	// the recording. Empty (the default) translates nothing — the track keeps
 	// only its detected-language variants.
 	TranslateLangs []string `json:"translate_langs,omitempty"`
+	// Op selects the run operation ("ingest" | "translate"); empty means ingest.
+	Op string `json:"op,omitempty"`
+	// The fields below drive op="translate": the already-ingested track's
+	// membership (the id its library row keys on, = the ingest run id), the
+	// content hash, the source language to translate FROM and the target language.
+	MembershipID string `json:"membership_id,omitempty"`
+	Track        string `json:"track,omitempty"`
+	SourceLang   string `json:"source_lang,omitempty"`
+	TargetLang   string `json:"target_lang,omitempty"`
 }
 
 // DecodeRequest parses a broker payload into a Request.

@@ -34,19 +34,31 @@ type Kind string
 
 const KindLibraryIngest Kind = "library_ingest"
 
+// Op is the operation a run performs; the worker dispatches on it.
+const (
+	OpIngest    = "ingest"
+	OpTranslate = "translate"
+)
+
 // Job is the aggregate root — the source of truth persisted in
 // orchestrator.jobs. Spec/Result are kind-specific JSON payloads.
 type Job struct {
-	ID        string
-	Kind      Kind
-	OwnerID   string // requesting user; empty for system jobs
-	State     State
-	Spec      []byte // kind-specific request (JSON)
-	Result    []byte // terminal payload (JSON); nil until done
-	Progress  []byte // kind-specific progress (JSON), poll-only; latest stage while running
-	TrackID   string // content hash; empty until fetched
-	Err       string
-	Attempts  int
+	ID   string
+	Kind Kind
+	// Op is the operation this run performs — the worker branches on it
+	// ("ingest" | "translate"). Kind stays the broad scenario; Op the action.
+	Op string
+	// MembershipID links the run to the track_memberships projection it advances.
+	// Multiple runs (ingest, then translate) share one membership_id per track.
+	MembershipID string
+	OwnerID      string // requesting user; empty for system jobs
+	State        State
+	Spec         []byte // kind-specific request (JSON)
+	Result       []byte // terminal payload (JSON); nil until done
+	Progress     []byte // kind-specific progress (JSON), poll-only; latest stage while running
+	TrackID      string // content hash; empty until fetched
+	Err          string
+	Attempts     int
 	// Generation counts re-runs of this job. 0 is the original run; a
 	// user-initiated retry of a dead-lettered (failed) job increments it so the
 	// re-run's track.events lifecycle stamps sort above the prior run's terminal
