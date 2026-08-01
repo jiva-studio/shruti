@@ -8,6 +8,12 @@ export interface UiTranscriptLanguage {
   readonly code: string
   readonly name: string
   readonly icon?: string
+  /** False for a language the track has NOT been transcribed/translated into yet
+   *  (a "ghost" chip) — tapping it requests an on-demand translation instead of
+   *  toggling it active. Undefined/true is a normal, selectable language. */
+  readonly available?: boolean
+  /** True while an on-demand translation into this language is running. */
+  readonly busy?: boolean
 }
 
 export type UiTranscriptBlockRaw =

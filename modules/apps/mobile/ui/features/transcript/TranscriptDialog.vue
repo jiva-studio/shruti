@@ -34,6 +34,7 @@
         v-model:active="activeLanguages"
         :languages="availableLanguages"
         :allow-multiple="allowMultipleLanguages"
+        @translate="(code) => emit('translate', code)"
       />
 
       <TranscriptStatus
@@ -127,6 +128,9 @@ const emit = defineEmits<{
   noteTapped: [event: NoteTappedEvent]
   /** Long-press on a selectable block — controller fires platform haptics. */
   pickStart: []
+  /** User tapped a not-yet-translated (ghost) language chip — the controller
+   *  requests an on-demand translation into that language. */
+  translate: [code: string]
   /** User tapped the explicit close button (top-right corner). */
   close: []
 }>()

@@ -47,6 +47,7 @@
       @text-selected="dialog.onTextSelected"
       @note-tapped="dialog.onNoteTapped"
       @pick-start="dialog.onPickStart"
+      @translate="dialog.onTranslateLanguage"
       @close="dialog.onClose"
     />
     <!--
