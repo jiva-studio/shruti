@@ -151,7 +151,7 @@ func TestFrontierCapsTheYield(t *testing.T) {
 // and every page reachable by a link was refetched on every tick.
 func TestFrontierSkipsPagesNotDueYet(t *testing.T) {
 	f := newFrontier([]string{"https://a.example/"}, 4, nil)
-	f.notDue = map[string]bool{"https://a.example/settled": true}
+	f.setNotDue(map[string]bool{"https://a.example/settled": true})
 	f.addAll([]string{"https://a.example/settled", "https://a.example/fresh"}, 1)
 
 	got, _, ok := f.next()
@@ -215,5 +215,35 @@ func TestFrontierHonoursAnExplicitDepthBound(t *testing.T) {
 	}
 	if _, _, more := f.next(); more {
 		t.Error("depth 4 should not be queued when the bound is 3")
+	}
+}
+
+// A host that redirects http to https serves one page under two names, and its
+// own sitemap may list the one it redirects away from — this archive's does.
+// Keyed by the full address the schedule never matched, so every sitemap entry
+// looked new, was fetched, redirected onto a row we already had, and was
+// fetched again ten minutes later: two hundred requests an hour to learn
+// nothing.
+func TestFrontierSeesThroughTheScheme(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/"}, 0, nil)
+	f.setNotDue(map[string]bool{"https://a.example/page": true})
+
+	f.add("http://a.example/page", 1)
+	if _, _, ok := f.next(); ok {
+		t.Error("the http spelling of a settled page should not be queued")
+	}
+}
+
+// The same page reached by both spellings is one page, not two.
+func TestFrontierDoesNotVisitBothSpellings(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/"}, 0, nil)
+	f.add("https://a.example/x", 1)
+	f.add("http://a.example/x", 1)
+
+	if _, _, ok := f.next(); !ok {
+		t.Fatal("the first spelling should be queued")
+	}
+	if _, _, ok := f.next(); ok {
+		t.Error("the second spelling is the same page")
 	}
 }
