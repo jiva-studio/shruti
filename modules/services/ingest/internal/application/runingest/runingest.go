@@ -115,6 +115,12 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		defer cancel()
 	}
 
+	// op=translate is a lightweight run against an already-stored transcript — no
+	// fetch/transcribe. Everything below is the ingest pipeline.
+	if cmd.Op == "translate" {
+		return s.processTranslate(ctx, cmd)
+	}
+
 	// Every line for this message carries job_id + attempt, so one ingest is a
 	// single LogQL filter across the whole pipeline.
 	lg := slog.With("job_id", cmd.JobID, "request_id", cmd.RequestID, "attempt", cmd.Attempt)
@@ -382,12 +388,64 @@ func (s *Service) fail(ctx context.Context, lg *slog.Logger, cmd ingest.WorkComm
 	}
 	lg.Log(ctx, lvl, "ingest_failed", "error", cause.Error(), "retriable", retry)
 	return s.done(ctx, ingest.Result{
-		JobID:     cmd.JobID,
-		RequestID: cmd.RequestID,
-		Attempt:   cmd.Attempt,
-		Phase:     ingest.PhaseFailed,
-		Error:     cause.Error(),
-		Retriable: retry,
+		JobID:        cmd.JobID,
+		RequestID:    cmd.RequestID,
+		Attempt:      cmd.Attempt,
+		Phase:        ingest.PhaseFailed,
+		Op:           cmd.Op,
+		MembershipID: cmd.MembershipID,
+		Error:        cause.Error(),
+		Retriable:    retry,
+	})
+}
+
+// processTranslate handles an op=translate run: read the already-stored source
+// transcript, translate it in full (blocks + overview + title), store it as a new
+// variant, and publish a ready result carrying just that variant for the
+// orchestrator to merge into the track. No fetch/transcribe.
+func (s *Service) processTranslate(ctx context.Context, cmd ingest.WorkCommand) error {
+	lg := slog.With("run_id", cmd.JobID, "op", "translate", "membership_id", cmd.MembershipID,
+		"track", cmd.Track, "source", cmd.SourceLang, "target", cmd.TargetLang)
+	started := time.Now()
+	lg.InfoContext(ctx, "translate_started")
+
+	if s.d.Translator == nil {
+		return s.fail(ctx, lg, cmd, fmt.Errorf("translate unavailable: no translator: %w", ingest.ErrPermanent))
+	}
+	if cmd.Track == "" || cmd.SourceLang == "" || cmd.TargetLang == "" {
+		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: track/source/target required: %w", ingest.ErrPermanent))
+	}
+	s.progress(ctx, cmd, ingest.StageTranslating)
+
+	body, err := s.d.Blob.Get(ctx, transcriptKey(cmd.Track, cmd.SourceLang))
+	if err != nil {
+		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: read source transcript: %w", err))
+	}
+	var src transcript.Reviewed
+	if err := json.Unmarshal(body, &src); err != nil {
+		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: parse source transcript: %w: %w", err, ingest.ErrPermanent))
+	}
+
+	translated, err := pipelinetranslate.Reviewed(ctx, s.d.Translator, src, cmd.SourceLang, cmd.TargetLang)
+	if err != nil {
+		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: %w", err))
+	}
+	v, err := s.storeVariant(ctx, lg, cmd.Track, cmd.TargetLang, translated, cmd.Title, cmd.SourceLang)
+	if err != nil {
+		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: store variant: %w", err))
+	}
+
+	lg.InfoContext(ctx, "translate_ready", "total_ms", ms(started))
+	return s.done(ctx, ingest.Result{
+		JobID:        cmd.JobID,
+		RequestID:    cmd.RequestID,
+		Attempt:      cmd.Attempt,
+		Phase:        ingest.PhaseReady,
+		Op:           cmd.Op,
+		MembershipID: cmd.MembershipID,
+		TrackID:      cmd.Track,
+		Lang:         cmd.TargetLang,
+		Variants:     []ingest.Variant{v},
 	})
 }
 

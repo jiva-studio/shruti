@@ -85,6 +85,16 @@ func (b *fakeBlob) Put(_ context.Context, key string, body []byte, _ string) err
 	return nil
 }
 
+func (b *fakeBlob) Get(_ context.Context, key string) ([]byte, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	body, ok := b.objects[key]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return body, nil
+}
+
 func (b *fakeBlob) Exists(_ context.Context, key string) (bool, error) {
 	if b.existsNo {
 		return false, nil
@@ -470,5 +480,60 @@ func TestProcess_NoTranslationWithoutRequest(t *testing.T) {
 	hash := ingest.ContentID([]byte("audio-bytes"))
 	if _, ok := h.blob.objects["public/tracks/"+hash+"/transcripts/ru.json"]; ok {
 		t.Fatal("a translated variant was produced without a request")
+	}
+}
+
+// An op=translate run reads the stored source transcript, translates it, stores
+// the new-language variant, and publishes a ready result carrying just that
+// variant + the membership to merge into — no fetch/transcribe.
+func TestProcess_TranslateOp(t *testing.T) {
+	h := &harness{
+		fetch:   &fakeFetcher{content: []byte("x")},
+		trans:   &fakeTranscriber{lang: "en"},
+		blob:    newBlob(),
+		results: &fakeResults{},
+	}
+	h.svc = New(Deps{
+		Fetcher: h.fetch, Transcriber: h.trans, Reviewer: review.New(),
+		Blob: h.blob, Results: h.results, Translator: fakeTranslator{},
+	})
+
+	const track = "hash-xyz"
+	src := transcript.Reviewed{
+		TrackId: track, Language: "en", Version: 1,
+		Blocks: []transcript.Block{transcript.SentenceBlock{Start: 0, End: 1000, Text: "hello"}},
+	}
+	srcBody, _ := json.Marshal(src)
+	h.blob.objects["public/tracks/"+track+"/transcripts/en.json"] = srcBody
+
+	payload, err := json.Marshal(ingest.WorkCommand{
+		JobID: "run-t", Op: "translate", MembershipID: "mem-1",
+		Track: track, SourceLang: "en", TargetLang: "ru", Title: "A talk", Attempt: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.Process(context.Background(), "m", payload); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+
+	ruBody, ok := h.blob.objects["public/tracks/"+track+"/transcripts/ru.json"]
+	if !ok {
+		t.Fatal("translated ru transcript not stored")
+	}
+	var rev transcript.Reviewed
+	if err := json.Unmarshal(ruBody, &rev); err != nil {
+		t.Fatalf("translated transcript not json: %v", err)
+	}
+	if rev.Language != "ru" {
+		t.Fatalf("translated transcript language = %q, want ru", rev.Language)
+	}
+
+	last := h.results.last()
+	if last.Op != "translate" || last.MembershipID != "mem-1" || last.Phase != ingest.PhaseReady {
+		t.Fatalf("result = %+v", last)
+	}
+	if len(last.Variants) != 1 || last.Variants[0].Lang != "ru" || last.Variants[0].Title != "[ru] A talk" {
+		t.Fatalf("variants = %+v", last.Variants)
 	}
 }

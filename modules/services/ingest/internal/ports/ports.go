@@ -62,6 +62,7 @@ type Reviewer interface {
 // (public/tracks/<track_id>/…) and can HEAD-verify a key before it is announced.
 type BlobStore interface {
 	Put(ctx context.Context, key string, body []byte, contentType string) error
+	Get(ctx context.Context, key string) ([]byte, error)
 	Exists(ctx context.Context, key string) (bool, error)
 }
 
