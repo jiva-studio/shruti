@@ -99,12 +99,14 @@ describe("libraryItemToTrack — synthetic Track adapter", () => {
         variants: [
           {
             language: "en",
+            title: "The Soul's Journey",
             transcriptKey: "public/tracks/hash-abc/transcripts/en.json",
             description: "English overview",
             outline: [{ title: "Intro", startMs: 0, endMs: 1000 }],
           },
           {
             language: "ru",
+            title: "Путь души",
             transcriptKey: "public/tracks/hash-abc/transcripts/ru.json",
             description: "Русский обзор",
             outline: [{ title: "Вступление", startMs: 0, endMs: 1000 }],
@@ -116,8 +118,10 @@ describe("libraryItemToTrack — synthetic Track adapter", () => {
     const en = track.variants.find((v) => v.language === "en")!
     const ru = track.variants.find((v) => v.language === "ru")!
     expect(en.transcript?.path).toBe("public/tracks/hash-abc/transcripts/en.json")
+    expect(en.title).toBe("The Soul's Journey")
     expect(en.description).toBe("English overview")
     expect(ru.transcript?.path).toBe("public/tracks/hash-abc/transcripts/ru.json")
+    expect(ru.title).toBe("Путь души")
     expect(ru.description).toBe("Русский обзор")
     expect(ru.outline?.[0]!.title).toBe("Вступление")
     // Audio is the one shared file for every language.

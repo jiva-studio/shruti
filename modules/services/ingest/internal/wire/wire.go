@@ -35,8 +35,10 @@ import (
 	glossaryport "github.com/jiva-studio/shruti/pipeline/ports/glossary"
 	outlineport "github.com/jiva-studio/shruti/pipeline/ports/outline"
 	reviewport "github.com/jiva-studio/shruti/pipeline/ports/review"
+	translateport "github.com/jiva-studio/shruti/pipeline/ports/translate"
 	hybrid "github.com/jiva-studio/shruti/pipeline/review/hybrid"
 	openaicompatreview "github.com/jiva-studio/shruti/pipeline/review/openaicompat"
+	openaicompattranslate "github.com/jiva-studio/shruti/pipeline/translate/openaicompat"
 )
 
 // Deps is the assembled dependency graph handed back to the entrypoint. The
@@ -113,6 +115,7 @@ func buildPipeline(ctx context.Context, cfg *config.Config, rdb *redis.Client) (
 		Extractor:   buildExtractor(ctx, cfg),
 		LLMReviewer: buildReviewer(ctx, cfg),
 		Outliner:    buildOutliner(ctx, cfg),
+		Translator:  buildTranslator(ctx, cfg),
 		Prober:      fetcher,
 		Glossary:    buildGlossary(ctx),
 		JobTimeout:  cfg.JobTimeout,
@@ -226,6 +229,28 @@ func buildOutliner(ctx context.Context, cfg *config.Config) outlineport.Generato
 		return nil
 	}
 	return gen
+}
+
+// buildTranslator builds the shared LLM title translator, reusing the outline
+// LLM credentials (same OpenRouter model); nil (→ variants keep the source
+// title) when unconfigured or on error.
+func buildTranslator(ctx context.Context, cfg *config.Config) translateport.Translator {
+	if cfg.OutlineLLMAPIKey == "" || cfg.OutlineLLMModel == "" {
+		slog.WarnContext(ctx, "ingest_translator_disabled",
+			"reason", "OUTLINE_LLM_API_KEY / OUTLINE_LLM_MODEL unset")
+		return nil
+	}
+	tr, err := openaicompattranslate.New(openaicompattranslate.Config{
+		Endpoint:  cfg.OutlineLLMEndpoint,
+		APIKey:    cfg.OutlineLLMAPIKey,
+		Model:     cfg.OutlineLLMModel,
+		Reasoning: cfg.OutlineLLMReasoning,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "ingest_translator_disabled", "error", err.Error())
+		return nil
+	}
+	return tr
 }
 
 // buildGlossary builds the shared review glossary from its embedded dictionary;
