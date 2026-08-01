@@ -71,6 +71,7 @@ func NewRouter(d RouterDeps) http.Handler {
 		r.Get("/queue", queueHandler(d.Repo))
 		r.Get("/pages/empty", emptyPagesHandler(d.Repo))
 		r.Get("/collections", collectionsHandler(d.Repo))
+		r.Get("/authors", authorsHandler(d.Repo))
 	})
 
 	return r

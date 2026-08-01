@@ -319,3 +319,53 @@ func (r *Repo) CountMediaStates(ctx context.Context, sourceID string) (map[strin
 	}
 	return counts, rows.Err()
 }
+
+// Author is one speaker: the name to show, every spelling the archive filed
+// them under, and how much of them there is.
+type Author struct {
+	Key      string   `json:"key"`
+	Name     string   `json:"name"`
+	Variants []string `json:"variants,omitempty"`
+	Items    int      `json:"items"`
+}
+
+// Authors lists the speakers of a source, most recorded first.
+//
+// The name shown is the commonest spelling rather than a made-up canonical
+// one: whichever form the archive used most is the form its readers will
+// recognise, and inventing a fifth spelling to sit alongside the four that
+// exist helps nobody.
+func (r *Repo) Authors(ctx context.Context, sourceID string, limit int) ([]Author, error) {
+	rows, err := r.pool.Query(ctx, `
+		WITH spelling AS (
+			SELECT author_key, author, count(*) AS n
+			FROM discovery.items
+			WHERE author_key IS NOT NULL AND ($1 = '' OR source_id = $1)
+			GROUP BY author_key, author
+		)
+		SELECT author_key,
+		       (array_agg(author ORDER BY n DESC, author))[1],
+		       array_agg(author ORDER BY n DESC, author),
+		       sum(n)::int
+		FROM spelling
+		GROUP BY author_key
+		ORDER BY sum(n) DESC, author_key
+		LIMIT $2`, sourceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Author
+	for rows.Next() {
+		var a Author
+		if err := rows.Scan(&a.Key, &a.Name, &a.Variants, &a.Items); err != nil {
+			return nil, err
+		}
+		if len(a.Variants) < 2 {
+			a.Variants = nil
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}

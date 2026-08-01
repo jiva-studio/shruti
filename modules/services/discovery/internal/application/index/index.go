@@ -168,10 +168,13 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 // series; it is a page with a recording on it.
 const minSeriesParts = 2
 
-// storeSeries asks whether a page that offered no audio presents a cycle.
+// storeSeries records what a page pointed at and asks whether a page that
+// offered no audio presents a cycle.
 //
-// The links are kept either way — they are the raw material for deciding
-// later, and refetching to get them back is the expensive way to find out.
+// The links are kept for every page, whether or not it carried audio. They are
+// the raw material for deciding about a cycle later, and they are also the only
+// way the crawl can walk through a page whose recheck has not come around
+// without asking the host for it again.
 //
 // The question itself is only put when at least two of those links reach
 // recordings we already have. Most pages on any site carry no audio: menus,
@@ -184,9 +187,6 @@ const minSeriesParts = 2
 func (s *Service) storeSeries(ctx context.Context, pageID int64, links []string,
 	mediaFound int, pageTitle, pageText, sourceID string, report *Report) error {
 
-	if mediaFound > 0 {
-		return nil
-	}
 	if len(links) > 0 {
 		if err := s.Repo.ReplacePageLinks(ctx, pageID, links); err != nil {
 			return err
@@ -196,6 +196,9 @@ func (s *Service) storeSeries(ctx context.Context, pageID int64, links []string,
 		if links, err = s.Repo.PageLinks(ctx, pageID); err != nil {
 			return err
 		}
+	}
+	if mediaFound > 0 {
+		return nil
 	}
 	if s.Normalizer == nil || len(links) == 0 {
 		return nil
@@ -624,7 +627,11 @@ func metadataLine(item *store.Item, extracted domain.Item) string {
 	if item.RecordedOn != nil {
 		parts = append(parts, item.RecordedOn.Format("2006-01-02"))
 	}
-	for _, ref := range item.References {
+	for i, ref := range item.References {
+		if i == refsInLine {
+			parts = append(parts, fmt.Sprintf("+%d more", len(item.References)-refsInLine))
+			break
+		}
 		parts = append(parts, ref.Label())
 	}
 	if len(parts) == 0 {
@@ -632,6 +639,15 @@ func metadataLine(item *store.Item, extracted domain.Item) string {
 	}
 	return strings.Join(parts, " — ")
 }
+
+// refsInLine caps how many passages go into the line that gets embedded.
+//
+// A talk on a whole chapter is filed as a range and expands to every verse in
+// it: one recording carried thirty-seven, and the sentence describing it was
+// nine tenths "SB 10.33.n". The vector then says almost nothing about the talk.
+// Every reference is still stored and still searchable by itself — this is
+// only what the sentence says out loud.
+const refsInLine = 3
 
 func parseDate(s string) *time.Time {
 	if s == "" {
