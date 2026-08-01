@@ -26,6 +26,7 @@ PROFILE_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 # ingest/publish planes), so each gets its own generated password.
 ORCHESTRATOR_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 PUBLISH_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+DISCOVERY_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 # Read-only role the orchestrator postgres-exporter connects as. Required by the
 # orchestrator-postgres init script, so compose refuses to start without it.
 ORCHESTRATOR_PG_EXPORTER_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
@@ -40,6 +41,7 @@ SHRUTI_POSTGRES_PASSWORD=postgres
 SHRUTI_PROFILE_POSTGRES_PASSWORD=postgres
 SHRUTI_ORCHESTRATOR_POSTGRES_PASSWORD=postgres
 SHRUTI_PUBLISH_POSTGRES_PASSWORD=postgres
+SHRUTI_DISCOVERY_POSTGRES_PASSWORD=postgres
 ORCHESTRATOR_PG_EXPORTER_PASSWORD=$ORCHESTRATOR_PG_EXPORTER_PASS
 SHRUTI_ENV_FILE=../.env.dev
 SHRUTI_JWT_KEYS_DIR=../../../../.config/shruti/jwt
