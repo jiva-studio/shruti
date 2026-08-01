@@ -118,6 +118,10 @@ type Run struct {
 	ItemsChanged   int            `json:"items_changed"`
 	Failures       int            `json:"failures"`
 	Errors         map[string]int `json:"errors,omitempty"`
+	// Interrupted means the process died while this run was going — a deploy,
+	// a restart, a crash. Its counters are whatever it had managed to record,
+	// and there is no finish time because we never learned one.
+	Interrupted bool `json:"interrupted,omitempty"`
 }
 
 func (r *Repo) StartRun(ctx context.Context, sourceID string, dryRun bool) (*Run, error) {
@@ -133,6 +137,34 @@ func (r *Repo) StartRun(ctx context.Context, sourceID string, dryRun bool) (*Run
 		return nil, err
 	}
 	return run, nil
+}
+
+// SaveProgress writes a run's counters while it is still going.
+//
+// Without it the row reads all zeros until the moment it finishes, so a run in
+// flight looks identical to one that has done nothing — and a run cut short by
+// a restart keeps those zeros for ever, losing the record of work it really
+// did.
+func (r *Repo) SaveProgress(ctx context.Context, run *Run) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE discovery.runs SET
+			pages_fetched = $2, pages_unchanged = $3, items_found = $4,
+			items_new = $5, items_changed = $6, failures = $7
+		WHERE id = $1`,
+		run.ID, run.PagesFetched, run.PagesUnchanged, run.ItemsFound,
+		run.ItemsNew, run.ItemsChanged, run.Failures)
+	return err
+}
+
+// MarkInterruptedRuns closes the books on runs the previous process left open.
+// Called once at boot: anything unfinished when we start cannot still be going.
+func (r *Repo) MarkInterruptedRuns(ctx context.Context) (int, error) {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE discovery.runs SET interrupted = true WHERE finished_at IS NULL AND NOT interrupted`)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (r *Repo) FinishRun(ctx context.Context, run *Run) error {
@@ -152,14 +184,14 @@ func (r *Repo) FinishRun(ctx context.Context, run *Run) error {
 }
 
 const runCols = `id, source_id, dry_run, started_at, finished_at, pages_fetched,
-	pages_unchanged, items_found, items_new, items_changed, failures, errors`
+	pages_unchanged, items_found, items_new, items_changed, failures, errors, interrupted`
 
 func scanRun(row pgx.Row) (*Run, error) {
 	var run Run
 	var errs []byte
 	err := row.Scan(&run.ID, &run.SourceID, &run.DryRun, &run.StartedAt, &run.FinishedAt,
 		&run.PagesFetched, &run.PagesUnchanged, &run.ItemsFound, &run.ItemsNew,
-		&run.ItemsChanged, &run.Failures, &errs)
+		&run.ItemsChanged, &run.Failures, &errs, &run.Interrupted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
