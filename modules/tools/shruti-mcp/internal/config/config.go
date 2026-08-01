@@ -91,10 +91,12 @@ type Transcribe struct {
 // TranscribeProvider is a discriminated union — `kind` selects which
 // adapter to instantiate; the other fields are kind-specific.
 type TranscribeProvider struct {
-	Kind     string `yaml:"kind"`               // "transcriber-service" | future: "openai", ...
+	Kind     string `yaml:"kind"`               // "transcriber-service" | "deepgram"
 	Model    string `yaml:"model,omitempty"`    // optional model override
-	APIKey   string `yaml:"api_key,omitempty"`  // openai (env-substituted)
-	Endpoint string `yaml:"endpoint,omitempty"` // transcriber-service / openai
+	APIKey   string `yaml:"api_key,omitempty"`  // deepgram (env-substituted)
+	Endpoint string `yaml:"endpoint,omitempty"` // transcriber-service
+	Language string `yaml:"language,omitempty"` // deepgram; empty = multi
+	Diarize  *bool  `yaml:"diarize,omitempty"`  // deepgram; unset follows multi
 }
 
 type Review struct {
