@@ -77,9 +77,10 @@ func NormalizeTranscript(raw transcript.Raw) transcript.Reviewed {
 				continue
 			}
 			out.Blocks = append(out.Blocks, transcript.SentenceBlock{
-				Start: seg.Start,
-				End:   seg.End,
-				Text:  text,
+				Start:   seg.Start,
+				End:     seg.End,
+				Text:    text,
+				Speaker: seg.Speaker,
 			})
 		}
 	}
