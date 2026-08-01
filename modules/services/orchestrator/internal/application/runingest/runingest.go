@@ -170,6 +170,11 @@ type SubmitResult struct {
 // on a bad token — it is a plain 4xx the client renders, not a dead-lettered job.
 var ErrNotPro = errors.New("pro tier not verified")
 
+// ErrMembershipNotFound rejects a translate run whose target membership does not
+// exist or is not owned by the caller — returned as a 404 so it never reveals
+// that another user's track exists.
+var ErrMembershipNotFound = errors.New("membership not found")
+
 // Submit is the synchronous API entry for an ingest request (POST /ingest). It
 // verifies the token and keys the job on the VERIFIED subject — so a
 // client-supplied user_id can neither misattribute the job nor split the dedup
@@ -189,6 +194,20 @@ func (h *RequestHandler) Submit(ctx context.Context, req ingest.Request) (Submit
 	}
 	req.MembershipID = membership // carried into the spec so a retry re-dispatches it
 	lg := slog.With("run_id", runID, "op", req.Op, "request_id", req.RequestID)
+
+	// A translate run advances an EXISTING track membership — verify it exists and
+	// belongs to THIS user before touching it, so a client can't translate (and
+	// read the variants of) someone else's track. The membership id is the
+	// original ingest run id, so a plain job load resolves the owner.
+	if req.Op == job.OpTranslate {
+		owner, oerr := h.d.Repo.Get(ctx, membership)
+		if oerr != nil {
+			return SubmitResult{}, fmt.Errorf("load membership: %w", oerr)
+		}
+		if owner == nil || owner.OwnerID != userID {
+			return SubmitResult{}, ErrMembershipNotFound
+		}
+	}
 
 	existing, err := h.d.Repo.Get(ctx, runID)
 	if err != nil {
