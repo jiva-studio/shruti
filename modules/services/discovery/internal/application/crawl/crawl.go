@@ -88,9 +88,11 @@ func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*st
 	// A full sweep is a deliberate request to ignore the schedule; an ordinary
 	// pass honours it, for links as much as for where it starts.
 	if !opts.Full {
-		if frontier.notDue, err = s.Repo.NotDueURLs(ctx, src.ID, s.now()); err != nil {
+		notDue, err := s.Repo.NotDueURLs(ctx, src.ID, s.now())
+		if err != nil {
 			return nil, err
 		}
+		frontier.setNotDue(notDue)
 	}
 	for _, seed := range src.SeedURLs {
 		frontier.add(seed, 0)
@@ -224,6 +226,26 @@ func errKind(err error) string {
 // digits is what turns an address into a shape: /audios/7378 and /audios/4145
 // are the same kind of page and should be judged together.
 var digits = regexp.MustCompile(`[0-9]+`)
+
+// identity is what makes two addresses the same page.
+//
+// The scheme is dropped. A host that redirects http to https serves one page
+// under two names, and its own sitemap may well list the one it redirects away
+// from — this archive's does. Keyed by the full address, the schedule then
+// never matches: every entry from the sitemap looks new, gets fetched,
+// redirects onto a row we already had, and is fetched again ten minutes later.
+// Two hundred requests an hour to learn nothing.
+func identity(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	id := strings.ToLower(u.Host) + u.EscapedPath()
+	if u.RawQuery != "" {
+		id += "?" + u.RawQuery
+	}
+	return strings.TrimSuffix(id, "/")
+}
 
 // urlShape is the address with its numbers blanked — the key everything about
 // a page's likely worth is learned under.
@@ -377,18 +399,28 @@ func (f *frontier) allowHostOf(rawURL string) {
 	}
 }
 
+// setNotDue records the pages whose next check has not come around, keyed the
+// same way the queue is so that http and https cannot disagree about them.
+func (f *frontier) setNotDue(urls map[string]bool) {
+	f.notDue = make(map[string]bool, len(urls))
+	for u := range urls {
+		f.notDue[identity(u)] = true
+	}
+}
+
 func (f *frontier) add(rawURL string, depth int) {
 	if f.maxDepth > 0 && depth > f.maxDepth {
 		return
 	}
-	if f.seen[rawURL] || f.notDue[rawURL] {
+	id := identity(rawURL)
+	if f.seen[id] || f.notDue[id] {
 		return
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil || !f.hosts[u.Host] {
 		return
 	}
-	f.seen[rawURL] = true
+	f.seen[id] = true
 	f.queue = append(f.queue, frontierEntry{url: rawURL, depth: depth})
 }
 
