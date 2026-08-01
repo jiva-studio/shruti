@@ -235,31 +235,21 @@ func buildOutliner(ctx context.Context, cfg *config.Config) outlineport.Generato
 // LLM credentials (same OpenRouter model); nil (→ variants keep the source
 // title) when unconfigured or on error.
 func buildTranslator(ctx context.Context, cfg *config.Config) translateport.Translator {
-	// Prefer the dedicated translation model (TRANSLATE_LLM_*) so translation can
-	// use a different Gemini model than outline; fall back to the outline LLM so a
-	// default deploy still translates.
-	endpoint, apiKey, model, reasoning := cfg.TranslateLLMEndpoint, cfg.TranslateLLMAPIKey, cfg.TranslateLLMModel, cfg.TranslateLLMReasoning
-	source := "TRANSLATE_LLM_*"
-	if apiKey == "" || model == "" {
-		endpoint, apiKey, model, reasoning = cfg.OutlineLLMEndpoint, cfg.OutlineLLMAPIKey, cfg.OutlineLLMModel, cfg.OutlineLLMReasoning
-		source = "OUTLINE_LLM_* (fallback)"
-	}
-	if apiKey == "" || model == "" {
+	if cfg.TranslateLLMAPIKey == "" || cfg.TranslateLLMModel == "" {
 		slog.WarnContext(ctx, "ingest_translator_disabled",
-			"reason", "neither TRANSLATE_LLM_* nor OUTLINE_LLM_* configured")
+			"reason", "TRANSLATE_LLM_API_KEY / TRANSLATE_LLM_MODEL unset")
 		return nil
 	}
 	tr, err := openaicompattranslate.New(openaicompattranslate.Config{
-		Endpoint:  endpoint,
-		APIKey:    apiKey,
-		Model:     model,
-		Reasoning: reasoning,
+		Endpoint:  cfg.TranslateLLMEndpoint,
+		APIKey:    cfg.TranslateLLMAPIKey,
+		Model:     cfg.TranslateLLMModel,
+		Reasoning: cfg.TranslateLLMReasoning,
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "ingest_translator_disabled", "error", err.Error())
 		return nil
 	}
-	slog.InfoContext(ctx, "ingest_translator_enabled", "config", source, "model", model)
 	return tr
 }
 
