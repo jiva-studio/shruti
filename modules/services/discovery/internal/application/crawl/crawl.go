@@ -62,6 +62,10 @@ type Options struct {
 // on purpose.
 const defaultLimit = 200
 
+// progressEvery is how often a run's counters are written while it is going.
+// Often enough that a restart loses little, rarely enough to be free.
+const progressEvery = 25
+
 // Run walks a source and returns the run record.
 func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*store.Run, error) {
 	if opts.Limit <= 0 {
@@ -115,6 +119,11 @@ func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*st
 		next, depth, ok := frontier.next()
 		if !ok {
 			break
+		}
+		if !opts.DryRun && attempts(run) > 0 && attempts(run)%progressEvery == 0 {
+			if err := s.Repo.SaveProgress(ctx, run); err != nil {
+				slog.WarnContext(ctx, "run_progress_not_saved", "run", run.ID, "err", err.Error())
+			}
 		}
 		if err := s.visit(ctx, next, depth, src, opts, run, frontier); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
