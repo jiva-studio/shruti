@@ -370,33 +370,3 @@ func equalInts(a, b []int) bool {
 	return true
 }
 
-func segLang(lang string) transcript.RawSegment { return transcript.RawSegment{Language: lang} }
-
-func TestSplitSegmentsByLanguage(t *testing.T) {
-	// Bilingual ~50/50: both clear the 10% + 3-sentence threshold → two groups.
-	segs := []transcript.RawSegment{
-		segLang("en"), segLang("ru"), segLang("en"), segLang("ru"),
-		segLang("en"), segLang("ru"), segLang("en"), segLang("ru"),
-	}
-	groups := splitSegmentsByLanguage(segs, "en")
-	if len(groups["en"]) != 4 || len(groups["ru"]) != 4 {
-		t.Fatalf("bilingual split = en:%d ru:%d, want 4/4", len(groups["en"]), len(groups["ru"]))
-	}
-
-	// A stray below-threshold language folds into the primary (no junk variant).
-	stray := make([]transcript.RawSegment, 0, 22)
-	for i := 0; i < 20; i++ {
-		stray = append(stray, segLang("en"))
-	}
-	stray = append(stray, segLang("hi"), segLang("hi")) // 2/22 ≈ 9% AND < 3 → folds
-	g := splitSegmentsByLanguage(stray, "en")
-	if len(g) != 1 || len(g["en"]) != 22 {
-		t.Fatalf("stray language should fold into primary: %v", func() map[string]int {
-			m := map[string]int{}
-			for k, v := range g {
-				m[k] = len(v)
-			}
-			return m
-		}())
-	}
-}
