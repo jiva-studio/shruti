@@ -5,18 +5,21 @@
       :key="lang.code"
       :class="{
         language: true,
-        'language-inactive': !active.includes(lang.code),
-        'language-active': active.includes(lang.code),
+        'language-ghost': lang.available === false,
+        'language-inactive': lang.available !== false && !active.includes(lang.code),
+        'language-active': lang.available !== false && active.includes(lang.code),
       }"
-      @click="onLanguageClicked(lang.code)"
+      @click="onLanguageClicked(lang)"
     >
-      <span v-if="lang.icon" class="flag">{{ lang.icon }}</span>
+      <IonSpinner v-if="lang.busy" name="dots" class="busy" />
+      <span v-else-if="lang.icon" class="flag">{{ lang.icon }}</span>
       {{ lang.name }}
     </span>
   </div>
 </template>
 
 <script setup lang="ts">
+import { IonSpinner } from "@ionic/vue"
 import type { UiTranscriptLanguage } from "./types.js"
 
 /* -------------------------------------------------------------------------- */
@@ -29,12 +32,22 @@ const props = defineProps<{
 }>()
 
 const active = defineModel<string[]>("active", { default: [] as string[] })
+const emit = defineEmits<{ translate: [code: string] }>()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
 /* -------------------------------------------------------------------------- */
 
-function onLanguageClicked(language: string) {
+function onLanguageClicked(lang: UiTranscriptLanguage) {
+  // A "ghost" language (no transcript yet) requests an on-demand translation
+  // instead of toggling — unless one is already running for it.
+  if (lang.available === false) {
+    if (!lang.busy) {
+      emit("translate", lang.code)
+    }
+    return
+  }
+  const language = lang.code
   if (props.allowMultiple) {
     if (active.value.includes(language)) {
       if (active.value.length <= 1) {
@@ -76,6 +89,20 @@ function onLanguageClicked(language: string) {
 
 .language-inactive {
   opacity: 0.55;
+}
+
+/* A not-yet-translated language: dashed outline, tap to request translation. */
+.language-ghost {
+  opacity: 0.6;
+  background-color: transparent;
+  border: 1px dashed var(--shruti-immersive-text, #c0b8a8);
+}
+
+.busy {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: middle;
 }
 
 .language-active {
