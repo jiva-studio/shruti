@@ -106,11 +106,24 @@ func (l *LLM) Normalize(ctx context.Context, batch Batch) ([]Result, error) {
 	return out, nil
 }
 
-// reply is the model's answer. media_url comes back so an answer can be matched
-// to its file instead of trusting the order.
+// promptItem is what the model is shown. The address itself is left out: the
+// filename and the path segments carry the same information, and sending it
+// would pay for the same long string twice — once going in and once coming
+// back, where tokens cost six times as much.
+type promptItem struct {
+	N            int               `json:"n"`
+	Filename     string            `json:"filename,omitempty"`
+	PathSegments []string          `json:"path_segments,omitempty"`
+	Context      string            `json:"context,omitempty"`
+	Tags         map[string]string `json:"tags,omitempty"`
+}
+
+// reply is the model's answer. The index comes back so an answer can be matched
+// to its file without trusting the order — two tokens where echoing the address
+// cost forty.
 type reply struct {
 	Items []struct {
-		MediaURL   string `json:"media_url"`
+		N          int    `json:"n"`
 		Title      string `json:"title"`
 		Author     string `json:"author"`
 		Location   string `json:"location"`
@@ -126,7 +139,17 @@ type reply struct {
 }
 
 func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
-	files, err := json.MarshalIndent(batch.Items, "", "  ")
+	shown := make([]promptItem, len(batch.Items))
+	for i, in := range batch.Items {
+		shown[i] = promptItem{
+			N:            i,
+			Filename:     in.Filename,
+			PathSegments: in.PathSegments,
+			Context:      in.Context,
+			Tags:         in.Tags,
+		}
+	}
+	files, err := json.MarshalIndent(shown, "", "  ")
 	if err != nil {
 		return nil, err
 	}
@@ -147,14 +170,14 @@ func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
 		return nil, fmt.Errorf("normalize: %w", err)
 	}
 
-	byURL := make(map[string]int, len(got.Items))
+	byIndex := make(map[int]int, len(got.Items))
 	for i, item := range got.Items {
-		byURL[item.MediaURL] = i
+		byIndex[item.N] = i
 	}
 
 	results := make([]Result, len(batch.Items))
 	for i, in := range batch.Items {
-		j, ok := byURL[in.MediaURL]
+		j, ok := byIndex[i]
 		if !ok {
 			slog.WarnContext(ctx, "normalize_no_answer", "media_url", in.MediaURL)
 			continue
