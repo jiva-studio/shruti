@@ -29,6 +29,15 @@ type WorkCommand struct {
 	// TranslateLangs requests full translated variants for these languages
 	// (carried from the originating Request). Empty translates nothing.
 	TranslateLangs []string `json:"translate_langs,omitempty"`
+	// Op selects the worker branch ("ingest" | "translate"); empty means ingest.
+	// MembershipID links the run to the track projection it advances.
+	Op           string `json:"op,omitempty"`
+	MembershipID string `json:"membership_id,omitempty"`
+	// Translate-op fields: the already-ingested track to translate, its source
+	// language (which stored transcript to read), and the target language.
+	Track      string `json:"track,omitempty"`
+	SourceLang string `json:"source_lang,omitempty"`
+	TargetLang string `json:"target_lang,omitempty"`
 }
 
 // Marshal serializes the command for the `ingest.work` outbox payload column.
