@@ -16,13 +16,31 @@ import (
 // --- fakes (the hexagonal design makes these cheap) ---
 
 type fakeRepo struct {
-	mu       sync.Mutex
-	jobs     map[string]job.Job
-	progress map[string][]byte
+	mu          sync.Mutex
+	jobs        map[string]job.Job
+	progress    map[string][]byte
+	memberships map[string]job.Membership
 }
 
 func newRepo() *fakeRepo {
-	return &fakeRepo{jobs: map[string]job.Job{}, progress: map[string][]byte{}}
+	return &fakeRepo{jobs: map[string]job.Job{}, progress: map[string][]byte{}, memberships: map[string]job.Membership{}}
+}
+
+func (r *fakeRepo) GetMembershipForUpdateTx(_ context.Context, _ ports.Tx, id string) (*job.Membership, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m, ok := r.memberships[id]
+	if !ok {
+		return nil, nil
+	}
+	return &m, nil
+}
+
+func (r *fakeRepo) SaveMembershipTx(_ context.Context, _ ports.Tx, m *job.Membership) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.memberships[m.ID] = *m
+	return nil
 }
 
 func (r *fakeRepo) CreateTx(_ context.Context, _ ports.Tx, j *job.Job) error { return r.put(j) }
@@ -651,5 +669,64 @@ func TestResult_SettledJob_Idempotent(t *testing.T) {
 	}
 	if after := len(h.events.trackEvents()); after != before {
 		t.Fatalf("settled job re-emitted events: before=%d after=%d", before, after)
+	}
+}
+
+// A translate run's ready appends its variant to the track membership (keyed on
+// membership_id, at a bumped version) instead of replacing the row — the ingest
+// variant survives and the translated one is added.
+func TestResult_TranslateReady_MergesVariant(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+
+	// 1. Ingest a track to ready → membership created with one (en) variant.
+	membership := h.seedQueued(t, "msg-1", "https://x/y")
+	ingestReady := ingest.Result{
+		JobID: membership, Phase: ingest.PhaseReady, TrackID: "hash",
+		Variants: []ingest.Variant{{Lang: "en", TranscriptKey: "k/en"}},
+	}
+	if err := h.res.Process(context.Background(), "r1", resPayload(t, ingestReady)); err != nil {
+		t.Fatalf("ingest ready: %v", err)
+	}
+
+	// 2. A translate run against that membership, driven to ready with a ru variant.
+	tRun, err := h.req.Submit(context.Background(), ingest.Request{
+		Op: job.OpTranslate, MembershipID: membership, Track: "hash",
+		SourceLang: "en", TargetLang: "ru", Token: "tok",
+	})
+	if err != nil {
+		t.Fatalf("translate submit: %v", err)
+	}
+	translateReady := ingest.Result{
+		JobID: tRun.JobID, Phase: ingest.PhaseReady, Op: job.OpTranslate,
+		MembershipID: membership, TrackID: "hash",
+		Variants: []ingest.Variant{{Lang: "ru", TranscriptKey: "k/ru"}},
+	}
+	if err := h.res.Process(context.Background(), "r2", resPayload(t, translateReady)); err != nil {
+		t.Fatalf("translate ready: %v", err)
+	}
+
+	// The membership now carries BOTH variants at a bumped version.
+	m, _ := h.repo.GetMembershipForUpdateTx(context.Background(), nil, membership)
+	if m == nil || m.Version != 1 {
+		t.Fatalf("membership = %+v, want version 1", m)
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(m.Doc, &doc); err != nil {
+		t.Fatalf("doc parse: %v", err)
+	}
+	var variants []ingest.Variant
+	_ = json.Unmarshal(doc["variants"], &variants)
+	langs := map[string]bool{}
+	for _, v := range variants {
+		langs[v.Lang] = true
+	}
+	if !langs["en"] || !langs["ru"] || len(variants) != 2 {
+		t.Fatalf("merged variants = %+v, want en+ru", variants)
+	}
+
+	// The emitted ready event is keyed on the membership at the bumped version.
+	ev := lastTrackEvent(h.events.trackEvents())
+	if ev.Type != ingest.EventReady || ev.DocID != membership || ev.Generation != 1 {
+		t.Fatalf("translate ready event = type=%s doc=%s gen=%d", ev.Type, ev.DocID, ev.Generation)
 	}
 }

@@ -55,6 +55,11 @@ type Result struct {
 	SourceURL string    `json:"source_url,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	Retriable bool      `json:"retriable,omitempty"`
+	// Op is the operation that produced this result ("ingest" | "translate"; empty
+	// = ingest). MembershipID links it to the track membership to merge into — a
+	// translate result carries a single added variant, not a full ingest payload.
+	Op           string `json:"op,omitempty"`
+	MembershipID string `json:"membership_id,omitempty"`
 }
 
 // Variant is one stored per-language transcript: its language, the bucket key of

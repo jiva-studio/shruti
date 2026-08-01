@@ -43,6 +43,12 @@ type JobRepository interface {
 	// WithTx runs fn inside a transaction so a job write and its outbox rows
 	// commit atomically.
 	WithTx(ctx context.Context, fn func(Tx) error) error
+	// GetMembershipForUpdateTx loads a track membership inside a tx taking a row
+	// lock, so two ops advancing the same track (e.g. two translations) serialize
+	// their read-modify-write of the version + doc. Returns (nil, nil) when absent.
+	GetMembershipForUpdateTx(ctx context.Context, q Tx, id string) (*job.Membership, error)
+	// SaveMembershipTx upserts a track membership (version + doc) in the tx.
+	SaveMembershipTx(ctx context.Context, q Tx, m *job.Membership) error
 }
 
 // TierVerifier re-verifies the PRO entitlement carried in an ingest request's
