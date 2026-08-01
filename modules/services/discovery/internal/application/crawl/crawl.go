@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/index"
@@ -224,6 +225,19 @@ const (
 	// still gets looked at. Without it a crawl would only ever revisit the
 	// kinds of page it already knows and would never find a new one.
 	exploreScore = 0.5
+	// insideSeedBonus favours going further into where the crawl was pointed
+	// over wandering out of it.
+	//
+	// A source seeded at one speaker's Bhagavad-gita is a request to index
+	// that, not the archive around it. Left to the order links appear in, a
+	// crawl walks straight out: the breadcrumb to the parent and the site root
+	// sit above the chapter directories in the markup, so twelve pages went up
+	// and sideways and never once went in.
+	//
+	// It is set above the whole range of the yield so that somewhere unexplored
+	// inside the seed still outranks a proven shape outside it. A shape known
+	// to be barren does not: nothing inside is worth visiting for its own sake.
+	insideSeedBonus = 0.75
 	// depthPenalty keeps a productive shape from being chased downwards
 	// forever before anything else is looked at.
 	depthPenalty = 0.05
@@ -245,6 +259,9 @@ type frontier struct {
 	// yields is what each shape has been worth so far, seeded from previous
 	// runs and updated as this one goes.
 	yields map[string]store.ShapeYield
+	// insideSeed are the directory paths the seeds point at. Anything under
+	// one of them is where this source was asked to look.
+	insideSeed []string
 }
 
 type frontierEntry struct {
@@ -261,11 +278,58 @@ func newFrontier(seeds []string, maxDepth int, yields map[string]store.ShapeYiel
 		f.maxDepth = 6
 	}
 	for _, seed := range seeds {
-		if u, err := url.Parse(seed); err == nil {
-			f.hosts[u.Host] = true
+		u, err := url.Parse(seed)
+		if err != nil {
+			continue
 		}
+		f.hosts[u.Host] = true
+		f.insideSeed = append(f.insideSeed, seedScope(u))
 	}
 	return f
+}
+
+// seedScope is the part of an address a seed marks out as its own.
+//
+// For a path it is the directory the seed sits in; for a listing addressed
+// through a query — which is how a file archive often does it — it is the
+// whole thing, since there is no path to speak of.
+func seedScope(u *url.URL) string {
+	if u.RawQuery != "" {
+		if q, err := url.QueryUnescape(u.RawQuery); err == nil {
+			return u.Path + "?" + q
+		}
+		return u.Path + "?" + u.RawQuery
+	}
+	scope := u.Path
+	if i := strings.LastIndex(strings.TrimSuffix(scope, "/"), "/"); i > 0 {
+		scope = scope[:i+1]
+	}
+	return scope
+}
+
+// within reports whether an address lies inside what a seed marked out.
+func (f *frontier) within(rawURL string) bool {
+	if len(f.insideSeed) == 0 {
+		return false
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	here := u.Path
+	if u.RawQuery != "" {
+		if q, err := url.QueryUnescape(u.RawQuery); err == nil {
+			here += "?" + q
+		} else {
+			here += "?" + u.RawQuery
+		}
+	}
+	for _, scope := range f.insideSeed {
+		if strings.HasPrefix(here, scope) {
+			return true
+		}
+	}
+	return false
 }
 
 // allowHostOf admits the name a page actually answered on.
@@ -302,11 +366,20 @@ func (f *frontier) addAll(urls []string, depth int) {
 }
 
 // score is how promising an address looks: what pages of its shape have
-// yielded per visit, less a little for how deep it sits.
+// yielded, whether it goes further into what the source asked for, and a little
+// against how deep it sits.
+//
+// The yield is capped at one. Uncapped, a shape holding twenty files a page
+// would outweigh everything else put together, and a crawl pointed at one
+// speaker would leave to go and fetch it. What matters for ordering is whether
+// a shape produces recordings at all, not how many.
 func (f *frontier) score(e frontierEntry) float64 {
 	base := exploreScore
 	if y, ok := f.yields[urlShape(e.url)]; ok && y.Pages > 0 {
-		base = float64(y.Media) / float64(y.Pages)
+		base = min(float64(y.Media)/float64(y.Pages), 1)
+	}
+	if f.within(e.url) {
+		base += insideSeedBonus
 	}
 	return base - depthPenalty*float64(e.depth)
 }

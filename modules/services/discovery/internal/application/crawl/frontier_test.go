@@ -1,6 +1,7 @@
 package crawl
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
@@ -79,5 +80,68 @@ func TestURLShapeBlanksNumbers(t *testing.T) {
 		if got := urlShape(in); got != want {
 			t.Errorf("%s -> %q, want %q", in, got, want)
 		}
+	}
+}
+
+// A crawl pointed at one speaker's Bhagavad-gita goes into it, not out of it.
+// The real page puts its breadcrumb — the parent and the site root — above the
+// chapter directories, so document order sends the crawl straight out.
+func TestFrontierGoesInwardBeforeOutward(t *testing.T) {
+	seed := "https://a.example/index.php?q=f&f=%2F02_-_Swamis%2FBhakti_Caitanya_Swami%2FBhagavad_Gita"
+	f := newFrontier([]string{seed}, 4, nil)
+	f.addAll([]string{
+		"https://a.example/", // breadcrumb: site root
+		"https://a.example/index.php?q=f&f=%2F02_-_Swamis", // breadcrumb: parent
+		"https://a.example/index.php?q=f&f=%2F02_-_Swamis%2FBhakti_Caitanya_Swami%2FBhagavad_Gita%2FChapter-01",
+	}, 1)
+
+	got, _, _ := f.next()
+	if !strings.Contains(got, "Chapter-01") {
+		t.Fatalf("first = %q, want the chapter under the seed", got)
+	}
+}
+
+// A path seed marks out the directory it sits in.
+func TestFrontierScopesAPathSeed(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/authors/tushkin/index.html"}, 4, nil)
+	f.addAll([]string{
+		"https://a.example/about",
+		"https://a.example/authors/tushkin/lecture-3",
+	}, 1)
+
+	got, _, _ := f.next()
+	if got != "https://a.example/authors/tushkin/lecture-3" {
+		t.Errorf("first = %q, want the one under the seed", got)
+	}
+}
+
+// Leaving the seed is discouraged, not forbidden: a shape known to hold
+// recordings still gets visited once what is inside has been.
+func TestFrontierStillLeavesTheSeedEventually(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/inside/"}, 4, map[string]store.ShapeYield{
+		"/elsewhere/#": {Pages: 4, Media: 4},
+	})
+	f.addAll([]string{"https://a.example/elsewhere/1", "https://a.example/inside/a"}, 1)
+
+	first, _, _ := f.next()
+	second, _, ok := f.next()
+	if !ok || first != "https://a.example/inside/a" {
+		t.Fatalf("first = %q, want inside the seed", first)
+	}
+	if second != "https://a.example/elsewhere/1" {
+		t.Errorf("second = %q, want the productive shape outside", second)
+	}
+}
+
+// One enormous page must not outweigh where the source was pointed.
+func TestFrontierCapsTheYield(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/inside/"}, 4, map[string]store.ShapeYield{
+		"/elsewhere/#": {Pages: 1, Media: 400},
+	})
+	f.addAll([]string{"https://a.example/elsewhere/1", "https://a.example/inside/a"}, 1)
+
+	got, _, _ := f.next()
+	if got != "https://a.example/inside/a" {
+		t.Errorf("first = %q; four hundred files on one page outside should not drag the crawl out", got)
 	}
 }
