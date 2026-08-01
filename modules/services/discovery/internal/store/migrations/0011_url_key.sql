@@ -1,16 +1,7 @@
--- A page whose recheck has not come around was dropped from the queue
--- entirely, and with it every address it was the only one pointing at. The
--- crawl could therefore only ever reach what was linked from a page it fetched
--- in the same pass. Once the first sweep had settled — 1416 pages, all of them
--- scheduled a day out — the seed itself was not due, nothing was fetched,
--- nothing was discovered, and three consecutive runs took zero pages while the
--- archive still held a quarter of a million files.
---
--- Not fetching a page and not walking through it are different things. What a
--- page pointed at is already known; it does not have to be asked again to be
--- traversed. Keeping the links of every page, not just the ones that offered
--- no audio, and keying them the way the queue keys addresses, makes the
--- unexplored edge answerable as a query.
+-- Links are kept for every page and keyed the way the crawl keys addresses, so
+-- a page that is not due to be fetched can still be walked through. Without it
+-- the queue could only reach what was linked from a page fetched in the same
+-- pass, and went empty as soon as the first sweep settled.
 
 ALTER TABLE discovery.pages
     ADD COLUMN IF NOT EXISTS url_key text
