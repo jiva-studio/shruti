@@ -367,6 +367,9 @@ export function useTranscriptDialogController(
         track: trackId,
         source_lang: source,
         target_lang: code,
+        // Send the source title so the variant gets a translated title too (the
+        // overview is generated from the translated blocks on the worker).
+        title: item.titleRaw ?? undefined,
       })
       const ok = await pollRun(res.run_id)
       // The run is ready, but the produced variant reaches THIS device through the
