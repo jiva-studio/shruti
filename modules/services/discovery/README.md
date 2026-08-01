@@ -50,9 +50,19 @@ yielded, where a shape is the address with its numbers blanked. On one archive
 had to say so. The counts come from the pages table, seeded from earlier runs
 and updated during the current one.
 
+Going further into where the source was pointed outranks wandering out of it. A
+source seeded at one speaker's Bhagavad-gita is a request to index that, not the
+archive around it — and left to document order a crawl walks straight out,
+because the breadcrumb to the parent and the site root sit above the chapter
+directories in the markup. Twelve pages from such a seed went up and sideways
+and found nothing; with the preference they went down eleven chapters and found
+sixty-nine files.
+
 A shape nobody has tried outranks one that has proved barren, or a crawl would
 only ever revisit what it already knows. Depth breaks ties, so one productive
-shape is not chased downwards forever.
+shape is not chased downwards forever. The yield is capped at one recording a
+page: uncapped, a single page holding four hundred files would outweigh
+everything else and drag a crawl out of the source it was given.
 
 This does nothing on an archive that publishes a file tree: every directory is
 its own shape, there is nothing to group, and the order falls back to the one
