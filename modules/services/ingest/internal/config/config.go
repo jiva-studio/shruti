@@ -96,10 +96,9 @@ type Config struct {
 	OutlineLLMReasoning string // OUTLINE_LLM_REASONING
 
 	// --- Translation (LLM, OpenAI-compatible) ---
-	// OPTIONAL: a DEDICATED model for the title/transcript translator (on-demand
-	// translate op + ingest-time translated variants). Its own knob so translation
-	// can use a different Gemini model than outline. When unset, falls back to the
-	// OUTLINE_LLM_* config so a default deploy still translates.
+	// OPTIONAL: the model for the title/transcript translator (on-demand translate
+	// op + ingest-time translated variants). Runs only when key + model are set;
+	// unset → no translation (title stays the source, no translated variants).
 	TranslateLLMEndpoint  string // TRANSLATE_LLM_ENDPOINT (default OpenRouter)
 	TranslateLLMAPIKey    string // TRANSLATE_LLM_API_KEY
 	TranslateLLMModel     string // TRANSLATE_LLM_MODEL
