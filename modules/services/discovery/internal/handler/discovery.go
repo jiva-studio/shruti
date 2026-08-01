@@ -279,3 +279,14 @@ func dateParam(s string) *time.Time {
 	}
 	return &d
 }
+
+func authorsHandler(repo *store.Repo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		authors, err := repo.Authors(r.Context(), r.URL.Query().Get("source"), intParam(r, "limit", 100))
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"authors": authors, "count": len(authors)})
+	}
+}

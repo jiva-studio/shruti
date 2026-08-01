@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strconv"
 	"time"
 )
 
@@ -32,7 +33,7 @@ func (r *Repo) SaveCollection(ctx context.Context, c *Collection) error {
 	// Two identities, two conflict targets: a series with a page of its own is
 	// keyed by that page, and one reconstructed from what its parts call it is
 	// keyed by the name they used.
-	conflict := "(source_id, title, coalesce(author, '')) WHERE url IS NULL"
+	conflict := "(source_id, title, coalesce(author_key, '')) WHERE url IS NULL"
 	if c.URL != "" {
 		conflict = "(source_id, url) WHERE url IS NOT NULL"
 	}
@@ -67,7 +68,9 @@ func (r *Repo) CollectionByURL(ctx context.Context, sourceID, url string) (*Coll
 // CollectionByTitle finds a cycle reconstructed from what its parts call it.
 //
 // The speaker is part of the identity: two lecturers can give courses of the
-// same name, and the name alone would fold them into one.
+// same name, and the name alone would fold them into one. It is the speaker's
+// key that decides, not the spelling — otherwise the same course filed under
+// "Shyamananda Prabhu" and under "HG Shyamananda Das" becomes two.
 func (r *Repo) CollectionByTitle(ctx context.Context, sourceID, title, author string) (*Collection, error) {
 	var c Collection
 	err := r.pool.QueryRow(ctx, `
@@ -75,7 +78,9 @@ func (r *Repo) CollectionByTitle(ctx context.Context, sourceID, title, author st
 		       coalesce(c.description,''), coalesce(c.author,''), `+memberCount+`
 		FROM discovery.collections c
 		WHERE c.source_id IS NOT DISTINCT FROM nullif($1,'')
-		  AND c.title = $2 AND coalesce(c.author,'') = $3 AND c.url IS NULL`,
+		  AND c.title = $2
+		  AND coalesce(c.author_key,'') = coalesce(discovery.author_key(nullif($3,'')),'')
+		  AND c.url IS NULL`,
 		sourceID, title, author,
 	).Scan(&c.ID, &c.SourceID, &c.URL, &c.Title, &c.Description, &c.Author, &c.MemberCount)
 	if err != nil {
@@ -162,7 +167,9 @@ func (r *Repo) AbsorbByTitle(ctx context.Context, into int64, sourceID, title, a
 	err = tx.QueryRow(ctx, `
 		SELECT id FROM discovery.collections
 		WHERE source_id IS NOT DISTINCT FROM nullif($1,'')
-		  AND title = $2 AND author = $3 AND url IS NULL`,
+		  AND title = $2
+		  AND author_key IS NOT DISTINCT FROM discovery.author_key(nullif($3,''))
+		  AND url IS NULL`,
 		sourceID, title, author).Scan(&from)
 	if err != nil {
 		return nil
@@ -219,6 +226,17 @@ type CollectionMember struct {
 	RecordedOn *time.Time `json:"recorded_on,omitempty"`
 }
 
+// minMembers is the fewest parts a cycle can be shown with. A course of one
+// lecture is not a course.
+//
+// It bites on the cycles reconstructed from what the parts called themselves,
+// where the name is often an occasion rather than a series: "Sunday Feast" and
+// "Gaura Purnima Festival" are what happened that day, not a set of talks given
+// together, and the archive holds hundreds of them under one speaker each. A
+// page that presents a cycle is taken at its word — it says what it is, and may
+// legitimately list one part so far.
+const minMembers = 2
+
 // Collections lists what we know of a source's cycles.
 func (r *Repo) Collections(ctx context.Context, sourceID string, limit int) ([]CollectionView, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -226,6 +244,7 @@ func (r *Repo) Collections(ctx context.Context, sourceID string, limit int) ([]C
 		       coalesce(c.description,''), coalesce(c.author,''), `+memberCount+`
 		FROM discovery.collections c
 		WHERE ($1 = '' OR c.source_id = $1)
+		  AND (c.url IS NOT NULL OR `+memberCount+` >= `+strconv.Itoa(minMembers)+`)
 		ORDER BY c.title LIMIT $2`, sourceID, limit)
 	if err != nil {
 		return nil, err
@@ -282,8 +301,9 @@ func (r *Repo) members(ctx context.Context, collectionID int64) ([]CollectionMem
 	return members, pending, rows.Err()
 }
 
-// ReplacePageLinks stores what a page pointed at. Kept only for pages that
-// offered no media, which is the side a series page is on.
+// ReplacePageLinks stores what a page pointed at, for every page. It is what a
+// cycle is decided from later, and what the crawl walks through when a page is
+// not due to be fetched again.
 func (r *Repo) ReplacePageLinks(ctx context.Context, pageID int64, urls []string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -302,6 +322,39 @@ func (r *Repo) ReplacePageLinks(ctx context.Context, pageID int64, urls []string
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// UnvisitedLinks are the addresses this source's pages point at that have
+// never become pages themselves.
+//
+// This is the edge of the crawl, and it has to be a query rather than a walk.
+// The queue is fed by fetching pages, but a page whose recheck has not come
+// around is not fetched — so once a first sweep settles, every route onwards
+// is behind a page nobody will open, and the crawl finds nothing for ever
+// while most of the archive is still unseen. What those pages pointed at is
+// already recorded; asking the table is the whole of the fix.
+func (r *Repo) UnvisitedLinks(ctx context.Context, sourceID string, limit int) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT l.url
+		FROM discovery.page_links l
+		JOIN discovery.pages p ON p.id = l.page_id
+		WHERE ($1 = '' OR p.source_id = $1)
+		  AND NOT EXISTS (SELECT 1 FROM discovery.pages t WHERE t.url_key = l.url_key)
+		LIMIT $2`, sourceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
 }
 
 // KnownMediaLinks counts how many of these addresses are pages we have already
