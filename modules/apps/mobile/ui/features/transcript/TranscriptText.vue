@@ -176,15 +176,17 @@ span {
   transition: none;
 }
 
-/* Sentence-paired: original on its own line, translation stacked beneath and
-   slightly dimmed so the pair reads as one unit. */
+/* Sentence-paired: original on its own line, translation stacked directly
+   beneath (tight) and slightly dimmed so the pair reads as one unit; the space
+   BETWEEN pairs is larger than the space within one. */
 .paired {
-  margin-bottom: 0.7em;
+  margin-bottom: 0.9em;
 }
 .paired-line {
   display: block;
 }
 .paired-line:not(:first-child) {
   opacity: 0.7;
+  margin-top: 0.15em;
 }
 </style>
