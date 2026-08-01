@@ -26,6 +26,7 @@ PROFILE_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 # ingest/publish planes), so each gets its own generated password.
 ORCHESTRATOR_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 PUBLISH_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+DISCOVERY_PG_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
 # Read-only role the orchestrator postgres-exporter connects as. Required by the
 # orchestrator-postgres init script, so compose refuses to start without it.
 ORCHESTRATOR_PG_EXPORTER_PASS=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
@@ -40,6 +41,7 @@ LECTORIUM_POSTGRES_PASSWORD=$PG_PASS
 LECTORIUM_PROFILE_POSTGRES_PASSWORD=$PROFILE_PG_PASS
 LECTORIUM_ORCHESTRATOR_POSTGRES_PASSWORD=$ORCHESTRATOR_PG_PASS
 LECTORIUM_PUBLISH_POSTGRES_PASSWORD=$PUBLISH_PG_PASS
+LECTORIUM_DISCOVERY_POSTGRES_PASSWORD=$DISCOVERY_PG_PASS
 ORCHESTRATOR_PG_EXPORTER_PASSWORD=$ORCHESTRATOR_PG_EXPORTER_PASS
 LECTORIUM_ENV_FILE=../.env.dev
 LECTORIUM_JWT_KEYS_DIR=../../../../.config/lectorium/jwt
