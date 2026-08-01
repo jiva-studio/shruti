@@ -105,6 +105,7 @@ import (
 	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 	"github.com/jiva-studio/lectorium/pipeline/ports/sentencesplit"
 	openaicompatreview "github.com/jiva-studio/lectorium/pipeline/review/openaicompat"
+	"github.com/jiva-studio/lectorium/pipeline/transcriber/deepgram"
 )
 
 // runBackfillAssetHashes opens current.db and (re)hashes every published
@@ -363,6 +364,16 @@ func main() {
 				Cleanup:  true,
 			})
 			transcribeRegistry.Register(worker.NewThrottledTranscriber(t, *transcribeConcurrency))
+		case "deepgram":
+			if p.APIKey == "" {
+				log.Fatalf("transcribe provider %q: deepgram needs api_key", name)
+			}
+			transcribeRegistry.Register(deepgram.New(deepgram.Config{
+				APIKey:   p.APIKey,
+				Model:    p.Model,
+				Language: p.Language,
+				Diarize:  p.Diarize,
+			}))
 		default:
 			log.Fatalf("transcribe provider %q: unknown kind %q", name, p.Kind)
 		}

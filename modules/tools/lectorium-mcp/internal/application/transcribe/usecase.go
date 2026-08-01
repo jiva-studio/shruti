@@ -10,8 +10,9 @@ import (
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
 	audioport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/audio"
 	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
-	"github.com/jiva-studio/lectorium/pipeline/ports/transcriber"
 	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/lectorium/pipeline/ports/transcriber"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 type UseCase struct {
@@ -32,6 +33,8 @@ type Result struct {
 	Provider string   `json:"provider"`
 	Segments int      `json:"segments"`
 	Empty    bool     `json:"empty,omitempty"`
+	// Languages is every language written for this track, one transcript each.
+	Languages []string `json:"languages,omitempty"`
 }
 
 func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Options) (res Result, rerr error) {
@@ -55,19 +58,54 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	if err != nil {
 		return Result{}, err
 	}
-	raw.TrackId = string(id)
-	raw.Language = language
+	// A provider that tags segments per language (Deepgram multi) can return a
+	// recording that is two transcripts in one — a talk and its consecutive
+	// translation. Store each language separately so every transcript is
+	// monolingual and gets reviewed by the model for its language.
+	groups := transcript.SplitByLanguage(raw.Segments, language)
+	langs := transcript.OrderedLanguages(groups, language)
 
-	if err := uc.Transcripts.WriteRaw(ctx, id, language, raw); err != nil {
-		return Result{}, err
+	for _, lang := range langs {
+		if lang != language {
+			key := pipeline.Key{Stage: pipeline.StageTranscribed, Variant: lang}
+			claimed, err := uc.Registry.TryClaimStage(ctx, id, key)
+			if err != nil {
+				return Result{}, err
+			}
+			if !claimed {
+				return Result{}, fmt.Errorf("transcribe: another worker holds stage for %s/%s", id, lang)
+			}
+		}
+		part := transcript.Raw{
+			TrackId:  string(id),
+			Language: lang,
+			Provider: raw.Provider,
+			Model:    raw.Model,
+			Segments: transcript.Reindex(groups[lang]),
+		}
+		if err := uc.Transcripts.WriteRaw(ctx, id, lang, part); err != nil {
+			return Result{}, err
+		}
+		if lang == language {
+			continue
+		}
+		body, _ := json.Marshal(Result{
+			TrackId: id, Language: lang, Provider: tx.Name(),
+			Segments: len(part.Segments),
+		})
+		key := pipeline.Key{Stage: pipeline.StageTranscribed, Variant: lang}
+		if err := uc.Registry.SetStage(ctx, id, key, pipeline.StatusDone, body, ""); err != nil {
+			return Result{}, err
+		}
 	}
 
 	res = Result{
-		TrackId:  id,
-		Language: language,
-		Provider: tx.Name(),
-		Segments: len(raw.Segments),
-		Empty:    len(raw.Segments) == 0,
+		TrackId:   id,
+		Language:  language,
+		Provider:  tx.Name(),
+		Segments:  len(groups[language]),
+		Empty:     len(groups[language]) == 0,
+		Languages: langs,
 	}
 	body, _ := json.Marshal(res)
 	if err := uc.Registry.SetStage(ctx, id, stageKey, pipeline.StatusDone, body, ""); err != nil {
@@ -90,4 +128,3 @@ func (uc UseCase) resolveProvider(name string) (transcriber.Transcriber, error) 
 	}
 	return t, nil
 }
-
