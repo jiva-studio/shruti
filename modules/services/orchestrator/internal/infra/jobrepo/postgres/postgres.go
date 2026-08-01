@@ -139,6 +139,41 @@ func getJob(ctx context.Context, q querier, id, lock string) (*job.Job, error) {
 	return &j, nil
 }
 
+// GetMembershipForUpdateTx loads a track membership FOR UPDATE; (nil, nil) when
+// absent. Two ops advancing the same track serialize on this lock.
+func (r *Repo) GetMembershipForUpdateTx(ctx context.Context, t ports.Tx, id string) (*job.Membership, error) {
+	var (
+		m     job.Membership
+		owner string
+		doc   []byte
+	)
+	err := r.q(t).QueryRow(ctx, `
+		SELECT membership_id, owner_id::text, version, doc
+		  FROM orchestrator.track_memberships WHERE membership_id=$1 FOR UPDATE`, id).
+		Scan(&m.ID, &owner, &m.Version, &doc)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m.OwnerID = owner
+	m.Doc = doc
+	return &m, nil
+}
+
+// SaveMembershipTx upserts a track membership's version + doc.
+func (r *Repo) SaveMembershipTx(ctx context.Context, t ports.Tx, m *job.Membership) error {
+	_, err := r.q(t).Exec(ctx, `
+		INSERT INTO orchestrator.track_memberships (membership_id, owner_id, version, doc, updated_at)
+		VALUES ($1,$2,$3,$4::jsonb, now())
+		ON CONFLICT (membership_id) DO UPDATE
+		   SET version=EXCLUDED.version, doc=EXCLUDED.doc, updated_at=now()`,
+		m.ID, nullUUID(m.OwnerID), m.Version, jsonbOrNil(m.Doc),
+	)
+	return err
+}
+
 // UpdateProgress writes only the job's progress blob — a lightweight,
 // off-the-hot-path update for the frequent per-stage heartbeats, so it never
 // contends with the state/attempt writes. Best-effort at the call site.
