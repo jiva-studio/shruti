@@ -41,6 +41,7 @@ import (
 	glossaryport "github.com/jiva-studio/lectorium/pipeline/ports/glossary"
 	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
+	translateport "github.com/jiva-studio/lectorium/pipeline/ports/translate"
 	"github.com/jiva-studio/lectorium/pipeline/review"
 	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
@@ -65,6 +66,10 @@ type Deps struct {
 	// Optional: nil skips it. Best-effort — a failure leaves the track without an
 	// outline/description and never blocks the ingest.
 	Outliner outlineport.Generator
+	// Translator, when set, renders the source title into each non-primary
+	// variant's language. Optional and best-effort — nil (or a failure) leaves
+	// the variant with the source title, never blocking the ingest.
+	Translator translateport.Translator
 	// Prober, when set, reads source metadata (uploader, publish date) to fill an
 	// author/date the title lacks. Optional and best-effort.
 	Prober ports.SourceProber
@@ -188,7 +193,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// lecturer+translator recording yields one variant per language; a
 	// single-language track yields exactly one.
 	s.progress(ctx, cmd, ingest.StageReviewing)
-	variants, primaryLang, err := s.reviewSplit(ctx, lg, hash, raw, draft.Lang)
+	variants, primaryLang, err := s.reviewSplit(ctx, lg, hash, raw, draft.Lang, draft.TitleRaw)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, err)
 	}
@@ -256,7 +261,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 // the primary so nothing is lost. A group that reviews to zero blocks is
 // dropped. The whole ingest fails (no_speech) only when NO group produced blocks.
 func (s *Service) reviewSplit(
-	ctx context.Context, lg *slog.Logger, hash string, raw transcript.Raw, primary string,
+	ctx context.Context, lg *slog.Logger, hash string, raw transcript.Raw, primary, title string,
 ) ([]ingest.Variant, string, error) {
 	groups := transcript.SplitByLanguage(raw.Segments, primary)
 
@@ -284,6 +289,7 @@ func (s *Service) reviewSplit(
 		description, chapters := s.outline(ctx, lg, reviewed.Blocks, lang)
 		variants = append(variants, ingest.Variant{
 			Lang:          lang,
+			Title:         s.variantTitle(ctx, lg, title, primary, lang),
 			TranscriptKey: tKey,
 			Description:   description,
 			Outline:       chapters,
@@ -413,6 +419,21 @@ func (s *Service) outline(ctx context.Context, lg *slog.Logger, blocks []transcr
 		chapters[i] = ingest.OutlineEntry{Title: c.Title, Start: c.Start, End: c.End}
 	}
 	return res.Description, chapters
+}
+
+// variantTitle renders the source title into a variant's language. The primary
+// variant keeps the source title verbatim; others are translated (best-effort:
+// a nil Translator or any error falls back to the source title).
+func (s *Service) variantTitle(ctx context.Context, lg *slog.Logger, title, primary, lang string) string {
+	if s.d.Translator == nil || lang == primary || title == "" {
+		return title
+	}
+	translated, err := s.d.Translator.Translate(ctx, title, primary, lang)
+	if err != nil {
+		lg.WarnContext(ctx, "ingest_title_translate_failed", "lang", lang, "error", err.Error())
+		return title
+	}
+	return translated
 }
 
 // probeSource reads best-effort source metadata (uploader, publish date). A nil

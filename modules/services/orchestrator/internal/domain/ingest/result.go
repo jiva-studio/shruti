@@ -62,6 +62,7 @@ type Result struct {
 // is shared, so not repeated here.
 type Variant struct {
 	Lang          string         `json:"lang"`
+	Title         string         `json:"title,omitempty"`
 	TranscriptKey string         `json:"transcript_key"`
 	Description   string         `json:"description,omitempty"`
 	Outline       []OutlineEntry `json:"outline,omitempty"`

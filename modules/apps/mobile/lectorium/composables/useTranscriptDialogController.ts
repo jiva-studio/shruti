@@ -274,6 +274,9 @@ export function useTranscriptDialogController(
   const chapters = computed<readonly TrackOutlineChapter[]>(
     () => overviewVariant.value?.outline ?? []
   )
+  // Title in the displayed language: a lecturer+translator recording shows the
+  // translated title when its language is active, falling back to the track's.
+  const title = computed<string>(() => overviewVariant.value?.title || hydration.title.value)
 
   const blockGroups = computed(() =>
     buildMergedTranscriptViewData(loader.transcripts.value, {
@@ -419,7 +422,7 @@ export function useTranscriptDialogController(
 
   return {
     isOpen,
-    title: hydration.title,
+    title,
     author: hydration.author,
     description,
     chapters,
