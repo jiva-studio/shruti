@@ -396,7 +396,13 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		if err := j.To(job.StateRunning); err != nil {
 			return fmt.Errorf("to running: %w", err)
 		}
-		ev := event(res.JobID+":processing", ingest.EventProcessing, res.RequestID, j.OwnerID, res.JobID, "", j.Generation, statusData("processing", specRequest(j).Title, specRequest(j).URL))
+		if j.Op == job.OpTranslate {
+			// Translate runs against an ALREADY-ready track: advance the run state
+			// (for the status poll) but emit NO library lifecycle — that would reset
+			// the row to a spinner. Its only library effect is the merged variant.
+			return h.save(ctx, j)
+		}
+		ev := event(res.JobID+":processing", ingest.EventProcessing, res.RequestID, j.OwnerID, j.MembershipID, "", j.Generation, statusData("processing", specRequest(j).Title, specRequest(j).URL))
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseReady:
@@ -410,13 +416,29 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		if err := j.To(job.StateDone); err != nil {
 			return fmt.Errorf("to done: %w", err)
 		}
-		// Key the projection on the JOB id (the stable library membership id) —
-		// the SAME doc_id as queued/processing/failed — so the row advances in
-		// place; the content hash rides along in track_id (via j.Result / the
-		// TrackEvent.TrackID field), not as the key.
-		lg.InfoContext(ctx, "job_done", "track_id", res.TrackID, "lang", res.Lang)
-		ev := event(res.JobID+":ready", ingest.EventReady, res.RequestID, j.OwnerID, res.JobID, res.TrackID, j.Generation, j.Result)
-		return h.save(ctx, j, ev)
+		// Merge into the track membership under a row lock and emit the merged doc
+		// keyed on membership_id (the stable library row id). Ingest sets the full
+		// doc at the run's generation; translate appends its variant and takes
+		// version+1 so it out-ranks the prior ready under LWW.
+		lg.InfoContext(ctx, "job_done", "op", j.Op, "track_id", res.TrackID, "membership", j.MembershipID)
+		return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
+			if err := h.d.Repo.SaveTx(ctx, tx, j); err != nil {
+				return err
+			}
+			m, err := h.d.Repo.GetMembershipForUpdateTx(ctx, tx, j.MembershipID)
+			if err != nil {
+				return err
+			}
+			version, doc, err := mergeReady(j, res, m)
+			if err != nil {
+				return err
+			}
+			if err := h.d.Repo.SaveMembershipTx(ctx, tx, &job.Membership{ID: j.MembershipID, OwnerID: j.OwnerID, Version: version, Doc: doc}); err != nil {
+				return err
+			}
+			ev := event(res.JobID+":ready", ingest.EventReady, res.RequestID, j.OwnerID, j.MembershipID, res.TrackID, version, doc)
+			return h.publishEvent(ctx, tx, ev)
+		})
 
 	case ingest.PhaseFailed:
 		// Discard a stale/duplicate failed result. The in-flight attempt is
@@ -469,9 +491,14 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		// `exhausted` field separates "we burned the attempt budget" (our
 		// dependency is sick) from "the source was never ingestable".
 		lg.ErrorContext(ctx, "job_dead_lettered",
-			"error", res.Error, "attempts", j.Attempts,
+			"op", j.Op, "error", res.Error, "attempts", j.Attempts,
 			"exhausted", res.Retriable, "user_id", j.OwnerID)
-		ev := event(res.JobID+":failed", ingest.EventFailed, res.RequestID, j.OwnerID, res.JobID, j.TrackID, j.Generation, failData(res.Error, specRequest(j).Title, specRequest(j).URL))
+		if j.Op == job.OpTranslate {
+			// A translate failure must not fail the (already-ready) library row —
+			// the user sees it only via the run status poll.
+			return h.save(ctx, j)
+		}
+		ev := event(res.JobID+":failed", ingest.EventFailed, res.RequestID, j.OwnerID, j.MembershipID, j.TrackID, j.Generation, failData(res.Error, specRequest(j).Title, specRequest(j).URL))
 		return h.save(ctx, j, ev)
 
 	default:

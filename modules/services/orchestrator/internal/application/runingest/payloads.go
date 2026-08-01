@@ -2,9 +2,11 @@ package runingest
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/jiva-studio/shruti/orchestrator/internal/domain/ingest"
+	"github.com/jiva-studio/shruti/orchestrator/internal/domain/job"
 )
 
 // progressData is the jobs.progress blob for a pipeline-stage heartbeat — the
@@ -109,6 +111,63 @@ func failCode(msg string) string {
 // readyResult is the track.ready event payload (and the job's terminal Result),
 // projected from the worker's ready result. Shape is part of the downstream
 // contract — keep it stable.
+// mergeReady computes a track membership's new (version, doc) for a ready result.
+// Ingest sets the full doc at the run's generation; translate appends its single
+// variant to the existing doc and takes version+1 so its ready out-ranks the
+// prior state under the profile's (version, rank) LWW.
+func mergeReady(j *job.Job, res ingest.Result, m *job.Membership) (int, []byte, error) {
+	if j.Op == job.OpTranslate {
+		if m == nil {
+			return 0, nil, fmt.Errorf("translate ready for unknown membership %s", j.MembershipID)
+		}
+		doc, err := mergeVariants(m.Doc, res.Variants)
+		if err != nil {
+			return 0, nil, err
+		}
+		return m.Version + 1, doc, nil
+	}
+	version := j.Generation
+	if m != nil && m.Version > version {
+		version = m.Version
+	}
+	return version, readyResult(res), nil
+}
+
+// mergeVariants inserts/replaces (by language) the given variants into the
+// "variants" array of an existing library_items doc, returning the merged doc —
+// so a translated variant is added without reconstructing the rest, and a
+// re-translation of the same language replaces the old one.
+func mergeVariants(doc []byte, add []ingest.Variant) ([]byte, error) {
+	fields := map[string]json.RawMessage{}
+	if len(doc) > 0 {
+		if err := json.Unmarshal(doc, &fields); err != nil {
+			return nil, fmt.Errorf("merge variants: parse doc: %w", err)
+		}
+	}
+	var variants []ingest.Variant
+	if raw, ok := fields["variants"]; ok && len(raw) > 0 {
+		_ = json.Unmarshal(raw, &variants)
+	}
+	byLang := map[string]int{}
+	for i, v := range variants {
+		byLang[v.Lang] = i
+	}
+	for _, v := range add {
+		if i, ok := byLang[v.Lang]; ok {
+			variants[i] = v
+		} else {
+			byLang[v.Lang] = len(variants)
+			variants = append(variants, v)
+		}
+	}
+	b, err := json.Marshal(variants)
+	if err != nil {
+		return nil, err
+	}
+	fields["variants"] = b
+	return json.Marshal(fields)
+}
+
 func readyResult(res ingest.Result) []byte {
 	b, _ := json.Marshal(map[string]any{
 		"status":         "ready",
