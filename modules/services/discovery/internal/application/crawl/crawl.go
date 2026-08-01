@@ -33,6 +33,10 @@ type Service struct {
 	Fetcher Fetcher
 	Repo    *store.Repo
 	Now     func() time.Time
+
+	// sitemaps remembers what each host's sitemap listed, so an idle tick does
+	// not re-download a catalogue that changes monthly at best.
+	sitemaps *sitemapCache
 }
 
 func (s *Service) now() time.Time {
@@ -291,10 +295,9 @@ func newFrontier(seeds []string, maxDepth int, yields map[string]store.ShapeYiel
 	if yields == nil {
 		yields = map[string]store.ShapeYield{}
 	}
+	// Zero means no bound: an archive is as deep as it is, and what stops a run
+	// running away is its page limit, not a guess about somebody else's tree.
 	f := &frontier{hosts: map[string]bool{}, maxDepth: maxDepth, seen: map[string]bool{}, yields: yields}
-	if f.maxDepth <= 0 {
-		f.maxDepth = 6
-	}
 	for _, seed := range seeds {
 		u, err := url.Parse(seed)
 		if err != nil {
@@ -366,7 +369,10 @@ func (f *frontier) allowHostOf(rawURL string) {
 }
 
 func (f *frontier) add(rawURL string, depth int) {
-	if depth > f.maxDepth || f.seen[rawURL] || f.notDue[rawURL] {
+	if f.maxDepth > 0 && depth > f.maxDepth {
+		return
+	}
+	if f.seen[rawURL] || f.notDue[rawURL] {
 		return
 	}
 	u, err := url.Parse(rawURL)
