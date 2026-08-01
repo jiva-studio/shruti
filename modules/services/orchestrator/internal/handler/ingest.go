@@ -47,9 +47,10 @@ type ingestAPI struct {
 // optional hints chat (or any caller) resolved, seeding the pipeline's metadata.
 // Kept open for future optional hints without breaking older clients.
 type createBody struct {
-	URL    string `json:"url"`
-	Title  string `json:"title,omitempty"`
-	Author string `json:"author,omitempty"`
+	URL            string   `json:"url"`
+	Title          string   `json:"title,omitempty"`
+	Author         string   `json:"author,omitempty"`
+	TranslateLangs []string `json:"translate_langs,omitempty"`
 }
 
 // create handles POST /ingest: verify pro (inside Submit), create/dedup/restart
@@ -75,10 +76,11 @@ func (a *ingestAPI) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := a.submit.Submit(r.Context(), ingest.Request{
-		URL:    strings.TrimSpace(body.URL),
-		Title:  body.Title,
-		Author: body.Author,
-		Token:  token,
+		URL:            strings.TrimSpace(body.URL),
+		Title:          body.Title,
+		Author:         body.Author,
+		Token:          token,
+		TranslateLangs: body.TranslateLangs,
 	})
 	if errors.Is(err, runingest.ErrNotPro) {
 		writeErr(w, http.StatusPaymentRequired, "not_pro", "adding lectures requires an active pro subscription")

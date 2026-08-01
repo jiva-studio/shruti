@@ -18,6 +18,10 @@ type WorkCommand struct {
 	Author    string `json:"author,omitempty"`
 	OwnerID   string `json:"owner_id,omitempty"`
 	Attempt   int    `json:"attempt"`
+	// TranslateLangs requests full translated variants (title + overview +
+	// transcript) for these languages when they were not spoken in the
+	// recording. Empty translates nothing.
+	TranslateLangs []string `json:"translate_langs,omitempty"`
 }
 
 // DecodeWork parses a broker payload into a WorkCommand.

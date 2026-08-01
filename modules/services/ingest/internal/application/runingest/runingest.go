@@ -44,6 +44,7 @@ import (
 	translateport "github.com/jiva-studio/lectorium/pipeline/ports/translate"
 	"github.com/jiva-studio/lectorium/pipeline/review"
 	"github.com/jiva-studio/lectorium/pipeline/transcript"
+	pipelinetranslate "github.com/jiva-studio/lectorium/pipeline/translate"
 )
 
 // Deps bundles the ports the pipeline needs.
@@ -193,7 +194,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// lecturer+translator recording yields one variant per language; a
 	// single-language track yields exactly one.
 	s.progress(ctx, cmd, ingest.StageReviewing)
-	variants, primaryLang, err := s.reviewSplit(ctx, lg, hash, raw, draft.Lang, draft.TitleRaw)
+	variants, primaryLang, err := s.reviewSplit(ctx, lg, hash, raw, draft.Lang, draft.TitleRaw, cmd.TranslateLangs)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, err)
 	}
@@ -261,12 +262,14 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 // the primary so nothing is lost. A group that reviews to zero blocks is
 // dropped. The whole ingest fails (no_speech) only when NO group produced blocks.
 func (s *Service) reviewSplit(
-	ctx context.Context, lg *slog.Logger, hash string, raw transcript.Raw, primary, title string,
+	ctx context.Context, lg *slog.Logger, hash string, raw transcript.Raw, primary, title string, translateLangs []string,
 ) ([]ingest.Variant, string, error) {
 	groups := transcript.SplitByLanguage(raw.Segments, primary)
 
 	var variants []ingest.Variant
 	primaryStored := false
+	var base transcript.Reviewed
+	var haveBase bool
 	for _, lang := range transcript.OrderedLanguages(groups, primary) {
 		sub := transcript.Raw{TrackId: hash, Language: lang, Segments: transcript.Reindex(groups[lang]), Provider: raw.Provider, Model: raw.Model}
 		reviewed := s.d.Reviewer.NormalizeTranscript(sub)
@@ -277,25 +280,18 @@ func (s *Service) reviewSplit(
 			lg.WarnContext(ctx, "ingest_language_empty", "lang", lang)
 			continue
 		}
-		body, err := json.Marshal(reviewed)
+		v, err := s.storeVariant(ctx, lg, hash, lang, reviewed, title, primary)
 		if err != nil {
-			return nil, "", fmt.Errorf("marshal transcript %s: %w", lang, err)
+			return nil, "", err
 		}
-		tKey := transcriptKey(hash, lang)
-		if err := s.d.Blob.Put(ctx, tKey, body, "application/json"); err != nil {
-			return nil, "", fmt.Errorf("put transcript %s: %w", lang, err)
-		}
-		// Overview generated FROM this language's own blocks (best-effort).
-		description, chapters := s.outline(ctx, lg, reviewed.Blocks, lang)
-		variants = append(variants, ingest.Variant{
-			Lang:          lang,
-			Title:         s.variantTitle(ctx, lg, title, primary, lang),
-			TranscriptKey: tKey,
-			Description:   description,
-			Outline:       chapters,
-		})
+		variants = append(variants, v)
 		if lang == primary {
 			primaryStored = true
+		}
+		// The translation base is the primary's reviewed transcript (or the first
+		// stored one, if the primary group came out empty).
+		if !haveBase || lang == primary {
+			base, haveBase = reviewed, true
 		}
 	}
 	if len(variants) == 0 {
@@ -306,7 +302,67 @@ func (s *Service) reviewSplit(
 	if !primaryStored {
 		primary = variants[0].Lang
 	}
-	return variants, primary, nil
+	return s.appendTranslatedVariants(ctx, lg, hash, base, primary, title, translateLangs, variants), primary, nil
+}
+
+// storeVariant marshals a reviewed transcript, uploads transcripts/<lang>.json,
+// generates that language's overview, and returns the Variant.
+func (s *Service) storeVariant(
+	ctx context.Context, lg *slog.Logger, hash, lang string, reviewed transcript.Reviewed, title, primary string,
+) (ingest.Variant, error) {
+	body, err := json.Marshal(reviewed)
+	if err != nil {
+		return ingest.Variant{}, fmt.Errorf("marshal transcript %s: %w", lang, err)
+	}
+	tKey := transcriptKey(hash, lang)
+	if err := s.d.Blob.Put(ctx, tKey, body, "application/json"); err != nil {
+		return ingest.Variant{}, fmt.Errorf("put transcript %s: %w", lang, err)
+	}
+	// Overview generated FROM this language's own blocks (best-effort).
+	description, chapters := s.outline(ctx, lg, reviewed.Blocks, lang)
+	return ingest.Variant{
+		Lang:          lang,
+		Title:         s.variantTitle(ctx, lg, title, primary, lang),
+		TranscriptKey: tKey,
+		Description:   description,
+		Outline:       chapters,
+	}, nil
+}
+
+// appendTranslatedVariants adds a full translated variant (transcript + overview
+// + title) for each requested language not already spoken in the recording.
+// Opt-in and best-effort: a nil Translator, no targets, or a per-language failure
+// leaves the track with only its detected-language variants.
+func (s *Service) appendTranslatedVariants(
+	ctx context.Context, lg *slog.Logger, hash string, base transcript.Reviewed, primary, title string,
+	targets []string, variants []ingest.Variant,
+) []ingest.Variant {
+	if s.d.Translator == nil || len(base.Blocks) == 0 {
+		return variants
+	}
+	present := map[string]bool{}
+	for _, v := range variants {
+		present[v.Lang] = true
+	}
+	for _, target := range targets {
+		target = strings.TrimSpace(target)
+		if target == "" || present[target] {
+			continue
+		}
+		translated, err := pipelinetranslate.Reviewed(ctx, s.d.Translator, base, primary, target)
+		if err != nil {
+			lg.WarnContext(ctx, "ingest_translate_variant_failed", "lang", target, "error", err.Error())
+			continue
+		}
+		v, err := s.storeVariant(ctx, lg, hash, target, translated, title, primary)
+		if err != nil {
+			lg.WarnContext(ctx, "ingest_translate_variant_store_failed", "lang", target, "error", err.Error())
+			continue
+		}
+		variants = append(variants, v)
+		present[target] = true
+	}
+	return variants
 }
 
 // fail publishes a terminal failed result (classifying transient vs permanent).

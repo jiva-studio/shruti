@@ -16,6 +16,11 @@ type Request struct {
 	UserID    string `json:"user_id,omitempty"`
 	Title     string `json:"title,omitempty"`
 	Author    string `json:"author,omitempty"`
+	// TranslateLangs opts the track into full translated variants (title +
+	// overview + transcript) for these languages when they were not spoken in
+	// the recording. Empty (the default) translates nothing — the track keeps
+	// only its detected-language variants.
+	TranslateLangs []string `json:"translate_langs,omitempty"`
 }
 
 // DecodeRequest parses a broker payload into a Request.

@@ -493,13 +493,14 @@ func (c *core) publishEvent(ctx context.Context, tx ports.Tx, e ingest.TrackEven
 // the job's stored spec and cannot silently drop the id.
 func (c *core) dispatchWork(ctx context.Context, tx ports.Tx, jobID, owner string, req ingest.Request, attempt int) error {
 	b, err := ingest.WorkCommand{
-		JobID:     jobID,
-		RequestID: req.RequestID,
-		URL:       req.URL,
-		Title:     req.Title,
-		Author:    req.Author,
-		OwnerID:   owner,
-		Attempt:   attempt,
+		JobID:          jobID,
+		RequestID:      req.RequestID,
+		URL:            req.URL,
+		Title:          req.Title,
+		Author:         req.Author,
+		OwnerID:        owner,
+		Attempt:        attempt,
+		TranslateLangs: req.TranslateLangs,
 	}.Marshal()
 	if err != nil {
 		return err

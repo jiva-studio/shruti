@@ -369,3 +369,106 @@ func equalInts(a, b []int) bool {
 	}
 	return true
 }
+
+// fakeTranslator prefixes each line with a [lang] tag so a test can assert the
+// translated variant was produced and stored under the right language.
+type fakeTranslator struct{}
+
+func (fakeTranslator) Translate(_ context.Context, text, _, to string) (string, error) {
+	if text == "" {
+		return "", nil
+	}
+	return "[" + to + "] " + text, nil
+}
+
+func (fakeTranslator) TranslateBatch(_ context.Context, texts []string, _, to string) ([]string, error) {
+	out := make([]string, len(texts))
+	for i, t := range texts {
+		if t != "" {
+			out[i] = "[" + to + "] " + t
+		}
+	}
+	return out, nil
+}
+
+// A requested language that was NOT spoken gets a full translated variant:
+// transcript stored under its key, blocks translated, title translated. A run
+// without the request (default) produces no such variant.
+func TestProcess_TranslatedVariantOnRequest(t *testing.T) {
+	h := &harness{
+		fetch:   &fakeFetcher{content: []byte("audio-bytes")},
+		trans:   &fakeTranscriber{lang: "en"},
+		blob:    newBlob(),
+		results: &fakeResults{},
+	}
+	h.svc = New(Deps{
+		Fetcher:     h.fetch,
+		Transcriber: h.trans,
+		Reviewer:    review.New(),
+		Blob:        h.blob,
+		Results:     h.results,
+		Translator:  fakeTranslator{},
+	})
+	payload, err := json.Marshal(ingest.WorkCommand{
+		JobID: "job-1", URL: "https://x/y", Title: "A talk", OwnerID: "user-1",
+		Attempt: 1, TranslateLangs: []string{"ru"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.Process(context.Background(), "m", payload); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+
+	hash := ingest.ContentID([]byte("audio-bytes"))
+	body, ok := h.blob.objects["public/tracks/"+hash+"/transcripts/ru.json"]
+	if !ok {
+		t.Fatal("translated ru transcript not stored")
+	}
+	var rev transcript.Reviewed
+	if err := json.Unmarshal(body, &rev); err != nil {
+		t.Fatalf("stored translated transcript not json: %v", err)
+	}
+	if rev.Language != "ru" {
+		t.Fatalf("translated transcript language = %q, want ru", rev.Language)
+	}
+
+	var ru *ingest.Variant
+	for i := range h.results.last().Variants {
+		if h.results.last().Variants[i].Lang == "ru" {
+			ru = &h.results.last().Variants[i]
+		}
+	}
+	if ru == nil {
+		t.Fatal("no ru variant in the ready result")
+	}
+	if ru.Title != "[ru] A talk" {
+		t.Fatalf("ru variant title = %q, want translated", ru.Title)
+	}
+}
+
+// Without a translate request, no extra variant is produced even if a translator
+// is configured — full translation is opt-in.
+func TestProcess_NoTranslationWithoutRequest(t *testing.T) {
+	h := &harness{
+		fetch:   &fakeFetcher{content: []byte("audio-bytes")},
+		trans:   &fakeTranscriber{lang: "en"},
+		blob:    newBlob(),
+		results: &fakeResults{},
+	}
+	h.svc = New(Deps{
+		Fetcher:     h.fetch,
+		Transcriber: h.trans,
+		Reviewer:    review.New(),
+		Blob:        h.blob,
+		Results:     h.results,
+		Translator:  fakeTranslator{},
+	})
+	if err := h.svc.Process(context.Background(), "m", workPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("Process: %v", err)
+	}
+	hash := ingest.ContentID([]byte("audio-bytes"))
+	if _, ok := h.blob.objects["public/tracks/"+hash+"/transcripts/ru.json"]; ok {
+		t.Fatal("a translated variant was produced without a request")
+	}
+}

@@ -26,6 +26,9 @@ type WorkCommand struct {
 	Author    string `json:"author,omitempty"`
 	OwnerID   string `json:"owner_id,omitempty"`
 	Attempt   int    `json:"attempt"`
+	// TranslateLangs requests full translated variants for these languages
+	// (carried from the originating Request). Empty translates nothing.
+	TranslateLangs []string `json:"translate_langs,omitempty"`
 }
 
 // Marshal serializes the command for the `ingest.work` outbox payload column.
