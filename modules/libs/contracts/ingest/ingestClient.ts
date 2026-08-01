@@ -17,24 +17,35 @@
 /** Job lifecycle state, in the same vocabulary as `library_items.status`. */
 export type IngestState = "queued" | "processing" | "ready" | "failed" | "cancelled"
 
+/** Operation a run performs; `op` defaults to `"ingest"` when omitted. */
+export type RunOp = "ingest" | "translate"
+
 /**
- * `POST /orchestrator/ingest` request. Only `url` is required; `title` / `author`
- * are optional hints a caller (e.g. chat discovery) resolved, seeding the
- * pipeline's metadata. Kept open for future optional hints.
+ * `POST /orchestrator/run` request — one generic entry for every orchestrated
+ * operation. `op="ingest"` reads url/title/author; `op="translate"` reads
+ * membership_id + track/source_lang/target_lang (translate an already-ingested
+ * track into a new language).
  */
 export interface IngestSubmitRequest {
-  readonly url: string
+  readonly op?: RunOp
+  readonly url?: string
   readonly title?: string
   readonly author?: string
+  readonly translate_langs?: readonly string[]
+  readonly membership_id?: string
+  readonly track?: string
+  readonly source_lang?: string
+  readonly target_lang?: string
 }
 
 /**
- * `POST /orchestrator/ingest` response: the deterministic job id — which is also
- * the library membership id (`library_items.id`) the client keys its row on —
- * and the job's current state.
+ * `POST /orchestrator/run` response: the deterministic run id (poll it for live
+ * status), the library membership id (`library_items.id`) the run advances — for
+ * an ingest run these are equal — and the run's current state.
  */
 export interface IngestSubmitResponse {
-  readonly job_id: string
+  readonly run_id: string
+  readonly membership_id: string
   readonly state: IngestState
 }
 
