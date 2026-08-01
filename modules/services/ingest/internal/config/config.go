@@ -94,6 +94,16 @@ type Config struct {
 	OutlineLLMModel     string // OUTLINE_LLM_MODEL
 	OutlineLLMMaxTokens int    // OUTLINE_LLM_MAX_TOKENS (0 → adapter default)
 	OutlineLLMReasoning string // OUTLINE_LLM_REASONING
+
+	// --- Translation (LLM, OpenAI-compatible) ---
+	// OPTIONAL: a DEDICATED model for the title/transcript translator (on-demand
+	// translate op + ingest-time translated variants). Its own knob so translation
+	// can use a different Gemini model than outline. When unset, falls back to the
+	// OUTLINE_LLM_* config so a default deploy still translates.
+	TranslateLLMEndpoint  string // TRANSLATE_LLM_ENDPOINT (default OpenRouter)
+	TranslateLLMAPIKey    string // TRANSLATE_LLM_API_KEY
+	TranslateLLMModel     string // TRANSLATE_LLM_MODEL
+	TranslateLLMReasoning string // TRANSLATE_LLM_REASONING
 }
 
 func Load() (*Config, error) {
@@ -143,6 +153,11 @@ func Load() (*Config, error) {
 		OutlineLLMModel:     env("OUTLINE_LLM_MODEL", ""),
 		OutlineLLMMaxTokens: envInt("OUTLINE_LLM_MAX_TOKENS", 0),
 		OutlineLLMReasoning: env("OUTLINE_LLM_REASONING", ""),
+
+		TranslateLLMEndpoint:  env("TRANSLATE_LLM_ENDPOINT", "https://openrouter.ai/api/v1"),
+		TranslateLLMAPIKey:    os.Getenv("TRANSLATE_LLM_API_KEY"),
+		TranslateLLMModel:     env("TRANSLATE_LLM_MODEL", ""),
+		TranslateLLMReasoning: env("TRANSLATE_LLM_REASONING", ""),
 	}
 	if cfg.StreamMaxLen <= 0 {
 		cfg.StreamMaxLen = 10000

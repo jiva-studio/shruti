@@ -12,6 +12,7 @@ import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
 import { requestSync } from "@lectorium/services/syncEvents.js"
+import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import router from "@lectorium/router/index.js"
 import { buildMergedTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
@@ -368,27 +369,55 @@ export function useTranscriptDialogController(
         target_lang: code,
       })
       const ok = await pollRun(res.run_id)
-      // Only refresh if the same track is still open (the user may have moved on).
+      // The run is ready, but the produced variant reaches THIS device through the
+      // normal sync — request a pull, then wait (reactively) for the library item
+      // to carry the new language and re-hydrate so it becomes a real chip.
       if (ok && transcriptStore.trackId === trackId) {
-        // The run is ready, but the new variant reaches this device via sync —
-        // pull it, then re-hydrate until the language lands (bounded).
         requestSync()
-        for (let i = 0; i < 20 && transcriptStore.trackId === trackId; i++) {
-          await hydration.hydrate(trackId)
-          if (hydration.availableLanguages.value.includes(code)) {
-            await loader.reload(trackId, hydration.activeLanguages.value)
-            break
-          }
-          await new Promise((r) => setTimeout(r, 2000))
-        }
+        await waitForSyncedVariant(trackId, code)
       }
     } catch (err) {
+      if (err instanceof IngestGatewayError && err.code === "not_pro") {
+        const { usePaywallStore } = await import("@lectorium/stores/usePaywallStore.js")
+        usePaywallStore().requestOpen()
+        return
+      }
       loader.error.value = err instanceof Error ? err.message : "Translation failed"
     } finally {
       const next = new Set(translating.value)
       next.delete(code)
       translating.value = next
     }
+  }
+
+  // Resolve once the synced library item carries `code` (the translated variant
+  // arrived through the sync), then re-hydrate so it becomes a selectable
+  // transcript. A timeout fallback re-hydrates anyway — the data is never lost (a
+  // re-open of the transcript would show it regardless).
+  function waitForSyncedVariant(trackId: string, code: string): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false
+      const present = () =>
+        library.items.some(
+          (i) => i.trackId === trackId && i.variants.some((v) => v.language === code)
+        )
+      const finish = async () => {
+        if (settled) return
+        settled = true
+        stop()
+        clearTimeout(timer)
+        if (transcriptStore.trackId === trackId) {
+          await hydration.hydrate(trackId)
+          await loader.reload(trackId, hydration.activeLanguages.value)
+        }
+        resolve()
+      }
+      const stop = watch(present, (yes) => {
+        if (yes) void finish()
+      })
+      const timer = setTimeout(() => void finish(), 90000)
+      if (present()) void finish()
+    })
   }
 
   // Poll a translate run to completion. Bounded so a stuck run can't spin
