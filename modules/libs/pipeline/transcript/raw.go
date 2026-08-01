@@ -16,6 +16,13 @@ type RawSegment struct {
 	// 2-letter codes, e.g. "en"/"ru"). Empty when the provider doesn't tag per
 	// segment. Drives the ingest per-language split; ignored elsewhere.
 	Language string `json:"language,omitempty"`
+	// Speaker labels who is talking, as the provider's diarizer numbered them
+	// ("0", "1", …) — stable within one transcript, meaningless across
+	// transcripts. Empty when diarization is off or unsupported. Carried
+	// through review into the reviewed transcript's sentence blocks, where the
+	// app renders it; a lecture with consecutive translation is unreadable
+	// without it.
+	Speaker string `json:"speaker,omitempty"`
 }
 
 // Raw is the language-tagged ASR output for one (track, language).
