@@ -30,7 +30,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -251,26 +250,20 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 // language's overview (description + outline), and returns the variants plus the
 // primary (largest surviving) language.
 //
-// A language becomes its own variant only when it clears the threshold
-// (langSplitThreshold); below-threshold segments fold into the primary
-// transcript so a stray mis-tagged sentence never spawns a junk variant and no
-// content is lost. A group that reviews to zero blocks is dropped. The whole
-// ingest fails (no_speech) only when NO group produced any blocks.
+// Splitting and ordering use the shared transcript.SplitByLanguage /
+// OrderedLanguages so corpus and personal-library tracks agree: a language earns
+// its own variant only above the threshold, below-threshold segments fold into
+// the primary so nothing is lost. A group that reviews to zero blocks is
+// dropped. The whole ingest fails (no_speech) only when NO group produced blocks.
 func (s *Service) reviewSplit(
 	ctx context.Context, lg *slog.Logger, hash string, raw transcript.Raw, primary string,
 ) ([]ingest.Variant, string, error) {
-	groups := splitSegmentsByLanguage(raw.Segments, primary)
+	groups := transcript.SplitByLanguage(raw.Segments, primary)
 
 	var variants []ingest.Variant
 	primaryStored := false
-	for _, lang := range orderedLanguages(groups, primary) {
-		segs := groups[lang]
-		reindexed := make([]transcript.RawSegment, len(segs))
-		for i, sg := range segs {
-			sg.Idx = i
-			reindexed[i] = sg
-		}
-		sub := transcript.Raw{TrackId: hash, Language: lang, Segments: reindexed, Provider: raw.Provider, Model: raw.Model}
+	for _, lang := range transcript.OrderedLanguages(groups, primary) {
+		sub := transcript.Raw{TrackId: hash, Language: lang, Segments: transcript.Reindex(groups[lang]), Provider: raw.Provider, Model: raw.Model}
 		reviewed := s.d.Reviewer.NormalizeTranscript(sub)
 		if s.d.LLMReviewer != nil {
 			reviewed = review.ReviewTranscript(ctx, s.d.LLMReviewer, sub, review.Options{Glossary: s.d.Glossary})
@@ -444,64 +437,6 @@ func parseYtdlpDate(s string) (string, bool) {
 		return t.Format("2006-01-02"), true
 	}
 	return "", false
-}
-
-// langSplitThreshold is the minimum share of sentences (of the total) a
-// language needs to earn its own transcript variant, plus an absolute floor of
-// langSplitMinSentences so a short recording can't spin a variant off a single
-// mis-tagged phrase. Below either, the segments fold into the primary transcript.
-const (
-	langSplitThreshold    = 0.10
-	langSplitMinSentences = 3
-)
-
-// splitSegmentsByLanguage buckets segments into per-language groups. A language
-// clears the split only with ≥ langSplitThreshold of the sentences AND ≥
-// langSplitMinSentences; every other segment (below-threshold or untagged) folds
-// into the primary group, so nothing is dropped. The primary is always its own
-// group.
-func splitSegmentsByLanguage(segs []transcript.RawSegment, primary string) map[string][]transcript.RawSegment {
-	total := len(segs)
-	counts := map[string]int{}
-	for _, sg := range segs {
-		counts[sg.Language]++
-	}
-	minCount := langSplitMinSentences
-	if t := int(float64(total)*langSplitThreshold + 0.999); t > minCount {
-		minCount = t
-	}
-	kept := map[string]bool{primary: true}
-	for lang, n := range counts {
-		if lang != "" && n >= minCount {
-			kept[lang] = true
-		}
-	}
-	groups := map[string][]transcript.RawSegment{}
-	for _, sg := range segs {
-		lang := sg.Language
-		if lang == "" || !kept[lang] {
-			lang = primary
-		}
-		groups[lang] = append(groups[lang], sg)
-	}
-	return groups
-}
-
-// orderedLanguages returns the group languages with the primary first, then the
-// rest alphabetically — a stable, deterministic review/store order.
-func orderedLanguages(groups map[string][]transcript.RawSegment, primary string) []string {
-	rest := make([]string, 0, len(groups))
-	for lang := range groups {
-		if lang != primary {
-			rest = append(rest, lang)
-		}
-	}
-	sort.Strings(rest)
-	out := make([]string, 0, len(groups))
-	if _, ok := groups[primary]; ok {
-		out = append(out, primary)
-	}
-	return append(out, rest...)
 }
 
 func firstNonEmpty(vals ...string) string {
