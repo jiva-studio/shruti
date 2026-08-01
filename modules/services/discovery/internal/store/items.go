@@ -39,8 +39,10 @@ type Item struct {
 	// replayed without refetching the page.
 	Raw json.RawMessage
 
-	Title           string
-	Author          string
+	Title  string
+	Author string
+	// AuthorID is the person the written name resolved to.
+	AuthorID        int64
 	Location        string
 	RecordedOn      *time.Time
 	Language        string
@@ -134,11 +136,11 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 	err = r.pool.QueryRow(ctx, `
 		INSERT INTO discovery.items
 			(media_url, source_id, page_id, raw, title, author, location, recorded_on,
-			 language, duration_s, collection_title,
+			 language, duration_s, collection_title, author_id,
 			 media_state, media_seen_at, media_missing_since,
 			 norm_input_sha256, norm_prompt_version, norm_model, status)
 		VALUES ($1,$2,$3,$4,nullif($5,''),nullif($6,''),nullif($7,''),$8,
-			 nullif($9,''),nullif($10,0),nullif($11,''),
+			 nullif($9,''),nullif($10,0),nullif($11,''),nullif($18,0),
 			 $12,$13,NULL,
 			 nullif($14,''),nullif($15,''),nullif($16,''),$17)
 		ON CONFLICT (media_url) DO UPDATE SET
@@ -152,6 +154,7 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 			language            = EXCLUDED.language,
 			duration_s          = EXCLUDED.duration_s,
 			collection_title    = EXCLUDED.collection_title,
+			author_id           = coalesce(EXCLUDED.author_id, discovery.items.author_id),
 			-- Seeing the file again clears the fact that it was ever missing.
 			media_state         = EXCLUDED.media_state,
 			media_seen_at       = EXCLUDED.media_seen_at,
@@ -165,7 +168,7 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 		it.MediaURL, it.SourceID, it.PageID, it.Raw, it.Title, it.Author, it.Location, it.RecordedOn,
 		it.Language, it.DurationS, it.CollectionTitle,
 		it.MediaState, it.MediaSeenAt,
-		it.NormInputSHA256, it.NormPromptVersion, it.NormModel, it.Status,
+		it.NormInputSHA256, it.NormPromptVersion, it.NormModel, it.Status, it.AuthorID,
 	).Scan(&it.ID, &isNew)
 	return isNew, err
 }
@@ -318,54 +321,4 @@ func (r *Repo) CountMediaStates(ctx context.Context, sourceID string) (map[strin
 		counts[state] = n
 	}
 	return counts, rows.Err()
-}
-
-// Author is one speaker: the name to show, every spelling the archive filed
-// them under, and how much of them there is.
-type Author struct {
-	Key      string   `json:"key"`
-	Name     string   `json:"name"`
-	Variants []string `json:"variants,omitempty"`
-	Items    int      `json:"items"`
-}
-
-// Authors lists the speakers of a source, most recorded first.
-//
-// The name shown is the commonest spelling rather than a made-up canonical
-// one: whichever form the archive used most is the form its readers will
-// recognise, and inventing a fifth spelling to sit alongside the four that
-// exist helps nobody.
-func (r *Repo) Authors(ctx context.Context, sourceID string, limit int) ([]Author, error) {
-	rows, err := r.pool.Query(ctx, `
-		WITH spelling AS (
-			SELECT author_key, author, count(*) AS n
-			FROM discovery.items
-			WHERE author_key IS NOT NULL AND ($1 = '' OR source_id = $1)
-			GROUP BY author_key, author
-		)
-		SELECT author_key,
-		       (array_agg(author ORDER BY n DESC, author))[1],
-		       array_agg(author ORDER BY n DESC, author),
-		       sum(n)::int
-		FROM spelling
-		GROUP BY author_key
-		ORDER BY sum(n) DESC, author_key
-		LIMIT $2`, sourceID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []Author
-	for rows.Next() {
-		var a Author
-		if err := rows.Scan(&a.Key, &a.Name, &a.Variants, &a.Items); err != nil {
-			return nil, err
-		}
-		if len(a.Variants) < 2 {
-			a.Variants = nil
-		}
-		out = append(out, a)
-	}
-	return out, rows.Err()
 }
