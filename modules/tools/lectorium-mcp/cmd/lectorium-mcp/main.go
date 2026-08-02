@@ -368,12 +368,13 @@ func main() {
 			if p.APIKey == "" {
 				log.Fatalf("transcribe provider %q: deepgram needs api_key", name)
 			}
-			transcribeRegistry.Register(deepgram.New(deepgram.Config{
+			t := deepgram.New(deepgram.Config{
 				APIKey:   p.APIKey,
 				Model:    p.Model,
 				Language: p.Language,
 				Diarize:  p.Diarize,
-			}))
+			})
+			transcribeRegistry.Register(worker.NewThrottledTranscriber(t, *transcribeConcurrency))
 		default:
 			log.Fatalf("transcribe provider %q: unknown kind %q", name, p.Kind)
 		}
