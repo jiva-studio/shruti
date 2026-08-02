@@ -66,8 +66,12 @@ func (t *Transcriber) Transcribe(ctx context.Context, audioPath string, opts tra
 	if opts.Model != "" {
 		model = opts.Model
 	}
+	// Config wins over opts: opts.Language is the track's language, which the
+	// pipeline passes automatically, while cfg.Language is a deliberate choice
+	// for this provider — and "multi" has to survive it to split a talk from
+	// its translation.
 	lang := t.cfg.Language
-	if opts.Language != "" {
+	if lang == "" {
 		lang = opts.Language
 	}
 	if lang == "" {
