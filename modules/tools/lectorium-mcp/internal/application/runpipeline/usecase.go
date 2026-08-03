@@ -24,6 +24,9 @@ import (
 )
 
 type UseCase struct {
+	// Gate caps how many files may be inside a stage at once; nil = no caps.
+	Gate *Gate
+
 	Registry   lakeport.Registry
 	Ingest     ingest.UseCase
 	Normalize  normalize.UseCase
@@ -62,11 +65,11 @@ type Options struct {
 }
 
 type FileSummary struct {
-	Path     string `json:"path"`
-	TrackId  string `json:"track_id,omitempty"`
-	Status   string `json:"status"` // committed | incomplete | failed | skipped
-	Reached  string `json:"reached_stage,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Path    string `json:"path"`
+	TrackId string `json:"track_id,omitempty"`
+	Status  string `json:"status"` // committed | incomplete | failed | skipped
+	Reached string `json:"reached_stage,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 type Result struct {
@@ -92,7 +95,13 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 	summary := FileSummary{Path: path}
 
 	// 1. Ingest.
+	relIngest, err := uc.Gate.Enter(ctx, pipeline.StageIngested)
+	if err != nil {
+		summary.Error = err.Error()
+		return summary
+	}
 	ingestRes, err := uc.Ingest.Run(ctx, path)
+	relIngest()
 	if err != nil {
 		// Extras (bhajan/kirtan/walks/fragments) are intentionally not
 		// part of the catalog — surface as "skipped", not "failed".
@@ -158,7 +167,14 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 	// and transcribe both read the canonical mp3).
 	summary.Reached = "normalize"
 	if !uc.alreadyDone(ctx, id, pipeline.Key{Stage: pipeline.StageNormalized}) {
-		if err := uc.Normalize.Run(ctx, id); err != nil {
+		rel, gerr := uc.Gate.Enter(ctx, pipeline.StageNormalized)
+		if gerr != nil {
+			summary.Error = gerr.Error()
+			return summary
+		}
+		err := uc.Normalize.Run(ctx, id)
+		rel()
+		if err != nil {
 			summary.Status = "failed"
 			summary.Error = "normalize: " + err.Error()
 			return summary
@@ -177,7 +193,12 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 		if uc.alreadyDone(gctx, id, pipeline.Key{Stage: pipeline.StageMetadataExtracted}) {
 			return nil
 		}
+		rel, gerr := uc.Gate.Enter(gctx, pipeline.StageMetadataExtracted)
+		if gerr != nil {
+			return gerr
+		}
 		_, err := uc.Metadata.Run(gctx, id, path)
+		rel()
 		if err != nil {
 			return fmt.Errorf("metadata: %w", err)
 		}
@@ -230,7 +251,13 @@ func (uc UseCase) Run(ctx context.Context, path string, opts Options) FileSummar
 	// Stage 5: commit — depends on metadata + review.
 	summary.Reached = "commit"
 	if !uc.alreadyDone(ctx, id, pipeline.Key{Stage: pipeline.StageCommitted, Variant: lang}) {
+		relCommit, gerr := uc.Gate.Enter(ctx, pipeline.StageCommitted)
+		if gerr != nil {
+			summary.Error = gerr.Error()
+			return summary
+		}
 		res, err := uc.Commit.Run(ctx, id, lang)
+		relCommit()
 		if err != nil {
 			summary.Status = "failed"
 			summary.Error = "commit: " + err.Error()
@@ -308,4 +335,3 @@ func (uc UseCase) alreadyDone(ctx context.Context, id track.Id, key pipeline.Key
 	}
 	return row.Status == pipeline.StatusDone
 }
-

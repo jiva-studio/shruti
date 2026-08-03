@@ -17,6 +17,15 @@ type Config struct {
 	RunsDB          string `yaml:"runs_db"`
 	DefaultLanguage string `yaml:"default_language"`
 
+	// Concurrency caps how many files may sit inside a stage at once, by stage
+	// name (ingested, normalized, metadata, transcribed, reviewed, committed).
+	// The worker pool is file-level, so without this one number has to serve
+	// stages with opposite needs: transcribe waits on a remote box and wants
+	// many workers in parallel, while normalize and commit contend for the
+	// local disk, where concurrent access on a mechanical drive costs most of
+	// the throughput. Absent or 0 = unrestricted.
+	Concurrency map[string]int `yaml:"concurrency,omitempty"`
+
 	CDN        CDN        `yaml:"cdn"`
 	S3         S3         `yaml:"s3"`
 	FFmpeg     FFmpeg     `yaml:"ffmpeg"`
