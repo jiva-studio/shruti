@@ -56,6 +56,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/transcribe"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/config"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/pipeline"
 	adminconfigrt "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/adminconfig/runtime"
 	pythonalign "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/alignpdf/python"
 	fsartifact "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/artifact/fs"
@@ -891,7 +892,12 @@ func main() {
 	}
 
 	// Pipeline orchestrator references the same use cases as the deps.
+	stageLimits := map[pipeline.Stage]int{}
+	for name, n := range cfg.Concurrency {
+		stageLimits[pipeline.Stage(name)] = n
+	}
 	deps.Pipeline = runpipeline.UseCase{
+		Gate:            runpipeline.NewGate(stageLimits),
 		Registry:        registry,
 		Ingest:          deps.Ingest,
 		Normalize:       deps.Normalize,
