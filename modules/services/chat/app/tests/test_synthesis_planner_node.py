@@ -29,6 +29,9 @@ class _Ctx:
     catalog_repo: Any | None = None
     aliases: Any | None = None
     reranker: Any | None = None
+    # Fallback name for the `Language:` directive when the catalog has no
+    # entry for the locale (a language the app doesn't ship).
+    lang_name: str = ""
 
 
 @dataclass
