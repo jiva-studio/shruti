@@ -20,6 +20,7 @@ import (
 
 	adminconfigapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/assetsync"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiodenoise"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/authorprofile"
@@ -909,6 +910,9 @@ func main() {
 		SupportedScheme: catalog.SupportedDBScheme,
 		Targets:         publishTargets,
 		OpMutex:         catalogOpMutex,
+	}
+	deps.AssetSync = tools.AssetSyncDeps{
+		UseCase: assetsync.UseCase{OutDir: cfg.Out, Targets: publishTargets, Registry: registry},
 	}
 	libraryLazy := sqlitelibrary.NewLazy(libraryDBPath)
 	deps.Library = tools.LibraryDeps{

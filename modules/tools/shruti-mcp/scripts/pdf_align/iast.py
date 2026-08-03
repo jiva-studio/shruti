@@ -40,14 +40,21 @@ def to_iast(text: str) -> str:
 
 _combining_re = re.compile(r"[̀-ͯ]")
 
+_punct_re = re.compile(r"[^\w\s']", re.UNICODE)
+_underscore_re = re.compile(r"_+")
+
+
 def ascii_fold(text: str) -> str:
     """Lowercase, strip diacritics, normalize whitespace, drop punct.
-    Used for fuzzy matching against ASR text."""
+    Used for fuzzy matching against ASR text. Letters of any script survive —
+    a Cyrillic transcript has to fold to something the aligner can match, and
+    dropping everything outside a-z left it with nothing."""
     s = to_iast(text)
     s = unicodedata.normalize("NFD", s)
     s = _combining_re.sub("", s)
     s = s.lower()
-    s = re.sub(r"[^a-z0-9\s']", " ", s)
+    s = _punct_re.sub(" ", s)
+    s = _underscore_re.sub(" ", s)          # \w keeps _, which is punctuation here
     s = re.sub(r"\s+", " ", s).strip()
     return s
 

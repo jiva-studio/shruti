@@ -50,6 +50,7 @@ type Deps struct {
 	Runs                runregistry.Registry
 	Runner              *runner.Runner
 	DictCRUD            DictCRUDDeps
+	AssetSync           AssetSyncDeps
 	Topics              TopicsDeps
 	CollectionCRUD      CollectionCRUDDeps
 	CollectionGroupCRUD CollectionGroupCRUDDeps

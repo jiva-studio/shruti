@@ -157,11 +157,13 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 		if method == "" {
 			method = "auto"
 		}
-		havePDF := alignpdf.PDFExists(uc.OutDir, id)
+		// Either canonical source skips the LLM: the text is already correct
+		// and only needs the ASR timings projected onto it.
+		haveCanonical := alignpdf.PDFExists(uc.OutDir, id) || alignpdf.TextExists(uc.OutDir, id)
 		switch method {
 		case "pdf":
-			if !havePDF {
-				return Result{}, fmt.Errorf("review: method=pdf requested but no transcript.pdf at %s", alignpdf.PDFPath(uc.OutDir, id))
+			if !haveCanonical {
+				return Result{}, fmt.Errorf("review: method=pdf requested but no canonical transcript for %s", id)
 			}
 			ar, err := uc.AlignPDF.RunInternal(ctx, id, language)
 			if err != nil {
@@ -174,7 +176,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 			}
 			return res, nil
 		case "auto":
-			if havePDF {
+			if haveCanonical {
 				ar, err := uc.AlignPDF.RunInternal(ctx, id, language)
 				if err != nil {
 					return Result{}, err
