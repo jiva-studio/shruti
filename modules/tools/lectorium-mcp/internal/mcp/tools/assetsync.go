@@ -34,6 +34,10 @@ func RegisterAssetSync(s *server.MCPServer, deps AssetSyncDeps) {
 		mcp.WithNumber("concurrency", mcp.Description("Files in flight per target (default 4).")),
 		mcp.WithNumber("limit", mcp.Description("Stop after uploading this many files. 0 = no cap.")),
 		mcp.WithBoolean("dry_run", mcp.Description("Report the plan, upload nothing.")),
+		mcp.WithBoolean("uncommitted", mcp.Description(
+			"Upload assets of tracks that have not been committed. Refused by "+
+				"default: commit rewrites the public mp3 with ID3 tags, so an "+
+				"earlier upload sends bytes that are about to change.")),
 		mcp.WithBoolean("all", mcp.Description(
 			"Also consider tracks already marked published. Off by default — the "+
 				"registry remembers what reached the target, so a routine run does "+
@@ -53,6 +57,7 @@ func RegisterAssetSync(s *server.MCPServer, deps AssetSyncDeps) {
 			Limit:       int(req.GetFloat("limit", 0)),
 			DryRun:      req.GetBool("dry_run", false),
 			All:         req.GetBool("all", false),
+			Uncommitted: req.GetBool("uncommitted", false),
 		}
 		if raw, ok := req.GetArguments()["track_ids"].([]any); ok {
 			for _, v := range raw {

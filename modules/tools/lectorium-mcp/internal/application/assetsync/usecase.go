@@ -47,6 +47,9 @@ type Options struct {
 	// registry remembers what reached the target, so a routine run asks about
 	// new tracks only instead of re-probing thousands of unchanged files.
 	All bool
+	// Uncommitted lifts the refusal to upload a track that has not been
+	// committed. Only useful for assets a commit cannot touch.
+	Uncommitted bool
 }
 
 type TargetResult struct {
@@ -61,13 +64,14 @@ type TargetResult struct {
 }
 
 type Result struct {
-	Strategy string         `json:"strategy"`
-	DryRun   bool           `json:"dry_run,omitempty"`
-	Files    int            `json:"files_seen"`
-	Bytes    int64          `json:"bytes_seen"`
-	Skipped  int            `json:"tracks_already_published,omitempty"`
-	Marked   int            `json:"tracks_marked_published,omitempty"`
-	Targets  []TargetResult `json:"targets"`
+	Strategy     string         `json:"strategy"`
+	DryRun       bool           `json:"dry_run,omitempty"`
+	Files        int            `json:"files_seen"`
+	Bytes        int64          `json:"bytes_seen"`
+	Skipped      int            `json:"tracks_already_published,omitempty"`
+	NotCommitted int            `json:"tracks_not_committed,omitempty"`
+	Marked       int            `json:"tracks_marked_published,omitempty"`
+	Targets      []TargetResult `json:"targets"`
 }
 
 // Run walks the local asset tree once and syncs it to every target.
@@ -92,6 +96,13 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 			res.Skipped++
 			continue
 		}
+		// Commit rewrites the public mp3 to carry ID3 tags reflecting the
+		// catalog row it just wrote. Uploading before that means uploading
+		// bytes that are about to change, and paying for the transfer twice.
+		if !opts.Uncommitted && !uc.isCommitted(ctx, id) {
+			res.NotCommitted++
+			continue
+		}
 		todo = append(todo, group...)
 	}
 	sort.Slice(todo, func(i, j int) bool { return todo[i].Key < todo[j].Key })
@@ -114,6 +125,25 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		res.Marked = uc.markPublished(ctx, byTrack, held, opts)
 	}
 	return res, nil
+}
+
+// isCommitted reports whether any language variant of the track reached the
+// catalog. Variant-agnostic on purpose: one committed language is enough for
+// the audio to have been tagged.
+func (uc UseCase) isCommitted(ctx context.Context, id string) bool {
+	if uc.Registry == nil {
+		return true
+	}
+	rows, err := uc.Registry.ListAllStages(ctx, track.Id(id))
+	if err != nil {
+		return false
+	}
+	for _, r := range rows {
+		if r.Key.Stage == pipeline.StageCommitted && r.Status == pipeline.StatusDone {
+			return true
+		}
+	}
+	return false
 }
 
 func (uc UseCase) isPublished(ctx context.Context, id string) bool {
