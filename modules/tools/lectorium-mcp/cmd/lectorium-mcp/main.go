@@ -640,6 +640,7 @@ func main() {
 		FS:          osfs,
 		OutDir:      cfg.Out,
 		AudioTag:    &audioTagUC,
+		OpMutex:     catalogOpMutex,
 	}
 
 	// alignPDFUC is built up front so review can reference it as a pointer

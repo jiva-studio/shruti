@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/audiotag"
@@ -41,6 +42,13 @@ type UseCase struct {
 	// Optional: nil disables auto-tagging (the standalone track_tag_audio
 	// MCP tool stays available for manual re-tagging either way).
 	AudioTag *audiotag.UseCase
+
+	// OpMutex serializes the catalog write. SaveTrack is a multi-statement
+	// transaction that reads before it writes, and SQLite answers a second
+	// writer trying the same upgrade with SQLITE_BUSY immediately — the
+	// busy_timeout does not cover that case. Shared with publish and the
+	// other catalog operations. Optional; nil leaves writes unguarded.
+	OpMutex *sync.Mutex
 }
 
 type Result struct {
@@ -281,7 +289,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 		Duration: meta.Audio.DurationMs,
 	}}
 
-	if err := uc.Catalog.SaveTrack(ctx, trackRow, variantRow, audios, resolvedRefs); err != nil {
+	if err := uc.saveTrack(ctx, trackRow, variantRow, audios, resolvedRefs); err != nil {
 		return uc.fail(ctx, id, stageKey, fmt.Errorf("catalog SaveTrack: %w", err))
 	}
 
@@ -350,9 +358,9 @@ func matchedDictID(resolves []extractmeta.Resolve, kind, query string) string {
 // track has no scriptural references — the consumer sorts NULL last
 // regardless of locale via SQL `NULLS LAST`.
 //
-//   refs[0].Tokens = "3.25.12", primaryShort = "ШБ" → "ШБ_000003_000025_000012"
-//   refs[0].Tokens = "",        primaryShort = "BG" → "BG"
-//   no refs                                          → nil
+//	refs[0].Tokens = "3.25.12", primaryShort = "ШБ" → "ШБ_000003_000025_000012"
+//	refs[0].Tokens = "",        primaryShort = "BG" → "BG"
+//	no refs                                          → nil
 func buildSortReference(refs []domaincatalog.TrackReference, primaryShort string) *string {
 	if len(refs) == 0 {
 		return nil
@@ -395,4 +403,14 @@ func isAllDigits(s string) bool {
 // without forcing a port import. Used purely for os.Stat invariant check.
 func publicTranscriptDiskPath(outDir string, id track.Id, lang string) string {
 	return fmt.Sprintf("%s/public/tracks/%s/transcripts/%s.json", outDir, string(id), lang)
+}
+
+func (uc UseCase) saveTrack(ctx context.Context, t domaincatalog.TrackRow,
+	v domaincatalog.VariantRow, audios []domaincatalog.AudioRow,
+	refs []domaincatalog.TrackReference) error {
+	if uc.OpMutex != nil {
+		uc.OpMutex.Lock()
+		defer uc.OpMutex.Unlock()
+	}
+	return uc.Catalog.SaveTrack(ctx, t, v, audios, refs)
 }
