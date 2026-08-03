@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     # errors (after exhausting same-model transient retries). For
     # streaming calls it only fires before the first chunk reaches the
     # client — a mid-stream failure can't be re-rolled onto another model.
-    llm_fallback: str = "openrouter/anthropic/claude-3-haiku"
+    llm_fallback: str = "openrouter/anthropic/claude-haiku-4.5"
     # Transient-error resilience for every provider LLM call. On a
     # retryable error (timeout / 429 / 5xx / connection) the provider
     # retries the SAME model up to `llm_max_retries` times with
