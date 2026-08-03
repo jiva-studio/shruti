@@ -2,11 +2,11 @@ package pipeline
 
 // Op discriminates the kind of work pipeline.run dispatches.
 //
-//   OpPipeline       — linear ingest → committed pipeline (default).
-//   OpAudioTag       — re-tag mp3 ID3 tags for selected (track, language) pairs.
-//   OpAlignPDF       — run PDF→ASR aligner (bulk replacement for tracks_align_pdf_bulk).
-//   OpAudit          — corpus audit walk; aggregator output lands in run.Result.
-//   OpTitlesRefresh  — LLM-rederive titles for selected (track, language) pairs.
+//	OpPipeline       — linear ingest → committed pipeline (default).
+//	OpAudioTag       — re-tag mp3 ID3 tags for selected (track, language) pairs.
+//	OpAlignPDF       — run PDF→ASR aligner (bulk replacement for tracks_align_pdf_bulk).
+//	OpAudit          — corpus audit walk; aggregator output lands in run.Result.
+//	OpTitlesRefresh  — LLM-rederive titles for selected (track, language) pairs.
 //
 // Only OpPipeline honours the linear stage progression (and the From/Only/UpTo
 // options). The other ops are post-commit / cross-cutting operations and
@@ -42,6 +42,10 @@ const (
 	StageTranscribed       Stage = "transcribed"
 	StageReviewed          Stage = "reviewed"
 	StageCommitted         Stage = "committed"
+	// StagePublished records that the track's assets under public/ reached the
+	// publish targets. Kept in the registry so a sync run considers only what
+	// is new instead of asking the target about every file every time.
+	StagePublished Stage = "published"
 )
 
 // Status of one stage.
@@ -64,22 +68,23 @@ type Key struct {
 // LanguageAgnostic returns true when this stage is not per-language.
 func (s Stage) LanguageAgnostic() bool {
 	switch s {
-	case StageIngested, StageNormalized, StageMetadataExtracted:
+	case StageIngested, StageNormalized, StageMetadataExtracted, StagePublished:
 		return true
 	}
 	return false
 }
 
 // Dependents returns the set of stages that must be reset to Pending whenever
-// the given stage transitions to Done. variant of '' means "all variants".
+// the given stage transitions to Done. variant of ” means "all variants".
 //
 // Cascade rules (mirrors plan):
-//   ingest    → normalize, metadata, transcribe(*), review(*), commit(*)
-//   normalize → metadata, transcribe(*), review(*), commit(*)
-//   metadata  → commit(*)
-//   transcribe(L) → review(L), commit(L)
-//   review(L)     → commit(L)
-//   commit(L)     → ()
+//
+//	ingest    → normalize, metadata, transcribe(*), review(*), commit(*)
+//	normalize → metadata, transcribe(*), review(*), commit(*)
+//	metadata  → commit(*)
+//	transcribe(L) → review(L), commit(L)
+//	review(L)     → commit(L)
+//	commit(L)     → ()
 //
 // Stages that propagate to "all variants" return language-agnostic Key
 // entries with Variant == "*"; the registry expands the wildcard against

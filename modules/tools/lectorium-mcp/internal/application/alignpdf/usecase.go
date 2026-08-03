@@ -61,6 +61,17 @@ func RawPath(outDir string, id track.Id, language string) string {
 
 // PDFExists reports whether transcript.pdf is present for this track.
 // Used by review.Run to decide auto vs LLM path.
+// TextPath is the home of a proofread transcript shipped by the importer.
+func TextPath(outDir string, id track.Id) string {
+	return filepath.Join(outDir, "artifacts", "tracks", string(id), "transcript.html")
+}
+
+// TextExists reports whether the track has one.
+func TextExists(outDir string, id track.Id) bool {
+	_, err := os.Stat(TextPath(outDir, id))
+	return err == nil
+}
+
 func PDFExists(outDir string, id track.Id) bool {
 	if _, err := os.Stat(PDFPath(outDir, id)); err == nil {
 		return true
@@ -104,17 +115,21 @@ func (uc UseCase) RunInternal(ctx context.Context, id track.Id, language string)
 	if uc.Aligner == nil {
 		return Result{}, fmt.Errorf("alignpdf: aligner not configured (set review.align_pdf.script_path in config)")
 	}
-	pdfPath := PDFPath(uc.OutDir, id)
-	rawPath := RawPath(uc.OutDir, id, language)
+	pdfPath, textPath := PDFPath(uc.OutDir, id), ""
 	if _, err := os.Stat(pdfPath); err != nil {
-		return Result{}, fmt.Errorf("alignpdf: PDF not found at %s", pdfPath)
+		pdfPath = ""
+		if textPath = TextPath(uc.OutDir, id); !TextExists(uc.OutDir, id) {
+			return Result{}, fmt.Errorf("alignpdf: no canonical transcript for %s (neither transcript.pdf nor transcript.html)", id)
+		}
 	}
+	rawPath := RawPath(uc.OutDir, id, language)
 	if _, err := os.Stat(rawPath); err != nil {
 		return Result{}, fmt.Errorf("alignpdf: raw transcript not found at %s (run transcript_create first)", rawPath)
 	}
 
 	rev, err := uc.Aligner.Align(ctx, alignpdfport.Request{
 		PDFPath:  pdfPath,
+		TextPath: textPath,
 		RawPath:  rawPath,
 		Language: language,
 	})

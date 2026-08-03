@@ -13,9 +13,12 @@ import (
 	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
-// Request describes one alignment job. Both paths are absolute.
+// Request describes one alignment job. All paths are absolute. Exactly one
+// canonical source is used: PDFPath when set, otherwise TextPath — a
+// proofread transcript the importer shipped as HTML or plain text.
 type Request struct {
 	PDFPath  string
+	TextPath string
 	RawPath  string
 	Language string
 }

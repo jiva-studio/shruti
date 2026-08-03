@@ -27,20 +27,22 @@ import sys
 import traceback
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pdf_align import align_track  # noqa: E402
-from pdf_align.titles import extract_header_hint  # noqa: E402
+from pdf_align import align_track, align_track_text  # noqa: E402
+
 
 
 def handle_align(req: dict) -> dict:
-    pdf_path = req["pdf_path"]
     raw_path = req["raw_path"]
     language = req.get("language", "en")
-    return align_track(pdf_path, raw_path, language)
+    if req.get("pdf_path"):
+        return align_track(req["pdf_path"], raw_path, language)
+    return align_track_text(req["text_path"], raw_path, language)
 
 
 def handle_title_hint(req: dict) -> dict:
+    from pdf_align.titles import extract_header_hint
     pdf_path = req["pdf_path"]
     hint = extract_header_hint(pdf_path)
     return {"header_hint": hint}
