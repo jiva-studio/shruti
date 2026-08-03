@@ -72,6 +72,29 @@ describe("canonical meta codec", () => {
     expect(back.traceId).toBe("trace-abc")
   })
 
+  it("carries a settled reply language in the SHARED namespace, not the web one", () => {
+    // Shared on purpose: a dialogue switched to Russian on the web must still
+    // be answered in Russian when it is continued on the phone.
+    const meta = richFieldsToMeta({
+      id: "m1",
+      role: "assistant",
+      text: "Хорошо.",
+      createdAt: 1000,
+      replyLanguage: { lang: "ru", name: "Русский", requested: true },
+    } as never)
+
+    expect(parseMeta(meta).replyLanguage).toEqual({
+      lang: "ru",
+      name: "Русский",
+      requested: true,
+    })
+    expect(metaToRichFields(meta).replyLanguage).toEqual({
+      lang: "ru",
+      name: "Русский",
+      requested: true,
+    })
+  })
+
   it("a card-less message serializes to the canonical empty envelope", () => {
     const meta = richFieldsToMeta({ id: "m", role: "user", text: "hi", createdAt: 1 } as never)
     expect(meta).toBe('{"_v":1,"data":{}}')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseStoredFrame } from "../chatClient.js"
+import { parseStoredFrame, toWireTurns } from "../chatClient.js"
 
 /**
  * Exercises the SSE wire decoder via the exported `parseStoredFrame`, which
@@ -185,5 +185,100 @@ describe("parseStoredFrame — error", () => {
 describe("parseStoredFrame — done aliases", () => {
   it("decodes a done with no aliases", () => {
     expect(parse("done", {})).toEqual({ type: "done" })
+  })
+})
+
+describe("parseStoredFrame — done reply_language", () => {
+  it("decodes the settled answer language", () => {
+    expect(
+      parse("done", { reply_language: { lang: "ru", name: "Русский", requested: true } })
+    ).toEqual({
+      type: "done",
+      replyLanguage: { lang: "ru", name: "Русский", requested: true },
+    })
+  })
+
+  it("omits it when the server settled nothing", () => {
+    // Normal on a bare «БГ 2.13»: the client keeps the language it already had.
+    expect(parse("done", {})).toEqual({ type: "done" })
+  })
+
+  it("drops a frame with no locale rather than answering in nothing", () => {
+    expect(parse("done", { reply_language: { lang: "", name: "", requested: true } })).toEqual({
+      type: "done",
+    })
+    expect(parse("done", { reply_language: "ru" })).toEqual({ type: "done" })
+  })
+
+  it("keeps an unknown locale — the reply language is not the UI language set", () => {
+    // «Cos'è il karma?» must come back in Italian even with no Italian UI.
+    expect(
+      parse("done", { reply_language: { lang: "it", name: "Italiano", requested: false } })
+    ).toEqual({
+      type: "done",
+      replyLanguage: { lang: "it", name: "Italiano", requested: false },
+    })
+  })
+
+  it("defaults a missing name and a non-boolean requested", () => {
+    expect(parse("done", { reply_language: { lang: "hi" } })).toEqual({
+      type: "done",
+      replyLanguage: { lang: "hi", name: "", requested: false },
+    })
+  })
+})
+
+describe("toWireTurns — what the next request carries back", () => {
+  it("sends the settled language on an assistant turn, in snake_case", () => {
+    expect(
+      toWireTurns([
+        { role: "user", content: "отвечай по-русски" },
+        {
+          role: "assistant",
+          content: "Хорошо.",
+          replyLanguage: { lang: "ru", name: "Русский", requested: true },
+        },
+      ])
+    ).toEqual([
+      { role: "user", content: "отвечай по-русски" },
+      {
+        role: "assistant",
+        content: "Хорошо.",
+        reply_language: { lang: "ru", name: "Русский", requested: true },
+      },
+    ])
+  })
+
+  it("omits it when the message settled none — the app locale stays in force", () => {
+    expect(toWireTurns([{ role: "assistant", content: "answer" }])).toEqual([
+      { role: "assistant", content: "answer" },
+    ])
+  })
+
+  it("never sends it on a user turn", () => {
+    // The server ignores a user-side claim; not sending it keeps the contract
+    // honest — this is server state, not something the user can set.
+    expect(
+      toWireTurns([
+        {
+          role: "user",
+          content: "hi",
+          replyLanguage: { lang: "de", name: "Deutsch", requested: true },
+        },
+      ])
+    ).toEqual([{ role: "user", content: "hi" }])
+  })
+
+  it("carries the language alongside the alias map", () => {
+    const [turn] = toWireTurns([
+      {
+        role: "assistant",
+        content: "see [cite:1]",
+        aliases: { "1": { trackId: "track_x", startMs: 1000, endMs: 2000 } },
+        replyLanguage: { lang: "hi", name: "हिन्दी", requested: true },
+      },
+    ])
+    expect(turn.aliases).toEqual({ "1": { track_id: "track_x", start_ms: 1000, end_ms: 2000 } })
+    expect(turn.reply_language).toEqual({ lang: "hi", name: "हिन्दी", requested: true })
   })
 })

@@ -220,3 +220,62 @@ describe("chatMessagesRepository — card-body meta round-trip", () => {
     expect(row.cites).toEqual({ "track_x|1000-2000": CITE })
   })
 })
+
+describe("chatMessagesRepository — settled reply language", () => {
+  let db: IDatabase
+  let repo: ReturnType<typeof createSqlChatMessageRepository>
+  const SESSION = "session-lang" as ChatSessionId
+  const MSG = "m-lang" as ChatMessageId
+  const RU = { lang: "ru", name: "Русский", requested: true } as const
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await setupSchema(db)
+    repo = createSqlChatMessageRepository(db)
+  })
+
+  it("survives create → listBySession so the switch outlives a cold start", async () => {
+    // Without this the language a user asked for is lost on app restart and the
+    // reply silently reverts to the interface locale.
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "Хорошо, отвечаю по-русски.",
+      createdAt: 1000,
+      replyLanguage: RU,
+    })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.replyLanguage).toEqual(RU)
+  })
+
+  it("is absent on a message that settled none", async () => {
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "plain answer",
+      createdAt: 1000,
+    })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.replyLanguage).toBeUndefined()
+  })
+
+  it("survives the read-modify-write meta updates", async () => {
+    // Each of these rewrites the whole envelope; dropping the field in one of
+    // them would silently un-switch the language mid-conversation.
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "Ответ.",
+      createdAt: 1000,
+      replyLanguage: RU,
+    })
+    await repo.updateActionStates(MSG, { a1: "done" })
+    await repo.updateFollowups(MSG, ["ещё?"])
+    await repo.updateFeedback(MSG, { state: "up" })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.replyLanguage).toEqual(RU)
+  })
+})

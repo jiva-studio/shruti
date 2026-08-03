@@ -75,6 +75,13 @@ export function richFieldsToMeta(m: SerializedMsg): string {
       ? (m.aliases as Record<string, never>)
       : undefined
   if (aliases) shared.aliases = aliases
+  // Goes in the SHARED namespace, not `web`: it is server state about the
+  // conversation, so a dialogue continued on the phone keeps the language it
+  // was switched to on the web.
+  const replyLanguage = m.replyLanguage
+  if (replyLanguage && typeof replyLanguage === "object") {
+    shared.replyLanguage = replyLanguage as Parameters<typeof wrapMeta>[0]["replyLanguage"]
+  }
 
   const web: Record<string, unknown> = {}
   for (const f of WEB_CARD_FIELDS) {
@@ -109,6 +116,7 @@ export function metaToRichFields(meta: string | null | undefined): Partial<Seria
     if (entries) out[f] = entries
   }
   if (canon.aliases && Object.keys(canon.aliases).length > 0) out.aliases = canon.aliases
+  if (canon.replyLanguage) out.replyLanguage = canon.replyLanguage
 
   // Web-only namespace — parse the raw envelope, since `parseMeta` drops it.
   let web: Record<string, unknown> = {}

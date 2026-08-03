@@ -17,6 +17,7 @@ export { BackendUnavailableError, ProtocolVersionMismatchError }
 // boundary that maps them to the camelCase domain shapes — `media` included.
 import type {
   ChatTurn,
+  ChatReplyLanguage,
   ResearchSourceKind,
   ChatStreamEvent,
   ChatActionPayload as ActionPayload,
@@ -626,17 +627,32 @@ export async function* streamChat(
 /*                                  Helpers                                   */
 /* -------------------------------------------------------------------------- */
 
-function buildRequestBody(
-  messages: readonly ChatTurn[],
-  lang: string,
-  opts: StreamChatRequestInit
-): Record<string, unknown> {
-  // Wire-format messages: server's ChatMessageDto expects `aliases`
-  // entries in snake_case (track_id / start_ms / end_ms). The domain
-  // side uses camelCase, so we transform on the boundary.
-  const wireMessages = messages.map((m) => {
+/**
+ * Map domain turns to the server's `ChatMessageDto` shape.
+ *
+ * Two fields ride BACK on an assistant turn, and both are load-bearing:
+ * `aliases` so the agent sees one numbering scheme across the conversation,
+ * and `reply_language` so a request to answer in another language keeps
+ * holding — the server caps history at 20 messages and cannot find the request
+ * again once it scrolls out of that window.
+ *
+ * Exported for tests, like `parseStoredFrame`: this is the seam where a field
+ * silently stops being sent and everything still looks fine locally.
+ */
+export function toWireTurns(messages: readonly ChatTurn[]): Record<string, unknown>[] {
+  return messages.map((m) => {
     const out: Record<string, unknown> = { role: m.role, content: m.content }
-    if (m.role === "assistant" && m.aliases && Object.keys(m.aliases).length > 0) {
+    if (m.role !== "assistant") return out
+    if (m.replyLanguage) {
+      out.reply_language = {
+        lang: m.replyLanguage.lang,
+        name: m.replyLanguage.name,
+        requested: m.replyLanguage.requested,
+      }
+    }
+    // snake_case on the wire (track_id / start_ms / end_ms); the domain side is
+    // camelCase, so the boundary transforms here.
+    if (m.aliases && Object.keys(m.aliases).length > 0) {
       const wireAliases: Record<string, { track_id: string; start_ms?: number; end_ms?: number }> =
         {}
       for (const [k, v] of Object.entries(m.aliases)) {
@@ -651,7 +667,14 @@ function buildRequestBody(
     }
     return out
   })
-  const body: Record<string, unknown> = { messages: wireMessages, lang }
+}
+
+function buildRequestBody(
+  messages: readonly ChatTurn[],
+  lang: string,
+  opts: StreamChatRequestInit
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { messages: toWireTurns(messages), lang }
   // Only emit the flag when the caller opted in — keeps the body identical
   // to the pre-feature shape (and the server default) when it's off.
   if (opts.translateCitations) body.translate_citations = true
@@ -817,7 +840,12 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       }
     case "done": {
       const aliases = parseAliasMap(payload.aliases)
-      return aliases ? { type: "done", aliases } : { type: "done" }
+      const replyLanguage = parseReplyLanguage(payload.reply_language)
+      return {
+        type: "done",
+        ...(aliases ? { aliases } : {}),
+        ...(replyLanguage ? { replyLanguage } : {}),
+      }
     }
     case "action": {
       const ap = parseActionPayload(payload)
@@ -936,6 +964,19 @@ function parseAliasMap(raw: unknown): AliasMapPayload | null {
     out[k] = entry
   }
   return out
+}
+
+function parseReplyLanguage(raw: unknown): ChatReplyLanguage | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+  const o = raw as Record<string, unknown>
+  // The server sends this only when it actually settled a language, so a
+  // missing locale means a malformed frame — not "answer in nothing".
+  if (typeof o.lang !== "string" || o.lang === "") return null
+  return {
+    lang: o.lang,
+    name: typeof o.name === "string" ? o.name : "",
+    requested: o.requested === true,
+  }
 }
 
 function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
