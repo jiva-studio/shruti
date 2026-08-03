@@ -53,14 +53,17 @@ type Options struct {
 }
 
 type TargetResult struct {
-	Target        string   `json:"target"`
-	Considered    int      `json:"considered"`
-	Uploaded      int      `json:"uploaded"`
-	Skipped       int      `json:"skipped"`
-	Failed        int      `json:"failed"`
-	BytesUploaded int64    `json:"bytes_uploaded"`
-	BytesPending  int64    `json:"bytes_pending,omitempty"`
-	Errors        []string `json:"errors,omitempty"`
+	Target        string `json:"target"`
+	Considered    int    `json:"considered"`
+	Uploaded      int    `json:"uploaded"`
+	Skipped       int    `json:"skipped"`
+	Failed        int    `json:"failed"`
+	BytesUploaded int64  `json:"bytes_uploaded"`
+	BytesPending  int64  `json:"bytes_pending,omitempty"`
+	// Vanished counts files that were listed by the walk and gone by the time
+	// they were opened — the signature of the lake disappearing mid-run.
+	Vanished int      `json:"vanished,omitempty"`
+	Errors   []string `json:"errors,omitempty"`
 }
 
 type Result struct {
@@ -86,6 +89,14 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	files, err := uc.walk(opts)
 	if err != nil {
 		return Result{}, err
+	}
+	// Asked about specific tracks and found nothing on disk: the lake is gone
+	// or was never there. Reporting success for zero work sent this run past
+	// 1 150 tracks in seconds after the drive dropped mid-upload, and called
+	// it done.
+	if len(files) == 0 && len(opts.TrackIds) > 0 {
+		return Result{}, fmt.Errorf("assetsync: none of the %d requested tracks has assets under %s — is the lake mounted?",
+			len(opts.TrackIds), uc.OutDir)
 	}
 
 	res := Result{Strategy: dec.Name(), DryRun: opts.DryRun}
@@ -116,6 +127,13 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		r, holds := uc.syncOne(ctx, t, dec, todo, opts)
 		res.Targets = append(res.Targets, r)
 		held = append(held, holds)
+		// Files listed a moment ago and unreadable now means the lake went
+		// away underneath us. Stopping beats grinding through the rest and
+		// reporting a success nobody got.
+		if r.Vanished > 0 {
+			return res, fmt.Errorf("assetsync: %d files vanished mid-run on %s — the lake went away",
+				r.Vanished, t.Name())
+		}
 	}
 
 	// A track counts as published once every target holds all of its files —
@@ -264,6 +282,9 @@ func (uc UseCase) syncOne(ctx context.Context, target s3port.Uploader,
 			if err := uc.put(ctx, target, f); err != nil {
 				mu.Lock()
 				out.Failed++
+				if os.IsNotExist(err) {
+					out.Vanished++
+				}
 				if len(out.Errors) < 10 {
 					out.Errors = append(out.Errors, fmt.Sprintf("%s: %v", f.Key, err))
 				}
