@@ -19,8 +19,8 @@ func TestWritablePathsMatchers(t *testing.T) {
 	rejects := []string{
 		"",
 		"ffmpeg.bin",
-		"transcribe.providers..endpoint", // empty name
-		"transcribe.providers.foo",       // missing .endpoint
+		"transcribe.providers..endpoint",        // empty name
+		"transcribe.providers.foo",              // missing .endpoint
 		"transcribe.providers.foo.bar.endpoint", // dotted middle not allowed
 	}
 	paths := admindomain.WritablePaths()
