@@ -14,8 +14,8 @@ import (
 
 // CatalogDeps wires the catalog use cases.
 type CatalogDeps struct {
-	Refresh   refresh.UseCase
-	OpenRepo  func(ctx context.Context) (CatalogRepo, error) // lazy-open current.db
+	Refresh  refresh.UseCase
+	OpenRepo func(ctx context.Context) (CatalogRepo, error) // lazy-open current.db
 }
 
 // CatalogRepo is the read interface used by tools (subset of catalogport.Repository).

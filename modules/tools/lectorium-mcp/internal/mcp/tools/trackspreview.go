@@ -114,23 +114,25 @@ func RegisterTracksSelect(s *server.MCPServer, deps Deps) {
 // selectorJSON is the over-the-wire shape of track.Selector. Stays JSON-y
 // (string enums, nested object) so the MCP tool spec is readable.
 type selectorJSON struct {
-	Source           string                       `json:"source,omitempty"`
-	Languages        []string                     `json:"languages,omitempty"`
-	TrackIds         []string                     `json:"track_ids,omitempty"`
-	PathGlob         string                       `json:"path_glob,omitempty"`
-	PathPrefix       string                       `json:"path_prefix,omitempty"`
-	HasPDF           *bool                        `json:"has_pdf,omitempty"`
-	KindTags         []string                     `json:"kind_tags,omitempty"`
-	LastDoneStage    string                       `json:"last_done_stage,omitempty"`
-	StageStatus      map[string]string            `json:"stage_status,omitempty"`
-	EnrichAudit      bool                         `json:"enrich_audit,omitempty"`
-	AuditFallback    *struct{ MinChunks int       `json:"min_chunks"` } `json:"audit_fallback,omitempty"`
-	LowConfMinSegs   int                          `json:"low_conf_min_segs,omitempty"`
-	SizeMin          int64                        `json:"size_min,omitempty"`
-	SizeMax          int64                        `json:"size_max,omitempty"`
-	DiscoveredAfter  string                       `json:"discovered_after,omitempty"`
-	DiscoveredBefore string                       `json:"discovered_before,omitempty"`
-	Limit            int                          `json:"limit,omitempty"`
+	Source        string            `json:"source,omitempty"`
+	Languages     []string          `json:"languages,omitempty"`
+	TrackIds      []string          `json:"track_ids,omitempty"`
+	PathGlob      string            `json:"path_glob,omitempty"`
+	PathPrefix    string            `json:"path_prefix,omitempty"`
+	HasPDF        *bool             `json:"has_pdf,omitempty"`
+	KindTags      []string          `json:"kind_tags,omitempty"`
+	LastDoneStage string            `json:"last_done_stage,omitempty"`
+	StageStatus   map[string]string `json:"stage_status,omitempty"`
+	EnrichAudit   bool              `json:"enrich_audit,omitempty"`
+	AuditFallback *struct {
+		MinChunks int `json:"min_chunks"`
+	} `json:"audit_fallback,omitempty"`
+	LowConfMinSegs   int    `json:"low_conf_min_segs,omitempty"`
+	SizeMin          int64  `json:"size_min,omitempty"`
+	SizeMax          int64  `json:"size_max,omitempty"`
+	DiscoveredAfter  string `json:"discovered_after,omitempty"`
+	DiscoveredBefore string `json:"discovered_before,omitempty"`
+	Limit            int    `json:"limit,omitempty"`
 }
 
 func (r selectorJSON) toDomain() (track.Selector, error) {
