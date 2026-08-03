@@ -118,6 +118,18 @@ async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]
     anniversary_md = _s("anniversary_md")
     author_id = await _resolve_id(ctx, "author", args.get("author"))
     location_id = await _resolve_id(ctx, "location", args.get("location"))
+    # A named chapter / canto («лекции по БГ 10») MUST constrain the search.
+    # Without it the ANN search returned whatever was semantically closest —
+    # chapter 9 lectures for a chapter 10 question — under a lead-in that
+    # confidently named chapter 10. `filter_track_ids` applies the same
+    # reference predicate as `list_tracks`. Only meaningful together with the
+    # source: a bare "10" doesn't say which book.
+    ref_prefix = ref_from = ref_to = None
+    if source_id:
+        parsed = parse_tokens(_s("tokens"))
+        if parsed is not None:
+            prefix, ref_from, ref_to = parsed
+            ref_prefix = ".".join(map(str, prefix)) or None
 
     full = {
         "author_id": author_id,
@@ -127,10 +139,17 @@ async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]
         "date_from": date_from,
         "date_to": date_to,
         "anniversary_md": anniversary_md,
+        "ref_prefix": ref_prefix,
+        "ref_from": ref_from,
+        "ref_to": ref_to,
     }
     ladder: list[tuple[str, dict]] = [("", dict(full))]
     relaxed: list[str] = []
     for label, keys in (
+        # Narrowest first: the reference is the constraint most likely to leave
+        # nothing, and dropping it degrades to "lectures on this book" — which
+        # `_intro` then has to admit to.
+        ("reference", ("ref_prefix", "ref_from", "ref_to")),
         ("date", ("date_from", "date_to", "anniversary_md")),
         ("location", ("location_id",)),
         ("author", ("author_id",)),
@@ -215,19 +234,33 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
     return out.strip()
 
 
-async def _intro(ctx: TurnContext, query: str, n: int, relaxed: str) -> str:
+async def _intro(
+    ctx: TurnContext, query: str, n: int, relaxed: str, *, ref: str = "",
+) -> str:
     sys = (
         "Write ONE short intro line (max ~14 words) in the user's language for "
         "a list of lectures found for the user's query — e.g. 'Вот лекции об "
         "очищении сердца:'. If some search filters were relaxed, mention it "
         "briefly. If zero lectures were found, say so plainly. Plain text only."
     )
-    usr = (
-        f"User query: {query}\n"
-        f"Lectures found: {n}\n"
-        f"Relaxed filters: {relaxed or 'none'}\n\n"
-        f"Write the line in language code '{ctx.lang}'."
-    )
+    facts = [
+        f"User query: {query}",
+        f"Lectures found: {n}",
+        f"Relaxed filters: {relaxed or 'none'}",
+    ]
+    if ref:
+        # The defect this exists for: the line said «Вот лекции по Бхагавад-гите
+        # 10:» above lectures on chapter 9, and the user had to point it out
+        # («Ты мне раньше дал 9 главу вместо 12»). A confidently wrong header is
+        # worse than an honest miss, so when the reference filter had to be
+        # dropped the line is FORBIDDEN to claim it.
+        facts.append(
+            f"IMPORTANT: the user asked for {ref}, and the corpus has NO lecture "
+            f"on it. These lectures are NOT on {ref}. Say plainly that there is "
+            f"nothing on {ref} and that these are other lectures on the same "
+            f"book. Do NOT write {ref} as if the list matched it."
+        )
+    usr = "\n".join(facts) + f"\n\nWrite the line in language code '{ctx.lang}'."
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     try:
         out = await ctx.llm.text_completion(
@@ -336,7 +369,15 @@ async def find_tracks_worker_node(
         _describe(ctx, query, disp.get("track_title", ""), description, sc.chunk.text)
         for sc, disp, description in kept
     ]
-    intro_task = _intro(ctx, query, len(kept), relaxed)
+    # When the reference filter had to be dropped, the lead-in gets the human
+    # address it must NOT claim («БГ 10»). Costs a catalog lookup only on that
+    # miss path.
+    ref_label = ""
+    if "reference" in relaxed.split(","):
+        _, short = await _resolve_source(ctx, str(args.get("source_id") or ""))
+        tokens = str(args.get("tokens") or "").strip()
+        ref_label = f"{short} {tokens}".strip() if short else tokens
+    intro_task = _intro(ctx, query, len(kept), relaxed, ref=ref_label)
     prose = await asyncio.gather(intro_task, *desc_tasks)
     intro, descriptions = prose[0], list(prose[1:])
 

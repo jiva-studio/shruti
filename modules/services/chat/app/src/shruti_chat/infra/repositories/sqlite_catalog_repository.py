@@ -290,10 +290,14 @@ def _filter_track_ids_sync(
     date_from: str | None,
     date_to: str | None,
     anniversary_md: str | None = None,
+    ref_prefix: str | None = None,
+    ref_from: int | None = None,
+    ref_to: int | None = None,
 ) -> list[str] | None:
     source_id = _normalize_source_id(db_path, source_id)
+    has_ref = ref_prefix is not None or ref_from is not None or ref_to is not None
     if not any([author_id, source_id, location_id, tag_ids, date_from, date_to,
-                anniversary_md]):
+                anniversary_md, has_ref]):
         return None
     sql = ["SELECT t.id FROM tracks t WHERE t.hidden = 0"]
     params: list[Any] = []
@@ -321,7 +325,19 @@ def _filter_track_ids_sync(
         )
         params.append(source_id)
     with _catalog_conn(db_path) as conn:
-        return [r["id"] for r in conn.execute("\n".join(sql), params).fetchall()]
+        ids = [r["id"] for r in conn.execute("\n".join(sql), params).fetchall()]
+        if not has_ref:
+            return ids
+        # Same reference predicate `list_tracks` applies, so a chapter/canto
+        # constraint narrows an ANN search exactly as it narrows a listing.
+        ref_ids = _filter_track_ids_by_ref(
+            conn,
+            source_id=source_id,
+            ref_prefix=ref_prefix,
+            ref_from=ref_from,
+            ref_to=ref_to,
+        )
+        return [tid for tid in ids if tid in ref_ids]
 
 
 def _get_track_sync(db_path: Path, track_id: str, lang: str) -> Track | None:
@@ -1118,6 +1134,9 @@ class SqliteCatalogRepository:
         date_from: str | None,
         date_to: str | None,
         anniversary_md: str | None = None,
+        ref_prefix: str | None = None,
+        ref_from: int | None = None,
+        ref_to: int | None = None,
     ) -> list[str] | None:
         return await asyncio.to_thread(
             _filter_track_ids_sync,
@@ -1129,6 +1148,9 @@ class SqliteCatalogRepository:
             date_from=date_from,
             date_to=date_to,
             anniversary_md=anniversary_md,
+            ref_prefix=ref_prefix,
+            ref_from=ref_from,
+            ref_to=ref_to,
         )
 
     async def resolve(
