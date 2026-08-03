@@ -784,6 +784,13 @@ export const useChatStore = defineStore("chat", () => {
         if (m.role === "assistant" && m.aliases && Object.keys(m.aliases).length > 0) {
           ;(turn as { aliases?: ChatTurn["aliases"] }).aliases = m.aliases
         }
+        // Ship back the language a previous turn settled on, so a request to
+        // answer in another language keeps holding — the server sees only the
+        // last 20 messages and can't find the request again once it scrolls out.
+        if (m.role === "assistant" && m.replyLanguage) {
+          ;(turn as { replyLanguage?: ChatTurn["replyLanguage"] }).replyLanguage =
+            m.replyLanguage
+        }
         return turn
       })
 

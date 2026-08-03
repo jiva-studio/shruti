@@ -94,6 +94,23 @@ class ChunkAliasDto(BaseModel):
     end_ms: int | None = None
 
 
+class ReplyLanguageDto(BaseModel):
+    """What a previous turn settled the answer language to be.
+
+    Bounded, but NOT validated against a list of locales: the reply language is
+    an open set (an Italian question gets an Italian answer even though the app
+    ships no Italian UI), and a server-side whitelist would be a second copy of
+    the client's language list to keep in sync. Untrusted like any client input
+    — `remembered_reply_language` re-validates and ignores what it can't read.
+    """
+
+    lang: str = Field(default="", max_length=32)
+    name: str = Field(default="", max_length=64)
+    # True when the user asked for this language in words, which is what makes
+    # it outrank the language a later message happens to be written in.
+    requested: bool = False
+
+
 USER_CONTENT_MAX = 4000
 # Assistant turns are server-generated prose with citations and routinely
 # exceed the user cap; the client replays them verbatim in history. We still
@@ -116,6 +133,13 @@ class ChatMessageDto(BaseModel):
     # server falls back to stripping their chip markers to placeholder
     # text.
     aliases: dict[str, ChunkAliasDto] | None = Field(default=None, max_length=128)
+    # The language this turn was answered in, as the server settled it — sent
+    # back on the terminal `done` event, persisted by the client on the
+    # assistant message, and replayed here. It is what makes «отвечай
+    # по-русски» outlive the 20-message window this list is capped at, and an
+    # app restart. Absent on legacy clients and on turns where nothing was
+    # settled: then the request's `lang` (the app's UI locale) stays in force.
+    reply_language: ReplyLanguageDto | None = None
 
     @model_validator(mode="after")
     def _cap_user_content(self) -> "ChatMessageDto":

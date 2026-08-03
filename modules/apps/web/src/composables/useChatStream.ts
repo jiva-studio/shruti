@@ -40,6 +40,20 @@ export interface Msg {
   outlines?: Map<string, OutlinePayload>
   pdfActions?: Map<string, PdfActionPayload>
   aliases?: Record<string, unknown>
+  /** The language the server settled this answer in. Shipped back on the next
+   *  turn so a request to switch language keeps holding: the server sees only
+   *  the last messages of the conversation and can't find the request again
+   *  once it scrolls out. */
+  replyLanguage?: ReplyLanguage
+}
+
+/** Wire + stored shape of a settled answer language. `lang` is an opaque
+ *  locale code, NOT one of the UI languages — an Italian question is answered
+ *  in Italian though there's no Italian interface. */
+export interface ReplyLanguage {
+  lang: string
+  name: string
+  requested: boolean
 }
 
 interface ActionEnvelope {
@@ -57,6 +71,7 @@ interface StreamEventPayload {
   label?: string
   payload?: Record<string, unknown>
   aliases?: Record<string, unknown>
+  reply_language?: Record<string, unknown>
   code?: string
   limit?: number
   current?: number
@@ -92,6 +107,20 @@ export interface UseChatStream {
   send: (q: string) => Promise<void>
   stop: () => void
   resetLimits: () => void
+}
+
+/** Read a settled answer language off a `done` frame. The server sends the
+ *  field only when it actually settled one, so a missing locale means a
+ *  malformed frame — not "answer in nothing". */
+function parseReplyLanguage(raw: unknown): ReplyLanguage | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  if (typeof o.lang !== 'string' || !o.lang) return undefined
+  return {
+    lang: o.lang,
+    name: typeof o.name === 'string' ? o.name : '',
+    requested: o.requested === true,
+  }
 }
 
 function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionId?: string) {
@@ -233,7 +262,12 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
           srvLimit.value = usage.limit!; srvCurrent.value = usage.current ?? srvCurrent.value
         }
       }
-      else if (evt === 'done') { gotDone = true; if (payload?.aliases) a.aliases = payload.aliases }
+      else if (evt === 'done') {
+        gotDone = true
+        if (payload?.aliases) a.aliases = payload.aliases
+        const rl = parseReplyLanguage(payload?.reply_language)
+        if (rl) a.replyLanguage = rl
+      }
       else if (evt === 'error') { throw new Error(payload?.code ?? 'error') }
     }
 
@@ -264,9 +298,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
       const buildBody = (withAliases: boolean): Record<string, unknown> => {
         const history = messages.value
           .filter((m) => m.text)
-          .map((m) => (withAliases && m.role === 'assistant' && m.aliases
-            ? { role: m.role, content: m.text, aliases: m.aliases }
-            : { role: m.role, content: m.text }))
+          .map((m) => {
+            const t: Record<string, unknown> = { role: m.role, content: m.text }
+            if (!withAliases || m.role !== 'assistant') return t
+            if (m.aliases) t.aliases = m.aliases
+            if (m.replyLanguage) t.reply_language = m.replyLanguage
+            return t
+          })
         const b: Record<string, unknown> = {
           messages: history.length ? history : [{ role: 'user', content: q }],
           lang,
