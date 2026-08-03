@@ -10,8 +10,10 @@ from .iast import to_iast, ascii_fold
 
 # Conservative sentence splitter: splits on .!? followed by space + uppercase
 # (or quote/paren/bracket) — protects [Bg X.Y] decimals so they don't break
-# "8.12" into two sentences.
-SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÄÅÉÏÖÜÑÇÌ\"'\(\[])")
+# "8.12" into two sentences. The uppercase class covers Cyrillic too, or a
+# Russian paragraph stays one sentence the length of the paragraph.
+SENT_SPLIT_RE = re.compile(
+    r"(?<=[.!?])\s+(?=[A-ZÄÅÉÏÖÜÑÇÌА-ЯЁ\"'\(\[])")
 
 _JUNK_SENT_RE = re.compile(
     r"^\s*\[(?:end|break|pause|aside|laughter|laughs|chuckling|coughs?|"

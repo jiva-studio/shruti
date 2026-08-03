@@ -26,7 +26,19 @@ from .canon import (build_canonical, asr_segments, to_v2_blocks,
                     CanonSentence, CanonVerse, CanonTranslation)
 from .sources import resolve as resolve_source, find_inline as find_inline_refs
 
-WORD_RE = re.compile(r"[a-z0-9']+")
+WORD_RE = re.compile(r"[\w']+", re.UNICODE)   # any script: the lake is not Latin-only
+
+# Roughly how long a character takes to say — used to bound an unanchored
+# block's span so it cannot swallow a silence.
+MS_PER_CHAR = 90
+
+
+def _block_text(c) -> str:
+    if isinstance(c, CanonSentence):
+        return c.text
+    if isinstance(c, CanonVerse):
+        return " ".join(c.lines)
+    return getattr(c, "text", "")
 
 def tokenize(s: str) -> list[str]:
     return WORD_RE.findall(ascii_fold(s))
@@ -137,13 +149,23 @@ def align_track_fast(parsed: dict, asr: dict) -> dict:
         gap_end   = aligned[j]["start"] if j < n and aligned[j]["start"] is not None else total_dur
         if gap_end < gap_start:  # safety: collapsed boundary
             gap_end = gap_start
-        run_len = j - i
+        # Share the gap out in proportion to how much text each block holds,
+        # capped at the speaking time that text plausibly takes. A block we
+        # could not anchor still happened somewhere inside the gap, and a span
+        # scaled to its length is a better answer than a point the player
+        # cannot highlight — while the cap keeps one short line from claiming
+        # a silent minute.
+        weights = [max(1, len(_block_text(canon[idx]))) for idx in range(i, j)]
+        total_w = sum(weights)
+        gap = max(0, gap_end - gap_start)
+        cursor = gap_start
         for k, idx in enumerate(range(i, j)):
-            # k=0..run_len-1 → fractional position (k+1)/(run_len+1) inside gap
-            frac = (k + 1) / (run_len + 1)
-            t = int(gap_start + frac * (gap_end - gap_start))
-            aligned[idx]["start"] = t
-            aligned[idx]["end"]   = t
+            share = int(gap * weights[k] / total_w)
+            span = min(share, weights[k] * MS_PER_CHAR)
+            start = cursor + (share - span) // 2
+            aligned[idx]["start"] = start
+            aligned[idx]["end"] = start + span
+            cursor += share
         i = j
 
     # Rescue zero-width sentences: a sentence with start==end means the

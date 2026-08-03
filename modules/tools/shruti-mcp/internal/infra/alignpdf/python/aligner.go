@@ -83,10 +83,11 @@ func (a *Aligner) spawn() error {
 // malformed input or OS pipe pressure without losing the call.
 func (a *Aligner) Align(ctx context.Context, req alignpdfport.Request) (transcript.Reviewed, error) {
 	body, err := json.Marshal(map[string]string{
-		"action":   "align",
-		"pdf_path": req.PDFPath,
-		"raw_path": req.RawPath,
-		"language": req.Language,
+		"action":    "align",
+		"pdf_path":  req.PDFPath,
+		"text_path": req.TextPath,
+		"raw_path":  req.RawPath,
+		"language":  req.Language,
 	})
 	if err != nil {
 		return transcript.Reviewed{}, err
