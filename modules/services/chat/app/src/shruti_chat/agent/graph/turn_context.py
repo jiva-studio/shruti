@@ -67,6 +67,13 @@ class TurnContext:
     # to localise the verse-payload `transliteration` (en = clean Latin
     # IAST, ru = derived Cyrillic) when flushing verse cards.
     lang: str = "ru"
+    # Native name of `lang` ("Русский", "Italiano"), set by `router_node` when
+    # it settles the reply language. Only a FALLBACK for the `{{LANG_NAME}}`
+    # directive: for a locale the catalog knows, the catalog's own name wins.
+    # It exists for the languages the catalog doesn't ship — a person writing
+    # in Italian gets an Italian answer, and a bare "it" in the directive is
+    # what makes the model drift to Russian.
+    lang_name: str = ""
     # Whether the user opted into machine-translating verbatim citations
     # that have no native variant in `lang`. Off → such citations fall back
     # to English (en-preferred), never MT. Set from the request DTO.

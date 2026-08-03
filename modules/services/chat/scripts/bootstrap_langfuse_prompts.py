@@ -114,6 +114,13 @@ _PROMPTS: list[tuple[str, str, dict, list[str]]] = [
          "note": "structured_output → temperature forced to 0"},
         ["chat", "router"],
     ),
+    # ── reply language (runs in parallel with the router) ──────────────
+    (
+        "reply-language", "reply_language",
+        {"model": _FLASH_LITE, "temperature": 0, "schema": "ReplyLanguage",
+         "note": "structured_output → temperature forced to 0; decides which language the turn is answered in — abstains (empty lang) when the message carries no signal"},
+        ["chat", "router"],
+    ),
     # ── chat-section-* (modular synth/worker prompt) ───────────────────
     ("chat-section-header", "header", {}, ["chat", "synth", "worker"]),
     ("chat-section-tools", "tools", {}, ["chat", "worker"]),
