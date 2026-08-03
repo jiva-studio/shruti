@@ -257,6 +257,11 @@ async def run_chat_turn(
     first_token_at: float | None = None
     tool_calls_count = 0
     had_error = False
+    # Whether the client got a tappable card. Read by the empty-turn backstop:
+    # a card with no prose around it is still an answer. Tracked off the events
+    # actually yielded rather than `emitted_action_ids`, which the workers
+    # populate through a side channel.
+    sent_action = False
     detected_intent: str | None = None
     full_prose: list[str] = []
     # Outline shape captured from synthesis_planner_node's one-shot
@@ -464,6 +469,8 @@ async def run_chat_turn(
                             maybe = params.get("intent")
                             if isinstance(maybe, str):
                                 detected_intent = maybe
+                    elif ev_type == "action":
+                        sent_action = True
                     elif ev_type == "error":
                         had_error = True
                     elif ev_type == "reply_language":
@@ -616,6 +623,31 @@ async def run_chat_turn(
                 request_id=request_id,
                 error=str(exc),
             )
+
+        # ── No turn may end with a blank bubble ──────────────────────
+        # Every cause converges here, so this is the one place that can tell.
+        # Three production turns in two weeks ended with the user staring at
+        # nothing: `localized_reply` missing parseable JSON on BOTH models, a
+        # 429 with no fallback left, and a pipeline that stopped after
+        # `topic_extractor` with no synthesizer observation AND no error. The
+        # first two are fixed at their source; this backstop covers the third
+        # and whatever comes next. `agent_error` is already localised on every
+        # client and already triggers the quota refund — an answer that never
+        # arrived must not be charged for.
+        #
+        # An action-only turn is NOT empty: the user got a tappable card even
+        # with no prose around it.
+        if not had_error and not sent_action and not any(s.strip() for s in full_prose):
+            log.warning(
+                "chat_turn_produced_no_output",
+                request_id=request_id,
+                intent=detected_intent,
+            )
+            yield AgentEvent(
+                type="error",
+                data={"code": "agent_error", "message": "empty answer"},
+            )
+            return
 
         # ── Terminal `done` carries the alias map inline ─────────────
         # v1 protocol: client persists `done.data.aliases` on the

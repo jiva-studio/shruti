@@ -55,6 +55,14 @@ class LocalizedReply(BaseModel):
     chips: list[str] = Field(default_factory=list)
 
 
+# Swaps the JSON contract for a plain one on the retry below. Same writing
+# instructions, no envelope.
+_PLAIN_LINE_RULE = (
+    "Return ONLY that one line as plain text. No JSON, no quotes, no chips, "
+    "no explanation."
+)
+
+
 async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
     """One cheap-LLM call that writes a short chat reply in the user's language
     (`ctx.lang`) from an English `situation` description: a `line` plus 0-3
@@ -83,9 +91,30 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
     model = get_settings().llm_cheap
 
     async def _call() -> LocalizedReply:
-        return await ctx.llm.structured_output(
-            msgs, LocalizedReply, model=model, run_name="localized_reply",
-        )
+        try:
+            return await ctx.llm.structured_output(
+                msgs, LocalizedReply, model=model, run_name="localized_reply",
+            )
+        except Exception as exc:  # noqa: BLE001
+            # A one-line reply plus up to three chips is too small a thing to
+            # lose a turn over, and in production both the primary AND the
+            # fallback model failed to emit parseable JSON for it — the user got
+            # a blank bubble. Ask again with NO JSON envelope, so there is no
+            # parse step left to miss (`text_completion` exists for exactly
+            # this). Chips are dropped: they are a nicety, the line is not.
+            log.warning(
+                "localized_reply_json_missed",
+                request_id=ctx.request_id, error=str(exc),
+            )
+            line = await ctx.llm.text_completion(
+                [
+                    {"role": "system", "content": f"{sys}\n\n{_PLAIN_LINE_RULE}"},
+                    {"role": "user", "content": usr},
+                ],
+                model=model,
+                run_name="localized_reply_plain",
+            )
+            return LocalizedReply(line=line.strip(), chips=[])
 
     try:
         if ctx.kv_cache is not None:
