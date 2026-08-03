@@ -217,9 +217,31 @@ export interface ChatMediaPayloadWire {
 
 export type ChatRole = "user" | "assistant"
 
+/** The language the server settled a turn's answer in.
+ *
+ *  Round-tripped: it arrives on `done`, the client stores it on the assistant
+ *  message and ships it back on the next turn. That is what makes «отвечай
+ *  по-русски» hold for the rest of the dialogue — the server caps history at
+ *  20 messages, so re-deriving the request from the conversation stops working
+ *  once it scrolls out (and after an app restart, which drops it entirely).
+ *
+ *  `lang` is an opaque locale code — NOT one of the app's languages. Someone
+ *  writing in Italian gets an Italian answer even though there is no Italian
+ *  UI, so never validate it against the interface-language list. `requested`
+ *  is true when the person asked for the language in words, which is what lets
+ *  it outrank the language a later message happens to be written in. */
+export interface ChatReplyLanguage {
+  readonly lang: string
+  readonly name: string
+  readonly requested: boolean
+}
+
 export interface ChatTurn {
   readonly role: ChatRole
   readonly content: string
+  /** What a previous turn settled the answer language to be. Only on
+   *  `role === "assistant"`; the wire layer sends it as `reply_language`. */
+  readonly replyLanguage?: ChatReplyLanguage
   /** Server-minted integer→chunk alias map for the chip markers in
    *  this assistant message's `content`. Round-tripped from a prior
    *  turn's `aliases` SSE event via the client's meta storage. Only
@@ -276,6 +298,11 @@ export type ChatStreamEvent =
       readonly aliases?: Readonly<
         Record<string, { track_id: string; start_ms?: number; end_ms?: number }>
       >
+      /** The language this turn was answered in, when the server settled one.
+       *  Absent when it didn't (nothing to read in the message and nothing
+       *  remembered) — then the client keeps what it already had. Persist it on
+       *  the assistant message and send it back; see `ChatReplyLanguage`. */
+      readonly replyLanguage?: ChatReplyLanguage
     }
   | {
       readonly type: "error"

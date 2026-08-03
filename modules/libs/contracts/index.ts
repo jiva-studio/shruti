@@ -27,6 +27,7 @@ export type {
   ChatRole,
   ChatActionPayload,
   ChatOutlinePayload,
+  ChatReplyLanguage,
   ChatStreamEvent,
   ChatTurn,
   ChatVersePayloadWire,

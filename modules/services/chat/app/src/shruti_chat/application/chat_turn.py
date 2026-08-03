@@ -266,6 +266,10 @@ async def run_chat_turn(
     outline_has_intro: bool | None = None
     outline_has_conclusion: bool | None = None
     outline_skipped_notes_ratio: float | None = None
+    # The answer language `router_node` settled on, when it settled one. Shipped
+    # on the terminal `done` so the client persists it on the assistant message
+    # and replays it next turn — the same ride `aliases` takes.
+    reply_language: dict[str, Any] | None = None
     # Hoisted above the try so the `finally` teardown can always reference
     # it — even if turn setup raises before the task is created.
     embed_task: Any | None = None
@@ -462,6 +466,10 @@ async def run_chat_turn(
                                 detected_intent = maybe
                     elif ev_type == "error":
                         had_error = True
+                    elif ev_type == "reply_language":
+                        # Not a client-facing event — it leaves on `done`.
+                        reply_language = ev_data or None
+                        continue
                     elif ev_type == "outline_summary":
                         # synthesis_planner_node emits this once per turn
                         # for Langfuse scoring. NOT a client-facing event
@@ -617,6 +625,8 @@ async def run_chat_turn(
         done_data: dict[str, Any] = {}
         if len(aliases) > 0:
             done_data["aliases"] = aliases.serialize()
+        if reply_language is not None:
+            done_data["reply_language"] = reply_language
         yield AgentEvent(type="done", data=done_data)
 
     finally:

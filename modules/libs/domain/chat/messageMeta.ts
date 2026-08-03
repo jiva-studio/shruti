@@ -38,6 +38,7 @@ import type {
   ChatFocusPayload,
   ChatMessageError,
   ChatOutlinePayload,
+  ChatReplyLanguage,
   ChatVerseBody,
   MediaPayload,
 } from "../chatMessage.js"
@@ -72,6 +73,7 @@ export interface ParsedMeta {
   readonly aliases: Record<string, ChatAliasEntry> | undefined
   readonly focus: ChatFocusPayload | undefined
   readonly feedback: ChatFeedbackState | undefined
+  readonly replyLanguage: ChatReplyLanguage | undefined
 }
 
 export const EMPTY_META: ParsedMeta = Object.freeze({
@@ -88,6 +90,7 @@ export const EMPTY_META: ParsedMeta = Object.freeze({
   aliases: undefined,
   focus: undefined,
   feedback: undefined,
+  replyLanguage: undefined,
 })
 
 export function parseMeta(raw: unknown): ParsedMeta {
@@ -123,6 +126,20 @@ export function parseMeta(raw: unknown): ParsedMeta {
     aliases: extractAliases(data.aliases),
     focus: extractFocus(data.focus),
     feedback: extractFeedback(data.feedback),
+    replyLanguage: extractReplyLanguage(data.replyLanguage),
+  }
+}
+
+function extractReplyLanguage(raw: unknown): ChatReplyLanguage | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  // A row with no locale carries nothing: the server only sends this field when
+  // it actually settled a language, so an empty `lang` is a corrupt row.
+  if (typeof o.lang !== "string" || o.lang === "") return undefined
+  return {
+    lang: o.lang,
+    name: typeof o.name === "string" ? o.name : "",
+    requested: o.requested === true,
   }
 }
 
@@ -233,6 +250,7 @@ export function wrapMeta(payload: {
   aliases?: Record<string, ChatAliasEntry>
   focus?: ChatFocusPayload
   feedback?: ChatFeedbackState
+  replyLanguage?: ChatReplyLanguage
 }): string {
   const data: Record<string, unknown> = {}
   if (payload.actions && Object.keys(payload.actions).length > 0) data.actions = payload.actions
@@ -250,5 +268,6 @@ export function wrapMeta(payload: {
   if (payload.aliases && Object.keys(payload.aliases).length > 0) data.aliases = payload.aliases
   if (payload.focus) data.focus = payload.focus
   if (payload.feedback) data.feedback = payload.feedback
+  if (payload.replyLanguage) data.replyLanguage = payload.replyLanguage
   return JSON.stringify({ _v: CURRENT_META_V, data })
 }
