@@ -35,6 +35,10 @@ from collections import defaultdict
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
+from lectorium_chat.agent.graph.nodes._author_match import (
+    distinctive_tokens,
+    names_match,
+)
 from lectorium_chat.agent.graph.nodes._worker_common import (
     LocalizedReply,
     build_cite_payload,
@@ -74,32 +78,49 @@ def _year_range(year: object) -> tuple[str | None, str | None]:
     return f"{y:04d}-01-01", f"{y:04d}-12-31"
 
 
+# How many author candidates to test for a name match. Top-1 is not enough:
+# the honorific the router keeps ("Srila") can rank a same-honorific stranger
+# above the real author.
+_AUTHOR_CANDIDATES = 5
+
+
 async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
     """Best-effort name → id for an author / location filter. A miss just
-    means we don't constrain on it (the semantic search still runs)."""
+    means we don't constrain on it (the semantic search still runs).
+
+    Resolved across ALL locales (`lang=None`), never `ctx.lang`: the router
+    normalizes what it extracts to English ("Токио" → "Tokyo"), so matching a
+    Latin name against the Cyrillic dictionary scores ~0 and silently drops
+    the filter — or worse, picks whatever grazed the cutoff.
+    """
     if not isinstance(text, str) or not text.strip():
         return None
     try:
-        hits = await ctx.catalog_repo.resolve(kind, text, lang=ctx.lang, limit=1)  # type: ignore[arg-type]
+        hits = await ctx.catalog_repo.resolve(kind, text, lang=None, limit=1)  # type: ignore[arg-type]
     except Exception:
         return None
     return hits[0].id if hits else None
 
 
-# A named teacher only counts as "in the corpus" above this confidence. The
-# catalog holds a handful of authors, so a query for an ABSENT teacher grazes a
-# common name word — "niranjana swami" matches "…Swami Prabhupada" at 0.5 — and
-# must NOT be treated as having their lectures. A real author match scores ~1.0.
-_AUTHOR_MIN_CONFIDENCE = 0.7
+async def _resolve_author(ctx: TurnContext, name: str):
+    """The corpus author `name` denotes, or None when the corpus lacks them.
 
-
-async def _author_in_corpus(ctx: TurnContext, name: str) -> bool:
-    """True only if `name` resolves to a corpus author with real confidence."""
+    Resolves across ALL locales and decides by distinctive-token containment
+    (see `_author_match`) rather than a score cutoff — the router hands us an
+    English name while the user's dictionary may be Cyrillic, and no single
+    ratio separates "Srila Prabhupada" (ours) from "Bhakti Caitanya Swami"
+    (not ours).
+    """
     try:
-        hits = await ctx.catalog_repo.resolve("author", name, lang=ctx.lang, limit=1)  # type: ignore[arg-type]
+        hits = await ctx.catalog_repo.resolve(  # type: ignore[arg-type]
+            "author", name, lang=None, limit=_AUTHOR_CANDIDATES,
+        )
     except Exception:
-        return False
-    return bool(hits) and hits[0].confidence >= _AUTHOR_MIN_CONFIDENCE
+        return None
+    for hit in hits:
+        if names_match(name, hit.full_name):
+            return hit
+    return None
 
 
 # Name of the ladder rung that carries a scripture reference. The label ends up
@@ -112,9 +133,16 @@ def _was_relaxed(relaxed: str, rung: str) -> bool:
     return rung in relaxed.split(",")
 
 
-async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]:
+async def _build_filters(
+    ctx: TurnContext, args: dict, *, author_id: str | None = None,
+) -> list[tuple[str, dict]]:
     """Ordered (relaxed-label, filter-kwargs) ladder: index 0 is fully
-    constrained, each next entry drops the narrowest remaining constraint."""
+    constrained, each next entry drops the narrowest remaining constraint.
+
+    `author_id` is resolved by the CALLER (the same resolution that decided the
+    corpus has this teacher at all), so the guard and the filter can never
+    disagree about who was asked for.
+    """
     source_id = args.get("source_id") if isinstance(args.get("source_id"), str) else None
     # Delivery-date constraint: an explicit ISO range (date_from/date_to) wins;
     # otherwise derive a full-year range from a bare `year`. `anniversary_md`
@@ -127,7 +155,6 @@ async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]
     if not date_from and not date_to:
         date_from, date_to = _year_range(args.get("year"))
     anniversary_md = _s("anniversary_md")
-    author_id = await _resolve_id(ctx, "author", args.get("author"))
     location_id = await _resolve_id(ctx, "location", args.get("location"))
     # A named chapter / canto («лекции по БГ 10») MUST constrain the search.
     # Without it the ANN search returned whatever was semantically closest —
@@ -175,7 +202,11 @@ async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]
     return ladder
 
 
-async def _search(ctx: TurnContext, embedding: list[float], flt: dict) -> list[ScoredChunk]:
+async def _search(
+    ctx: TurnContext, embedding: list[float], flt: dict, *, lang: str | None,
+) -> list[ScoredChunk]:
+    """Semantic search under `flt`. `lang=None` drops the transcript-language
+    predicate, so lectures that exist ONLY in another language become visible."""
     eligible = None
     if any(flt.values()):
         eligible = await ctx.catalog_repo.filter_track_ids(**flt)
@@ -184,9 +215,22 @@ async def _search(ctx: TurnContext, embedding: list[float], flt: dict) -> list[S
     return await ctx.chunk_repo.search_by_embedding(
         embedding,
         eligible_track_ids=eligible,
-        lang=ctx.lang,
+        lang=lang,
         top_k=_SEARCH_TOP_K,
     )
+
+
+async def _run_ladder(
+    ctx: TurnContext, embedding: list[float], ladder: list[tuple[str, dict]],
+    *, lang: str | None,
+) -> tuple[list[ScoredChunk], str]:
+    """Walk the relaxation ladder until a rung yields lectures. Returns the
+    lectures and the label of the constraints that had to be dropped."""
+    for label, flt in ladder:
+        lectures = _top_lectures(await _search(ctx, embedding, flt, lang=lang))
+        if lectures:
+            return lectures, label
+    return [], ""
 
 
 def _top_lectures(chunks: list[ScoredChunk]) -> list[ScoredChunk]:
@@ -211,6 +255,45 @@ def _top_lectures(chunks: list[ScoredChunk]) -> list[ScoredChunk]:
 
     picked.sort(key=lambda p: p[0], reverse=True)
     return [q for _, q in picked[:_MAX_LECTURES]]
+
+
+async def _language_names(ctx: TurnContext, codes: list[str]) -> str:
+    """Native names for locale codes ("en" → "English"), comma-joined. The
+    `languages` table is the source of truth; an unknown code degrades to the
+    code itself so the line still names SOMETHING concrete."""
+    names: list[str] = []
+    for code in codes:
+        name = None
+        if ctx.catalog_repo is not None:
+            try:
+                name = await ctx.catalog_repo.language_name(code)
+            except Exception:  # noqa: BLE001 — a label miss must not fail the turn
+                name = None
+        names.append(name or code)
+    return ", ".join(names)
+
+
+async def _other_language_note(
+    ctx: TurnContext, found_langs: list[str],
+) -> str:
+    """The situation clause for lectures that exist only in ANOTHER language.
+
+    Names BOTH sides — the language the user asked in and the one the lectures
+    are actually in — because "available in another language" leaves the user
+    guessing which. Empty when nothing was found outside their language.
+    """
+    others = [c for c in dict.fromkeys(found_langs) if c and c != ctx.lang]
+    if not others:
+        return ""
+    requested = await _language_names(ctx, [ctx.lang])
+    available = await _language_names(ctx, others)
+    return (
+        f" IMPORTANT: there is NO transcript in the user's own language "
+        f"({requested}); these lectures are in {available}. Say BOTH parts "
+        f"explicitly — that nothing was found in {requested}, but these were "
+        f"found in {available} — naming each language naturally in the user's "
+        f"language (e.g. «на русском нет, но нашлись на английском»)."
+    )
 
 
 async def _describe(ctx: TurnContext, query: str, title: str, description: str, excerpt: str) -> str:
@@ -239,7 +322,8 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
 
 
 async def _intro(
-    ctx: TurnContext, query: str, n: int, relaxed: str, *, ref: str = "",
+    ctx: TurnContext, query: str, n: int, relaxed: str, *,
+    lang_note: str = "", ref: str = "",
 ) -> str:
     sys = standalone_prompt("find-tracks-intro", "find_tracks_intro")
     facts = [
@@ -247,6 +331,8 @@ async def _intro(
         f"Lectures found: {n}",
         f"Relaxed filters: {relaxed or 'none'}",
     ]
+    if lang_note:
+        facts.append(lang_note)
     if ref:
         # The defect this exists for: the line said «Вот лекции по Бхагавад-гите
         # 10:» above lectures on chapter 9, and the user had to point it out
@@ -287,13 +373,19 @@ async def find_tracks_worker_node(
         log.warning("find_tracks_missing_deps", request_id=ctx.request_id)
         return await _emit_empty(ctx, writer, query)
 
-    # The user named a teacher whose lectures the corpus does NOT have. Guard
-    # here so the unresolved author_id can't drop out of the filter and let the
-    # semantic search return SOME OTHER teacher's lectures (which synth would then
-    # misattribute). Route to add-to-library web discovery for the named teacher.
+    # The user named a teacher. Resolve them ONCE — the same resolution decides
+    # whether the corpus has them at all AND which author_id constrains the
+    # search, so the guard and the filter cannot disagree. A name that is only
+    # honorifics ("Свами") denotes nobody in particular: no guard, no filter.
+    author_id: str | None = None
     requested_author = args.get("author")
-    if isinstance(requested_author, str) and requested_author.strip():
-        if not await _author_in_corpus(ctx, requested_author):
+    if isinstance(requested_author, str) and distinctive_tokens(requested_author):
+        hit = await _resolve_author(ctx, requested_author)
+        if hit is None:
+            # The corpus does NOT have this teacher. Guard here so the unresolved
+            # author can't drop out of the filter and let the semantic search
+            # return SOME OTHER teacher's lectures (which synth would then
+            # misattribute). Route to add-to-library web discovery instead.
             if not ctx.capabilities.get("personal_library"):
                 return await _emit_empty(ctx, writer, query)
             log.info(
@@ -302,18 +394,30 @@ async def find_tracks_worker_node(
                 author=requested_author.strip()[:60],
             )
             return {"web_fallback": True}
+        author_id = hit.id
 
     embedding = await ctx.embedder.embed_query(query)
-    ladder = await _build_filters(ctx, args)
+    ladder = await _build_filters(ctx, args, author_id=author_id)
 
-    lectures: list[ScoredChunk] = []
-    relaxed = ""
-    for label, flt in ladder:
-        chunks = await _search(ctx, embedding, flt)
-        lectures = _top_lectures(chunks)
+    lectures, relaxed = await _run_ladder(ctx, embedding, ladder, lang=ctx.lang)
+    lang_note = ""
+    if not lectures:
+        # Nothing with a transcript in the user's language — but the lecture may
+        # exist in ANOTHER one, and hiding it reads as "the corpus doesn't have
+        # it" (a ru user asking for a Tokyo 1972 talk that only has an en
+        # transcript was told exactly that). Retry language-agnostically and,
+        # when that finds something, SAY which language it's in.
+        lectures, relaxed = await _run_ladder(ctx, embedding, ladder, lang=None)
         if lectures:
-            relaxed = label
-            break
+            lang_note = await _other_language_note(
+                ctx, [sc.chunk.lang for sc in lectures],
+            )
+            log.info(
+                "find_tracks_other_language",
+                request_id=ctx.request_id,
+                requested_lang=ctx.lang,
+                found_langs=sorted({sc.chunk.lang for sc in lectures}),
+            )
 
     if not lectures:
         # Semantic search found nothing — but for a BARE scripture reference
@@ -376,7 +480,9 @@ async def find_tracks_worker_node(
         _, short = await _resolve_source(ctx, str(args.get("source_id") or ""))
         tokens = str(args.get("tokens") or "").strip()
         ref_label = f"{short} {tokens}".strip() if short else tokens
-    intro_task = _intro(ctx, query, len(kept), relaxed, ref=ref_label)
+    intro_task = _intro(
+        ctx, query, len(kept), relaxed, lang_note=lang_note, ref=ref_label,
+    )
     prose = await asyncio.gather(intro_task, *desc_tasks)
     intro, descriptions = prose[0], list(prose[1:])
 
@@ -483,17 +589,32 @@ async def _probe_and_answer_ref(
     ref = f"{short} {tokens}" if short else tokens
 
     tracks = []
+    lang_note = ""
     parsed = parse_tokens(tokens)
     if parsed is not None and ctx.catalog_repo is not None:
         prefix, ref_from, ref_to = parsed
-        try:
-            tracks = await ctx.catalog_repo.list_tracks(
+
+        async def _probe(lang: str | None):
+            return await ctx.catalog_repo.list_tracks(
                 author_id=None, source_id=opaque, location_id=None, tag_ids=None,
-                title_query=None, date_from=None, date_to=None, lang=ctx.lang,
+                title_query=None, date_from=None, date_to=None, lang=lang,
                 limit=8, offset=0,
                 ref_prefix=".".join(map(str, prefix)) or None,
                 ref_from=ref_from, ref_to=ref_to,
             )
+
+        try:
+            tracks = await _probe(ctx.lang)
+            if not tracks:
+                # This ref has no lecture transcribed in the user's language.
+                # It may well exist in another — the prod case was a ru user
+                # asking for ШБ 2.9.1 (Tokyo, 1972), which the corpus HAS in
+                # English only, and being told "лекций Шрилы Прабхупады нет".
+                tracks = await _probe(None)
+                if tracks:
+                    lang_note = await _other_language_note(
+                        ctx, [t.lang for t in tracks],
+                    )
         except Exception:  # noqa: BLE001 — a probe miss falls back to the clarify
             log.exception("find_tracks_ref_probe_failed", request_id=ctx.request_id)
             tracks = []
@@ -514,7 +635,7 @@ async def _probe_and_answer_ref(
             ctx,
             f"Found {len(cards)} lecture(s) that discuss the verses {ref}. Write a "
             f"one-line lead-in for the list below. Add ONE chip that means 'show "
-            f"the verses {ref} themselves' and includes '{ref}'.",
+            f"the verses {ref} themselves' and includes '{ref}'.{lang_note}",
         )
         _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[]), suffix="\n\n")
         _stream_cards(writer, cards)
@@ -547,13 +668,27 @@ async def _probe_and_answer_date(
     ("MM-DD") matches that calendar day across ALL years ("in this day in
     history"). Serve what's found, else say so honestly."""
     tracks = []
+    lang_note = ""
     if ctx.catalog_repo is not None:
-        try:
-            tracks = await ctx.catalog_repo.list_tracks(
+
+        async def _probe(lang: str | None):
+            return await ctx.catalog_repo.list_tracks(
                 author_id=None, source_id=None, location_id=None, tag_ids=None,
-                title_query=None, date_from=date_from, date_to=date_to, lang=ctx.lang,
+                title_query=None, date_from=date_from, date_to=date_to, lang=lang,
                 limit=8, offset=0, anniversary_md=anniversary_md,
             )
+
+        try:
+            tracks = await _probe(ctx.lang)
+            if not tracks:
+                # Nothing transcribed in the user's language for this date —
+                # show what exists in another rather than claiming the date is
+                # empty (same reasoning as the ref probe).
+                tracks = await _probe(None)
+                if tracks:
+                    lang_note = await _other_language_note(
+                        ctx, [t.lang for t in tracks],
+                    )
         except Exception:  # noqa: BLE001 — a probe miss falls back to the empty line
             log.exception("find_tracks_date_probe_failed", request_id=ctx.request_id)
             tracks = []
@@ -586,7 +721,7 @@ async def _probe_and_answer_date(
             f"Found {len(cards)} lecture(s) delivered on {date_desc}. Write a "
             f"one-line lead-in that names this date NATURALLY in the user's "
             f"language (e.g. 'лекции за 9 июля'). Use ONLY this date — do not "
-            f"invent a specific year or a different date. No chips.",
+            f"invent a specific year or a different date. No chips.{lang_note}",
         )
         _emit_reply(writer, LocalizedReply(line=reply.line or "", chips=[]), suffix="\n\n")
         _stream_cards(writer, cards)

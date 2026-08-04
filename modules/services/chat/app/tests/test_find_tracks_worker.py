@@ -13,10 +13,28 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from rapidfuzz import fuzz, utils
 
 from lectorium_chat.agent.graph.nodes import find_tracks_worker as ftw
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.domain.entities import Chunk, ResolvedEntity, ScoredChunk, Track
+
+# The catalog's real author dictionary as `authors` rows: (id, language,
+# full_name). Tests that exercise the author guard use these rather than invented
+# names, because the guard's whole difficulty is that real honorifics collide
+# across teachers — and that ONE teacher has a different spelling per locale.
+#
+# The per-locale split matters: production must resolve with lang=None, and a
+# fake that pooled every locale regardless would pass either way, hiding the
+# regression where a ru user's request was matched against Cyrillic names only.
+CORPUS_AUTHORS = (
+    ("author_prabhupada", "en", "A. C. Bhaktivedanta Swami Prabhupada"),
+    ("author_bhaktisiddhanta", "en", "Śrīla Bhaktisiddhānta Sarasvatī Ṭhākura"),
+    ("author_bhaktivinoda", "en", "Śrīla Bhaktivinoda Ṭhākura"),
+    ("author_prabhupada", "ru", "А. Ч. Бхактиведанта Свами Прабхупада"),
+    ("author_bhaktisiddhanta", "ru", "Шрила Бхактисиддханта Сарасвати Тхакур"),
+    ("author_bhaktivinoda", "ru", "Шрила Бхактивинода Тхакур"),
+)
 
 
 @dataclass
@@ -46,19 +64,34 @@ class _Embedder:
 
 
 class _ChunkRepo:
-    def __init__(self, results: list[list[ScoredChunk]]) -> None:
+    def __init__(
+        self, results: list[list[ScoredChunk]], *, transcript_langs: set[str] | None = None,
+    ) -> None:
         self._results = results
+        # Which transcript languages exist. When set, a search constrained to a
+        # language outside it finds NOTHING — mirroring the real predicate, so a
+        # test can pin the "only exists in English" case. None = any lang hits.
+        self._transcript_langs = transcript_langs
         self.calls = 0
+        self.langs_searched: list[str | None] = []
 
     async def search_by_embedding(self, embedding, *, eligible_track_ids, lang, top_k):
+        self.langs_searched.append(lang)
+        if (
+            self._transcript_langs is not None
+            and lang is not None
+            and lang not in self._transcript_langs
+        ):
+            self.calls += 1
+            return []
         i = min(self.calls, len(self._results) - 1)
         self.calls += 1
         return self._results[i]
 
 
-def _track(tid: str, title: str | None) -> Track:
+def _track(tid: str, title: str | None, lang: str = "ru") -> Track:
     return Track(
-        id=tid, title=title, lang="ru", date="1976-01-01",
+        id=tid, title=title, lang=lang, date="1976-01-01",
         author_id="a1", author_name="Prabhupada", location_id=None, location_name=None,
         tag_ids=(), tag_names=(), duration_ms=None, references=(),
     )
@@ -69,8 +102,10 @@ class _Catalog:
         self, *, titles=None, descriptions=None, eligible=None, sources=None,
         ref_tracks=None, authors=None,
     ) -> None:
-        # authors: {query_text: (id, confidence)} for the author resolve.
-        self._authors = authors or {}
+        # authors: the catalog's author full names (see CORPUS_AUTHORS). Resolved
+        # with the same fuzzy scorer as production so the tests see the real
+        # scores, not hand-picked ones.
+        self._authors = tuple(authors or ())
         self._titles = dict(titles or {})
         self._descriptions = descriptions or {}
         self._eligible = eligible
@@ -81,6 +116,7 @@ class _Catalog:
         for t in self._ref_tracks:
             self._titles.setdefault(t.id, t.title)
         self.filter_kwargs: dict = {}
+        self.list_tracks_langs: list[str | None] = []
 
     async def filter_track_ids(self, **kwargs):
         self.filter_kwargs = kwargs
@@ -89,7 +125,17 @@ class _Catalog:
     async def list_tracks(self, **kwargs):
         # The ref-index probe: return the configured lectures regardless of the
         # exact ref window (the parsing is covered by _ref_filter's own tests).
-        return list(self._ref_tracks)
+        # `lang` IS honoured, because it means "has a transcript in this
+        # language" — a lecture that exists only in English must be invisible to
+        # a lang="ru" probe and visible to a lang=None one.
+        lang = kwargs.get("lang")
+        self.list_tracks_langs.append(lang)
+        if lang is None:
+            return list(self._ref_tracks)
+        return [t for t in self._ref_tracks if t.lang == lang]
+
+    async def language_name(self, code):
+        return {"ru": "Русский", "en": "English", "hi": "हिन्दी"}.get(code)
 
     async def get_outline(self, track_id, lang):
         return ("[]", self._descriptions.get(track_id))
@@ -112,9 +158,33 @@ class _Catalog:
                         confidence=1.0, extra={"short_name": text.strip().upper()},
                     )
                 ]
-        if kind == "author" and text in self._authors:
-            aid, conf = self._authors[text]
-            return [ResolvedEntity(id=aid, full_name=text, confidence=conf, extra={})]
+        if kind == "author":
+            # Mirror the real resolver: `lang` NARROWS the dictionary to that
+            # locale's rows (lang=None pools every locale), then rank the
+            # surviving names with the same fuzzy scorer.
+            pool = [
+                (aid, name) for aid, language, name in self._authors
+                if lang is None or language == lang
+            ]
+            scored = sorted(
+                (
+                    (
+                        fuzz.token_set_ratio(
+                            text, name, processor=utils.default_process,
+                        ) / 100.0,
+                        aid,
+                        name,
+                    )
+                    for aid, name in pool
+                ),
+                key=lambda p: -p[0],
+            )
+            return [
+                ResolvedEntity(id=aid, full_name=name, confidence=conf, extra={})
+                # 0.4 mirrors _fuzzy_top's score_cutoff — below it the real
+                # resolver returns nothing at all.
+                for conf, aid, name in scored[:limit] if conf >= 0.4
+            ]
         return []
 
     async def source_short_label(self, source_id, *, lang):
@@ -134,7 +204,8 @@ class _FakeLLM:
         self.calls: list[str] = []
         self.situations: list[str] = []
         # (run_name, user prompt) per call, so a test can assert WHAT a hop was
-        # told — the lead-in's honesty about a dropped filter lives there.
+        # told — the lead-in's honesty about a dropped filter and about a
+        # language it had to fall back to both live there.
         self.prompts: list[tuple[str, str]] = []
 
     def prompt_for(self, run_name: str) -> str:
@@ -158,11 +229,16 @@ class _FakeLLM:
         self.prompts.append((run_name or "", messages[-1]["content"]))
         return f"prose[{run_name}]"
 
+    def prompt_for(self, run_name: str) -> str:
+        return next(p for name, p in self.prompts if name == run_name)
 
-def _sc(track_id: str, start: int, score: float, text: str) -> ScoredChunk:
+
+def _sc(
+    track_id: str, start: int, score: float, text: str, lang: str = "ru",
+) -> ScoredChunk:
     return ScoredChunk(
         chunk=Chunk(
-            track_id=track_id, lang="ru", start_ms=start, end_ms=start + 1000,
+            track_id=track_id, lang=lang, start_ms=start, end_ms=start + 1000,
             text=text, reference_source_id=None,
         ),
         score=score,
@@ -474,6 +550,90 @@ async def test_prefers_non_intro_chunk_for_quote(_events) -> None:
     assert cite["data"]["payload"]["text"] == "real passage"
 
 
+async def test_ref_probe_serves_lectures_that_exist_only_in_another_language(
+    _events,
+) -> None:
+    # The prod failure: a ru user asked for ШБ 2.9.1 (Токио, 23.04.1972). The
+    # corpus HAS that lecture — in English only — so the lang="ru" probe found
+    # nothing and the user was told the app has no Prabhupāda lectures at all.
+    # Now the en-only lecture is SERVED, and the lead-in must name BOTH
+    # languages: nothing in Russian, but found in English.
+    refs = [_track("r1", "The Stages of Creation", lang="en")]
+    llm = _FakeLLM()
+    catalog = _Catalog(ref_tracks=refs)
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[]]),  # semantic: zero
+        catalog_repo=catalog,
+        llm=llm,
+        lang="ru",
+    )
+    out = await ftw.find_tracks_worker_node(
+        {
+            "user_query": "Шрила Прабхупада — ШБ 2.9.1 Токио 23.04.1972 найди лекцию",
+            "extracted_args": {"source_id": "SB", "tokens": "2.9.1"},
+        },
+        _Runtime(ctx),
+    )
+    assert out == {}
+    card_ids = [
+        e["data"]["payload"]["track_id"]
+        for e in _events if e["type"] == "action" and e["data"]["kind"] == "card"
+    ]
+    assert card_ids == ["r1"]  # served, not hidden
+    # It asked in the user's language FIRST, and only then language-agnostically.
+    assert catalog.list_tracks_langs == ["ru", None]
+    # The localizer was told to name both languages by their real names.
+    situation = next(s for s in llm.situations if "Русский" in s)
+    assert "English" in situation
+    assert "NO transcript in the user's own language" in situation
+
+
+async def test_semantic_search_falls_back_across_languages(_events) -> None:
+    # Same rule on the semantic path: when no transcript in the user's language
+    # matches, retry language-agnostically rather than dead-ending, and tell the
+    # intro writer which language the results are actually in.
+    llm = _FakeLLM()
+    chunks = [_sc("t1", 70000, 0.9, "an english passage", lang="en")]
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([chunks], transcript_langs={"en"}),
+        catalog_repo=_Catalog(titles={"t1": "A lecture"}, descriptions={"t1": "d"}),
+        llm=llm,
+        lang="ru",
+    )
+    out = await ftw.find_tracks_worker_node(
+        {"user_query": "лекции про преданное служение", "extracted_args": {}},
+        _Runtime(ctx),
+    )
+    assert out == {}
+    assert [a for a in _events
+            if a["type"] == "action" and a["data"]["kind"] == "card"]  # served
+    intro_prompt = llm.prompt_for("find_tracks_intro")
+    assert "Русский" in intro_prompt and "English" in intro_prompt
+
+
+async def test_same_language_results_carry_no_language_note(_events) -> None:
+    # The note is for the exceptional case only: when the user's own language
+    # HAS the lecture, nothing about languages should be said.
+    llm = _FakeLLM()
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "отрывок", lang="ru")]],
+                              transcript_langs={"ru", "en"}),
+        catalog_repo=_Catalog(titles={"t1": "Лекция"}, descriptions={"t1": "d"}),
+        llm=llm,
+        lang="ru",
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции про преданное служение", "extracted_args": {}},
+        _Runtime(ctx),
+    )
+    intro_prompt = llm.prompt_for("find_tracks_intro")
+    assert "English" not in intro_prompt
+    assert "NO transcript" not in intro_prompt
+
+
 async def test_author_absent_from_corpus_routes_to_web(_events) -> None:
     # The catalog fake resolves NO author, so a teacher the corpus lacks must NOT
     # be answered with some OTHER teacher's semantic hits — it sets web_fallback
@@ -499,21 +659,32 @@ async def test_author_absent_from_corpus_routes_to_web(_events) -> None:
     assert "[followup:" not in full
 
 
-async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
-    # "niranjana swami" grazes "…Swami Prabhupada" at 0.5 — below the floor, so
-    # it must NOT hand back Prabhupada's lectures; route to web discovery.
+@pytest.mark.parametrize(
+    "author",
+    [
+        "Niranjana Swami",        # shares only the honorific with our author
+        "Ниранджана Свами",       # …and in the user's own script
+        "Bhakti Caitanya Swami",  # scores 0.62 — the closest stranger
+        "Krishna Ksetra Swami",
+        "Bir Krishna Goswami",
+        "Suresh Kumar",
+    ],
+)
+async def test_author_absent_when_only_honorifics_are_shared(_events, author) -> None:
+    # A teacher the corpus lacks must NOT be answered with Prabhupada's lectures,
+    # however close the fuzzy score gets: route to web discovery instead.
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "q")]]),
         catalog_repo=_Catalog(
             titles={"t1": "Лекция"}, descriptions={"t1": "d"},
-            authors={"Niranjana Swami": ("prabhupada", 0.5)},
+            authors=CORPUS_AUTHORS,
         ),
         llm=_FakeLLM(),
     )
     out = await ftw.find_tracks_worker_node(
-        {"user_query": "find lectures of niranjana swami",
-         "extracted_args": {"author": "Niranjana Swami"}},
+        {"user_query": f"find lectures of {author}",
+         "extracted_args": {"author": author}},
         _Runtime(ctx),
     )
     assert out == {"web_fallback": True}
@@ -521,25 +692,88 @@ async def test_author_weak_common_word_match_treated_as_absent(_events) -> None:
     assert [a for a in actions if a["data"]["kind"] in ("card", "cite_transcript")] == []
 
 
-async def test_author_strong_match_proceeds_to_search(_events) -> None:
-    # A real corpus author (confidence 1.0) is above the floor → we search and
-    # surface cards, we do NOT emit the "not in the app" reply.
+@pytest.mark.parametrize(
+    "author",
+    [
+        # The prod regression: a ru user wrote "Шрила Прабхупада", the router
+        # normalized it to English, and matching that against the CYRILLIC
+        # dictionary scored 0.05 — so the app's own and only author read as
+        # absent and the user was told "лекций Шрилы Прабхупады нет".
+        "Srila Prabhupada",
+        "Прабхупада",
+        "Шрила Прабхупада",
+        "Prabhupada",
+        "A. C. Bhaktivedanta Swami Prabhupada",
+        "His Divine Grace A. C. Bhaktivedanta Swami Prabhupada",
+        "Bhaktivinoda Thakura",
+    ],
+)
+async def test_corpus_author_is_found_across_scripts_and_honorifics(
+    _events, author,
+) -> None:
+    # A name that denotes a corpus author — in either script, with or without
+    # honorifics — must reach the search and surface cards, never the
+    # "not in the app" route.
     ctx = _Ctx(
         embedder=_Embedder(),
         chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "best quote")]]),
         catalog_repo=_Catalog(
             titles={"t1": "Лекция"}, descriptions={"t1": "d"},
-            authors={"Prabhupada": ("prabhupada", 1.0)},
+            authors=CORPUS_AUTHORS,
         ),
         llm=_FakeLLM(),
     )
-    await ftw.find_tracks_worker_node(
-        {"user_query": "lectures by prabhupada",
-         "extracted_args": {"author": "Prabhupada"}},
+    out = await ftw.find_tracks_worker_node(
+        {"user_query": f"lectures by {author}",
+         "extracted_args": {"author": author}},
         _Runtime(ctx),
     )
+    assert out == {}
     actions = [e for e in _events if e["type"] == "action"]
     assert [a for a in actions if a["data"]["kind"] == "card"]  # cards emitted
+
+
+async def test_resolved_author_id_constrains_the_search(_events) -> None:
+    # The guard and the FILTER must agree: the author the guard accepted is the
+    # author the catalog filter constrains on. Previously they were two separate
+    # resolves and could disagree.
+    catalog = _Catalog(
+        titles={"t1": "Лекция"}, descriptions={"t1": "d"},
+        authors=CORPUS_AUTHORS, eligible=["t1"],
+    )
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "q")]]),
+        catalog_repo=catalog,
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "lectures by Srila Prabhupada",
+         "extracted_args": {"author": "Srila Prabhupada"}},
+        _Runtime(ctx),
+    )
+    assert catalog.filter_kwargs["author_id"] == "author_prabhupada"
+
+
+async def test_honorific_only_author_does_not_constrain_or_bail(_events) -> None:
+    # "Свами" names no particular teacher: no web fallback (we don't claim the
+    # corpus lacks them) and no author filter (we don't guess who they meant).
+    catalog = _Catalog(
+        titles={"t1": "Лекция"}, descriptions={"t1": "d"},
+        authors=CORPUS_AUTHORS, eligible=["t1"],
+    )
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "q")]]),
+        catalog_repo=catalog,
+        llm=_FakeLLM(),
+    )
+    out = await ftw.find_tracks_worker_node(
+        {"user_query": "лекции свами", "extracted_args": {"author": "Свами"}},
+        _Runtime(ctx),
+    )
+    assert out == {}
+    assert catalog.filter_kwargs.get("author_id") is None
 
 
 # ── a named chapter must constrain the search, not just the header ─────────
