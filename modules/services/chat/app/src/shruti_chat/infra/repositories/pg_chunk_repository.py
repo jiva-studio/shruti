@@ -127,7 +127,7 @@ class PgChunkRepository:
         verified `sub`, never on client-supplied `recent_tracks`, so a client
         cannot widen its own access. Returns an empty list for an anonymous /
         unknown user or when the projection has no rows for them. Best-effort:
-        a missing `owned` table (migration not yet applied) yields [] rather
+        a missing `chunk_meta` table (migration not yet applied) yields [] rather
         than failing the turn, matching the feature's graceful-degradation
         contract."""
         if not user_id:
@@ -135,7 +135,8 @@ class PgChunkRepository:
         try:
             async with self._pool.acquire() as conn:
                 rows = await conn.fetch(
-                    "SELECT track_id FROM owned WHERE user_id = $1", user_id
+                    "SELECT track_id FROM chunk_meta WHERE owner_id = $1",
+                    user_id,
                 )
         except asyncpg.UndefinedTableError:
             return []
@@ -146,15 +147,15 @@ class PgChunkRepository:
     ) -> list[str]:
         """The subset of this user's own tracks spoken by one of `author_ids`.
 
-        The speaker was resolved to a catalog author when the track was indexed
-        and stamped on its chunks, so this is the same predicate the public lane
-        uses — a join, not a per-turn resolve loop over free-text names.
+        One indexed read on the primary key's leading column — the speaker was
+        resolved when the track was indexed and stored beside the ACL, so the
+        private lane's whole question ("what may they read, and is it the right
+        teacher") is answered by a single row scan with no join.
 
         A track whose speaker is unknown or absent from the catalog carries no
-        author and is therefore NOT returned: under a lecturer filter, a
-        recording we cannot attribute is not known to be by the person who was
-        asked for. `unattributed_owned_count` is how a caller tells the person
-        that such recordings exist.
+        author and is therefore NOT returned: under a lecturer filter, a recording
+        we cannot attribute is not known to be by the person who was asked for.
+        `unattributed_owned_count` is how a caller tells the person those exist.
         """
         if not user_id or not author_ids:
             return []
@@ -162,12 +163,8 @@ class PgChunkRepository:
             async with self._pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
-                    SELECT DISTINCT o.track_id
-                      FROM owned o
-                      JOIN chunks c
-                        ON c.track_id = o.track_id AND c.kind = 'user_track'
-                     WHERE o.user_id = $1
-                       AND c.author_id = ANY($2::text[])
+                    SELECT track_id FROM chunk_meta
+                     WHERE owner_id = $1 AND author_id = ANY($2::text[])
                     """,
                     user_id, list(author_ids),
                 )
@@ -187,12 +184,8 @@ class PgChunkRepository:
             async with self._pool.acquire() as conn:
                 row = await conn.fetchrow(
                     """
-                    SELECT count(DISTINCT o.track_id) AS n
-                      FROM owned o
-                      JOIN chunks c
-                        ON c.track_id = o.track_id AND c.kind = 'user_track'
-                     WHERE o.user_id = $1
-                       AND c.author_id IS NULL
+                    SELECT count(*) AS n FROM chunk_meta
+                     WHERE owner_id = $1 AND author_id IS NULL
                     """,
                     user_id,
                 )

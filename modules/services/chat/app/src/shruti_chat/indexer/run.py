@@ -304,7 +304,6 @@ async def index_one_track(
     embedder: Embedder | None = None,
     settings: Settings | None = None,
     etag: str | None = None,
-    author_id: str | None = None,
 ) -> int:
     """Chunk → embed → upsert ONE track's transcript. Returns chunk count.
 
@@ -320,13 +319,9 @@ async def index_one_track(
     lane's rows are structurally invisible to the public `track_transcript`
     partial HNSW index (migration 0043) — the isolation guarantee.
 
-    `author_id` is the catalog author this recording's speaker was resolved to,
-    stamped on every chunk exactly as the library indexer stamps it on purports.
-    It is what lets a lecturer filter reach a private upload: the private lane
-    then narrows with the same SQL predicate the public lane uses, instead of
-    asking a side table who is speaking. None when the speaker is unknown or not
-    in the catalog — and under a filter those rows fall out, because a recording
-    we cannot attribute is not known to be by the person who was asked for.
+    Who is SPEAKING is not written here: it is one attribute of the whole track,
+    so it lives in `chunk_meta` (one row per owner per group), the way a corpus
+    lecture's author lives in the catalog rather than on its 524k chunks.
     """
     s = settings or get_settings()
     emb = embedder or get_embedder(s)
@@ -388,15 +383,15 @@ async def index_one_track(
                 """
                 INSERT INTO chunks
                   (track_id, lang, start_ms, end_ms, text,
-                   reference_source_id, embed_model, kind, author_id)
+                   reference_source_id, embed_model, kind)
                 SELECT * FROM UNNEST(
                   $1::text[], $2::text[], $3::int[], $4::int[], $5::text[],
-                  $6::text[], $7::text[], $8::text[], $9::text[]
+                  $6::text[], $7::text[], $8::text[]
                 )
                 RETURNING id
                 """,
                 [track_id] * n, [lang] * n, starts, ends, texts, ref_src,
-                [emb.name] * n, [kind] * n, [author_id] * n,
+                [emb.name] * n, [kind] * n,
             )
             chunk_ids = [int(r["id"]) for r in id_rows]
             # kind/lang denormalized onto the embedding row (migrations 0035 /
@@ -441,7 +436,9 @@ async def _graft_promoted_track(
     stop being ACL-scoped and start being visible to everyone. Rather than
     re-embedding, we RELABEL the existing rows from `kind='user_track'` to
     `kind='track_transcript'` (moving them onto the public partial-HNSW lane) and
-    DROP the per-user `owned` ACL rows for the track.
+    DROP the track's `chunk_meta` rows — the corpus catalog is the authority for a
+    published lecture, so a private record of who may read it and who is speaking
+    would be a stale second copy.
 
     Idempotent: a track that was never a user_track (or was already grafted)
     matches nothing and the call is a cheap no-op. Returns the number of chunk
@@ -472,9 +469,10 @@ async def _graft_promoted_track(
                 "WHERE track_id = $1 AND kind = 'user_track'",
                 track_id,
             )
-            # The corpus lane is public — drop the now-redundant ACL rows so the
-            # track is no longer treated as privately owned.
-            await conn.execute("DELETE FROM owned WHERE track_id = $1", track_id)
+            # The corpus lane is public — drop the private records so the track
+            # is no longer treated as owned, and its speaker comes from the
+            # catalog like every other corpus lecture's.
+            await conn.execute("DELETE FROM chunk_meta WHERE track_id = $1", track_id)
     # asyncpg returns a status string like "UPDATE 12"; parse the count.
     try:
         n = int(str(relabelled).split()[-1])
