@@ -22,8 +22,8 @@ import (
 const (
 	transcriptCacheTTL  = 15 * time.Minute
 	transcriptCacheMax  = 64
-	transcriptMaxBlocks = 400
-	transcriptMaxChars  = 8000
+	transcriptMaxBlocks = 1000
+	transcriptMaxChars  = 24000
 )
 
 var transcriptHTTP = &http.Client{Timeout: 15 * time.Second}
@@ -99,9 +99,14 @@ func fetchTranscript(ctx context.Context, url string) *transcriptDoc {
 	return &doc
 }
 
-// sliceTranscript keeps the sentence blocks overlapping [lo, hi], capped in
-// count and total length so a 10-minute excerpt can't flood the widget or the
-// model context.
+// sliceTranscript keeps the sentence blocks that fall ENTIRELY inside [lo, hi].
+// A sentence straddling either edge is dropped: the clip is cut at exactly
+// those bounds, so only part of it is audible and printing it whole would show
+// words the listener never hears.
+//
+// The caps are corruption rails, not content limits — the excerpt itself is
+// capped at 10 minutes, and the densest 10-minute window measured across the
+// corpus is ~13k characters / ~160 sentences.
 func sliceTranscript(doc *transcriptDoc, lo, hi int) []transcriptBlock {
 	out := make([]transcriptBlock, 0, 32)
 	chars := 0
@@ -109,7 +114,7 @@ func sliceTranscript(doc *transcriptDoc, lo, hi int) []transcriptBlock {
 		if b.Type != "" && b.Type != "sentence" {
 			continue
 		}
-		if b.End < lo || b.Start > hi {
+		if b.Start < lo || b.End > hi {
 			continue
 		}
 		text := strings.TrimSpace(b.Text)
@@ -130,19 +135,16 @@ func sliceTranscript(doc *transcriptDoc, lo, hi int) []transcriptBlock {
 // segments plus their joined plain text, and the transcript language actually
 // used. All three are empty when the track has no transcript in reach.
 func (d *Deps) excerptTranscript(ctx context.Context, tr *catalog.Track, lang string, lo, hi int) (segments []map[string]any, text, effLang string) {
+	segments = []map[string]any{}
 	path, effLang := tr.TranscriptPath(lang)
 	if path == "" {
-		return nil, "", ""
+		return segments, "", ""
 	}
 	doc := fetchTranscript(ctx, d.Cfg.MediaBase()+"/"+strings.TrimPrefix(path, "/"))
 	if doc == nil {
-		return nil, "", ""
+		return segments, "", ""
 	}
 	blocks := sliceTranscript(doc, lo, hi)
-	if len(blocks) == 0 {
-		return nil, "", effLang
-	}
-	segments = make([]map[string]any, 0, len(blocks))
 	parts := make([]string, 0, len(blocks))
 	for _, b := range blocks {
 		segments = append(segments, map[string]any{
