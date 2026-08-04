@@ -195,10 +195,10 @@ review:
   # from the corrected text instead of trusting the LLM's own grouping.
   # Razdel handles Russian abbreviations, initials, decimals, and
   # quoted Sanskrit verses correctly. Requires `pip install razdel` on
-  # the python interpreter.
+  # the interpreter named in python_bin.
   sentencer:
     python_bin:  python3
-    script_path: /path/to/lectorium-mcp/scripts/sentencesplit/razdel.py
+    script_path: /path/to/lectorium-mcp/scripts/sentencesplit/sentencer.py
 
   # Each entry registers one OpenAI-compatible upstream. Aliases (the map
   # keys) are what shows up in chunk_NNNN.json::models[].name and what you

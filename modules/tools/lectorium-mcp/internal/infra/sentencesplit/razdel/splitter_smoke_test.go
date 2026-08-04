@@ -14,7 +14,7 @@ import (
 // system python3.
 func TestSplitter_Razdel(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)
-	scriptPath := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "scripts", "sentencesplit", "razdel.py")
+	scriptPath := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "scripts", "sentencesplit", "sentencer.py")
 
 	s, err := New(Config{ScriptPath: scriptPath})
 	if err != nil {
