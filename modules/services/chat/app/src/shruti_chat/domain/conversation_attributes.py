@@ -33,33 +33,88 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 
 # The reply language: which language this turn's answer is written in. Its
 # value is a locale code and is NOT constrained to the languages the app ships
-# — «Cos'è il karma?» is answered in Italian with no Italian UI.
+# — «Cos'è il karma?» is answered in Italian with no Italian UI. Single-valued.
 REPLY_LANGUAGE = "reply_language"
+
+# Which lecturers the answer may draw on. Multi-valued (a person can pick
+# several), and `ALL` is how a filter is LIFTED — see `AuthorSelection`.
+LECTURE_AUTHORS = "lecture_authors"
+
+# "no constraint", as an explicit value. An attribute that is simply absent
+# means the same thing; this exists so someone who narrowed the search can say
+# «ищи у всех» and have that stick, which removal cannot express (there is no
+# tombstone in the merge).
+ALL = "*"
 
 
 class Attribute(BaseModel):
-    """One settled attribute. `value` empty = nothing settled, which is a
-    normal outcome (on «БГ 2.13» there is no language to read)."""
+    """One settled attribute.
+
+    `value` is ISOMORPHIC on the wire: a single-valued attribute reads and
+    writes as a bare string (`"ru"`), a multi-valued one as an array
+    (`["author_a", "author_b"]`). Internally it is always a list, so nothing
+    downstream branches on the shape — the coercion happens once, here.
+    Unsettled = empty, which is a normal outcome (on «БГ 2.13» there is no
+    language to read).
+
+    `label` describes the WHOLE selection, not one element — «Русский»,
+    «Прабхупада и Бхактивинода» — because that is what a UI chip and an honest
+    "nothing by them" line need.
+
+    NOT the schema an LLM fills. Each attribute's detector has its own
+    structured-output model (the language one names a locale, the author one
+    names PEOPLE the server then resolves to ids), so no model is ever asked to
+    produce a union.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
-    value: str = ""
+    value: list[str] = []
     label: str = ""
     explicit: bool = False
 
-    @field_validator("value", "label", mode="before")
+    @field_validator("value", mode="before")
+    @classmethod
+    def _as_clean_list(cls, value: Any) -> Any:
+        # Trim, drop blanks, de-duplicate but keep order: a padded locale code
+        # would miss every per-locale catalog lookup, and a repeated author id
+        # would widen nothing while making the label wrong.
+        if isinstance(value, str):
+            value = [value]
+        if not isinstance(value, list):
+            return value
+        out: list[str] = []
+        for v in value:
+            if not isinstance(v, str):
+                continue
+            v = v.strip()
+            if v and v not in out:
+                out.append(v)
+        return out
+
+    @field_validator("label", mode="before")
     @classmethod
     def _trimmed(cls, value: Any) -> Any:
-        # A padded locale code would miss every per-locale catalog lookup.
         return value.strip() if isinstance(value, str) else value
+
+    @field_serializer("value")
+    def _shortest_shape(self, value: list[str]) -> str | list[str]:
+        # A single value goes back out as the bare string it came in as, so a
+        # round trip is shape-stable and a reader of the stored JSON is not
+        # asked why a language is an array of one.
+        return value[0] if len(value) == 1 else value
 
     def settled(self) -> bool:
         return bool(self.value)
+
+    def single(self) -> str:
+        """The one value of a single-valued attribute, or "" when unsettled."""
+        return self.value[0] if self.value else ""
 
 
 def merge_attributes(
