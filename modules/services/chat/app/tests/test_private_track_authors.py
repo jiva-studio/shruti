@@ -5,9 +5,10 @@ says nothing about them — and intersecting with it emptied the whole private l
 choose «только Прабхупада» and your own Prabhupada recording disappeared along
 with everyone else's.
 
-What the lane has instead is the speaker resolved when the track was indexed and
-stamped on its chunks (`chunks.author_id`, the same column the public lane filters
-by). So narrowing here is one join, and the rules are:
+What the lane has instead is `chunk_meta`: one row per owner per group of chunks,
+holding who may read it and who is speaking on it (resolved once, when the track
+was indexed). So narrowing is one indexed read — the ACL and the author filter are
+the same row — and the rules are:
 
 - their own recording of the chosen teacher stays;
 - a stranger's talk goes;
@@ -34,7 +35,7 @@ _MYSTERY = "mystery"
 
 
 class _Private:
-    """The chunk repository's private-lane reads, answering off a fake stamp."""
+    """The chunk repository's private-lane reads, off a fake `chunk_meta`."""
 
     def __init__(self, by_track: dict[str, str | None]) -> None:
         self._by_track = by_track
@@ -157,11 +158,10 @@ async def test_the_private_lane_uses_the_owned_narrowing() -> None:
 # ── the SQL behind it ─────────────────────────────────────────────────────
 
 
-async def test_the_query_joins_owned_against_the_stamped_author() -> None:
-    """The predicate itself: `owned` ⋈ `chunks.author_id`, restricted to the
-    private kind, keyed on the verified user. Asserted on the SQL because the
-    isolation (`kind = 'user_track'`) and the ACL (`o.user_id = $1`) are the two
-    things that must never drift."""
+async def test_the_query_is_one_indexed_read_on_the_group_record() -> None:
+    """The predicate itself. Keyed on the verified owner, which is the ACL, and on
+    the resolved author, which is the filter — one row scan, no join. Asserted on
+    the SQL because those two conditions must never drift apart."""
     import inspect
 
     from lectorium_chat.infra.repositories.pg_chunk_repository import (
@@ -169,11 +169,13 @@ async def test_the_query_joins_owned_against_the_stamped_author() -> None:
     )
 
     sql = inspect.getsource(PgChunkRepository.get_owned_track_ids_by_author)
-    assert "FROM owned o" in sql
-    assert "c.kind = 'user_track'" in sql
-    assert "o.user_id = $1" in sql
-    assert "c.author_id = ANY($2::text[])" in sql
+    assert "FROM chunk_meta" in sql
+    assert "owner_id = $1" in sql
+    assert "author_id = ANY($2::text[])" in sql
+    # One table: no ACL table to join, and the chunks are not consulted at all.
+    assert "FROM owned" not in sql and "chunks" not in sql
 
     counted = inspect.getsource(PgChunkRepository.unattributed_owned_count)
-    assert "c.author_id IS NULL" in counted
-    assert "o.user_id = $1" in counted
+    assert "FROM chunk_meta" in counted
+    assert "author_id IS NULL" in counted
+    assert "owner_id = $1" in counted
