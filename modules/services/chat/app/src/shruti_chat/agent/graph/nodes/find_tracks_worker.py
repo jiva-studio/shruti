@@ -170,7 +170,7 @@ async def _build_filters(
             ref_prefix = ".".join(map(str, prefix)) or None
 
     full = {
-        "author_id": author_id,
+        "author_ids": [author_id] if author_id else None,
         "source_id": source_id,
         "location_id": location_id,
         "tag_ids": None,
@@ -190,7 +190,7 @@ async def _build_filters(
         (_REF_RUNG, ("ref_prefix", "ref_from", "ref_to")),
         ("date", ("date_from", "date_to", "anniversary_md")),
         ("location", ("location_id",)),
-        ("author", ("author_id",)),
+        ("author", ("author_ids",)),
         ("source", ("source_id",)),
     ):
         if not any(full[k] for k in keys):

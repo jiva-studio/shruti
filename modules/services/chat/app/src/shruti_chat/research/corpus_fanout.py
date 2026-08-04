@@ -412,7 +412,8 @@ async def fanout_search_with_boost(
         # doc prefix); essential the moment an asymmetric model is enabled.
         embedder.embed_queries(query_texts),
         catalog_repo.filter_track_ids(
-            author_id=author_id, source_id=book_id, location_id=location_id,
+            author_ids=[author_id] if author_id else None,
+            source_id=book_id, location_id=location_id,
             tag_ids=tag_ids, date_from=date_from, date_to=date_to,
         ),
     )

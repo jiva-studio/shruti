@@ -65,7 +65,7 @@ class CatalogRepository(Protocol):
     async def filter_track_ids(
         self,
         *,
-        author_id: str | None,
+        author_ids: list[str] | None,
         source_id: str | None,
         location_id: str | None,
         tag_ids: list[str] | None,
@@ -79,7 +79,10 @@ class CatalogRepository(Protocol):
         """Return eligible track_ids for the metadata filters, or None
         when no filter is active (caller should skip the constraint).
         `anniversary_md` ("MM-DD") matches that calendar day across all years.
-        `ref_prefix`/`ref_from`/`ref_to` narrow to a scripture reference — the
+        `author_ids` is a SET because a turn can be constrained to several
+        lecturers at once (the conversation's author selection) on top of the
+        one a question named. `ref_prefix`/`ref_from`/`ref_to` narrow to a
+        scripture reference — the
         same predicate `list_tracks` uses, so "lectures on BG chapter 10" can
         constrain a semantic search instead of only a listing."""
         ...

@@ -23,7 +23,6 @@ record. Both go through the same merge, so the two paths cannot disagree.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Protocol, TypeVar
 
@@ -51,31 +50,59 @@ _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "agent" / "prompts"
 MESSAGE_FIELD = "attributes"
 
 
-@dataclass(frozen=True)
-class AttributeSpec:
+class ReplyLanguageOut(BaseModel):
+    """What the reply-language detector fills. Single-valued by nature, so the
+    model is asked for a plain string — no model is ever handed a union."""
+
+    value: str = ""
+    label: str = ""
+    explicit: bool = False
+
+
+class AttributeSpec(Protocol):
     """One thing we know how to read out of a message.
 
-    `prompt_name` is the Langfuse-hosted prompt (edited without a deploy);
-    `md` is the bundled fallback under `agent/prompts/`. Adding an attribute is
-    this entry plus its prompt — the transport, the merge and the client need
-    no change at all.
+    `prompt_name` is the Langfuse-hosted prompt (edited without a deploy); `md`
+    is the bundled fallback under `agent/prompts/`. `schema` is what the MODEL
+    fills — deliberately per-attribute, because they differ: the language one
+    names a locale, the author one names PEOPLE the server must then resolve to
+    catalog ids. `build` turns that into the stored `Attribute`, or None when
+    the message settled nothing.
+
+    Adding an attribute is one of these plus its prompt — the transport, the
+    merge and the clients need no change at all.
     """
 
     key: str
     prompt_name: str
     md: str
+    schema: type[BaseModel]
 
-    def load_fallback(self) -> str:
-        return (_PROMPTS_DIR / f"{self.md}.md").read_text(encoding="utf-8")
+    async def build(
+        self, out: Any, *, catalog_repo: Any, request_id: str | None,
+    ) -> Attribute | None: ...
 
 
-ATTRIBUTE_SPECS: tuple[AttributeSpec, ...] = (
-    AttributeSpec(
-        key=REPLY_LANGUAGE,
-        prompt_name="reply-language",
-        md="reply_language",
-    ),
-)
+def _bundled(md: str) -> str:
+    return (_PROMPTS_DIR / f"{md}.md").read_text(encoding="utf-8")
+
+
+class ReplyLanguageSpec:
+    key = REPLY_LANGUAGE
+    prompt_name = "reply-language"
+    md = "reply_language"
+    schema = ReplyLanguageOut
+
+    async def build(
+        self, out: ReplyLanguageOut, *, catalog_repo: Any, request_id: str | None,
+    ) -> Attribute | None:
+        attr = Attribute(
+            value=out.value, label=out.label, explicit=out.explicit,
+        )
+        return attr if attr.settled() else None
+
+
+ATTRIBUTE_SPECS: tuple[AttributeSpec, ...] = (ReplyLanguageSpec(),)
 
 
 class _LLMForAttributes(Protocol):
@@ -145,6 +172,7 @@ async def detect_attributes(
     model: str | None = None,
     kv_cache: Any | None = None,
     callbacks: list[Any] | None = None,
+    catalog_repo: Any | None = None,
     specs: tuple[AttributeSpec, ...] = ATTRIBUTE_SPECS,
 ) -> dict[str, Attribute]:
     """Read every registered attribute off this message, concurrently.
@@ -161,7 +189,7 @@ async def detect_attributes(
     results = await asyncio.gather(*(
         _detect_one(
             spec, query, llm=llm, request_id=request_id, model=model,
-            kv_cache=kv_cache, callbacks=callbacks,
+            kv_cache=kv_cache, callbacks=callbacks, catalog_repo=catalog_repo,
         )
         for spec in specs
     ))
@@ -181,19 +209,22 @@ async def _detect_one(
     model: str | None,
     kv_cache: Any | None,
     callbacks: list[Any] | None,
+    catalog_repo: Any | None,
 ) -> Attribute | None:
-    prompt = prompt_with_fallback(spec.prompt_name, fallback=spec.load_fallback)
+    prompt = prompt_with_fallback(
+        spec.prompt_name, fallback=lambda: _bundled(spec.md),
+    )
     effective_model = prompt.config.get("model") or model
     messages: list[Message] = [
         {"role": "system", "content": prompt.text},
         {"role": "user", "content": query},
     ]
 
-    async def _call() -> Attribute:
+    async def _call() -> Any:
         async with stage(f"attribute.{spec.key}", request_id=request_id):
             return await llm.structured_output(
                 messages,
-                Attribute,
+                spec.schema,
                 model=effective_model,
                 callbacks=callbacks,
                 run_name=f"attribute_{spec.key}",
@@ -202,19 +233,24 @@ async def _detect_one(
     try:
         if kv_cache is not None:
             # Deterministic at temperature 0, so a repeat («спасибо»,
-            # «подробнее») costs nothing the second time.
-            detected = await cached_llm_json(
+            # «подробнее») costs nothing the second time. The cached shape is
+            # the MODEL's output, not the built attribute: `build` may consult
+            # the catalog, whose contents change under us.
+            out = await cached_llm_json(
                 kv_cache,
                 ns="chat_attribute",
                 key_parts={
                     "k": spec.key, "q": query, "model": effective_model or "",
                 },
                 ttl_s=TTL_7D,
-                schema=Attribute,
+                schema=spec.schema,
                 factory=_call,
             )
         else:
-            detected = await _call()
+            out = await _call()
+        detected = await spec.build(
+            out, catalog_repo=catalog_repo, request_id=request_id,
+        )
     except Exception as exc:  # noqa: BLE001 — never fail the turn on a hint
         log.warning(
             "attribute_detection_failed",
@@ -222,7 +258,7 @@ async def _detect_one(
         )
         return None
 
-    if not detected.settled():
+    if detected is None or not detected.settled():
         return None
     log.info(
         "attribute_detected",

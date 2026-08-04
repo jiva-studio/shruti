@@ -106,7 +106,10 @@ class AttributeDto(BaseModel):
     re-validates and ignores what it can't read.
     """
 
-    value: str = Field(default="", max_length=64)
+    # Isomorphic: a single-valued attribute (the reply language) is a bare
+    # string, a multi-valued one (the lecturers to draw on) an array. The domain
+    # coerces both to a list once, so nothing downstream branches on the shape.
+    value: str | list[str] = ""
     label: str = Field(default="", max_length=128)
     # True when the user stated it in words rather than us inferring it, which
     # is what makes it outrank a fresh inference on a later message.

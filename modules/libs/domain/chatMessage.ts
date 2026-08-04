@@ -405,9 +405,22 @@ export type ChatFeedbackCategory =
  *  Redeclared here rather than imported from `@lib/contracts`: domain does not
  *  depend on the port layer, same as `ChatActionPayload`. */
 export interface ChatAttribute {
-  readonly value: string
+  /** Isomorphic: a bare string for a single-valued attribute (the reply
+   *  language), an array for a multi-valued one (which lecturers to draw on).
+   *  `attributeValues()` normalises it — never branch at the use site. */
+  readonly value: string | readonly string[]
   readonly label: string
   readonly explicit: boolean
+}
+
+/** The attribute's values, whichever shape the wire used. */
+export function attributeValues(attr: ChatAttribute): readonly string[] {
+  return typeof attr.value === "string" ? [attr.value] : attr.value
+}
+
+/** The one value of a single-valued attribute, or "" when unsettled. */
+export function attributeValue(attr: ChatAttribute): string {
+  return attributeValues(attr)[0] ?? ""
 }
 
 export type ChatAttributes = Readonly<Record<string, ChatAttribute>>

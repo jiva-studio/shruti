@@ -26,7 +26,8 @@ from pydantic import BaseModel
 
 from shruti_chat.application.conversation_attributes import (
     ATTRIBUTE_SPECS,
-    AttributeSpec,
+    ReplyLanguageOut,
+    ReplyLanguageSpec,
     detect_attributes,
     remembered_attributes,
 )
@@ -39,14 +40,26 @@ from shruti_chat.domain.entities import Message
 
 T = TypeVar("T", bound=BaseModel)
 
+def _spec(key: str) -> ReplyLanguageSpec:
+    """A language spec under a different key — the registry is a tuple of these,
+    so a test can stand several up without inventing a second attribute."""
+    spec = ReplyLanguageSpec()
+    spec.key = key  # type: ignore[misc]
+    return spec
+
+
 _RU_ASKED = Attribute(value="ru", label="Русский", explicit=True)
 _EN_TYPED = Attribute(value="en", label="English", explicit=False)
 _IT_TYPED = Attribute(value="it", label="Italiano", explicit=False)
 
+# What the detector MODEL returns, as opposed to what gets stored.
+_OUT_RU = ReplyLanguageOut(value="ru", label="Русский", explicit=True)
+_OUT_EN = ReplyLanguageOut(value="en", label="English", explicit=False)
+
 
 @dataclass
 class FakeLLM:
-    response: Attribute | None = None
+    response: Any | None = None
     raises: bool = False
     calls: int = 0
     prompts: list[str] = field(default_factory=list)
@@ -88,7 +101,7 @@ def test_nothing_known_stays_nothing() -> None:
 
 def test_a_fresh_reading_is_kept() -> None:
     out = merge_attributes(detected={REPLY_LANGUAGE: _IT_TYPED}, remembered={})
-    assert out[REPLY_LANGUAGE].value == "it"
+    assert out[REPLY_LANGUAGE].single() == "it"
 
 
 def test_something_stated_outranks_a_later_inference() -> None:
@@ -98,7 +111,7 @@ def test_something_stated_outranks_a_later_inference() -> None:
         detected={REPLY_LANGUAGE: _EN_TYPED},
         remembered={REPLY_LANGUAGE: _RU_ASKED},
     )
-    assert out[REPLY_LANGUAGE].value == "ru"
+    assert out[REPLY_LANGUAGE].single() == "ru"
 
 
 def test_a_new_statement_replaces_the_old_one() -> None:
@@ -106,7 +119,7 @@ def test_a_new_statement_replaces_the_old_one() -> None:
         detected={REPLY_LANGUAGE: Attribute(value="en", explicit=True)},
         remembered={REPLY_LANGUAGE: _RU_ASKED},
     )
-    assert out[REPLY_LANGUAGE].value == "en"
+    assert out[REPLY_LANGUAGE].single() == "en"
 
 
 def test_the_fresher_of_two_inferences_wins() -> None:
@@ -114,12 +127,12 @@ def test_the_fresher_of_two_inferences_wins() -> None:
         detected={REPLY_LANGUAGE: _IT_TYPED},
         remembered={REPLY_LANGUAGE: _EN_TYPED},
     )
-    assert out[REPLY_LANGUAGE].value == "it"
+    assert out[REPLY_LANGUAGE].single() == "it"
 
 
 def test_a_key_nobody_read_this_turn_carries_forward() -> None:
     out = merge_attributes(detected={}, remembered={REPLY_LANGUAGE: _RU_ASKED})
-    assert out[REPLY_LANGUAGE].value == "ru"
+    assert out[REPLY_LANGUAGE].single() == "ru"
 
 
 def test_keys_are_independent() -> None:
@@ -128,8 +141,8 @@ def test_keys_are_independent() -> None:
         detected={"tone": Attribute(value="brief")},
         remembered={REPLY_LANGUAGE: _RU_ASKED},
     )
-    assert out[REPLY_LANGUAGE].value == "ru"
-    assert out["tone"].value == "brief"
+    assert out[REPLY_LANGUAGE].single() == "ru"
+    assert out["tone"].single() == "brief"
 
 
 def test_an_unsettled_reading_is_dropped_not_stored() -> None:
@@ -138,15 +151,18 @@ def test_an_unsettled_reading_is_dropped_not_stored() -> None:
         detected={REPLY_LANGUAGE: Attribute(value="", explicit=True)},
         remembered={REPLY_LANGUAGE: _EN_TYPED},
     )
-    assert out[REPLY_LANGUAGE].value == "en"
+    assert out[REPLY_LANGUAGE].single() == "en"
     assert merge_attributes(
         detected={"tone": Attribute(value="  ")}, remembered={},
     ) == {}
 
 
 def test_whitespace_is_not_a_value() -> None:
-    assert Attribute(value="  ru  ").value == "ru"
+    assert Attribute(value="  ru  ").single() == "ru"
     assert not Attribute(value="   ").settled()
+    # Isomorphic on the wire: one value in, one value out; a list stays a list.
+    assert Attribute(value="ru").model_dump()["value"] == "ru"
+    assert Attribute(value=["a", "b", " a "]).model_dump()["value"] == ["a", "b"]
 
 
 # ── recall ────────────────────────────────────────────────────────────────
@@ -164,7 +180,7 @@ def test_the_newest_message_value_wins_over_an_older_one() -> None:
         _assistant(reply_language={"value": "en", "label": "English", "explicit": True}),
     ]
     out = remembered_attributes(history)
-    assert out[REPLY_LANGUAGE].value == "en"
+    assert out[REPLY_LANGUAGE].single() == "en"
 
 
 def test_the_clients_aggregate_is_preferred_over_the_messages() -> None:
@@ -173,13 +189,13 @@ def test_the_clients_aggregate_is_preferred_over_the_messages() -> None:
     out = remembered_attributes(
         history, {"reply_language": {"value": "ru", "label": "Русский", "explicit": True}}
     )
-    assert out[REPLY_LANGUAGE].value == "ru"
+    assert out[REPLY_LANGUAGE].single() == "ru"
 
 
 def test_the_messages_still_answer_a_client_that_sends_no_aggregate() -> None:
     history = [_assistant(reply_language={"value": "ru", "label": "Русский", "explicit": True})]
     out = remembered_attributes(history, None)
-    assert out[REPLY_LANGUAGE].value == "ru"
+    assert out[REPLY_LANGUAGE].single() == "ru"
 
 
 def test_a_stale_aggregate_cannot_undo_something_stated() -> None:
@@ -187,7 +203,7 @@ def test_a_stale_aggregate_cannot_undo_something_stated() -> None:
     # disagreement rather than one source blindly winning.
     history = [_assistant(reply_language={"value": "ru", "label": "Русский", "explicit": True})]
     out = remembered_attributes(history, {"reply_language": {"value": "en"}})
-    assert out[REPLY_LANGUAGE].value == "ru"
+    assert out[REPLY_LANGUAGE].single() == "ru"
 
 
 def test_a_users_own_claim_is_ignored() -> None:
@@ -214,7 +230,7 @@ def test_one_bad_entry_does_not_cost_the_others() -> None:
         "reply_language": {"value": "ru"},
         "broken": "not an object",
     })
-    assert out[REPLY_LANGUAGE].value == "ru"
+    assert out[REPLY_LANGUAGE].single() == "ru"
 
 
 def test_no_history_no_attributes() -> None:
@@ -226,16 +242,16 @@ def test_no_history_no_attributes() -> None:
 
 
 async def test_the_registered_attribute_is_read_off_the_message() -> None:
-    llm = FakeLLM(response=_RU_ASKED)
+    llm = FakeLLM(response=_OUT_RU)
     out = await detect_attributes("отвечай по-русски", llm=llm)
-    assert out[REPLY_LANGUAGE].value == "ru"
+    assert out[REPLY_LANGUAGE].single() == "ru"
     assert out[REPLY_LANGUAGE].explicit
     assert llm.calls == 1
 
 
 async def test_an_abstention_is_an_absent_key() -> None:
     # «БГ 2.13» says nothing about language. Absent ⇒ the settled value carries.
-    llm = FakeLLM(response=Attribute())
+    llm = FakeLLM(response=ReplyLanguageOut())
     assert await detect_attributes("БГ 2.13", llm=llm) == {}
 
 
@@ -253,12 +269,9 @@ async def test_every_attribute_is_read_concurrently() -> None:
     """N attributes cost ONE round-trip of wall-clock, not N. Asserted by
     gating: all calls must have STARTED before any is allowed to finish, so a
     sequential implementation deadlocks."""
-    specs = tuple(
-        AttributeSpec(key=f"a{i}", prompt_name="reply-language", md="reply_language")
-        for i in range(3)
-    )
+    specs = tuple(_spec(f"a{i}") for i in range(3))
     gate = asyncio.Event()
-    llm = FakeLLM(response=Attribute(value="x"), gate=gate)
+    llm = FakeLLM(response=ReplyLanguageOut(value="x"), gate=gate)
 
     async def _release() -> None:
         while llm.calls < len(specs):
@@ -280,12 +293,9 @@ async def test_one_attribute_failing_does_not_lose_the_others() -> None:
             self.calls += 1
             if run_name == "attribute_bad":
                 raise RuntimeError("schema miss")
-            return Attribute(value="ok")
+            return ReplyLanguageOut(value="ok")
 
-    specs = (
-        AttributeSpec(key="bad", prompt_name="reply-language", md="reply_language"),
-        AttributeSpec(key="good", prompt_name="reply-language", md="reply_language"),
-    )
+    specs = (_spec("bad"), _spec("good"))
     out = await detect_attributes("вопрос", llm=_Flaky(), specs=specs)
     assert list(out) == ["good"]
 
@@ -293,14 +303,14 @@ async def test_one_attribute_failing_does_not_lose_the_others() -> None:
 async def test_each_attribute_gets_its_own_run_name() -> None:
     # So a failure is attributable in Langfuse to the attribute, not to "the
     # attribute call".
-    llm = FakeLLM(response=_RU_ASKED)
+    llm = FakeLLM(response=_OUT_RU)
     await detect_attributes("отвечай по-русски", llm=llm)
     assert llm.started == [f"attribute_{REPLY_LANGUAGE}"]
 
 
 async def test_the_same_message_is_answered_from_cache() -> None:
     cache = FakeCache()
-    llm = FakeLLM(response=_EN_TYPED)
+    llm = FakeLLM(response=_OUT_EN)
     first = await detect_attributes("what is karma?", llm=llm, kv_cache=cache)
     second = await detect_attributes("what is karma?", llm=llm, kv_cache=cache)
     assert first == second
@@ -309,12 +319,9 @@ async def test_the_same_message_is_answered_from_cache() -> None:
 
 async def test_the_cache_key_separates_attributes() -> None:
     # Two attributes read off the SAME text must not serve each other's answer.
-    specs = (
-        AttributeSpec(key="a", prompt_name="reply-language", md="reply_language"),
-        AttributeSpec(key="b", prompt_name="reply-language", md="reply_language"),
-    )
+    specs = (_spec("a"), _spec("b"))
     cache = FakeCache()
-    llm = FakeLLM(response=Attribute(value="x"))
+    llm = FakeLLM(response=ReplyLanguageOut(value="x"))
     await detect_attributes("вопрос", llm=llm, kv_cache=cache, specs=specs)
     assert llm.calls == 2
 
@@ -323,8 +330,10 @@ async def test_the_cache_key_separates_attributes() -> None:
 
 
 def test_the_reply_language_spec_is_registered_with_a_readable_prompt() -> None:
+    from shruti_chat.application.conversation_attributes import _bundled
+
     spec = next(s for s in ATTRIBUTE_SPECS if s.key == REPLY_LANGUAGE)
-    text = spec.load_fallback()
+    text = _bundled(spec.md)
     # Load-bearing rules: abstaining, and the script for multi-script languages.
     assert "EMPTY" in text
     assert "sr-Latn" in text and "sr-Cyrl" in text
@@ -344,13 +353,13 @@ def test_the_wire_dto_is_readable_as_a_remembered_attribute() -> None:
                                           "explicit": True}},
     })
     out = remembered_attributes([dto.model_dump()])
-    assert out[REPLY_LANGUAGE].value == "ru" and out[REPLY_LANGUAGE].explicit
+    assert out[REPLY_LANGUAGE].single() == "ru" and out[REPLY_LANGUAGE].explicit
 
     aggregate = {"reply_language": AttributeDto(value="ru", label="Русский")}
     out = remembered_attributes(
         None, {k: v.model_dump() for k, v in aggregate.items()},
     )
-    assert out[REPLY_LANGUAGE].value == "ru"
+    assert out[REPLY_LANGUAGE].single() == "ru"
 
 
 def test_a_legacy_client_message_still_validates() -> None:

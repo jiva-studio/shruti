@@ -53,9 +53,16 @@ export interface Msg {
  *  Italian interface). `explicit` is true when the user stated it rather than
  *  us inferring it. Keyed so a new attribute needs no client change. */
 export interface ChatAttribute {
-  value: string
+  /** Isomorphic: a bare string for a single-valued attribute (the reply
+   *  language), an array for a multi-valued one (which lecturers to draw on). */
+  value: string | string[]
   label: string
   explicit: boolean
+}
+
+/** The attribute's values, whichever shape the wire used. */
+function attrValues(attr: ChatAttribute): string[] {
+  return typeof attr.value === 'string' ? [attr.value] : attr.value
 }
 
 export type ChatAttributes = Record<string, ChatAttribute>
@@ -123,9 +130,18 @@ function parseAttributes(raw: unknown): ChatAttributes | undefined {
   for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
     if (!v || typeof v !== 'object' || Array.isArray(v)) continue
     const o = v as Record<string, unknown>
-    if (typeof o.value !== 'string' || !o.value) continue
+    const rawValue = o.value
+    const listed =
+      typeof rawValue === 'string'
+        ? [rawValue]
+        : Array.isArray(rawValue)
+          ? rawValue.filter((v): v is string => typeof v === 'string')
+          : []
+    // Same normalisation as the server: trim, drop blanks, de-duplicate.
+    const clean = [...new Set(listed.map((v) => v.trim()).filter((v) => v.length > 0))]
+    if (clean.length === 0) continue
     out[key] = {
-      value: o.value,
+      value: typeof rawValue === 'string' ? clean[0]! : clean,
       label: typeof o.label === 'string' ? o.label : '',
       explicit: o.explicit === true,
     }
@@ -142,7 +158,7 @@ function aggregateAttributes(messages: readonly Msg[]): ChatAttributes | undefin
   for (const m of messages) {
     if (m.role !== 'assistant' || !m.attributes) continue
     for (const [key, attr] of Object.entries(m.attributes)) {
-      if (!attr.value) continue
+      if (attrValues(attr).length === 0) continue
       const previous = out[key]
       if (previous && previous.explicit && !attr.explicit) continue
       out[key] = attr
