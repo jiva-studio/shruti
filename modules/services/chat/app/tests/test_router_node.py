@@ -11,8 +11,8 @@ Contracts exercised here that pure-use-case tests can't reach:
    fallback + salvage are exhausted) must NOT kill the turn. The node
    degrades to intent="unknown" — the documented soft-fallback path.
 3. Conversation attributes are settled here. The reply language — today's
-   only attribute — is published to BOTH `state["lang"]` and `ctx.lang`. Downstream hops read one or the other — the synthesizer the
-   state, `localized_reply` and the card blurbs `ctx.lang` — and when they
+   only attribute — is published to BOTH `state["lang"]` and `ctx.lang_code`. Downstream hops read one or the other — the synthesizer the
+   state, `localized_reply` and the card blurbs `ctx.lang_code` — and when they
    derived the language separately they disagreed (a Hindi answer under an
    English summary, on production). It also has to overlap the router's own
    LLM call, or it costs a second round-trip on every turn.
@@ -44,9 +44,10 @@ class _Ctx:
     embed_task: Any | None = None
     langfuse_trace_id: str | None = None
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
-    lang: str = "ru"
+    lang_code: str = "ru"
     lang_name: str = ""
     catalog_repo: Any | None = None
+    author_scope: Any | None = None
 
 
 @dataclass
@@ -217,13 +218,13 @@ async def test_a_detected_language_reaches_both_state_and_context(
     monkeypatch.setattr(
         router_node_mod, "detect_attributes", _detect(_RU_ASKED, calls=calls)
     )
-    ctx = _Ctx(llm=object(), lang="en")
+    ctx = _Ctx(llm=object(), lang_code="en")
     state = {"user_query": "отвечай по-русски", "lang": "en", "history": []}
 
     out = await router_node(state, _Runtime(ctx))
 
     assert out["lang"] == "ru"
-    assert ctx.lang == "ru"
+    assert ctx.lang_code == "ru"
     assert ctx.lang_name == "Русский"
     assert _attribute_events(_capture_stream)[0]["data"] == {
         REPLY_LANGUAGE: {"value": "ru", "label": "Русский", "explicit": True},
@@ -270,12 +271,12 @@ async def test_nothing_settled_leaves_the_request_locale_in_force(
     monkeypatch.setattr(
         router_node_mod, "detect_attributes", _detect(None, calls=[])
     )
-    ctx = _Ctx(llm=object(), lang="en")
+    ctx = _Ctx(llm=object(), lang_code="en")
 
     out = await router_node({"user_query": "БГ 2.13", "lang": "en", "history": []}, _Runtime(ctx))
 
     assert "lang" not in out
-    assert ctx.lang == "en"
+    assert ctx.lang_code == "en"
     assert _attribute_events(_capture_stream) == []
 
 
@@ -290,7 +291,7 @@ async def test_a_remembered_request_carries_an_inconclusive_message(
     monkeypatch.setattr(
         router_node_mod, "detect_attributes", _detect(None, calls=[])
     )
-    ctx = _Ctx(llm=object(), lang="en")
+    ctx = _Ctx(llm=object(), lang_code="en")
     history = [
         {"role": "user", "content": "отвечай по-русски"},
         {"role": "assistant", "content": "Хорошо.",
@@ -304,7 +305,7 @@ async def test_a_remembered_request_carries_an_inconclusive_message(
     )
 
     assert out["lang"] == "ru"
-    assert ctx.lang == "ru"
+    assert ctx.lang_code == "ru"
     assert _attribute_events(_capture_stream)[0]["data"][REPLY_LANGUAGE]["value"] == "ru"
 
 
@@ -369,7 +370,7 @@ async def test_the_clients_aggregate_reaches_the_merge(
     monkeypatch.setattr(
         router_node_mod, "detect_attributes", _detect(None, calls=[])
     )
-    ctx = _Ctx(llm=object(), lang="en")
+    ctx = _Ctx(llm=object(), lang_code="en")
 
     out = await router_node(
         {
@@ -382,7 +383,7 @@ async def test_the_clients_aggregate_reaches_the_merge(
     )
 
     assert out["lang"] == "ru"
-    assert ctx.lang == "ru" and ctx.lang_name == "Русский"
+    assert ctx.lang_code == "ru" and ctx.lang_name == "Русский"
 
 
 async def test_an_unknown_attribute_rides_through_untouched(
