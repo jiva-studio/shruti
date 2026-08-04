@@ -347,3 +347,30 @@ async def test_a_failed_language_lookup_is_left_out() -> None:
     ctx.user_id = "u-1"
     assert await author_gap_note(ctx, [_VERSE])
     assert "not the language of this answer" not in llm.situations[0]
+
+
+async def test_no_apology_when_their_own_recordings_did_contribute() -> None:
+    """Production printed «записи Рохини Суты Прабху на этом языке отсутствуют»
+    above four translated citations OF HIS. The pool the synthesizer is handed
+    showed verse/commentary only — their fragments reach the answer by another
+    route — so the private lane's own count is what settles it."""
+    llm = _LLM()
+    scope = _scope([])
+    scope.note_private_hits(4)
+    ctx = _Ctx(llm=llm, author_scope=scope)
+    ctx.chunk_repo = _Langs(["en"])
+    ctx.user_id = "u-1"
+    assert await author_gap_note(ctx, [_VERSE]) == ""
+    assert llm.situations == []
+
+
+async def test_the_private_lane_reports_its_yield() -> None:
+    """The wire: `corpus_fanout` must tell the scope what it found, or the note is
+    back to guessing from a pool that does not show it."""
+    import inspect
+
+    from lectorium_chat.research import corpus_fanout
+
+    lane = inspect.getsource(corpus_fanout).split("async def _user_lecture")[1]
+    lane = lane.split("async def ")[0]
+    assert "note_private_hits(" in lane
