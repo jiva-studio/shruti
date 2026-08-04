@@ -180,6 +180,15 @@ class TurnContext:
     # it None and exercise the un-cached path.
     kv_cache: Any | None = None         # KVCache
 
+    # ── Author scope ────────────────────────────────────────────────────
+    # Which lecturers this turn may draw on, resolved to track ids once (see
+    # `application/author_scope.AuthorScope`). Built empty by `chat_turn` and
+    # filled by `router_node` once the attributes are settled — the retrieval
+    # tools close over the SAME object, so they see the selection without it
+    # being threaded through the ReAct loop. None in tests / on paths that
+    # never retrieve.
+    author_scope: Any | None = None
+
     # ── Speculative embedding (Stage 2.8.a) ─────────────────────────────
     # Kicked off in `chat_turn` in parallel with the router LLM call.
     # The research pipeline awaits this future instead of re-embedding;
