@@ -34,6 +34,7 @@ from shruti_chat.agent.marker_expander import MarkerExpander
 from shruti_chat.agent.markers import CARD_RE, CITE_RE, OUTLINE_RE
 from shruti_chat.agent.tools import TOOLS, build_personalized_tools
 from shruti_chat.agent.turn_aliases import TurnAliasMap
+from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.composition import AppDeps
 from shruti_chat.domain import UserContext
 from shruti_chat.infra.llm_provider.openrouter import is_provider_unavailable
@@ -166,71 +167,19 @@ async def _audit_bypass_markers(
         )
 
 
-def _extract_latest_user_query(history: list[dict[str, Any]]) -> str:
-    """The router and workers only need the current question — pull it
-    out so we don't have to thread the whole history into their inner
-    LLM calls. Synthesizer DOES get the full history (folded down to
-    user-visible text by `fold_history`) so the assistant remembers
-    prior exchanges; that fan-out lives in `state["history"]` →
-    `synthesizer_turn`.
-    """
-    for entry in reversed(history):
-        if entry.get("role") == "user" and isinstance(entry.get("content"), str):
-            return entry["content"]
-    return ""
-
-
-def _effective_tier(tier: str, tier_expires_at: int) -> str:
-    """Coerce a stale Pro claim back to free.
-
-    Auth may mint `tier="pro"` with a `tier_expires_at` (UNIX epoch) that
-    has already passed — e.g. a dropped EXPIRATION webhook. A lapsed token
-    must not unlock Pro-only capabilities (add-to-library), so we downgrade
-    it to free before the tier reaches any graph gate. Mirrors the rate
-    limiter's `_user_limit_for` (`application/rate_limiter.py`). `0` means
-    "no expiry claim" and is left as-is.
-    """
-    if tier == "pro" and tier_expires_at != 0 and tier_expires_at < int(time()):
-        return "free"
-    return tier
-
-
 async def run_chat_turn(
-    history: list[dict[str, Any]],
+    request: ChatTurnRequest,
     *,
-    lang: str = "en",
-    translate_citations: bool = False,
-    # Client-aggregated conversation attributes (see
-    # `domain/conversation_attributes.py`). Preferred over folding the replayed
-    # messages: the client saw the whole dialogue, the request only sees 20.
-    client_attributes: dict[str, Any] | None = None,
-    capabilities: dict[str, bool] | None = None,
-    request_id: str | None = None,
-    user_context: UserContext | None = None,
+    deps: AppDeps,
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
-    deps: AppDeps | None = None,
-    session_id: str | None = None,
-    session_title: str | None = None,
-    client_trace_id: str | None = None,
-    region: str | None = None,
-    turn_config: dict[str, Any] | None = None,
-    tier: str = "free",
-    tier_expires_at: int = 0,
-    jwt: str | None = None,
 ) -> AsyncIterator[AgentEvent]:
-    """Drive one chat turn through the LangGraph chat graph.
+    """Drive one chat turn through the LangGraph chat graph, yielding
+    `AgentEvent`s. The graph internals are hidden behind the `astream` event
+    bridge below.
 
-    Same shape as the legacy monolithic loop: takes history + lang +
-    request_id, yields `AgentEvent`s. The graph internals are hidden
-    behind the `astream` event bridge below.
-
-    `client_trace_id` is the hyphenless 32-hex form of the client's
-    assistant `ChatMessage.id` (validated upstream in `api/chat.py`).
-    When present, it becomes the Langfuse trace_id so a later
-    `/chat/feedback` POST referencing the same message id lands the
-    score on the right trace. When absent (legacy client), a fresh
-    server-side trace id is generated and never exposed to the client
-    — the feedback UI on that row stays hidden.
+    `request` is the turn's DATA (see `ChatTurnRequest`); `deps` and
+    `is_disconnected` are its collaborators — the composition root's wiring and
+    the caller's cancellation probe, neither of which belongs in a value object.
     """
     if deps is None or deps.chat_graph is None or deps.llm is None:
         raise RuntimeError(
@@ -238,13 +187,17 @@ async def run_chat_turn(
             "(lifespan must have built them)"
         )
 
+    history = request.history
+    lang = request.lang
+    request_id = request.request_id
+    user_context = request.user_context
     trace_id = request_id or "anon"
     # Langfuse-side trace ID. Prefer the client-supplied one so message
     # identity == trace identity for the feedback flow; otherwise fall
     # back to a fresh server-minted id. The same value is bound into
     # structlog so Grafana's Loki derived field
     # `langfuse_trace_id=([a-f0-9]+)` resolves to the right Langfuse URL.
-    langfuse_trace_id = client_trace_id or uuid4().hex
+    langfuse_trace_id = request.client_trace_id or uuid4().hex
     bind_turn_context(
         trace_id=trace_id,
         request_id=request_id,
@@ -337,7 +290,7 @@ async def run_chat_turn(
         # and the expander reads it to drop hallucinated (never-emitted)
         # `[action:...|id=X]` markers before they reach the client.
         emitted_action_ids: set[str] = set()
-        caps = capabilities or {}
+        caps = request.capabilities or {}
         expander = MarkerExpander(
             aliases,
             request_id=request_id,
@@ -361,7 +314,7 @@ async def run_chat_turn(
         # (those don't need the embedding). On hit we shave 150-300 ms
         # off every research turn — the embed_query was previously the
         # first step inside research/pipeline, blocking the rest.
-        user_query_text = _extract_latest_user_query(history)
+        user_query_text = request.latest_user_query()
         if user_query_text and deps.embedder is not None:
             embed_task = asyncio.create_task(
                 deps.embedder.embed_query(user_query_text),
@@ -371,11 +324,11 @@ async def run_chat_turn(
         ctx = TurnContext(
             request_id=trace_id,
             lang=lang,
-            translate_citations=translate_citations,
+            translate_citations=request.translate_citations,
             capabilities=caps,
             # `getattr` tolerates test doubles that predate this field.
             translator=getattr(deps, "translation_service", None),
-            region=region,
+            region=request.region,
             langfuse_trace_id=langfuse_trace_id,
             aliases=aliases,
             expander=expander,
@@ -402,7 +355,7 @@ async def run_chat_turn(
             # plus the provider resolver from the deps. `getattr` tolerates test
             # AppDeps doubles that predate the field.
             user_id=(user_context.user_id if user_context else None),
-            jwt=jwt,
+            jwt=request.jwt,
             lecture_search=getattr(deps, "lecture_search", None),
         )
 
@@ -411,13 +364,13 @@ async def run_chat_turn(
         # Pro-only capabilities like add-to-library. Coerce it back to free
         # BEFORE the tier reaches any graph gate, mirroring the rate limiter
         # (`application/rate_limiter._user_limit_for`).
-        effective_tier = _effective_tier(tier, tier_expires_at)
+        effective_tier = request.effective_tier(int(time()))
 
         initial_state: dict[str, Any] = {
             "history": history,
-            "user_query": _extract_latest_user_query(history),
+            "user_query": request.latest_user_query(),
             "lang": lang,
-            "client_attributes": client_attributes or {},
+            "client_attributes": request.client_attributes or {},
             "request_id": trace_id,
             "tier": effective_tier,
             "tool_results": [],
@@ -426,7 +379,7 @@ async def run_chat_turn(
             "current_track_ref": current_track_ref,
             "now_iso": now_iso,
             "history_summary": history_summary,
-            "config": turn_config or {},
+            "config": request.turn_config or {},
         }
 
         # ── Drive the graph; bridge custom events to AgentEvents ─────
@@ -436,15 +389,15 @@ async def run_chat_turn(
         # `langfuse_node_callback(langfuse_trace_id, ...)` attaches its
         # spans under the same root. No-op when the SDK is uninitialised
         # (LANGFUSE_FORCE_FALLBACK=1 or missing env).
-        user_query_for_trace = _extract_latest_user_query(history)
+        user_query_for_trace = request.latest_user_query()
         async with with_langfuse_trace(
             langfuse_trace_id,
             user_id_for_trace,
-            session_id=session_id,
-            session_title=session_title,
+            session_id=request.session_id,
+            session_title=request.session_title,
             name="chat_turn",
             input=user_query_for_trace or None,
-            region=region,
+            region=request.region,
         ) as langfuse_root_span:
             try:
                 async for mode, payload in deps.chat_graph.astream(

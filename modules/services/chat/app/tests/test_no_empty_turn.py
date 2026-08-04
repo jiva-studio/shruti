@@ -25,6 +25,7 @@ import pytest
 from shruti_chat.agent.graph.nodes._worker_common import localized_reply
 from shruti_chat.application import chat_turn
 from shruti_chat.application.chat_turn import run_chat_turn
+from shruti_chat.application.chat_turn_request import ChatTurnRequest
 
 
 # ── localized_reply: a parse miss must not cost the line ──────────────────
@@ -166,8 +167,11 @@ async def _run(events: list[tuple[str, dict]]) -> list[Any]:
          patch.object(chat_turn, "with_langfuse_trace", _no_trace):
         return [
             ev async for ev in run_chat_turn(
-                history=[{"role": "user", "content": "Случайность"}],
-                lang="ru", request_id="r-empty", deps=deps,
+                ChatTurnRequest(
+                    history=[{"role": "user", "content": "Случайность"}],
+                    lang="ru", request_id="r-empty",
+                ),
+                deps=deps,
             )
         ]
 
