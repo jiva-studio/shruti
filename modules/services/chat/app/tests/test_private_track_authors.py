@@ -37,14 +37,23 @@ _MYSTERY = "mystery"
 class _Private:
     """The chunk repository's private-lane reads, off a fake `chunk_meta`."""
 
-    def __init__(self, by_track: dict[str, str | None]) -> None:
+    def __init__(
+        self,
+        by_track: dict[str, str | None],
+        raw_by_track: dict[str, str] | None = None,
+    ) -> None:
         self._by_track = by_track
-        self.calls: list[tuple[str, list[str]]] = []
+        self._raw = raw_by_track or {}
+        self.calls: list[tuple[str, list[str], list[str]]] = []
 
-    async def get_owned_track_ids_by_author(self, user_id, author_ids):
-        self.calls.append((user_id, list(author_ids)))
+    async def get_owned_track_ids_by_author(
+        self, user_id, author_ids, author_raws=None,
+    ):
+        raws = list(author_raws or [])
+        self.calls.append((user_id, list(author_ids), raws))
         return [
-            t for t, a in self._by_track.items() if a and a in author_ids
+            t for t, a in self._by_track.items()
+            if (a and a in author_ids) or self._raw.get(t) in raws
         ]
 
     async def unattributed_owned_count(self, user_id):
@@ -81,7 +90,7 @@ async def test_my_own_recording_of_the_chosen_teacher_survives() -> None:
     assert kept == [_MINE]
     # Asked with the verified user id and the selected authors — the ACL and the
     # filter are one query, not a name-matching loop.
-    assert private.calls == [("u-1", [_PRABHU])]
+    assert private.calls == [("u-1", [_PRABHU], [])]
 
 
 async def test_the_callers_list_stays_authoritative_for_access() -> None:
@@ -179,3 +188,52 @@ async def test_the_query_is_one_indexed_read_on_the_group_record() -> None:
     assert "FROM chunk_meta" in counted
     assert "author_id IS NULL" in counted
     assert "owner_id = $1" in counted
+
+
+# ── a teacher only my library knows ───────────────────────────────────────
+
+
+def _raw_scope(private, *, raw: str, user_id: str = "u-1") -> AuthorScope:
+    scope = AuthorScope(
+        catalog_repo=_Catalog(), private_repo=private, user_id=user_id,
+        request_id="req",
+    )
+    scope.apply(AuthorSelection.from_attributes({
+        LECTURE_AUTHORS: Attribute(
+            value=[f"raw:{raw}"], label=raw, explicit=True,
+        ),
+    }))
+    return scope
+
+
+class _Catalog:
+    """The corpus knows nothing about this teacher — that is the premise."""
+
+    async def filter_track_ids(self, *, author_ids=None, **_kw):
+        # The real one reads an empty author list as "no filter at all"; the scope
+        # must never let it get that far under a raw-name selection.
+        return None if not author_ids else []
+
+
+async def test_my_own_teachers_lectures_are_found_by_name() -> None:
+    private = _Private({"mine": None}, {"mine": "Rohini Suta Prabhu"})
+    scope = _raw_scope(private, raw="Rohini Suta Prabhu")
+    assert scope.selection.constrained
+    assert scope.selection.raw_names == ("Rohini Suta Prabhu",)
+    assert await scope.narrow_owned(["mine"]) == ["mine"]
+    assert private.calls == [("u-1", [], ["Rohini Suta Prabhu"])]
+
+
+async def test_the_corpus_lane_is_emptied_not_opened() -> None:
+    """The trap: `filter_track_ids` with an empty author list means "no filter",
+    so a selection that names only a private teacher would otherwise hand back the
+    WHOLE corpus — the opposite of what was asked."""
+    scope = _raw_scope(_Private({}), raw="Rohini Suta Prabhu")
+    assert await scope.track_ids() == []
+    assert await scope.narrow(["any-corpus-track"]) == []
+
+
+async def test_someone_elses_upload_is_still_dropped() -> None:
+    private = _Private({"theirs": None}, {"theirs": "Niranjana Swami"})
+    scope = _raw_scope(private, raw="Rohini Suta Prabhu")
+    assert await scope.narrow_owned(["theirs"]) == []

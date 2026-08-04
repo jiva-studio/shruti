@@ -134,6 +134,8 @@ class _RouterCtx:
     lang_code: str = "ru"
     lang_name: str = ""
     author_scope: Any | None = None
+    chunk_repo: Any | None = None
+    user_id: str = ""
 
 
 @dataclass

@@ -14,6 +14,11 @@ than an absence.
 What it constrains is LECTURES only. Books are canon: verses, chapters,
 letters, and the purports are never filtered by who is speaking, so an answer
 narrowed to one teacher still quotes scripture and its commentary.
+
+A selection can name a teacher the CORPUS does not have — that is the normal case
+for a personal library. Then the corpus lane has nothing to offer (`ids` is empty,
+so no catalog lecture qualifies) and the answer is built from that person's own
+uploads plus scripture.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from dataclasses import dataclass
 from lectorium_chat.domain.conversation_attributes import (
     ALL,
     LECTURE_AUTHORS,
+    RAW_PREFIX,
     Attribute,
 )
 
@@ -32,12 +38,16 @@ from lectorium_chat.domain.conversation_attributes import (
 class AuthorSelection:
     """The lecturers in force for a turn.
 
-    `ids` are catalog author ids; `names` are what to call them when the answer
-    has to admit it found nothing by them. Both empty with `constrained=False`
-    means "everyone", which is the default.
+    `ids` are catalog author ids. `raw_names` are speaker names as someone's own
+    uploads recorded them — a personal library is mostly teachers the curated
+    corpus never heard of, and the name is the only handle those have. `names` is
+    what to call the selection when the answer has to admit it found nothing.
+
+    All empty with `constrained=False` means "everyone", which is the default.
     """
 
     ids: tuple[str, ...] = ()
+    raw_names: tuple[str, ...] = ()
     names: str = ""
     constrained: bool = False
     # True when the person stated it — picked it in the app or asked in words —
@@ -62,10 +72,15 @@ class AuthorSelection:
         attr = attributes.get(LECTURE_AUTHORS)
         if attr is None or not attr.settled() or ALL in attr.value:
             return cls.unconstrained()
+        ids = tuple(v for v in attr.value if not v.startswith(RAW_PREFIX))
+        raw = tuple(
+            v[len(RAW_PREFIX):] for v in attr.value if v.startswith(RAW_PREFIX)
+        )
         return cls(
-            ids=tuple(attr.value),
+            ids=ids,
+            raw_names=raw,
             names=attr.label,
-            constrained=True,
+            constrained=bool(ids or raw),
             explicit=attr.explicit,
         )
 

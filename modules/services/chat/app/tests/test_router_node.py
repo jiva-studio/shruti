@@ -48,6 +48,8 @@ class _Ctx:
     lang_name: str = ""
     catalog_repo: Any | None = None
     author_scope: Any | None = None
+    chunk_repo: Any | None = None
+    user_id: str = ""
 
 
 @dataclass
