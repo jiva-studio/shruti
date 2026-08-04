@@ -72,7 +72,18 @@ async def author_gap_note(
         f"mention this in one short clause."
         if untagged else ""
     )
-    if allowed:
+    # A selection on a teacher only the LIBRARY knows resolves to no corpus tracks
+    # by definition — that is not "they have nothing", and saying so while citing
+    # their own recording is a plain contradiction. Production did exactly that:
+    # «Лекций Рохини Суты Прабху нет» above four fragments of his.
+    if scope.selection.raw_names and not allowed:
+        situation = (
+            f"The user asked to be answered only from lectures by {who}. The shared "
+            "corpus has none by them and their own recordings did not cover this "
+            "question either, so the answer below is drawn from scripture. Say this "
+            "in one short sentence, WITHOUT claiming their recordings do not exist."
+        ) + langs + mine
+    elif allowed:
         situation = (
             f"The user asked to be answered only from lectures by {who}. Those "
             "lectures exist in the corpus, but none of them covers this "
