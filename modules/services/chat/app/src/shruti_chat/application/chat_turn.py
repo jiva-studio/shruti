@@ -287,7 +287,10 @@ async def run_chat_turn(
         # reach them.
         author_scope = AuthorScope(
             catalog_repo=deps.catalog_repo,
-            facts_repo=deps.chunk_repo,
+            private_repo=deps.chunk_repo,
+            # The verified id, same source the ACL lookup uses — never a
+            # client-supplied one.
+            user_id=(user_context.user_id if user_context else "") or "",
             request_id=trace_id,
         )
 
