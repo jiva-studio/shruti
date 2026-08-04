@@ -29,6 +29,7 @@
 
 import type {
   ChatActionPayload,
+  ChatAttribute,
   ChatActionState,
   ChatAliasEntry,
   ChatChapterBody,
@@ -132,16 +133,27 @@ export function parseMeta(raw: unknown): ParsedMeta {
 
 function extractAttributes(raw: unknown): ChatAttributes | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
-  const out: Record<string, { value: string; label: string; explicit: boolean }> = {}
+  const out: Record<string, ChatAttribute> = {}
   for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
     if (!v || typeof v !== "object" || Array.isArray(v)) continue
     const o = v as Record<string, unknown>
-    // The server only sends an attribute it actually settled, so an empty
-    // value is a corrupt row. Unknown KEYS are kept: this build does not need
-    // to understand an attribute to carry it forward.
-    if (typeof o.value !== "string" || o.value === "") continue
+    // The server only sends an attribute it actually settled, so an empty value
+    // is a corrupt row. Unknown KEYS are kept: this build does not need to
+    // understand an attribute to carry it forward. The value is isomorphic —
+    // string or array — and is stored back in the shape it arrived in.
+    const rawValue = o.value
+    const listed =
+      typeof rawValue === "string"
+        ? [rawValue]
+        : Array.isArray(rawValue)
+          ? rawValue.filter((v): v is string => typeof v === "string")
+          : []
+    // Trim, drop blanks, de-duplicate keeping order — the same normalisation the
+    // server applies, so a stored attribute is clean on both sides.
+    const clean = [...new Set(listed.map((v) => v.trim()).filter((v) => v.length > 0))]
+    if (clean.length === 0) continue
     out[key] = {
-      value: o.value,
+      value: typeof rawValue === "string" ? clean[0]! : clean,
       label: typeof o.label === "string" ? o.label : "",
       explicit: o.explicit === true,
     }
