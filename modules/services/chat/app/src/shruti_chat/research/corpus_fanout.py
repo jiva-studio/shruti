@@ -500,6 +500,8 @@ async def fanout_search_with_boost(
                 kind="user_track",
             )
             _record("user_lecture", _t)
+            if scored and author_scope is not None:
+                author_scope.note_private_hits(len(scored))
             # Surfaced under the same "lecture" kind so private results merge
             # into the lecture dedup / ranking / citation path identically to
             # corpus lectures — the isolation lives in the ACL + kind filter,
