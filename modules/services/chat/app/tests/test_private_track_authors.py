@@ -5,9 +5,10 @@ says nothing about them — and intersecting with it emptied the whole private l
 choose «только Прабхупада» and your own Prabhupada recording disappeared along
 with everyone else's.
 
-What the lane has instead is the speaker resolved when the track was indexed and
-stamped on its chunks (`chunks.author_id`, the same column the public lane filters
-by). So narrowing here is one join, and the rules are:
+What the lane has instead is `chunk_meta`: one row per owner per group of chunks,
+holding who may read it and who is speaking on it (resolved once, when the track
+was indexed). So narrowing is one indexed read — the ACL and the author filter are
+the same row — and the rules are:
 
 - their own recording of the chosen teacher stays;
 - a stranger's talk goes;
@@ -34,16 +35,25 @@ _MYSTERY = "mystery"
 
 
 class _Private:
-    """The chunk repository's private-lane reads, answering off a fake stamp."""
+    """The chunk repository's private-lane reads, off a fake `chunk_meta`."""
 
-    def __init__(self, by_track: dict[str, str | None]) -> None:
+    def __init__(
+        self,
+        by_track: dict[str, str | None],
+        raw_by_track: dict[str, str] | None = None,
+    ) -> None:
         self._by_track = by_track
-        self.calls: list[tuple[str, list[str]]] = []
+        self._raw = raw_by_track or {}
+        self.calls: list[tuple[str, list[str], list[str]]] = []
 
-    async def get_owned_track_ids_by_author(self, user_id, author_ids):
-        self.calls.append((user_id, list(author_ids)))
+    async def get_owned_track_ids_by_author(
+        self, user_id, author_ids, author_raws=None,
+    ):
+        raws = list(author_raws or [])
+        self.calls.append((user_id, list(author_ids), raws))
         return [
-            t for t, a in self._by_track.items() if a and a in author_ids
+            t for t, a in self._by_track.items()
+            if (a and a in author_ids) or self._raw.get(t) in raws
         ]
 
     async def unattributed_owned_count(self, user_id):
@@ -80,7 +90,7 @@ async def test_my_own_recording_of_the_chosen_teacher_survives() -> None:
     assert kept == [_MINE]
     # Asked with the verified user id and the selected authors — the ACL and the
     # filter are one query, not a name-matching loop.
-    assert private.calls == [("u-1", [_PRABHU])]
+    assert private.calls == [("u-1", [_PRABHU], [])]
 
 
 async def test_the_callers_list_stays_authoritative_for_access() -> None:
@@ -157,11 +167,10 @@ async def test_the_private_lane_uses_the_owned_narrowing() -> None:
 # ── the SQL behind it ─────────────────────────────────────────────────────
 
 
-async def test_the_query_joins_owned_against_the_stamped_author() -> None:
-    """The predicate itself: `owned` ⋈ `chunks.author_id`, restricted to the
-    private kind, keyed on the verified user. Asserted on the SQL because the
-    isolation (`kind = 'user_track'`) and the ACL (`o.user_id = $1`) are the two
-    things that must never drift."""
+async def test_the_query_is_one_indexed_read_on_the_group_record() -> None:
+    """The predicate itself. Keyed on the verified owner, which is the ACL, and on
+    the resolved author, which is the filter — one row scan, no join. Asserted on
+    the SQL because those two conditions must never drift apart."""
     import inspect
 
     from lectorium_chat.infra.repositories.pg_chunk_repository import (
@@ -169,11 +178,62 @@ async def test_the_query_joins_owned_against_the_stamped_author() -> None:
     )
 
     sql = inspect.getsource(PgChunkRepository.get_owned_track_ids_by_author)
-    assert "FROM owned o" in sql
-    assert "c.kind = 'user_track'" in sql
-    assert "o.user_id = $1" in sql
-    assert "c.author_id = ANY($2::text[])" in sql
+    assert "FROM chunk_meta" in sql
+    assert "owner_id = $1" in sql
+    assert "author_id = ANY($2::text[])" in sql
+    # One table: no ACL table to join, and the chunks are not consulted at all.
+    assert "FROM owned" not in sql and "chunks" not in sql
 
     counted = inspect.getsource(PgChunkRepository.unattributed_owned_count)
-    assert "c.author_id IS NULL" in counted
-    assert "o.user_id = $1" in counted
+    assert "FROM chunk_meta" in counted
+    assert "author_id IS NULL" in counted
+    assert "owner_id = $1" in counted
+
+
+# ── a teacher only my library knows ───────────────────────────────────────
+
+
+def _raw_scope(private, *, raw: str, user_id: str = "u-1") -> AuthorScope:
+    scope = AuthorScope(
+        catalog_repo=_Catalog(), private_repo=private, user_id=user_id,
+        request_id="req",
+    )
+    scope.apply(AuthorSelection.from_attributes({
+        LECTURE_AUTHORS: Attribute(
+            value=[f"raw:{raw}"], label=raw, explicit=True,
+        ),
+    }))
+    return scope
+
+
+class _Catalog:
+    """The corpus knows nothing about this teacher — that is the premise."""
+
+    async def filter_track_ids(self, *, author_ids=None, **_kw):
+        # The real one reads an empty author list as "no filter at all"; the scope
+        # must never let it get that far under a raw-name selection.
+        return None if not author_ids else []
+
+
+async def test_my_own_teachers_lectures_are_found_by_name() -> None:
+    private = _Private({"mine": None}, {"mine": "Rohini Suta Prabhu"})
+    scope = _raw_scope(private, raw="Rohini Suta Prabhu")
+    assert scope.selection.constrained
+    assert scope.selection.raw_names == ("Rohini Suta Prabhu",)
+    assert await scope.narrow_owned(["mine"]) == ["mine"]
+    assert private.calls == [("u-1", [], ["Rohini Suta Prabhu"])]
+
+
+async def test_the_corpus_lane_is_emptied_not_opened() -> None:
+    """The trap: `filter_track_ids` with an empty author list means "no filter",
+    so a selection that names only a private teacher would otherwise hand back the
+    WHOLE corpus — the opposite of what was asked."""
+    scope = _raw_scope(_Private({}), raw="Rohini Suta Prabhu")
+    assert await scope.track_ids() == []
+    assert await scope.narrow(["any-corpus-track"]) == []
+
+
+async def test_someone_elses_upload_is_still_dropped() -> None:
+    private = _Private({"theirs": None}, {"theirs": "Niranjana Swami"})
+    scope = _raw_scope(private, raw="Rohini Suta Prabhu")
+    assert await scope.narrow_owned(["theirs"]) == []

@@ -5,7 +5,7 @@ to the publish-service's promotion event (#1236). When a user-uploaded track is
 approved and published into the corpus, publish-service emits `track.published`;
 this consumer runs `indexer.run._graft_promoted_track`, which relabels that
 track's already-indexed `user_track` chunks onto the public `track_transcript`
-lane and drops the `owned` ACL rows — no re-embedding required.
+lane and drops the track's `chunk_meta` rows — no re-embedding required.
 
 Design contract mirrors the sibling `track.events` consumer:
   - Idempotent by track_id: the graft is an ON-CONFLICT-free UPDATE/DELETE that

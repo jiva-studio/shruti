@@ -88,6 +88,10 @@ def _start_attributes(
             kv_cache=ctx.kv_cache,
             callbacks=[cb] if cb is not None else None,
             catalog_repo=ctx.catalog_repo,
+            # Lets a lecturer filter name a teacher only THIS person's uploads
+            # know — most of a personal library is such teachers.
+            private_repo=ctx.chunk_repo,
+            user_id=ctx.user_id or "",
         ),
         name="conversation_attributes",
     )

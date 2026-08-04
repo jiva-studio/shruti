@@ -29,10 +29,12 @@ from typing import Any, Mapping, Protocol, TypeVar
 from pydantic import BaseModel
 
 from lectorium_chat.application.author_lookup import resolve_author
+from lectorium_chat.application.author_names import names_match
 from lectorium_chat.application.cache_helpers import TTL_7D, cached_llm_json
 from lectorium_chat.domain.conversation_attributes import (
     ALL,
     LECTURE_AUTHORS,
+    RAW_PREFIX,
     REPLY_LANGUAGE,
     Attribute,
     merge_attributes,
@@ -82,7 +84,13 @@ class AttributeSpec(Protocol):
     schema: type[BaseModel]
 
     async def build(
-        self, out: Any, *, catalog_repo: Any, request_id: str | None,
+        self,
+        out: Any,
+        *,
+        catalog_repo: Any,
+        request_id: str | None,
+        private_repo: Any = None,
+        user_id: str = "",
     ) -> Attribute | None: ...
 
 
@@ -97,7 +105,13 @@ class ReplyLanguageSpec:
     schema = ReplyLanguageOut
 
     async def build(
-        self, out: ReplyLanguageOut, *, catalog_repo: Any, request_id: str | None,
+        self,
+        out: ReplyLanguageOut,
+        *,
+        catalog_repo: Any,
+        request_id: str | None,
+        private_repo: Any = None,
+        user_id: str = "",
     ) -> Attribute | None:
         attr = Attribute(
             value=out.value, label=out.label, explicit=out.explicit,
@@ -134,7 +148,13 @@ class LectureAuthorsSpec:
     schema = LectureAuthorsOut
 
     async def build(
-        self, out: LectureAuthorsOut, *, catalog_repo: Any, request_id: str | None,
+        self,
+        out: LectureAuthorsOut,
+        *,
+        catalog_repo: Any,
+        request_id: str | None,
+        private_repo: Any = None,
+        user_id: str = "",
     ) -> Attribute | None:
         if out.everyone:
             # No label: "everyone" is not a name, and the wording for it belongs
@@ -158,15 +178,35 @@ class LectureAuthorsSpec:
         hits = await asyncio.gather(*(
             resolve_author(catalog_repo, name) for name in names
         ))
+        # A personal library is mostly teachers the curated corpus never heard of,
+        # so a name the catalog cannot place is looked for among the speakers this
+        # person's OWN uploads recorded — a handful of strings, compared with the
+        # same cross-script matcher. Every stored spelling that denotes them is
+        # kept («Rohini Suta Prabhu», «H.G. Rohini Suta Prabhu» are one teacher and
+        # two rows), so the filter matches whichever the ingest happened to write.
+        own_names: list[str] | None = None
         ids: list[str] = []
         labels: list[str] = []
         missing: list[str] = []
         for name, hit in zip(names, hits):
-            if hit is None:
+            if hit is not None:
+                if hit.id not in ids:
+                    ids.append(hit.id)
+                    labels.append(hit.full_name)
+                continue
+            if own_names is None:
+                own_names = await _own_speakers(
+                    private_repo, user_id, request_id=request_id,
+                )
+            mine = [stored for stored in own_names if names_match(name, stored)]
+            if mine:
+                for stored in mine:
+                    value = f"{RAW_PREFIX}{stored}"
+                    if value not in ids:
+                        ids.append(value)
+                labels.append(name)
+            else:
                 missing.append(name)
-            elif hit.id not in ids:
-                ids.append(hit.id)
-                labels.append(hit.full_name)
         if missing:
             log.info(
                 "lecture_authors_unresolved",
@@ -187,6 +227,26 @@ class LectureAuthorsSpec:
 ATTRIBUTE_SPECS: tuple[AttributeSpec, ...] = (
     ReplyLanguageSpec(), LectureAuthorsSpec(),
 )
+
+
+
+async def _own_speakers(
+    private_repo: Any, user_id: str, *, request_id: str | None,
+) -> list[str]:
+    """Speaker names across this person's own uploads, or [] when unavailable.
+
+    Read only when the catalog failed to place a name — the common case (a corpus
+    author) costs nothing extra.
+    """
+    if private_repo is None or not user_id:
+        return []
+    try:
+        return list(await private_repo.get_own_author_names(user_id))
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "own_speakers_lookup_failed", request_id=request_id, error=str(exc),
+        )
+        return []
 
 
 class _LLMForAttributes(Protocol):
@@ -257,6 +317,8 @@ async def detect_attributes(
     kv_cache: Any | None = None,
     callbacks: list[Any] | None = None,
     catalog_repo: Any | None = None,
+    private_repo: Any | None = None,
+    user_id: str = "",
     specs: tuple[AttributeSpec, ...] = ATTRIBUTE_SPECS,
 ) -> dict[str, Attribute]:
     """Read every registered attribute off this message, concurrently.
@@ -274,6 +336,7 @@ async def detect_attributes(
         _detect_one(
             spec, query, llm=llm, request_id=request_id, model=model,
             kv_cache=kv_cache, callbacks=callbacks, catalog_repo=catalog_repo,
+            private_repo=private_repo, user_id=user_id,
         )
         for spec in specs
     ))
@@ -294,6 +357,8 @@ async def _detect_one(
     kv_cache: Any | None,
     callbacks: list[Any] | None,
     catalog_repo: Any | None,
+    private_repo: Any | None = None,
+    user_id: str = "",
 ) -> Attribute | None:
     prompt = prompt_with_fallback(
         spec.prompt_name, fallback=lambda: _bundled(spec.md),
@@ -334,6 +399,7 @@ async def _detect_one(
             out = await _call()
         detected = await spec.build(
             out, catalog_repo=catalog_repo, request_id=request_id,
+            private_repo=private_repo, user_id=user_id,
         )
     except Exception as exc:  # noqa: BLE001 — never fail the turn on a hint
         log.warning(

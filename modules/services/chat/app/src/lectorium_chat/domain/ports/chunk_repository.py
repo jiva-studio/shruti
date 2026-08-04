@@ -38,12 +38,16 @@ class ChunkRepository(Protocol):
         ...
 
     async def get_owned_track_ids_by_author(
-        self, user_id: str, author_ids: list[str],
+        self, user_id: str, author_ids: list[str], author_raws: list[str] | None = None,
     ) -> list[str]:
-        """This user's own tracks spoken by one of `author_ids` — the speaker
-        resolved at index time and stamped on the chunks, so the private lane
-        narrows with the same predicate the public one does. A track with no
-        resolved speaker is not returned."""
+        """This user's own tracks by one of `author_ids` (catalog authors) or with
+        one of `author_raws` (names their uploads recorded, matched exactly). A
+        track with neither is not returned."""
+        ...
+
+    async def get_own_author_names(self, user_id: str) -> list[str]:
+        """Distinct speaker names across this person's own uploads — the pool an
+        asked-for name is matched against when the catalog does not know it."""
         ...
 
     async def unattributed_owned_count(self, user_id: str) -> int:
