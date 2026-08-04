@@ -444,6 +444,7 @@ func main() {
 			Model:     p.Model,
 			MaxTokens: p.MaxTokens,
 			Reasoning: p.Reasoning,
+			Format:    openaicompatreview.Format(p.Format),
 		})
 		if err != nil {
 			log.Fatalf("review provider %q: %v", alias, err)
