@@ -453,3 +453,61 @@ async def test_a_turn_that_chose_nobody_leaves_nothing_in_force() -> None:
     await _settled({"history": [], "client_attributes": None}, scope)
     assert not scope.selection.constrained
     assert await scope.track_ids() is None
+
+
+async def test_the_planner_hands_the_scope_to_its_own_top_up(monkeypatch) -> None:
+    """Stage 2 of the planner runs a FRESH lecture search of its own.
+
+    It happens after retrieval is over and outside the pipeline that threads the
+    scope, so it has to be handed the selection explicitly. Production proved
+    what happens otherwise: the fanout honoured a selection whose lecturer has no
+    lectures — zero lecture candidates in either round — and the answer still
+    arrived with 29 transcript citations from two other teachers, topped up here.
+    """
+    from dataclasses import dataclass, field as dc_field
+
+    from shruti_chat.agent.graph.nodes import synthesis_planner as planner_mod
+    from shruti_chat.research.models import Outline, Thesis
+
+    seen: dict[str, Any] = {}
+
+    async def _spy(*args, **kwargs):
+        seen.update(kwargs)
+        return kwargs["_augmented"] if "_augmented" in kwargs else (args[0], [])
+
+    monkeypatch.setattr(planner_mod, "augment_thin_theses", _spy)
+
+    class _LLM:
+        async def structured_output(self, *_a, **_k):
+            return Outline(theses=[Thesis(thesis="t1", supporting_notes=[1])])
+
+        async def text_completion(self, *_a, **_k):
+            return ""
+
+    @dataclass
+    class _Ctx:
+        llm: Any = None
+        request_id: str = "req"
+        langfuse_trace_id: str = ""
+        embedder: Any = None
+        chunk_repo: Any = None
+        catalog_repo: Any = None
+        aliases: Any = None
+        reranker: Any = None
+        lang_name: str = ""
+        author_scope: Any = None
+
+    @dataclass
+    class _Runtime:
+        context: _Ctx = dc_field(default_factory=_Ctx)
+
+    scope = _scope(_selection(_OURS), _Catalog({_OURS: ["t-ours"]}))
+    await planner_mod.synthesis_planner_node(
+        {
+            "user_query": "как развить смирение", "lang": "ru",
+            "tool_results": [{"type": "lecture", "text": "x", "score": 0.7, "meta": {}}],
+        },
+        _Runtime(context=_Ctx(llm=_LLM(), author_scope=scope)),
+    )
+
+    assert seen.get("author_scope") is scope
