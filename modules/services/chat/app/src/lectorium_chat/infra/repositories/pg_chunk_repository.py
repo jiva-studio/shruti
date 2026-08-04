@@ -234,10 +234,12 @@ class PgChunkRepository:
         return [r["lang"] for r in rows if r["lang"]]
 
     async def unattributed_owned_count(self, user_id: str) -> int:
-        """How many of this user's own tracks have no resolved speaker.
+        """How many of this user's own tracks say nothing about who is speaking.
 
-        Only useful to say out loud: those recordings fall out of every
-        lecturer-filtered answer, and the person cannot see why unless told.
+        A recording whose speaker the CATALOG does not know is still selectable by
+        the name the ingest heard, so it does not count here — only one with
+        neither. Those fall out of every lecturer-filtered answer, and the person
+        cannot see why unless told.
         """
         if not user_id:
             return 0
@@ -246,7 +248,8 @@ class PgChunkRepository:
                 row = await conn.fetchrow(
                     """
                     SELECT count(*) AS n FROM chunk_meta
-                     WHERE owner_id = $1 AND author_id IS NULL
+                     WHERE owner_id = $1
+                       AND author_id IS NULL AND author_raw IS NULL
                     """,
                     user_id,
                 )
