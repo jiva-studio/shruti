@@ -133,6 +133,12 @@ class _FakeLLM:
     def __init__(self) -> None:
         self.calls: list[str] = []
         self.situations: list[str] = []
+        # (run_name, user prompt) per call, so a test can assert WHAT a hop was
+        # told — the lead-in's honesty about a dropped filter lives there.
+        self.prompts: list[tuple[str, str]] = []
+
+    def prompt_for(self, run_name: str) -> str:
+        return next((p for r, p in self.prompts if r == run_name), "")
 
     async def structured_output(self, messages, schema, *, run_name=None, model=None, callbacks=None):
         # Only the localized clarify/empty reply (LocalizedReply — line+chips)
@@ -140,6 +146,7 @@ class _FakeLLM:
         # text now (see `text_completion`).
         self.calls.append(run_name or "")
         situation = messages[-1]["content"]
+        self.prompts.append((run_name or "", situation))
         self.situations.append(situation)
         # A deterministic stand-in: a marker line + one chip, so tests can
         # assert the localized path ran and a chip was emitted, without
@@ -148,6 +155,7 @@ class _FakeLLM:
 
     async def text_completion(self, messages, *, model=None, run_name=None):
         self.calls.append(run_name or "")
+        self.prompts.append((run_name or "", messages[-1]["content"]))
         return f"prose[{run_name}]"
 
 
@@ -532,3 +540,157 @@ async def test_author_strong_match_proceeds_to_search(_events) -> None:
     )
     actions = [e for e in _events if e["type"] == "action"]
     assert [a for a in actions if a["data"]["kind"] == "card"]  # cards emitted
+
+
+# ── a named chapter must constrain the search, not just the header ─────────
+#
+# Production, 31.07: «Какие здесь есть лекции по БГ 10» → lectures on chapter 9
+# under «Вот лекции по Бхагавад-гите 10:». The user noticed («Ты мне раньше дал
+# 9 главу вместо 12») and re-asking returned the same wrong track. The header was
+# written from the query while the tracks came from an unconstrained ANN search.
+
+
+class _RefCatalog(_Catalog):
+    """Catalog whose `filter_track_ids` actually honours the reference.
+
+    Chapter matching here is a deliberate one-liner of its own — NOT production's
+    `_ref_filter` — so a test cannot pass by mirroring the code it checks. The
+    real predicate has its own tests over a real SQLite catalog in
+    `tests/infra/test_catalog_ref_filter.py`.
+    """
+
+    def __init__(self, *, chapters: dict[str, int], **kw) -> None:
+        super().__init__(**kw)
+        self._chapters = chapters
+
+    async def filter_track_ids(self, **kwargs):
+        self.filter_kwargs = kwargs
+        ref_from = kwargs.get("ref_from")
+        if ref_from is None:
+            return self._eligible
+        return [tid for tid, ch in self._chapters.items() if ch == ref_from]
+
+
+class _EligibleAwareChunkRepo:
+    """Returns only chunks whose track survived the catalog filter — the step
+    that was missing end to end."""
+
+    def __init__(self, chunks: list[ScoredChunk]) -> None:
+        self._chunks = chunks
+        self.eligible_seen: list[Any] = []
+
+    async def search_by_embedding(self, embedding, *, eligible_track_ids, lang, top_k):
+        self.eligible_seen.append(eligible_track_ids)
+        if eligible_track_ids is None:
+            return list(self._chunks)
+        allowed = set(eligible_track_ids)
+        return [c for c in self._chunks if c.chunk.track_id in allowed]
+
+
+def _ref_ctx(chunks, *, chapters, titles, llm=None):
+    cat = _RefCatalog(
+        chapters=chapters, titles=titles,
+        descriptions={t: "d" for t in titles},
+        sources={"source_BG": "БГ"},
+    )
+    return _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_EligibleAwareChunkRepo(chunks),
+        catalog_repo=cat,
+        llm=llm or _FakeLLM(),
+    ), cat
+
+
+async def test_a_named_chapter_keeps_other_chapters_out(_events) -> None:
+    # The chapter-9 lecture is what production actually served for this ask.
+    chunks = [_sc("bg_9_11", 70000, 0.9, "q9"), _sc("bg_10_1", 70000, 0.8, "q10")]
+    ctx, _cat = _ref_ctx(
+        chunks,
+        chapters={"bg_9_11": 9, "bg_10_1": 10},
+        titles={"bg_9_11": "БГ 9.11", "bg_10_1": "БГ 10.1"},
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "Какие здесь есть лекции по БГ 10",
+         "extracted_args": {"source_id": "BG", "tokens": "10"}},
+        _Runtime(ctx),
+    )
+    text = "".join(
+        e["data"].get("text", "") for e in _events if e.get("type") == "delta"
+    )
+    assert "[card:bg_10_1]" in text
+    assert "[card:bg_9_11]" not in text
+
+
+async def test_the_chapter_reaches_the_catalog_filter(_events) -> None:
+    chunks = [_sc("bg_10_1", 70000, 0.9, "q")]
+    ctx, cat = _ref_ctx(
+        chunks, chapters={"bg_10_1": 10}, titles={"bg_10_1": "БГ 10.1"},
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции по БГ 10",
+         "extracted_args": {"source_id": "BG", "tokens": "10"}},
+        _Runtime(ctx),
+    )
+    assert cat.filter_kwargs.get("ref_from") == 10
+    assert cat.filter_kwargs.get("ref_to") == 10
+    assert cat.filter_kwargs.get("ref_prefix") is None  # bare chapter
+
+
+async def test_a_verse_address_narrows_to_its_chapter_and_verse(_events) -> None:
+    chunks = [_sc("bg_2_13", 70000, 0.9, "q")]
+    ctx, cat = _ref_ctx(
+        chunks, chapters={"bg_2_13": 13}, titles={"bg_2_13": "БГ 2.13"},
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции по БГ 2.13",
+         "extracted_args": {"source_id": "BG", "tokens": "2.13"}},
+        _Runtime(ctx),
+    )
+    assert cat.filter_kwargs.get("ref_prefix") == "2"
+    assert cat.filter_kwargs.get("ref_from") == 13
+
+
+async def test_a_chapter_without_a_book_is_not_a_reference_filter(_events) -> None:
+    # A bare "10" doesn't say which book, so it must not silently filter.
+    chunks = [_sc("t1", 70000, 0.9, "q")]
+    ctx, cat = _ref_ctx(chunks, chapters={"t1": 10}, titles={"t1": "Лекция"})
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции по 10 главе", "extracted_args": {"tokens": "10"}},
+        _Runtime(ctx),
+    )
+    assert cat.filter_kwargs.get("ref_from") is None
+
+
+async def test_a_lead_in_may_not_claim_a_chapter_that_was_dropped(_events) -> None:
+    # Nothing on chapter 12, so the ladder relaxes to the book. The lectures are
+    # still shown — but the line is forbidden to present them as chapter 12.
+    chunks = [_sc("bg_9_11", 70000, 0.9, "q")]
+    llm = _FakeLLM()
+    ctx, _cat = _ref_ctx(
+        chunks, chapters={"bg_9_11": 9}, titles={"bg_9_11": "БГ 9.11"}, llm=llm,
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "Лекции по БГ глава 12",
+         "extracted_args": {"source_id": "BG", "tokens": "12"}},
+        _Runtime(ctx),
+    )
+    intro = llm.prompt_for("find_tracks_intro")
+    assert "reference" in intro                       # which filter was dropped
+    assert "БГ 12" in intro                           # the human address
+    assert "are NOT on" in intro                      # and the explicit ban
+
+
+async def test_a_matched_chapter_leaves_the_lead_in_alone(_events) -> None:
+    chunks = [_sc("bg_10_1", 70000, 0.9, "q")]
+    llm = _FakeLLM()
+    ctx, _cat = _ref_ctx(
+        chunks, chapters={"bg_10_1": 10}, titles={"bg_10_1": "БГ 10.1"}, llm=llm,
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции по БГ 10",
+         "extracted_args": {"source_id": "BG", "tokens": "10"}},
+        _Runtime(ctx),
+    )
+    intro = llm.prompt_for("find_tracks_intro")
+    assert "are NOT on" not in intro
+    assert "Relaxed filters: none" in intro

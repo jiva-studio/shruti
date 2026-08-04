@@ -24,6 +24,7 @@ import asyncio
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
+from lectorium_chat.agent.graph.nodes._lang_name import resolve_lang_name
 from lectorium_chat.agent.graph.nodes._worker_common import (
     flush_card_payloads,
     translate_commentaries,
@@ -114,17 +115,8 @@ async def synthesis_planner_node(
     # code ("sr-Latn") in the `Language:` directive makes the LLM drift to
     # Russian — the synthesizer already fixes this exact drift; the planner
     # writers stream their prose (the intro) to the client WITHOUT a
-    # synthesizer re-pass, so the fix must be applied here too. Sourced from
-    # the catalog `languages` table (auto-extends; no hardcode). Never fails
-    # the turn — falls back to the bare code on any error / missing repo.
-    lang_name: str | None = None
-    if ctx.catalog_repo is not None:
-        try:
-            lang_name = await ctx.catalog_repo.language_name(
-                state.get("lang") or "ru"
-            )
-        except Exception:  # noqa: BLE001 — language hint must never fail the turn
-            lang_name = None
+    # synthesizer re-pass, so the fix must be applied here too.
+    lang_name = await resolve_lang_name(ctx, state.get("lang") or "ru")
 
     # Curator memory note(s) for this turn (set by research_worker). They are
     # AUTHORITATIVE framing — the planner anchors the outline's structure to

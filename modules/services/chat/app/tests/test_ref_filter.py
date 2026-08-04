@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from lectorium_chat.infra.repositories._ref_filter import (
+from lectorium_chat.domain.scripture_ref import (
     matches_ref as _matches_ref,
     parse_tokens as _parse_tokens,
 )

@@ -38,6 +38,7 @@ import type {
   ChatFocusPayload,
   ChatMessageError,
   ChatOutlinePayload,
+  ChatAttributes,
   ChatVerseBody,
   MediaPayload,
 } from "../chatMessage.js"
@@ -72,6 +73,7 @@ export interface ParsedMeta {
   readonly aliases: Record<string, ChatAliasEntry> | undefined
   readonly focus: ChatFocusPayload | undefined
   readonly feedback: ChatFeedbackState | undefined
+  readonly attributes: ChatAttributes | undefined
 }
 
 export const EMPTY_META: ParsedMeta = Object.freeze({
@@ -88,6 +90,7 @@ export const EMPTY_META: ParsedMeta = Object.freeze({
   aliases: undefined,
   focus: undefined,
   feedback: undefined,
+  attributes: undefined,
 })
 
 export function parseMeta(raw: unknown): ParsedMeta {
@@ -123,7 +126,27 @@ export function parseMeta(raw: unknown): ParsedMeta {
     aliases: extractAliases(data.aliases),
     focus: extractFocus(data.focus),
     feedback: extractFeedback(data.feedback),
+    attributes: extractAttributes(data.attributes),
   }
+}
+
+function extractAttributes(raw: unknown): ChatAttributes | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const out: Record<string, { value: string; label: string; explicit: boolean }> = {}
+  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== "object" || Array.isArray(v)) continue
+    const o = v as Record<string, unknown>
+    // The server only sends an attribute it actually settled, so an empty
+    // value is a corrupt row. Unknown KEYS are kept: this build does not need
+    // to understand an attribute to carry it forward.
+    if (typeof o.value !== "string" || o.value === "") continue
+    out[key] = {
+      value: o.value,
+      label: typeof o.label === "string" ? o.label : "",
+      explicit: o.explicit === true,
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 function extractFeedback(raw: unknown): ChatFeedbackState | undefined {
@@ -233,6 +256,7 @@ export function wrapMeta(payload: {
   aliases?: Record<string, ChatAliasEntry>
   focus?: ChatFocusPayload
   feedback?: ChatFeedbackState
+  attributes?: ChatAttributes
 }): string {
   const data: Record<string, unknown> = {}
   if (payload.actions && Object.keys(payload.actions).length > 0) data.actions = payload.actions
@@ -250,5 +274,7 @@ export function wrapMeta(payload: {
   if (payload.aliases && Object.keys(payload.aliases).length > 0) data.aliases = payload.aliases
   if (payload.focus) data.focus = payload.focus
   if (payload.feedback) data.feedback = payload.feedback
+  if (payload.attributes && Object.keys(payload.attributes).length > 0)
+    data.attributes = payload.attributes
   return JSON.stringify({ _v: CURRENT_META_V, data })
 }

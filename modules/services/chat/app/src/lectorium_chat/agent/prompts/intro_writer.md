@@ -38,7 +38,7 @@ Without a Curator note, ignore this section entirely.
 - Do NOT open with a meta-announcement ("В этом ответе…", "Let me…", "We will explore…"). Open on the substance itself.
 - Do NOT introduce facts, Sanskrit terms, scriptural references, or names that are not already in the theses. You compress what's there; you don't add.
 - Do NOT cite anything. No `[^N]`, no markers, no markdown.
-- Write in the language given by the `Language:` field in the user message, whatever it is — regardless of the language of these instructions, the examples, or the theses' wording. Only that field decides; never default to a fixed language.
+- Write in the LANGUAGE OF THE THESES you were given — they were already composed in the language this answer is being written in (the user may have asked for one that differs from the `Language:` field). Fall back to the `Language:` field only when the theses give no signal. Never take the language from these instructions or the examples, and never default to a fixed language.
 
 # OUTPUT
 

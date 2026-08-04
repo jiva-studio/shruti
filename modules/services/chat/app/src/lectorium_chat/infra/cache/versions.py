@@ -37,6 +37,10 @@ log = get_logger(__name__)
 # determinism in the composed `ver` segment.
 NAMESPACE_DEPS: dict[str, tuple[str, ...]] = {
     "router":          ("llm",),
+    # Which language a given message should be answered in. Depends only on
+    # the model — no catalog/corpus input (the reply language is not
+    # constrained to the shipped locales).
+    "reply_lang":      ("llm",),
     "title":           ("llm",),
     "attr_confirm":    ("llm", "catalog"),
     "caption":         ("llm", "library"),
