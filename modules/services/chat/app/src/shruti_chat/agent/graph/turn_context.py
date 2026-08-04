@@ -63,12 +63,14 @@ class TurnContext:
 
     # ── Identity / correlation ─────────────────────────────────────────
     request_id: str = ""
-    # Turn locale ("ru" / "en"), passed straight from the request. Used
-    # to localise the verse-payload `transliteration` (en = clean Latin
-    # IAST, ru = derived Cyrillic) when flushing verse cards.
-    lang: str = "ru"
-    # Native name of `lang` ("Русский", "Italiano"), set by `router_node` when
-    # it settles the reply language. Only a FALLBACK for the `{{LANG_NAME}}`
+    # Locale the answer is written in ("ru" / "sr-Latn"), from the request and
+    # then from whatever the reply-language attribute settled on. Also localises
+    # the verse-payload `transliteration` (en = clean Latin IAST, ru = derived
+    # Cyrillic) when flushing verse cards. Named `_code` because it travels with
+    # `lang_name` below and the prompt directive needs BOTH halves.
+    lang_code: str = "ru"
+    # Native name of `lang_code` ("Русский", "Italiano"), set by `router_node`
+    # when it settles the reply language. Only a FALLBACK for the `{{LANG_NAME}}`
     # directive: for a locale the catalog knows, the catalog's own name wins.
     # It exists for the languages the catalog doesn't ship — a person writing
     # in Italian gets an Italian answer, and a bare "it" in the directive is
@@ -91,9 +93,9 @@ class TurnContext:
     # citations were fetched in — answer lang if the corpus has it, else
     # English). Set by research_worker / synthesis_planner. Used as the
     # `src_lang` for the lazy commentary-card translation in
-    # `synthesizer.py`: a card is translated only when `retrieval_lang !=
+    # `synthesizer.py`: a card is translated only when `retrieval_lang_code !=
     # lang` (a non-corpus answer), so native ru/en answers cost no calls.
-    retrieval_lang: str = ""
+    retrieval_lang_code: str = ""
     # Region of the originating request, derived from the trusted
     # `X-Shruti-Region` header injected by the RU reverse proxy. None
     # means the request came directly from the global origin. Gated PII

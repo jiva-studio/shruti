@@ -373,7 +373,7 @@ async def _resolve_memory(
     user_q_embedding: list[float],
     sub_query_texts: list[str],
     embedder: Any,
-    retrieval_lang: str,
+    retrieval_lang_code: str,
     answer_lang: str,
     embed_model: str | None,
     embed_dim: int,
@@ -416,7 +416,7 @@ async def _resolve_memory(
     top: AttributionMatch | None = None
     for emb in embeddings:
         matches = await find_attributions(
-            kind="memory", user_q_embedding=emb, lang=retrieval_lang,
+            kind="memory", user_q_embedding=emb, lang=retrieval_lang_code,
             embed_model=embed_model, embed_dim=embed_dim, pool=pool,
             reranker=reranker, user_query=user_query,
             llm=llm, confirm_model=confirm_model,
@@ -425,7 +425,7 @@ async def _resolve_memory(
             top = matches[0]
     if top is None:
         return MemoryResolution()
-    note = await _fetch_memory_note(pool, top.attribution_id, retrieval_lang)
+    note = await _fetch_memory_note(pool, top.attribution_id, retrieval_lang_code)
     # Keep refs that are language-agnostic OR scoped to this answer language
     # (e.g. drop the EN lecture ref when answering in RU).
     scoped_refs = [r for r in top.refs if not r.language or r.language == answer_lang]
@@ -433,7 +433,7 @@ async def _resolve_memory(
     if scoped_refs:
         envelopes = await _fetch_refs(
             scoped_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-            lang=retrieval_lang, canonical_score=MEMORY_REF_SCORE, on_event=on_event,
+            lang=retrieval_lang_code, canonical_score=MEMORY_REF_SCORE, on_event=on_event,
             library_db=library_db, catalog_repo=catalog_repo,
             author_scope=author_scope,
         )
@@ -679,7 +679,7 @@ async def run_research(
     lang: str,
     router_args: dict[str, Any],
     *,
-    retrieval_lang: str | None = None,   # corpus-constrained retrieval lang
+    retrieval_lang_code: str | None = None,   # corpus-constrained retrieval lang
     chunk_repo: Any,                     # ChunkRepository
     catalog_repo: Any,                   # CatalogRepository
     embedder: Any,                       # EmbedderPort
@@ -720,15 +720,15 @@ async def run_research(
     LangGraph's stream writer. Pure observability — never blocks or
     raises into the research loop.
 
-    `retrieval_lang` is the corpus-constrained language EVERY retrieval lane
+    `retrieval_lang_code` is the corpus-constrained language EVERY retrieval lane
     (fanout, ref-fetch, attribution lookup, address fast-path) runs in. It
     is always a real corpus language (the worker derives it via
     `clamp_retrieval_lang`); `lang` (the answer language) drives the planner
     / topic-extraction / caption prose only. Defaulting to `lang` keeps
     legacy callers (tests) on the old single-lang behaviour."""
 
-    if retrieval_lang is None:
-        retrieval_lang = lang
+    if retrieval_lang_code is None:
+        retrieval_lang_code = lang
 
     # 0. Embed user question once — reused for question-attribution lookup
     # and (implicitly via topic_embeddings) for the topic stage.
@@ -760,7 +760,7 @@ async def run_research(
         # plain fanout with the raw question.
         log.warning("pipeline_embed_failed_fanout_only", request_id=request_id)
         return await _research_path(
-            question=question, lang=lang, retrieval_lang=retrieval_lang,
+            question=question, lang=lang, retrieval_lang_code=retrieval_lang_code,
             plan=QueryPlan(sub_queries=[
                 SubQuery(id=0, type="general", text=question, alt_phrasings=[]),
             ]),
@@ -795,7 +795,7 @@ async def run_research(
     ))
     q_lookup_task = asyncio.create_task(_safe(
         lambda: find_attributions(
-            kind="pinned", user_q_embedding=user_q_embedding, lang=retrieval_lang,
+            kind="pinned", user_q_embedding=user_q_embedding, lang=retrieval_lang_code,
             embed_model=embed_model, embed_dim=embed_dim,
             pool=pool, reranker=reranker, user_query=question,
             llm=llm, confirm_model=confirm_model,
@@ -840,7 +840,7 @@ async def run_research(
     memory_task = asyncio.create_task(_safe(
         lambda: _resolve_memory(
             user_q_embedding=user_q_embedding, sub_query_texts=sub_query_texts,
-            embedder=embedder, retrieval_lang=retrieval_lang,
+            embedder=embedder, retrieval_lang_code=retrieval_lang_code,
             answer_lang=lang, embed_model=embed_model, embed_dim=embed_dim,
             pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
             library_db=library_db, catalog_repo=catalog_repo, on_event=on_event,
@@ -880,7 +880,7 @@ async def run_research(
             policy=policy,
             question_matches=question_matches,
             memory_envelopes=memory_result.envelopes,
-            plan=plan, question=question, lang=lang, retrieval_lang=retrieval_lang,
+            plan=plan, question=question, lang=lang, retrieval_lang_code=retrieval_lang_code,
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
             expand_model=expand_model, library_db=library_db,
@@ -907,7 +907,7 @@ async def run_research(
             speculative_topics = []
     long_result = await _research_path(
         policy=policy,
-        question=question, lang=lang, retrieval_lang=retrieval_lang, plan=plan,
+        question=question, lang=lang, retrieval_lang_code=retrieval_lang_code, plan=plan,
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
         expand_model=expand_model,
@@ -939,7 +939,7 @@ async def _lean_path(
     plan: QueryPlan,
     question: str,
     lang: str,
-    retrieval_lang: str,
+    retrieval_lang_code: str,
     chunk_repo: Any,
     catalog_repo: Any,
     embedder: Any,
@@ -994,7 +994,7 @@ async def _lean_path(
         _safe(
             lambda: _fetch_refs(
                 all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-                lang=retrieval_lang, canonical_score=top_score, on_event=on_event,
+                lang=retrieval_lang_code, canonical_score=top_score, on_event=on_event,
                 library_db=library_db, catalog_repo=catalog_repo,
                 author_scope=author_scope,
             ),
@@ -1005,7 +1005,7 @@ async def _lean_path(
             lambda: fanout_search_with_boost(
                 queries=supplementary_queries,
                 embedder=embedder, chunk_repo=chunk_repo,
-                catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang,
+                catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang_code,
                 author_id=router_args.get("author_id"),
                 location_id=router_args.get("location_id"),
                 tag_ids=router_args.get("tag_ids"),
@@ -1177,7 +1177,7 @@ async def _research_path(
     policy: RetrievalPolicy = WIDE_POLICY,
     question: str,
     lang: str,
-    retrieval_lang: str | None = None,
+    retrieval_lang_code: str | None = None,
     plan: QueryPlan,
     chunk_repo: Any,
     catalog_repo: Any,
@@ -1204,11 +1204,11 @@ async def _research_path(
     """WIDE path: topic-extract → topic-lookup → fanout with coverage gate
     and up to `policy.max_fanout_rounds` rounds (default WIDE_POLICY).
 
-    `retrieval_lang` (corpus-constrained) drives every retrieval call;
+    `retrieval_lang_code` (corpus-constrained) drives every retrieval call;
     `lang` (answer language) drives the topic-extraction prose only.
     Defaults to `lang` for legacy callers."""
-    if retrieval_lang is None:
-        retrieval_lang = lang
+    if retrieval_lang_code is None:
+        retrieval_lang_code = lang
     # Topic-attribution refs (extract → embed → lookup → fetch → gate) are
     # INDEPENDENT of the fanout: the fanout's only inputs are the plan queries +
     # boost_kinds(question, router_args) — never topic_matches — and the two
@@ -1256,7 +1256,7 @@ async def _research_path(
                     lookup_tasks = [
                         _safe(
                             lambda emb=emb: find_attributions(
-                                kind="boost", user_q_embedding=emb, lang=retrieval_lang,
+                                kind="boost", user_q_embedding=emb, lang=retrieval_lang_code,
                                 embed_model=embed_model_for_lookup,
                                 embed_dim=embed_dim_for_lookup,
                                 pool=pool,
@@ -1289,7 +1289,7 @@ async def _research_path(
         topic_refs_fetched = await _safe(
             lambda: _fetch_refs(
                 topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-                lang=retrieval_lang, canonical_score=0.75, on_event=on_event,
+                lang=retrieval_lang_code, canonical_score=0.75, on_event=on_event,
                 library_db=library_db, catalog_repo=catalog_repo,
                 author_scope=author_scope,
             ),
@@ -1330,7 +1330,7 @@ async def _research_path(
             lambda queries=queries: fanout_search_with_boost(
                 queries=queries,
                 embedder=embedder, chunk_repo=chunk_repo,
-                catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang,
+                catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang_code,
                 author_id=router_args.get("author_id"),
                 location_id=router_args.get("location_id"),
                 tag_ids=router_args.get("tag_ids"),

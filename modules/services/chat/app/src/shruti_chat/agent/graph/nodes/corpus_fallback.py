@@ -220,10 +220,10 @@ async def corpus_fallback_node(
     queries = queries[:_MAX_SUBQUERIES]
     if queries and ctx.chunk_repo and ctx.embedder and ctx.catalog_repo:
         try:
-            retrieval_lang = await resolve_retrieval_lang(
+            retrieval_lang_code = await resolve_retrieval_lang(
                 ctx.chunk_repo, lang, request_id=ctx.request_id
             )
-            ctx.retrieval_lang = retrieval_lang
+            ctx.retrieval_lang_code = retrieval_lang_code
             enable_reranker = state.get("config", {}).get("enable_reranker", True)
             reranker = ctx.reranker if enable_reranker else None
             result = await fanout_search_with_boost(
@@ -232,7 +232,7 @@ async def corpus_fallback_node(
                 chunk_repo=ctx.chunk_repo,
                 catalog_repo=ctx.catalog_repo,
                 alias_map=ctx.aliases,
-                lang=retrieval_lang,
+                lang=retrieval_lang_code,
                 reranker=reranker,
                 rerank_query=user_query,
             )

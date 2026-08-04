@@ -74,7 +74,7 @@ async def recommend_worker_node(
         catalog=ctx.catalog_repo,
         # Single language — recommend lectures the user can actually read in
         # the answer language (an English clip is useless to a Russian user).
-        languages=[ctx.lang],
+        languages=[ctx.lang_code],
     )
 
     # The author selection applies to a recommendation like any other lecture
@@ -97,7 +97,7 @@ async def recommend_worker_node(
 
     # Topic names for the lead-in. Missing names are skipped; if none
     # resolve we still recommend (the synthesizer just won't name topics).
-    names = await ctx.catalog_repo.topic_names(list(rec.hot_topic_ids), lang=ctx.lang)
+    names = await ctx.catalog_repo.topic_names(list(rec.hot_topic_ids), lang=ctx.lang_code)
     topic_list = ", ".join(
         names[tid] for tid in rec.hot_topic_ids if tid in names
     ) or "—"
@@ -105,7 +105,7 @@ async def recommend_worker_node(
     # Titles help the synthesizer write grounded prose; the card itself
     # renders client-side from the alias' track_id, so a missing title is
     # harmless (the [^N] card still appears).
-    titles = await ctx.catalog_repo.get_titles(list(rec.track_ids), lang=ctx.lang)
+    titles = await ctx.catalog_repo.get_titles(list(rec.track_ids), lang=ctx.lang_code)
 
     notes: list[dict] = [{"text": _recommendation_directive(topic_list)}]
     for tid in rec.track_ids:

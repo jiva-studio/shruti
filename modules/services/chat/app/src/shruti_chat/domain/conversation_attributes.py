@@ -24,7 +24,7 @@ Each entry carries:
 The precedence in `merge_attributes` is the same for every key on purpose —
 per-attribute merge rules would be a second thing to reason about for no
 demonstrated need. What each attribute MEANS is decided where it is consumed,
-not here: the language becomes `ctx.lang`, and the next attribute will go
+not here: the language becomes `ctx.lang_code`, and the next attribute will go
 somewhere else entirely.
 """
 

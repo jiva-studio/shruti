@@ -163,7 +163,7 @@ async def action_worker_node(
             # `track_pdf_generate` is the aliased tool — it de-aliases the
             # integer refs back to real catalog track_ids and is already
             # bound with the catalog repo.
-            result = await fn(track_ids=refs, lang=ctx.lang, yield_event=_yield_event)
+            result = await fn(track_ids=refs, lang=ctx.lang_code, yield_event=_yield_event)
 
     if not isinstance(result, dict) or not result.get("action_id"):
         log.info(

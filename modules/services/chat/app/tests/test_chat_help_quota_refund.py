@@ -131,7 +131,9 @@ class _RouterCtx:
     embed_task: Any | None = None
     langfuse_trace_id: str | None = None
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
-    lang: str = "ru"
+    lang_code: str = "ru"
+    lang_name: str = ""
+    author_scope: Any | None = None
 
 
 @dataclass

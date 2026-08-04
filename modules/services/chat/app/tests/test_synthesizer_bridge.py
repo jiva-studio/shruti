@@ -54,7 +54,7 @@ def _fake_verse_body(translation: dict[str, str]) -> dict:
 async def test_bridge_translates_and_preserves_order():
     tr = _Tr()
     ctx = TurnContext(
-        lang="sr-Cyrl", retrieval_lang="en", translate_citations=True, translator=tr
+        lang_code="sr-Cyrl", retrieval_lang_code="en", translate_citations=True, translator=tr
     )
     out: list[dict] = []
     events = _events(
@@ -78,7 +78,7 @@ async def test_bridge_translates_and_preserves_order():
 async def test_bridge_builds_verse_card(monkeypatch):
     tr = _Tr()
     ctx = TurnContext(
-        lang="sr-Cyrl", retrieval_lang="en", translate_citations=True, translator=tr,
+        lang_code="sr-Cyrl", retrieval_lang_code="en", translate_citations=True, translator=tr,
         library_db_path="/fake/library.db",
     )
     am = TurnAliasMap()
@@ -104,7 +104,7 @@ async def test_bridge_builds_verse_card(monkeypatch):
 
 
 async def test_bridge_dedups_repeated_verse(monkeypatch):
-    ctx = TurnContext(lang="ru", retrieval_lang="ru", translator=_Tr(), library_db_path="/x")
+    ctx = TurnContext(lang_code="ru", retrieval_lang_code="ru", translator=_Tr(), library_db_path="/x")
     am = TurnAliasMap()
     am.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = am.verse_refs()[0]
@@ -125,7 +125,7 @@ async def test_bridge_dedups_repeated_verse(monkeypatch):
 
 async def test_bridge_native_answer_no_translation():
     tr = _Tr()
-    ctx = TurnContext(lang="ru", retrieval_lang="ru", translate_citations=True, translator=tr)
+    ctx = TurnContext(lang_code="ru", retrieval_lang_code="ru", translate_citations=True, translator=tr)
     out: list[dict] = []
     events = _events(_comment_action(3, "русский текст"))
     await _bridge_synth_events(events, ctx, out.append)
@@ -139,7 +139,7 @@ async def test_bridge_builds_cite_card():
     n = am.alias_chunk("track_X", 1000, 2000, lang="en")
     am.chunk_texts[n] = "The soul is eternal."
     _, cref = am.cite_refs()[0]
-    ctx = TurnContext(lang="sr-Cyrl", translate_citations=True, translator=tr, aliases=am)
+    ctx = TurnContext(lang_code="sr-Cyrl", translate_citations=True, translator=tr, aliases=am)
     out: list[dict] = []
     events = _events(
         _card_req("cite", n, cref),
@@ -160,7 +160,7 @@ async def test_bridge_dedups_repeated_cite():
     n = am.alias_chunk("track_X", 1000, 2000, lang="en")
     am.chunk_texts[n] = "verbatim"
     _, cref = am.cite_refs()[0]
-    ctx = TurnContext(lang="en", translate_citations=True, translator=_Tr(), aliases=am)
+    ctx = TurnContext(lang_code="en", translate_citations=True, translator=_Tr(), aliases=am)
     out: list[dict] = []
     events = _events(
         _card_req("cite", n, cref),

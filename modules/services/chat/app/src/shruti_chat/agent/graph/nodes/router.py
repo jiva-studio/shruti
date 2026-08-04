@@ -4,17 +4,17 @@ result into ChatState.
 Thin adapter: 8 lines of real logic. The LLM-prompt and intent classifier
 live in the use-case; this node just bridges state ↔ runtime.context.
 
-It also settles this turn's CONVERSATION ATTRIBUTES — today just the reply
-language. Here, because this is the one node every path passes through before
+It also settles this turn's CONVERSATION ATTRIBUTES — the reply language and the
+lecturers the answer may draw on. Here, because this is the one node every path passes through before
 any prose is composed, and because `ctx` is mutable: writing the resolved locale
-to both `state["lang"]` and `ctx.lang` leaves every downstream hop reading ONE
+to both `state["lang"]` and `ctx.lang_code` leaves every downstream hop reading ONE
 value. That single value is the point — the hops draw the language from
 different places (the synthesizer from `state` plus the history, `localized_reply`
-and the card blurbs from `ctx.lang` in code), so any of them deciding for itself
+and the card blurbs from `ctx.lang_code` in code), so any of them deciding for itself
 means an answer whose body and summary paragraph disagree.
 
 Merging and carrying attributes is generic; APPLYING one is not. The language
-becomes `ctx.lang` here in two explicit lines, and the next attribute will go
+becomes `ctx.lang_code` here in two explicit lines, and the next attribute will go
 somewhere else entirely — a dispatch table over one member would be machinery,
 not clarity.
 """
@@ -99,10 +99,11 @@ async def _settle_attributes(
     task: "asyncio.Task[dict[str, Attribute]] | None",
 ) -> dict[str, Attribute]:
     """Fold this message's readings into what the dialogue already knew, then
-    apply the ones this turn acts on.
+    apply the ones this turn acts on: the reply language and the lecturers the
+    answer may be built from.
 
     The reply language is published to BOTH places the downstream hops read:
-    `ctx.lang` (code-composed prose — `localized_reply`, card blurbs) and
+    `ctx.lang_code` (code-composed prose — `localized_reply`, card blurbs) and
     `state["lang"]` (the prompt directive) via the caller's state update. An
     empty result means nothing was ever derived — the client's locale stays in
     force and nothing is stored, so changing the app's language later still
@@ -117,8 +118,14 @@ async def _settle_attributes(
     )
     language = settled.get(REPLY_LANGUAGE)
     if language is not None:
-        ctx.lang = language.single()
+        ctx.lang_code = language.single()
         ctx.lang_name = language.label
+    # The chosen lecturers reach retrieval the same way: through the scope every
+    # lane holds by reference. Unconditional, because "nobody was chosen" is a
+    # value too — it is how a filter gets LIFTED, and skipping the call would
+    # leave the previous turn's narrowing in force.
+    if ctx.author_scope is not None:
+        ctx.author_scope.apply(AuthorSelection.from_attributes(settled))
     return settled
 
 
