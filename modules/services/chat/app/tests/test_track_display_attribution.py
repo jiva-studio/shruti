@@ -86,7 +86,7 @@ def test_format_reference_label_falls_back_to_source_id() -> None:
 
 async def test_resolve_track_display_full() -> None:
     repo = FakeCatalogRepo(_track())
-    ctx = TurnContext(lang="ru", catalog_repo=repo)
+    ctx = TurnContext(lang_code="ru", catalog_repo=repo)
     out = await resolve_track_display(ctx, "t1")
     assert out["track_title"] == "The Goal of Life"
     assert out["author_name"] == "A. C. Bhaktivedanta Swami"
@@ -101,7 +101,7 @@ async def test_resolve_track_display_collapses_uk_to_ru() -> None:
     # the collapsed content language (uk→ru) — otherwise the join finds no
     # uk rows and the web card renders the raw catalog id ("source_… 2.19").
     repo = FakeCatalogRepo(_track())
-    ctx = TurnContext(lang="uk", catalog_repo=repo)
+    ctx = TurnContext(lang_code="uk", catalog_repo=repo)
     out = await resolve_track_display(ctx, "t1")
     assert out["references"] == [{"source_id": "bg", "tokens": "4.8", "label": "BG 4.8"}]
     assert repo.calls == [("t1", "ru")]  # collapsed, not the raw "uk"
@@ -110,39 +110,39 @@ async def test_resolve_track_display_collapses_uk_to_ru() -> None:
 async def test_resolve_track_display_collapses_sr_to_en() -> None:
     # A non-East-Slavic non-corpus locale reduces to English.
     repo = FakeCatalogRepo(_track())
-    ctx = TurnContext(lang="sr-Cyrl", catalog_repo=repo)
+    ctx = TurnContext(lang_code="sr-Cyrl", catalog_repo=repo)
     await resolve_track_display(ctx, "t1")
     assert repo.calls == [("t1", "en")]
 
 
 async def test_resolve_track_display_caches_per_turn() -> None:
     repo = FakeCatalogRepo(_track())
-    ctx = TurnContext(lang="ru", catalog_repo=repo)
+    ctx = TurnContext(lang_code="ru", catalog_repo=repo)
     await resolve_track_display(ctx, "t1")
     await resolve_track_display(ctx, "t1")
     assert repo.calls == [("t1", "ru")]  # second call served from cache
 
 
 async def test_resolve_track_display_no_repo() -> None:
-    ctx = TurnContext(lang="ru", catalog_repo=None)
+    ctx = TurnContext(lang_code="ru", catalog_repo=None)
     assert await resolve_track_display(ctx, "t1") == {}
 
 
 async def test_resolve_track_display_unknown_track() -> None:
     repo = FakeCatalogRepo(None)
-    ctx = TurnContext(lang="ru", catalog_repo=repo)
+    ctx = TurnContext(lang_code="ru", catalog_repo=repo)
     assert await resolve_track_display(ctx, "t1") == {}
 
 
 async def test_resolve_track_display_swallows_error() -> None:
     repo = FakeCatalogRepo(_track(), boom=True)
-    ctx = TurnContext(lang="ru", catalog_repo=repo)
+    ctx = TurnContext(lang_code="ru", catalog_repo=repo)
     assert await resolve_track_display(ctx, "t1") == {}
 
 
 async def test_resolve_track_display_omits_empty_fields() -> None:
     repo = FakeCatalogRepo(_track(title=None, author_name=None, date=None, references=()))
-    ctx = TurnContext(lang="ru", catalog_repo=repo)
+    ctx = TurnContext(lang_code="ru", catalog_repo=repo)
     assert await resolve_track_display(ctx, "t1") == {}
 
 
@@ -159,7 +159,7 @@ class FakeChunkRepo:
 
 async def test_flush_cite_includes_attribution(capture_writer) -> None:
     ctx = TurnContext(
-        lang="ru",
+        lang_code="ru",
         chunk_repo=FakeChunkRepo("snippet"),
         catalog_repo=FakeCatalogRepo(_track()),
     )

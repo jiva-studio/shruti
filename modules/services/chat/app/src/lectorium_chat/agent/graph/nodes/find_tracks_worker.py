@@ -37,7 +37,6 @@ from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.nodes._author_match import (
     distinctive_tokens,
-    names_match,
 )
 from lectorium_chat.agent.graph.nodes._worker_common import (
     LocalizedReply,
@@ -47,6 +46,7 @@ from lectorium_chat.agent.graph.nodes._worker_common import (
 )
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prompts import standalone_prompt
+from lectorium_chat.application.author_lookup import resolve_author
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.config import get_settings
 from lectorium_chat.domain.entities import Message, ScoredChunk
@@ -78,17 +78,11 @@ def _year_range(year: object) -> tuple[str | None, str | None]:
     return f"{y:04d}-01-01", f"{y:04d}-12-31"
 
 
-# How many author candidates to test for a name match. Top-1 is not enough:
-# the honorific the router keeps ("Srila") can rank a same-honorific stranger
-# above the real author.
-_AUTHOR_CANDIDATES = 5
-
-
 async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
     """Best-effort name → id for an author / location filter. A miss just
     means we don't constrain on it (the semantic search still runs).
 
-    Resolved across ALL locales (`lang=None`), never `ctx.lang`: the router
+    Resolved across ALL locales (`lang=None`), never `ctx.lang_code`: the router
     normalizes what it extracts to English ("Токио" → "Tokyo"), so matching a
     Latin name against the Cyrillic dictionary scores ~0 and silently drops
     the filter — or worse, picks whatever grazed the cutoff.
@@ -103,24 +97,9 @@ async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
 
 
 async def _resolve_author(ctx: TurnContext, name: str):
-    """The corpus author `name` denotes, or None when the corpus lacks them.
-
-    Resolves across ALL locales and decides by distinctive-token containment
-    (see `_author_match`) rather than a score cutoff — the router hands us an
-    English name while the user's dictionary may be Cyrillic, and no single
-    ratio separates "Srila Prabhupada" (ours) from "Bhakti Caitanya Swami"
-    (not ours).
-    """
-    try:
-        hits = await ctx.catalog_repo.resolve(  # type: ignore[arg-type]
-            "author", name, lang=None, limit=_AUTHOR_CANDIDATES,
-        )
-    except Exception:
-        return None
-    for hit in hits:
-        if names_match(name, hit.full_name):
-            return hit
-    return None
+    """The corpus author `name` denotes, shared with the `lecture_authors`
+    attribute so the two cannot disagree about who is in the corpus."""
+    return await resolve_author(ctx.catalog_repo, name)
 
 
 # Name of the ladder rung that carries a scripture reference. The label ends up
@@ -289,10 +268,10 @@ async def _other_language_note(
     are actually in — because "available in another language" leaves the user
     guessing which. Empty when nothing was found outside their language.
     """
-    others = [c for c in dict.fromkeys(found_langs) if c and c != ctx.lang]
+    others = [c for c in dict.fromkeys(found_langs) if c and c != ctx.lang_code]
     if not others:
         return ""
-    requested = await _language_names(ctx, [ctx.lang])
+    requested = await _language_names(ctx, [ctx.lang_code])
     available = await _language_names(ctx, others)
     return (
         f" IMPORTANT: there is NO transcript in the user's own language "
@@ -313,7 +292,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
         f"Lecture title: {title or '—'}\n"
         f"Lecture description: {description or '—'}\n"
         f"Relevant excerpt: {excerpt[:300]}\n\n"
-        f"Write the description in language code '{ctx.lang}'."
+        f"Write the description in language code '{ctx.lang_code}'."
     )
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     try:
@@ -352,7 +331,7 @@ async def _intro(
             f"nothing on {ref} and that these are other lectures on the same "
             f"book. Do NOT write {ref} as if the list matched it."
         )
-    usr = "\n".join(facts) + f"\n\nWrite the line in language code '{ctx.lang}'."
+    usr = "\n".join(facts) + f"\n\nWrite the line in language code '{ctx.lang_code}'."
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     try:
         out = await ctx.llm.text_completion(
@@ -413,7 +392,7 @@ async def find_tracks_worker_node(
     # the any-language pass below is allowed to drop the author. A query with no
     # author has no such rung and walks the whole ladder either way.
     keeps_author = [rung for rung in ladder if "author" not in rung[0].split(",")]
-    lectures, relaxed = await _run_ladder(ctx, embedding, keeps_author, lang=ctx.lang)
+    lectures, relaxed = await _run_ladder(ctx, embedding, keeps_author, lang=ctx.lang_code)
     lang_note = ""
     if not lectures:
         # Nothing with a transcript in the user's language — but the lecture may
@@ -429,7 +408,7 @@ async def find_tracks_worker_node(
             log.info(
                 "find_tracks_other_language",
                 request_id=ctx.request_id,
-                requested_lang=ctx.lang,
+                requested_lang=ctx.lang_code,
                 found_langs=sorted({sc.chunk.lang for sc in lectures}),
             )
 
@@ -469,7 +448,7 @@ async def find_tracks_worker_node(
     # doesn't carry has no display title → drop it (client can't render it).
     displays, outlines = await asyncio.gather(
         asyncio.gather(*(resolve_track_display(ctx, tid) for tid in track_ids)),
-        asyncio.gather(*(ctx.catalog_repo.get_outline(tid, ctx.lang) for tid in track_ids)),
+        asyncio.gather(*(ctx.catalog_repo.get_outline(tid, ctx.lang_code) for tid in track_ids)),
     )
     kept = [
         (sc, disp, (outline[1] or ""))
@@ -563,12 +542,12 @@ async def _resolve_source(ctx: TurnContext, source_id: str) -> tuple[str, str | 
     """Resolve a source arg to `(opaque_id, short_label)`. `source_id` may be an
     opaque catalog id (deterministic path) OR an abbreviation like "SB" (the LLM
     router emits the abbrev). Returns the opaque id needed for the ref lookup and
-    the label localized to `ctx.lang` ("ШБ" for ru). Falls back to the input id
+    the label localized to `ctx.lang_code` ("ШБ" for ru). Falls back to the input id
     and a None label when the repo can't resolve it."""
     if ctx.catalog_repo is None:
         return source_id, None
     try:
-        short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang)
+        short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang_code)
     except Exception:  # noqa: BLE001 — a label miss must never fail the turn
         short = None
     if short:  # source_id was already the opaque id
@@ -586,7 +565,7 @@ async def _resolve_source(ctx: TurnContext, source_id: str) -> tuple[str, str | 
         return source_id, None
     opaque = hits[0].id
     try:
-        short = await ctx.catalog_repo.source_short_label(opaque, lang=ctx.lang)
+        short = await ctx.catalog_repo.source_short_label(opaque, lang=ctx.lang_code)
     except Exception:  # noqa: BLE001
         short = None
     return opaque, (short or hits[0].extra.get("short_name") or None)
@@ -618,7 +597,7 @@ async def _probe_and_answer_ref(
             )
 
         try:
-            tracks = await _probe(ctx.lang)
+            tracks = await _probe(ctx.lang_code)
             if not tracks:
                 # This ref has no lecture transcribed in the user's language.
                 # It may well exist in another — the prod case was a ru user
@@ -693,7 +672,7 @@ async def _probe_and_answer_date(
             )
 
         try:
-            tracks = await _probe(ctx.lang)
+            tracks = await _probe(ctx.lang_code)
             if not tracks:
                 # Nothing transcribed in the user's language for this date —
                 # show what exists in another rather than claiming the date is

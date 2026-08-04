@@ -45,7 +45,7 @@ class _Ctx:
     llm: Any | None = None
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
     track_display_cache: dict = field(default_factory=dict)
-    lang: str = "ru"
+    lang_code: str = "ru"
     translate_citations: bool = False
     translator: Any | None = None
     request_id: str = "req-test"
@@ -370,7 +370,7 @@ async def test_bare_ref_probe_serves_lectures_the_embedding_missed(_events) -> N
         chunk_repo=_ChunkRepo([[]]),  # semantic: zero
         catalog_repo=_Catalog(ref_tracks=refs),  # ref-index: two lectures
         llm=llm,
-        lang="ru",
+        lang_code="ru",
     )
     out = await ftw.find_tracks_worker_node(
         {
@@ -404,7 +404,7 @@ async def test_bare_ref_with_no_lectures_asks_to_show_verses(_events) -> None:
         chunk_repo=_ChunkRepo([[]]),
         catalog_repo=_Catalog(ref_tracks=[]),  # semantic AND ref-index empty
         llm=llm,
-        lang="ru",
+        lang_code="ru",
     )
     await ftw.find_tracks_worker_node(
         {
@@ -456,7 +456,7 @@ async def test_date_only_query_probes_and_serves(_events) -> None:
         chunk_repo=_ChunkRepo([[]]),
         catalog_repo=_Catalog(ref_tracks=refs),  # list_tracks returns these
         llm=_FakeLLM(),
-        lang="ru",
+        lang_code="ru",
     )
     await ftw.find_tracks_worker_node(
         {"user_query": "лекции 9 июля", "extracted_args": {"anniversary_md": "07-09"}},
@@ -477,7 +477,7 @@ async def test_date_query_with_no_lectures_says_so(_events) -> None:
         chunk_repo=_ChunkRepo([[]]),
         catalog_repo=_Catalog(ref_tracks=[]),
         llm=_FakeLLM(),
-        lang="ru",
+        lang_code="ru",
     )
     await ftw.find_tracks_worker_node(
         {"user_query": "лекции 30 февраля", "extracted_args": {"anniversary_md": "02-30"}},
@@ -570,7 +570,7 @@ async def test_ref_probe_serves_lectures_that_exist_only_in_another_language(
         chunk_repo=_ChunkRepo([[]]),  # semantic: zero
         catalog_repo=catalog,
         llm=llm,
-        lang="ru",
+        lang_code="ru",
     )
     out = await ftw.find_tracks_worker_node(
         {
@@ -604,7 +604,7 @@ async def test_semantic_search_falls_back_across_languages(_events) -> None:
         chunk_repo=_ChunkRepo([chunks], transcript_langs={"en"}),
         catalog_repo=_Catalog(titles={"t1": "A lecture"}, descriptions={"t1": "d"}),
         llm=llm,
-        lang="ru",
+        lang_code="ru",
     )
     out = await ftw.find_tracks_worker_node(
         {"user_query": "лекции про преданное служение", "extracted_args": {}},
@@ -627,7 +627,7 @@ async def test_same_language_results_carry_no_language_note(_events) -> None:
                               transcript_langs={"ru", "en"}),
         catalog_repo=_Catalog(titles={"t1": "Лекция"}, descriptions={"t1": "d"}),
         llm=llm,
-        lang="ru",
+        lang_code="ru",
     )
     await ftw.find_tracks_worker_node(
         {"user_query": "лекции про преданное служение", "extracted_args": {}},

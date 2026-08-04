@@ -69,7 +69,7 @@ async def _fetch_one(
     """Single (source_id, tokens) → commentary chunks in `lang` ONLY.
 
     No cross-language fallback. Callers pass the corpus-clamped
-    `retrieval_lang` (English for a non-corpus answer). A `lang=None`
+    `retrieval_lang_code` (English for a non-corpus answer). A `lang=None`
     fallback used to fire on a miss and grab the purport in WHATEVER
     language existed — which handed Russian purports to a Serbian / English
     answer. A miss now returns nothing: better no purport than a foreign one.

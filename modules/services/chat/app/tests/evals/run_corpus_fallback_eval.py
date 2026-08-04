@@ -79,7 +79,7 @@ class _Ctx:
     catalog_repo: Any = None
     aliases: Any = field(default_factory=TurnAliasMap)
     reranker: Any = None
-    retrieval_lang: str | None = None
+    retrieval_lang_code: str | None = None
 
 
 @dataclass

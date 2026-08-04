@@ -28,7 +28,7 @@ class _FakeLLM:
 @dataclass
 class _Ctx:
     llm: Any = field(default_factory=_FakeLLM)
-    lang: str = "ru"
+    lang_code: str = "ru"
     request_id: str = "req-test"
     kv_cache: Any | None = None
 
@@ -80,6 +80,6 @@ async def test_language_is_passed_to_localizer(_events) -> None:
     llm = _FakeLLM()
     await cw.clarify_worker_node(
         {"intent": "research", "extracted_args": {"current_ref": True}},
-        _Runtime(_Ctx(llm=llm, lang="hi")),
+        _Runtime(_Ctx(llm=llm, lang_code="hi")),
     )
     assert "hi" in llm.situations[0]  # "Language code: hi" is in the prompt
