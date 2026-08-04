@@ -22,6 +22,7 @@ not clarity.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
@@ -135,7 +136,7 @@ async def _settle_attributes(
 
 
 async def _turn_author(
-    state: ChatState, ctx: TurnContext, settled: dict[str, Attribute],
+    args: dict[str, Any], ctx: TurnContext, settled: dict[str, Attribute],
 ) -> bool:
     """Apply the author this MESSAGE named, when no standing choice overrides it.
 
@@ -161,7 +162,10 @@ async def _turn_author(
     scope = ctx.author_scope
     if scope is None or scope.selection.constrained:
         return False
-    name = ((state.get("extracted_args") or {}).get("author") or "").strip()
+    # From the DECISION, not from state: the router has not written its args yet
+    # when this runs, so `state["extracted_args"]` still holds the previous turn's
+    # — which is how the first version of this silently did nothing.
+    name = ((args or {}).get("author") or "").strip()
     if not name:
         return False
     hit = await resolve_author(ctx.catalog_repo, name)
@@ -301,7 +305,7 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
     # The speaker THIS message named, once the standing choice is known. Before
     # the decision event below, because a rerouted turn must not be reported —
     # to the refund path or to Langfuse — as the intent it no longer has.
-    if await _turn_author(state, ctx, attributes):
+    if await _turn_author(decision.extracted_args, ctx, attributes):
         decision = _reroute_for_private_author(decision)
     get_stream_writer()(
         {"type": "status", "data": {"key": "router_decision", "params": {"intent": decision.intent}}}

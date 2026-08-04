@@ -569,7 +569,7 @@ async def _turn_author_applied(
         request_id = "req"
 
     _Ctx.user_id = user_id
-    await _turn_author({"extracted_args": {"author": asked}}, _Ctx(), {})
+    await _turn_author({"author": asked}, _Ctx(), {})
     return scope
 
 
@@ -672,3 +672,144 @@ async def test_the_reroute_happens_before_the_decision_is_announced() -> None:
     reroute_at = src.index("_reroute_for_private_author")
     emit_at = src.index('"key": "router_decision"')
     assert reroute_at < emit_at, "the decision event must carry the FINAL intent"
+
+
+# ── the whole router node, driven for real ────────────────────────────────
+#
+# Three bugs shipped to production in a row here, and every unit test above
+# passed through all three: the node never called the author step; then it called
+# it with `state["extracted_args"]`, which the router has not written yet; then it
+# left a `find_track` turn pointing at a catalog that cannot hold the answer.
+#
+# This drives `router_node` itself — scripted decision in, state + scope + emitted
+# events out — which is the only level where those three are visible at all.
+
+
+async def test_the_router_turns_a_private_teachers_name_into_a_narrowed_research_turn(
+    monkeypatch,
+) -> None:
+    from lectorium_chat.agent.graph.nodes import router as router_mod
+    from lectorium_chat.domain.routing import RoutingDecision
+
+    emitted: list[dict[str, Any]] = []
+
+    async def _no_classifier(*_a, **_k):
+        return None
+
+    async def _identity_rewrite(_history, query, **_k):
+        return query
+
+    async def _router_turn(*_a, **_k):
+        # What the LLM router really produces for «Что рохини сута прабху
+        # говорил о карме?»: an author NAME and a topic, intent find_track.
+        return RoutingDecision(
+            intent="find_track", confidence=0.95,
+            extracted_args={"author": "Rohini suta Prabhu", "topic": "karma"},
+        )
+
+    monkeypatch.setattr(router_mod, "get_stream_writer", lambda: emitted.append)
+    monkeypatch.setattr(router_mod, "run_classifier_chain", _no_classifier)
+    monkeypatch.setattr(router_mod, "resolve_followup_query", _identity_rewrite)
+    monkeypatch.setattr(router_mod, "run_router_turn", _router_turn)
+
+    scope = AuthorScope(
+        catalog_repo=_Dict(),
+        private_repo=_MyLibrary(["Rohini Suta Prabhu", "H.G. Rohini Suta Prabhu"]),
+        user_id="u-1",
+        request_id="req",
+    )
+
+    class _Ctx:
+        llm = None
+        request_id = "req"
+        kv_cache = None
+        embed_task = None
+        langfuse_trace_id = ""
+        lang_code = "ru"
+        lang_name = ""
+        catalog_repo = _Dict()
+        chunk_repo = _MyLibrary(["Rohini Suta Prabhu", "H.G. Rohini Suta Prabhu"])
+        author_scope = scope
+        user_id = "u-1"
+
+    class _Runtime:
+        context = _Ctx()
+
+    out = await router_mod.router_node(
+        {
+            "user_query": "Что рохини сута прабху говорил о карме?",
+            "lang": "ru",
+            "history": [],
+        },
+        _Runtime(),
+    )
+
+    # 1. The name became a constraint — on HIS stored spellings, not a catalog id.
+    assert scope.selection.constrained
+    assert set(scope.selection.raw_names) == {
+        "Rohini Suta Prabhu", "H.G. Rohini Suta Prabhu",
+    }
+    # 2. The corpus lane is emptied rather than opened (it has no such author).
+    assert await scope.track_ids() == []
+    # 3. The listing turn became research, in the state the workers read...
+    assert out["intent"] == "research"
+    # ...and in the event the refund path and Langfuse read.
+    announced = [
+        (e.get("data") or {}).get("params", {}).get("intent")
+        for e in emitted
+        if (e.get("data") or {}).get("key") == "router_decision"
+    ]
+    assert announced == ["research"], announced
+
+
+async def test_the_router_leaves_a_corpus_author_as_a_listing(monkeypatch) -> None:
+    """The reroute is for the private case only: a catalog author still gets the
+    lecture cards, because the catalog can actually list them."""
+    from lectorium_chat.agent.graph.nodes import router as router_mod
+    from lectorium_chat.domain.routing import RoutingDecision
+
+    emitted: list[dict[str, Any]] = []
+
+    async def _no_classifier(*_a, **_k):
+        return None
+
+    async def _identity_rewrite(_history, query, **_k):
+        return query
+
+    async def _router_turn(*_a, **_k):
+        return RoutingDecision(
+            intent="find_track", confidence=0.95,
+            extracted_args={"author": "Прабхупада"},
+        )
+
+    monkeypatch.setattr(router_mod, "get_stream_writer", lambda: emitted.append)
+    monkeypatch.setattr(router_mod, "run_classifier_chain", _no_classifier)
+    monkeypatch.setattr(router_mod, "resolve_followup_query", _identity_rewrite)
+    monkeypatch.setattr(router_mod, "run_router_turn", _router_turn)
+
+    scope = AuthorScope(
+        catalog_repo=_Dict(), private_repo=_MyLibrary([]), user_id="u-1",
+        request_id="req",
+    )
+
+    class _Ctx:
+        llm = None
+        request_id = "req"
+        kv_cache = None
+        embed_task = None
+        langfuse_trace_id = ""
+        lang_code = "ru"
+        lang_name = ""
+        catalog_repo = _Dict()
+        chunk_repo = _MyLibrary([])
+        author_scope = scope
+        user_id = "u-1"
+
+    class _Runtime:
+        context = _Ctx()
+
+    out = await router_mod.router_node(
+        {"user_query": "лекции Прабхупады", "lang": "ru", "history": []}, _Runtime(),
+    )
+    assert out["intent"] == "find_track"
+    assert scope.selection.ids == (_OURS,)
