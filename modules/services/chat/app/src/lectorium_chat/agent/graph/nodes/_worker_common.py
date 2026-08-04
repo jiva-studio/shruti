@@ -26,7 +26,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
-from lectorium_chat.agent.prompts import build_prompt
+from lectorium_chat.agent.prompts import build_prompt, standalone_prompt
 from lectorium_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
 from lectorium_chat.application.react_loop import (
     DEFAULT_MAX_TURNS,
@@ -55,11 +55,13 @@ class LocalizedReply(BaseModel):
     chips: list[str] = Field(default_factory=list)
 
 
-# Swaps the JSON contract for a plain one on the retry below. Same writing
-# instructions, no envelope.
+# Overrides the prompt's JSON contract on the retry below. Stays in code rather
+# than in the `.md`: it exists only because the TRANSPORT changed
+# (`text_completion` instead of `structured_output`), and an editor tuning the
+# wording in Langfuse must not be able to break a schema contract.
 _PLAIN_LINE_RULE = (
-    "Return ONLY that one line as plain text. No JSON, no quotes, no chips, "
-    "no explanation."
+    "Ignore the JSON contract above: return ONLY that one line as plain text. "
+    "No JSON, no quotes, no chips, no explanation."
 )
 
 
@@ -75,14 +77,7 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
     deterministic for a given situation+language, so the same "no lectures on
     <ref>" or "name a lecture" phrasing is written by the LLM once and then
     served from cache — no per-turn model call on the hot paths."""
-    sys = (
-        "You write ONE short assistant reply for a Vedic-lecture chat, in the "
-        "user's language. Return `line` (<=25 words, plain text, no markdown) "
-        "and `chips` (0-3 follow-up suggestion labels the user can tap, <=6 "
-        "words each, in the user's language; [] if none asked for). Keep any "
-        "scripture reference, number, or date in `line` verbatim. Do not add a "
-        "reference to a chip unless the situation says to."
-    )
+    sys = standalone_prompt("localized-reply", "localized_reply")
     usr = f"Language code: {ctx.lang}\nSituation: {situation}"
     msgs: list[Message] = [
         {"role": "system", "content": sys},

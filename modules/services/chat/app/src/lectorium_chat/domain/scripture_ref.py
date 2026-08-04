@@ -6,11 +6,9 @@ Bhagavad-gītā (chapter.verse), three for Śrīmad-Bhāgavatam and Caitanya-
 caritāmṛta (canto.chapter.verse), one for Īśopaniṣad (mantra). A BARE chapter
 covers the whole chapter, which is what makes «лекции по БГ 10» answerable.
 
-That is domain knowledge, not persistence: the same rules decide which lectures
-a chapter question may return (`find_tracks_worker`) and which rows the catalog
-filter keeps (`sqlite_catalog_repository`). It lived under `infra/repositories/`
-for a test-import reason, which left the agent layer importing a private infra
-module to understand its own vocabulary.
+These rules are domain knowledge, not persistence: the same ones decide which
+lectures a chapter question may return (`find_tracks_worker`) and which rows the
+catalog filter keeps (`sqlite_catalog_repository`).
 
 Pure: no IO, no dependencies, so a unit test costs nothing to run.
 """
