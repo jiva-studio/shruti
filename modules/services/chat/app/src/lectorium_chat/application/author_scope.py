@@ -62,10 +62,25 @@ class AuthorScope:
         self._selection = AuthorSelection.unconstrained()
         self._resolved: list[str] | None = None
         self._done = False
+        # How many chunks the PRIVATE lane returned this turn. The honest note
+        # cannot read this off the synthesizer's pool: their fragments reach the
+        # answer by another route (the pool showed verse/commentary only while
+        # four of their citations were printed), so the lane reports it directly.
+        self._private_hits = 0
 
     @property
     def selection(self) -> AuthorSelection:
         return self._selection
+
+    @property
+    def private_hits(self) -> int:
+        """Chunks the private lane returned this turn — evidence that their own
+        recordings DID contribute, whatever the pool the synthesizer was handed
+        looks like."""
+        return self._private_hits
+
+    def note_private_hits(self, n: int) -> None:
+        self._private_hits += max(0, int(n))
 
     def apply(self, selection: AuthorSelection) -> None:
         """Set the selection for the rest of the turn (called by the router)."""

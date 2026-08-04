@@ -41,7 +41,11 @@ async def author_gap_note(
     scope = getattr(ctx, "author_scope", None)
     if scope is None or not scope.selection.constrained:
         return ""
-    if has_lecture(notes):
+    if has_lecture(notes) or scope.private_hits:
+        # Their own recordings contributed — the pool the synthesizer was handed
+        # does not always show them (their fragments arrive by another route), so
+        # the lane's own count is what settles it. Apologising over four citations
+        # of the very teacher asked for is worse than saying nothing.
         return ""
 
     who = scope.selection.names or "the selected lecturers"
