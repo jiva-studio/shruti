@@ -137,6 +137,9 @@ export interface ChatVerseBody {
   /** Original IAST (Latin) transliteration; present only when the shown
    *  one is a different script. The card flips to it on "view original". */
   readonly transliterationOriginal?: string
+  /** Language of the shown `translation` entry — the answer language, resolved
+   *  server-side. Absent ⇒ the card falls back to the UI locale. */
+  readonly lang?: string
   readonly translation: { readonly [lang: string]: string }
   /** Full public URL of the Sanskrit recitation, when one exists. */
   readonly audioUrl?: string
