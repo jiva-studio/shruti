@@ -141,7 +141,16 @@ async def test_flush_cite_native_no_mt_field(capture_writer):
     assert payload["text"] == "english transcript"
 
 
-async def test_flush_cite_flag_off_no_translation(capture_writer):
+async def test_a_transcript_quote_is_translated_without_being_asked(capture_writer):
+    """Spoken words are not scripture.
+
+    The opt-in exists to protect the WORDING of verses and purports. A transcript
+    has no such claim, and someone's own uploads are usually in another language
+    than their question — production showed a Russian answer quoting English
+    fragments of the very teacher that was asked for, unreadable to the person who
+    asked. So a non-native transcript fragment is translated regardless of the
+    flag, with the original alongside it.
+    """
     tr = FakeTranslator()
     ctx = TurnContext(lang_code="uk", translate_citations=False, translator=tr)
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
@@ -150,7 +159,24 @@ async def test_flush_cite_flag_off_no_translation(capture_writer):
     await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
-    assert "mt" not in payload
+    assert payload["mt"] is True
+    assert payload["text_original"] == "english transcript"
+    assert tr.calls, "the translator must be used"
+
+
+async def test_scripture_still_waits_to_be_asked() -> None:
+    """The other half of the rule: a verse translation is NOT machine-translated
+    on a whim — with the flag off it falls back to the English variant."""
+    tr = FakeTranslator()
+    ctx = TurnContext(lang_code="uk", translate_citations=False, translator=tr)
+    shown, original, mt = await localize_citation(
+        ctx,
+        variants={"en": "english translation"},
+        source_text="english translation",
+        src_lang="en",
+    )
+    assert shown == "english translation"
+    assert mt is False and original is None
     assert tr.calls == []
 
 
