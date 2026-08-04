@@ -43,6 +43,7 @@ class _Ctx:
     catalog_repo: Any | None = None
     aliases: Any | None = None
     reranker: Any | None = None
+    author_scope: Any | None = None
 
 
 @dataclass
