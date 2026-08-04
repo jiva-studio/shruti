@@ -141,6 +141,8 @@ async def research_worker_node(
         precomputed_query_embedding_task=ctx.embed_task,
         callbacks=[cb] if cb is not None else None,
         owned_track_ids=owned_track_ids,
+        # The turn's author selection — narrows every lecture lane below.
+        author_scope=ctx.author_scope,
     )
 
     # Flatten authoritative (PINNED) + research_chunks into a single

@@ -50,6 +50,10 @@ async def chunks_find_similar(
     chunk_repo: ChunkRepository,
     embedder: EmbedderPort,
     alias_map: TurnAliasMap,
+    # The turn's author selection, supplied by the per-turn wrapper and hidden
+    # from the LLM schema. "More like this" must stay inside the selection —
+    # otherwise the one path that starts from a fragment escapes it.
+    author_scope: Any | None = None,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     ref = alias_map.resolve(int(track_ref))
     if not isinstance(ref, ChunkRef) or not ref.track_id:
@@ -69,8 +73,12 @@ async def chunks_find_similar(
     if not src_texts:
         return []
     q_vec = await embedder.embed_query(" ".join(src_texts))
+    eligible = None if author_scope is None else await author_scope.track_ids()
+    if eligible is not None and not eligible:
+        return []
     scored = await chunk_repo.search_by_embedding(
         q_vec,
+        eligible_track_ids=eligible,
         excluded_track_ids=[ref.track_id],
         lang=lang,
         top_k=max(1, min(top_k, 12)),

@@ -148,6 +148,52 @@ def bind_repositories(
         TOOLS[name] = partial(fn, **kwargs)
 
 
+# Retrieval tools whose reach the turn's author selection must narrow. Each
+# accepts a keyword-only `author_scope` that the LLM schema does not expose —
+# the same convention `book_id` uses — because a worker calls these directly and
+# a prompt rule would be advice, not enforcement.
+_SCOPED = (
+    "chunks_search",
+    "chunks_find_similar",
+    "user_history_search",
+    "tracks_list",
+)
+
+
+def build_scoped_tools(
+    base: dict[str, ToolFn], author_scope: Any | None,
+) -> dict[str, ToolFn]:
+    """Bind the turn's `author_scope` into the retrieval tools via closure.
+
+    The scope object is filled in by the router AFTER these wrappers are built,
+    which is exactly why the object is passed rather than its contents: the
+    closure and the router hold the same instance.
+
+    An LLM-supplied `author_scope` is dropped — the schema hides it, but a model
+    that invents the field must not be able to widen its own reach.
+    """
+    if author_scope is None:
+        return dict(base)
+    out = dict(base)
+    for name in _SCOPED:
+        fn = base.get(name)
+        if fn is None:
+            continue
+
+        def _make(_fn: ToolFn) -> ToolFn:
+            # Same `@wraps` reason as `build_personalized_tools`: keep the real
+            # signature visible so the later alias-injection introspection works.
+            @wraps(_fn)
+            async def _wrapped(**kwargs: Any) -> Any:
+                kwargs.pop("author_scope", None)
+                return await _fn(author_scope=author_scope, **kwargs)
+
+            return _wrapped
+
+        out[name] = _make(fn)
+    return out
+
+
 def build_personalized_tools(
     base: dict[str, ToolFn], user_context: UserContext | None,
 ) -> dict[str, ToolFn]:
