@@ -1,8 +1,9 @@
-"""Does a teacher's name, as the ROUTER wrote it, denote a corpus author?
+"""Does a written-out teacher's name denote a corpus author?
 
-The router normalizes the speaker it extracts to English ("Шрила Прабхупада" →
-"Srila Prabhupada"), so a name can never be compared against one locale's
-dictionary alone: a Latin query scores ~0.04 against the Cyrillic
+A name reaches us in whatever language it was written — the router normalizes the
+speaker it extracts to English ("Шрила Прабхупада" → "Srila Prabhupada"), a
+person asking for a lecturer types their own script — so it can never be compared
+against one locale's dictionary alone: a Latin query scores ~0.04 against the Cyrillic
 "А. Ч. Бхактиведанта Свами Прабхупада" and the corpus's OWN author reads as
 absent. Callers therefore resolve across ALL locales and decide here.
 
