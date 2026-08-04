@@ -168,3 +168,69 @@ async def test_the_planner_does_not_flag_the_fallback_under_a_filter() -> None:
         state, _Runtime(context=_Ctx(author_scope=_scope([]))),
     )
     assert out == {"outline": None, "corpus_insufficient": False}
+
+
+async def test_the_admission_is_not_stranded_under_the_paragraph_it_explains() -> None:
+    """The planner paints the intro early, seconds before the synthesizer runs —
+    so under a filter it would land ABOVE the admission that explains it. That is
+    what production did on the first try: «...ответ основан на священных
+    писаниях» arrived as the second paragraph. Under a filter the intro goes back
+    to the synthesizer, which renders it after the note."""
+    from dataclasses import field as dc_field
+
+    from lectorium_chat.agent.graph.nodes import synthesis_planner as planner_mod
+    from lectorium_chat.research.models import Outline, Thesis
+
+    painted: list[str] = []
+
+    class _LLM:
+        async def structured_output(self, *_a, **_k):
+            return Outline(
+                intro="Вступление.",
+                theses=[
+                    Thesis(thesis="t1", supporting_notes=[1]),
+                    Thesis(thesis="t2", supporting_notes=[1]),
+                ],
+            )
+
+        async def text_completion(self, *_a, **_k):
+            return ""
+
+    @dataclass
+    class _Runtime:
+        context: Any = None
+
+    for constrained, expect_early_paint in ((True, False), (False, True)):
+        painted.clear()
+        ctx = _Ctx(llm=_LLM(), author_scope=_scope([], constrained=constrained))
+        # `catalog_repo` / `chunk_repo` / `aliases` are unused by this path.
+        for extra in ("langfuse_trace_id", "embedder", "chunk_repo",
+                      "catalog_repo", "aliases", "reranker", "lang_name"):
+            setattr(ctx, extra, None if extra != "lang_name" else "")
+        import lectorium_chat.agent.graph.nodes.synthesis_planner as sp
+
+        orig = sp.get_stream_writer
+        sp.get_stream_writer = lambda: (
+            lambda ev: painted.append((ev.get("data") or {}).get("text", ""))
+        )
+        try:
+            out = await planner_mod.synthesis_planner_node(
+                {
+                    "user_query": "q", "lang": "ru",
+                    "tool_results": [
+                        {"type": "verse", "text": "x", "score": 0.8, "meta": {}},
+                    ],
+                },
+                _Runtime(context=ctx),
+            )
+        finally:
+            sp.get_stream_writer = orig
+
+        early = any("Вступление" in t for t in painted)
+        assert early is expect_early_paint, (
+            f"constrained={constrained}: early intro paint should be "
+            f"{expect_early_paint}"
+        )
+        # And when it is held back, the synthesizer is the one given the intro.
+        if not expect_early_paint:
+            assert out["outline"].intro
