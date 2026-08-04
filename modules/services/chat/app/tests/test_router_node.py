@@ -46,6 +46,7 @@ class _Ctx:
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
     lang: str = "ru"
     lang_name: str = ""
+    catalog_repo: Any | None = None
 
 
 @dataclass

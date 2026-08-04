@@ -242,7 +242,10 @@ export type ChatRole = "user" | "assistant"
  *  can't be shown. `explicit` is true when the person STATED it rather than us
  *  inferring it, which is what lets it outrank a later inference. */
 export interface ChatAttribute {
-  readonly value: string
+  /** Isomorphic on the wire: a single-valued attribute (the reply language) is
+   *  a bare string, a multi-valued one (which lecturers to draw on) an array.
+   *  Read it through a normaliser, never by branching at the use site. */
+  readonly value: string | readonly string[]
   readonly label: string
   readonly explicit: boolean
 }

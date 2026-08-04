@@ -141,9 +141,9 @@ async def test_what_done_ships_is_what_the_next_turn_reads_back() -> None:
         {"role": "assistant", "content": "Ответ.", "attributes": shipped},
     ]
     from_messages = remembered_attributes(replayed)
-    assert from_messages[REPLY_LANGUAGE].value == "ru"
+    assert from_messages[REPLY_LANGUAGE].single() == "ru"
     assert from_messages[REPLY_LANGUAGE].explicit
 
     # (b) folded into the aggregate and sent as request metadata
     from_aggregate = remembered_attributes(None, shipped)
-    assert from_aggregate[REPLY_LANGUAGE].value == "ru"
+    assert from_aggregate[REPLY_LANGUAGE].single() == "ru"
