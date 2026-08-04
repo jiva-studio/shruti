@@ -92,6 +92,12 @@ class AuthorScope:
         """
         if not self._selection.constrained or self._catalog_repo is None:
             return None
+        if not self._selection.ids:
+            # Constrained, but on a teacher the CORPUS does not have (a personal
+            # library name). The catalog would read an empty author list as "no
+            # filter" and hand back everything, so answer for it: no corpus
+            # lecture qualifies.
+            return []
         if self._done:
             return self._resolved
         try:
@@ -146,9 +152,13 @@ class AuthorScope:
             return owned
         if self._private_repo is None or not self._user_id:
             return owned
+        if not self._selection.ids and not self._selection.raw_names:
+            return owned
         try:
             by_author = await self._private_repo.get_owned_track_ids_by_author(
-                self._user_id, list(self._selection.ids),
+                self._user_id,
+                list(self._selection.ids),
+                list(self._selection.raw_names),
             )
         except Exception as exc:  # noqa: BLE001
             log.warning(
