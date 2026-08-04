@@ -11,6 +11,60 @@ import (
 	"github.com/jiva-studio/shruti/pipeline/ports/review"
 )
 
+// TestOpenAICompatReviewer_RealOpenRouterLines is the same trip in the line
+// format: the model returns only what it corrected, and the adapter must hand
+// back the whole chunk with sentence groups rebuilt from the boundaries.
+func TestOpenAICompatReviewer_RealOpenRouterLines(t *testing.T) {
+	key := os.Getenv("OPENROUTER_API_KEY")
+	if key == "" {
+		t.Skip("OPENROUTER_API_KEY not set")
+	}
+	r, err := New(Config{
+		NameAlias: "gemini-3.1-flash-lite",
+		Endpoint:  "https://openrouter.ai/api/v1",
+		APIKey:    key,
+		Model:     "google/gemini-3.1-flash-lite",
+		MaxTokens: 4096,
+		Reasoning: ReasoningOff,
+		Format:    FormatLines,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := review.ChunkRequest{
+		Language: "ru",
+		Segments: []review.ChunkSegment{
+			{Idx: 0, Text: "шрипраб упада говорил об этом", Confidence: 0.5},
+			{Idx: 1, Text: "в бхагават гите", Confidence: 0.6},
+			{Idx: 2, Text: "во второй главе.", Confidence: 0.95},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	resp, err := r.ReviewChunk(ctx, req)
+	if err != nil {
+		t.Fatalf("ReviewChunk: %v", err)
+	}
+	if len(resp.Segments) != 3 {
+		t.Fatalf("got %d segments, want the full chunk of 3", len(resp.Segments))
+	}
+	for i, s := range resp.Segments {
+		if s.Idx != i {
+			t.Errorf("segment %d has idx %d — order or membership changed", i, s.Idx)
+		}
+	}
+	if len(resp.Sentences) == 0 {
+		t.Error("no sentence groups were rebuilt from the boundaries")
+	}
+	m := resp.Models[0]
+	t.Logf("tokens_in=%d tokens_out=%d cost_usd=%g sentences=%v",
+		m.TokensIn, m.TokensOut, m.CostUSD, resp.Sentences)
+	for _, s := range resp.Segments {
+		t.Logf("  [%d] %s", s.Idx, s.Text)
+	}
+}
+
 // TestOpenAICompatReviewer_RealOpenRouter hits OpenRouter for one short
 // chunk and asserts the response shape (idx-set preserved, models[]
 // populated with non-zero tokens). Skipped unless OPENROUTER_API_KEY is
