@@ -136,7 +136,7 @@ async def _settle_attributes(
 
 async def _turn_author(
     state: ChatState, ctx: TurnContext, settled: dict[str, Attribute],
-) -> None:
+) -> bool:
     """Apply the author this MESSAGE named, when no standing choice overrides it.
 
     The router extracts a speaker as a NAME («что Прабхупада говорил о карме»,
@@ -154,19 +154,22 @@ async def _turn_author(
 
     A standing selection wins: someone who set a filter deliberately does not have
     it widened by mentioning a name.
+
+    Returns True when the speaker exists ONLY in this person's own library — the
+    caller then reroutes a lecture listing, which has nothing to list.
     """
     scope = ctx.author_scope
     if scope is None or scope.selection.constrained:
-        return
+        return False
     name = ((state.get("extracted_args") or {}).get("author") or "").strip()
     if not name:
-        return
+        return False
     hit = await resolve_author(ctx.catalog_repo, name)
     if hit is not None:
         scope.apply(AuthorSelection(
             ids=(hit.id,), names=hit.full_name, constrained=True, explicit=True,
         ))
-        return
+        return False
     mine = await own_speaker_names(
         ctx.chunk_repo, ctx.user_id or "", name, request_id=ctx.request_id,
     )
@@ -174,6 +177,28 @@ async def _turn_author(
         scope.apply(AuthorSelection(
             raw_names=tuple(mine), names=name, constrained=True, explicit=True,
         ))
+        return True
+    return False
+
+
+def _reroute_for_private_author(decision: RoutingDecision) -> RoutingDecision:
+    """A lecture LISTING cannot show what only the private lane holds.
+
+    `find_track` answers from the catalog — titles, dates, cards — and a personal
+    upload is in none of it. So a turn whose speaker exists only in someone's own
+    library goes to research instead, which reads their transcripts and cites
+    fragments the client renders with its own copy of the title. Otherwise the
+    honest-but-useless «Лекции по вашему запросу не найдены» is the best we can do
+    while three of their lectures sit indexed and searchable.
+    """
+    if decision.intent != "find_track":
+        return decision
+    log.info("find_track_rerouted_to_research_private_author")
+    return RoutingDecision(
+        intent="research",
+        confidence=decision.confidence,
+        extracted_args=decision.extracted_args,
+    )
 
 
 async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
@@ -272,6 +297,12 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
     # `status` event with key=router_decision / params.intent — without this
     # emit the help-quota refund path is dead code and the intent is never
     # observable. Emitted for every path (deterministic, follow-up, LLM).
+    attributes = await _settle_attributes(state, ctx, lang_task)
+    # The speaker THIS message named, once the standing choice is known. Before
+    # the decision event below, because a rerouted turn must not be reported —
+    # to the refund path or to Langfuse — as the intent it no longer has.
+    if await _turn_author(state, ctx, attributes):
+        decision = _reroute_for_private_author(decision)
     get_stream_writer()(
         {"type": "status", "data": {"key": "router_decision", "params": {"intent": decision.intent}}}
     )
@@ -283,9 +314,6 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
         # answer the self-contained form, not the bare follow-up.
         "user_query": query,
     }
-    attributes = await _settle_attributes(state, ctx, lang_task)
-    # The speaker THIS message named, once the standing choice is known.
-    await _turn_author(state, ctx, attributes)
     language = attributes.get(REPLY_LANGUAGE)
     if language is not None:
         update["lang"] = language.single()
