@@ -45,6 +45,14 @@ REPLY_LANGUAGE = "reply_language"
 # several), and `ALL` is how a filter is LIFTED — see `AuthorSelection`.
 LECTURE_AUTHORS = "lecture_authors"
 
+# Prefix marking a value as a name from someone's OWN library rather than a
+# catalog author id. Most of what people add to a personal library is by teachers
+# the curated corpus has never heard of, so «отвечай только по лекциям X» has to be
+# expressible for them too — and the only handle we have is the name the ingest
+# heard, which is why it travels as the value.
+RAW_PREFIX = "raw:"
+
+
 # "no constraint", as an explicit value. An attribute that is simply absent
 # means the same thing; this exists so someone who narrowed the search can say
 # «ищи у всех» and have that stick, which removal cannot express (there is no

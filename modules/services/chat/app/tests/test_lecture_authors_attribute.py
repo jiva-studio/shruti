@@ -165,3 +165,91 @@ async def test_the_detector_is_registered() -> None:
     # One prompt per attribute, hosted separately in Langfuse.
     names = [s.prompt_name for s in ATTRIBUTE_SPECS]
     assert len(set(names)) == len(names)
+
+
+# ── a teacher only MY library knows ───────────────────────────────────────
+#
+# The case a personal library is mostly made of: people add lectures of their own
+# teachers, who by definition are not in the curated corpus. Asking for them has
+# to work, or the filter serves only the catalog and the library is unreachable.
+
+
+class _MyLibrary:
+    def __init__(self, names: list[str]) -> None:
+        self._names = names
+        self.asked = 0
+
+    async def get_own_author_names(self, _user_id):
+        self.asked += 1
+        return list(self._names)
+
+
+async def _build_with_library(names: list[str], library, user_id: str = "u-1"):
+    return await LectureAuthorsSpec().build(
+        LectureAuthorsOut(names=names),
+        catalog_repo=_Catalog(_CATALOG),
+        request_id="req",
+        private_repo=library,
+        user_id=user_id,
+    )
+
+
+async def test_my_own_teacher_becomes_a_selection_by_name() -> None:
+    library = _MyLibrary(["Rohini Suta Prabhu"])
+    attr = await _build_with_library(["Rohini Suta Prabhu"], library)
+    assert attr is not None
+    # Not a catalog id — the corpus has no such author — but a value the private
+    # lane can match, and the label is what the person actually said.
+    assert attr.value == ["raw:Rohini Suta Prabhu"]
+    assert attr.label == "Rohini Suta Prabhu"
+    assert attr.explicit
+
+
+async def test_every_stored_spelling_of_that_teacher_is_kept() -> None:
+    # One teacher, three rows: whichever spelling an ingest wrote must match.
+    library = _MyLibrary([
+        "Rohini Suta Prabhu", "H.G. Rohini Suta Prabhu", "H.G Rohini Suta Prabhu",
+    ])
+    attr = await _build_with_library(["Rohini Suta"], library)
+    assert attr is not None
+    assert set(attr.value) == {
+        "raw:Rohini Suta Prabhu",
+        "raw:H.G. Rohini Suta Prabhu",
+        "raw:H.G Rohini Suta Prabhu",
+    }
+
+
+async def test_a_corpus_author_never_asks_my_library() -> None:
+    # The common case pays nothing extra: the catalog placed the name.
+    library = _MyLibrary(["Rohini Suta Prabhu"])
+    attr = await _build_with_library(["Srila Prabhupada"], library)
+    assert attr is not None and attr.value == ["author_prabhupada"]
+    assert library.asked == 0
+
+
+async def test_a_teacher_neither_the_corpus_nor_i_have_sets_no_filter() -> None:
+    library = _MyLibrary(["Rohini Suta Prabhu"])
+    assert await _build_with_library(["Some Visiting Speaker"], library) is None
+
+
+async def test_an_anonymous_turn_has_no_library_to_search() -> None:
+    library = _MyLibrary(["Rohini Suta Prabhu"])
+    assert await _build_with_library(["Rohini Suta"], library, user_id="") is None
+    assert library.asked == 0
+
+
+async def test_a_broken_library_lookup_just_finds_nothing() -> None:
+    class _Broken:
+        async def get_own_author_names(self, _user_id):
+            raise RuntimeError("relation missing")
+
+    assert await _build_with_library(["Rohini Suta"], _Broken()) is None
+
+
+async def test_mixing_a_corpus_author_with_my_own_teacher() -> None:
+    library = _MyLibrary(["Rohini Suta Prabhu"])
+    attr = await _build_with_library(
+        ["Srila Prabhupada", "Rohini Suta Prabhu"], library,
+    )
+    assert attr is not None
+    assert attr.value == ["author_prabhupada", "raw:Rohini Suta Prabhu"]

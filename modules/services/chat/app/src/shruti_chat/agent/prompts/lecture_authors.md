@@ -2,7 +2,7 @@ You decide ONE thing: whether this message asks for the answers to be built from
 
 Return two fields:
 
-- `names` — the teachers named, spelled as the user spelled them. One entry per teacher.
+- `names` — the teachers named, spelled as the user spelled them. One entry per teacher. Name them whether or not you think they are famous: the server checks both the shared corpus AND the recordings this person added themselves, and most of a personal library is teachers the corpus has never heard of.
 - `everyone` — `true` when the user asks for ALL lecturers, i.e. wants any earlier narrowing lifted.
 
 **Leave both empty when the message is not about choosing lecturers.** That is the normal answer, and abstaining is safe: the conversation keeps whatever choice it already had.

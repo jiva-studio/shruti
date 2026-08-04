@@ -143,7 +143,7 @@ class PgChunkRepository:
         return [r["track_id"] for r in rows]
 
     async def get_owned_track_ids_by_author(
-        self, user_id: str, author_ids: list[str],
+        self, user_id: str, author_ids: list[str], author_raws: list[str] | None = None,
     ) -> list[str]:
         """The subset of this user's own tracks spoken by one of `author_ids`.
 
@@ -152,25 +152,56 @@ class PgChunkRepository:
         private lane's whole question ("what may they read, and is it the right
         teacher") is answered by a single row scan with no join.
 
-        A track whose speaker is unknown or absent from the catalog carries no
-        author and is therefore NOT returned: under a lecturer filter, a recording
-        we cannot attribute is not known to be by the person who was asked for.
+        `author_raws` are the names as this person's own uploads recorded them —
+        matched exactly, because the caller already decided WHICH stored spellings
+        the asked-for name denotes (see `lecture_authors`, which compares across
+        scripts and honorifics over the few names one library holds). That is what
+        makes a teacher the corpus never heard of selectable at all.
+
+        A track with neither a resolved author nor a matching name is NOT
+        returned: under a lecturer filter, a recording we cannot attribute is not
+        known to be by the person who was asked for.
         `unattributed_owned_count` is how a caller tells the person those exist.
         """
-        if not user_id or not author_ids:
+        raws = list(author_raws or [])
+        if not user_id or (not author_ids and not raws):
             return []
         try:
             async with self._pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
                     SELECT track_id FROM chunk_meta
-                     WHERE owner_id = $1 AND author_id = ANY($2::text[])
+                     WHERE owner_id = $1
+                       AND (author_id = ANY($2::text[])
+                            OR author_raw = ANY($3::text[]))
                     """,
-                    user_id, list(author_ids),
+                    user_id, list(author_ids), raws,
                 )
         except asyncpg.UndefinedTableError:
             return []
         return [r["track_id"] for r in rows]
+
+    async def get_own_author_names(self, user_id: str) -> list[str]:
+        """Distinct speaker names across this person's own uploads.
+
+        A handful of strings — a library holds tens of recordings, not thousands —
+        which is what makes it affordable to compare an asked-for name against all
+        of them in code, across scripts and honorifics.
+        """
+        if not user_id:
+            return []
+        try:
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT DISTINCT author_raw FROM chunk_meta
+                     WHERE owner_id = $1 AND author_raw IS NOT NULL
+                    """,
+                    user_id,
+                )
+        except asyncpg.UndefinedTableError:
+            return []
+        return [r["author_raw"] for r in rows if (r["author_raw"] or "").strip()]
 
     async def unattributed_owned_count(self, user_id: str) -> int:
         """How many of this user's own tracks have no resolved speaker.
