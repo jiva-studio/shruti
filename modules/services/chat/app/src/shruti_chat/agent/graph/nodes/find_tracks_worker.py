@@ -45,7 +45,7 @@ from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message, ScoredChunk
-from shruti_chat.infra.repositories._ref_filter import parse_tokens
+from shruti_chat.domain.scripture_ref import parse_tokens
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 log = get_logger(__name__)
@@ -101,6 +101,16 @@ async def _author_in_corpus(ctx: TurnContext, name: str) -> bool:
     return bool(hits) and hits[0].confidence >= _AUTHOR_MIN_CONFIDENCE
 
 
+# Name of the ladder rung that carries a scripture reference. The label ends up
+# in the intro prompt as text, so it has to be a string — but the ladder and the
+# "was it dropped?" check must never drift apart on a literal.
+_REF_RUNG = "reference"
+
+
+def _was_relaxed(relaxed: str, rung: str) -> bool:
+    return rung in relaxed.split(",")
+
+
 async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]:
     """Ordered (relaxed-label, filter-kwargs) ladder: index 0 is fully
     constrained, each next entry drops the narrowest remaining constraint."""
@@ -149,7 +159,7 @@ async def _build_filters(ctx: TurnContext, args: dict) -> list[tuple[str, dict]]
         # Narrowest first: the reference is the constraint most likely to leave
         # nothing, and dropping it degrades to "lectures on this book" — which
         # `_intro` then has to admit to.
-        ("reference", ("ref_prefix", "ref_from", "ref_to")),
+        (_REF_RUNG, ("ref_prefix", "ref_from", "ref_to")),
         ("date", ("date_from", "date_to", "anniversary_md")),
         ("location", ("location_id",)),
         ("author", ("author_id",)),
@@ -373,7 +383,7 @@ async def find_tracks_worker_node(
     # address it must NOT claim («БГ 10»). Costs a catalog lookup only on that
     # miss path.
     ref_label = ""
-    if "reference" in relaxed.split(","):
+    if _was_relaxed(relaxed, _REF_RUNG):
         _, short = await _resolve_source(ctx, str(args.get("source_id") or ""))
         tokens = str(args.get("tokens") or "").strip()
         ref_label = f"{short} {tokens}".strip() if short else tokens

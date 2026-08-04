@@ -1,12 +1,18 @@
-"""Parser + matcher for `track_references.tokens`.
+"""How this corpus addresses scripture: parsing and matching a reference.
 
-`tokens` is a dot-separated numeric ladder ("2.13", "1.2.6"), optionally
-ending in a range ("2.51-54", "7.91-2" short-form). Two-level for БГ
-(chapter.verse), three-level for ШБ/ЧЧ (canto.chapter.verse), one-level
-for ИШО (mantra).
+A reference is a dot-separated numeric ladder — "2.13", "1.2.6" — optionally
+ending in a range ("2.51-54", and the "7.91-2" short-form). Two levels for the
+Bhagavad-gītā (chapter.verse), three for Śrīmad-Bhāgavatam and Caitanya-
+caritāmṛta (canto.chapter.verse), one for Īśopaniṣad (mantra). A BARE chapter
+covers the whole chapter, which is what makes «лекции по БГ 10» answerable.
 
-Kept in its own module so the unit tests don't drag in
-`agent.tools.__init__` (which side-effect-imports litellm).
+That is domain knowledge, not persistence: the same rules decide which lectures
+a chapter question may return (`find_tracks_worker`) and which rows the catalog
+filter keeps (`sqlite_catalog_repository`). It lived under `infra/repositories/`
+for a test-import reason, which left the agent layer importing a private infra
+module to understand its own vocabulary.
+
+Pure: no IO, no dependencies, so a unit test costs nothing to run.
 """
 
 from __future__ import annotations
