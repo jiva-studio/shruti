@@ -53,19 +53,29 @@ async def author_gap_note(
         return ""
     if allowed is None:
         return ""
+    # Their own uploads with no resolved speaker fall out of a filtered answer,
+    # and nothing on screen says why. Counting them turns "why is my lecture
+    # missing" into something the person can act on: tag the speaker.
+    untagged = await _untagged_own(ctx)
+    mine = (
+        f" The person also has {untagged} recording(s) in their personal library "
+        f"with no speaker recorded, which is why those could not be used — "
+        f"mention this in one short clause."
+        if untagged else ""
+    )
     if allowed:
         situation = (
             f"The user asked to be answered only from lectures by {who}. Those "
             "lectures exist in the corpus, but none of them covers this "
             "question, so the answer below is drawn from scripture and its "
-            "commentaries instead. Say this in one short sentence."
+            "commentaries instead. Say this in one short sentence." + mine
         )
     else:
         situation = (
             f"The user asked to be answered only from lectures by {who}. The "
             "corpus holds no lectures by them at all, so the answer below is "
             "drawn from scripture and its commentaries instead. Say this in one "
-            "short sentence."
+            "short sentence." + mine
         )
 
     from lectorium_chat.agent.graph.nodes._worker_common import localized_reply
@@ -78,5 +88,23 @@ async def author_gap_note(
         authors=len(scope.selection.ids),
         their_tracks=len(allowed),
         written=bool(line),
+        untagged_own=untagged,
     )
     return line
+
+
+async def _untagged_own(ctx: Any) -> int:
+    """How many of this person's own uploads carry no resolved speaker.
+
+    Zero for an anonymous turn, a library-less one, or any failure: this only
+    adds a clause to a disclaimer, and a count we are unsure of is worse than
+    none.
+    """
+    repo = getattr(ctx, "chunk_repo", None)
+    user_id = getattr(ctx, "user_id", "") or ""
+    if repo is None or not user_id:
+        return 0
+    try:
+        return int(await repo.unattributed_owned_count(user_id))
+    except Exception:  # noqa: BLE001
+        return 0

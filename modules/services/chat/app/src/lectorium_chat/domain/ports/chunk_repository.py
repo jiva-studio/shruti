@@ -37,12 +37,19 @@ class ChunkRepository(Protocol):
         users; best-effort (a missing projection yields [])."""
         ...
 
-    async def get_track_authors_raw(self, track_ids: list[str]) -> dict[str, str]:
-        """Speaker names for privately added tracks, as the ingest reported
-        them — free text, unresolved. Tracks with no recorded speaker are absent
-        from the mapping rather than present-and-empty, so a caller cannot
-        mistake "we don't know" for "nobody". Best-effort ({} when the
-        projection is missing)."""
+    async def get_owned_track_ids_by_author(
+        self, user_id: str, author_ids: list[str],
+    ) -> list[str]:
+        """This user's own tracks spoken by one of `author_ids` — the speaker
+        resolved at index time and stamped on the chunks, so the private lane
+        narrows with the same predicate the public one does. A track with no
+        resolved speaker is not returned."""
+        ...
+
+    async def unattributed_owned_count(self, user_id: str) -> int:
+        """How many of this user's own tracks have no resolved speaker — they
+        fall out of every lecturer-filtered answer, and saying so is the only
+        way the person can tell why."""
         ...
 
     async def search_by_embedding(

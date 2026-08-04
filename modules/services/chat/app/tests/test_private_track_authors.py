@@ -3,19 +3,22 @@
 Their tracks are not in the published catalog, so the catalog-derived track-id set
 says nothing about them — and intersecting with it emptied the whole private lane:
 choose «только Прабхупада» and your own Prabhupada recording disappeared along
-with everyone else's. What the private lane has instead is what the ingest heard,
-a free-text speaker name per track (`user_track_facts.data->>'author_raw'`,
-projected from `track.ready`).
+with everyone else's.
 
-So the question asked of an upload is the one asked of a typed name — does this
-name denote the chosen author? — through the same cross-script lookup. Which makes
-«Прабхупада» on an upload match the catalog's Latin
-"A. C. Bhaktivedanta Swami Prabhupada", and keeps a stranger's talk out.
+What the lane has instead is the speaker resolved when the track was indexed and
+stamped on its chunks (`chunks.author_id`, the same column the public lane filters
+by). So narrowing here is one join, and the rules are:
+
+- their own recording of the chosen teacher stays;
+- a stranger's talk goes;
+- a recording with no resolved speaker goes too — under a constraint, "we don't
+  know who this is" is not "this is them" — and the count of those is surfaced so
+  the person can find out why their upload is missing;
+- a DEFAULT never narrows this lane at all, and every failure fails open, because
+  hiding a library is the worse error.
 """
 
 from __future__ import annotations
-
-from dataclasses import dataclass
 
 import pytest
 
@@ -25,50 +28,40 @@ from lectorium_chat.domain.conversation_attributes import LECTURE_AUTHORS, Attri
 
 
 _PRABHU = "author_prabhupada"
-_OTHER = "author_other"
+_MINE = "mine"
+_THEIRS = "theirs"
+_MYSTERY = "mystery"
 
 
-@dataclass
-class _Hit:
-    id: str
-    full_name: str
+class _Private:
+    """The chunk repository's private-lane reads, answering off a fake stamp."""
 
+    def __init__(self, by_track: dict[str, str | None]) -> None:
+        self._by_track = by_track
+        self.calls: list[tuple[str, list[str]]] = []
 
-class _Catalog:
-    """Multi-locale dictionary, like the real one."""
-
-    def __init__(self) -> None:
-        self.resolves: list[str] = []
-
-    async def resolve(self, kind, text, *, lang, limit):
-        self.resolves.append(text)
+    async def get_owned_track_ids_by_author(self, user_id, author_ids):
+        self.calls.append((user_id, list(author_ids)))
         return [
-            _Hit(_PRABHU, "A. C. Bhaktivedanta Swami Prabhupada"),
-            _Hit(_PRABHU, "А. Ч. Бхактиведанта Свами Прабхупада"),
-            _Hit(_OTHER, "Niranjana Swami"),
+            t for t, a in self._by_track.items() if a and a in author_ids
         ]
 
-    async def filter_track_ids(self, **_kw):
-        # The published corpus knows nothing about anyone's uploads.
-        return []
+    async def unattributed_owned_count(self, user_id):
+        return sum(1 for a in self._by_track.values() if not a)
 
 
-class _Facts:
-    def __init__(self, by_track: dict[str, str]) -> None:
-        self._by_track = by_track
-        self.asked: list[list[str]] = []
-
-    async def get_track_authors_raw(self, track_ids):
-        self.asked.append(list(track_ids))
-        return {
-            t: self._by_track[t] for t in track_ids
-            if self._by_track.get(t)
-        }
+_LIBRARY = {_MINE: _PRABHU, _THEIRS: "author_other", _MYSTERY: None}
 
 
-def _scope(facts, catalog=None, *, explicit: bool = True, constrained: bool = True):
+def _scope(
+    private: object,
+    *,
+    explicit: bool = True,
+    constrained: bool = True,
+    user_id: str = "u-1",
+) -> AuthorScope:
     scope = AuthorScope(
-        catalog_repo=catalog or _Catalog(), facts_repo=facts, request_id="req",
+        catalog_repo=None, private_repo=private, user_id=user_id, request_id="req",
     )
     scope.apply(
         AuthorSelection.from_attributes({
@@ -82,86 +75,70 @@ def _scope(facts, catalog=None, *, explicit: bool = True, constrained: bool = Tr
 
 
 async def test_my_own_recording_of_the_chosen_teacher_survives() -> None:
-    # The whole point: the catalog says the selection allows NO tracks, and this
-    # upload is still kept, because the speaker is who was asked for.
-    facts = _Facts({"mine": "Прабхупада"})
-    scope = _scope(facts)
-    assert await scope.track_ids() == []
-    assert await scope.narrow_owned(["mine"]) == ["mine"]
+    private = _Private(_LIBRARY)
+    kept = await _scope(private).narrow_owned([_MINE, _THEIRS, _MYSTERY])
+    assert kept == [_MINE]
+    # Asked with the verified user id and the selected authors — the ACL and the
+    # filter are one query, not a name-matching loop.
+    assert private.calls == [("u-1", [_PRABHU])]
 
 
-async def test_a_latin_name_on_the_upload_matches_a_cyrillic_request() -> None:
-    facts = _Facts({"mine": "Srila Prabhupada"})
-    assert await _scope(facts).narrow_owned(["mine"]) == ["mine"]
+async def test_the_callers_list_stays_authoritative_for_access() -> None:
+    # The repository may know about a track this turn's ACL list doesn't carry;
+    # narrowing only ever REMOVES.
+    private = _Private({**_LIBRARY, "not-in-acl": _PRABHU})
+    assert await _scope(private).narrow_owned([_MINE]) == [_MINE]
 
 
-async def test_someone_elses_teacher_is_dropped() -> None:
-    facts = _Facts({"theirs": "Niranjana Swami"})
-    assert await _scope(facts).narrow_owned(["theirs"]) == []
-
-
-async def test_an_upload_with_no_recorded_speaker_is_dropped() -> None:
-    # Under a constraint, "we don't know who this is" is not "this is them" —
-    # the same rule the corpus lane applies to an unattributable lecture.
-    facts = _Facts({"mystery": ""})
-    assert await _scope(facts).narrow_owned(["mystery"]) == []
-
-
-async def test_a_name_the_corpus_never_heard_of_is_dropped() -> None:
-    class _Empty(_Catalog):
-        async def resolve(self, kind, text, *, lang, limit):
-            self.resolves.append(text)
-            return []
-
-    facts = _Facts({"mine": "Some Visiting Speaker"})
-    assert await _scope(facts, _Empty()).narrow_owned(["mine"]) == []
+async def test_order_is_the_callers() -> None:
+    private = _Private({"a": _PRABHU, "b": _PRABHU})
+    assert await _scope(private).narrow_owned(["b", "a"]) == ["b", "a"]
 
 
 async def test_a_default_never_touches_the_library() -> None:
     # Nobody stated a choice, so nothing of theirs may be hidden — even though
     # the same selection narrows the public corpus.
-    facts = _Facts({"mine": "Niranjana Swami"})
-    scope = _scope(facts, explicit=False)
-    assert await scope.narrow_owned(["mine"]) == ["mine"]
-    assert facts.asked == []
+    private = _Private(_LIBRARY)
+    scope = _scope(private, explicit=False)
+    assert await scope.narrow_owned([_MINE, _THEIRS]) == [_MINE, _THEIRS]
+    assert private.calls == []
 
 
 async def test_no_selection_leaves_the_library_alone() -> None:
-    facts = _Facts({"mine": "Anyone"})
-    assert await _scope(facts, constrained=False).narrow_owned(["mine"]) == ["mine"]
-    assert facts.asked == []
+    private = _Private(_LIBRARY)
+    assert await _scope(private, constrained=False).narrow_owned([_THEIRS]) == [_THEIRS]
+    assert private.calls == []
 
 
-async def test_the_same_speaker_is_resolved_once_for_many_tracks() -> None:
-    facts = _Facts({f"t{i}": "Прабхупада" for i in range(5)})
-    catalog = _Catalog()
-    kept = await _scope(facts, catalog).narrow_owned([f"t{i}" for i in range(5)])
-    assert len(kept) == 5
-    assert catalog.resolves == ["Прабхупада"]
-
-
-async def test_a_facts_lookup_failure_fails_open() -> None:
-    class _Broken:
-        async def get_track_authors_raw(self, _ids):
-            raise RuntimeError("table missing")
-
-    # Hiding a library because a projection is unavailable is the worse error.
-    assert await _scope(_Broken()).narrow_owned(["mine"]) == ["mine"]
-
-
-async def test_no_facts_reader_at_all_fails_open() -> None:
-    scope = AuthorScope(catalog_repo=_Catalog(), request_id="req")
-    scope.apply(AuthorSelection.from_attributes({
-        LECTURE_AUTHORS: Attribute(value=[_PRABHU], explicit=True),
-    }))
-    assert await scope.narrow_owned(["mine"]) == ["mine"]
+async def test_an_anonymous_turn_has_nothing_to_narrow() -> None:
+    private = _Private(_LIBRARY)
+    scope = _scope(private, user_id="")
+    assert await scope.narrow_owned([_MINE]) == [_MINE]
+    assert private.calls == []
 
 
 @pytest.mark.parametrize("owned", [None, []])
 async def test_an_empty_library_asks_nothing(owned) -> None:
-    facts = _Facts({})
-    assert await _scope(facts).narrow_owned(owned) == owned
-    assert facts.asked == []
+    private = _Private(_LIBRARY)
+    assert await _scope(private).narrow_owned(owned) == owned
+    assert private.calls == []
+
+
+async def test_a_query_failure_fails_open() -> None:
+    class _Broken:
+        async def get_owned_track_ids_by_author(self, *_a):
+            raise RuntimeError("relation missing")
+
+    # Hiding a library because a query is unavailable is the worse error.
+    assert await _scope(_Broken()).narrow_owned([_MINE]) == [_MINE]
+
+
+async def test_no_private_reader_at_all_fails_open() -> None:
+    scope = AuthorScope(catalog_repo=None, user_id="u-1", request_id="req")
+    scope.apply(AuthorSelection.from_attributes({
+        LECTURE_AUTHORS: Attribute(value=[_PRABHU], explicit=True),
+    }))
+    assert await scope.narrow_owned([_MINE]) == [_MINE]
 
 
 async def test_the_private_lane_uses_the_owned_narrowing() -> None:
@@ -175,3 +152,28 @@ async def test_the_private_lane_uses_the_owned_narrowing() -> None:
     lane = src.split("async def _user_lecture")[1].split("async def ")[0]
     assert "narrow_owned(owned)" in lane
     assert "narrow(owned)" not in lane.replace("narrow_owned(owned)", "")
+
+
+# ── the SQL behind it ─────────────────────────────────────────────────────
+
+
+async def test_the_query_joins_owned_against_the_stamped_author() -> None:
+    """The predicate itself: `owned` ⋈ `chunks.author_id`, restricted to the
+    private kind, keyed on the verified user. Asserted on the SQL because the
+    isolation (`kind = 'user_track'`) and the ACL (`o.user_id = $1`) are the two
+    things that must never drift."""
+    import inspect
+
+    from lectorium_chat.infra.repositories.pg_chunk_repository import (
+        PgChunkRepository,
+    )
+
+    sql = inspect.getsource(PgChunkRepository.get_owned_track_ids_by_author)
+    assert "FROM owned o" in sql
+    assert "c.kind = 'user_track'" in sql
+    assert "o.user_id = $1" in sql
+    assert "c.author_id = ANY($2::text[])" in sql
+
+    counted = inspect.getsource(PgChunkRepository.unattributed_owned_count)
+    assert "c.author_id IS NULL" in counted
+    assert "o.user_id = $1" in counted
