@@ -643,3 +643,40 @@ def test_dedup_notes_by_key_passes_through_keyless_notes():
     out = dedup_notes_by_key(notes)
     assert len(out) == 2
     assert out[0] == {"type": "media", "ref": 1}
+
+
+@pytest.mark.asyncio
+async def test_the_private_lane_ignores_the_answer_language() -> None:
+    """A personal library is tens of recordings, often in another language than the
+    question. Filtering it by the answer language is how production answered
+    «не найдено» for three English lectures by exactly the asked-for teacher, while
+    the corpus lane happily served someone else.
+
+    The public lane keeps its language filter: half a million chunks, and its
+    per-(kind,lang) partial indexes are the reason it is fast.
+    """
+    seen: list[tuple[str, str | None]] = []
+
+    class _Repo(FakeChunkRepo):
+        async def search_by_embedding(
+            self, q_vec, *, eligible_track_ids=None, lang=None, top_k=8,
+            kind="track_transcript", **_kw,
+        ):
+            seen.append((kind, lang))
+            return []
+
+        async def search_library_by_embedding(self, q_vec, *, kinds, lang=None, **kw):
+            return []
+
+    await fanout_search_with_boost(
+        queries=[(0, "q")],
+        embedder=FakeEmbedder(),
+        chunk_repo=_Repo([], []),
+        catalog_repo=FakeCatalogRepo({}),
+        alias_map=FakeAliasMap(),
+        lang="ru",
+        owned_track_ids=["mine-en"],
+    )
+
+    assert ("user_track", None) in seen, f"private lane must not filter by lang: {seen}"
+    assert ("track_transcript", "ru") in seen, "public lane keeps its language"

@@ -50,6 +50,13 @@ class ChunkRepository(Protocol):
         asked-for name is matched against when the catalog does not know it."""
         ...
 
+    async def owned_langs_for_authors(
+        self, user_id: str, author_ids: list[str], author_raws: list[str],
+    ) -> list[str]:
+        """Languages of this person's own recordings by the given lecturers — so
+        an answer can say "they are in English" instead of "nothing found"."""
+        ...
+
     async def unattributed_owned_count(self, user_id: str) -> int:
         """How many of this user's own tracks have no resolved speaker — they
         fall out of every lecturer-filtered answer, and saying so is the only
