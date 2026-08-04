@@ -23,6 +23,7 @@ from typing import Any
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
+from shruti_chat.agent.graph.nodes._author_note import author_gap_note
 from shruti_chat.agent.graph.nodes._lang_name import resolve_lang_name
 from shruti_chat.agent.graph.nodes._worker_common import CARD_SPEC_BY_FAMILY
 from shruti_chat.agent.graph.state import ChatState
@@ -264,6 +265,14 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         state.get("fallback_notes", []) if fallback_mode
         else state.get("tool_results", [])
     )
+    # An answer narrowed to a lecturer and built entirely from scripture is
+    # indistinguishable from one that merely preferred scripture — so when their
+    # lectures contributed nothing, say so, in the same deterministic way as the
+    # disclaimer above and before the prose it explains.
+    gap_note = await author_gap_note(ctx, list(tool_results))
+    if gap_note:
+        writer({"type": "delta", "data": {"text": gap_note + "\n\n"}})
+
     # Only the `memory` fallback carries a draft; `out_of_scope` declines with
     # no draft and no notes (its prompt section is self-contained).
     fallback_answer = (
