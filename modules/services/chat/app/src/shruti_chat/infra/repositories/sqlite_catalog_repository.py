@@ -253,14 +253,14 @@ def _fuzzy_top(query: str, rows: list[_DictRow], limit: int) -> list[tuple[_Dict
     # address classifier / source filter silently miss. Parallel lists let
     # one id own several matchable strings; we keep the best score per id.
     choices: list[str] = []
-    owners: list[str] = []
-    for r in rows:
+    owners: list[int] = []
+    for i, r in enumerate(rows):
         choices.append(r.full_name)
-        owners.append(r.id)
+        owners.append(i)
         short = r.extra.get("short_name")
         if short:
             choices.append(short)
-            owners.append(r.id)
+            owners.append(i)
     matches = process.extract(
         query,
         choices,
@@ -269,13 +269,20 @@ def _fuzzy_top(query: str, rows: list[_DictRow], limit: int) -> list[tuple[_Dict
         limit=limit * 2,
         score_cutoff=40,
     )
-    by_id = {r.id: r for r in rows}
-    best: dict[str, float] = {}
+    # Keep the ROW whose name actually matched, not just its id. With
+    # `lang=None` the pool holds one row per locale for the same entity, so
+    # picking a row by id alone hands back an arbitrary locale's name — the
+    # query matches "A. C. Bhaktivedanta Swami Prabhupada" and the caller
+    # receives «А. Ч. Бхактиведанта Свами Прабхупада», which no cross-script
+    # comparison can then recognise as the same person.
+    best: dict[str, tuple[float, _DictRow]] = {}
     for (_text, score, idx) in matches:
-        oid = owners[idx]
-        best[oid] = max(best.get(oid, 0.0), score)
-    ranked = sorted(best.items(), key=lambda kv: -kv[1])[:limit]
-    return [(by_id[oid], score / 100.0) for oid, score in ranked]
+        row = rows[owners[idx]]
+        previous = best.get(row.id)
+        if previous is None or score > previous[0]:
+            best[row.id] = (score, row)
+    ranked = sorted(best.values(), key=lambda sr: -sr[0])[:limit]
+    return [(row, score / 100.0) for score, row in ranked]
 
 
 # --- sync SQL bodies (moved from agent/tools/*) -----------------------------
