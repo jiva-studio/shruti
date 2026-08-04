@@ -243,36 +243,28 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 			return envelope.Err(kind, envelope.CodeNotFound, "no such track", map[string]any{"track_id": trackID}), nil
 		}
 		_ = ld // location not needed here; loaded for the shared dict helper
-
-		title := tr.Title(lang)
-		author := ""
-		if a := authorRef(ad, tr.AuthorID, lang); a != nil {
-			if n, ok := a["name"].(string); ok {
-				author = n
-			}
-		}
 		_ = sd
 
-		// Transcript of [start,end] when Postgres is configured (else empty).
-		text := ""
-		if d.Search != nil {
-			hits, werr := d.Search.Window(ctx, trackID, startMs, endMs, lang, 50)
-			if werr == nil {
-				parts := make([]string, 0, len(hits))
-				for _, h := range hits {
-					if s := strings.TrimSpace(h.Text); s != "" {
-						parts = append(parts, s)
-					}
-				}
-				text = strings.Join(parts, " ")
-			}
+		// Spoken sentences of [start,end], sliced out of the published transcript.
+		segments, text, transcriptLang := d.excerptTranscript(ctx, tr, lang, startMs, endMs)
+
+		// Caller-supplied lang wins; otherwise label the card in the language the
+		// passage is actually spoken in, so title and author match the transcript.
+		metaLang := lang
+		if metaLang == "" {
+			metaLang = transcriptLang
+		}
+		title := tr.Title(metaLang)
+		author := ""
+		if a, ok := ad.Get(tr.AuthorID); ok {
+			author = a.Name(metaLang)
 		}
 
 		_, excerptID, _, _ := d.excerptKeys(trackID, startMs, endMs)
 
 		// No generation here — the player calls excerpt_prepare on Play. excerpt_id
-		// seeds the waveform. The transcript goes to the LLM (content), not the
-		// widget — the player renders only title/meta + waveform.
+		// seeds the waveform. The transcript goes to both the widget (rendered under
+		// the player, as in the app's citation card) and the LLM (content).
 		data := map[string]any{
 			"track_id":   trackID,
 			"title":      title,
@@ -281,6 +273,8 @@ func registerLectureExcerpt(srv *server.MCPServer, d *Deps) {
 			"start_ms":   startMs,
 			"end_ms":     endMs,
 			"excerpt_id": excerptID,
+			"transcript": segments,
+			"lang":       transcriptLang,
 		}
 		human := "Audio excerpt from " + title
 		if author != "" {

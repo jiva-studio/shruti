@@ -217,17 +217,17 @@ type RefRow struct {
 
 // Track is the assembled per-track metadata.
 type Track struct {
-	ID              string
-	AuthorID        string
-	LocationID      string
-	Date            string
-	Titles          map[string]string // lang -> title
-	Durations       map[string]int64  // lang -> audio duration (ms), from track_audio
-	Languages       []string          // variant languages (stable order)
-	TranscriptLangs map[string]bool   // lang -> has transcript_path
-	HasOutline      bool              // any variant has an aligned outline (has_pdf proxy)
-	TagIDs          []string
-	Refs            []RefRow
+	ID          string
+	AuthorID    string
+	LocationID  string
+	Date        string
+	Titles      map[string]string // lang -> title
+	Durations   map[string]int64  // lang -> audio duration (ms), from track_audio
+	Languages   []string          // variant languages (stable order)
+	Transcripts map[string]string // lang -> transcript_path (relative to the media base)
+	HasOutline  bool              // any variant has an aligned outline (has_pdf proxy)
+	TagIDs      []string
+	Refs        []RefRow
 }
 
 // Kind derives lecture|conversation from the track's tags.
@@ -242,6 +242,26 @@ func (t *Track) Kind() string {
 
 // Title returns the track title preferring lang, then en, then any variant.
 func (t *Track) Title(lang string) string { return pick(t.Titles, lang) }
+
+// TranscriptPath returns the published transcript artifact for the preferred
+// language (then en, then the first variant carrying one) and the language it
+// belongs to. Empty when the track has no transcript at all.
+func (t *Track) TranscriptPath(lang string) (path, effLang string) {
+	if lang != "" {
+		if p, ok := t.Transcripts[lang]; ok {
+			return p, lang
+		}
+	}
+	if p, ok := t.Transcripts["en"]; ok {
+		return p, "en"
+	}
+	for _, l := range t.Languages {
+		if p, ok := t.Transcripts[l]; ok {
+			return p, l
+		}
+	}
+	return "", ""
+}
 
 // Duration returns the audio duration for the preferred variant language.
 func (t *Track) Duration(lang string) int64 {
@@ -278,13 +298,13 @@ func (r *Repo) GetTrack(ctx context.Context, id string) (*Track, error) {
 		return nil, nil
 	}
 	t := &Track{
-		ID:              id,
-		AuthorID:        authorID.String,
-		LocationID:      locationID.String,
-		Date:            date.String,
-		Titles:          map[string]string{},
-		Durations:       map[string]int64{},
-		TranscriptLangs: map[string]bool{},
+		ID:          id,
+		AuthorID:    authorID.String,
+		LocationID:  locationID.String,
+		Date:        date.String,
+		Titles:      map[string]string{},
+		Durations:   map[string]int64{},
+		Transcripts: map[string]string{},
 	}
 	if err := r.fillVariants(ctx, t); err != nil {
 		return nil, err
@@ -315,7 +335,7 @@ func (r *Repo) fillVariants(ctx context.Context, t *Track) error {
 		t.Languages = append(t.Languages, lang)
 		t.Titles[lang] = title
 		if transcript.Valid && transcript.String != "" {
-			t.TranscriptLangs[lang] = true
+			t.Transcripts[lang] = transcript.String
 		}
 		if outline.Valid && outline.String != "" {
 			t.HasOutline = true
@@ -385,7 +405,7 @@ func (r *Repo) fillRefs(ctx context.Context, t *Track) error {
 }
 
 // HasTranscript reports whether any variant carries a transcript.
-func (t *Track) HasTranscript() bool { return len(t.TranscriptLangs) > 0 }
+func (t *Track) HasTranscript() bool { return len(t.Transcripts) > 0 }
 
 // TrackHasRef reports whether a track cites (sourceID[, tokens]). Used by
 // search's post-retrieval track filtering.
@@ -524,7 +544,7 @@ func (r *Repo) ListTracks(ctx context.Context, f ListFilter) ([]*Track, error) {
 		}
 		out = append(out, &Track{
 			ID: id, AuthorID: author.String, LocationID: location.String, Date: date,
-			Titles: map[string]string{}, Durations: map[string]int64{}, TranscriptLangs: map[string]bool{},
+			Titles: map[string]string{}, Durations: map[string]int64{}, Transcripts: map[string]string{},
 		})
 	}
 	if err := rows.Err(); err != nil {
