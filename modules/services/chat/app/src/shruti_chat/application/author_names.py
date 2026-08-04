@@ -3,9 +3,15 @@
 A name reaches us in whatever language it was written — the router normalizes the
 speaker it extracts to English ("Шрила Прабхупада" → "Srila Prabhupada"), a
 person asking for a lecturer types their own script — so it can never be compared
-against one locale's dictionary alone: a Latin query scores ~0.04 against the Cyrillic
-"А. Ч. Бхактиведанта Свами Прабхупада" and the corpus's OWN author reads as
-absent. Callers therefore resolve across ALL locales and decide here.
+against one locale's dictionary alone: a Latin query scores ~0.04 against the
+Cyrillic "А. Ч. Бхактиведанта Свами Прабхупада" and the corpus's OWN author reads
+as absent. Callers therefore resolve across ALL locales and decide here.
+
+Comparison itself also falls back to a romanized pass, for the case a dictionary
+cannot help with: a privately added recording carries ONE spelling of its speaker
+— whatever the ingest wrote — so «Рохини сута прабху» has to reach "Rohini Suta
+Prabhu" on its own. Same-script matching runs first, so a name still comes back in
+the script it was asked in.
 
 The decision is token containment, not a fuzzy threshold: strip the honorifics
 ("Srila", "Swami", "His Divine Grace", …) from both sides and require every
@@ -46,10 +52,36 @@ _HONORIFICS = frozenset({
 _TOKEN_SIMILARITY = 88.0
 
 
+# Cyrillic → Latin, for comparison only. The published dictionary carries a row
+# per locale, so a catalog author matches in either script by lookup. A PRIVATE
+# upload has exactly one spelling — whatever the ingest wrote, usually Latin — and
+# someone typing «Рохини сута прабху» would never reach "Rohini Suta Prabhu"
+# without this. Practical transliteration, not a standard: «прабху» → "prabhu",
+# «бхакти» → "bhakti", which is what these names actually look like in Latin.
+_CYR_TO_LAT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sh",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+}
+
+
 def _fold(text: str) -> str:
     """Casefold and drop combining marks, so "Ṭhākura" == "thakura"."""
     decomposed = unicodedata.normalize("NFKD", text)
     return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+
+def _romanize(token: str) -> str:
+    """Cyrillic token → Latin, for comparison only.
+
+    Applied per TOKEN, after the initials and honorifics are already gone: some
+    letters romanize to two characters («ч» → "ch"), and doing this before the
+    single-letter filter would turn the initials of «А. Ч. Бхактиведанта» into
+    identity-bearing tokens.
+    """
+    return "".join(_CYR_TO_LAT.get(c, c) for c in token)
 
 
 def distinctive_tokens(name: str) -> set[str]:
@@ -69,6 +101,10 @@ def distinctive_tokens(name: str) -> set[str]:
     }
 
 
+def _romanized(tokens: set[str]) -> set[str]:
+    return {_romanize(t) for t in tokens}
+
+
 def names_match(query: str, candidate: str) -> bool:
     """True when every distinctive token of `query` appears in `candidate`.
 
@@ -83,6 +119,17 @@ def names_match(query: str, candidate: str) -> bool:
     have = distinctive_tokens(candidate)
     if not have:
         return False
+    if _covers(wanted, have):
+        return True
+    # Second pass in Latin. The published dictionary holds a row per locale, so a
+    # catalog author is reachable in either script by lookup — a PRIVATE upload has
+    # one spelling, whatever the ingest wrote, and «Рохини сута прабху» would never
+    # reach "Rohini Suta Prabhu" otherwise. Same-script matching runs first so a
+    # label still comes back in the script it was asked in.
+    return _covers(_romanized(wanted), _romanized(have))
+
+
+def _covers(wanted: set[str], have: set[str]) -> bool:
     return all(
         any(fuzz.ratio(w, h) >= _TOKEN_SIMILARITY for h in have)
         for w in wanted

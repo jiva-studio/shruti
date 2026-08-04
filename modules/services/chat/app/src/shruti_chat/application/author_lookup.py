@@ -39,10 +39,25 @@ async def resolve_author(catalog_repo: Any, name: str) -> Any | None:
         )
     except Exception:  # noqa: BLE001
         return None
+    # Two passes so the returned row is the one whose SCRIPT was asked for: the
+    # dictionary holds every locale of an author, and a Cyrillic question deserves
+    # the Cyrillic name back even though romanized matching would accept either.
+    from shruti_chat.application.author_names import distinctive_tokens
+
+    for hit in hits:
+        if _covers_same_script(text, hit.full_name):
+            return hit
     for hit in hits:
         if names_match(text, hit.full_name):
             return hit
     return None
+
+
+def _covers_same_script(query: str, candidate: str) -> bool:
+    from shruti_chat.application.author_names import _covers, distinctive_tokens
+
+    wanted, have = distinctive_tokens(query), distinctive_tokens(candidate)
+    return bool(wanted and have and _covers(wanted, have))
 
 
 async def own_speaker_names(
