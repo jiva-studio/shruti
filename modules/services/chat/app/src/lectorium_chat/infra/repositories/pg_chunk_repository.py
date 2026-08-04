@@ -141,6 +141,41 @@ class PgChunkRepository:
             return []
         return [r["track_id"] for r in rows]
 
+    async def get_track_authors_raw(
+        self, track_ids: list[str],
+    ) -> dict[str, str]:
+        """Speaker names for privately added tracks, as the ingest reported them.
+
+        Free text, unresolved: "Прабхупада", "His Grace Radhanath Swami". The
+        caller decides what they denote — resolving here would freeze one
+        strategy into the repository.
+
+        A track with no row, or a row with no speaker, is simply absent from the
+        result: the caller must decide what an unattributable recording means,
+        and it means different things to a filter and to a listing. Same
+        graceful-degradation contract as `get_owned_track_ids` — a missing table
+        yields {} rather than failing the turn.
+        """
+        if not track_ids:
+            return {}
+        try:
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT track_id, data->>'author_raw' AS author_raw
+                      FROM user_track_facts
+                     WHERE track_id = ANY($1::text[])
+                    """,
+                    list(track_ids),
+                )
+        except asyncpg.UndefinedTableError:
+            return {}
+        return {
+            r["track_id"]: r["author_raw"]
+            for r in rows
+            if (r["author_raw"] or "").strip()
+        }
+
     async def search_by_embedding(
         self,
         embedding: list[float],
