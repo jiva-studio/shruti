@@ -296,6 +296,13 @@ type ProviderOptions struct {
 	// to the model's own default behaviour. Ignored by upstreams that
 	// don't expose a reasoning toggle.
 	Reasoning string `yaml:"reasoning,omitempty"`
+	// Format is the review reply shape: "json" (default) returns every
+	// segment, "lines" returns only the corrected ones plus sentence-end
+	// boundaries. Output is billed well above input, and most of the JSON
+	// reply was unchanged text, so "lines" measured ~45% cheaper at equal
+	// accuracy. Per-provider because it depends on the model holding the
+	// looser contract.
+	Format string `yaml:"format,omitempty"`
 }
 
 // Load reads YAML config from path, expands ${ENV_VAR} and ~, applies defaults.

@@ -19,6 +19,7 @@ import (
 )
 
 var defaultSystemPrompt = prompts.System
+var linesSystemPrompt = prompts.SystemLines
 var defaultUserPrompt = prompts.User
 
 // Reasoning re-exports for callers that don't import internal/infra/openaicompat directly.
@@ -28,12 +29,25 @@ const (
 	ReasoningOn      = openaicompat.ReasoningOn
 )
 
+// Format selects the wire shape of the reply. FormatJSON is the original
+// contract: every segment returned, sentences spelled out in full. FormatLines
+// asks only for the segments that changed and the sentence-end boundaries,
+// which measured ~45% cheaper at equal accuracy — output is billed at several
+// times the input rate, and most of it was unchanged text.
+type Format string
+
+const (
+	FormatJSON  Format = "json"
+	FormatLines Format = "lines"
+)
+
 type Reviewer struct {
 	NameAlias    string // YAML alias, e.g. "gemini-3-flash-preview"
 	Client       *openaicompat.Client
 	Model        string // upstream id, e.g. google/gemini-3-flash-preview
 	MaxTokens    int
 	Reasoning    string
+	Format       Format
 	SystemPrompt string
 	UserPrompt   string
 }
@@ -45,6 +59,7 @@ type Config struct {
 	Model     string
 	MaxTokens int
 	Reasoning string
+	Format    Format // empty = FormatJSON
 }
 
 func New(cfg Config) (*Reviewer, error) {
@@ -65,13 +80,24 @@ func New(cfg Config) (*Reviewer, error) {
 	if max == 0 {
 		max = 4096
 	}
+	format := cfg.Format
+	if format == "" {
+		format = FormatJSON
+	}
+	system := defaultSystemPrompt
+	if format == FormatLines {
+		system = linesSystemPrompt
+	} else if format != FormatJSON {
+		return nil, fmt.Errorf("openai-compat review %q: unknown format %q", cfg.NameAlias, cfg.Format)
+	}
 	return &Reviewer{
 		NameAlias:    cfg.NameAlias,
 		Client:       cli,
 		Model:        cfg.Model,
 		MaxTokens:    max,
 		Reasoning:    cfg.Reasoning,
-		SystemPrompt: defaultSystemPrompt,
+		Format:       format,
+		SystemPrompt: system,
 		UserPrompt:   defaultUserPrompt,
 	}, nil
 }
@@ -109,15 +135,26 @@ func (r *Reviewer) ReviewChunk(ctx context.Context, req review.ChunkRequest) (re
 	}
 
 	temp := 0.1
-	var out chunkContent
-	res, err := r.Client.RunJSON(ctx, openaicompat.Call{
+	call := openaicompat.Call{
 		Model:       r.Model,
 		MaxTokens:   r.MaxTokens,
 		System:      r.SystemPrompt,
 		User:        user,
 		Temperature: &temp,
 		Reasoning:   r.Reasoning,
-	}, &out)
+	}
+
+	var out chunkContent
+	var res openaicompat.Result
+	if r.Format == FormatLines {
+		res, err = r.Client.Run(ctx, call)
+		if err == nil {
+			out.Segments, out.Sentences, err = parseLines(
+				openaicompat.StripFences(res.Text), req.Segments)
+		}
+	} else {
+		res, err = r.Client.RunJSON(ctx, call, &out)
+	}
 	if err != nil {
 		return review.ChunkResponse{}, fmt.Errorf("openai-compat %q: %w", r.NameAlias, err)
 	}

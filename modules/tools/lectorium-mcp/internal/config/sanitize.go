@@ -110,6 +110,7 @@ func sanitizeProvider(p ProviderOptions) map[string]any {
 		"model":       p.Model,
 		"max_tokens":  p.MaxTokens,
 		"reasoning":   p.Reasoning,
+		"format":      p.Format,
 		"prompt_path": p.PromptPath,
 	}
 }
