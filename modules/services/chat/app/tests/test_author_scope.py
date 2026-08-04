@@ -320,3 +320,76 @@ async def test_history_search_narrows_what_the_user_listened_to() -> None:
         author_scope=_scope(_selection(_OURS), _Catalog({_OURS: ["mine"]})),
     )
     assert seen == [["mine"]]
+
+
+async def test_a_pinned_lecture_is_still_a_lecture() -> None:
+    """The gap a production probe found. Attribution refs arrive by a verse↔talk
+    link rather than a search, so they bypass every eligible-id filter upstream
+    — the question lookup, the memory pass and the topic refs all resolve through
+    one funnel, and with the selection unapplied there an answer narrowed to a
+    lecturer with no lectures still came back with eleven transcript citations.
+
+    Books stay canon: only `ref_kind == "track"` is dropped."""
+    from lectorium_chat.research.models import AttributionRef
+    from lectorium_chat.research.pipeline import _fetch_refs
+
+    asked: list[tuple[str, str]] = []
+
+    class _Chunks:
+        async def get_chunks_by_target(self, *, ref_kind, target_id, lang):
+            asked.append((ref_kind, target_id))
+            return []
+
+        async def get_chunks_by_track_fragment(self, *args, **kwargs):
+            # The path a `track` ref takes — a fragment lookup, NOT the
+            # by-target one, which is why asserting on the latter alone proved
+            # nothing (the first version of this test passed with the filter
+            # removed).
+            target = kwargs.get("target_id") or (args[0] if args else "")
+            asked.append(("track", str(target)))
+            return []
+
+    refs = [
+        AttributionRef(ref_kind="track", target_id="mine@0-1000"),
+        AttributionRef(ref_kind="track", target_id="theirs@0-1000"),
+        AttributionRef(ref_kind="verse", target_id="bg/2.13"),
+        AttributionRef(ref_kind="document", target_id="doc_purport"),
+    ]
+    await _fetch_refs(
+        refs,
+        chunk_repo=_Chunks(),
+        alias_map=None,
+        lang="ru",
+        canonical_score=0.9,
+        author_scope=_scope(_selection(_OURS), _Catalog({_OURS: ["mine"]})),
+    )
+    # The other lecturer's pinned fragment never reached a lookup; the verse and
+    # the purport did.
+    assert ("track", "theirs@0-1000") not in asked
+    assert ("verse", "bg/2.13") in asked
+    assert ("document", "doc_purport") in asked
+
+
+async def test_pinned_refs_ride_through_when_nothing_is_selected() -> None:
+    from lectorium_chat.research.models import AttributionRef
+    from lectorium_chat.research.pipeline import _fetch_refs
+
+    asked: list[str] = []
+
+    class _Chunks:
+        async def get_chunks_by_target(self, *, ref_kind, target_id, lang):
+            asked.append(target_id)
+            return []
+
+        async def get_window(self, *_a, **_k):
+            return []
+
+    await _fetch_refs(
+        [AttributionRef(ref_kind="verse", target_id="bg/2.13")],
+        chunk_repo=_Chunks(), alias_map=None, lang="ru", canonical_score=0.9,
+        author_scope=_scope(AuthorSelection.unconstrained(), _Catalog({})),
+    )
+    # Asked at least once — twice here, because a ref with no chunks in the
+    # answer language is retried language-agnostically. What matters is that it
+    # was not dropped.
+    assert asked and set(asked) == {"bg/2.13"}

@@ -387,6 +387,7 @@ async def _resolve_memory(
     reranker: Any = None,
     llm: Any = None,
     confirm_model: str | None = None,
+    author_scope: Any | None = None,
 ) -> MemoryResolution:
     """Find the best-matching memory for this turn and resolve it.
 
@@ -434,6 +435,7 @@ async def _resolve_memory(
             scoped_refs, chunk_repo=chunk_repo, alias_map=alias_map,
             lang=retrieval_lang, canonical_score=MEMORY_REF_SCORE, on_event=on_event,
             library_db=library_db, catalog_repo=catalog_repo,
+            author_scope=author_scope,
         )
     log.info(
         "pipeline_memory_match",
@@ -478,6 +480,7 @@ async def _fetch_refs(
     on_event: OnEvent | None = None,
     library_db: Any | None = None,
     catalog_repo: Any | None = None,
+    author_scope: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve each AttributionRef → chunks → envelopes. Envelopes carry
     `score = canonical_score` (>= 0.85 for accept) so the synthesizer's
@@ -487,6 +490,32 @@ async def _fetch_refs(
     'prose_chapter' applies; refs to literal verses use kind='verse'."""
     if not refs:
         return []
+
+    # Every attribution path — the question lookup, the memory pass and the
+    # topic refs — resolves its refs HERE, which makes this the one place the
+    # author selection has to be applied to them. A pinned lecture is still a
+    # lecture: it arrives by a verse↔talk link rather than a search, so it
+    # bypasses every eligible-id filter upstream. Only `ref_kind == "track"` is
+    # touched; verses, purports and chapters are canon.
+    if author_scope is not None and author_scope.selection.constrained:
+        allowed = await author_scope.track_ids()
+        allowed_set = set(allowed or ())
+        kept = []
+        for ref in refs:
+            if ref.ref_kind != "track":
+                kept.append(ref)
+                continue
+            # target_id is "<track_id>@<start_ms>-<end_ms>".
+            if ref.target_id.split("@", 1)[0] in allowed_set:
+                kept.append(ref)
+        if len(kept) != len(refs):
+            log.info(
+                "attribution_refs_narrowed_by_author",
+                dropped=len(refs) - len(kept), kept=len(kept),
+            )
+        refs = kept
+        if not refs:
+            return []
 
     async def _one(ref: AttributionRef) -> list[dict[str, Any]]:
         # Lecture-fragment refs resolve to transcript chunks (which have no
@@ -815,6 +844,7 @@ async def run_research(
             answer_lang=lang, embed_model=embed_model, embed_dim=embed_dim,
             pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
             library_db=library_db, catalog_repo=catalog_repo, on_event=on_event,
+            author_scope=author_scope,
             user_query=question, reranker=reranker, llm=llm, confirm_model=confirm_model,
         ),
         default=MemoryResolution(),
@@ -966,6 +996,7 @@ async def _lean_path(
                 all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                 lang=retrieval_lang, canonical_score=top_score, on_event=on_event,
                 library_db=library_db, catalog_repo=catalog_repo,
+                author_scope=author_scope,
             ),
             default=[], timeout=TIMEOUT_FETCH_REFS_S,
             name="fetch_refs", request_id=request_id,
@@ -1260,6 +1291,7 @@ async def _research_path(
                 topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                 lang=retrieval_lang, canonical_score=0.75, on_event=on_event,
                 library_db=library_db, catalog_repo=catalog_repo,
+                author_scope=author_scope,
             ),
             default=[], timeout=TIMEOUT_FETCH_REFS_S,
             name="fetch_topic_refs", request_id=request_id,
