@@ -42,6 +42,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
     resolve_track_display,
 )
 from shruti_chat.agent.graph.state import ChatState
+from shruti_chat.agent.prompts import standalone_prompt
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message, ScoredChunk
@@ -216,14 +217,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
     """A short, grounded description of ONE lecture, tilted toward the user's
     question. Built from the lecture's own catalog description — NOT a verdict
     on whether it matches (that produced "this lecture is NOT about X")."""
-    sys = (
-        "You write a SHORT 1–2 sentence description of a lecture for a "
-        "search-result card, in the user's language. Base it on the lecture's "
-        "own description and the excerpt; bring out the part relevant to the "
-        "user's question. Describe what the lecture COVERS — never comment on "
-        "whether it matches the query, never say 'this lecture is about…'. "
-        "Plain text, no markdown, do not repeat the title."
-    )
+    sys = standalone_prompt("find-tracks-description", "find_tracks_description")
     usr = (
         f"User question: {query}\n"
         f"Lecture title: {title or '—'}\n"
@@ -247,12 +241,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
 async def _intro(
     ctx: TurnContext, query: str, n: int, relaxed: str, *, ref: str = "",
 ) -> str:
-    sys = (
-        "Write ONE short intro line (max ~14 words) in the user's language for "
-        "a list of lectures found for the user's query — e.g. 'Вот лекции об "
-        "очищении сердца:'. If some search filters were relaxed, mention it "
-        "briefly. If zero lectures were found, say so plainly. Plain text only."
-    )
+    sys = standalone_prompt("find-tracks-intro", "find_tracks_intro")
     facts = [
         f"User query: {query}",
         f"Lectures found: {n}",
