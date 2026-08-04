@@ -636,3 +636,39 @@ async def test_the_router_calls_it(monkeypatch) -> None:
     monkeypatch.setattr(router_mod, "_turn_author", _spy)
     src = __import__("inspect").getsource(router_mod.router_node)
     assert "_turn_author(" in src, "router_node must apply the message's author"
+
+
+async def test_a_listing_turn_reroutes_when_only_my_library_has_him() -> None:
+    """`find_track` answers from the catalog — titles, dates, cards — and a
+    personal upload is in none of it. Production said «Лекции по вашему запросу не
+    найдены» while three of his lectures sat indexed and searchable, so such a turn
+    goes to research, which reads transcripts and cites fragments instead."""
+    from shruti_chat.agent.graph.nodes.router import _reroute_for_private_author
+    from shruti_chat.domain.routing import RoutingDecision
+
+    listing = RoutingDecision(
+        intent="find_track", confidence=0.95,
+        extracted_args={"author": "Rohini suta Prabhu"},
+    )
+    out = _reroute_for_private_author(listing)
+    assert out.intent == "research"
+    # The extracted args ride along — the topic is what research needs.
+    assert out.extracted_args == {"author": "Rohini suta Prabhu"}
+
+    # Any other intent is left exactly as it was.
+    research = RoutingDecision(intent="research", confidence=0.9, extracted_args={})
+    assert _reroute_for_private_author(research) is research
+
+
+async def test_the_reroute_happens_before_the_decision_is_announced() -> None:
+    """The SSE `router_decision` event feeds the refund path and the Langfuse
+    intent score. Announcing `find_track` and then running research would make both
+    of them lie."""
+    import inspect
+
+    from shruti_chat.agent.graph.nodes import router as router_mod
+
+    src = inspect.getsource(router_mod.router_node)
+    reroute_at = src.index("_reroute_for_private_author")
+    emit_at = src.index('"key": "router_decision"')
+    assert reroute_at < emit_at, "the decision event must carry the FINAL intent"
