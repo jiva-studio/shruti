@@ -75,6 +75,11 @@ async def chunks_search(
     # internal callers / tests that DO have real ids.
     book_id: str | None = None,
     referenced_source_id: str | None = None,
+    # The turn's author selection (`application.author_scope.AuthorScope`),
+    # supplied by the per-turn wrapper. Not in the LLM schema: a worker calls
+    # this directly, so the narrowing has to happen here rather than be asked
+    # for. None ⇒ nothing constrained.
+    author_scope: Any | None = None,
 ) -> list[dict[str, Any]]:
     if type is not None and type not in _ALL_TYPES:
         return []
@@ -91,6 +96,8 @@ async def chunks_search(
             date_from=date_from,
             date_to=date_to,
         )
+        if author_scope is not None:
+            eligible_ids = await author_scope.narrow(eligible_ids)
         if eligible_ids is not None and not eligible_ids:
             return []
         scored = await chunk_repo.search_by_embedding(

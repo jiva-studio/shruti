@@ -206,12 +206,19 @@ async def _search(
     ctx: TurnContext, embedding: list[float], flt: dict, *, lang: str | None,
 ) -> list[ScoredChunk]:
     """Semantic search under `flt`. `lang=None` drops the transcript-language
-    predicate, so lectures that exist ONLY in another language become visible."""
+    predicate, so lectures that exist ONLY in another language become visible.
+
+    The turn's author selection narrows EVERY rung of the ladder and is never
+    relaxed by it: a person who limited the answer to one lecturer must not be
+    handed another one's lecture — the ladder gives up the author a QUESTION
+    named, not the one a setting did."""
     eligible = None
     if any(flt.values()):
         eligible = await ctx.catalog_repo.filter_track_ids(**flt)
-        if eligible is not None and not eligible:
-            return []  # filters matched zero tracks — nothing to search
+    if ctx.author_scope is not None:
+        eligible = await ctx.author_scope.narrow(eligible)
+    if eligible is not None and not eligible:
+        return []  # filters matched zero tracks — nothing to search
     return await ctx.chunk_repo.search_by_embedding(
         embedding,
         eligible_track_ids=eligible,

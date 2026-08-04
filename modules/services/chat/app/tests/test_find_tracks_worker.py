@@ -51,6 +51,10 @@ class _Ctx:
     request_id: str = "req-test"
     kv_cache: Any | None = None
     capabilities: dict = field(default_factory=lambda: {"personal_library": True})
+    # The turn's author selection; None ⇒ nothing constrained,
+    # which is what every test that does not care about it wants.
+    author_scope: Any | None = None
+
 
 
 @dataclass

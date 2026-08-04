@@ -32,7 +32,11 @@ from lectorium_chat.agent.events import AgentEvent
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.markers import CARD_RE, CITE_RE, OUTLINE_RE
-from lectorium_chat.agent.tools import TOOLS, build_personalized_tools
+from lectorium_chat.agent.tools import (
+    TOOLS,
+    build_personalized_tools,
+    build_scoped_tools,
+)
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.application.author_scope import AuthorScope
 from lectorium_chat.application.chat_turn_request import ChatTurnRequest
@@ -278,7 +282,17 @@ async def run_chat_turn(
         # by name per worker (the aliasing is idempotent and the shared
         # alias map keeps refs consistent across workers in the same
         # turn).
+        # Empty until the router settles the turn's attributes; the tools close
+        # over this very object, so filling it there is what makes the selection
+        # reach them.
+        author_scope = AuthorScope(
+            catalog_repo=deps.catalog_repo, request_id=trace_id,
+        )
+
         all_tools = build_personalized_tools(TOOLS, user_context)
+        # The retrieval tools close over the (still empty) author scope; the
+        # router fills it once the turn's attributes are settled.
+        all_tools = build_scoped_tools(all_tools, author_scope)
         aliased_tools = build_aliased_tools(all_tools, aliases)
         research_tools = _subset(aliased_tools, _RESEARCH_TOOL_NAMES)
         locate_tools = _subset(aliased_tools, _LOCATE_TOOL_NAMES)
@@ -321,13 +335,6 @@ async def run_chat_turn(
                 deps.embedder.embed_query(user_query_text),
                 name="speculative_embed_query",
             )
-
-        # Empty until the router settles the turn's attributes; the tools close
-        # over this very object, so filling it there is what makes the selection
-        # reach them.
-        author_scope = AuthorScope(
-            catalog_repo=deps.catalog_repo, request_id=trace_id,
-        )
 
         ctx = TurnContext(
             request_id=trace_id,

@@ -376,6 +376,9 @@ async def fanout_search_with_boost(
     rerank_query: str | None = None,
     boost_kinds: frozenset[str] = frozenset(),
     owned_track_ids: list[str] | None = None,
+    # The turn's author selection. Narrows the LECTURE lanes only — the library
+    # lane below (verses, purports, chapters, letters) is canon and untouched.
+    author_scope: Any | None = None,
 ) -> FanoutResult:
     """One round of fanout. Returns top-K envelopes.
 
@@ -429,8 +432,14 @@ async def fanout_search_with_boost(
         query_texts = query_texts[:n]
         sub_query_ids = sub_query_ids[:n]
 
-    # 2. Lecture lane is disabled when the catalog filter matched zero tracks.
-    lectures_disabled = eligible_track_ids is not None and not eligible_track_ids
+    # 2. The turn's author selection narrows the lecture lanes on top of the
+    #    router's own filters. Books stay canon, so the library lane below is
+    #    left alone. The lane is disabled when the intersection matched zero
+    #    tracks — same rule as an empty catalog filter.
+    lecture_eligible = eligible_track_ids
+    if author_scope is not None:
+        lecture_eligible = await author_scope.narrow(eligible_track_ids)
+    lectures_disabled = lecture_eligible is not None and not lecture_eligible
 
     # Per-lane ANN timing. The 4 lanes run concurrently inside `_run` across
     # all sub-queries, so the round's `ann_ms` is bounded by the slowest single
@@ -449,7 +458,7 @@ async def fanout_search_with_boost(
                 return []
             _t = time.perf_counter()
             scored = await chunk_repo.search_by_embedding(
-                q_vec, eligible_track_ids=eligible_track_ids, lang=use_lang, top_k=fetch_k,
+                q_vec, eligible_track_ids=lecture_eligible, lang=use_lang, top_k=fetch_k,
             )
             _record("lecture", _t)
             return [
@@ -464,12 +473,19 @@ async def fanout_search_with_boost(
             # `owned_track_ids`). Off entirely when the user owns nothing, so
             # a signed-out / library-less turn pays zero extra ANN cost and
             # the public corpus behaviour is byte-for-byte unchanged.
-            if not owned_track_ids:
+            owned = owned_track_ids
+            # A person's OWN added lectures are narrowed only by a selection
+            # they stated — a default must never hide their own library. Their
+            # authors are not in the published catalog, so the intersection is
+            # by track id and an unattributable track simply falls out.
+            if owned and author_scope is not None and author_scope.selection.explicit:
+                owned = await author_scope.narrow(owned)
+            if not owned:
                 return []
             _t = time.perf_counter()
             scored = await chunk_repo.search_by_embedding(
                 q_vec,
-                eligible_track_ids=owned_track_ids,
+                eligible_track_ids=owned,
                 lang=use_lang,
                 top_k=fetch_k,
                 kind="user_track",
