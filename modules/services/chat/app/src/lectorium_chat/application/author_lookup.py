@@ -5,7 +5,7 @@ which resolves the speaker the router extracted, and the `lecture_authors`
 attribute, which resolves the teachers someone asked to be answered from.
 
 Resolution is across ALL locales, and the decision is token containment rather
-than a score cutoff — see `_author_match` for why no ratio separates "Srila
+than a score cutoff — see `author_names` for why no ratio separates "Srila
 Prabhupada" (ours) from "Bhakti Caitanya Swami" (not ours).
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from lectorium_chat.agent.graph.nodes._author_match import names_match
+from lectorium_chat.application.author_names import names_match
 
 
 # Enough candidates that the right locale's row is in the pool — the fuzzy

@@ -28,8 +28,11 @@ from typing import Any, Mapping, Protocol, TypeVar
 
 from pydantic import BaseModel
 
+from lectorium_chat.application.author_lookup import resolve_author
 from lectorium_chat.application.cache_helpers import TTL_7D, cached_llm_json
 from lectorium_chat.domain.conversation_attributes import (
+    ALL,
+    LECTURE_AUTHORS,
     REPLY_LANGUAGE,
     Attribute,
     merge_attributes,
@@ -102,7 +105,88 @@ class ReplyLanguageSpec:
         return attr if attr.settled() else None
 
 
-ATTRIBUTE_SPECS: tuple[AttributeSpec, ...] = (ReplyLanguageSpec(),)
+class LectureAuthorsOut(BaseModel):
+    """What the lecturer detector fills.
+
+    NAMES, never ids: the model cannot know the catalog's ids, and a guessed one
+    would be a filter that silently matches nothing. `everyone` is the request to
+    lift a narrowing — it becomes `ALL`, which the merge can carry and an absence
+    cannot.
+
+    No `explicit` field, unlike the language: this attribute is only ever set by
+    someone ASKING for it (the prompt abstains on a mere mention), so the answer
+    is known and asking the model for it just invites disagreement.
+    """
+
+    names: list[str] = []
+    everyone: bool = False
+
+
+# Bound on catalog round-trips for one message. Nobody picks nine teachers in a
+# sentence; a list that long is a malformed reading, and truncation is logged.
+_MAX_AUTHORS = 8
+
+
+class LectureAuthorsSpec:
+    key = LECTURE_AUTHORS
+    prompt_name = "lecture-authors"
+    md = "lecture_authors"
+    schema = LectureAuthorsOut
+
+    async def build(
+        self, out: LectureAuthorsOut, *, catalog_repo: Any, request_id: str | None,
+    ) -> Attribute | None:
+        if out.everyone:
+            # No label: "everyone" is not a name, and the wording for it belongs
+            # to whoever displays it, in their own language.
+            return Attribute(value=[ALL], explicit=True)
+
+        names: list[str] = []
+        for raw in out.names:
+            name = (raw or "").strip()
+            if name and name not in names:
+                names.append(name)
+        if len(names) > _MAX_AUTHORS:
+            log.info(
+                "lecture_authors_truncated",
+                request_id=request_id, asked=len(names), kept=_MAX_AUTHORS,
+            )
+            names = names[:_MAX_AUTHORS]
+        if not names:
+            return None
+
+        hits = await asyncio.gather(*(
+            resolve_author(catalog_repo, name) for name in names
+        ))
+        ids: list[str] = []
+        labels: list[str] = []
+        missing: list[str] = []
+        for name, hit in zip(names, hits):
+            if hit is None:
+                missing.append(name)
+            elif hit.id not in ids:
+                ids.append(hit.id)
+                labels.append(hit.full_name)
+        if missing:
+            log.info(
+                "lecture_authors_unresolved",
+                request_id=request_id, names=missing, resolved=len(ids),
+            )
+        if not ids:
+            # Nobody asked for silence. A filter on a teacher the corpus does not
+            # have would empty every answer from here on and read as "there is
+            # nothing on this" — so the request is dropped instead, and the turn
+            # answers from everyone as it did before.
+            return None
+        # A name we could not place is left out rather than widening the filter
+        # back: the user named who they wanted, and the ones we found are what we
+        # can honestly serve.
+        return Attribute(value=ids, label=", ".join(labels), explicit=True)
+
+
+ATTRIBUTE_SPECS: tuple[AttributeSpec, ...] = (
+    ReplyLanguageSpec(), LectureAuthorsSpec(),
+)
 
 
 class _LLMForAttributes(Protocol):

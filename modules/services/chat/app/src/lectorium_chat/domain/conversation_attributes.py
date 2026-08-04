@@ -7,10 +7,10 @@ CONVERSATION and outlives the turn: it rides out on the terminal `done`, the
 client stores it on the assistant message and replays it, so it survives both
 the 20-message history cap and an app restart.
 
-Today the only attribute is the reply language. It is stored as one entry in a
-map rather than a field of its own so the next one — whatever we learn to read
-out of a dialogue — costs no protocol change, no client release, and no
-migration: an unknown key rides through every layer untouched.
+Today: the reply language, and the lecturers an answer may be built from. They
+are entries in a map rather than fields of their own so the next one — whatever
+we learn to read out of a dialogue — costs no protocol change, no client release
+and no migration: an unknown key rides through every layer untouched.
 
 Each entry carries:
   `value`    the machine value, an opaque string (locale code, an id, a flag)
