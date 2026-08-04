@@ -4,11 +4,11 @@ Background Redis-Streams consumer (started from `main.py` lifespan) that turns
 track-lifecycle events into two side effects for the private lane (#1227):
 
   - `track.ready`   → index the transcript under `kind='user_track'` AND upsert
-                      the `owned(user_id, track_id)` ACL row. The event's
-                      `author_raw` is resolved to a catalog author and stamped on
-                      the chunks, which is what lets a lecturer filter reach
-                      someone's own uploads.
-  - `library.unlinked` → delete the `owned` row (revoke this user's access).
+                      `chunk_meta(owner_id, track_id, author_id, author_raw)` —
+                      who may read this group of chunks, and who is speaking on
+                      it. The speaker is resolved against the catalog here, once,
+                      so a lecturer filter is one indexed read at query time.
+  - `library.unlinked` → delete that row (revoke this user's access).
                       (Consumer wired; a producer for this removal event is not
                       yet implemented — see the personal-library architecture doc.)
 
@@ -119,23 +119,43 @@ def _unwrap_payload(fields: dict[str, str]) -> dict[str, str]:
     return flat
 
 
-async def upsert_owned(user_id: str, track_id: str) -> None:
-    """Assert `user_id` owns `track_id` (idempotent)."""
+async def upsert_chunk_meta(
+    user_id: str,
+    track_id: str,
+    *,
+    author_id: str | None = None,
+    author_raw: str | None = None,
+) -> None:
+    """Assert `user_id` may read `track_id`'s chunks, and record who is speaking.
+
+    Idempotent, and last-writer-wins on the attributes: a re-ingest ships fresher
+    metadata, and this is a projection with no history to keep. A speaker we could
+    not resolve is written as NULL rather than skipped — the raw name still goes
+    in, so a filter can match it and a later pass can resolve it without touching
+    the chunks.
+    """
     async with get_pool().acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO owned (user_id, track_id) VALUES ($1, $2)
-            ON CONFLICT (user_id, track_id) DO NOTHING
+            INSERT INTO chunk_meta (owner_id, track_id, author_id, author_raw)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (owner_id, track_id) DO UPDATE
+               SET author_id = COALESCE(EXCLUDED.author_id, chunk_meta.author_id),
+                   author_raw = COALESCE(EXCLUDED.author_raw, chunk_meta.author_raw),
+                   updated_at = NOW()
             """,
-            user_id, track_id,
+            user_id, track_id, author_id, author_raw,
         )
 
 
-async def delete_owned(user_id: str, track_id: str) -> None:
-    """Revoke `user_id`'s access to `track_id` (idempotent)."""
+async def delete_chunk_meta(user_id: str, track_id: str) -> None:
+    """Revoke `user_id`'s access to `track_id` (idempotent).
+
+    Only their row: a recording two people added stays readable by the other.
+    """
     async with get_pool().acquire() as conn:
         await conn.execute(
-            "DELETE FROM owned WHERE user_id = $1 AND track_id = $2",
+            "DELETE FROM chunk_meta WHERE owner_id = $1 AND track_id = $2",
             user_id, track_id,
         )
 
@@ -276,14 +296,19 @@ class TrackEventsConsumer:
 
         if etype == "library.unlinked":
             if user_id:
-                await delete_owned(user_id, track_id)
+                await delete_chunk_meta(user_id, track_id)
             return True
 
         if etype == "track.ready":
             # ACL first — cheap, idempotent, and independent of indexing so
             # ownership is asserted even if the transcript indexing is deferred.
+            author_raw = (fields.get("author_raw") or "").strip()
             if user_id:
-                await upsert_owned(user_id, track_id)
+                await upsert_chunk_meta(
+                    user_id, track_id,
+                    author_id=await self._resolve_speaker(author_raw),
+                    author_raw=author_raw or None,
+                )
             await self._maybe_index(track_id, fields)
             return True
 
@@ -351,7 +376,6 @@ class TrackEventsConsumer:
                 kind="user_track",
                 embedder=self._embedder,
                 settings=self._settings,
-                author_id=await self._resolve_speaker(fields.get("author_raw")),
             )
             log.info("user_track_indexed", track_id=track_id, chunks=n)
         except Exception:

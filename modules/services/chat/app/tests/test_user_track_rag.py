@@ -88,13 +88,22 @@ class FakeConn:
             kind, item_id, lang, embed_model, etag = params
             self._db.indexed_items[(kind, item_id, lang, embed_model)] = etag
             return "INSERT"
-        if s.startswith("INSERT INTO owned"):
-            user_id, track_id = params
-            self._db.owned.add((user_id, track_id))
+        if s.startswith("INSERT INTO chunk_meta"):
+            owner_id, track_id, author_id, author_raw = params
+            prev = self._db.meta.get((owner_id, track_id), {})
+            self._db.meta[(owner_id, track_id)] = {
+                "author_id": author_id or prev.get("author_id"),
+                "author_raw": author_raw or prev.get("author_raw"),
+            }
             return "INSERT"
-        if s.startswith("DELETE FROM owned"):
-            user_id, track_id = params
-            self._db.owned.discard((user_id, track_id))
+        if s.startswith("DELETE FROM chunk_meta WHERE owner_id"):
+            owner_id, track_id = params
+            self._db.meta.pop((owner_id, track_id), None)
+            return "DELETE"
+        if s.startswith("DELETE FROM chunk_meta WHERE track_id"):
+            (track_id,) = params
+            for key in [k for k in self._db.meta if k[1] == track_id]:
+                self._db.meta.pop(key)
             return "DELETE"
         raise AssertionError(f"FakeConn.execute: unhandled SQL: {s[:80]}")
 
@@ -114,7 +123,7 @@ class FakeConn:
         s = sql.strip()
         if s.startswith("INSERT INTO chunks") and "RETURNING id" in s:
             (track_ids, langs, starts, ends, texts, ref_src,
-             embed_models, kinds, author_ids) = params
+             embed_models, kinds) = params
             out = []
             for i in range(len(track_ids)):
                 self._db._id += 1
@@ -124,13 +133,14 @@ class FakeConn:
                     "start_ms": starts[i], "end_ms": ends[i], "text": texts[i],
                     "reference_source_id": ref_src[i],
                     "embed_model": embed_models[i], "kind": kinds[i],
-                    "author_id": author_ids[i],
                 })
                 out.append({"id": cid})
             return out
-        if s.startswith("SELECT track_id FROM owned"):
+        if s.startswith("SELECT track_id FROM chunk_meta"):
             user_id = params[0]
-            return [{"track_id": t} for (u, t) in sorted(self._db.owned) if u == user_id]
+            return [
+                {"track_id": t} for (u, t) in sorted(self._db.meta) if u == user_id
+            ]
         if "FROM chunks c" in s and "JOIN" in s:
             return self._db._search(s, params)
         raise AssertionError(f"FakeConn.fetch: unhandled SQL: {s[:80]}")
@@ -154,7 +164,9 @@ class FakePg:
         self.chunks: list[dict] = []
         self.embeddings: dict[int, dict] = {}
         self.indexed_items: dict[tuple, str] = {}
-        self.owned: set[tuple[str, str]] = set()
+        # (owner_id, track_id) -> {author_id, author_raw}: who may read this
+        # group of chunks and who is speaking on it.
+        self.meta: dict[tuple[str, str], dict[str, str | None]] = {}
         self._id = 0
 
     def acquire(self) -> _Acquire:
@@ -273,7 +285,7 @@ async def test_owned_maintenance_unlink(monkeypatch) -> None:
     consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
 
     # Seed ownership (a prior track.ready), then a removal event revokes it.
-    db.owned.add(("userA", "tk"))
+    db.meta[("userA", "tk")] = {}
     repo = _repo(db)  # get_owned_track_ids reads the projection keyed on sub.
     assert await repo.get_owned_track_ids("userA") == ["tk"]
     assert await repo.get_owned_track_ids("userB") == []
@@ -281,7 +293,7 @@ async def test_owned_maintenance_unlink(monkeypatch) -> None:
     acked = await consumer.handle(
         {"type": "library.unlinked", "track_id": "tk", "user_id": "userA"}
     )
-    assert acked is True and ("userA", "tk") not in db.owned
+    assert acked is True and ("userA", "tk") not in db.meta
     assert await repo.get_owned_track_ids("userA") == []
 
 
@@ -355,7 +367,7 @@ async def test_orchestrator_payload_envelope_indexes(monkeypatch) -> None:
     raw_fields = {b"payload": json.dumps(body).encode()}
     await consumer._process("1700000000000-0", raw_fields)
 
-    assert ("userA", "rt-9") in db.owned
+    assert ("userA", "rt-9") in db.meta
     assert db.chunks and all(r["kind"] == "user_track" for r in db.chunks)
 
 
@@ -431,7 +443,7 @@ async def test_reclaim_redelivers_stranded_pending_entry(monkeypatch) -> None:
 
     await consumer._reclaim()
 
-    assert ("userS", "rt-strand") in db.owned
+    assert ("userS", "rt-strand") in db.meta
     assert db.chunks and all(r["kind"] == "user_track" for r in db.chunks)
     assert consumer._client.acked == ["1700000000000-0"]
 
@@ -472,7 +484,7 @@ async def test_track_ready_indexes_and_owns(monkeypatch) -> None:
         "lang": "en", "transcript": json.dumps(_orch_transcript("rt-1")),
     }
     assert await consumer.handle(fields) is True
-    assert ("userA", "rt-1") in db.owned
+    assert ("userA", "rt-1") in db.meta
     assert db.chunks and all(r["kind"] == "user_track" for r in db.chunks)
 
     # Idempotent by track_id: redelivery does not re-index (chunk count stable).
@@ -602,10 +614,11 @@ async def test_user_track_lane_is_acl_scoped_no_cross_user(monkeypatch) -> None:
     assert all(h.chunk.track_id != "corpus-A" for h in a_hits)
 
 
-async def test_the_speaker_is_stamped_on_the_chunks_at_index_time(monkeypatch) -> None:
+async def test_the_speaker_is_recorded_for_the_group_at_ready(monkeypatch) -> None:
     """What makes a lecturer filter reach a private upload: the ingest's speaker
-    name is resolved ONCE here and written to `chunks.author_id`, the same column
-    the public lane filters by. No side table, no per-turn name matching."""
+    name is resolved ONCE here and stored next to the ACL, one row per owner per
+    group of chunks. Not on the chunks — a corpus lecture's author is not there
+    either (0 of 524k rows)."""
     import json
 
     db = FakePg()
@@ -687,24 +700,33 @@ async def test_the_speaker_is_stamped_on_the_chunks_at_index_time(monkeypatch) -
     await consumer._process("1700000000002-0", {b"payload": json.dumps(body).encode()})
 
     assert catalog.asked == ["Прабхупада"]
-    assert db.chunks and all(
-        r["author_id"] == "author_prabhupada" for r in db.chunks
-    )
+    row = db.meta[("userA", "rt-a")]
+    assert row["author_id"] == "author_prabhupada"
+    # The raw name is kept too: it is what a filter for a teacher the CORPUS does
+    # not know matches on, and what a later re-resolve reads.
+    assert row["author_raw"] == "Прабхупада"
+    # Never on the chunks.
+    assert db.chunks and all(r.get("author_id") is None for r in db.chunks)
 
 
-async def test_an_unknown_speaker_leaves_the_chunks_unattributed(monkeypatch) -> None:
-    # Nothing to resolve, or nobody in the catalog by that name: the rows carry
-    # no author, and a lecturer filter passes them over rather than guessing.
+async def test_an_unknown_speaker_leaves_the_group_unattributed(monkeypatch) -> None:
+    # Nobody in the catalog by that name: the row carries the raw name and no
+    # author, and a lecturer filter passes it over rather than guessing.
     db = FakePg()
-    monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
+    monkeypatch.setattr(tec, "get_pool", lambda: db)
 
-    reviewed = {
-        "trackId": "rt-b", "language": "ru", "version": 1,
-        "blocks": [{"type": "sentence", "start": 0, "end": 2000, "text": "Текст."}],
-    }
-    n = await indexer_run.index_one_track(
-        "rt-b", reviewed, "ru", kind="user_track",
-        embedder=FakeEmbedder(), settings=_Settings(), author_id=None,
+    class _Empty:
+        async def resolve(self, *_a, **_k):
+            return []
+
+    consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
+    consumer._catalog_repo = _Empty()
+    author_id = await consumer._resolve_speaker("Some Visiting Speaker")
+    assert author_id is None
+
+    await tec.upsert_chunk_meta(
+        "userA", "rt-b", author_id=None, author_raw="Some Visiting Speaker",
     )
-    assert n == 1
-    assert all(r["author_id"] is None for r in db.chunks)
+    row = db.meta[("userA", "rt-b")]
+    assert row["author_id"] is None
+    assert row["author_raw"] == "Some Visiting Speaker"
