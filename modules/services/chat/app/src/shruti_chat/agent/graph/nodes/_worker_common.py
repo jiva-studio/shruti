@@ -227,15 +227,16 @@ async def localize_citation(
     variants: dict[str, str],
     source_text: str,
     src_lang: str | None,
+    force: bool = False,
 ) -> tuple[str, str | None, bool]:
     """Resolve the citation text to SHOW in the turn's answer language.
 
     Three branches (additive, backward-compatible defaults):
       1. NATIVE — `variants` already has `ctx.lang_code`: show it, no MT.
          → (native_text, None, mt=False)
-      2. TRANSLATE — opted in (`ctx.translate_citations`) and a translator
-         is present: machine-translate `source_text` into `ctx.lang_code`.
-         → (translated, source_text, mt=True)
+      2. TRANSLATE — a translator is present and either the caller `force`s it or
+         the turn opted in (`ctx.translate_citations`): machine-translate
+         `source_text` into `ctx.lang_code`. → (translated, source_text, mt=True)
       3. EN-PREFERRED — otherwise: English variant, else the source.
          → (variants["en"] or source_text, None, mt=False)
 
@@ -246,7 +247,7 @@ async def localize_citation(
     native = variants.get(ctx.lang_code)
     if native:
         return native, None, False
-    if ctx.translate_citations and ctx.translator is not None and source_text:
+    if (force or ctx.translate_citations) and ctx.translator is not None and source_text:
         try:
             translated = await ctx.translator.translate(
                 source_text,
@@ -577,13 +578,19 @@ async def build_cite_payload(ctx: TurnContext, ref_num: int, cref: Any) -> dict[
     # with no local catalog (web) can render the card header. Mobile keeps
     # resolving it from its on-device DB and ignores these fields.
     payload.update(await resolve_track_display(ctx, cref.track_id))
-    # Transcript localisation. A fragment is "native" when its language
-    # matches the answer language; otherwise translate-if-opted-in, else show
-    # the (English / source) transcript verbatim. There is no per-lang
-    # transcript map — the only original is `text` in `cref.lang`.
+    # Transcript localisation. A fragment is "native" when its language matches
+    # the answer language; otherwise it is TRANSLATED — without waiting to be
+    # asked, unlike a verse or a purport. The opt-in exists to protect the
+    # wording of scripture, and spoken words are not scripture: showing an
+    # English transcript to someone reading Russian is not fidelity, it is a
+    # quote they cannot read. Someone's OWN uploads are usually in another
+    # language than their question, so this is the difference between a usable
+    # answer and a wall of English. The original rides along (`text_original`,
+    # `mt`) so a client can offer it.
     if cref.lang and cref.lang != ctx.lang_code:
         shown, original, mt = await localize_citation(
             ctx, variants={cref.lang: text}, source_text=text, src_lang=cref.lang,
+            force=True,
         )
         if mt:
             payload["text"] = shown
