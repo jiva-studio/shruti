@@ -1034,6 +1034,7 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
   }
   const audioUrl = typeof p.audio_url === "string" && p.audio_url ? p.audio_url : undefined
   const mt = p.mt === true
+  const lang = typeof p.lang === "string" && p.lang ? p.lang : undefined
   return {
     source_id: sourceId,
     tokens,
@@ -1041,6 +1042,7 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
     sanskrit,
     transliteration,
     ...(transliterationOriginal ? { transliteration_original: transliterationOriginal } : {}),
+    ...(lang ? { lang } : {}),
     translation,
     ...(audioUrl ? { audio_url: audioUrl } : {}),
     ...(mt ? { mt: true } : {}),

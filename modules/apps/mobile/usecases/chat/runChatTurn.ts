@@ -70,6 +70,8 @@ export type RunChatTurnEvent =
       /** Original IAST (Latin) transliteration; present only when the shown
        *  one is a different script. Flips with the translation on toggle. */
       readonly transliterationOriginal?: string
+      /** Language of the shown `translation` entry, resolved server-side. */
+      readonly lang?: string
       readonly translation: { readonly [lang: string]: string }
       readonly audioUrl?: string
       /** True when `translation[lang]` is a machine translation — the card
@@ -445,6 +447,7 @@ export async function* runChatTurn(
               sanskrit: p.sanskrit,
               transliteration: p.transliteration,
               transliterationOriginal: p.transliteration_original,
+              lang: p.lang,
               translation: p.translation,
               audioUrl: p.audio_url,
               mt: p.mt,
@@ -457,6 +460,7 @@ export async function* runChatTurn(
               sanskrit: p.sanskrit,
               transliteration: p.transliteration,
               transliterationOriginal: p.transliteration_original,
+              lang: p.lang,
               translation: p.translation,
               audioUrl: p.audio_url,
               mt: p.mt,

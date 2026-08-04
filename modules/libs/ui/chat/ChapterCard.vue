@@ -74,7 +74,7 @@ function onTap() {
  * class (theme/misc.css); only chapter-specific content styling is below. */
 .chapter-card-region {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 0.88em;
   text-align: center;
   color: var(--ion-color-primary);
   margin: 0 0 6px;

@@ -15,7 +15,7 @@
   display: block;
   margin: 10px 0;
   padding: 10px 0;
-  font-size: 14px;
+  /* Type size inherited from the surrounding answer; sizes inside are `em`. */
   line-height: 1.45;
 }
 .scripture-block::before,

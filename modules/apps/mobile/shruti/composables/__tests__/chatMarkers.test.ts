@@ -4,6 +4,7 @@ import {
   messageToMarkdown,
   parseChatMarkers,
   type CiteBodyLike,
+  renderExcerptHtml,
   type VerseBodyLike,
 } from "@lib/chat/chatMarkers.js"
 
@@ -335,6 +336,22 @@ describe("parseChatMarkers — markdown blockquote", () => {
     }
   })
 
+  it("keeps a quoted śloka's lines together, without blank lines between them", () => {
+    // Purport bodies store each line of a stanza as its own paragraph (the
+    // gitabase import leaves CRLF + blank lines between them). Rendered as
+    // paragraph breaks the stanza falls apart into a column of gaps.
+    const tokens = parseChatMarkers(
+      "> Шукадева Госвами утверждает:\n>\n> *харер нама харер нама*\n>\n> *харер намаива кевалам*\n> — таков вывод шастр."
+    )
+    const quote = tokens.find((t) => t.kind === "quote")
+    expect(quote).toBeTruthy()
+    if (quote?.kind === "quote") {
+      expect(quote.bodyHtml).toContain("харер нама харер нама")
+      expect(quote.bodyHtml).toContain("харер намаива кевалам")
+      expect(quote.bodyHtml).not.toContain("<br><br>")
+    }
+  })
+
   it("treats a single-line blockquote without italic line as body-only", () => {
     const tokens = parseChatMarkers("> short note")
     const quote = tokens.find((t) => t.kind === "quote")
@@ -613,5 +630,23 @@ describe("parseChatMarkers — commentary card markers", () => {
   it("leaves a non-numeric commentary-looking marker as plain text", () => {
     const tokens = parseChatMarkers("Text [commentary:abc] tail.")
     expect(tokens.find((t) => t.kind === "commentary")).toBeUndefined()
+  })
+})
+
+describe("renderExcerptHtml — commentary / citation card body", () => {
+  it("renders a quoted śloka's lines as one stanza", () => {
+    const html = renderExcerptHtml(
+      "Шукадева Госвами утверждает:\n\n\r\n\n*этан нирвидйамананам*\n\n\r\n\n*иччхатам акуто-бхайам*"
+    )
+    expect(html).toContain("этан нирвидйамананам")
+    expect(html).toContain("иччхатам акуто-бхайам")
+    expect(html).not.toContain("<br><br>")
+    expect(html).not.toContain("\r")
+  })
+
+  it("still lifts a `>` block into an italic quote", () => {
+    const html = renderExcerptHtml("Он пишет:\n\n> харер нама харер нама\n> харер намаива кевалам")
+    expect(html).toContain('<blockquote class="excerpt-quote">')
+    expect(html).toContain("харер намаива кевалам")
   })
 })
