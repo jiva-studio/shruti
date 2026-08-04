@@ -164,6 +164,7 @@ export function applyStreamingTurnEvent(
             sanskrit: event.sanskrit,
             transliteration: event.transliteration,
             transliterationOriginal: event.transliterationOriginal,
+            lang: event.lang,
             translation: event.translation,
             audioUrl: event.audioUrl,
             mt: event.mt,

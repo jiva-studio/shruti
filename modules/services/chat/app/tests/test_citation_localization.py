@@ -247,6 +247,58 @@ async def test_build_verse_payload_translates_cited(monkeypatch):
     assert payload["translation"]["en"] == "english verse"
 
 
+async def test_build_verse_payload_ships_answer_lang_only(monkeypatch):
+    """The card shows the ANSWER language, which the router settles into
+    `ctx.lang` — not the client's locale. The payload names it and carries only
+    that translation, so a client on a different locale can't render another."""
+    ctx = TurnContext(lang="ru", library_db_path="/fake/library.db")
+    ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
+    _, vref = ctx.aliases.verse_refs()[0]
+
+    async def fake_fetch(db, source_id, tokens):
+        return _fake_verse_body({"en": "english verse", "ru": "русский стих"})
+
+    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    payload = await build_verse_payload(ctx, vref)
+    assert payload["lang"] == "ru"
+    assert payload["translation"] == {"ru": "русский стих"}
+
+
+async def test_build_verse_payload_lang_falls_back_to_available(monkeypatch):
+    """No variant in the answer language and no MT → the card shows en, and
+    `lang` says so rather than naming a translation the payload lacks."""
+    ctx = TurnContext(lang="uk", library_db_path="/fake/library.db")
+    ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
+    _, vref = ctx.aliases.verse_refs()[0]
+
+    async def fake_fetch(db, source_id, tokens):
+        return _fake_verse_body({"en": "english verse"})
+
+    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    payload = await build_verse_payload(ctx, vref)
+    assert payload["lang"] == "en"
+    assert payload["translation"] == {"en": "english verse"}
+
+
+async def test_build_verse_payload_mt_keeps_original(monkeypatch):
+    """A machine-translated verse also ships `en` — the card's "view original"
+    toggle reads it."""
+    ctx = TurnContext(
+        lang="uk", translate_citations=True, translator=FakeTranslator(),
+        library_db_path="/fake/library.db",
+    )
+    ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
+    _, vref = ctx.aliases.verse_refs()[0]
+
+    async def fake_fetch(db, source_id, tokens):
+        return _fake_verse_body({"en": "english verse"})
+
+    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    payload = await build_verse_payload(ctx, vref)
+    assert payload["lang"] == "uk"
+    assert payload["translation"] == {"uk": "[uk] english verse", "en": "english verse"}
+
+
 # ── retrieval-lang derivation ────────────────────────────────────────────
 
 

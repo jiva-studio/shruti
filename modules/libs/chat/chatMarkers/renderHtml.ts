@@ -135,6 +135,15 @@ export function pushTextToken(out: ChatToken[], raw: string): void {
 /*               Excerpt rendering (citation / commentary cards)              */
 /* -------------------------------------------------------------------------- */
 
+/** A śloka quoted inside a purport is stored one line per paragraph (CRLF +
+ *  blank lines between the lines of one stanza). A quote is joined from whole
+ *  sentences, so a blank line inside one is always that stanza formatting, not
+ *  a paragraph break — collapse the run so the lines read as a stanza. Mirrors
+ *  what `VerseCard` does for the verse's own sanskrit / transliteration. */
+export function normalizeQuoteBreaks(raw: string): string {
+  return raw.replace(/\r\n?/g, "\n").replace(/\n[ \t]*\n[\s]*/g, "\n")
+}
+
 /** Markdown blockquote run: consecutive lines starting with `>`. Mirrors
  *  `QUOTE_RE` in parse.ts but kept local so this module doesn't import from
  *  parse.ts — which already imports from here (avoids an import cycle). */
@@ -164,8 +173,9 @@ function renderQuoteBlock(block: string): string {
  * `.excerpt-quote` blocks, so a quoted śloka renders as an italic quote on
  * its own line instead of printing the literal `>`.
  */
-export function renderExcerptHtml(raw: string): string {
-  if (!raw) return ""
+export function renderExcerptHtml(input: string): string {
+  if (!input) return ""
+  const raw = normalizeQuoteBreaks(input)
   let out = ""
   let cursor = 0
   for (const m of raw.matchAll(EXCERPT_QUOTE_RE)) {

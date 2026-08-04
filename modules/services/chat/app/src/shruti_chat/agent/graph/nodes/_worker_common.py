@@ -268,6 +268,30 @@ async def localize_citation(
     return variants.get("en") or source_text, None, False
 
 
+def _verse_display_lang(lang: str, translation: dict[str, str]) -> str:
+    """Which language the verse card shows: the answer language when the verse
+    has it (native or MT-filled), else en, else whatever exists. Always names a
+    language the payload actually carries."""
+    if translation.get(lang):
+        return lang
+    if translation.get("en"):
+        return "en"
+    return next((lng for lng, text in translation.items() if text), lang)
+
+
+def _verse_translation_wire(
+    shown_lang: str, translation: dict[str, str], *, mt: bool,
+) -> dict[str, str]:
+    """The lang→text map the card needs: the shown translation, plus `en` when
+    the shown one is a machine translation (the card's "view original" toggle
+    flips to it). A single entry also keeps a client that ignores `lang` right:
+    its `map[locale] → map.en → first entry` fallback has one text to find."""
+    wire = {shown_lang: translation.get(shown_lang, "")}
+    if mt and shown_lang != "en" and translation.get("en"):
+        wire["en"] = translation["en"]
+    return wire
+
+
 async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any] | None:
     """Fetch + build ONE verse card payload (sanskrit / transliteration /
     translation / audio). For a non-corpus answer with translation opted in,
@@ -309,7 +333,6 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
         "addr_label": vref.addr_label or "",
         "sanskrit": body["sanskrit"],
         "transliteration": transliteration,
-        "translation": translation,
     }
     # Original IAST (Latin) transliteration, shipped only when the localised
     # script differs from it — lets the client's "view original" toggle flip
@@ -319,9 +342,7 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
     # Verse PROSE translation. The transliteration above is deterministic
     # (never MT); the `translation` map is natural-language prose. When the
     # turn's lang has no native variant and MT is on, add a translated entry
-    # under `ctx.lang` + record the original lang. `translation` stays a
-    # multilingual map (client reads `translation.en` as the original), so no
-    # separate `text_original` is needed — only the `mt` flag.
+    # under `ctx.lang` + record the original lang.
     if ctx.lang not in translation:
         orig_lang = "en" if translation.get("en") else next(
             (lng for lng, t in translation.items() if t), None
@@ -334,6 +355,14 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
             translation[ctx.lang] = shown
             payload["mt"] = True
             payload["translation_original_lang"] = orig_lang
+    # `ctx.lang` is the answer language (the router settles it before any card
+    # is built), so the shown translation is picked here rather than by the
+    # client's UI locale. `lang` names what `translation` carries.
+    shown_lang = _verse_display_lang(ctx.lang, translation)
+    payload["lang"] = shown_lang
+    payload["translation"] = _verse_translation_wire(
+        shown_lang, translation, mt=bool(payload.get("mt")),
+    )
     # Expand the stored relative key into a full public URL on the media CDN
     # (Bunny). Omitted entirely when the verse has no recitation.
     if body["audio_path"]:

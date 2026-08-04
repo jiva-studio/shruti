@@ -58,7 +58,8 @@ const props = withDefaults(
     caption?: string
     /** Verse body from the message's `verses` map; absent ⇒ chip fallback. */
     body?: ChatVerseBody
-    /** Active UI locale; picks the translation/transliteration language. */
+    /** Active UI locale. Only picks the translation when the body carries no
+     *  `lang` of its own (a body streamed by an older server). */
     locale: string
     /** Recitation playing — drives the play/pause glyph. Owned by the host. */
     isPlaying?: boolean
@@ -105,11 +106,15 @@ const transliteration = computed(() => {
   return (s || "").replace(/\n{2,}/g, "\n")
 })
 
-// True when the active-locale translation is a machine translation AND an
-// original English entry exists to flip to.
+// The language the verse is shown in — the answer language, named on the body
+// by the server. The UI locale only stands in for a body without it.
+const displayLang = computed(() => body.value?.lang || props.locale)
+
+// True when the shown translation is a machine translation AND an original
+// English entry exists to flip to.
 const isMt = computed<boolean>(() => {
   const map = body.value?.translation
-  return !!body.value?.mt && !!map && !!map.en && map[props.locale] !== map.en
+  return !!body.value?.mt && !!map && !!map.en && map[displayLang.value] !== map.en
 })
 // Toggle between the (shown) machine translation and the original English.
 const showOriginal = ref(false)
@@ -120,7 +125,7 @@ const translation = computed(() => {
   // When toggled to the original on a machine-translated verse, render the
   // English entry verbatim.
   if (isMt.value && showOriginal.value && map.en) return map.en
-  const wanted = props.locale
+  const wanted = displayLang.value
   if (map[wanted]) return map[wanted]
   // Fallback chain: any English text, then the first available.
   if (map.en) return map.en
@@ -185,7 +190,7 @@ function onTap() {
 }
 .verse-card-addr {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 0.88em;
   text-align: center;
   color: var(--ion-color-primary);
   margin: 0 0 2px;
@@ -194,10 +199,10 @@ function onTap() {
   margin: 0 0 2px;
   text-align: center;
   font-family: "Sanskrit2003", "Noto Sans Devanagari", serif;
-  /* Slightly larger than the bubble base — sanskrit is the
+  /* Slightly larger than the surrounding text — sanskrit is the
      headline content of the verse and reads better with a touch
      more weight. */
-  font-size: 16px;
+  font-size: 1.12em;
   white-space: pre-wrap;
 }
 .verse-card-iast {

@@ -155,7 +155,8 @@ function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionI
   if (kind === 'verse' && p.source_id != null) {
     a.verses!.set(`${p.source_id}|${p.tokens}`, {
       addrLabel: p.addr_label, sanskrit: p.sanskrit, transliteration: p.transliteration,
-      transliterationOriginal: p.transliteration_original, translation: p.translation,
+      transliterationOriginal: p.transliteration_original, lang: p.lang,
+      translation: p.translation,
       audioUrl: p.audio_url, mt: p.mt,
     } as VersePayload)
   } else if (kind === 'chapter' && p.source_id != null) {

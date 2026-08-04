@@ -123,6 +123,11 @@ export interface ChatVersePayloadWire {
    *  `transliteration` is a different script. Lets the card flip the
    *  transliteration with the translation on "view original". Additive. */
   readonly transliteration_original?: string
+  /** Language of the shown `translation` entry — the answer language, settled
+   *  server-side. Additive; absence ⇒ the card falls back to the UI locale. */
+  readonly lang?: string
+  /** Shown translation keyed by language, plus `en` when the shown one is a
+   *  machine translation (the "view original" toggle reads it). */
   readonly translation: Readonly<Record<string, string>>
   /** Full public URL of the Sanskrit recitation for this verse, present
    *  only when the library has audio for it. Server expands the stored

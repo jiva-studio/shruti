@@ -1,4 +1,4 @@
-import { inlineMd, pushTextToken } from "./renderHtml.js"
+import { inlineMd, normalizeQuoteBreaks, pushTextToken } from "./renderHtml.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Types                                     */
@@ -458,7 +458,7 @@ function parseQuoteBlock(raw: string): { bodyHtml: string; attributionHtml?: str
     lines.pop()
     while (lines.length && lines[lines.length - 1].trim() === "") lines.pop()
   }
-  const bodyRaw = lines.join("\n").trim()
+  const bodyRaw = normalizeQuoteBreaks(lines.join("\n")).trim()
   const bodyHtml = bodyRaw ? inlineMd(bodyRaw).replace(/\n/g, "<br>") : ""
   return { bodyHtml, attributionHtml }
 }
