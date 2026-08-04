@@ -34,6 +34,7 @@ from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.markers import CARD_RE, CITE_RE, OUTLINE_RE
 from lectorium_chat.agent.tools import TOOLS, build_personalized_tools
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
+from lectorium_chat.application.author_scope import AuthorScope
 from lectorium_chat.application.chat_turn_request import ChatTurnRequest
 from lectorium_chat.composition import AppDeps
 from lectorium_chat.domain import UserContext
@@ -321,6 +322,13 @@ async def run_chat_turn(
                 name="speculative_embed_query",
             )
 
+        # Empty until the router settles the turn's attributes; the tools close
+        # over this very object, so filling it there is what makes the selection
+        # reach them.
+        author_scope = AuthorScope(
+            catalog_repo=deps.catalog_repo, request_id=trace_id,
+        )
+
         ctx = TurnContext(
             request_id=trace_id,
             lang=lang,
@@ -351,6 +359,7 @@ async def run_chat_turn(
             embed_dim=deps.settings.embed_dim,
             kv_cache=deps.kv_cache,
             embed_task=embed_task,
+            author_scope=author_scope,
             # Add-to-library (#1226): identity for the ingest.request payload,
             # plus the provider resolver from the deps. `getattr` tolerates test
             # AppDeps doubles that predate the field.

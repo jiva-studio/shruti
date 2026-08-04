@@ -39,6 +39,7 @@ from lectorium_chat.application.conversation_attributes import (
     remembered_attributes,
 )
 from lectorium_chat.application.router_turn import run_router_turn
+from lectorium_chat.domain.author_selection import AuthorSelection
 from lectorium_chat.domain.conversation_attributes import (
     REPLY_LANGUAGE,
     Attribute,

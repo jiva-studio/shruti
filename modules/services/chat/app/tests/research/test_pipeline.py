@@ -578,7 +578,7 @@ async def test_router_args_propagated_to_fanout(monkeypatch):
         pool=pool, llm=llm, embed_model="m", embed_dim=1536,
     )
     assert captured  # filter_track_ids was called
-    assert captured[0]["author_id"] == "author_p"
+    assert captured[0]["author_ids"] == ["author_p"]
     assert captured[0]["tag_ids"] == ["t1"]
     assert captured[0]["date_from"] == "1972-01-01"
 
