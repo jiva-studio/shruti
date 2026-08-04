@@ -1015,7 +1015,13 @@ async def _lean_path(
                 on_event=on_event,
                 reranker=reranker,
                 rerank_query=question,
-                boost_kinds=boost_kinds_from(question, router_args),
+                boost_kinds=boost_kinds_from(
+                    question, router_args,
+                    author_asked=bool(
+                        author_scope is not None
+                        and author_scope.selection.constrained
+                    ),
+                ),
                 owned_track_ids=owned_track_ids,
             author_scope=author_scope,
             ),
@@ -1340,7 +1346,13 @@ async def _research_path(
                 on_event=on_event,
                 reranker=reranker,
                 rerank_query=question,
-                boost_kinds=boost_kinds_from(question, router_args),
+                boost_kinds=boost_kinds_from(
+                    question, router_args,
+                    author_asked=bool(
+                        author_scope is not None
+                        and author_scope.selection.constrained
+                    ),
+                ),
                 owned_track_ids=owned_track_ids,
             author_scope=author_scope,
             ),
