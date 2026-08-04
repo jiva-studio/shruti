@@ -89,12 +89,12 @@ async def research_worker_node(
     # depends on per-(kind,lang) partial HNSW indexes. Passing a non-corpus
     # answer lang (uk / sr) — or None — would return empty results / trigger
     # a seq scan. So retrieval clamps to the answer lang IFF the corpus has
-    # it, else English; the answer prose (ctx.lang) still goes out in `lang`.
-    retrieval_lang = await _derive_retrieval_lang(ctx, lang)
+    # it, else English; the answer prose (ctx.lang_code) still goes out in `lang`.
+    retrieval_lang_code = await _derive_retrieval_lang(ctx, lang)
     # Stash on ctx so the synthesizer knows the citation source language for
     # lazy commentary-card translation (translate only when it differs from
     # the answer language).
-    ctx.retrieval_lang = retrieval_lang
+    ctx.retrieval_lang_code = retrieval_lang_code
 
     # Per-turn cross-encoder kill-switch (Stage A). Off ⇒ pass None so the
     # fanout runs the cosine path verbatim.
@@ -123,7 +123,7 @@ async def research_worker_node(
     research_result = await run_research(
         question=user_query,
         lang=lang,
-        retrieval_lang=retrieval_lang,
+        retrieval_lang_code=retrieval_lang_code,
         router_args=router_args,
         chunk_repo=ctx.chunk_repo,
         catalog_repo=ctx.catalog_repo,

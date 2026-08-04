@@ -49,7 +49,7 @@ async def show_verse_worker_node(
     addr_label = ""
     if ctx.catalog_repo is not None:
         try:
-            short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang)
+            short = await ctx.catalog_repo.source_short_label(source_id, lang=ctx.lang_code)
         except Exception:  # noqa: BLE001 — a label miss must never fail the turn
             short = None
         if short:
@@ -73,7 +73,7 @@ async def show_verse_worker_node(
             from shruti_chat.indexer.library.repo import fetch_verse_commentary
 
             purport = await fetch_verse_commentary(
-                ctx.library_db_path, source_id, tokens, lang=ctx.lang,
+                ctx.library_db_path, source_id, tokens, lang=ctx.lang_code,
             )
         except Exception:  # noqa: BLE001 — a purport miss must never fail the turn
             purport = None

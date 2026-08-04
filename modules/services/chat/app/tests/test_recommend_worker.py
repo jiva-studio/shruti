@@ -19,7 +19,7 @@ class _Ctx:
     catalog_repo: Any | None = None
     user_context: Any | None = None
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
-    lang: str = "ru"
+    lang_code: str = "ru"
     request_id: str = "req-test"
     # The turn's author selection; None ⇒ nothing constrained,
     # which is what every test that does not care about it wants.

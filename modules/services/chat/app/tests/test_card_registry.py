@@ -84,7 +84,7 @@ async def test_card_client_eager_flush_translates_and_emits_nothing(capture_writ
             raise AssertionError("card-capable client translated a card eagerly")
 
     ctx = TurnContext(
-        lang="uk",
+        lang_code="uk",
         translate_citations=True,
         translator=_Boom(),
         capabilities={"commentary_card": True},

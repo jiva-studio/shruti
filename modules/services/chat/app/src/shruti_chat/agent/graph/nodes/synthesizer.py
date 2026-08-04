@@ -40,7 +40,7 @@ async def _maybe_translate_commentary(ctx: TurnContext, data: dict) -> None:
     """Translate one commentary card's quote in place — only when needed.
 
     Fires only for an `action.kind == "commentary"` payload on a non-native
-    answer (`retrieval_lang != lang`) with translation opted in. Translates
+    answer (`retrieval_lang_code != lang`) with translation opted in. Translates
     the card's shown (cited) text — ONE LLM call per shown card — and records
     the source as `text_original` + `mt` so the client's original toggle
     works. This replaces the eager whole-pool `translate_commentaries` for
@@ -53,8 +53,8 @@ async def _maybe_translate_commentary(ctx: TurnContext, data: dict) -> None:
     if not (
         ctx.translate_citations
         and ctx.translator is not None
-        and ctx.retrieval_lang
-        and ctx.retrieval_lang != ctx.lang
+        and ctx.retrieval_lang_code
+        and ctx.retrieval_lang_code != ctx.lang_code
     ):
         return
     payload = data.get("payload") or {}
@@ -63,7 +63,7 @@ async def _maybe_translate_commentary(ctx: TurnContext, data: dict) -> None:
         return
     try:
         translated = await ctx.translator.translate(
-            src, src_lang=ctx.retrieval_lang, tgt_lang=ctx.lang
+            src, src_lang=ctx.retrieval_lang_code, tgt_lang=ctx.lang_code
         )
     except Exception as exc:  # noqa: BLE001 — a citation never fails the turn
         log.warning(
