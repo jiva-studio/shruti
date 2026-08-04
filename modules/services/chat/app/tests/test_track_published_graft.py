@@ -64,11 +64,12 @@ class FakeConn:
                     r["kind"] = "track_transcript"
                     n += 1
             return f"UPDATE {n}"
-        if s.startswith("DELETE FROM owned"):
+        if s.startswith("DELETE FROM chunk_meta"):
             (track_id,) = params
-            before = len(self._db.owned)
-            self._db.owned = {(u, t) for (u, t) in self._db.owned if t != track_id}
-            return f"DELETE {before - len(self._db.owned)}"
+            before = len(self._db.meta)
+            for key in [k for k in self._db.meta if k[1] == track_id]:
+                self._db.meta.pop(key)
+            return f"DELETE {before - len(self._db.meta)}"
         raise AssertionError(f"FakeConn.execute: unhandled SQL: {s[:80]}")
 
 
@@ -87,7 +88,9 @@ class FakePg:
     def __init__(self) -> None:
         self.chunks: list[dict] = []
         self.embeddings: dict[int, dict] = {}
-        self.owned: set[tuple[str, str]] = set()
+        # (owner_id, track_id) -> {author_id, author_raw}: who may read this
+        # group of chunks and who is speaking on it.
+        self.meta: dict[tuple[str, str], dict[str, str | None]] = {}
 
     def acquire(self) -> _Acquire:
         return _Acquire(self)
@@ -104,8 +107,8 @@ def _seed(db: FakePg, track_id: str) -> None:
             {"id": cid, "track_id": track_id, "kind": "user_track"}
         )
         db.embeddings[cid] = {"kind": "user_track"}
-    db.owned.add(("userA", track_id))
-    db.owned.add(("userB", track_id))
+    db.meta.setdefault(("userA", track_id))
+    db.meta.setdefault(("userB", track_id))
     # An unrelated user_track that must be left untouched.
     db.chunks.append({"id": 9, "track_id": "other", "kind": "user_track"})
     db.embeddings[9] = {"kind": "user_track"}
@@ -114,7 +117,7 @@ def _seed(db: FakePg, track_id: str) -> None:
 # ── 1. graft relabels + drops owned ──────────────────────────────────────
 
 
-async def test_graft_relabels_and_drops_owned(monkeypatch) -> None:
+async def test_graft_relabels_and_drops_the_private_records(monkeypatch) -> None:
     db = FakePg()
     _seed(db, "trk-1")
     monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
@@ -133,7 +136,7 @@ async def test_graft_relabels_and_drops_owned(monkeypatch) -> None:
         if r["track_id"] == "trk-1"
     )
     # ACL rows for the track are gone.
-    assert not any(t == "trk-1" for (_u, t) in db.owned)
+    assert not any(t == "trk-1" for (_u, t) in db.meta)
     # The unrelated user_track is untouched.
     assert db.chunks[-1]["kind"] == "user_track"
     assert db.embeddings[9]["kind"] == "user_track"
@@ -184,7 +187,7 @@ async def test_handle_flat_fields(monkeypatch) -> None:
     monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
     c = _consumer()
     assert await c.handle({"track_id": "trk-1"}) is True
-    assert not any(t == "trk-1" for (_u, t) in db.owned)
+    assert not any(t == "trk-1" for (_u, t) in db.meta)
 
 
 async def test_handle_missing_track_id_is_acked(monkeypatch) -> None:
