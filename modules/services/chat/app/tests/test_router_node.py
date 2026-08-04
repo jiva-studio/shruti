@@ -47,6 +47,7 @@ class _Ctx:
     lang: str = "ru"
     lang_name: str = ""
     catalog_repo: Any | None = None
+    author_scope: Any | None = None
 
 
 @dataclass

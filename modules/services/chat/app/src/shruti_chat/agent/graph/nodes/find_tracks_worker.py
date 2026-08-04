@@ -37,7 +37,6 @@ from langgraph.runtime import Runtime
 
 from shruti_chat.agent.graph.nodes._author_match import (
     distinctive_tokens,
-    names_match,
 )
 from shruti_chat.agent.graph.nodes._worker_common import (
     LocalizedReply,
@@ -47,6 +46,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
 )
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import standalone_prompt
+from shruti_chat.application.author_lookup import resolve_author
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message, ScoredChunk
@@ -78,12 +78,6 @@ def _year_range(year: object) -> tuple[str | None, str | None]:
     return f"{y:04d}-01-01", f"{y:04d}-12-31"
 
 
-# How many author candidates to test for a name match. Top-1 is not enough:
-# the honorific the router keeps ("Srila") can rank a same-honorific stranger
-# above the real author.
-_AUTHOR_CANDIDATES = 5
-
-
 async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
     """Best-effort name → id for an author / location filter. A miss just
     means we don't constrain on it (the semantic search still runs).
@@ -103,24 +97,9 @@ async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
 
 
 async def _resolve_author(ctx: TurnContext, name: str):
-    """The corpus author `name` denotes, or None when the corpus lacks them.
-
-    Resolves across ALL locales and decides by distinctive-token containment
-    (see `_author_match`) rather than a score cutoff — the router hands us an
-    English name while the user's dictionary may be Cyrillic, and no single
-    ratio separates "Srila Prabhupada" (ours) from "Bhakti Caitanya Swami"
-    (not ours).
-    """
-    try:
-        hits = await ctx.catalog_repo.resolve(  # type: ignore[arg-type]
-            "author", name, lang=None, limit=_AUTHOR_CANDIDATES,
-        )
-    except Exception:
-        return None
-    for hit in hits:
-        if names_match(name, hit.full_name):
-            return hit
-    return None
+    """The corpus author `name` denotes, shared with the `lecture_authors`
+    attribute so the two cannot disagree about who is in the corpus."""
+    return await resolve_author(ctx.catalog_repo, name)
 
 
 # Name of the ladder rung that carries a scripture reference. The label ends up
