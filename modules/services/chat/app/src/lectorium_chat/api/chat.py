@@ -18,6 +18,7 @@ from lectorium_chat.api._rate_limit import raise_429
 from lectorium_chat.api._region import extract_region
 from lectorium_chat.api.schemas.chat import ChatRequestDto
 from lectorium_chat.application.chat_turn import run_chat_turn
+from lectorium_chat.application.chat_turn_request import ChatTurnRequest
 from lectorium_chat.application.proactive_turn import run_proactive_turn
 from lectorium_chat.application.rate_limiter import _next_midnight_utc
 from lectorium_chat.composition import AppDeps, get_deps
@@ -241,33 +242,35 @@ async def chat(
             )
         else:
             inner = run_chat_turn(
-                [m.model_dump() for m in body.messages],
-                lang=body.lang,
-                translate_citations=body.translate_citations,
-                # The client's aggregate over its FULL local history — the
-                # request itself only carries the last 20 messages.
-                client_attributes=(
-                    {k: v.model_dump() for k, v in body.attributes.items()}
-                    if body.attributes else None
+                ChatTurnRequest(
+                    history=[m.model_dump() for m in body.messages],
+                    lang=body.lang,
+                    # The client's aggregate over its FULL local history — the
+                    # request itself only carries the last 20 messages.
+                    client_attributes=(
+                        {k: v.model_dump() for k, v in body.attributes.items()}
+                        if body.attributes else None
+                    ),
+                    capabilities=body.capabilities,
+                    translate_citations=body.translate_citations,
+                    turn_config=(body.config.model_dump() if body.config else None),
+                    user_context=user_ctx,
+                    # Add-to-library (#1226): the verified tier PRO-gates the
+                    # capability; the raw bearer token rides the ingest.request
+                    # payload so the ingest worker can act on the user's behalf.
+                    # `tier_expires_at` lets the turn coerce a lapsed Pro claim
+                    # back to free before the gate (same as the rate limiter).
+                    tier=user.tier,
+                    tier_expires_at=user.tier_expires_at,
+                    jwt=bearer_jwt,
+                    region=region,
+                    request_id=request_id,
+                    session_id=body.session_id,
+                    session_title=body.session_title,
+                    client_trace_id=client_trace_id,
                 ),
-                capabilities=body.capabilities,
-                request_id=request_id,
-                user_context=user_ctx,
-                is_disconnected=is_cancelled,
                 deps=deps,
-                session_id=body.session_id,
-                session_title=body.session_title,
-                client_trace_id=client_trace_id,
-                region=region,
-                turn_config=(body.config.model_dump() if body.config else None),
-                # Add-to-library (#1226): the verified tier PRO-gates the
-                # capability; the raw bearer token rides the ingest.request
-                # payload so the ingest worker can act on the user's behalf.
-                # `tier_expires_at` lets the turn coerce a lapsed Pro claim
-                # back to free before the gate (same as the rate limiter).
-                tier=user.tier,
-                tier_expires_at=user.tier_expires_at,
-                jwt=bearer_jwt,
+                is_disconnected=is_cancelled,
             )
         return _stream_with_intent_capture(inner, turn_meta)
 

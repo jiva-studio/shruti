@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 
 from lectorium_chat.application import chat_turn
 from lectorium_chat.application.chat_turn import run_chat_turn
+from lectorium_chat.application.chat_turn_request import ChatTurnRequest
 from lectorium_chat.application.conversation_attributes import remembered_attributes
 from lectorium_chat.domain.conversation_attributes import REPLY_LANGUAGE
 
@@ -85,8 +86,11 @@ async def _events(graph: Any, **kwargs: Any) -> list[Any]:
          patch.object(chat_turn, "with_langfuse_trace", _no_trace):
         return [
             ev async for ev in run_chat_turn(
-                history=[{"role": "user", "content": "отвечай по-русски"}],
-                lang="en", request_id="r-attrs-1", deps=deps, **kwargs,
+                ChatTurnRequest(
+                    history=[{"role": "user", "content": "отвечай по-русски"}],
+                    lang="en", request_id="r-attrs-1", **kwargs,
+                ),
+                deps=deps,
             )
         ]
 
