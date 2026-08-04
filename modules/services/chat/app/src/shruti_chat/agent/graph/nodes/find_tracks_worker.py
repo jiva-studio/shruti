@@ -46,10 +46,11 @@ from shruti_chat.agent.graph.nodes._worker_common import (
     resolve_track_display,
 )
 from shruti_chat.agent.graph.state import ChatState
+from shruti_chat.agent.prompts import standalone_prompt
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message, ScoredChunk
-from shruti_chat.infra.repositories._ref_filter import parse_tokens
+from shruti_chat.domain.scripture_ref import parse_tokens
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 log = get_logger(__name__)
@@ -122,6 +123,16 @@ async def _resolve_author(ctx: TurnContext, name: str):
     return None
 
 
+# Name of the ladder rung that carries a scripture reference. The label ends up
+# in the intro prompt as text, so it has to be a string — but the ladder and the
+# "was it dropped?" check must never drift apart on a literal.
+_REF_RUNG = "reference"
+
+
+def _was_relaxed(relaxed: str, rung: str) -> bool:
+    return rung in relaxed.split(",")
+
+
 async def _build_filters(
     ctx: TurnContext, args: dict, *, author_id: str | None = None,
 ) -> list[tuple[str, dict]]:
@@ -145,6 +156,18 @@ async def _build_filters(
         date_from, date_to = _year_range(args.get("year"))
     anniversary_md = _s("anniversary_md")
     location_id = await _resolve_id(ctx, "location", args.get("location"))
+    # A named chapter / canto («лекции по БГ 10») MUST constrain the search.
+    # Without it the ANN search returned whatever was semantically closest —
+    # chapter 9 lectures for a chapter 10 question — under a lead-in that
+    # confidently named chapter 10. `filter_track_ids` applies the same
+    # reference predicate as `list_tracks`. Only meaningful together with the
+    # source: a bare "10" doesn't say which book.
+    ref_prefix = ref_from = ref_to = None
+    if source_id:
+        parsed = parse_tokens(_s("tokens"))
+        if parsed is not None:
+            prefix, ref_from, ref_to = parsed
+            ref_prefix = ".".join(map(str, prefix)) or None
 
     full = {
         "author_id": author_id,
@@ -154,10 +177,17 @@ async def _build_filters(
         "date_from": date_from,
         "date_to": date_to,
         "anniversary_md": anniversary_md,
+        "ref_prefix": ref_prefix,
+        "ref_from": ref_from,
+        "ref_to": ref_to,
     }
     ladder: list[tuple[str, dict]] = [("", dict(full))]
     relaxed: list[str] = []
     for label, keys in (
+        # Narrowest first: the reference is the constraint most likely to leave
+        # nothing, and dropping it degrades to "lectures on this book" — which
+        # `_intro` then has to admit to.
+        (_REF_RUNG, ("ref_prefix", "ref_from", "ref_to")),
         ("date", ("date_from", "date_to", "anniversary_md")),
         ("location", ("location_id",)),
         ("author", ("author_id",)),
@@ -270,14 +300,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
     """A short, grounded description of ONE lecture, tilted toward the user's
     question. Built from the lecture's own catalog description — NOT a verdict
     on whether it matches (that produced "this lecture is NOT about X")."""
-    sys = (
-        "You write a SHORT 1–2 sentence description of a lecture for a "
-        "search-result card, in the user's language. Base it on the lecture's "
-        "own description and the excerpt; bring out the part relevant to the "
-        "user's question. Describe what the lecture COVERS — never comment on "
-        "whether it matches the query, never say 'this lecture is about…'. "
-        "Plain text, no markdown, do not repeat the title."
-    )
+    sys = standalone_prompt("find-tracks-description", "find_tracks_description")
     usr = (
         f"User question: {query}\n"
         f"Lecture title: {title or '—'}\n"
@@ -299,22 +322,30 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
 
 
 async def _intro(
-    ctx: TurnContext, query: str, n: int, relaxed: str, *, lang_note: str = "",
+    ctx: TurnContext, query: str, n: int, relaxed: str, *,
+    lang_note: str = "", ref: str = "",
 ) -> str:
-    sys = (
-        "Write ONE short intro line (max ~14 words, or ~30 when you must also "
-        "name a language) in the user's language for a list of lectures found "
-        "for the user's query — e.g. 'Вот лекции об очищении сердца:'. If some "
-        "search filters were relaxed, mention it briefly. If zero lectures were "
-        "found, say so plainly. Plain text only."
-    )
-    usr = (
-        f"User query: {query}\n"
-        f"Lectures found: {n}\n"
-        f"Relaxed filters: {relaxed or 'none'}\n"
-        f"{lang_note}\n\n"
-        f"Write the line in language code '{ctx.lang}'."
-    )
+    sys = standalone_prompt("find-tracks-intro", "find_tracks_intro")
+    facts = [
+        f"User query: {query}",
+        f"Lectures found: {n}",
+        f"Relaxed filters: {relaxed or 'none'}",
+    ]
+    if lang_note:
+        facts.append(lang_note)
+    if ref:
+        # The defect this exists for: the line said «Вот лекции по Бхагавад-гите
+        # 10:» above lectures on chapter 9, and the user had to point it out
+        # («Ты мне раньше дал 9 главу вместо 12»). A confidently wrong header is
+        # worse than an honest miss, so when the reference filter had to be
+        # dropped the line is FORBIDDEN to claim it.
+        facts.append(
+            f"IMPORTANT: the user asked for {ref}, and the corpus has NO lecture "
+            f"on it. These lectures are NOT on {ref}. Say plainly that there is "
+            f"nothing on {ref} and that these are other lectures on the same "
+            f"book. Do NOT write {ref} as if the list matched it."
+        )
+    usr = "\n".join(facts) + f"\n\nWrite the line in language code '{ctx.lang}'."
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
     try:
         out = await ctx.llm.text_completion(
@@ -441,7 +472,17 @@ async def find_tracks_worker_node(
         _describe(ctx, query, disp.get("track_title", ""), description, sc.chunk.text)
         for sc, disp, description in kept
     ]
-    intro_task = _intro(ctx, query, len(kept), relaxed, lang_note=lang_note)
+    # When the reference filter had to be dropped, the lead-in gets the human
+    # address it must NOT claim («БГ 10»). Costs a catalog lookup only on that
+    # miss path.
+    ref_label = ""
+    if _was_relaxed(relaxed, _REF_RUNG):
+        _, short = await _resolve_source(ctx, str(args.get("source_id") or ""))
+        tokens = str(args.get("tokens") or "").strip()
+        ref_label = f"{short} {tokens}".strip() if short else tokens
+    intro_task = _intro(
+        ctx, query, len(kept), relaxed, lang_note=lang_note, ref=ref_label,
+    )
     prose = await asyncio.gather(intro_task, *desc_tasks)
     intro, descriptions = prose[0], list(prose[1:])
 

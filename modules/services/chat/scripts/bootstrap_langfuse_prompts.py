@@ -114,6 +114,32 @@ _PROMPTS: list[tuple[str, str, dict, list[str]]] = [
          "note": "structured_output → temperature forced to 0"},
         ["chat", "router"],
     ),
+    # ── reply language (runs in parallel with the router) ──────────────
+    (
+        "reply-language", "reply_language",
+        {"model": _FLASH_LITE, "temperature": 0, "schema": "Attribute",
+         "note": "structured_output → temperature forced to 0; one conversation ATTRIBUTE (see domain/conversation_attributes.py) — abstains (empty value) when the message carries no signal"},
+        ["chat", "router"],
+    ),
+    # ── standalone one-off prompts (not sections of the system prompt) ──
+    (
+        "localized-reply", "localized_reply",
+        {"model": _FLASH_LITE, "temperature": 0, "schema": "LocalizedReply",
+         "note": "structured_output → temperature forced to 0; localises a fixed reply into EVERY shipped locale. On a parse miss the caller re-asks with this same text plus a plain-text override (kept in code — an edit here must not be able to break the schema contract)"},
+        ["chat", "worker"],
+    ),
+    (
+        "find-tracks-intro", "find_tracks_intro",
+        {"model": _FLASH_LITE, "temperature": 0,
+         "note": "text_completion (no JSON envelope); the lead-in above a lecture list. When the reference filter was relaxed the caller adds the facts + an explicit ban on naming it"},
+        ["chat", "worker"],
+    ),
+    (
+        "find-tracks-description", "find_tracks_description",
+        {"model": _FLASH_LITE, "temperature": 0,
+         "note": "text_completion (no JSON envelope); the per-card blurb, one call per lecture"},
+        ["chat", "worker"],
+    ),
     # ── chat-section-* (modular synth/worker prompt) ───────────────────
     ("chat-section-header", "header", {}, ["chat", "synth", "worker"]),
     ("chat-section-tools", "tools", {}, ["chat", "worker"]),

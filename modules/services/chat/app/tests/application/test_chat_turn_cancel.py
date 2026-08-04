@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 
 from shruti_chat.application import chat_turn
 from shruti_chat.application.chat_turn import run_chat_turn
+from shruti_chat.application.chat_turn_request import ChatTurnRequest
 
 
 class _FakeGraph:
@@ -118,12 +119,13 @@ async def test_disconnect_tags_langfuse_trace_and_cancels_embed():
          patch.object(chat_turn, "with_langfuse_trace", _fake_trace_cm):
         events = []
         async for ev in run_chat_turn(
-            history=[{"role": "user", "content": "test question"}],
-            lang="en",
-            request_id="r-cancel-1",
-            user_context=None,
-            is_disconnected=_is_disconnected,
+            ChatTurnRequest(
+                history=[{"role": "user", "content": "test question"}],
+                lang="en",
+                request_id="r-cancel-1",
+            ),
             deps=deps,
+            is_disconnected=_is_disconnected,
         ):
             events.append(ev)
 
@@ -161,12 +163,13 @@ async def test_disconnect_swallows_langfuse_tag_failure():
         # Must NOT raise — the warning is logged inside chat_turn.
         events = []
         async for ev in run_chat_turn(
-            history=[{"role": "user", "content": "test question"}],
-            lang="en",
-            request_id="r-cancel-2",
-            user_context=None,
-            is_disconnected=_is_disconnected,
+            ChatTurnRequest(
+                history=[{"role": "user", "content": "test question"}],
+                lang="en",
+                request_id="r-cancel-2",
+            ),
             deps=deps,
+            is_disconnected=_is_disconnected,
         ):
             events.append(ev)
     assert any(e.type == "delta" for e in events)
@@ -190,12 +193,13 @@ async def test_no_disconnect_does_not_tag():
     with patch.object(chat_turn, "get_langfuse", return_value=fake_lf), \
          patch.object(chat_turn, "with_langfuse_trace", _fake_trace_cm):
         async for _ in run_chat_turn(
-            history=[{"role": "user", "content": "test"}],
-            lang="en",
-            request_id="r-normal-1",
-            user_context=None,
-            is_disconnected=_never_disconnected,
+            ChatTurnRequest(
+                history=[{"role": "user", "content": "test"}],
+                lang="en",
+                request_id="r-normal-1",
+            ),
             deps=deps,
+            is_disconnected=_never_disconnected,
         ):
             pass
 
@@ -227,12 +231,13 @@ async def test_normal_completion_cancels_speculative_embed():
     with patch.object(chat_turn, "get_langfuse", return_value=MagicMock()), \
          patch.object(chat_turn, "with_langfuse_trace", _fake_trace_cm):
         async for _ in run_chat_turn(
-            history=[{"role": "user", "content": "find a lecture"}],
-            lang="en",
-            request_id="r-leak-1",
-            user_context=None,
-            is_disconnected=_never_disconnected,
+            ChatTurnRequest(
+                history=[{"role": "user", "content": "find a lecture"}],
+                lang="en",
+                request_id="r-leak-1",
+            ),
             deps=deps,
+            is_disconnected=_never_disconnected,
         ):
             pass
 
