@@ -260,7 +260,7 @@ async def lifespan(app: FastAPI):
     from shruti_chat.infra.broker.track_events_consumer import (
         build_track_events_consumer,
     )
-    track_events_consumer = build_track_events_consumer(s, embedder)
+    track_events_consumer = build_track_events_consumer(s, embedder, catalog_repo)
     track_events_task = None
     if track_events_consumer is not None:
         track_events_task = asyncio.create_task(

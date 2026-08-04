@@ -141,40 +141,64 @@ class PgChunkRepository:
             return []
         return [r["track_id"] for r in rows]
 
-    async def get_track_authors_raw(
-        self, track_ids: list[str],
-    ) -> dict[str, str]:
-        """Speaker names for privately added tracks, as the ingest reported them.
+    async def get_owned_track_ids_by_author(
+        self, user_id: str, author_ids: list[str],
+    ) -> list[str]:
+        """The subset of this user's own tracks spoken by one of `author_ids`.
 
-        Free text, unresolved: "Прабхупада", "His Grace Radhanath Swami". The
-        caller decides what they denote — resolving here would freeze one
-        strategy into the repository.
+        The speaker was resolved to a catalog author when the track was indexed
+        and stamped on its chunks, so this is the same predicate the public lane
+        uses — a join, not a per-turn resolve loop over free-text names.
 
-        A track with no row, or a row with no speaker, is simply absent from the
-        result: the caller must decide what an unattributable recording means,
-        and it means different things to a filter and to a listing. Same
-        graceful-degradation contract as `get_owned_track_ids` — a missing table
-        yields {} rather than failing the turn.
+        A track whose speaker is unknown or absent from the catalog carries no
+        author and is therefore NOT returned: under a lecturer filter, a
+        recording we cannot attribute is not known to be by the person who was
+        asked for. `unattributed_owned_count` is how a caller tells the person
+        that such recordings exist.
         """
-        if not track_ids:
-            return {}
+        if not user_id or not author_ids:
+            return []
         try:
             async with self._pool.acquire() as conn:
                 rows = await conn.fetch(
                     """
-                    SELECT track_id, data->>'author_raw' AS author_raw
-                      FROM user_track_facts
-                     WHERE track_id = ANY($1::text[])
+                    SELECT DISTINCT o.track_id
+                      FROM owned o
+                      JOIN chunks c
+                        ON c.track_id = o.track_id AND c.kind = 'user_track'
+                     WHERE o.user_id = $1
+                       AND c.author_id = ANY($2::text[])
                     """,
-                    list(track_ids),
+                    user_id, list(author_ids),
                 )
         except asyncpg.UndefinedTableError:
-            return {}
-        return {
-            r["track_id"]: r["author_raw"]
-            for r in rows
-            if (r["author_raw"] or "").strip()
-        }
+            return []
+        return [r["track_id"] for r in rows]
+
+    async def unattributed_owned_count(self, user_id: str) -> int:
+        """How many of this user's own tracks have no resolved speaker.
+
+        Only useful to say out loud: those recordings fall out of every
+        lecturer-filtered answer, and the person cannot see why unless told.
+        """
+        if not user_id:
+            return 0
+        try:
+            async with self._pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT count(DISTINCT o.track_id) AS n
+                      FROM owned o
+                      JOIN chunks c
+                        ON c.track_id = o.track_id AND c.kind = 'user_track'
+                     WHERE o.user_id = $1
+                       AND c.author_id IS NULL
+                    """,
+                    user_id,
+                )
+        except asyncpg.UndefinedTableError:
+            return 0
+        return int((row or {}).get("n") or 0)
 
     async def search_by_embedding(
         self,
