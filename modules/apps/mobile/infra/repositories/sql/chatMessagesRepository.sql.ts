@@ -39,7 +39,7 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     error: meta.error,
     followups: meta.followups.length > 0 ? meta.followups : undefined,
     aliases: meta.aliases,
-    replyLanguage: meta.replyLanguage,
+    attributes: meta.attributes,
     focus: meta.focus,
   }
   if (meta.feedback) {
@@ -90,7 +90,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         followups: input.followups,
         error: input.error,
         aliases: input.aliases,
-        replyLanguage: input.replyLanguage,
+        attributes: input.attributes,
         focus: input.focus,
       })
       await mutate(
@@ -117,7 +117,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: input.error,
         followups: input.followups && input.followups.length > 0 ? input.followups : undefined,
         aliases: input.aliases && Object.keys(input.aliases).length > 0 ? input.aliases : undefined,
-        replyLanguage: input.replyLanguage,
+        attributes: input.attributes,
         focus: input.focus,
       }
       return out
@@ -148,7 +148,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
           followups,
           error: current.error,
           aliases: current.aliases,
-          replyLanguage: current.replyLanguage,
+          attributes: current.attributes,
           focus: current.focus,
           feedback: current.feedback,
         })
@@ -179,7 +179,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
           followups: current.followups,
           error: current.error,
           aliases: current.aliases,
-          replyLanguage: current.replyLanguage,
+          attributes: current.attributes,
           focus: current.focus,
           feedback: current.feedback,
         })
@@ -207,7 +207,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
           followups: current.followups,
           error: current.error,
           aliases: current.aliases,
-          replyLanguage: current.replyLanguage,
+          attributes: current.attributes,
           focus: current.focus,
           feedback,
         })

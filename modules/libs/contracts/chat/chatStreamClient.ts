@@ -217,31 +217,42 @@ export interface ChatMediaPayloadWire {
 
 export type ChatRole = "user" | "assistant"
 
-/** The language the server settled a turn's answer in.
+/** One thing the server worked out about the conversation.
  *
- *  Round-tripped: it arrives on `done`, the client stores it on the assistant
- *  message and ships it back on the next turn. That is what makes «отвечай
- *  по-русски» hold for the rest of the dialogue — the server caps history at
- *  20 messages, so re-deriving the request from the conversation stops working
- *  once it scrolls out (and after an app restart, which drops it entirely).
+ *  Round-tripped: attributes arrive on `done`, the client stores them on the
+ *  assistant message AND folds them into a per-conversation aggregate it sends
+ *  back as request metadata. That is what makes «отвечай по-русски» hold for
+ *  the rest of the dialogue — the server sees at most the last 20 messages, so
+ *  re-deriving it from the replayed conversation stops working once the request
+ *  scrolls out (and after an app restart, which drops it entirely).
  *
- *  `lang` is an opaque locale code — NOT one of the app's languages. Someone
- *  writing in Italian gets an Italian answer even though there is no Italian
- *  UI, so never validate it against the interface-language list. `requested`
- *  is true when the person asked for the language in words, which is what lets
- *  it outrank the language a later message happens to be written in. */
-export interface ChatReplyLanguage {
-  readonly lang: string
-  readonly name: string
-  readonly requested: boolean
+ *  Keyed rather than a field per thing: the next attribute the server learns to
+ *  read costs no protocol change and no client release. An unknown key MUST be
+ *  carried through untouched, never dropped.
+ *
+ *  `value` is opaque — for the reply language it is a locale code that is NOT
+ *  one of the app's languages (someone writing in Italian gets an Italian
+ *  answer with no Italian UI), so never validate it against the
+ *  interface-language list. `label` is its human form when the value alone
+ *  can't be shown. `explicit` is true when the person STATED it rather than us
+ *  inferring it, which is what lets it outrank a later inference. */
+export interface ChatAttribute {
+  readonly value: string
+  readonly label: string
+  readonly explicit: boolean
 }
+
+/** Attribute keys the client knows by name. Others still ride through. */
+export const CHAT_ATTR_REPLY_LANGUAGE = "reply_language"
+
+export type ChatAttributes = Readonly<Record<string, ChatAttribute>>
 
 export interface ChatTurn {
   readonly role: ChatRole
   readonly content: string
-  /** What a previous turn settled the answer language to be. Only on
-   *  `role === "assistant"`; the wire layer sends it as `reply_language`. */
-  readonly replyLanguage?: ChatReplyLanguage
+  /** Attributes as they stood after this turn. Only on `role === "assistant"`;
+   *  the wire layer sends them under `attributes`. */
+  readonly attributes?: ChatAttributes
   /** Server-minted integer→chunk alias map for the chip markers in
    *  this assistant message's `content`. Round-tripped from a prior
    *  turn's `aliases` SSE event via the client's meta storage. Only
@@ -298,11 +309,11 @@ export type ChatStreamEvent =
       readonly aliases?: Readonly<
         Record<string, { track_id: string; start_ms?: number; end_ms?: number }>
       >
-      /** The language this turn was answered in, when the server settled one.
-       *  Absent when it didn't (nothing to read in the message and nothing
-       *  remembered) — then the client keeps what it already had. Persist it on
-       *  the assistant message and send it back; see `ChatReplyLanguage`. */
-      readonly replyLanguage?: ChatReplyLanguage
+      /** Conversation attributes as they stand after this turn — the WHOLE map,
+       *  not just what changed, so the client's aggregate is a replace rather
+       *  than a merge it could get wrong. Absent when nothing was ever settled;
+       *  the client then keeps what it already had. See `ChatAttribute`. */
+      readonly attributes?: ChatAttributes
     }
   | {
       readonly type: "error"

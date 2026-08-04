@@ -244,6 +244,12 @@ async def chat(
                 [m.model_dump() for m in body.messages],
                 lang=body.lang,
                 translate_citations=body.translate_citations,
+                # The client's aggregate over its FULL local history — the
+                # request itself only carries the last 20 messages.
+                client_attributes=(
+                    {k: v.model_dump() for k, v in body.attributes.items()}
+                    if body.attributes else None
+                ),
                 capabilities=body.capabilities,
                 request_id=request_id,
                 user_context=user_ctx,

@@ -40,21 +40,25 @@ export interface Msg {
   outlines?: Map<string, OutlinePayload>
   pdfActions?: Map<string, PdfActionPayload>
   aliases?: Record<string, unknown>
-  /** The language the server settled this answer in. Shipped back on the next
-   *  turn so a request to switch language keeps holding: the server sees only
-   *  the last messages of the conversation and can't find the request again
-   *  once it scrolls out. */
-  replyLanguage?: ReplyLanguage
+  /** What the server worked out about the conversation as of this turn (the
+   *  reply language today). Sent back both on the message and folded into the
+   *  request-level aggregate, so a setting keeps holding: the server sees only
+   *  the last messages and can't find the request again once it scrolls out. */
+  attributes?: ChatAttributes
 }
 
-/** Wire + stored shape of a settled answer language. `lang` is an opaque
- *  locale code, NOT one of the UI languages — an Italian question is answered
- *  in Italian though there's no Italian interface. */
-export interface ReplyLanguage {
-  lang: string
-  name: string
-  requested: boolean
+/** One thing the server settled about the conversation. `value` is opaque —
+ *  for the reply language it's a locale code that is NOT one of the UI
+ *  languages (an Italian question is answered in Italian though there's no
+ *  Italian interface). `explicit` is true when the user stated it rather than
+ *  us inferring it. Keyed so a new attribute needs no client change. */
+export interface ChatAttribute {
+  value: string
+  label: string
+  explicit: boolean
 }
+
+export type ChatAttributes = Record<string, ChatAttribute>
 
 interface ActionEnvelope {
   kind?: string
@@ -71,7 +75,7 @@ interface StreamEventPayload {
   label?: string
   payload?: Record<string, unknown>
   aliases?: Record<string, unknown>
-  reply_language?: Record<string, unknown>
+  attributes?: Record<string, unknown>
   code?: string
   limit?: number
   current?: number
@@ -109,18 +113,42 @@ export interface UseChatStream {
   resetLimits: () => void
 }
 
-/** Read a settled answer language off a `done` frame. The server sends the
- *  field only when it actually settled one, so a missing locale means a
- *  malformed frame — not "answer in nothing". */
-function parseReplyLanguage(raw: unknown): ReplyLanguage | undefined {
+/** Read settled attributes off a `done` frame. An entry with no value is a
+ *  malformed frame (the server only sends what it settled); an entry with an
+ *  unknown KEY is kept and carried forward, which is what lets the server add
+ *  an attribute without a client release. */
+function parseAttributes(raw: unknown): ChatAttributes | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
-  const o = raw as Record<string, unknown>
-  if (typeof o.lang !== 'string' || !o.lang) return undefined
-  return {
-    lang: o.lang,
-    name: typeof o.name === 'string' ? o.name : '',
-    requested: o.requested === true,
+  const out: ChatAttributes = {}
+  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) continue
+    const o = v as Record<string, unknown>
+    if (typeof o.value !== 'string' || !o.value) continue
+    out[key] = {
+      value: o.value,
+      label: typeof o.label === 'string' ? o.label : '',
+      explicit: o.explicit === true,
+    }
   }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+/** Fold every turn's attributes into the map sent as request metadata. The
+ *  server sees only the last messages, so a setting from turn 1 of a long
+ *  dialogue reaches it only this way. Same rule as the server's merge: a later
+ *  turn wins, but a later inference does not overwrite what the user stated. */
+function aggregateAttributes(messages: readonly Msg[]): ChatAttributes | undefined {
+  const out: ChatAttributes = {}
+  for (const m of messages) {
+    if (m.role !== 'assistant' || !m.attributes) continue
+    for (const [key, attr] of Object.entries(m.attributes)) {
+      if (!attr.value) continue
+      const previous = out[key]
+      if (previous && previous.explicit && !attr.explicit) continue
+      out[key] = attr
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 function captureAction(a: Msg, kind: string, p: Record<string, unknown>, actionId?: string) {
@@ -265,8 +293,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
       else if (evt === 'done') {
         gotDone = true
         if (payload?.aliases) a.aliases = payload.aliases
-        const rl = parseReplyLanguage(payload?.reply_language)
-        if (rl) a.replyLanguage = rl
+        const attrs = parseAttributes(payload?.attributes)
+        if (attrs) a.attributes = attrs
       }
       else if (evt === 'error') { throw new Error(payload?.code ?? 'error') }
     }
@@ -302,12 +330,14 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStream {
             const t: Record<string, unknown> = { role: m.role, content: m.text }
             if (!withAliases || m.role !== 'assistant') return t
             if (m.aliases) t.aliases = m.aliases
-            if (m.replyLanguage) t.reply_language = m.replyLanguage
+            if (m.attributes) t.attributes = m.attributes
             return t
           })
+        const attributes = withAliases ? aggregateAttributes(messages.value) : undefined
         const b: Record<string, unknown> = {
           messages: history.length ? history : [{ role: 'user', content: q }],
           lang,
+          ...(attributes ? { attributes } : {}),
           capabilities: { commentary_card: true },
           // Web always opts in: there's no per-user toggle here, and the corpus
           // has native transcripts only for ru/en — so for any other `lang` the

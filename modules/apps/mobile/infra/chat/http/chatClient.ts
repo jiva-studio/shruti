@@ -17,7 +17,7 @@ export { BackendUnavailableError, ProtocolVersionMismatchError }
 // boundary that maps them to the camelCase domain shapes — `media` included.
 import type {
   ChatTurn,
-  ChatReplyLanguage,
+  ChatAttributes,
   ResearchSourceKind,
   ChatStreamEvent,
   ChatActionPayload as ActionPayload,
@@ -632,23 +632,49 @@ export async function* streamChat(
  *
  * Two fields ride BACK on an assistant turn, and both are load-bearing:
  * `aliases` so the agent sees one numbering scheme across the conversation,
- * and `reply_language` so a request to answer in another language keeps
- * holding — the server caps history at 20 messages and cannot find the request
- * again once it scrolls out of that window.
+ * and `attributes` — what the server settled about the dialogue, e.g. the reply
+ * language. The attributes here are the per-message record; what actually
+ * carries a setting past the 20 messages the server can see is the aggregate
+ * `buildRequestBody` folds out of the full local history.
  *
  * Exported for tests, like `parseStoredFrame`: this is the seam where a field
  * silently stops being sent and everything still looks fine locally.
  */
+/**
+ * Fold every turn's attributes into ONE map for the request metadata.
+ *
+ * The server can only see the last 20 messages, so an attribute settled twenty
+ * exchanges ago would fall out of its view. The client has the whole
+ * conversation, so it folds it here and sends the result once. Later turns win,
+ * and something the user STATED is not overwritten by a later inference — the
+ * same rule the server applies, because both sides fold the same data and must
+ * not disagree about it.
+ */
+export function aggregateAttributes(
+  messages: readonly ChatTurn[],
+): Record<string, { value: string; label: string; explicit: boolean }> | undefined {
+  const out: Record<string, { value: string; label: string; explicit: boolean }> = {}
+  for (const m of messages) {
+    if (m.role !== "assistant" || !m.attributes) continue
+    for (const [key, attr] of Object.entries(m.attributes)) {
+      if (!attr.value) continue
+      const previous = out[key]
+      if (previous && previous.explicit && !attr.explicit) continue
+      out[key] = { value: attr.value, label: attr.label, explicit: attr.explicit }
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+
 export function toWireTurns(messages: readonly ChatTurn[]): Record<string, unknown>[] {
   return messages.map((m) => {
     const out: Record<string, unknown> = { role: m.role, content: m.content }
     if (m.role !== "assistant") return out
-    if (m.replyLanguage) {
-      out.reply_language = {
-        lang: m.replyLanguage.lang,
-        name: m.replyLanguage.name,
-        requested: m.replyLanguage.requested,
-      }
+    // Attributes ride back on the message as provenance; the authoritative
+    // copy is the request-level aggregate `buildRequestBody` sends.
+    if (m.attributes && Object.keys(m.attributes).length > 0) {
+      out.attributes = m.attributes
     }
     // snake_case on the wire (track_id / start_ms / end_ms); the domain side is
     // camelCase, so the boundary transforms here.
@@ -675,6 +701,10 @@ function buildRequestBody(
   opts: StreamChatRequestInit
 ): Record<string, unknown> {
   const body: Record<string, unknown> = { messages: toWireTurns(messages), lang }
+  // Turn metadata, not per-message state: what the conversation has settled so
+  // far, folded over the client's FULL local history.
+  const attributes = aggregateAttributes(messages)
+  if (attributes) body.attributes = attributes
   // Only emit the flag when the caller opted in — keeps the body identical
   // to the pre-feature shape (and the server default) when it's off.
   if (opts.translateCitations) body.translate_citations = true
@@ -840,11 +870,11 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       }
     case "done": {
       const aliases = parseAliasMap(payload.aliases)
-      const replyLanguage = parseReplyLanguage(payload.reply_language)
+      const attributes = parseAttributes(payload.attributes)
       return {
         type: "done",
         ...(aliases ? { aliases } : {}),
-        ...(replyLanguage ? { replyLanguage } : {}),
+        ...(attributes ? { attributes } : {}),
       }
     }
     case "action": {
@@ -966,17 +996,24 @@ function parseAliasMap(raw: unknown): AliasMapPayload | null {
   return out
 }
 
-function parseReplyLanguage(raw: unknown): ChatReplyLanguage | null {
+function parseAttributes(raw: unknown): ChatAttributes | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
-  const o = raw as Record<string, unknown>
-  // The server sends this only when it actually settled a language, so a
-  // missing locale means a malformed frame — not "answer in nothing".
-  if (typeof o.lang !== "string" || o.lang === "") return null
-  return {
-    lang: o.lang,
-    name: typeof o.name === "string" ? o.name : "",
-    requested: o.requested === true,
+  const out: Record<string, { value: string; label: string; explicit: boolean }> = {}
+  for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== "object" || Array.isArray(v)) continue
+    const o = v as Record<string, unknown>
+    // The server sends an attribute only when it actually settled one, so an
+    // empty value is a malformed frame. An unknown KEY is kept and carried
+    // forward — that is what lets the server add an attribute without a client
+    // release.
+    if (typeof o.value !== "string" || o.value === "") continue
+    out[key] = {
+      value: o.value,
+      label: typeof o.label === "string" ? o.label : "",
+      explicit: o.explicit === true,
+    }
   }
+  return Object.keys(out).length > 0 ? out : null
 }
 
 function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
