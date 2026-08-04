@@ -18,11 +18,13 @@ function playBtn(): HTMLButtonElement {
   return el("play") as HTMLButtonElement;
 }
 
+// Always an explicit display value, never "". Clearing the inline style falls
+// back to the markup's `hidden` attribute, which the UA honours on the spinner's
+// <span> (but not on the <svg> glyphs) — that is why the spinner never appeared.
 function icon(state: "play" | "pause" | "busy"): void {
-  // SVG elements don't reflect the `.hidden` IDL property — toggle display.
-  el("i-play").style.display = state === "play" ? "" : "none";
-  el("i-pause").style.display = state === "pause" ? "" : "none";
-  el("i-spin").style.display = state === "busy" ? "" : "none";
+  el("i-play").style.display = state === "play" ? "block" : "none";
+  el("i-pause").style.display = state === "pause" ? "block" : "none";
+  el("i-spin").style.display = state === "busy" ? "block" : "none";
 }
 
 // While loading, always show the spinner — the button's play/pause only reflects
@@ -121,8 +123,17 @@ async function onPlay(): Promise<void> {
   }
   try {
     await au.play();
-  } catch {
-    /* clip may still be encoding — the error handler retries the load */
+  } catch (e) {
+    // A rejected play() usually means the clip is still encoding, and the error
+    // handler retries the load. But it also fires when the user activation
+    // expired while excerpt_prepare was cutting the clip — nothing retries that,
+    // so hand the button back instead of spinning forever. The clip is prepared
+    // by then, so the next tap plays at once.
+    if ((e as Error | undefined)?.name === "NotAllowedError") {
+      loading = false;
+      playBtn().disabled = false;
+      refreshIcon();
+    }
   }
 }
 
