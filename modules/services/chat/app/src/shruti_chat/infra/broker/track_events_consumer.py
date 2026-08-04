@@ -3,10 +3,11 @@
 Background Redis-Streams consumer (started from `main.py` lifespan) that turns
 track-lifecycle events into two side effects for the private lane (#1227):
 
-  - `track.ready`   → index the transcript under `kind='user_track'`, upsert the
-                      `owned(user_id, track_id)` ACL row, and record what the
-                      track IS in `user_track_facts` (its `author_raw` is what
-                      lets a lecturer filter reach someone's own uploads).
+  - `track.ready`   → index the transcript under `kind='user_track'` AND upsert
+                      the `owned(user_id, track_id)` ACL row. The event's
+                      `author_raw` is resolved to a catalog author and stamped on
+                      the chunks, which is what lets a lecturer filter reach
+                      someone's own uploads.
   - `library.unlinked` → delete the `owned` row (revoke this user's access).
                       (Consumer wired; a producer for this removal event is not
                       yet implemented — see the personal-library architecture doc.)
@@ -40,6 +41,7 @@ from typing import Any
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.indexer.embed import Embedder, get_embedder
+from shruti_chat.application.author_lookup import resolve_author
 from shruti_chat.indexer.run import index_one_track
 from shruti_chat.observability.logging import get_logger
 
@@ -76,19 +78,7 @@ def _decode(v: Any) -> str:
     return v.decode() if isinstance(v, (bytes, bytearray)) else str(v)
 
 
-# What a track IS, as the ingest reported it. Blob keys (`transcript_key`,
-# `audio_key`, `cover_key`) and the lifecycle `status` are deliberately left out:
-# they describe where bytes live and how far the job got, not the recording, and
-# they go stale on their own schedule. `references` is a JSON string here — the
-# flattening upstream stringifies nested values — and is kept as it arrived.
-_FACT_KEYS = (
-    "author_raw", "title_raw", "location_raw",
-    "date", "date_raw", "kind_tag", "references", "lang", "duration",
-)
 
-
-def _facts_of(fields: dict[str, str]) -> dict[str, str]:
-    return {k: fields[k] for k in _FACT_KEYS if fields.get(k)}
 
 
 def _unwrap_payload(fields: dict[str, str]) -> dict[str, str]:
@@ -142,52 +132,13 @@ async def upsert_owned(user_id: str, track_id: str) -> None:
 
 
 async def delete_owned(user_id: str, track_id: str) -> None:
-    """Revoke `user_id`'s access to `track_id` (idempotent).
-
-    The track's facts go with the last owner: they describe a recording nobody
-    holds any more, and the row would otherwise outlive every reference to it.
-    """
+    """Revoke `user_id`'s access to `track_id` (idempotent)."""
     async with get_pool().acquire() as conn:
         await conn.execute(
             "DELETE FROM owned WHERE user_id = $1 AND track_id = $2",
             user_id, track_id,
         )
-        await conn.execute(
-            """
-            DELETE FROM user_track_facts
-             WHERE track_id = $1
-               AND NOT EXISTS (SELECT 1 FROM owned WHERE track_id = $1)
-            """,
-            track_id,
-        )
 
-
-async def upsert_track_facts(track_id: str, data: Any) -> None:
-    """Store what the ingest reported about a track, verbatim.
-
-    Last writer wins: a re-ingest of the same recording carries fresher
-    metadata, and the row is a projection with no history to preserve. Never
-    raises — the facts are what makes an author filter work on someone's own
-    library, not something worth losing an indexing run over.
-    """
-    if not track_id or not data:
-        return
-    payload = data if isinstance(data, str) else json.dumps(data)
-    try:
-        async with get_pool().acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO user_track_facts (track_id, data)
-                VALUES ($1, $2::jsonb)
-                ON CONFLICT (track_id) DO UPDATE
-                   SET data = EXCLUDED.data, updated_at = NOW()
-                """,
-                track_id, payload,
-            )
-    except Exception as exc:  # noqa: BLE001
-        log.warning(
-            "track_facts_upsert_failed", track_id=track_id, error=str(exc),
-        )
 
 
 class TrackEventsConsumer:
@@ -200,6 +151,7 @@ class TrackEventsConsumer:
         consumer: str,
         settings: Settings,
         embedder: Embedder,
+        catalog_repo: Any | None = None,
     ) -> None:
         from redis import asyncio as redis_async
 
@@ -208,6 +160,10 @@ class TrackEventsConsumer:
         self._consumer = consumer
         self._settings = settings
         self._embedder = embedder
+        # Resolves the ingest's speaker name to a catalog author, once per
+        # indexed track. None (test harnesses, catalog-less runs) simply leaves
+        # the chunks unattributed.
+        self._catalog_repo = catalog_repo
         self._processed_set = f"chat:track_events:indexed:{settings.embed_model}"
         self._client = redis_async.from_url(
             url,
@@ -328,15 +284,30 @@ class TrackEventsConsumer:
             # ownership is asserted even if the transcript indexing is deferred.
             if user_id:
                 await upsert_owned(user_id, track_id)
-            # The event carries the ingest's own metadata (`author_raw` and the
-            # rest). Stored as it arrived, so a filter on a lecturer can reach
-            # someone's own uploads instead of hiding their whole library.
-            await upsert_track_facts(track_id, _facts_of(fields))
             await self._maybe_index(track_id, fields)
             return True
 
         log.info("track_event_ignored", type=etype, track_id=track_id)
         return True
+
+    async def _resolve_speaker(self, author_raw: str | None) -> str | None:
+        """The catalog author the ingest's speaker name denotes, or None.
+
+        Resolved ONCE here rather than on every turn: the answer only changes
+        when the dictionary does, and a re-ingest re-runs it. None — unknown
+        speaker, or one the corpus has never heard of — is a normal outcome; the
+        chunks simply carry no author, and a lecturer filter then passes them
+        over.
+        """
+        name = (author_raw or "").strip()
+        if not name or self._catalog_repo is None:
+            return None
+        hit = await resolve_author(self._catalog_repo, name)
+        log.info(
+            "user_track_speaker_resolved",
+            author_raw=name, author_id=hit.id if hit else None,
+        )
+        return hit.id if hit is not None else None
 
     async def _maybe_index(self, track_id: str, fields: dict[str, str]) -> None:
         """Index the track's transcript under kind='user_track', idempotent by
@@ -380,6 +351,7 @@ class TrackEventsConsumer:
                 kind="user_track",
                 embedder=self._embedder,
                 settings=self._settings,
+                author_id=await self._resolve_speaker(fields.get("author_raw")),
             )
             log.info("user_track_indexed", track_id=track_id, chunks=n)
         except Exception:
@@ -401,6 +373,7 @@ class TrackEventsConsumer:
 def build_track_events_consumer(
     settings: Settings | None = None,
     embedder: Embedder | None = None,
+    catalog_repo: Any | None = None,
 ) -> TrackEventsConsumer | None:
     """Consumer when STREAMS_REDIS_URL is set, else None (feature off)."""
     s = settings or get_settings()
@@ -413,4 +386,5 @@ def build_track_events_consumer(
         consumer=s.track_events_consumer,
         settings=s,
         embedder=embedder or get_embedder(s),
+        catalog_repo=catalog_repo,
     )
