@@ -37,6 +37,14 @@ class ChunkRepository(Protocol):
         users; best-effort (a missing projection yields [])."""
         ...
 
+    async def get_track_authors_raw(self, track_ids: list[str]) -> dict[str, str]:
+        """Speaker names for privately added tracks, as the ingest reported
+        them — free text, unresolved. Tracks with no recorded speaker are absent
+        from the mapping rather than present-and-empty, so a caller cannot
+        mistake "we don't know" for "nobody". Best-effort ({} when the
+        projection is missing)."""
+        ...
+
     async def search_by_embedding(
         self,
         embedding: list[float],

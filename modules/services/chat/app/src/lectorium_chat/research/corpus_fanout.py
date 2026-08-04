@@ -474,12 +474,13 @@ async def fanout_search_with_boost(
             # a signed-out / library-less turn pays zero extra ANN cost and
             # the public corpus behaviour is byte-for-byte unchanged.
             owned = owned_track_ids
-            # A person's OWN added lectures are narrowed only by a selection
-            # they stated — a default must never hide their own library. Their
-            # authors are not in the published catalog, so the intersection is
-            # by track id and an unattributable track simply falls out.
-            if owned and author_scope is not None and author_scope.selection.explicit:
-                owned = await author_scope.narrow(owned)
+            # A person's OWN added lectures are narrowed by the speaker the
+            # ingest recorded, not by the catalog — their uploads are not in it,
+            # so a track-id intersection would hide their whole library behind a
+            # filter that was never about them. `narrow_owned` also enforces the
+            # stated-only rule: a default never touches this lane.
+            if owned and author_scope is not None:
+                owned = await author_scope.narrow_owned(owned)
             if not owned:
                 return []
             _t = time.perf_counter()

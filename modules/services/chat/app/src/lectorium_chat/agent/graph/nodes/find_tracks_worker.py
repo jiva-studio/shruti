@@ -309,7 +309,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
 
 async def _intro(
     ctx: TurnContext, query: str, n: int, relaxed: str, *,
-    lang_note: str = "", ref: str = "",
+    lang_note: str = "", ref: str = "", chosen_authors: str = "",
 ) -> str:
     sys = standalone_prompt("find-tracks-intro", "find_tracks_intro")
     facts = [
@@ -330,6 +330,20 @@ async def _intro(
             f"on it. These lectures are NOT on {ref}. Say plainly that there is "
             f"nothing on {ref} and that these are other lectures on the same "
             f"book. Do NOT write {ref} as if the list matched it."
+        )
+    if chosen_authors:
+        # Same honesty as the reference case above: an empty list under a
+        # lecturer filter must name the filter, or it reads as "the corpus has
+        # nothing on this" and the person never learns their choice is why.
+        facts.append(
+            f"IMPORTANT: the user limited the answer to lectures by "
+            f"{chosen_authors}. "
+            + (
+                f"The corpus has nothing by them for this request. Say that "
+                f"plainly, naming {chosen_authors}."
+                if n == 0 else
+                f"Every lecture listed is by them; do not imply otherwise."
+            )
         )
     usr = "\n".join(facts) + f"\n\nWrite the line in language code '{ctx.lang_code}'."
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]
@@ -756,9 +770,15 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
     """No lectures found — one localized line, nothing else."""
     writer({"type": "status", "data": {"key": "composing_answer"}})
     line = ""
+    scope = getattr(ctx, "author_scope", None)
+    chosen = (
+        scope.selection.names
+        if scope is not None and scope.selection.constrained
+        else ""
+    )
     if ctx.llm is not None and query:
         try:
-            line = await _intro(ctx, query, 0, "")
+            line = await _intro(ctx, query, 0, "", chosen_authors=chosen)
         except Exception:
             log.exception("find_tracks_empty_intro_failed", request_id=ctx.request_id)
     if line:

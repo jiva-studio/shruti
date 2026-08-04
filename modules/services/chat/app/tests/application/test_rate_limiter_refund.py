@@ -14,6 +14,8 @@ import pytest
 
 from lectorium_chat.application.rate_limiter import RateLimiter
 from lectorium_chat.config import Settings
+
+from _shipped_settings import settings_from_model_defaults
 from lectorium_chat.domain.ports.rate_limit_store import (
     CounterRecord,
     RateLimitStoreUnavailable,
@@ -49,11 +51,9 @@ class _FailingDecrStore(_FakeStore):
 
 
 def _settings() -> Settings:
-    # `_env_file=None` keeps the local dev `.env` out of unit tests so the
-    # asserted rate limits never depend on the environment.
-    return Settings(
-        _env_file=None, database_url="postgres://test", s3_bucket="x", s3_region="us-east-1"
-    )
+    # The SHIPPED caps, from the model's own defaults — see `conftest` for why
+    # `_env_file=None` alone cannot keep the dev `.env` out.
+    return settings_from_model_defaults()
 
 
 @pytest.mark.asyncio
