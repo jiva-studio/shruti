@@ -84,7 +84,7 @@ async def chunks_search(
 
     async def _lecture_branch(use_lang: str | None) -> list[dict[str, Any]]:
         eligible_ids = await catalog_repo.filter_track_ids(
-            author_id=author_id,
+            author_ids=[author_id] if author_id else None,
             source_id=referenced_source_id,
             location_id=location_id,
             tag_ids=tag_ids,

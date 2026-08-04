@@ -752,7 +752,7 @@ async def test_resolved_author_id_constrains_the_search(_events) -> None:
          "extracted_args": {"author": "Srila Prabhupada"}},
         _Runtime(ctx),
     )
-    assert catalog.filter_kwargs["author_id"] == "author_prabhupada"
+    assert catalog.filter_kwargs["author_ids"] == ["author_prabhupada"]
 
 
 async def test_honorific_only_author_does_not_constrain_or_bail(_events) -> None:
@@ -773,7 +773,7 @@ async def test_honorific_only_author_does_not_constrain_or_bail(_events) -> None
         _Runtime(ctx),
     )
     assert out == {}
-    assert catalog.filter_kwargs.get("author_id") is None
+    assert not catalog.filter_kwargs.get("author_ids")
 
 
 # ── a named chapter must constrain the search, not just the header ─────────
@@ -975,10 +975,10 @@ class _TwoAuthorCatalog(_Catalog):
 
     async def filter_track_ids(self, **kwargs):
         self.filter_kwargs = kwargs
-        author = kwargs.get("author_id")
-        if author is None:
+        authors = kwargs.get("author_ids")
+        if not authors:
             return list(self.TRACKS)
-        return [t for t, (a, _l) in self.TRACKS.items() if a == author]
+        return [t for t, (a, _l) in self.TRACKS.items() if a in authors]
 
 
 class _LangAwareChunkRepo:

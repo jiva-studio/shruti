@@ -357,3 +357,57 @@ describe("aggregateAttributes — the metadata the request carries", () => {
     ).toBeUndefined()
   })
 })
+
+describe("attribute values are isomorphic on the wire", () => {
+  it("reads a single-valued attribute as the bare string it is", () => {
+    expect(
+      parse("done", { attributes: { reply_language: { value: "ru", label: "Русский" } } })
+    ).toEqual({
+      type: "done",
+      attributes: { reply_language: { value: "ru", label: "Русский", explicit: false } },
+    })
+  })
+
+  it("reads a multi-valued attribute as an array", () => {
+    expect(
+      parse("done", {
+        attributes: { lecture_authors: { value: ["a1", "a2"], label: "Двое", explicit: true } },
+      })
+    ).toEqual({
+      type: "done",
+      attributes: { lecture_authors: { value: ["a1", "a2"], label: "Двое", explicit: true } },
+    })
+  })
+
+  it("keeps the shape it arrived in, so a round trip does not drift", () => {
+    const single = parse("done", { attributes: { k: { value: "x" } } })
+    const listed = parse("done", { attributes: { k: { value: ["x"] } } })
+    expect((single as { attributes: Record<string, { value: unknown }> }).attributes.k.value).toBe(
+      "x"
+    )
+    expect(
+      (listed as { attributes: Record<string, { value: unknown }> }).attributes.k.value
+    ).toEqual(["x"])
+  })
+
+  it("drops blanks and de-duplicates inside an array", () => {
+    expect(parse("done", { attributes: { k: { value: ["a", "  ", "a", " b "] } } })).toEqual({
+      type: "done",
+      attributes: { k: { value: ["a", "b"], label: "", explicit: false } },
+    })
+  })
+
+  it("treats an all-blank value as no attribute at all", () => {
+    expect(parse("done", { attributes: { k: { value: ["", "  "] } } })).toEqual({ type: "done" })
+    expect(parse("done", { attributes: { k: { value: 7 } } })).toEqual({ type: "done" })
+  })
+
+  it("aggregates a multi-valued attribute without flattening it", () => {
+    const picked = { value: ["a1", "a2"], label: "Двое", explicit: true }
+    expect(
+      aggregateAttributes([
+        { role: "assistant", content: "…", attributes: { lecture_authors: picked } },
+      ])
+    ).toEqual({ lecture_authors: picked })
+  })
+})

@@ -73,10 +73,10 @@ class FakeChunkRepo:
 class FakeCatalogRepo:
     captured_filters: list[dict] = field(default_factory=list)
 
-    async def filter_track_ids(self, *, author_id=None, source_id=None, location_id=None,
+    async def filter_track_ids(self, *, author_ids=None, source_id=None, location_id=None,
                                tag_ids=None, date_from=None, date_to=None):
         self.captured_filters.append({
-            "author_id": author_id, "source_id": source_id,
+            "author_ids": author_ids, "source_id": source_id,
             "location_id": location_id, "tag_ids": tag_ids,
             "date_from": date_from, "date_to": date_to,
         })
@@ -258,7 +258,7 @@ async def test_router_args_propagate_to_fresh_fetch():
         router_args={"author_id": "prabhupada", "date_from": "1976-01-01"},
     )
     # Catalog filter received author_id.
-    assert catalog.captured_filters[-1]["author_id"] == "prabhupada"
+    assert catalog.captured_filters[-1]["author_ids"] == ["prabhupada"]
     assert catalog.captured_filters[-1]["date_from"] == "1976-01-01"
     # Library search received author_id + date.
     assert repo.captured_router_args[-1]["author_id"] == "prabhupada"

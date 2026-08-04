@@ -39,6 +39,7 @@ from lectorium_chat.application.conversation_attributes import (
     remembered_attributes,
 )
 from lectorium_chat.application.router_turn import run_router_turn
+from lectorium_chat.domain.author_selection import AuthorSelection
 from lectorium_chat.domain.conversation_attributes import (
     REPLY_LANGUAGE,
     Attribute,
@@ -86,6 +87,7 @@ def _start_attributes(
             request_id=ctx.request_id,
             kv_cache=ctx.kv_cache,
             callbacks=[cb] if cb is not None else None,
+            catalog_repo=ctx.catalog_repo,
         ),
         name="conversation_attributes",
     )
@@ -115,7 +117,7 @@ async def _settle_attributes(
     )
     language = settled.get(REPLY_LANGUAGE)
     if language is not None:
-        ctx.lang = language.value
+        ctx.lang = language.single()
         ctx.lang_name = language.label
     return settled
 
@@ -230,7 +232,7 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
     attributes = await _settle_attributes(state, ctx, lang_task)
     language = attributes.get(REPLY_LANGUAGE)
     if language is not None:
-        update["lang"] = language.value
+        update["lang"] = language.single()
     if attributes:
         # Not a client-facing event: `chat_turn` swallows it and puts the map on
         # the terminal `done`, which is where the client already picks up

@@ -57,6 +57,11 @@ def _is_thin(scored: list[tuple[float, int]]) -> bool:
     return strong < THIN_THESIS_MIN_STRONG_NOTES
 
 
+def _as_ids(author_id: Any) -> list[str] | None:
+    """One author from the router's args as the set the port now takes."""
+    return [author_id] if isinstance(author_id, str) and author_id else None
+
+
 async def _fresh_fanout_for_thesis(
     thesis_embedding: list[float],
     *,
@@ -74,7 +79,7 @@ async def _fresh_fanout_for_thesis(
     so augmentation can't smuggle in chunks outside their intent.
     """
     eligible = await catalog_repo.filter_track_ids(
-        author_id=router_args.get("author_id"),
+        author_ids=_as_ids(router_args.get("author_id")),
         source_id=router_args.get("source_id"),
         location_id=router_args.get("location_id"),
         tag_ids=router_args.get("tag_ids"),
