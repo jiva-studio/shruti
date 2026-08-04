@@ -286,7 +286,9 @@ async def run_chat_turn(
         # over this very object, so filling it there is what makes the selection
         # reach them.
         author_scope = AuthorScope(
-            catalog_repo=deps.catalog_repo, request_id=trace_id,
+            catalog_repo=deps.catalog_repo,
+            facts_repo=deps.chunk_repo,
+            request_id=trace_id,
         )
 
         all_tools = build_personalized_tools(TOOLS, user_context)
