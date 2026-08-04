@@ -399,7 +399,14 @@ async def find_tracks_worker_node(
     embedding = await ctx.embedder.embed_query(query)
     ladder = await _build_filters(ctx, args, author_id=author_id)
 
-    lectures, relaxed = await _run_ladder(ctx, embedding, ladder, lang=ctx.lang)
+    # The teacher the user NAMED outranks the language. Giving the author up
+    # answers with somebody else's lecture and says nothing about it; crossing
+    # the language boundary keeps the person and can say which language they
+    # speak in. So the same-language pass stops before the author rung, and only
+    # the any-language pass below is allowed to drop the author. A query with no
+    # author has no such rung and walks the whole ladder either way.
+    keeps_author = [rung for rung in ladder if "author" not in rung[0].split(",")]
+    lectures, relaxed = await _run_ladder(ctx, embedding, keeps_author, lang=ctx.lang)
     lang_note = ""
     if not lectures:
         # Nothing with a transcript in the user's language — but the lecture may

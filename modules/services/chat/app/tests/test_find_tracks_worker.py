@@ -928,3 +928,137 @@ async def test_a_matched_chapter_leaves_the_lead_in_alone(_events) -> None:
     intro = llm.prompt_for("find_tracks_intro")
     assert "are NOT on" not in intro
     assert "Relaxed filters: none" in intro
+
+
+# ── the lecturer outranks the language ─────────────────────────────────────
+#
+# The relaxation ladder can drop the author, and it can cross the language
+# boundary. Which of the two goes first decides what the user is told when the
+# teacher they named has nothing in their language:
+#
+#   author dropped first → «вот лекции про X» … by somebody else, silently
+#   language first       → «лекций X на русском нет, есть на английском»
+#
+# The second is what a person asking for a named teacher wants: they asked for
+# THAT teacher. Only reachable with more than one lecturer in the corpus, which
+# is why fakes carry two here.
+
+
+class _TwoAuthorCatalog(_Catalog):
+    """Catalog where the requested teacher exists but has no Russian lecture.
+
+    `filter_track_ids` narrows to the author when asked; `_ChunkRepo` then
+    narrows to the language. Between them they reproduce the only situation
+    where the ladder order is observable.
+    """
+
+    TRACKS = {
+        # track_id: (author_id, transcript language)
+        "ours_en": ("author_ours", "en"),
+        "other_ru": ("author_other", "ru"),
+    }
+
+    AUTHORS = (
+        ("author_ours", "en", "A. C. Bhaktivedanta Swami Prabhupada"),
+        ("author_ours", "ru", "А. Ч. Бхактиведанта Свами Прабхупада"),
+        ("author_other", "en", "Śrīla Bhaktivinoda Ṭhākura"),
+        ("author_other", "ru", "Шрила Бхактивинода Тхакур"),
+    )
+
+    def __init__(self) -> None:
+        super().__init__(
+            titles={"ours_en": "Our teacher, in English",
+                    "other_ru": "Another teacher, in Russian"},
+            descriptions={"ours_en": "d", "other_ru": "d"},
+            authors=self.AUTHORS,
+        )
+
+    async def filter_track_ids(self, **kwargs):
+        self.filter_kwargs = kwargs
+        author = kwargs.get("author_id")
+        if author is None:
+            return list(self.TRACKS)
+        return [t for t, (a, _l) in self.TRACKS.items() if a == author]
+
+
+class _LangAwareChunkRepo:
+    """Returns a track's chunk only when its transcript language is asked for
+    (or the caller asked for any language)."""
+
+    def __init__(self, tracks: dict[str, tuple[str, str]]) -> None:
+        self._tracks = tracks
+        self.langs_searched: list[str | None] = []
+
+    async def search_by_embedding(self, embedding, *, eligible_track_ids, lang, top_k):
+        self.langs_searched.append(lang)
+        allowed = None if eligible_track_ids is None else set(eligible_track_ids)
+        out = []
+        for tid, (_author, tlang) in self._tracks.items():
+            if allowed is not None and tid not in allowed:
+                continue
+            if lang is not None and lang != tlang:
+                continue
+            out.append(_sc(tid, 70000, 0.9, "quote", lang=tlang))
+        return out
+
+
+async def test_the_named_teacher_survives_the_language_switch(_events) -> None:
+    """«лекции Шрилы Прабхупады про X»: nothing of theirs in Russian, plenty by
+    ANOTHER teacher. The answer must be their English lecture, not somebody
+    else's Russian one."""
+    catalog = _TwoAuthorCatalog()
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_LangAwareChunkRepo(_TwoAuthorCatalog.TRACKS),
+        catalog_repo=catalog,
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции Шрилы Прабхупады про карму",
+         "extracted_args": {"author": "Srila Prabhupada"}},
+        _Runtime(ctx),
+    )
+    text = "".join(
+        e["data"].get("text", "") for e in _events if e.get("type") == "delta"
+    )
+    assert "[card:ours_en]" in text, "the teacher the user named must be served"
+    assert "[card:other_ru]" not in text, "another teacher's lecture is not an answer"
+
+
+async def test_and_the_lead_in_says_which_language_they_are_in(_events) -> None:
+    catalog = _TwoAuthorCatalog()
+    llm = _FakeLLM()
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_LangAwareChunkRepo(_TwoAuthorCatalog.TRACKS),
+        catalog_repo=catalog,
+        llm=llm,
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции Шрилы Прабхупады про карму",
+         "extracted_args": {"author": "Srila Prabhupada"}},
+        _Runtime(ctx),
+    )
+    intro = llm.prompt_for("find_tracks_intro")
+    # The honest version of this answer names the language it had to cross into.
+    assert "English" in intro or "Английский" in intro
+    # And it must NOT report the author as given up — the author was kept.
+    assert "author" not in intro.split("Relaxed filters:")[1].split("\n")[0]
+
+
+async def test_a_query_with_no_author_is_unaffected(_events) -> None:
+    # Without an author there is no rung to protect: the ladder behaves as before.
+    catalog = _TwoAuthorCatalog()
+    repo = _LangAwareChunkRepo(_TwoAuthorCatalog.TRACKS)
+    ctx = _Ctx(
+        embedder=_Embedder(), chunk_repo=repo, catalog_repo=catalog, llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции про карму", "extracted_args": {}},
+        _Runtime(ctx),
+    )
+    text = "".join(
+        e["data"].get("text", "") for e in _events if e.get("type") == "delta"
+    )
+    # The Russian lecture is a perfectly good answer here.
+    assert "[card:other_ru]" in text
