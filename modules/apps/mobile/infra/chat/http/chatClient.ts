@@ -651,7 +651,7 @@ export async function* streamChat(
  * not disagree about it.
  */
 export function aggregateAttributes(
-  messages: readonly ChatTurn[],
+  messages: readonly ChatTurn[]
 ): Record<string, { value: string; label: string; explicit: boolean }> | undefined {
   const out: Record<string, { value: string; label: string; explicit: boolean }> = {}
   for (const m of messages) {
@@ -665,7 +665,6 @@ export function aggregateAttributes(
   }
   return Object.keys(out).length > 0 ? out : undefined
 }
-
 
 export function toWireTurns(messages: readonly ChatTurn[]): Record<string, unknown>[] {
   return messages.map((m) => {

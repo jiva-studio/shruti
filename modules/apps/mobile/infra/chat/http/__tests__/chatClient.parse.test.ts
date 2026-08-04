@@ -271,9 +271,7 @@ describe("toWireTurns — what the next request carries back", () => {
     // Server state, not something the user can set — the server ignores a
     // user-side claim, and not sending it keeps the contract honest.
     expect(
-      toWireTurns([
-        { role: "user", content: "hi", attributes: { reply_language: RU } },
-      ])
+      toWireTurns([{ role: "user", content: "hi", attributes: { reply_language: RU } }])
     ).toEqual([{ role: "user", content: "hi" }])
   })
 
@@ -310,9 +308,14 @@ describe("aggregateAttributes — the metadata the request carries", () => {
     // The whole reason this exists: the request can only hold 20 messages, so
     // the server would never see turn 1 again.
     const messages = [
-      { role: "assistant" as const, content: "Хорошо.", attributes: { reply_language: asked("ru") } },
+      {
+        role: "assistant" as const,
+        content: "Хорошо.",
+        attributes: { reply_language: asked("ru") },
+      },
       ...Array.from({ length: 30 }, (_, i) => ({
-        role: "assistant" as const, content: `answer ${i}`,
+        role: "assistant" as const,
+        content: `answer ${i}`,
       })),
     ]
     expect(aggregateAttributes(messages)).toEqual({ reply_language: asked("ru") })
