@@ -127,6 +127,7 @@ def _format_user(
     *,
     lang_name: str | None = None,
     memory_notes: list[str] | None = None,
+    speaker: str = "",
 ) -> str:
     note_blocks = "\n\n".join(
         _render_note(i, n) for i, n in enumerate(notes, start=1)
@@ -143,9 +144,21 @@ def _format_user(
                 "these; see the \"Curator note\" rule):\n"
                 f"{rendered}\n\n"
             )
+    # WHOSE words the lecture notes are. The planner cannot tell from the text —
+    # a transcript fragment rarely names its own speaker — so on «что X говорил о
+    # карме» it judged every fragment off-topic and rejected all thirteen notes,
+    # including five of X's own. Retrieval had already narrowed the lane to that
+    # teacher, so this is a fact we hold and simply never passed on.
+    speaker_block = (
+        f"Every note of type `lecture` below is SPOKEN BY {speaker}. The question "
+        f"asks what {speaker} said, so those notes are the primary evidence — do "
+        f"not reject them for failing to name the speaker in their text.\n\n"
+        if speaker else ""
+    )
     return (
         f"Question: {json.dumps(question, ensure_ascii=False)}\n"
         f"Language: {_lang_directive(lang, lang_name)}\n\n"
+        f"{speaker_block}"
         f"{curator_block}"
         f"Notes:\n{note_blocks}"
     )
@@ -343,6 +356,7 @@ async def build_outline(
     callbacks: list[Any] | None = None,
     lang_name: str | None = None,
     memory_notes: list[str] | None = None,
+    speaker: str = "",
 ) -> Outline | None:
     """Run one structured-output LLM call. Returns:
 
@@ -379,7 +393,7 @@ async def build_outline(
                 "role": "user",
                 "content": _format_user(
                     question, lang, notes, lang_name=lang_name,
-                    memory_notes=memory_notes,
+                    memory_notes=memory_notes, speaker=speaker,
                 ),
             },
         ]
