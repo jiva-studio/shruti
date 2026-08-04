@@ -28,8 +28,10 @@ from typing import Any, Mapping, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from shruti_chat.application.author_lookup import resolve_author
-from shruti_chat.application.author_names import names_match
+from shruti_chat.application.author_lookup import (
+    own_speaker_names,
+    resolve_author,
+)
 from shruti_chat.application.cache_helpers import TTL_7D, cached_llm_json
 from shruti_chat.domain.conversation_attributes import (
     ALL,
@@ -184,7 +186,6 @@ class LectureAuthorsSpec:
         # same cross-script matcher. Every stored spelling that denotes them is
         # kept («Rohini Suta Prabhu», «H.G. Rohini Suta Prabhu» are one teacher and
         # two rows), so the filter matches whichever the ingest happened to write.
-        own_names: list[str] | None = None
         ids: list[str] = []
         labels: list[str] = []
         missing: list[str] = []
@@ -194,11 +195,9 @@ class LectureAuthorsSpec:
                     ids.append(hit.id)
                     labels.append(hit.full_name)
                 continue
-            if own_names is None:
-                own_names = await _own_speakers(
-                    private_repo, user_id, request_id=request_id,
-                )
-            mine = [stored for stored in own_names if names_match(name, stored)]
+            mine = await own_speaker_names(
+                private_repo, user_id, name, request_id=request_id,
+            )
             if mine:
                 for stored in mine:
                     value = f"{RAW_PREFIX}{stored}"
@@ -227,26 +226,6 @@ class LectureAuthorsSpec:
 ATTRIBUTE_SPECS: tuple[AttributeSpec, ...] = (
     ReplyLanguageSpec(), LectureAuthorsSpec(),
 )
-
-
-
-async def _own_speakers(
-    private_repo: Any, user_id: str, *, request_id: str | None,
-) -> list[str]:
-    """Speaker names across this person's own uploads, or [] when unavailable.
-
-    Read only when the catalog failed to place a name — the common case (a corpus
-    author) costs nothing extra.
-    """
-    if private_repo is None or not user_id:
-        return []
-    try:
-        return list(await private_repo.get_own_author_names(user_id))
-    except Exception as exc:  # noqa: BLE001
-        log.warning(
-            "own_speakers_lookup_failed", request_id=request_id, error=str(exc),
-        )
-        return []
 
 
 class _LLMForAttributes(Protocol):
