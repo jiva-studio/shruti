@@ -3,8 +3,10 @@
 Background Redis-Streams consumer (started from `main.py` lifespan) that turns
 track-lifecycle events into two side effects for the private lane (#1227):
 
-  - `track.ready`   → index the transcript under `kind='user_track'` AND upsert
-                      the `owned(user_id, track_id)` ACL row.
+  - `track.ready`   → index the transcript under `kind='user_track'`, upsert the
+                      `owned(user_id, track_id)` ACL row, and record what the
+                      track IS in `user_track_facts` (its `author_raw` is what
+                      lets a lecturer filter reach someone's own uploads).
   - `library.unlinked` → delete the `owned` row (revoke this user's access).
                       (Consumer wired; a producer for this removal event is not
                       yet implemented — see the personal-library architecture doc.)
@@ -74,6 +76,21 @@ def _decode(v: Any) -> str:
     return v.decode() if isinstance(v, (bytes, bytearray)) else str(v)
 
 
+# What a track IS, as the ingest reported it. Blob keys (`transcript_key`,
+# `audio_key`, `cover_key`) and the lifecycle `status` are deliberately left out:
+# they describe where bytes live and how far the job got, not the recording, and
+# they go stale on their own schedule. `references` is a JSON string here — the
+# flattening upstream stringifies nested values — and is kept as it arrived.
+_FACT_KEYS = (
+    "author_raw", "title_raw", "location_raw",
+    "date", "date_raw", "kind_tag", "references", "lang", "duration",
+)
+
+
+def _facts_of(fields: dict[str, str]) -> dict[str, str]:
+    return {k: fields[k] for k in _FACT_KEYS if fields.get(k)}
+
+
 def _unwrap_payload(fields: dict[str, str]) -> dict[str, str]:
     """Flatten the orchestrator's `payload` JSON envelope into the string dict
     the handler reads.
@@ -125,11 +142,51 @@ async def upsert_owned(user_id: str, track_id: str) -> None:
 
 
 async def delete_owned(user_id: str, track_id: str) -> None:
-    """Revoke `user_id`'s access to `track_id` (idempotent)."""
+    """Revoke `user_id`'s access to `track_id` (idempotent).
+
+    The track's facts go with the last owner: they describe a recording nobody
+    holds any more, and the row would otherwise outlive every reference to it.
+    """
     async with get_pool().acquire() as conn:
         await conn.execute(
             "DELETE FROM owned WHERE user_id = $1 AND track_id = $2",
             user_id, track_id,
+        )
+        await conn.execute(
+            """
+            DELETE FROM user_track_facts
+             WHERE track_id = $1
+               AND NOT EXISTS (SELECT 1 FROM owned WHERE track_id = $1)
+            """,
+            track_id,
+        )
+
+
+async def upsert_track_facts(track_id: str, data: Any) -> None:
+    """Store what the ingest reported about a track, verbatim.
+
+    Last writer wins: a re-ingest of the same recording carries fresher
+    metadata, and the row is a projection with no history to preserve. Never
+    raises — the facts are what makes an author filter work on someone's own
+    library, not something worth losing an indexing run over.
+    """
+    if not track_id or not data:
+        return
+    payload = data if isinstance(data, str) else json.dumps(data)
+    try:
+        async with get_pool().acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO user_track_facts (track_id, data)
+                VALUES ($1, $2::jsonb)
+                ON CONFLICT (track_id) DO UPDATE
+                   SET data = EXCLUDED.data, updated_at = NOW()
+                """,
+                track_id, payload,
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "track_facts_upsert_failed", track_id=track_id, error=str(exc),
         )
 
 
@@ -271,6 +328,10 @@ class TrackEventsConsumer:
             # ownership is asserted even if the transcript indexing is deferred.
             if user_id:
                 await upsert_owned(user_id, track_id)
+            # The event carries the ingest's own metadata (`author_raw` and the
+            # rest). Stored as it arrived, so a filter on a lecturer can reach
+            # someone's own uploads instead of hiding their whole library.
+            await upsert_track_facts(track_id, _facts_of(fields))
             await self._maybe_index(track_id, fields)
             return True
 
