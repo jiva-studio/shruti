@@ -37,7 +37,7 @@ type Splitter struct {
 type Config struct {
 	// PythonBin is the interpreter to run; defaults to "python3" when empty.
 	PythonBin string
-	// ScriptPath is the path to scripts/sentencesplit/razdel.py. Required.
+	// ScriptPath is the path to scripts/sentencesplit/sentencer.py. Required.
 	ScriptPath string
 }
 
@@ -125,7 +125,7 @@ func (s *Splitter) Split(ctx context.Context, text string) ([]sentencesplit.Sent
 	return nil, fmt.Errorf("razdelsplit: subprocess respawn failed")
 }
 
-// decodeReply handles both shapes scripts/sentencesplit/razdel.py emits:
+// decodeReply handles both shapes scripts/sentencesplit/sentencer.py emits:
 //   - normal: a JSON array of {start,stop,text}
 //   - error: a JSON object {"error": "..."}
 func decodeReply(line []byte, out *struct {

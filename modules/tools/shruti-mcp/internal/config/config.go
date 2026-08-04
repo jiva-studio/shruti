@@ -163,7 +163,7 @@ type GlossaryOptions struct {
 // SentencerOptions points at the razdel subprocess script.
 type SentencerOptions struct {
 	PythonBin  string `yaml:"python_bin"`  // default "python3"
-	ScriptPath string `yaml:"script_path"` // path to scripts/sentencesplit/razdel.py
+	ScriptPath string `yaml:"script_path"` // path to scripts/sentencesplit/sentencer.py
 }
 
 // AlignPDFOptions points at the scripts/pdf_align/daemon.py subprocess.
