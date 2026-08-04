@@ -40,6 +40,12 @@ class ChatState(TypedDict, total=False):
     history: list[dict[str, Any]]
     user_query: str
     lang: str
+    # Conversation attributes as the CLIENT aggregated them (see
+    # `domain/conversation_attributes.py`). The client folds its full local
+    # history, which the request can't carry — `messages` is capped at 20 — so
+    # this is what makes a settled attribute outlive a long dialogue. Absent on
+    # a client that doesn't aggregate; the router then folds the messages.
+    client_attributes: dict[str, Any]
     request_id: str
     # Subscription tier ("pro" | "free" | "anon"), from the verified JWT
     # claim. Read by the add_to_library_worker to PRO-gate the capability.

@@ -26,7 +26,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
-from lectorium_chat.agent.prompts import build_prompt
+from lectorium_chat.agent.prompts import build_prompt, standalone_prompt
 from lectorium_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
 from lectorium_chat.application.react_loop import (
     DEFAULT_MAX_TURNS,
@@ -55,6 +55,16 @@ class LocalizedReply(BaseModel):
     chips: list[str] = Field(default_factory=list)
 
 
+# Overrides the prompt's JSON contract on the retry below. Stays in code rather
+# than in the `.md`: it exists only because the TRANSPORT changed
+# (`text_completion` instead of `structured_output`), and an editor tuning the
+# wording in Langfuse must not be able to break a schema contract.
+_PLAIN_LINE_RULE = (
+    "Ignore the JSON contract above: return ONLY that one line as plain text. "
+    "No JSON, no quotes, no chips, no explanation."
+)
+
+
 async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
     """One cheap-LLM call that writes a short chat reply in the user's language
     (`ctx.lang`) from an English `situation` description: a `line` plus 0-3
@@ -67,14 +77,7 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
     deterministic for a given situation+language, so the same "no lectures on
     <ref>" or "name a lecture" phrasing is written by the LLM once and then
     served from cache — no per-turn model call on the hot paths."""
-    sys = (
-        "You write ONE short assistant reply for a Vedic-lecture chat, in the "
-        "user's language. Return `line` (<=25 words, plain text, no markdown) "
-        "and `chips` (0-3 follow-up suggestion labels the user can tap, <=6 "
-        "words each, in the user's language; [] if none asked for). Keep any "
-        "scripture reference, number, or date in `line` verbatim. Do not add a "
-        "reference to a chip unless the situation says to."
-    )
+    sys = standalone_prompt("localized-reply", "localized_reply")
     usr = f"Language code: {ctx.lang}\nSituation: {situation}"
     msgs: list[Message] = [
         {"role": "system", "content": sys},
@@ -83,9 +86,30 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
     model = get_settings().llm_cheap
 
     async def _call() -> LocalizedReply:
-        return await ctx.llm.structured_output(
-            msgs, LocalizedReply, model=model, run_name="localized_reply",
-        )
+        try:
+            return await ctx.llm.structured_output(
+                msgs, LocalizedReply, model=model, run_name="localized_reply",
+            )
+        except Exception as exc:  # noqa: BLE001
+            # A one-line reply plus up to three chips is too small a thing to
+            # lose a turn over, and in production both the primary AND the
+            # fallback model failed to emit parseable JSON for it — the user got
+            # a blank bubble. Ask again with NO JSON envelope, so there is no
+            # parse step left to miss (`text_completion` exists for exactly
+            # this). Chips are dropped: they are a nicety, the line is not.
+            log.warning(
+                "localized_reply_json_missed",
+                request_id=ctx.request_id, error=str(exc),
+            )
+            line = await ctx.llm.text_completion(
+                [
+                    {"role": "system", "content": f"{sys}\n\n{_PLAIN_LINE_RULE}"},
+                    {"role": "user", "content": usr},
+                ],
+                model=model,
+                run_name="localized_reply_plain",
+            )
+            return LocalizedReply(line=line.strip(), chips=[])
 
     try:
         if ctx.kv_cache is not None:

@@ -25,6 +25,9 @@ export interface SerializedMsg {
   createdAt?: number
   statusKey?: string
   aliases?: Record<string, unknown>
+  /** Settled conversation attributes — see `Msg.attributes`. Persisted so a
+   *  language the user asked for survives a page reload. */
+  attributes?: Record<string, { value: string; label: string; explicit: boolean }>
   researchQuestions?: string[]
   // Serialized Map fields live here as [key, value] entry arrays.
   [field: string]: unknown
@@ -73,6 +76,7 @@ function serializeMsg(m: Msg): SerializedMsg {
   if (m.statusKey) o.statusKey = m.statusKey
   if (m.traceId) o.traceId = m.traceId
   if (m.aliases) o.aliases = m.aliases
+  if (m.attributes) o.attributes = m.attributes
   if (m.researchQuestions?.length) o.researchQuestions = m.researchQuestions
   const src = m as unknown as Record<string, Map<string, unknown> | undefined>
   for (const f of MAP_FIELDS) {
@@ -89,6 +93,7 @@ function deserializeMsg(o: SerializedMsg): Msg {
   if (o.statusKey) m.statusKey = o.statusKey
   if (o.traceId) m.traceId = o.traceId
   if (o.aliases) m.aliases = o.aliases
+  if (o.attributes) m.attributes = o.attributes
   m.researchQuestions = o.researchQuestions ?? []
   for (const f of MAP_FIELDS) {
     m[f] = new Map((o[f] as [string, unknown][] | undefined) ?? [])

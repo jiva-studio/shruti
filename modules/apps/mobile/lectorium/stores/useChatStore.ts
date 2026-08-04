@@ -784,6 +784,12 @@ export const useChatStore = defineStore("chat", () => {
         if (m.role === "assistant" && m.aliases && Object.keys(m.aliases).length > 0) {
           ;(turn as { aliases?: ChatTurn["aliases"] }).aliases = m.aliases
         }
+        // Attributes a previous turn settled ride back with the message. The
+        // wire layer also folds them into ONE request-level aggregate, which is
+        // what carries a setting past the 20 messages the server can see.
+        if (m.role === "assistant" && m.attributes) {
+          ;(turn as { attributes?: ChatTurn["attributes"] }).attributes = m.attributes
+        }
         return turn
       })
 

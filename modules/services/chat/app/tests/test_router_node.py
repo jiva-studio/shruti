@@ -1,7 +1,7 @@
 """Tests for `agent/graph/nodes/router.py` — the graph node that bridges
 state ↔ `run_router_turn` and surfaces the routing decision on the stream.
 
-Two contracts are exercised here that pure-use-case tests can't reach:
+Contracts exercised here that pure-use-case tests can't reach:
 
 1. The node emits a `status` / key=router_decision / params.intent event
    via the LangGraph stream writer. The API layer's help-quota refund and
@@ -10,10 +10,17 @@ Two contracts are exercised here that pure-use-case tests can't reach:
 2. A genuine router parse failure (run_router_turn raises after retries +
    fallback + salvage are exhausted) must NOT kill the turn. The node
    degrades to intent="unknown" — the documented soft-fallback path.
+3. Conversation attributes are settled here. The reply language — today's
+   only attribute — is published to BOTH `state["lang"]` and `ctx.lang`. Downstream hops read one or the other — the synthesizer the
+   state, `localized_reply` and the card blurbs `ctx.lang` — and when they
+   derived the language separately they disagreed (a Hindi answer under an
+   English summary, on production). It also has to overlap the router's own
+   LLM call, or it costs a second round-trip on every turn.
 """
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,6 +29,10 @@ import pytest
 from lectorium_chat.agent.graph.nodes import router as router_node_mod
 from lectorium_chat.agent.graph.nodes.router import router_node
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
+from lectorium_chat.domain.conversation_attributes import (
+    REPLY_LANGUAGE,
+    Attribute,
+)
 from lectorium_chat.domain.routing import RoutingDecision
 
 
@@ -34,6 +45,7 @@ class _Ctx:
     langfuse_trace_id: str | None = None
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
     lang: str = "ru"
+    lang_name: str = ""
 
 
 @dataclass
@@ -165,3 +177,232 @@ async def test_router_parse_failure_soft_falls_to_unknown(
     # layer observes intent=unknown rather than seeing nothing.
     events = _router_decision_events(_capture_stream)
     assert events[0]["data"]["params"]["intent"] == "unknown"
+
+
+# ── conversation attributes ───────────────────────────────────────────────
+
+
+_RU_ASKED = {REPLY_LANGUAGE: Attribute(value="ru", label="Русский", explicit=True)}
+
+
+@pytest.fixture
+def _quiet_router(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _fake_router_turn(*_a, **_k) -> RoutingDecision:
+        return RoutingDecision(intent="research", confidence=0.9, extracted_args={})
+
+    monkeypatch.setattr(router_node_mod, "run_router_turn", _fake_router_turn)
+
+
+def _detect(result: dict[str, Attribute] | None, *, calls: list[str]):
+    async def _fake(query: str, **_k) -> dict[str, Attribute]:
+        calls.append(query)
+        return dict(result or {})
+
+    return _fake
+
+
+def _attribute_events(emitted: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [e for e in emitted if e.get("type") == "attributes"]
+
+
+async def test_a_detected_language_reaches_both_state_and_context(
+    monkeypatch: pytest.MonkeyPatch,
+    _capture_stream: list[dict[str, Any]],
+    _quiet_router: None,
+) -> None:
+    """One resolved value, published to both readers — that's the fix. The
+    event carries it out so the client can persist it on the message."""
+    calls: list[str] = []
+    monkeypatch.setattr(
+        router_node_mod, "detect_attributes", _detect(_RU_ASKED, calls=calls)
+    )
+    ctx = _Ctx(llm=object(), lang="en")
+    state = {"user_query": "отвечай по-русски", "lang": "en", "history": []}
+
+    out = await router_node(state, _Runtime(ctx))
+
+    assert out["lang"] == "ru"
+    assert ctx.lang == "ru"
+    assert ctx.lang_name == "Русский"
+    assert _attribute_events(_capture_stream)[0]["data"] == {
+        REPLY_LANGUAGE: {"value": "ru", "label": "Русский", "explicit": True},
+    }
+
+
+async def test_detection_reads_the_typed_message_not_the_rewrite(
+    monkeypatch: pytest.MonkeyPatch,
+    _capture_stream: list[dict[str, Any]],
+    _quiet_router: None,
+) -> None:
+    """The follow-up rewrite is written by another model, so its language says
+    nothing about the person. Detection must see what they typed."""
+    calls: list[str] = []
+    monkeypatch.setattr(
+        router_node_mod, "detect_attributes", _detect(_RU_ASKED, calls=calls)
+    )
+
+    async def _rewrite_to_english(_history, _query, **_k) -> str:
+        return "More verses on the nature of asuras"
+
+    monkeypatch.setattr(
+        router_node_mod, "resolve_followup_query", _rewrite_to_english
+    )
+
+    out = await router_node(
+        {"user_query": "а ещё?", "lang": "en", "history": [{"role": "user", "content": "x"}]},
+        _Runtime(_Ctx(llm=object())),
+    )
+
+    assert calls == ["а ещё?"]
+    # The rewrite still lands in state — only the language input differs.
+    assert out["user_query"] == "More verses on the nature of asuras"
+
+
+async def test_nothing_settled_leaves_the_request_locale_in_force(
+    monkeypatch: pytest.MonkeyPatch,
+    _capture_stream: list[dict[str, Any]],
+    _quiet_router: None,
+) -> None:
+    """Detector abstained and nothing was remembered: don't touch the language,
+    and don't emit — storing a value we never derived would shadow a later
+    change of the app's language."""
+    monkeypatch.setattr(
+        router_node_mod, "detect_attributes", _detect(None, calls=[])
+    )
+    ctx = _Ctx(llm=object(), lang="en")
+
+    out = await router_node({"user_query": "БГ 2.13", "lang": "en", "history": []}, _Runtime(ctx))
+
+    assert "lang" not in out
+    assert ctx.lang == "en"
+    assert _attribute_events(_capture_stream) == []
+
+
+async def test_a_remembered_request_carries_an_inconclusive_message(
+    monkeypatch: pytest.MonkeyPatch,
+    _capture_stream: list[dict[str, Any]],
+    _quiet_router: None,
+) -> None:
+    """«отвечай по-русски» two turns ago, «7.1» now: the reply stays Russian,
+    and the value is re-emitted so it rides forward instead of ageing out of
+    the 20-message window the client replays."""
+    monkeypatch.setattr(
+        router_node_mod, "detect_attributes", _detect(None, calls=[])
+    )
+    ctx = _Ctx(llm=object(), lang="en")
+    history = [
+        {"role": "user", "content": "отвечай по-русски"},
+        {"role": "assistant", "content": "Хорошо.",
+         "attributes": {REPLY_LANGUAGE: {"value": "ru", "label": "Русский",
+                                        "explicit": True}}},
+        {"role": "user", "content": "7.1"},
+    ]
+
+    out = await router_node(
+        {"user_query": "7.1", "lang": "en", "history": history}, _Runtime(ctx)
+    )
+
+    assert out["lang"] == "ru"
+    assert ctx.lang == "ru"
+    assert _attribute_events(_capture_stream)[0]["data"][REPLY_LANGUAGE]["value"] == "ru"
+
+
+async def test_a_claimed_query_costs_no_language_call(
+    monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
+) -> None:
+    """A bare address / lecture URL is claimed by the deterministic chain. There
+    is no language to read in «БГ 2.13», so we don't pay for the call."""
+    calls: list[str] = []
+    monkeypatch.setattr(
+        router_node_mod, "detect_attributes", _detect(_RU_ASKED, calls=calls)
+    )
+
+    async def _claims(*_a, **_k) -> RoutingDecision:
+        return RoutingDecision(intent="show_verse", confidence=1.0, extracted_args={})
+
+    monkeypatch.setattr(router_node_mod, "run_classifier_chain", _claims)
+
+    out = await router_node(_state("БГ 2.13"), _Runtime(_Ctx(llm=object())))
+
+    assert out["intent"] == "show_verse"
+    assert calls == []
+
+
+async def test_detection_overlaps_the_router_call(
+    monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
+) -> None:
+    """Concurrency, asserted rather than assumed: the two calls are in flight at
+    the same time. Detection must have started before the router's call, and
+    must still be unfinished while it runs — so either sequential order
+    deadlocks instead of quietly costing a second round-trip per turn."""
+    running = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _slow_detect(_query: str, **_k) -> dict[str, Attribute]:
+        running.set()
+        await asyncio.wait_for(release.wait(), timeout=1)
+        return _RU_ASKED
+
+    async def _router_waits_for_detection(*_a, **_k) -> RoutingDecision:
+        await asyncio.wait_for(running.wait(), timeout=1)
+        release.set()
+        return RoutingDecision(intent="research", confidence=0.9, extracted_args={})
+
+    monkeypatch.setattr(router_node_mod, "detect_attributes", _slow_detect)
+    monkeypatch.setattr(
+        router_node_mod, "run_router_turn", _router_waits_for_detection
+    )
+
+    out = await router_node(_state("что такое карма?"), _Runtime(_Ctx(llm=object())))
+
+    assert out["lang"] == "ru"
+
+
+async def test_the_clients_aggregate_reaches_the_merge(
+    monkeypatch: pytest.MonkeyPatch,
+    _capture_stream: list[dict[str, Any]],
+    _quiet_router: None,
+) -> None:
+    """The aggregate is the whole point of the metadata channel: it carries a
+    language settled long before the 20 messages the request can hold."""
+    monkeypatch.setattr(
+        router_node_mod, "detect_attributes", _detect(None, calls=[])
+    )
+    ctx = _Ctx(llm=object(), lang="en")
+
+    out = await router_node(
+        {
+            "user_query": "7.1", "lang": "en", "history": [],
+            "client_attributes": {
+                REPLY_LANGUAGE: {"value": "ru", "label": "Русский", "explicit": True},
+            },
+        },
+        _Runtime(ctx),
+    )
+
+    assert out["lang"] == "ru"
+    assert ctx.lang == "ru" and ctx.lang_name == "Русский"
+
+
+async def test_an_unknown_attribute_rides_through_untouched(
+    monkeypatch: pytest.MonkeyPatch,
+    _capture_stream: list[dict[str, Any]],
+    _quiet_router: None,
+) -> None:
+    """The point of the map: a key this build knows nothing about is carried
+    forward rather than dropped, so an older server cannot erase what a newer
+    one settled."""
+    monkeypatch.setattr(
+        router_node_mod, "detect_attributes", _detect(None, calls=[])
+    )
+    out = await router_node(
+        {
+            "user_query": "вопрос", "lang": "ru", "history": [],
+            "client_attributes": {"future_thing": {"value": "42"}},
+        },
+        _Runtime(_Ctx(llm=object())),
+    )
+
+    assert "lang" not in out  # nothing language-related was settled
+    emitted = _attribute_events(_capture_stream)[0]["data"]
+    assert emitted["future_thing"]["value"] == "42"

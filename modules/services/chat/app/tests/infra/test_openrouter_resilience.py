@@ -12,6 +12,9 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, AIMessageChunk
 from pydantic import BaseModel
 
+import httpx
+import openai
+
 from lectorium_chat.config import Settings
 from lectorium_chat.infra.llm_provider.openrouter import (
     EmptyCompletionError,
@@ -38,7 +41,7 @@ def _provider(*, max_retries: int = 2) -> OpenRouterLLMProvider:
     s = Settings(
         openrouter_api_key="test-key",
         llm_default="openrouter/deepseek/deepseek-chat",
-        llm_fallback="openrouter/anthropic/claude-3-haiku",
+        llm_fallback="openrouter/anthropic/claude-haiku-4.5",
         llm_max_retries=max_retries,
         llm_retry_base_delay_s=0.0,  # no real sleep in tests
     )
@@ -408,3 +411,150 @@ async def test_raw_text_empty_is_valid_empty_string():
         p._default_model, [{"role": "user", "content": "q"}], run_name="t",
     )
     assert out == ""
+
+
+# ── in-band OpenRouter errors (arrive on a 200, no status_code) ───────
+#
+# OpenRouter documents ONE error object — `{"error": {"code": <http status>,
+# "message": …}}` — and delivers it two ways. Before the first token the HTTP
+# status is real and the SDK types the exception. Mid-stream it cannot be (the
+# 200 and its headers are already committed), so the SAME object arrives in-band
+# and reaches us as an untyped exception with no `status_code`:
+#   - streaming     → `openai.APIError(…, body=data["error"])`
+#   - non-streaming → langchain_openai's `ValueError(response["error"])`
+# https://openrouter.ai/docs/api-reference/errors
+#
+# That was the gap: 16 of 18 ERROR-level observations in two weeks were 429s in
+# one of these shapes, so they never reached the retry path.
+
+
+def _langchain_in_band(code: int = 429) -> ValueError:
+    """What langchain_openai raises for a non-streamed response carrying an
+    `error` body: `raise ValueError(response_dict.get("error"))` — the single
+    arg IS the documented error object."""
+    return ValueError({"message": "Provider returned error", "code": code})
+
+
+def _sdk_in_band(code: int = 429) -> openai.APIError:
+    """What `openai._streaming` raises for an in-band error chunk:
+    `APIError(message, request, body=data["error"])`."""
+    return openai.APIError(
+        "Provider returned error",
+        httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+        body={"message": "temporarily rate-limited upstream", "code": code},
+    )
+
+
+async def test_langchain_in_band_rate_limit_is_retried():
+    p = _provider(max_retries=2)
+    calls = _stub_structured(p, [
+        ("fail", _langchain_in_band()),
+        ("ok", _Schema(value="x")),
+    ])
+    res = await p.structured_output([{"role": "user", "content": "q"}], _Schema)
+    assert res.value == "x"
+    # Same model retried — before the fix this went straight to the fallback,
+    # and `find_tracks_description` silently lost its card blurbs.
+    assert calls == [p._default_model, p._default_model]
+
+
+async def test_sdk_in_band_rate_limit_is_retried():
+    p = _provider(max_retries=2)
+    calls = _stub_text(p, [
+        ("fail", _sdk_in_band()),
+        ("ok", "blurb"),
+    ])
+    out = await p.text_completion([{"role": "user", "content": "q"}])
+    assert out == "blurb"
+    assert calls == [p._default_model, p._default_model]
+
+
+async def test_in_band_5xx_is_retried():
+    # 502 "model unavailable", 503 "no provider meets the routing requirements".
+    p = _provider(max_retries=1)
+    calls = _stub_structured(p, [
+        ("fail", _langchain_in_band(503)),
+        ("ok", _Schema(value="x")),
+    ])
+    await p.structured_output([{"role": "user", "content": "q"}], _Schema)
+    assert calls == [p._default_model, p._default_model]
+
+
+async def test_in_band_400_is_not_retried():
+    # Our own bad request fails identically on a retry — don't burn the budget.
+    p = _provider(max_retries=2)
+    calls = _stub_structured(p, [
+        ("fail", _langchain_in_band(400)),
+        ("ok", _Schema(value="fb")),
+    ])
+    await p.structured_output([{"role": "user", "content": "q"}], _Schema)
+    assert calls == [p._default_model, p._fallback_model]
+
+
+async def test_a_plain_value_error_is_not_read_as_a_provider_error():
+    # Only a ValueError whose arg is the documented error MAPPING counts; an
+    # ordinary one from our own code must not look like a rate limit.
+    p = _provider(max_retries=2)
+    calls = _stub_structured(p, [
+        ("fail", ValueError("not a provider error")),
+        ("ok", _Schema(value="fb")),
+    ])
+    await p.structured_output([{"role": "user", "content": "q"}], _Schema)
+    assert calls == [p._default_model, p._fallback_model]
+
+
+async def test_exhausted_in_band_rate_limit_reads_as_provider_unavailable():
+    # So the turn ends on a calm "chat temporarily unavailable" instead of a
+    # generic agent error: retries AND the fallback model are already spent.
+    assert is_provider_unavailable(_langchain_in_band())
+    assert is_provider_unavailable(_sdk_in_band())
+    assert not is_provider_unavailable(_langchain_in_band(400))
+
+
+# ── Retry-After ───────────────────────────────────────────────────────
+# OpenRouter documents the header as the primary delay source on a 429.
+
+
+def _rate_limited_with_retry_after(value: str) -> openai.RateLimitError:
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    response = httpx.Response(429, headers={"retry-after": value}, request=request)
+    return openai.RateLimitError("rate limited", response=response, body=None)
+
+
+async def test_retry_after_is_honoured_over_our_own_backoff(monkeypatch):
+    slept: list[float] = []
+
+    async def _record(delay: float) -> None:
+        slept.append(delay)
+
+    monkeypatch.setattr(
+        "lectorium_chat.infra.llm_provider.openrouter.asyncio.sleep", _record
+    )
+    p = _provider(max_retries=1)
+    _stub_structured(p, [
+        ("fail", _rate_limited_with_retry_after("2")),
+        ("ok", _Schema(value="x")),
+    ])
+    await p.structured_output([{"role": "user", "content": "q"}], _Schema)
+    assert slept == [2.0]
+
+
+async def test_an_unreasonably_long_retry_after_is_ignored(monkeypatch):
+    # A person is waiting on the turn: past a few seconds, escalating to the
+    # fallback model beats sitting on the provider's wait. `llm_retry_base_delay_s`
+    # is 0 in tests, so our own backoff draws 0.
+    slept: list[float] = []
+
+    async def _record(delay: float) -> None:
+        slept.append(delay)
+
+    monkeypatch.setattr(
+        "lectorium_chat.infra.llm_provider.openrouter.asyncio.sleep", _record
+    )
+    p = _provider(max_retries=1)
+    _stub_structured(p, [
+        ("fail", _rate_limited_with_retry_after("600")),
+        ("ok", _Schema(value="x")),
+    ])
+    await p.structured_output([{"role": "user", "content": "q"}], _Schema)
+    assert slept == [0.0]
