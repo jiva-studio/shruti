@@ -266,6 +266,10 @@ async def synthesis_planner_node(
             router_args=state.get("extracted_args") or {},
             reranker=reranker,
             user_query=user_query,
+            # This stage runs its OWN lecture search, after retrieval is over and
+            # outside the pipeline that threads the scope — so it has to be
+            # handed the selection here or it tops theses up from every lecturer.
+            author_scope=ctx.author_scope,
         )
 
     # Emit a one-shot summary event so chat_turn can pull outline-shape

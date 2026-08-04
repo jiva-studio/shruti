@@ -32,6 +32,7 @@ class _Ctx:
     # Fallback name for the `Language:` directive when the catalog has no
     # entry for the locale (a language the app doesn't ship).
     lang_name: str = ""
+    author_scope: Any | None = None
 
 
 @dataclass
