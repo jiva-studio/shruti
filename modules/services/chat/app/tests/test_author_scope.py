@@ -393,3 +393,63 @@ async def test_pinned_refs_ride_through_when_nothing_is_selected() -> None:
     # answer language is retried language-agnostically. What matters is that it
     # was not dropped.
     assert asked and set(asked) == {"bg/2.13"}
+
+
+# ── the link between the attribute and the scope ──────────────────────────
+#
+# Every test above hands the scope a selection directly, which is exactly how
+# the filter reached production doing nothing at all: nine retrieval paths
+# honoured a selection that no node ever applied. These pin the one call that
+# joins them.
+
+
+async def _settled(state: dict[str, Any], scope: AuthorScope) -> None:
+    from lectorium_chat.agent.graph.nodes.router import _settle_attributes
+
+    class _Ctx:
+        lang = "ru"
+        lang_name = ""
+        author_scope = scope
+
+    await _settle_attributes(state, _Ctx(), None)
+
+
+async def _apply_client_attribute(value: Any, catalog: Any) -> AuthorScope:
+    scope = AuthorScope(catalog_repo=catalog, request_id="req")
+    await _settled(
+        {
+            "history": [],
+            "client_attributes": {
+                LECTURE_AUTHORS: {"value": value, "explicit": True},
+            },
+        },
+        scope,
+    )
+    return scope
+
+
+async def test_the_router_applies_the_selection_it_settled() -> None:
+    catalog = _Catalog({_OURS: ["t-ours"]})
+    scope = await _apply_client_attribute(_OURS, catalog)
+    assert scope.selection.constrained
+    assert scope.selection.ids == (_OURS,)
+    assert await scope.track_ids() == ["t-ours"]
+
+
+async def test_choosing_everyone_lifts_the_narrowing_downstream() -> None:
+    catalog = _Catalog({_OURS: ["t-ours"]})
+    scope = await _apply_client_attribute(ALL, catalog)
+    assert not scope.selection.constrained
+    assert await scope.track_ids() is None
+
+
+async def test_a_turn_that_chose_nobody_leaves_nothing_in_force() -> None:
+    # The scope outlives no turn, but the object is created before the router
+    # runs — so "no attribute" has to actively mean "no constraint", not
+    # "whatever was there before".
+    catalog = _Catalog({_OURS: ["t-ours"]})
+    scope = AuthorScope(catalog_repo=catalog, request_id="req")
+    scope.apply(_selection(_OURS))
+    await _settled({"history": [], "client_attributes": None}, scope)
+    assert not scope.selection.constrained
+    assert await scope.track_ids() is None

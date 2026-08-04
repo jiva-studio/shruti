@@ -4,8 +4,8 @@ result into ChatState.
 Thin adapter: 8 lines of real logic. The LLM-prompt and intent classifier
 live in the use-case; this node just bridges state ↔ runtime.context.
 
-It also settles this turn's CONVERSATION ATTRIBUTES — today just the reply
-language. Here, because this is the one node every path passes through before
+It also settles this turn's CONVERSATION ATTRIBUTES — the reply language and the
+lecturers the answer may draw on. Here, because this is the one node every path passes through before
 any prose is composed, and because `ctx` is mutable: writing the resolved locale
 to both `state["lang"]` and `ctx.lang` leaves every downstream hop reading ONE
 value. That single value is the point — the hops draw the language from
@@ -99,7 +99,8 @@ async def _settle_attributes(
     task: "asyncio.Task[dict[str, Attribute]] | None",
 ) -> dict[str, Attribute]:
     """Fold this message's readings into what the dialogue already knew, then
-    apply the ones this turn acts on.
+    apply the ones this turn acts on: the reply language and the lecturers the
+    answer may be built from.
 
     The reply language is published to BOTH places the downstream hops read:
     `ctx.lang` (code-composed prose — `localized_reply`, card blurbs) and
@@ -119,6 +120,12 @@ async def _settle_attributes(
     if language is not None:
         ctx.lang = language.single()
         ctx.lang_name = language.label
+    # The chosen lecturers reach retrieval the same way: through the scope every
+    # lane holds by reference. Unconditional, because "nobody was chosen" is a
+    # value too — it is how a filter gets LIFTED, and skipping the call would
+    # leave the previous turn's narrowing in force.
+    if ctx.author_scope is not None:
+        ctx.author_scope.apply(AuthorSelection.from_attributes(settled))
     return settled
 
 
