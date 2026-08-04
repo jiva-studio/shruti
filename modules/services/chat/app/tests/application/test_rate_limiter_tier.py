@@ -16,6 +16,8 @@ import pytest
 
 from shruti_chat.application.rate_limiter import RateLimiter
 from shruti_chat.config import Settings
+
+from _shipped_settings import settings_from_model_defaults
 from shruti_chat.domain.ports.rate_limit_store import (
     CounterRecord,
     RateLimitStoreUnavailable,
@@ -47,14 +49,22 @@ class _FakeStore:
 
 
 def _settings() -> Settings:
-    # Pull defaults straight from the model. `_env_file=None` keeps the local
-    # dev `.env` (which lowers IP/device caps for manual testing) out of the
-    # unit tests, so the limits asserted here never depend on the environment.
-    return Settings(
-        _env_file=None,
-        database_url="postgres://test",
-        s3_bucket="x",
-        s3_region="us-east-1",
+    # The SHIPPED caps, from the model's own defaults — see `conftest` for why
+    # `_env_file=None` alone cannot keep the dev `.env` out.
+    return settings_from_model_defaults()
+
+
+def test_the_environment_cannot_move_the_caps_under_test(monkeypatch) -> None:
+    """These tests assert the SHIPPED limits, so a stray env var — or the dev
+    `.env` that `litellm` copies into the environment on import — must not reach
+    them. It did: `IP_RATE_LIMIT_PER_DAY=200` made two 200-admission loops fail
+    in a full run and pass in isolation, decided purely by import order."""
+    monkeypatch.setenv("IP_RATE_LIMIT_PER_DAY", "7")
+    monkeypatch.setenv("ANON_CHAT_RATE_LIMIT_PER_DAY", "1")
+    shipped = _settings()
+    assert shipped.ip_rate_limit_per_day == 2000
+    assert shipped.ip_rate_limit_per_day == (
+        Settings.model_fields["ip_rate_limit_per_day"].default
     )
 
 
