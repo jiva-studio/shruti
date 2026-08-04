@@ -9,27 +9,23 @@
   --brand-fg: #3d2b1f;
   --brand-muted: #806752;
   --brand-wave: rgba(128, 103, 82, 0.3);
-  --highlight: rgba(204, 122, 61, 0.2);
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --accent: #f0a55c; --accent-fg: #3d2b1f; --accent-shade: #d49150;
     --brand-surface: #261c13; --brand-fg: #c0b8a8; --brand-muted: #a88c70;
     --brand-wave: rgba(168, 140, 112, 0.3);
-    --highlight: rgba(240, 165, 92, 0.22);
   }
 }
 :root[data-theme="light"] {
   --accent: #cc7a3d; --accent-fg: #faf5ea; --accent-shade: #b36b36;
   --brand-surface: #f0e6d5; --brand-fg: #3d2b1f; --brand-muted: #806752;
   --brand-wave: rgba(128, 103, 82, 0.3);
-  --highlight: rgba(204, 122, 61, 0.2);
 }
 :root[data-theme="dark"] {
   --accent: #f0a55c; --accent-fg: #3d2b1f; --accent-shade: #d49150;
   --brand-surface: #261c13; --brand-fg: #c0b8a8; --brand-muted: #a88c70;
   --brand-wave: rgba(168, 140, 112, 0.3);
-  --highlight: rgba(240, 165, 92, 0.22);
 }
 
 /* Effective tokens: prefer the host's (applied by applyHostStyleVariables via
@@ -65,15 +61,10 @@ body { font-family: var(--ui-font); color: var(--fg); }
   line-height: var(--body-line); color: var(--fg-muted); text-align: right;
 }
 
-.transcript {
-  font-size: var(--text-size); line-height: var(--text-line); color: var(--fg);
-  max-height: 320px; overflow-y: auto;
-}
-.seg {
-  cursor: pointer; border-radius: 3px; transition: background-color 200ms ease;
-  -webkit-box-decoration-break: clone; box-decoration-break: clone;
-}
-.seg.spoken { background: var(--highlight); }
+/* No max-height: the host resizes the frame to whatever we lay out, so the card
+   grows to fit the passage. A scrollbar inside a chat bubble would hide text
+   behind a second scroll axis. */
+.transcript { font-size: var(--text-size); line-height: var(--text-line); color: var(--fg); }
 .err {
   display: none; font-size: 11px; color: var(--color-text-danger, #c0392b); white-space: pre-wrap;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);

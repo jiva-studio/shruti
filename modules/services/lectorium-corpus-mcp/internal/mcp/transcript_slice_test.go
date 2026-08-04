@@ -15,7 +15,7 @@ func doc() *transcriptDoc {
 
 func TestSliceTranscriptKeepsOnlyTheWindow(t *testing.T) {
 	got := sliceTranscript(doc(), 10000, 20000)
-	want := []string{"straddles the start", "inside", "straddles the end"}
+	want := []string{"inside"}
 	if len(got) != len(want) {
 		t.Fatalf("got %d blocks, want %d: %+v", len(got), len(want), got)
 	}
@@ -29,6 +29,14 @@ func TestSliceTranscriptKeepsOnlyTheWindow(t *testing.T) {
 func TestSliceTranscriptEmptyWindow(t *testing.T) {
 	if got := sliceTranscript(doc(), 22000, 29000); len(got) != 0 {
 		t.Fatalf("expected no blocks between two sentences, got %+v", got)
+	}
+}
+
+// A window landing inside one sentence hears only part of it, so it yields no
+// text rather than a sentence the listener never hears in full.
+func TestSliceTranscriptDropsPartiallyAudibleSentences(t *testing.T) {
+	if got := sliceTranscript(doc(), 12000, 13000); len(got) != 0 {
+		t.Fatalf("expected nothing for a window inside a sentence, got %+v", got)
 	}
 }
 
