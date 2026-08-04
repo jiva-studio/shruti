@@ -374,3 +374,30 @@ async def test_the_private_lane_reports_its_yield() -> None:
     lane = inspect.getsource(corpus_fanout).split("async def _user_lecture")[1]
     lane = lane.split("async def ")[0]
     assert "note_private_hits(" in lane
+
+
+async def test_no_refusal_over_their_own_retrieved_recordings() -> None:
+    """Production printed «Не нашёл в корпусе материалов на эту тему» with fourteen
+    translated fragments of the asked-for teacher attached. The planner may be right
+    that mid-sentence transcript scraps make poor theses; "nothing found" is still
+    false. The notes go to the synthesizer free-form instead."""
+    from dataclasses import field as dc_field
+
+    from lectorium_chat.agent.graph.nodes.synthesis_planner import (
+        synthesis_planner_node,
+    )
+
+    scope = _scope([])
+    scope.note_private_hits(14)
+
+    @dataclass
+    class _Runtime:
+        context: _Ctx = dc_field(default_factory=_Ctx)
+
+    state = {
+        "user_query": "Рохини сута прабху о карме", "lang": "ru",
+        "tool_results": [], "config": {"enable_corpus_fallback": True},
+    }
+    out = await synthesis_planner_node(state, _Runtime(context=_Ctx(author_scope=scope)))
+    # No refusal flag: the turn must not claim the corpus had nothing.
+    assert out.get("corpus_insufficient") is not True
