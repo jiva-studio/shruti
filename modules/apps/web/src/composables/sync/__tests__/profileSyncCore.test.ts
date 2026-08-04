@@ -72,6 +72,40 @@ describe("canonical meta codec", () => {
     expect(back.traceId).toBe("trace-abc")
   })
 
+  it("carries settled attributes in the SHARED namespace, not the web one", () => {
+    // Shared on purpose: a dialogue switched to Russian on the web must still
+    // be answered in Russian when it is continued on the phone.
+    const attributes = {
+      reply_language: { value: "ru", label: "Русский", explicit: true },
+    }
+    const meta = richFieldsToMeta({
+      id: "m1",
+      role: "assistant",
+      text: "Хорошо.",
+      createdAt: 1000,
+      attributes,
+    } as never)
+
+    expect(parseMeta(meta).attributes).toEqual(attributes)
+    expect(metaToRichFields(meta).attributes).toEqual(attributes)
+  })
+
+  it("carries an attribute neither client understands", () => {
+    // The keyed map's reason to exist: the server can add one and every client
+    // keeps replaying it without a release.
+    const meta = richFieldsToMeta({
+      id: "m1",
+      role: "assistant",
+      text: "…",
+      createdAt: 1000,
+      attributes: { future_thing: { value: "42", label: "", explicit: false } },
+    } as never)
+
+    expect(parseMeta(meta).attributes).toEqual({
+      future_thing: { value: "42", label: "", explicit: false },
+    })
+  })
+
   it("a card-less message serializes to the canonical empty envelope", () => {
     const meta = richFieldsToMeta({ id: "m", role: "user", text: "hi", createdAt: 1 } as never)
     expect(meta).toBe('{"_v":1,"data":{}}')

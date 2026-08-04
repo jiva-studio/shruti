@@ -330,3 +330,39 @@ describe("runChatTurn — card bodies persisted onto the finalised message", () 
     }
   })
 })
+
+describe("runChatTurn — settled conversation attributes", () => {
+  it("persists it on the finalised message so the next turn can ship it back", async () => {
+    const stream = makeStream([
+      { type: "delta", text: "Хорошо." } as ChatStreamEvent,
+      {
+        type: "done",
+        attributes: { reply_language: { value: "ru", label: "Русский", explicit: true } },
+      } as ChatStreamEvent,
+    ])
+    const ctl = new AbortController()
+    const events = await collect(runChatTurn(baseInput(ctl.signal), baseDeps(stream)))
+
+    const finalised = events.find((e) => e.kind === "finalised")
+    expect(finalised).toBeDefined()
+    if (finalised && finalised.kind === "finalised") {
+      expect(finalised.message.attributes).toEqual({
+        reply_language: { value: "ru", label: "Русский", explicit: true },
+      })
+    }
+  })
+
+  it("leaves it unset when the server settled nothing", async () => {
+    const stream = makeStream([
+      { type: "delta", text: "answer" } as ChatStreamEvent,
+      { type: "done" } as ChatStreamEvent,
+    ])
+    const ctl = new AbortController()
+    const events = await collect(runChatTurn(baseInput(ctl.signal), baseDeps(stream)))
+
+    const finalised = events.find((e) => e.kind === "finalised")
+    if (finalised && finalised.kind === "finalised") {
+      expect(finalised.message.attributes).toBeUndefined()
+    }
+  })
+})

@@ -23,6 +23,7 @@ from typing import Any
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
+from shruti_chat.agent.graph.nodes._lang_name import resolve_lang_name
 from shruti_chat.agent.graph.nodes._worker_common import CARD_SPEC_BY_FAMILY
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import build_prompt
@@ -210,13 +211,7 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
     # is substituted with the human verse address, same as `{{LANG}}`.
     # Resolve the human language NAME for the directive — a bare locale code
     # ("sr-Latn") makes the LLM drift (answered Russian) on planner-less paths.
-    # Sourced from the catalog `languages` table (auto-extends; no hardcode).
-    lang_name: str | None = None
-    if ctx.catalog_repo is not None:
-        try:
-            lang_name = await ctx.catalog_repo.language_name(state["lang"])
-        except Exception:  # noqa: BLE001 — language hint must never fail the turn
-            lang_name = None
+    lang_name = await resolve_lang_name(ctx, state["lang"])
 
     fallback_mode = bool(state.get("fallback_mode"))
     fallback_kind = state.get("fallback_kind", "memory")

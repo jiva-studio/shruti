@@ -75,3 +75,22 @@ def build_prompt(
         text = text.replace("{{LANG_NAME}}", lang_name or lang)
         text = text.replace("{{LANG}}", lang)
     return text
+
+
+def standalone_prompt(name: str, md: str) -> str:
+    """Text of a one-off prompt that is NOT a section of the system prompt.
+
+    Same contract as `build_prompt`: Langfuse is the source of truth so an
+    editor can tune the wording without a deploy, and the bundled `.md` is the
+    fallback (Langfuse down, `LANGFUSE_FORCE_FALLBACK=1`, eval mode). Exists so
+    a small prompt does not end up as a Python string literal — the one place
+    nobody can edit and nobody thinks to look.
+
+    `name` is the Langfuse prompt name, `md` the bundled file under this
+    package (without `.md`). Both are listed in
+    `scripts/bootstrap_langfuse_prompts.py`.
+    """
+    path = Path(__file__).parent / f"{md}.md"
+    return prompt_with_fallback(
+        name, fallback=lambda: path.read_text(encoding="utf-8"),
+    ).text

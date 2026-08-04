@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
+  ChatAttributes,
   ChatVerseBody,
   MediaPayload,
 } from "@lib/domain/chatMessage.js"
@@ -331,6 +332,11 @@ export async function* runChatTurn(
   const chapters: Record<string, ChatChapterBody> = {}
   const commentaries: Record<string, ChatCommentaryBody> = {}
   let aliases: Record<string, ChatAliasEntry> | undefined
+  // What the server worked out about the conversation this turn. Persisted on
+  // the finalised message and folded into the aggregate sent back next turn, so
+  // it keeps holding once it scrolls out of the 20-message window the server
+  // sees. Unknown keys ride along without this build understanding them.
+  let attributes: ChatAttributes | undefined
 
   // The history passed by the caller is the conversation BEFORE this
   // turn (caller has no clean way to splice the new user message in
@@ -568,6 +574,7 @@ export async function* runChatTurn(
               aliases[k] = entry
             }
           }
+          if (event.attributes) attributes = event.attributes
           sawDone = true
           break
         case "error":
@@ -654,6 +661,7 @@ export async function* runChatTurn(
       error: errorMeta,
       followups: followups.length > 0 ? followups : undefined,
       aliases,
+      attributes,
     })
     await deps.sessions.touch(input.sessionId, finalised.createdAt)
     yield { kind: "finalised", message: finalised }

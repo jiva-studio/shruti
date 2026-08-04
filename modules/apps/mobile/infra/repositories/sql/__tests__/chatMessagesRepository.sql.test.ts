@@ -220,3 +220,80 @@ describe("chatMessagesRepository — card-body meta round-trip", () => {
     expect(row.cites).toEqual({ "track_x|1000-2000": CITE })
   })
 })
+
+describe("chatMessagesRepository — settled conversation attributes", () => {
+  let db: IDatabase
+  let repo: ReturnType<typeof createSqlChatMessageRepository>
+  const SESSION = "session-lang" as ChatSessionId
+  const MSG = "m-lang" as ChatMessageId
+  const RU = { reply_language: { value: "ru", label: "Русский", explicit: true } } as const
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await setupSchema(db)
+    repo = createSqlChatMessageRepository(db)
+  })
+
+  it("survives create → listBySession so the switch outlives a cold start", async () => {
+    // Without this the language a user asked for is lost on app restart and the
+    // reply silently reverts to the interface locale. Also what the client folds
+    // its request-level aggregate out of.
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "Хорошо, отвечаю по-русски.",
+      createdAt: 1000,
+      attributes: RU,
+    })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.attributes).toEqual(RU)
+  })
+
+  it("is absent on a message that settled none", async () => {
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "plain answer",
+      createdAt: 1000,
+    })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.attributes).toBeUndefined()
+  })
+
+  it("keeps an attribute this build knows nothing about", async () => {
+    // Forward compatibility: an app that predates an attribute must still store
+    // and replay it, or a newer server's setting dies on an older client.
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "Ответ.",
+      createdAt: 1000,
+      attributes: { future_thing: { value: "42", label: "", explicit: false } },
+    })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.attributes).toEqual({
+      future_thing: { value: "42", label: "", explicit: false },
+    })
+  })
+
+  it("survives the read-modify-write meta updates", async () => {
+    // Each of these rewrites the whole envelope; dropping the field in one of
+    // them would silently un-switch the language mid-conversation.
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "Ответ.",
+      createdAt: 1000,
+      attributes: RU,
+    })
+    await repo.updateActionStates(MSG, { a1: "done" })
+    await repo.updateFollowups(MSG, ["ещё?"])
+    await repo.updateFeedback(MSG, { state: "up" })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.attributes).toEqual(RU)
+  })
+})
