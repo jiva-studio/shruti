@@ -222,7 +222,7 @@ type Track struct {
 	LocationID      string
 	Date            string
 	Titles          map[string]string // lang -> title
-	Durations       map[string]int64  // lang -> audio_duration (ms)
+	Durations       map[string]int64  // lang -> audio duration (ms), from track_audio
 	Languages       []string          // variant languages (stable order)
 	TranscriptLangs map[string]bool   // lang -> has transcript_path
 	HasOutline      bool              // any variant has an aligned outline (has_pdf proxy)
@@ -300,7 +300,7 @@ func (r *Repo) GetTrack(ctx context.Context, id string) (*Track, error) {
 
 func (r *Repo) fillVariants(ctx context.Context, t *Track) error {
 	rows, err := r.db().QueryContext(ctx,
-		`SELECT language, title, audio_duration, transcript_path, outline
+		`SELECT language, title, transcript_path, outline
 		 FROM track_variants WHERE track_id = ? ORDER BY language`, t.ID)
 	if err != nil {
 		return err
@@ -308,22 +308,44 @@ func (r *Repo) fillVariants(ctx context.Context, t *Track) error {
 	defer rows.Close()
 	for rows.Next() {
 		var lang, title string
-		var dur sql.NullInt64
 		var transcript, outline sql.NullString
-		if err := rows.Scan(&lang, &title, &dur, &transcript, &outline); err != nil {
+		if err := rows.Scan(&lang, &title, &transcript, &outline); err != nil {
 			return err
 		}
 		t.Languages = append(t.Languages, lang)
 		t.Titles[lang] = title
-		if dur.Valid {
-			t.Durations[lang] = dur.Int64
-		}
 		if transcript.Valid && transcript.String != "" {
 			t.TranscriptLangs[lang] = true
 		}
 		if outline.Valid && outline.String != "" {
 			t.HasOutline = true
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return r.fillDurations(ctx, t)
+}
+
+// fillDurations reads the duration from track_audio, the per-version audio
+// model that replaced track_variants.audio_path/audio_duration. Every kind of
+// a track carries the same length — clean is the denoised original, not a
+// different edit — so whichever row comes back is the answer.
+func (r *Repo) fillDurations(ctx context.Context, t *Track) error {
+	rows, err := r.db().QueryContext(ctx,
+		`SELECT language, MAX(duration) FROM track_audio
+		 WHERE track_id = ? AND duration > 0 GROUP BY language`, t.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lang string
+		var dur int64
+		if err := rows.Scan(&lang, &dur); err != nil {
+			return err
+		}
+		t.Durations[lang] = dur
 	}
 	return rows.Err()
 }
