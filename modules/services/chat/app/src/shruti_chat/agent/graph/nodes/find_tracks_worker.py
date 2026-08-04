@@ -332,18 +332,15 @@ async def _intro(
             f"book. Do NOT write {ref} as if the list matched it."
         )
     if chosen_authors:
-        # Same honesty as the reference case above: an empty list under a
-        # lecturer filter must name the filter, or it reads as "the corpus has
-        # nothing on this" and the person never learns their choice is why.
+        # Same honesty as the reference case above, and only for an EMPTY list:
+        # "nothing found" under a lecturer filter must name the filter, or it
+        # reads as "the corpus has nothing on this" and the person never learns
+        # their own choice is the reason. A non-empty list needs no such line —
+        # every card in it is already by them.
         facts.append(
             f"IMPORTANT: the user limited the answer to lectures by "
-            f"{chosen_authors}. "
-            + (
-                f"The corpus has nothing by them for this request. Say that "
-                f"plainly, naming {chosen_authors}."
-                if n == 0 else
-                f"Every lecture listed is by them; do not imply otherwise."
-            )
+            f"{chosen_authors}, and the corpus has nothing by them for this "
+            f"request. Say that plainly, naming {chosen_authors}."
         )
     usr = "\n".join(facts) + f"\n\nWrite the line in language code '{ctx.lang_code}'."
     msgs: list[Message] = [{"role": "system", "content": sys}, {"role": "user", "content": usr}]

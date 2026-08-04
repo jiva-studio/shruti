@@ -237,9 +237,20 @@ async def synthesis_planner_node(
     # expander safely. Per-turn kill-switch via config.
     intro_streamed = False
     intro_text = resolved_intro.strip()
+    # Not under a lecturer filter. There the answer may have to open with the
+    # admission that the chosen teachers had nothing (see `_author_note`), and
+    # that only reads as an explanation if it comes FIRST — but whether it is
+    # needed is not known until the pool is final, after Stage 2. So on those
+    # turns the intro goes back to the synthesizer, which renders it after the
+    # note. Costs the early-paint head start on a minority of turns; a
+    # disclaimer stranded under the paragraph it qualifies costs more.
+    narrowed = bool(
+        ctx.author_scope is not None and ctx.author_scope.selection.constrained
+    )
     if (
         intro_text
         and outline.theses
+        and not narrowed
         and state.get("config", {}).get("enable_early_intro", True)
     ):
         try:
