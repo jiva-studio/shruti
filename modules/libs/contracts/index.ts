@@ -26,6 +26,8 @@ export type {
   IChatStreamClient,
   ChatRole,
   ChatActionPayload,
+  ChatAttribute,
+  ChatAttributes,
   ChatOutlinePayload,
   ChatStreamEvent,
   ChatTurn,

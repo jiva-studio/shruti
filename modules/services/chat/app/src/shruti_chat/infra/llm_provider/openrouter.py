@@ -3,7 +3,7 @@
 OpenRouter exposes an OpenAI-compatible API at `https://openrouter.ai/api/v1`,
 so we point `langchain_openai.ChatOpenAI` at it via `base_url` and let the
 provider route by model prefix (`google/gemini-3.1-flash-lite`,
-`anthropic/claude-3-haiku`, ...).
+`anthropic/claude-haiku-4.5`, ...).
 
 Why ChatOpenAI specifically: it streams reliably through OpenRouter
 via the OpenAI-compatible base_url, handles `tool_choice` (including
@@ -19,6 +19,7 @@ import asyncio
 import random
 from contextlib import nullcontext
 from functools import lru_cache
+from collections.abc import Mapping
 from typing import Any, AsyncIterator, TypeVar
 
 import openai
@@ -57,6 +58,49 @@ _RETRYABLE_EXC = (
 )
 
 
+def _in_band_error(exc: BaseException) -> Mapping[str, Any] | None:
+    """The OpenRouter `error` object an exception carries, if any.
+
+    OpenRouter documents ONE error shape — `{"error": {"code": <http status>,
+    "message": …, "metadata"?: …}}` — and two ways of delivering it. Before the
+    first token the status is real, and the SDK turns it into a typed exception
+    (`RateLimitError`, …). Mid-stream it cannot be: the 200 and its headers are
+    already committed, so the error arrives IN-BAND as an SSE chunk carrying
+    that same object plus `finish_reason: "error"`.
+    https://openrouter.ai/docs/api-reference/errors
+
+    Who hands the in-band object to us:
+      - streaming — `openai._streaming` raises `APIError(…, body=data["error"])`
+      - non-streaming — langchain_openai raises `ValueError(response["error"])`
+
+    So both paths give us the documented object; `code` is read off it. This is
+    the gap that let 16 of 18 ERROR-level observations in two weeks skip the
+    retry path (no `status_code` to look at), one of them leaving the user with
+    an empty answer after 36 seconds.
+    """
+    if isinstance(exc, openai.APIError) and isinstance(exc.body, Mapping):
+        return exc.body
+    if isinstance(exc, ValueError) and exc.args and isinstance(exc.args[0], Mapping):
+        return exc.args[0]
+    return None
+
+
+def _error_status(exc: BaseException) -> int | None:
+    """HTTP-equivalent status for `exc`: the real one when the SDK typed it,
+    else the `code` from an in-band OpenRouter error. Documented as a number;
+    tolerate a string in case a provider stringifies it."""
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+    body = _in_band_error(exc)
+    if body is None:
+        return None
+    try:
+        return int(body.get("code"))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
 def _is_retryable(exc: BaseException) -> bool:
     if isinstance(exc, _RETRYABLE_EXC):
         return True
@@ -64,9 +108,36 @@ def _is_retryable(exc: BaseException) -> bool:
     # same model, then the fallback model (see `EmptyCompletionError`).
     if isinstance(exc, EmptyCompletionError):
         return True
-    # Some providers surface 429/5xx as a generic APIStatusError.
-    status = getattr(exc, "status_code", None)
+    # 429 (rate limited) and 5xx (502 model unavailable / 503 no provider meets
+    # the routing requirements) — whether the SDK typed them or they arrived
+    # in-band on a 200.
+    status = _error_status(exc)
     return isinstance(status, int) and (status == 429 or 500 <= status < 600)
+
+
+# Cap on an honoured `Retry-After`. OpenRouter documents the header as the
+# primary delay source on a 429, but a chat turn has a person waiting on it:
+# past a few seconds, escalating to the fallback model (the next step anyway)
+# beats sitting on the wait the provider asked for.
+_RETRY_AFTER_MAX_S = 5.0
+
+
+def _retry_after_s(exc: BaseException) -> float | None:
+    """Seconds from the `Retry-After` header, when the provider sent one and it
+    is short enough to be worth honouring. The HTTP-date form is not parsed —
+    OpenRouter sends delay-seconds — and an absent/unusable value means "use
+    our own backoff"."""
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    try:
+        seconds = float(headers.get("retry-after"))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0 or seconds > _RETRY_AFTER_MAX_S:
+        return None
+    return seconds
 
 
 def _extract_json_object(text: str) -> str | None:
@@ -184,7 +255,12 @@ def is_provider_unavailable(exc: BaseException) -> bool:
         seen.add(id(cur))
         if isinstance(cur, (_UNAVAILABLE_EXC, EmptyCompletionError)):
             return True
-        status = getattr(cur, "status_code", None)
+        # `_error_status` also reads the code out of an IN-BAND OpenRouter
+        # error (mid-stream failures arrive on a 200 with no `status_code`).
+        # Once retries AND the fallback model are spent on one of those, it is a
+        # capacity problem upstream, so the user gets "try again later" rather
+        # than a generic error.
+        status = _error_status(cur)
         if isinstance(status, int) and (
             status in _UNAVAILABLE_STATUS or 500 <= status < 600
         ):
@@ -230,7 +306,7 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
         # outside this set is still used (with a loud warning) so changing a
         # model in Langfuse prompt-config doesn't need a code deploy. Listing
         # a vetted model here just silences the warning. See `_validate_model`.
-        "openrouter/anthropic/claude-3-haiku",
+        "openrouter/anthropic/claude-haiku-4.5",
         "openrouter/google/gemini-2.5-flash-lite",
         "openrouter/google/gemini-2.5-flash",
         "openrouter/google/gemini-3.1-flash-lite",
@@ -365,7 +441,7 @@ def _build_client(
         # EOF` — the planner then degrades to free-form synthesis with no
         # intro/conclusion/headers. 4096 comfortably fits the largest outline
         # and sits at-or-below every structured model's own cap (gemini-flash,
-        # deepseek-chat, claude-3-haiku), so it never trips a 400. The
+        # deepseek-chat, claude-haiku-4.5), so it never trips a 400. The
         # streaming synthesizer is deliberately left uncapped so long answers
         # are never clipped.
         kwargs["max_tokens"] = 4096
@@ -542,7 +618,7 @@ class OpenRouterLLMProvider:
                     )
                     raise
                 if attempt < self._max_retries and _is_retryable(exc):
-                    delay = self._backoff_delay(attempt)
+                    delay = _retry_after_s(exc) or self._backoff_delay(attempt)
                     log.warning(
                         "llm_stream_retry", model=validated_model,
                         attempt=attempt + 1, delay_s=round(delay, 3),
@@ -728,7 +804,7 @@ class OpenRouterLLMProvider:
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
                 if attempt < self._max_retries and _is_retryable(exc):
-                    delay = self._backoff_delay(attempt)
+                    delay = _retry_after_s(exc) or self._backoff_delay(attempt)
                     log.warning(
                         "llm_structured_retry", model=validated_model,
                         attempt=attempt + 1, delay_s=round(delay, 3),
@@ -786,7 +862,7 @@ class OpenRouterLLMProvider:
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
                 if attempt < self._max_retries and _is_retryable(exc):
-                    delay = self._backoff_delay(attempt)
+                    delay = _retry_after_s(exc) or self._backoff_delay(attempt)
                     log.warning(
                         "llm_text_retry", model=validated_model,
                         attempt=attempt + 1, delay_s=round(delay, 3),

@@ -144,9 +144,12 @@ async def test_anon_user_also_gets_upsell(_events) -> None:
 
 async def test_pro_user_emits_candidate_cards_without_publishing(_events) -> None:
     pub = _FakePublisher(ok=True)
+    # Real YouTube shapes: the worker drops any candidate no downloader can
+    # fetch (`_is_ingestable_url`), so a placeholder URL would be filtered out
+    # before it ever reaches a card.
     res = _FakeResolver([
-        Candidate(url="https://y/1", title="Bhakti 1", provider="youtube_api"),
-        Candidate(url="https://y/2", title="Bhakti 2", provider="youtube_api"),
+        Candidate(url="https://www.youtube.com/watch?v=aaaaaaaaaaa", title="Bhakti 1", provider="youtube_api"),
+        Candidate(url="https://www.youtube.com/watch?v=bbbbbbbbbbb", title="Bhakti 2", provider="youtube_api"),
     ])
     ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=pub, lecture_search=res)
 
@@ -164,7 +167,7 @@ async def test_pro_user_emits_candidate_cards_without_publishing(_events) -> Non
     # marker per result — the shared contract the mobile card renders.
     cands = _actions(_events, "add_to_library")
     assert [c["data"]["id"] for c in cands] == ["cand_0", "cand_1"]
-    assert cands[0]["data"]["payload"]["url"] == "https://y/1"
+    assert cands[0]["data"]["payload"]["url"] == "https://www.youtube.com/watch?v=aaaaaaaaaaa"
     text = _delta_text(_events)
     assert "[action:add_to_library|id=cand_0]" in text
     assert "[action:add_to_library|id=cand_1]" in text
@@ -191,7 +194,9 @@ async def test_search_term_combines_author_and_topic(_events) -> None:
 
 
 async def test_candidate_action_precedes_its_card_marker(_events) -> None:
-    res = _FakeResolver([Candidate(url="https://y/1", title="T", provider="p")])
+    res = _FakeResolver([
+        Candidate(url="https://youtu.be/ccccccccccc", title="T", provider="p"),
+    ])
     ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=_FakePublisher(), lecture_search=res)
     await atl.add_to_library_worker_node(
         {"user_query": "add a lecture", "tier": "pro"}, _Runtime(ctx)
@@ -319,7 +324,9 @@ def test_youtube_thumb_from_various_url_shapes() -> None:
 async def test_search_uses_extracted_topic_not_the_raw_command(_events) -> None:
     # The router extracts a clean topic; the worker must search THAT, not the
     # full command sentence (a keyword engine returns nothing for the latter).
-    res = _FakeResolver([Candidate(url="https://y/1", title="Bhakti", provider="serpapi")])
+    res = _FakeResolver([
+        Candidate(url="https://youtu.be/ddddddddddd", title="Bhakti", provider="serpapi"),
+    ])
     ctx = _Ctx(llm=_FakeLLM(), ingest_publisher=_FakePublisher(), lecture_search=res)
     await atl.add_to_library_worker_node(
         {

@@ -72,10 +72,16 @@ class CatalogRepository(Protocol):
         date_from: str | None,
         date_to: str | None,
         anniversary_md: str | None = None,
+        ref_prefix: str | None = None,
+        ref_from: int | None = None,
+        ref_to: int | None = None,
     ) -> list[str] | None:
         """Return eligible track_ids for the metadata filters, or None
         when no filter is active (caller should skip the constraint).
-        `anniversary_md` ("MM-DD") matches that calendar day across all years."""
+        `anniversary_md` ("MM-DD") matches that calendar day across all years.
+        `ref_prefix`/`ref_from`/`ref_to` narrow to a scripture reference — the
+        same predicate `list_tracks` uses, so "lectures on BG chapter 10" can
+        constrain a semantic search instead of only a listing."""
         ...
 
     async def resolve(
