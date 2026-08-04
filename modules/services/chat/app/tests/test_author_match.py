@@ -1,4 +1,4 @@
-"""Unit tests for agent.graph.nodes._author_match — deciding whether a name the
+"""Unit tests for application.author_names — deciding whether a name the
 router extracted denotes one of the corpus's authors.
 
 The hard part is that every Vaiṣṇava teacher's name is mostly honorifics, so a
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from lectorium_chat.agent.graph.nodes._author_match import (
+from lectorium_chat.application.author_names import (
     distinctive_tokens,
     names_match,
 )
