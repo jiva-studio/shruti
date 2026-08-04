@@ -16,6 +16,12 @@ from shruti_chat.domain.entities import Track
 from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 
 
+# A listing is filtered AFTER the query, so ask for more than requested when a
+# selection is active. Capped so a wide selection cannot pull the whole catalog.
+_SCOPE_OVERFETCH = 4
+_SCOPE_MAX_FETCH = 200
+
+
 def _to_wire(track: Track) -> dict[str, Any]:
     return {
         "track_id": track.id,
@@ -57,12 +63,25 @@ async def list_tracks(
     ref_to: int | None = None,
     *,
     catalog_repo: CatalogRepository,
+    # The turn's author selection, supplied by the per-turn wrapper and hidden
+    # from the LLM schema. The model's `author_id` is a REQUEST; this is the
+    # authority. Without it a worker could list any lecturer's tracks by simply
+    # not naming one.
+    author_scope: Any | None = None,
 ) -> list[dict[str, Any]]:
+    selection = None if author_scope is None else author_scope.selection
+    if selection is not None and selection.constrained:
+        # Over-fetch: the filter below runs AFTER the limit, so asking for
+        # exactly `limit` rows would return fewer than asked whenever the
+        # selection excludes any of them.
+        fetch = min(limit * _SCOPE_OVERFETCH, _SCOPE_MAX_FETCH)
+    else:
+        fetch = limit
     rows = await catalog_repo.list_tracks(
         author_id=author_id, source_id=source_id, location_id=location_id,
         tag_ids=tag_ids, title_query=title_query,
         date_from=date_from, date_to=date_to,
-        lang=lang, limit=limit, offset=offset,
+        lang=lang, limit=fetch, offset=offset,
         ref_prefix=ref_prefix, ref_from=ref_from, ref_to=ref_to,
     )
     # Prefer tracks that have a transcript in the requested language; if
@@ -73,9 +92,11 @@ async def list_tracks(
             author_id=author_id, source_id=source_id, location_id=location_id,
             tag_ids=tag_ids, title_query=title_query,
             date_from=date_from, date_to=date_to,
-            lang=None, limit=limit, offset=offset,
+            lang=None, limit=fetch, offset=offset,
             ref_prefix=ref_prefix, ref_from=ref_from, ref_to=ref_to,
         )
+    if selection is not None and selection.constrained:
+        rows = [t for t in rows if selection.allows(t.author_id)][:limit]
     return [_to_wire(t) for t in rows]
 
 

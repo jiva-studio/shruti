@@ -21,6 +21,8 @@ It appends to `state["tool_results"]`:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
@@ -74,6 +76,15 @@ async def recommend_worker_node(
         # the answer language (an English clip is useless to a Russian user).
         languages=[ctx.lang],
     )
+
+    # The author selection applies to a recommendation like any other lecture
+    # retrieval. Filtered AFTER the recommender ranked, because it scores by
+    # topic affinity and has no author predicate — so a narrow selection simply
+    # yields a shorter list rather than a differently-ranked one.
+    if ctx.author_scope is not None:
+        allowed = await ctx.author_scope.narrow(list(rec.track_ids))
+        if allowed is not None and list(allowed) != list(rec.track_ids):
+            rec = replace(rec, track_ids=tuple(allowed))
 
     if not rec.has_history or not rec.track_ids:
         log.info(

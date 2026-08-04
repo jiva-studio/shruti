@@ -30,10 +30,16 @@ async def user_history_search(
     chunk_repo: ChunkRepository,
     embedder: EmbedderPort,
     alias_map: TurnAliasMap,
+    # The turn's author selection, supplied by the per-turn wrapper. These are
+    # PUBLIC tracks the user happens to have listened to, so the catalog knows
+    # their authors and the intersection is exact.
+    author_scope: Any | None = None,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     if user_context is None:
         return ok_or_no_ctx([], False)
     ids = [t.track_id for t in user_context.recent_tracks]
+    if author_scope is not None:
+        ids = await author_scope.narrow(ids) or []
     if not ids:
         return []
     q_vec = await embedder.embed_query(query)
