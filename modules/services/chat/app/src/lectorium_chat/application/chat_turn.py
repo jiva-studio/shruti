@@ -200,6 +200,10 @@ async def run_chat_turn(
     *,
     lang: str = "en",
     translate_citations: bool = False,
+    # Client-aggregated conversation attributes (see
+    # `domain/conversation_attributes.py`). Preferred over folding the replayed
+    # messages: the client saw the whole dialogue, the request only sees 20.
+    client_attributes: dict[str, Any] | None = None,
     capabilities: dict[str, bool] | None = None,
     request_id: str | None = None,
     user_context: UserContext | None = None,
@@ -271,10 +275,11 @@ async def run_chat_turn(
     outline_has_intro: bool | None = None
     outline_has_conclusion: bool | None = None
     outline_skipped_notes_ratio: float | None = None
-    # The answer language `router_node` settled on, when it settled one. Shipped
-    # on the terminal `done` so the client persists it on the assistant message
-    # and replays it next turn — the same ride `aliases` takes.
-    reply_language: dict[str, Any] | None = None
+    # Conversation attributes as `router_node` settled them. Shipped on the
+    # terminal `done` so the client persists them on the assistant message,
+    # folds them into its aggregate, and replays both — the ride `aliases`
+    # already takes.
+    attributes: dict[str, Any] | None = None
     # Hoisted above the try so the `finally` teardown can always reference
     # it — even if turn setup raises before the task is created.
     embed_task: Any | None = None
@@ -412,6 +417,7 @@ async def run_chat_turn(
             "history": history,
             "user_query": _extract_latest_user_query(history),
             "lang": lang,
+            "client_attributes": client_attributes or {},
             "request_id": trace_id,
             "tier": effective_tier,
             "tool_results": [],
@@ -473,9 +479,9 @@ async def run_chat_turn(
                         sent_action = True
                     elif ev_type == "error":
                         had_error = True
-                    elif ev_type == "reply_language":
+                    elif ev_type == "attributes":
                         # Not a client-facing event — it leaves on `done`.
-                        reply_language = ev_data or None
+                        attributes = ev_data or None
                         continue
                     elif ev_type == "outline_summary":
                         # synthesis_planner_node emits this once per turn
@@ -657,8 +663,8 @@ async def run_chat_turn(
         done_data: dict[str, Any] = {}
         if len(aliases) > 0:
             done_data["aliases"] = aliases.serialize()
-        if reply_language is not None:
-            done_data["reply_language"] = reply_language
+        if attributes:
+            done_data["attributes"] = attributes
         yield AgentEvent(type="done", data=done_data)
 
     finally:

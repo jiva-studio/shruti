@@ -4,13 +4,19 @@ result into ChatState.
 Thin adapter: 8 lines of real logic. The LLM-prompt and intent classifier
 live in the use-case; this node just bridges state ↔ runtime.context.
 
-It also settles the REPLY LANGUAGE for the turn. That happens here because
-this is the one node every path passes through before any prose is composed,
-and because `ctx` is mutable: writing the resolved locale to both
-`state["lang"]` and `ctx.lang` leaves every downstream hop reading a single
-value. Hops used to derive the language independently — the synthesizer from
-the history, `localized_reply` and the card blurbs from `ctx.lang` in code —
-which is how a Hindi answer shipped with an English summary paragraph on top.
+It also settles this turn's CONVERSATION ATTRIBUTES — today just the reply
+language. That happens here because this is the one node every path passes
+through before any prose is composed, and because `ctx` is mutable: writing the
+resolved locale to both `state["lang"]` and `ctx.lang` leaves every downstream
+hop reading a single value. Hops used to derive the language independently —
+the synthesizer from the history, `localized_reply` and the card blurbs from
+`ctx.lang` in code — which is how a Hindi answer shipped with an English
+summary paragraph on top.
+
+Merging and carrying attributes is generic; APPLYING one is not. The language
+becomes `ctx.lang` here in two explicit lines, and the next attribute will go
+somewhere else entirely — a dispatch table over one member would be machinery,
+not clarity.
 """
 
 from __future__ import annotations
@@ -28,12 +34,16 @@ from lectorium_chat.agent.classify import (
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prior_refs import extract_prior_track_refs
 from lectorium_chat.application.followup_rewrite import resolve_followup_query
-from lectorium_chat.application.reply_language import (
-    detect_reply_language,
-    remembered_reply_language,
+from lectorium_chat.application.conversation_attributes import (
+    detect_attributes,
+    remembered_attributes,
 )
 from lectorium_chat.application.router_turn import run_router_turn
-from lectorium_chat.domain.reply_language import ReplyLanguage, resolve_reply_language
+from lectorium_chat.domain.conversation_attributes import (
+    REPLY_LANGUAGE,
+    Attribute,
+    merge_attributes,
+)
 from lectorium_chat.domain.routing import RoutingDecision
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
@@ -49,61 +59,65 @@ log = get_logger(__name__)
 _DETERMINISTIC_CHAIN = [AddressClassifier(), LectureUrlClassifier()]
 
 
-def _start_reply_language(
+def _start_attributes(
     state: ChatState, ctx: TurnContext,
-) -> "asyncio.Task[ReplyLanguage | None] | None":
-    """Kick off language detection so it overlaps the router's own LLM call.
+) -> "asyncio.Task[dict[str, Attribute]] | None":
+    """Kick off attribute detection so it overlaps the router's own LLM call.
 
     Runs on the message the user actually typed, NOT the follow-up rewrite —
     the rewrite is written by another model and would launder the language.
 
-    Not awaited in a `finally`: `detect_reply_language` swallows its own
-    failures (it can only return None), so the only way past the await below
+    Not awaited in a `finally`: `detect_attributes` swallows its own failures
+    (it can only return fewer attributes), so the only way past the await below
     is a node exception that ends the turn regardless.
     """
     query = state.get("user_query") or ""
     if ctx.llm is None or not query.strip():
         return None
     cb = (
-        langfuse_node_callback(ctx.langfuse_trace_id, "reply_language")
+        langfuse_node_callback(ctx.langfuse_trace_id, "attributes")
         if ctx.langfuse_trace_id
         else None
     )
     return asyncio.create_task(
-        detect_reply_language(
+        detect_attributes(
             query,
             llm=ctx.llm,
             request_id=ctx.request_id,
             kv_cache=ctx.kv_cache,
             callbacks=[cb] if cb is not None else None,
         ),
-        name="reply_language",
+        name="conversation_attributes",
     )
 
 
-async def _settle_reply_language(
+async def _settle_attributes(
     state: ChatState,
     ctx: TurnContext,
-    task: "asyncio.Task[ReplyLanguage | None] | None",
-) -> ReplyLanguage | None:
-    """Combine this message's reading with what the dialogue already settled
-    on, then publish the winner to BOTH places the downstream hops read:
-    `ctx.lang` (code-composed prose — `localized_reply`, card blurbs) and
-    `state["lang"]` (the prompt directive) via the caller's state update.
+    task: "asyncio.Task[dict[str, Attribute]] | None",
+) -> dict[str, Attribute]:
+    """Fold this message's readings into what the dialogue already knew, then
+    apply the ones this turn acts on.
 
-    None means nothing was derived — the client's locale stays in force and
-    nothing is stored, so changing the app's language later still takes effect.
+    The reply language is published to BOTH places the downstream hops read:
+    `ctx.lang` (code-composed prose — `localized_reply`, card blurbs) and
+    `state["lang"]` (the prompt directive) via the caller's state update. An
+    empty result means nothing was ever derived — the client's locale stays in
+    force and nothing is stored, so changing the app's language later still
+    takes effect.
     """
-    detected = await task if task is not None else None
-    resolved = resolve_reply_language(
+    detected = await task if task is not None else {}
+    settled = merge_attributes(
         detected=detected,
-        remembered=remembered_reply_language(state.get("history")),
+        remembered=remembered_attributes(
+            state.get("history"), state.get("client_attributes"),
+        ),
     )
-    if resolved is None:
-        return None
-    ctx.lang = resolved.lang
-    ctx.lang_name = resolved.name
-    return resolved
+    language = settled.get(REPLY_LANGUAGE)
+    if language is not None:
+        ctx.lang = language.value
+        ctx.lang_name = language.label
+    return settled
 
 
 async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
@@ -121,11 +135,11 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
     query = state["user_query"]
     decision = await run_classifier_chain(_DETERMINISTIC_CHAIN, query, ctx)
 
-    # 1a. Settle the reply language, in parallel with the router's LLM call.
-    #     Skipped when the deterministic chain already claimed the query: that
-    #     means a bare scripture address or a URL, which carries no language
-    #     signal to read — exactly the case the detector would abstain on.
-    lang_task = _start_reply_language(state, ctx) if decision is None else None
+    # 1a. Read this message's conversation attributes, in parallel with the
+    #     router's LLM call. Skipped when the deterministic chain already
+    #     claimed the query: that means a bare scripture address or a URL,
+    #     which carries no signal to read — exactly the abstain case.
+    lang_task = _start_attributes(state, ctx) if decision is None else None
 
     # 2. Fall-through (no deterministic hit). Resolve a context-dependent
     #    follow-up into a self-contained query BEFORE the LLM router. The
@@ -213,15 +227,18 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
         # answer the self-contained form, not the bare follow-up.
         "user_query": query,
     }
-    reply_language = await _settle_reply_language(state, ctx, lang_task)
-    if reply_language is not None:
-        update["lang"] = reply_language.lang
-        # Not a client-facing event: `chat_turn` swallows it and puts the value
-        # on the terminal `done`, which is where the client already picks up
-        # per-message server state (`aliases`). It rides forward on every turn,
-        # not only the one that changed it, so it outlives the 20-message
-        # history window the client replays.
-        get_stream_writer()(
-            {"type": "reply_language", "data": reply_language.model_dump()}
-        )
+    attributes = await _settle_attributes(state, ctx, lang_task)
+    language = attributes.get(REPLY_LANGUAGE)
+    if language is not None:
+        update["lang"] = language.value
+    if attributes:
+        # Not a client-facing event: `chat_turn` swallows it and puts the map on
+        # the terminal `done`, which is where the client already picks up
+        # per-message server state (`aliases`). The WHOLE map goes out, not just
+        # what changed this turn, so the client's aggregate is a replace rather
+        # than a merge it could get wrong.
+        get_stream_writer()({
+            "type": "attributes",
+            "data": {k: a.model_dump() for k, a in attributes.items()},
+        })
     return update

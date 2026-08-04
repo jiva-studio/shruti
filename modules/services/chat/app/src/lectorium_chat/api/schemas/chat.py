@@ -94,21 +94,29 @@ class ChunkAliasDto(BaseModel):
     end_ms: int | None = None
 
 
-class ReplyLanguageDto(BaseModel):
-    """What a previous turn settled the answer language to be.
+class AttributeDto(BaseModel):
+    """One conversation attribute the server settled — see
+    `domain/conversation_attributes.py`.
 
-    Bounded, but NOT validated against a list of locales: the reply language is
-    an open set (an Italian question gets an Italian answer even though the app
-    ships no Italian UI), and a server-side whitelist would be a second copy of
-    the client's language list to keep in sync. Untrusted like any client input
-    — `remembered_reply_language` re-validates and ignores what it can't read.
+    Values are bounded but NOT validated against any enum: an attribute's value
+    is opaque to the transport (the reply language is a locale code from an OPEN
+    set — an Italian question gets an Italian answer with no Italian UI, and a
+    server-side whitelist would be a second copy of the client's language list
+    to keep in sync). Untrusted like any client input — `remembered_attributes`
+    re-validates and ignores what it can't read.
     """
 
-    lang: str = Field(default="", max_length=32)
-    name: str = Field(default="", max_length=64)
-    # True when the user asked for this language in words, which is what makes
-    # it outrank the language a later message happens to be written in.
-    requested: bool = False
+    value: str = Field(default="", max_length=64)
+    label: str = Field(default="", max_length=128)
+    # True when the user stated it in words rather than us inferring it, which
+    # is what makes it outrank a fresh inference on a later message.
+    explicit: bool = False
+
+
+# Bounds the attribute map wherever it appears. Generous next to the registry
+# (one entry today) so adding attributes never trips the cap, tight enough that
+# a client can't push an unbounded map through.
+ATTRIBUTES_MAX = 32
 
 
 USER_CONTENT_MAX = 4000
@@ -133,13 +141,15 @@ class ChatMessageDto(BaseModel):
     # server falls back to stripping their chip markers to placeholder
     # text.
     aliases: dict[str, ChunkAliasDto] | None = Field(default=None, max_length=128)
-    # The language this turn was answered in, as the server settled it — sent
-    # back on the terminal `done` event, persisted by the client on the
-    # assistant message, and replayed here. It is what makes «отвечай
-    # по-русски» outlive the 20-message window this list is capped at, and an
-    # app restart. Absent on legacy clients and on turns where nothing was
-    # settled: then the request's `lang` (the app's UI locale) stays in force.
-    reply_language: ReplyLanguageDto | None = None
+    # Conversation attributes as they stood after this turn — sent on the
+    # terminal `done`, persisted by the client on the assistant message, and
+    # replayed here. The per-message copy is the provenance record and the
+    # fallback for a client that doesn't aggregate; the aggregate on the request
+    # root is the preferred source. Absent on legacy clients and on turns that
+    # settled nothing.
+    attributes: dict[str, AttributeDto] | None = Field(
+        default=None, max_length=ATTRIBUTES_MAX,
+    )
 
     @model_validator(mode="after")
     def _cap_user_content(self) -> "ChatMessageDto":
@@ -221,6 +231,15 @@ class ChatRequestDto(BaseModel):
     # pair. Default off → such citations fall back to English (en-preferred),
     # never machine-translated.
     translate_citations: bool = False
+    # Conversation attributes, aggregated by the CLIENT over its full local
+    # history and sent as turn metadata. The request can only carry the last 20
+    # messages, so an attribute settled earlier — «отвечай по-русски» twenty
+    # exchanges ago — would otherwise fall out of view; the client has the whole
+    # dialogue and folds it once. Optional: without it the server folds whatever
+    # per-message copies the replayed history happens to carry.
+    attributes: dict[str, AttributeDto] | None = Field(
+        default=None, max_length=ATTRIBUTES_MAX,
+    )
     user_context: UserContextDto | None = None
     proactive: ProactiveRequestDto | None = None
     # Client-managed chat session — groups turns of the same conversation

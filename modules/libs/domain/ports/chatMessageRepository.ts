@@ -10,7 +10,7 @@ import type {
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
-  ChatReplyLanguage,
+  ChatAttributes,
   ChatVerseBody,
   MediaPayload,
 } from "../chatMessage.js"
@@ -42,9 +42,8 @@ export interface CreateChatMessageInput {
   /** Integer→chunk alias map for the chip markers in `content` — see
    *  `ChatMessage.aliases`. */
   readonly aliases?: Record<string, ChatAliasEntry>
-  /** The language the server settled this answer in — see
-   *  `ChatMessage.replyLanguage`. */
-  readonly replyLanguage?: ChatReplyLanguage
+  /** Conversation attributes as of this turn — see `ChatMessage.attributes`. */
+  readonly attributes?: ChatAttributes
   /** Focus payload — set when the message was inserted by the
    *  "Ask Sadhu" flow on a transcript selection. Determines whether
    *  the bubble renders as a focus card. */

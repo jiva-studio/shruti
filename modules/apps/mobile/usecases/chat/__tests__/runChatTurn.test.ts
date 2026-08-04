@@ -331,13 +331,13 @@ describe("runChatTurn — card bodies persisted onto the finalised message", () 
   })
 })
 
-describe("runChatTurn — settled reply language", () => {
+describe("runChatTurn — settled conversation attributes", () => {
   it("persists it on the finalised message so the next turn can ship it back", async () => {
     const stream = makeStream([
       { type: "delta", text: "Хорошо." } as ChatStreamEvent,
       {
         type: "done",
-        replyLanguage: { lang: "ru", name: "Русский", requested: true },
+        attributes: { reply_language: { value: "ru", label: "Русский", explicit: true } },
       } as ChatStreamEvent,
     ])
     const ctl = new AbortController()
@@ -346,10 +346,8 @@ describe("runChatTurn — settled reply language", () => {
     const finalised = events.find((e) => e.kind === "finalised")
     expect(finalised).toBeDefined()
     if (finalised && finalised.kind === "finalised") {
-      expect(finalised.message.replyLanguage).toEqual({
-        lang: "ru",
-        name: "Русский",
-        requested: true,
+      expect(finalised.message.attributes).toEqual({
+        reply_language: { value: "ru", label: "Русский", explicit: true },
       })
     }
   })
@@ -364,7 +362,7 @@ describe("runChatTurn — settled reply language", () => {
 
     const finalised = events.find((e) => e.kind === "finalised")
     if (finalised && finalised.kind === "finalised") {
-      expect(finalised.message.replyLanguage).toBeUndefined()
+      expect(finalised.message.attributes).toBeUndefined()
     }
   })
 })

@@ -353,12 +353,13 @@ export interface ChatMessage {
    *  messages; the server falls back to placeholder-stripping for
    *  those. */
   aliases?: Record<string, ChatAliasEntry>
-  /** The language the server settled this turn's answer in, when it settled
-   *  one. Shipped back with the message on the next turn so a language the
-   *  user ASKED for keeps holding — the server sees only the last 20 messages,
-   *  so it cannot find the request again once it scrolls out. Assistant
-   *  messages only; absent on legacy rows and on turns that settled nothing. */
-  replyLanguage?: ChatReplyLanguage
+  /** What the server worked out about the conversation as of this turn (the
+   *  reply language today). Shipped back on the next turn — both on the message
+   *  and folded into the request-level aggregate — so something the user ASKED
+   *  for keeps holding: the server sees only the last 20 messages and cannot
+   *  find the request again once it scrolls out. Assistant messages only;
+   *  absent on legacy rows and on turns that settled nothing. */
+  attributes?: ChatAttributes
   /** Present iff this message was inserted by the "Ask Sadhu" flow on
    *  a transcript selection. `content` still carries the quoted text
    *  (history → LLM stays a vanilla user turn); the renderer branches
@@ -385,22 +386,32 @@ export type ChatFeedbackCategory =
   | "factually_wrong"
   | "other"
 
-/** The language the server settled an answer in, as persisted on the message.
+/** One thing the server worked out about a conversation, as persisted on the
+ *  message. Keyed by attribute name so a new one costs no schema change here,
+ *  in the meta codec, in SQL, or on the wire — an unknown key is carried
+ *  through untouched.
  *
- *  `lang` is an OPAQUE locale code and deliberately not one of the app's
- *  interface languages: someone writing in Italian gets an Italian answer
- *  though there is no Italian UI, so it must never be validated against the
- *  language list. `requested` is true when they asked for it in words — that is
- *  what makes it outrank the language of a later message (an English quote
- *  pasted into a Russian conversation must not flip the reply back).
+ *  `value` is OPAQUE: for the reply language it is a locale code that is
+ *  deliberately not one of the app's interface languages (someone writing in
+ *  Italian gets an Italian answer though there is no Italian UI), so it must
+ *  never be validated against the language list. `label` is its human form.
+ *  `explicit` is true when the user STATED it rather than us inferring it —
+ *  that is what makes it outrank a later inference (an English quote pasted
+ *  into a Russian conversation must not flip the reply back).
  *
  *  Redeclared here rather than imported from `@lib/contracts`: domain does not
  *  depend on the port layer, same as `ChatActionPayload`. */
-export interface ChatReplyLanguage {
-  readonly lang: string
-  readonly name: string
-  readonly requested: boolean
+export interface ChatAttribute {
+  readonly value: string
+  readonly label: string
+  readonly explicit: boolean
 }
+
+export type ChatAttributes = Readonly<Record<string, ChatAttribute>>
+
+/** The attribute key the app reads by name. Others are stored and replayed
+ *  without being understood. */
+export const CHAT_ATTR_REPLY_LANGUAGE = "reply_language"
 
 /** One row of the integer→chunk alias map. `startMs`/`endMs` are
  *  present only for cite-level aliases (chunks); card- and outline-
