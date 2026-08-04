@@ -39,6 +39,7 @@ from shruti_chat.application.conversation_attributes import (
     remembered_attributes,
 )
 from shruti_chat.application.router_turn import run_router_turn
+from shruti_chat.domain.author_selection import AuthorSelection
 from shruti_chat.domain.conversation_attributes import (
     REPLY_LANGUAGE,
     Attribute,

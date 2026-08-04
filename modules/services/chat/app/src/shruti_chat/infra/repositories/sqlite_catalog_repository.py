@@ -290,7 +290,7 @@ def _fuzzy_top(query: str, rows: list[_DictRow], limit: int) -> list[tuple[_Dict
 def _filter_track_ids_sync(
     db_path: Path,
     *,
-    author_id: str | None,
+    author_ids: list[str] | None,
     source_id: str | None,
     location_id: str | None,
     tag_ids: list[str] | None,
@@ -303,13 +303,14 @@ def _filter_track_ids_sync(
 ) -> list[str] | None:
     source_id = _normalize_source_id(db_path, source_id)
     has_ref = ref_prefix is not None or ref_from is not None or ref_to is not None
-    if not any([author_id, source_id, location_id, tag_ids, date_from, date_to,
+    if not any([author_ids, source_id, location_id, tag_ids, date_from, date_to,
                 anniversary_md, has_ref]):
         return None
     sql = ["SELECT t.id FROM tracks t WHERE t.hidden = 0"]
     params: list[Any] = []
-    if author_id:
-        sql.append("AND t.author_id = ?"); params.append(author_id)
+    if author_ids:
+        ph_a = ",".join("?" * len(author_ids))
+        sql.append(f"AND t.author_id IN ({ph_a})"); params.extend(author_ids)
     if location_id:
         sql.append("AND t.location_id = ?"); params.append(location_id)
     if date_from:
@@ -1134,7 +1135,7 @@ class SqliteCatalogRepository:
     async def filter_track_ids(
         self,
         *,
-        author_id: str | None,
+        author_ids: list[str] | None,
         source_id: str | None,
         location_id: str | None,
         tag_ids: list[str] | None,
@@ -1148,7 +1149,7 @@ class SqliteCatalogRepository:
         return await asyncio.to_thread(
             _filter_track_ids_sync,
             self._db_path,
-            author_id=author_id,
+            author_ids=author_ids,
             source_id=source_id,
             location_id=location_id,
             tag_ids=tag_ids,
