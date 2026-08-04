@@ -56,7 +56,13 @@ def distinctive_tokens(name: str) -> set[str]:
     """The identity-bearing tokens of `name` — honorifics and single letters
     (initials like "A. C.") removed. Empty when the name is nothing BUT
     honorifics ("Свами"), which denotes no particular teacher."""
-    folded = _fold(name).replace(".", " ").replace(",", " ")
+    # Hyphens and the rest of the punctuation are SEPARATORS, not letters. The
+    # naming convention is full of them — «Rohiṇī-suta», «Bhakti-siddhānta» — and a
+    # router that writes "Rohini-suta Prabhu" for a library that stored "Rohini
+    # Suta Prabhu" is the same teacher. Left as one token, it matched neither.
+    folded = _fold(name)
+    for ch in ".,-–—‑'\"()/":
+        folded = folded.replace(ch, " ")
     return {
         t for t in folded.split()
         if len(t) > 1 and t not in _HONORIFICS
