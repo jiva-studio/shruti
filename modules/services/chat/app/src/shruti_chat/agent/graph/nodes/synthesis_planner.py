@@ -150,6 +150,12 @@ async def synthesis_planner_node(
         conclusion_model=None,
         callbacks=[cb] if cb is not None else None,
         lang_name=lang_name,
+        # Who the lecture notes belong to, when the turn was narrowed to them.
+        speaker=(
+            ctx.author_scope.selection.names
+            if ctx.author_scope is not None and ctx.author_scope.selection.constrained
+            else ""
+        ),
         memory_notes=memory_notes,
     )
 
