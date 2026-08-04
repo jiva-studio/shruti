@@ -38,6 +38,7 @@ from shruti_chat.application.conversation_attributes import (
     detect_attributes,
     remembered_attributes,
 )
+from shruti_chat.application.author_lookup import own_speaker_names, resolve_author
 from shruti_chat.application.router_turn import run_router_turn
 from shruti_chat.domain.author_selection import AuthorSelection
 from shruti_chat.domain.conversation_attributes import (
@@ -131,6 +132,48 @@ async def _settle_attributes(
     if ctx.author_scope is not None:
         ctx.author_scope.apply(AuthorSelection.from_attributes(settled))
     return settled
+
+
+async def _turn_author(
+    state: ChatState, ctx: TurnContext, settled: dict[str, Attribute],
+) -> None:
+    """Apply the author this MESSAGE named, when no standing choice overrides it.
+
+    The router extracts a speaker as a NAME («что Прабхупада говорил о карме»,
+    «What Rohini suta Prabhu said about karma»). Nothing turned that name into a
+    constraint: the research path read `router_args["author_id"]`, a key the
+    router never set, so the name was silently dropped and the answer came from
+    whoever the corpus liked best — for a teacher the corpus does not have, that
+    produced prose attributing OTHER lecturers' words to them.
+
+    So it goes through the same scope every lane honours, for this turn only: the
+    attribute is untouched, so nothing sticks. Resolved against the catalog first,
+    then against the speakers this person's OWN uploads recorded — a personal
+    library is mostly teachers the corpus never heard of, and until now naming one
+    did nothing at all.
+
+    A standing selection wins: someone who set a filter deliberately does not have
+    it widened by mentioning a name.
+    """
+    scope = ctx.author_scope
+    if scope is None or scope.selection.constrained:
+        return
+    name = ((state.get("extracted_args") or {}).get("author") or "").strip()
+    if not name:
+        return
+    hit = await resolve_author(ctx.catalog_repo, name)
+    if hit is not None:
+        scope.apply(AuthorSelection(
+            ids=(hit.id,), names=hit.full_name, constrained=True, explicit=True,
+        ))
+        return
+    mine = await own_speaker_names(
+        ctx.chunk_repo, ctx.user_id or "", name, request_id=ctx.request_id,
+    )
+    if mine:
+        scope.apply(AuthorSelection(
+            raw_names=tuple(mine), names=name, constrained=True, explicit=True,
+        ))
 
 
 async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
@@ -241,6 +284,8 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
         "user_query": query,
     }
     attributes = await _settle_attributes(state, ctx, lang_task)
+    # The speaker THIS message named, once the standing choice is known.
+    await _turn_author(state, ctx, attributes)
     language = attributes.get(REPLY_LANGUAGE)
     if language is not None:
         update["lang"] = language.single()

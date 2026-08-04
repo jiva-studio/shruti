@@ -14,11 +14,14 @@ from __future__ import annotations
 from typing import Any
 
 from shruti_chat.application.author_names import names_match
+from shruti_chat.observability.logging import get_logger
 
 
 # Enough candidates that the right locale's row is in the pool — the fuzzy
 # ranking may put another locale of another teacher above ours.
 CANDIDATES = 5
+
+log = get_logger(__name__)
 
 
 async def resolve_author(catalog_repo: Any, name: str) -> Any | None:
@@ -40,3 +43,33 @@ async def resolve_author(catalog_repo: Any, name: str) -> Any | None:
         if names_match(text, hit.full_name):
             return hit
     return None
+
+
+async def own_speaker_names(
+    private_repo: Any,
+    user_id: str,
+    name: str,
+    *,
+    request_id: str | None = None,
+) -> list[str]:
+    """Which of this person's OWN recorded speaker names denote `name`.
+
+    A personal library is mostly teachers the curated corpus never heard of, so a
+    name the catalog cannot place is looked for here — over the few distinct names
+    one library holds, with the same matcher, so «Rohini Suta» finds all three
+    spellings three different ingests wrote.
+
+    Empty for an anonymous turn, a library-less one, or any failure: naming a
+    teacher we cannot place must degrade to "no constraint", never to a crash.
+    """
+    text = (name or "").strip()
+    if not text or private_repo is None or not user_id:
+        return []
+    try:
+        stored = await private_repo.get_own_author_names(user_id)
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "own_speaker_names_failed", request_id=request_id, error=str(exc),
+        )
+        return []
+    return [s for s in stored if names_match(text, s)]

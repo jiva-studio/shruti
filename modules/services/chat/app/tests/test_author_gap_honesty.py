@@ -291,3 +291,59 @@ async def test_a_failed_count_is_simply_left_out() -> None:
     # The disclaimer still gets written; only the extra clause is dropped.
     assert await author_gap_note(ctx, [_VERSE])
     assert "recording(s)" not in llm.situations[0]
+
+
+# ── their recordings exist, in another language ────────────────────────────
+
+
+class _Langs:
+    def __init__(self, langs: list[str], untagged: int = 0) -> None:
+        self._langs = langs
+        self._untagged = untagged
+
+    async def owned_langs_for_authors(self, _user_id, _ids, _raws):
+        return list(self._langs)
+
+    async def unattributed_owned_count(self, _user_id):
+        return self._untagged
+
+
+async def test_it_says_which_language_their_recordings_are_in() -> None:
+    """The production case: three lectures by the asked-for teacher, all English,
+    a Russian question — «не найдено» is the wrong answer, «они на английском» is
+    the right one."""
+    llm = _LLM()
+    ctx = _Ctx(llm=llm, author_scope=_scope([]))
+    ctx.chunk_repo = _Langs(["en"])
+    ctx.user_id = "u-1"
+    assert await author_gap_note(ctx, [_VERSE])
+    asked = llm.situations[0]
+    # A distinctive phrase, not the bare code: "en" hides inside "sentence".
+    assert "not the language of this answer" in asked
+    assert "are in en," in asked
+
+
+async def test_no_language_clause_when_they_are_in_the_answers_language() -> None:
+    # Then the miss is about the topic, and blaming the language would mislead.
+    llm = _LLM()
+    ctx = _Ctx(llm=llm, author_scope=_scope([]))
+    ctx.chunk_repo = _Langs(["ru"])
+    ctx.user_id = "u-1"
+    await author_gap_note(ctx, [_VERSE])
+    assert "not the language of this answer" not in llm.situations[0]
+
+
+async def test_a_failed_language_lookup_is_left_out() -> None:
+    class _Broken:
+        async def owned_langs_for_authors(self, *_a):
+            raise RuntimeError("relation missing")
+
+        async def unattributed_owned_count(self, _u):
+            return 0
+
+    llm = _LLM()
+    ctx = _Ctx(llm=llm, author_scope=_scope([]))
+    ctx.chunk_repo = _Broken()
+    ctx.user_id = "u-1"
+    assert await author_gap_note(ctx, [_VERSE])
+    assert "not the language of this answer" not in llm.situations[0]

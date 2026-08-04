@@ -485,10 +485,17 @@ async def fanout_search_with_boost(
             if not owned:
                 return []
             _t = time.perf_counter()
+            # No language filter here, unlike the corpus lane. A personal library
+            # holds tens of recordings, not half a million, so the filter saves
+            # nothing — and it costs everything: someone's own lectures are often
+            # in another language than the question, and a Russian question would
+            # never see their English uploads. The ranking still decides; the
+            # answer is written in the reply language regardless, and a quote can
+            # be translated (`translate_citations`).
             scored = await chunk_repo.search_by_embedding(
                 q_vec,
                 eligible_track_ids=owned,
-                lang=use_lang,
+                lang=None,
                 top_k=fetch_k,
                 kind="user_track",
             )

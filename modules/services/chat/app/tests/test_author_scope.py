@@ -511,3 +511,128 @@ async def test_the_planner_hands_the_scope_to_its_own_top_up(monkeypatch) -> Non
     )
 
     assert seen.get("author_scope") is scope
+
+
+# ── the author THIS message named ─────────────────────────────────────────
+#
+# The seam that shipped broken for everyone: the router extracts a speaker as a
+# NAME, the research path read `router_args["author_id"]` — a key the router never
+# writes — so no per-turn author ever narrowed anything. It was "tested":
+# `test_router_args_propagated_to_fanout` hands the pipeline an `author_id` of its
+# own and asserts it arrives. Testing a seam from the middle proves both halves
+# exist, not that they meet.
+
+
+class _Dict:
+    """Catalog dictionary holding one author, in two locales like the real one —
+    a single-locale fake cannot match a name typed in the other script."""
+
+    async def resolve(self, kind, text, *, lang, limit):
+        from types import SimpleNamespace
+
+        return [
+            SimpleNamespace(id=_OURS, full_name="A. C. Bhaktivedanta Swami Prabhupada"),
+            SimpleNamespace(id=_OURS, full_name="А. Ч. Бхактиведанта Свами Прабхупада"),
+        ]
+
+    async def filter_track_ids(self, *, author_ids=None, **_kw):
+        return ["t-ours"] if author_ids else None
+
+
+class _MyLibrary:
+    def __init__(self, names: list[str]) -> None:
+        self._names = names
+
+    async def get_own_author_names(self, _user_id):
+        return list(self._names)
+
+
+async def _turn_author_applied(
+    *, asked: str, dictionary=None, library=None, sticky: bool = False,
+    user_id: str = "u-1",
+) -> AuthorScope:
+    from shruti_chat.agent.graph.nodes.router import _turn_author
+
+    scope = AuthorScope(
+        catalog_repo=dictionary or _Dict(),
+        private_repo=library or _MyLibrary([]),
+        user_id=user_id,
+        request_id="req",
+    )
+    if sticky:
+        scope.apply(_selection("author_chosen_before"))
+
+    class _Ctx:
+        catalog_repo = dictionary or _Dict()
+        chunk_repo = library or _MyLibrary([])
+        author_scope = scope
+        request_id = "req"
+
+    _Ctx.user_id = user_id
+    await _turn_author({"extracted_args": {"author": asked}}, _Ctx(), {})
+    return scope
+
+
+async def test_a_named_corpus_author_narrows_this_turn() -> None:
+    scope = await _turn_author_applied(asked="Прабхупада")
+    # The name the router extracted, resolved and in force for retrieval.
+    assert scope.selection.constrained
+    assert scope.selection.ids == (_OURS,)
+    assert await scope.track_ids() == ["t-ours"]
+
+
+async def test_a_teacher_only_my_library_knows_narrows_it_too() -> None:
+    scope = await _turn_author_applied(
+        asked="Rohini suta Prabhu",
+        library=_MyLibrary(["Rohini Suta Prabhu", "H.G. Rohini Suta Prabhu"]),
+    )
+    assert scope.selection.constrained
+    assert set(scope.selection.raw_names) == {
+        "Rohini Suta Prabhu", "H.G. Rohini Suta Prabhu",
+    }
+    # And the corpus has no such author, so its lecture lane must go empty rather
+    # than answer from whoever it likes best — which is how production ended up
+    # attributing other lecturers' words to him.
+    assert await scope.track_ids() == []
+
+
+async def test_a_name_nobody_has_constrains_nothing() -> None:
+    scope = await _turn_author_applied(asked="Some Visiting Speaker")
+    assert not scope.selection.constrained
+    assert await scope.track_ids() is None
+
+
+async def test_a_standing_choice_is_not_widened_by_a_mention() -> None:
+    scope = await _turn_author_applied(
+        asked="Прабхупада", sticky=True,
+    )
+    assert scope.selection.ids == ("author_chosen_before",)
+
+
+async def test_no_author_in_the_message_leaves_the_scope_alone() -> None:
+    scope = await _turn_author_applied(asked="")
+    assert not scope.selection.constrained
+
+
+async def test_an_anonymous_turn_cannot_search_a_library() -> None:
+    scope = await _turn_author_applied(
+        asked="Rohini suta Prabhu",
+        library=_MyLibrary(["Rohini Suta Prabhu"]),
+        user_id="",
+    )
+    assert not scope.selection.constrained
+
+
+async def test_the_router_calls_it(monkeypatch) -> None:
+    """The wire itself: `router_node` must invoke it. Everything above passes with
+    the call missing — that is exactly how the last two of these shipped."""
+    from shruti_chat.agent.graph.nodes import router as router_mod
+
+    called: list[str] = []
+
+    async def _spy(state, ctx, settled):
+        called.append((state.get("extracted_args") or {}).get("author", ""))
+
+    monkeypatch.setattr(router_mod, "_turn_author", _spy)
+    src = __import__("inspect").getsource(router_mod.router_node)
+    assert "_turn_author(" in src, "router_node must apply the message's author"
