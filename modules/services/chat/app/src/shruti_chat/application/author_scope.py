@@ -60,6 +60,17 @@ class AuthorScope:
         self._selection = selection
         self._resolved = None
         self._done = False
+        # Logged even when nothing is selected. A filter that narrows nothing and
+        # a filter that was never applied produce the identical answer, so
+        # without this line a production trace cannot tell them apart — which is
+        # exactly the hour this feature cost.
+        log.info(
+            "author_scope_applied",
+            request_id=self._request_id,
+            constrained=selection.constrained,
+            authors=len(selection.ids),
+            explicit=selection.explicit,
+        )
 
     async def track_ids(self) -> list[str] | None:
         """Track ids the selection allows, or None when nothing is constrained.
@@ -91,6 +102,14 @@ class AuthorScope:
             ids = None
         self._resolved = list(ids) if ids is not None else None
         self._done = True
+        log.info(
+            "author_scope_resolved",
+            request_id=self._request_id,
+            authors=len(self._selection.ids),
+            # None = the catalog declined to constrain (a hiccup, failed open);
+            # 0 = the selected lecturers genuinely have nothing in the corpus.
+            tracks=None if self._resolved is None else len(self._resolved),
+        )
         return self._resolved
 
     async def narrow(self, eligible: list[str] | None) -> list[str] | None:
