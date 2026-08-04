@@ -243,7 +243,9 @@ def test_no_history_no_attributes() -> None:
 
 async def test_the_registered_attribute_is_read_off_the_message() -> None:
     llm = FakeLLM(response=_OUT_RU)
-    out = await detect_attributes("отвечай по-русски", llm=llm)
+    out = await detect_attributes(
+        "отвечай по-русски", llm=llm, specs=(ReplyLanguageSpec(),),
+    )
     assert out[REPLY_LANGUAGE].single() == "ru"
     assert out[REPLY_LANGUAGE].explicit
     assert llm.calls == 1
@@ -304,15 +306,22 @@ async def test_each_attribute_gets_its_own_run_name() -> None:
     # So a failure is attributable in Langfuse to the attribute, not to "the
     # attribute call".
     llm = FakeLLM(response=_OUT_RU)
-    await detect_attributes("отвечай по-русски", llm=llm)
+    await detect_attributes(
+        "отвечай по-русски", llm=llm, specs=(ReplyLanguageSpec(),),
+    )
     assert llm.started == [f"attribute_{REPLY_LANGUAGE}"]
 
 
 async def test_the_same_message_is_answered_from_cache() -> None:
     cache = FakeCache()
     llm = FakeLLM(response=_OUT_EN)
-    first = await detect_attributes("what is karma?", llm=llm, kv_cache=cache)
-    second = await detect_attributes("what is karma?", llm=llm, kv_cache=cache)
+    specs = (ReplyLanguageSpec(),)
+    first = await detect_attributes(
+        "what is karma?", llm=llm, kv_cache=cache, specs=specs,
+    )
+    second = await detect_attributes(
+        "what is karma?", llm=llm, kv_cache=cache, specs=specs,
+    )
     assert first == second
     assert llm.calls == 1
 
