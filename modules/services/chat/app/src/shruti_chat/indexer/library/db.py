@@ -98,10 +98,16 @@ async def ensure_library(settings: Settings | None = None, force: bool = False) 
 
 
 def _verify_library_file(path: Path) -> None:
-    """Sanity-check the freshly-downloaded library SQLite has the schema we expect."""
+    """Sanity-check the freshly-downloaded library SQLite has the schema we expect.
+
+    Views count: the word-by-word migration promoted `library_verse_variants`
+    to `library_verse_translations` and left the old name behind as a
+    backward-compat view. Reads (`SELECT language, translation ...`) work
+    against either, so gate on the name being readable, not on its storage kind.
+    """
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as conn:
         names = {r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")}
+            "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')")}
     required = {"library_verses", "library_verse_variants",
                 "library_documents", "library_document_variants", "library_titles"}
     missing = required - names
