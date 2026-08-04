@@ -354,16 +354,21 @@ async def synthesis_planner_node(
     if not final_outline.theses:
         scope = getattr(ctx, "author_scope", None)
         if scope is not None and scope.private_hits:
-            # Their OWN recordings were retrieved for this turn — production
-            # printed «Не нашёл в корпусе материалов на эту тему» with fourteen
-            # translated fragments of the asked-for teacher attached to it. The
-            # planner may well be right that mid-sentence transcript scraps make
-            # poor theses, but "nothing found" is then a false statement. Hand the
-            # notes to the synthesizer free-form instead of refusing over them.
+            # An EMPTY outline is the refusal shape: the synthesizer sees it and
+            # prints the canned "nothing in the corpus" line. Production printed
+            # exactly that over fourteen translated fragments of the asked-for
+            # teacher — the planner rejected all eighteen notes (they are
+            # mid-sentence scraps of speech, so it is not obviously wrong) and the
+            # answer then denied the very thing it had attached.
+            #
+            # `outline=None` is the free-form shape instead: no plan, but the notes
+            # are still there to answer from. Their own recordings were retrieved;
+            # refusing over them states something false.
             log.info(
                 "planner_rejected_all_but_private_notes_exist",
                 request_id=ctx.request_id, private_hits=scope.private_hits,
             )
+            update["outline"] = None
         else:
             update["corpus_insufficient"] = _fallback_enabled(state, ctx)
     combined_appends = list(new_commentaries) + list(fresh_chunks)

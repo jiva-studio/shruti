@@ -380,15 +380,26 @@ async def test_no_refusal_over_their_own_retrieved_recordings() -> None:
     """Production printed «Не нашёл в корпусе материалов на эту тему» with fourteen
     translated fragments of the asked-for teacher attached. The planner may be right
     that mid-sentence transcript scraps make poor theses; "nothing found" is still
-    false. The notes go to the synthesizer free-form instead."""
+    false. The notes go to the synthesizer free-form instead.
+
+    Drives the REJECT-EVERYTHING branch: a note in the pool and a planner that
+    returns no theses. My first version of this test passed an empty pool, which
+    takes an earlier return where the flag is already False for another reason —
+    it proved nothing, and removing the guard did not fail it.
+    """
     from dataclasses import field as dc_field
 
     from lectorium_chat.agent.graph.nodes.synthesis_planner import (
         synthesis_planner_node,
     )
+    from lectorium_chat.research.models import Outline
 
-    scope = _scope([])
-    scope.note_private_hits(14)
+    class _LLMEmptyPlan:
+        async def structured_output(self, *_a, **_k):
+            return Outline(theses=[])
+
+        async def text_completion(self, *_a, **_k):
+            return ""
 
     @dataclass
     class _Runtime:
@@ -396,8 +407,33 @@ async def test_no_refusal_over_their_own_retrieved_recordings() -> None:
 
     state = {
         "user_query": "Рохини сута прабху о карме", "lang": "ru",
-        "tool_results": [], "config": {"enable_corpus_fallback": True},
+        "tool_results": [{"type": "lecture", "text": "x", "score": 0.8, "meta": {}}],
+        "config": {"enable_corpus_fallback": True},
     }
-    out = await synthesis_planner_node(state, _Runtime(context=_Ctx(author_scope=scope)))
-    # No refusal flag: the turn must not claim the corpus had nothing.
-    assert out.get("corpus_insufficient") is not True
+
+    heard = _scope([])
+    heard.note_private_hits(14)
+    ctx = _Ctx(llm=_LLMEmptyPlan(), author_scope=heard)
+    for extra in ("langfuse_trace_id", "embedder", "chunk_repo", "catalog_repo",
+                  "aliases", "reranker"):
+        setattr(ctx, extra, None)
+    ctx.lang_name = ""
+    out = await synthesis_planner_node(state, _Runtime(context=ctx))
+    # An EMPTY outline is the refusal shape — the synthesizer prints the canned
+    # "nothing found" line from it. None is the free-form shape: no plan, but the
+    # notes are still answered from.
+    assert out["outline"] is None
+    assert "corpus_insufficient" not in out or out["corpus_insufficient"] is False
+
+    # Contrast: no recordings of theirs were used, and the turn is NOT narrowed —
+    # then an all-rejected plan is a genuine corpus miss and the fallback fires.
+    plain = AuthorScope(catalog_repo=_Catalog(None), request_id="req")
+    ctx2 = _Ctx(llm=_LLMEmptyPlan(), author_scope=plain)
+    for extra in ("langfuse_trace_id", "embedder", "chunk_repo", "catalog_repo",
+                  "aliases", "reranker"):
+        setattr(ctx2, extra, None)
+    ctx2.lang_name = ""
+    out2 = await synthesis_planner_node(state, _Runtime(context=ctx2))
+    assert out2["corpus_insufficient"] is True
+    # And it keeps the refusal shape, because there really is nothing of theirs.
+    assert out2["outline"] is not None and out2["outline"].theses == []
