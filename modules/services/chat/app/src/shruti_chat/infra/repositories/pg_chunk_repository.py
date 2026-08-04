@@ -203,6 +203,36 @@ class PgChunkRepository:
             return []
         return [r["author_raw"] for r in rows if (r["author_raw"] or "").strip()]
 
+    async def owned_langs_for_authors(
+        self, user_id: str, author_ids: list[str], author_raws: list[str],
+    ) -> list[str]:
+        """Languages of this person's own recordings by the given lecturers.
+
+        Only useful to say out loud: when their recordings exist but in another
+        language, "nothing found" is the wrong answer and "they are in English" is
+        the right one.
+        """
+        raws = list(author_raws or [])
+        if not user_id or (not author_ids and not raws):
+            return []
+        try:
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT DISTINCT c.lang
+                      FROM chunk_meta m
+                      JOIN chunks c
+                        ON c.track_id = m.track_id AND c.kind = 'user_track'
+                     WHERE m.owner_id = $1
+                       AND (m.author_id = ANY($2::text[])
+                            OR m.author_raw = ANY($3::text[]))
+                    """,
+                    user_id, list(author_ids), raws,
+                )
+        except asyncpg.UndefinedTableError:
+            return []
+        return [r["lang"] for r in rows if r["lang"]]
+
     async def unattributed_owned_count(self, user_id: str) -> int:
         """How many of this user's own tracks have no resolved speaker.
 

@@ -45,6 +45,15 @@ async def author_gap_note(
         return ""
 
     who = scope.selection.names or "the selected lecturers"
+    # Their own uploads may be in another language than the answer. That is worth
+    # saying rather than hiding — «его лекции есть, но на английском» is an
+    # answer; silence reads as "nothing exists".
+    other_langs = await _their_languages(ctx, scope)
+    langs = (
+        f" Their recordings in the personal library are in {', '.join(other_langs)},"
+        " not the language of this answer — say which language they are in."
+        if other_langs else ""
+    )
     # `[]` means the catalog has nothing by them; `None` means the lookup failed
     # open, and then we do not get to claim anything about the corpus.
     try:
@@ -68,14 +77,14 @@ async def author_gap_note(
             f"The user asked to be answered only from lectures by {who}. Those "
             "lectures exist in the corpus, but none of them covers this "
             "question, so the answer below is drawn from scripture and its "
-            "commentaries instead. Say this in one short sentence." + mine
+            "commentaries instead. Say this in one short sentence." + langs + mine
         )
     else:
         situation = (
             f"The user asked to be answered only from lectures by {who}. The "
             "corpus holds no lectures by them at all, so the answer below is "
             "drawn from scripture and its commentaries instead. Say this in one "
-            "short sentence." + mine
+            "short sentence." + langs + mine
         )
 
     from shruti_chat.agent.graph.nodes._worker_common import localized_reply
@@ -91,6 +100,31 @@ async def author_gap_note(
         untagged_own=untagged,
     )
     return line
+
+
+async def _their_languages(ctx: Any, scope: Any) -> list[str]:
+    """Languages the chosen lecturers' OWN recordings are in, when the answer's
+    language is not among them.
+
+    Empty whenever we cannot say it confidently: no repository, no user, a failure,
+    or the recordings do exist in the answer's language (then the miss is about the
+    topic, not the language, and mentioning it would mislead).
+    """
+    repo = getattr(ctx, "chunk_repo", None)
+    user_id = getattr(ctx, "user_id", "") or ""
+    if repo is None or not user_id or not scope.selection.explicit:
+        return []
+    try:
+        langs = await repo.owned_langs_for_authors(
+            user_id,
+            list(scope.selection.ids),
+            list(scope.selection.raw_names),
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    answer_lang = (getattr(ctx, "lang_code", "") or "").split("-")[0]
+    others = sorted({lg for lg in langs if lg and lg.split("-")[0] != answer_lang})
+    return others
 
 
 async def _untagged_own(ctx: Any) -> int:
