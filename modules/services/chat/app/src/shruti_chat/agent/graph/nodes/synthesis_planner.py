@@ -352,7 +352,20 @@ async def synthesis_planner_node(
     # (Outline(theses=[])) — a relevance miss, not a degradation. Flag it
     # for the memory-pass fallback. A non-empty plan clears the flag.
     if not final_outline.theses:
-        update["corpus_insufficient"] = _fallback_enabled(state, ctx)
+        scope = getattr(ctx, "author_scope", None)
+        if scope is not None and scope.private_hits:
+            # Their OWN recordings were retrieved for this turn — production
+            # printed «Не нашёл в корпусе материалов на эту тему» with fourteen
+            # translated fragments of the asked-for teacher attached to it. The
+            # planner may well be right that mid-sentence transcript scraps make
+            # poor theses, but "nothing found" is then a false statement. Hand the
+            # notes to the synthesizer free-form instead of refusing over them.
+            log.info(
+                "planner_rejected_all_but_private_notes_exist",
+                request_id=ctx.request_id, private_hits=scope.private_hits,
+            )
+        else:
+            update["corpus_insufficient"] = _fallback_enabled(state, ctx)
     combined_appends = list(new_commentaries) + list(fresh_chunks)
     if combined_appends:
         # `tool_results` state field uses an append-reducer so returning
