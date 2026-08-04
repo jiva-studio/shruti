@@ -102,8 +102,14 @@ async def author_gap_note(
 
     reply = await localized_reply(ctx, situation)
     line = (reply.line or "").strip()
+    from collections import Counter
+
     log.info(
         "author_gap_note",
+        # What the pool actually held when we decided to apologise. The first
+        # version of this note fired above four citations of the very teacher it
+        # said had nothing, and no amount of reading told me why.
+        pool=dict(Counter((n or {}).get("type") for n in notes or [])),
         request_id=getattr(ctx, "request_id", None),
         authors=len(scope.selection.ids),
         their_tracks=len(allowed),
