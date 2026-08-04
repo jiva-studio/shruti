@@ -142,11 +142,30 @@ func (uc UseCase) List(ctx context.Context, opts library.ListAttributionsOpts) (
 	return uc.Repo.AttributionList(ctx, opts)
 }
 
-func (uc UseCase) TextAdd(ctx context.Context, id, language, text string) error {
+// TextAdd inserts one trigger variant and, unless `skipTranslate`, mirrors
+// Create's behaviour by best-effort translating it into every other supported
+// language. Without this a curator who grows an attribution's trigger set after
+// creation silently leaves every non-source locale behind — the source-language
+// triggers match, the others never do.
+func (uc UseCase) TextAdd(ctx context.Context, id, language, text string, skipTranslate bool) error {
 	if id == "" || language == "" || text == "" {
 		return fmt.Errorf("text_add: id, language, text required")
 	}
-	return uc.Repo.AttributionTextAdd(ctx, id, language, text)
+	if err := uc.Repo.AttributionTextAdd(ctx, id, language, text); err != nil {
+		return err
+	}
+	if skipTranslate {
+		return nil
+	}
+	attr, found, err := uc.Repo.AttributionGet(ctx, id)
+	if err != nil || !found {
+		// The insert landed; a missing row here only costs the translation.
+		slog.WarnContext(ctx, "text_add: cannot resolve kind, skipping translate",
+			"attribution_id", id, "err", err)
+		return nil
+	}
+	uc.autoTranslateTriggers(ctx, id, attr.Kind, language, text)
+	return nil
 }
 
 func (uc UseCase) TextRemove(ctx context.Context, id, language, text string) error {

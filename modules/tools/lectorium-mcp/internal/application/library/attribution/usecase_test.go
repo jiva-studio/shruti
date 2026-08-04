@@ -387,3 +387,68 @@ func TestNoteTranslate_FillsMissingOnly(t *testing.T) {
 		t.Fatalf("expected 0 on re-run (en already exists), got %d", n)
 	}
 }
+
+func TestTextAdd_AutoTranslatesIntoOtherLangs(t *testing.T) {
+	repo := newFakeRepo()
+	tr := &fakeTranslator{}
+	uc := UseCase{
+		Repo:       repo,
+		Translator: tr,
+		Minter:     fakeMinter{tail: "x"},
+		Langs:      []string{"ru", "en", "hi"},
+	}
+	id, err := uc.Create(context.Background(), library.AttrMemory, "ru", "дхарма-йуддха", "")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	before := len(tr.calls)
+
+	if err := uc.TextAdd(context.Background(), id, "ru", "можно ли преданному воевать", false); err != nil {
+		t.Fatalf("text_add: %v", err)
+	}
+
+	// One translate call per non-source language.
+	if got := len(tr.calls) - before; got != 2 {
+		t.Fatalf("expected 2 translate calls for the added trigger, got %d", got)
+	}
+	got, _, _ := repo.AttributionGet(context.Background(), id)
+	for _, lang := range []string{"ru", "en", "hi"} {
+		if len(got.Texts[lang]) != 2 {
+			t.Fatalf("lang %s: expected 2 triggers, got %v", lang, got.Texts[lang])
+		}
+	}
+}
+
+func TestTextAdd_SkipTranslate(t *testing.T) {
+	repo := newFakeRepo()
+	tr := &fakeTranslator{}
+	uc := UseCase{
+		Repo:       repo,
+		Translator: tr,
+		Minter:     fakeMinter{tail: "x"},
+		Langs:      []string{"ru", "en"},
+	}
+	id, _ := uc.Create(context.Background(), library.AttrBoost, "ru", "война", "")
+	before := len(tr.calls)
+
+	if err := uc.TextAdd(context.Background(), id, "ru", "агрессия", true); err != nil {
+		t.Fatalf("text_add: %v", err)
+	}
+
+	if got := len(tr.calls) - before; got != 0 {
+		t.Fatalf("skip_translate=true still called the translator %d times", got)
+	}
+	got, _, _ := repo.AttributionGet(context.Background(), id)
+	if len(got.Texts["en"]) != 1 {
+		t.Fatalf("en should keep only the create-time variant, got %v", got.Texts["en"])
+	}
+}
+
+func TestTextAdd_NoTranslator_OK(t *testing.T) {
+	repo := newFakeRepo()
+	uc := UseCase{Repo: repo, Minter: fakeMinter{tail: "x"}, Langs: []string{"ru", "en"}}
+	id, _ := uc.Create(context.Background(), library.AttrPinned, "ru", "вопрос", "")
+	if err := uc.TextAdd(context.Background(), id, "ru", "ещё вопрос", false); err != nil {
+		t.Fatalf("text_add without translator: %v", err)
+	}
+}

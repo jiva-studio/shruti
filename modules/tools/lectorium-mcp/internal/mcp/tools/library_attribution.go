@@ -154,10 +154,11 @@ func registerAttributionList(s *server.MCPServer, deps LibraryAttributionDeps) {
 func registerAttributionTriggerAdd(s *server.MCPServer, deps LibraryAttributionDeps) {
 	const kind = "library.attribution.trigger_add"
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("Add one trigger phrase (a short search key) to an attribution. Duplicate (id, language, text) is a graceful no-op."),
+		mcp.WithDescription("Add one trigger phrase (a short search key) to an attribution. Auto-translates into every other configured locale, like create — pass skip_translate=true to add the source-language variant only. Duplicate (id, language, text) is a graceful no-op."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 		mcp.WithString("text", mcp.Required()),
+		mcp.WithBoolean("skip_translate", mcp.Description("Add only the source-language variant; skip auto-translation into the other locales.")),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("id")
@@ -172,7 +173,8 @@ func registerAttributionTriggerAdd(s *server.MCPServer, deps LibraryAttributionD
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		if err := deps.UseCase.TextAdd(ctx, id, lang, text); err != nil {
+		skipTranslate := req.GetBool("skip_translate", false)
+		if err := deps.UseCase.TextAdd(ctx, id, lang, text, skipTranslate); err != nil {
 			return mapAttributionError(kind, err), nil
 		}
 		attr, _, _ := deps.UseCase.Get(ctx, id)
