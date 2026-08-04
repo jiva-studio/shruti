@@ -23,6 +23,9 @@ from lectorium_chat.research.models import (
     SubQuery,
     TopicExtractionResult,
 )
+from lectorium_chat.application.author_scope import AuthorScope
+from lectorium_chat.domain.author_selection import AuthorSelection
+from lectorium_chat.domain.conversation_attributes import LECTURE_AUTHORS, Attribute
 from lectorium_chat.research.pipeline import (
     _attach_memory,
     _resolve_memory,
@@ -1185,3 +1188,129 @@ async def test_memory_only_takes_lean_path(monkeypatch) -> None:
     assert result.matched_topic_ids == []      # WIDE path never ran
     tokens = sorted(e["meta"]["tokens"] for e in result.authoritative_refs)
     assert tokens == ["6.47", "7.7", "9.22"]
+
+
+@pytest.mark.asyncio
+async def test_a_selection_with_no_lectures_leaves_no_lecture_note_anywhere():
+    """The whole pipeline, driven exactly as the worker drives it.
+
+    The production probe kept finding transcript citations under a selection
+    whose lecturer has ZERO lectures in the corpus, and every unit test passed —
+    because each pinned one lane in isolation. This one runs the real
+    `run_research` with a scope that resolves to no tracks, while the corpus
+    would happily hand back a lecture from any lane that forgets to ask: the
+    fanout, and a track pinned by attribution.
+    """
+    pool = FakePool({
+        # A question match that pins a TRACK — the path that bypasses every
+        # eligible-id filter, since it arrives by link rather than by search.
+        ("ru", "pinned"): [
+            _row("attribution_q1", 0.92, [
+                {"ref_kind": "track", "target_id": "track_theirs@1000-2000"},
+            ]),
+        ],
+        (None, "pinned"): [],
+        ("ru", "boost"): [],
+    })
+    chunk_repo = FakeChunkRepo(
+        lecture_results=[
+            _Scored(_LecChunk("track_theirs", 1000, 2000, "ЛЕКЦИЯ ДРУГОГО", "ru"), 0.95),
+        ],
+        library_results=[
+            _Scored(_LibChunk("verse_bg_2_13", "verse", "СТИХ", "ru",
+                              source_id="src", tokens="2.13", addr_label="БГ 2.13"), 0.6),
+        ],
+        by_target={
+            ("track", "track_theirs@1000-2000"): [
+                _LecChunk("track_theirs", 1000, 2000, "ЛЕКЦИЯ ДРУГОГО", "ru"),
+            ],
+        },
+    )
+    llm = FakeLLM(by_schema={"QueryPlan": _plan("q1")})
+
+    scope = AuthorScope(catalog_repo=_NoTracksForAnyone(), request_id="req")
+    scope.apply(AuthorSelection.from_attributes({
+        LECTURE_AUTHORS: Attribute(value=["author_chosen"], explicit=True),
+    }))
+
+    result = await run_research(
+        question="как развить смирение", lang="ru", router_args={},
+        author_scope=scope,
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+
+    notes = list(result.research_chunks) + list(result.authoritative_refs)
+    lectures = [n for n in notes if n.get("type") == "lecture"]
+    assert lectures == [], f"a lecture reached the answer: {lectures}"
+    # And the books are untouched — the selection narrows lecturers, not canon.
+    assert any(n.get("type") == "verse" for n in notes)
+
+
+@pytest.mark.asyncio
+async def test_the_long_path_narrows_its_fanout_rounds_too():
+    """Same guarantee on the LONG path, which is what production actually took.
+
+    A topic match with no pinned question sends the turn through topic lookup
+    and the multi-round fanout — different code from the lean path above, and
+    the rounds are where a live probe found 31 other lecturers' talks.
+    """
+    pool = FakePool({
+        ("ru", "pinned"): [],
+        (None, "pinned"): [],
+        ("ru", "boost"): [
+            _row("attribution_t1", 0.75, [
+                {"ref_kind": "track", "target_id": "track_theirs@1000-2000"},
+            ]),
+        ],
+    })
+    chunk_repo = FakeChunkRepo(
+        lecture_results=[
+            _Scored(_LecChunk("track_theirs", 1000, 2000, "ЛЕКЦИЯ ДРУГОГО", "ru"), 0.95),
+        ],
+        library_results=[
+            _Scored(_LibChunk("verse_bg_2_13", "verse", "СТИХ", "ru",
+                              source_id="src", tokens="2.13", addr_label="БГ 2.13"), 0.6),
+        ],
+        by_target={
+            ("track", "track_theirs@1000-2000"): [
+                _LecChunk("track_theirs", 1000, 2000, "ЛЕКЦИЯ ДРУГОГО", "ru"),
+            ],
+        },
+    )
+    llm = FakeLLM(by_schema={
+        "QueryPlan": _plan("q1", "q2"),
+        "TopicExtractionResult": TopicExtractionResult(topics=["смирение"]),
+    })
+
+    scope = AuthorScope(catalog_repo=_NoTracksForAnyone(), request_id="req")
+    scope.apply(AuthorSelection.from_attributes({
+        LECTURE_AUTHORS: Attribute(value=["author_chosen"], explicit=True),
+    }))
+
+    result = await run_research(
+        question="как развить смирение", lang="ru", router_args={},
+        author_scope=scope,
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+
+    notes = list(result.research_chunks) + list(result.authoritative_refs)
+    lectures = [n for n in notes if n.get("type") == "lecture"]
+    assert lectures == [], f"a lecture reached the answer: {lectures}"
+    assert chunk_repo.fanout_calls == 0, (
+        "the lecture lane called the corpus even though the selection allows no "
+        "track — the lane must be disabled, not filtered after the fact"
+    )
+
+
+class _NoTracksForAnyone:
+    """Catalog where the chosen lecturer has nothing — the corpus knows them,
+    they simply never spoke a recorded word."""
+
+    async def filter_track_ids(self, **_kw):
+        return []
+
+    async def get_author_names(self, author_ids, *, lang):
+        return {a: "Выбранный" for a in author_ids}
+
+    async def language_name(self, code):
+        return None
