@@ -66,7 +66,7 @@ func TestDurationComesFromTrackAudio(t *testing.T) {
 	} {
 		tr := &Track{
 			ID: tc.id, Titles: map[string]string{}, Durations: map[string]int64{},
-			TranscriptLangs: map[string]bool{},
+			Transcripts: map[string]string{},
 		}
 		if err := repo.fillVariants(context.Background(), tr); err != nil {
 			t.Fatalf("%s: %v", tc.id, err)
@@ -105,7 +105,7 @@ func TestDurationAbsentWithoutAudio(t *testing.T) {
 	defer h.Close()
 
 	tr := &Track{ID: "t", Titles: map[string]string{}, Durations: map[string]int64{},
-		TranscriptLangs: map[string]bool{}}
+		Transcripts: map[string]string{}}
 	if err := New(h).fillVariants(context.Background(), tr); err != nil {
 		t.Fatal(err)
 	}

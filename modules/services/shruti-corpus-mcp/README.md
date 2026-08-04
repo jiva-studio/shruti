@@ -20,6 +20,7 @@ unified `search` (with a `title` type), `verse_get`/`document_get`, and
 | `library.db` (SQLite artifact) | `modernc.org/sqlite`, read-only | `verse.*`, `document.*`, source stats |
 | `current.db` catalog (SQLite artifact) | `modernc.org/sqlite`, read-only | source/author/location dicts, reference resolution, `track.*` |
 | Embedding API (OpenAI-compatible) | outbound HTTP | embed the `search` / `*.resolve` query |
+| Published transcript JSON (`public/tracks/<id>/transcripts/<lang>.json`) | outbound HTTP, cached | the spoken sentences `excerpt_render` shows under its player |
 
 The SQLite driver is **pure Go** (`modernc.org/sqlite`, no CGO) so the release
 image stays a static `scratch` container. Both SQLite files are opened
