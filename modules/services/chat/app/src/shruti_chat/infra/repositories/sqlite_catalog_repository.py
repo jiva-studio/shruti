@@ -32,7 +32,7 @@ from rapidfuzz import fuzz, process, utils
 from shruti_chat.agent.tools._fts import matches as _title_matches, tokens as _title_tokens
 from shruti_chat.domain.entities import Collection, Reference, ResolvedEntity, Track
 from shruti_chat.domain.ports.catalog_repository import ResolveKind
-from shruti_chat.infra.repositories._ref_filter import (
+from shruti_chat.domain.scripture_ref import (
     matches_ref as _matches_ref,
     parse_tokens as _parse_tokens,
     parse_user_prefix as _parse_user_prefix,
@@ -549,8 +549,8 @@ def _filter_track_ids_by_ref(
 
     The full set has ~5k rows in production — Python-side filtering is
     sub-millisecond, and the dot-separated `tokens` format isn't
-    practical to filter from SQL. Parser + matcher live in
-    `_ref_filter` so they can be unit-tested without the agent stack.
+    practical to filter from SQL. Parser + matcher are domain rules
+    (`domain/scripture_ref`), shared with the lecture-search filter.
     """
     sql = "SELECT track_id, tokens FROM track_references WHERE tokens IS NOT NULL"
     params: list[Any] = []
