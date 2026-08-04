@@ -171,10 +171,10 @@ async def synthesis_planner_node(
     # (corpus) language, NOT the raw answer language: for a non-corpus answer
     # (uk / sr-*) `state["lang"]` finds no purport and falls back to a stray
     # Russian one. `distinct_langs` is cached, so this is a cache hit.
-    retrieval_lang = await resolve_retrieval_lang(
+    retrieval_lang_code = await resolve_retrieval_lang(
         ctx.chunk_repo, state.get("lang") or "ru", request_id=ctx.request_id
     )
-    ctx.retrieval_lang = retrieval_lang
+    ctx.retrieval_lang_code = retrieval_lang_code
 
     # Stage 1: lazy commentary attach + per-thesis rerank.
     # Pulls purports ONLY for verses the planner picked, then re-ranks
@@ -194,7 +194,7 @@ async def synthesis_planner_node(
         chunk_repo=ctx.chunk_repo,
         embedder=ctx.embedder,
         alias_map=ctx.aliases,
-        lang=retrieval_lang,
+        lang=retrieval_lang_code,
         catalog_repo=ctx.catalog_repo,
         on_event=None,  # planner runs after the live SSE progress panel
         reranker=reranker,
@@ -262,7 +262,7 @@ async def synthesis_planner_node(
             embedder=ctx.embedder,
             alias_map=ctx.aliases,
             catalog_repo=ctx.catalog_repo,
-            lang=retrieval_lang,
+            lang=retrieval_lang_code,
             router_args=state.get("extracted_args") or {},
             reranker=reranker,
             user_query=user_query,

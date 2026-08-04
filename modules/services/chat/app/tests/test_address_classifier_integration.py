@@ -75,7 +75,7 @@ def ctx(tmp_path: Path) -> TurnContext:
     return TurnContext(
         catalog_repo=SqliteCatalogRepository(catalog_db_path=cat),
         library_db_path=lib,
-        lang="ru",
+        lang_code="ru",
     )
 
 

@@ -42,7 +42,7 @@ def capture_writer(monkeypatch):
 
 
 async def test_localize_native_variant_wins():
-    ctx = TurnContext(lang="ru", translate_citations=True, translator=FakeTranslator())
+    ctx = TurnContext(lang_code="ru", translate_citations=True, translator=FakeTranslator())
     shown, original, mt = await localize_citation(
         ctx, variants={"ru": "родной", "en": "native"},
         source_text="native", src_lang="en",
@@ -54,7 +54,7 @@ async def test_localize_native_variant_wins():
 
 async def test_localize_translates_when_opted_in():
     tr = FakeTranslator()
-    ctx = TurnContext(lang="uk", translate_citations=True, translator=tr)
+    ctx = TurnContext(lang_code="uk", translate_citations=True, translator=tr)
     shown, original, mt = await localize_citation(
         ctx, variants={"en": "the source"}, source_text="the source", src_lang="en",
     )
@@ -65,7 +65,7 @@ async def test_localize_translates_when_opted_in():
 
 
 async def test_localize_en_preferred_when_flag_off():
-    ctx = TurnContext(lang="uk", translate_citations=False, translator=FakeTranslator())
+    ctx = TurnContext(lang_code="uk", translate_citations=False, translator=FakeTranslator())
     shown, original, mt = await localize_citation(
         ctx, variants={"en": "english fallback"},
         source_text="the source", src_lang="en",
@@ -75,7 +75,7 @@ async def test_localize_en_preferred_when_flag_off():
 
 
 async def test_localize_en_preferred_no_en_uses_source():
-    ctx = TurnContext(lang="uk", translate_citations=False, translator=None)
+    ctx = TurnContext(lang_code="uk", translate_citations=False, translator=None)
     shown, original, mt = await localize_citation(
         ctx, variants={}, source_text="raw source", src_lang="ru",
     )
@@ -87,7 +87,7 @@ async def test_localize_same_language_noop_not_marked_mt():
         async def translate(self, text, *, src_lang, tgt_lang):
             return text  # unchanged
 
-    ctx = TurnContext(lang="sr-Latn", translate_citations=True, translator=NoopTranslator())
+    ctx = TurnContext(lang_code="sr-Latn", translate_citations=True, translator=NoopTranslator())
     shown, original, mt = await localize_citation(
         ctx, variants={"en": "x"}, source_text="x", src_lang="en",
     )
@@ -101,7 +101,7 @@ async def test_localize_same_language_noop_not_marked_mt():
 
 async def test_flush_cite_translates_non_native(capture_writer):
     tr = FakeTranslator()
-    ctx = TurnContext(lang="uk", translate_citations=True, translator=tr)
+    ctx = TurnContext(lang_code="uk", translate_citations=True, translator=tr)
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "english transcript"
 
@@ -118,7 +118,7 @@ async def test_flush_cite_skipped_for_card_client(capture_writer):
     flush must NOT translate or emit the aliased lecture-fragment pool."""
     tr = FakeTranslator()
     ctx = TurnContext(
-        lang="uk", translate_citations=True, translator=tr,
+        lang_code="uk", translate_citations=True, translator=tr,
         capabilities={"commentary_card": True},
     )
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
@@ -129,7 +129,7 @@ async def test_flush_cite_skipped_for_card_client(capture_writer):
 
 
 async def test_flush_cite_native_no_mt_field(capture_writer):
-    ctx = TurnContext(lang="en", translate_citations=True, translator=FakeTranslator())
+    ctx = TurnContext(lang_code="en", translate_citations=True, translator=FakeTranslator())
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "english transcript"
 
@@ -143,7 +143,7 @@ async def test_flush_cite_native_no_mt_field(capture_writer):
 
 async def test_flush_cite_flag_off_no_translation(capture_writer):
     tr = FakeTranslator()
-    ctx = TurnContext(lang="uk", translate_citations=False, translator=tr)
+    ctx = TurnContext(lang_code="uk", translate_citations=False, translator=tr)
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "english transcript"
 
@@ -169,7 +169,7 @@ def _fake_verse_body(translation):
 async def test_flush_verse_translates_into_lang(capture_writer, monkeypatch):
     tr = FakeTranslator()
     ctx = TurnContext(
-        lang="uk", translate_citations=True, translator=tr,
+        lang_code="uk", translate_citations=True, translator=tr,
         library_db_path="/fake/library.db",
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
@@ -190,7 +190,7 @@ async def test_flush_verse_translates_into_lang(capture_writer, monkeypatch):
 
 async def test_flush_verse_native_no_mt(capture_writer, monkeypatch):
     ctx = TurnContext(
-        lang="uk", translate_citations=True, translator=FakeTranslator(),
+        lang_code="uk", translate_citations=True, translator=FakeTranslator(),
         library_db_path="/fake/library.db",
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
@@ -211,7 +211,7 @@ async def test_flush_verse_skipped_for_card_client(capture_writer, monkeypatch):
     eager flush must NOT translate or emit the aliased verse pool."""
     tr = FakeTranslator()
     ctx = TurnContext(
-        lang="uk", translate_citations=True, translator=tr,
+        lang_code="uk", translate_citations=True, translator=tr,
         library_db_path="/fake/library.db", capabilities={"commentary_card": True},
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
@@ -230,7 +230,7 @@ async def test_build_verse_payload_translates_cited(monkeypatch):
     the lazy synth-time emit, so translation runs only for cited verses)."""
     tr = FakeTranslator()
     ctx = TurnContext(
-        lang="uk", translate_citations=True, translator=tr,
+        lang_code="uk", translate_citations=True, translator=tr,
         library_db_path="/fake/library.db",
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
@@ -249,9 +249,9 @@ async def test_build_verse_payload_translates_cited(monkeypatch):
 
 async def test_build_verse_payload_ships_answer_lang_only(monkeypatch):
     """The card shows the ANSWER language, which the router settles into
-    `ctx.lang` — not the client's locale. The payload names it and carries only
+    `ctx.lang_code` — not the client's locale. The payload names it and carries only
     that translation, so a client on a different locale can't render another."""
-    ctx = TurnContext(lang="ru", library_db_path="/fake/library.db")
+    ctx = TurnContext(lang_code="ru", library_db_path="/fake/library.db")
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = ctx.aliases.verse_refs()[0]
 
@@ -267,7 +267,7 @@ async def test_build_verse_payload_ships_answer_lang_only(monkeypatch):
 async def test_build_verse_payload_lang_falls_back_to_available(monkeypatch):
     """No variant in the answer language and no MT → the card shows en, and
     `lang` says so rather than naming a translation the payload lacks."""
-    ctx = TurnContext(lang="uk", library_db_path="/fake/library.db")
+    ctx = TurnContext(lang_code="uk", library_db_path="/fake/library.db")
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
     _, vref = ctx.aliases.verse_refs()[0]
 
@@ -284,7 +284,7 @@ async def test_build_verse_payload_mt_keeps_original(monkeypatch):
     """A machine-translated verse also ships `en` — the card's "view original"
     toggle reads it."""
     ctx = TurnContext(
-        lang="uk", translate_citations=True, translator=FakeTranslator(),
+        lang_code="uk", translate_citations=True, translator=FakeTranslator(),
         library_db_path="/fake/library.db",
     )
     ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
@@ -355,7 +355,7 @@ async def test_translate_commentaries_fills_aligned_sentences():
             # Prefix each line so the count is preserved (newline-aligned).
             return "\n".join(f"<{tgt_lang}>{ln}" for ln in text.split("\n"))
 
-    ctx = TurnContext(lang="uk", translate_citations=True, translator=JoinTranslator())
+    ctx = TurnContext(lang_code="uk", translate_citations=True, translator=JoinTranslator())
     n = ctx.aliases.alias_commentary(
         "doc1", 0, addr_label="BG 2.13", author_name="Prabhupada",
         sentences=["First sentence.", "Second sentence."],
@@ -382,7 +382,7 @@ async def test_translate_commentaries_noop_when_flag_off():
         async def translate(self, *a, **k):
             raise AssertionError("must not be called")
 
-    ctx = TurnContext(lang="uk", translate_citations=False, translator=Boom())
+    ctx = TurnContext(lang_code="uk", translate_citations=False, translator=Boom())
     n = ctx.aliases.alias_commentary(
         "doc1", 0, addr_label="BG 2.13", author_name="P",
         sentences=["a.", "b."],

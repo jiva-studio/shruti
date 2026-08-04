@@ -338,7 +338,7 @@ async def run_chat_turn(
 
         ctx = TurnContext(
             request_id=trace_id,
-            lang=lang,
+            lang_code=lang,
             translate_citations=request.translate_citations,
             capabilities=caps,
             # `getattr` tolerates test doubles that predate this field.

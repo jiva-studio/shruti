@@ -60,7 +60,7 @@ class _LLM:
 @dataclass
 class _Ctx:
     llm: Any
-    lang: str = "ru"
+    lang_code: str = "ru"
     request_id: str = "req-1"
     kv_cache: Any | None = None
 

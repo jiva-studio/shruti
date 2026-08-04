@@ -67,7 +67,7 @@ _PLAIN_LINE_RULE = (
 
 async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
     """One cheap-LLM call that writes a short chat reply in the user's language
-    (`ctx.lang`) from an English `situation` description: a `line` plus 0-3
+    (`ctx.lang_code`) from an English `situation` description: a `line` plus 0-3
     tappable follow-up `chips`. This is how the service localizes fixed replies
     to EVERY shipped locale (es/hi/bn/uk/sr/…), not just a hardcoded ru/en pair
     — same pattern as the find_tracks intro. Degrades to an empty reply on any
@@ -78,7 +78,7 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
     <ref>" or "name a lecture" phrasing is written by the LLM once and then
     served from cache — no per-turn model call on the hot paths."""
     sys = standalone_prompt("localized-reply", "localized_reply")
-    usr = f"Language code: {ctx.lang}\nSituation: {situation}"
+    usr = f"Language code: {ctx.lang_code}\nSituation: {situation}"
     msgs: list[Message] = [
         {"role": "system", "content": sys},
         {"role": "user", "content": usr},
@@ -115,7 +115,7 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
         if ctx.kv_cache is not None:
             return await cached_llm_json(
                 ctx.kv_cache, ns="localized_reply",
-                key_parts={"s": situation, "lang": ctx.lang, "model": model},
+                key_parts={"s": situation, "lang": ctx.lang_code, "model": model},
                 ttl_s=TTL_30D, schema=LocalizedReply, factory=_call,
             )
         return await _call()
@@ -231,10 +231,10 @@ async def localize_citation(
     """Resolve the citation text to SHOW in the turn's answer language.
 
     Three branches (additive, backward-compatible defaults):
-      1. NATIVE — `variants` already has `ctx.lang`: show it, no MT.
+      1. NATIVE — `variants` already has `ctx.lang_code`: show it, no MT.
          → (native_text, None, mt=False)
       2. TRANSLATE — opted in (`ctx.translate_citations`) and a translator
-         is present: machine-translate `source_text` into `ctx.lang`.
+         is present: machine-translate `source_text` into `ctx.lang_code`.
          → (translated, source_text, mt=True)
       3. EN-PREFERRED — otherwise: English variant, else the source.
          → (variants["en"] or source_text, None, mt=False)
@@ -243,7 +243,7 @@ async def localize_citation(
     the best available original (a non-empty string). Never raises — on a
     translator failure the service itself falls back to the source text.
     """
-    native = variants.get(ctx.lang)
+    native = variants.get(ctx.lang_code)
     if native:
         return native, None, False
     if ctx.translate_citations and ctx.translator is not None and source_text:
@@ -251,7 +251,7 @@ async def localize_citation(
             translated = await ctx.translator.translate(
                 source_text,
                 src_lang=src_lang or "en",
-                tgt_lang=ctx.lang,
+                tgt_lang=ctx.lang_code,
             )
         except Exception as exc:  # noqa: BLE001 — citation never fails the turn
             log.warning(
@@ -295,7 +295,7 @@ def _verse_translation_wire(
 async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any] | None:
     """Fetch + build ONE verse card payload (sanskrit / transliteration /
     translation / audio). For a non-corpus answer with translation opted in,
-    the prose `translation` map gains a translated `ctx.lang` entry (+ mt);
+    the prose `translation` map gains a translated `ctx.lang_code` entry (+ mt);
     native (ru/en) answers translate nothing. Returns None on fetch failure
     or missing body.
 
@@ -324,7 +324,7 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
     # wire field stays a single localised string. Pick the turn's lang, fall
     # back to en (clean IAST) so a non-ru locale / IAST-only row still renders.
     tr = body["transliteration"]
-    transliteration = tr.get(ctx.lang) or tr.get("en") or ""
+    transliteration = tr.get(ctx.lang_code) or tr.get("en") or ""
     transliteration_iast = tr.get("en") or ""
     translation = dict(body["translation"])
     payload: dict[str, Any] = {
@@ -342,8 +342,8 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
     # Verse PROSE translation. The transliteration above is deterministic
     # (never MT); the `translation` map is natural-language prose. When the
     # turn's lang has no native variant and MT is on, add a translated entry
-    # under `ctx.lang` + record the original lang.
-    if ctx.lang not in translation:
+    # under `ctx.lang_code` + record the original lang.
+    if ctx.lang_code not in translation:
         orig_lang = "en" if translation.get("en") else next(
             (lng for lng, t in translation.items() if t), None
         )
@@ -352,13 +352,13 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
             ctx, variants=translation, source_text=source, src_lang=orig_lang,
         )
         if mt:
-            translation[ctx.lang] = shown
+            translation[ctx.lang_code] = shown
             payload["mt"] = True
             payload["translation_original_lang"] = orig_lang
-    # `ctx.lang` is the answer language (the router settles it before any card
+    # `ctx.lang_code` is the answer language (the router settles it before any card
     # is built), so the shown translation is picked here rather than by the
     # client's UI locale. `lang` names what `translation` carries.
-    shown_lang = _verse_display_lang(ctx.lang, translation)
+    shown_lang = _verse_display_lang(ctx.lang_code, translation)
     payload["lang"] = shown_lang
     payload["translation"] = _verse_translation_wire(
         shown_lang, translation, mt=bool(payload.get("mt")),
@@ -428,7 +428,7 @@ async def build_media_payload(ctx: TurnContext, mref: MediaRef) -> dict[str, Any
         "text": mref.text,
     }
     media_lang = mref.lang or row.get("lang") or None
-    if mref.text and media_lang and media_lang != ctx.lang:
+    if mref.text and media_lang and media_lang != ctx.lang_code:
         shown, original, mt = await localize_citation(
             ctx, variants={media_lang: mref.text},
             source_text=mref.text, src_lang=media_lang,
@@ -515,7 +515,7 @@ async def resolve_track_display(ctx: TurnContext, track_id: str) -> dict[str, An
     client trusts these server labels."""
     if ctx.catalog_repo is None:
         return {}
-    display_lang = reduce_locale_to_content_lang(ctx.lang)
+    display_lang = reduce_locale_to_content_lang(ctx.lang_code)
     key = (track_id, display_lang)
     cached = ctx.track_display_cache.get(key)
     if cached is not None:
@@ -581,7 +581,7 @@ async def build_cite_payload(ctx: TurnContext, ref_num: int, cref: Any) -> dict[
     # matches the answer language; otherwise translate-if-opted-in, else show
     # the (English / source) transcript verbatim. There is no per-lang
     # transcript map — the only original is `text` in `cref.lang`.
-    if cref.lang and cref.lang != ctx.lang:
+    if cref.lang and cref.lang != ctx.lang_code:
         shown, original, mt = await localize_citation(
             ctx, variants={cref.lang: text}, source_text=text, src_lang=cref.lang,
         )
@@ -708,7 +708,7 @@ async def translate_commentaries(ctx: TurnContext) -> None:
             return s
         try:
             out = await ctx.translator.translate(
-                s, src_lang=ctx.retrieval_lang, tgt_lang=ctx.lang,
+                s, src_lang=ctx.retrieval_lang_code, tgt_lang=ctx.lang_code,
             )
         except Exception:  # noqa: BLE001 — citation never fails the turn
             return s
@@ -727,7 +727,7 @@ async def translate_commentaries(ctx: TurnContext) -> None:
         whole: str | None
         try:
             whole = await ctx.translator.translate(
-                joined, src_lang=ctx.retrieval_lang, tgt_lang=ctx.lang,
+                joined, src_lang=ctx.retrieval_lang_code, tgt_lang=ctx.lang_code,
             )
         except Exception as exc:  # noqa: BLE001 — citation never fails the turn
             whole = None

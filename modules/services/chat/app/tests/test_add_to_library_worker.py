@@ -25,7 +25,7 @@ from lectorium_chat.lecture_search.models import Candidate
 @dataclass
 class _Ctx:
     llm: Any | None = None
-    lang: str = "en"
+    lang_code: str = "en"
     request_id: str = "req-test"
     kv_cache: Any | None = None
     emitted_action_ids: set = field(default_factory=set)
