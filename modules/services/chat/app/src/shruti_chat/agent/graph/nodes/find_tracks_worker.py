@@ -35,7 +35,7 @@ from collections import defaultdict
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
-from shruti_chat.agent.graph.nodes._author_match import (
+from shruti_chat.application.author_names import (
     distinctive_tokens,
 )
 from shruti_chat.agent.graph.nodes._worker_common import (
