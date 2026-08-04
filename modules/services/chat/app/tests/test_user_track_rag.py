@@ -96,16 +96,6 @@ class FakeConn:
             user_id, track_id = params
             self._db.owned.discard((user_id, track_id))
             return "DELETE"
-        if s.startswith("INSERT INTO user_track_facts"):
-            track_id, data = params
-            self._db.facts[track_id] = data
-            return "INSERT"
-        if s.startswith("DELETE FROM user_track_facts"):
-            (track_id,) = params
-            # The real statement drops the row only when no owner is left.
-            if not any(t == track_id for _u, t in self._db.owned):
-                self._db.facts.pop(track_id, None)
-            return "DELETE"
         raise AssertionError(f"FakeConn.execute: unhandled SQL: {s[:80]}")
 
     async def executemany(self, sql: str, args: list[Any]) -> None:
@@ -124,7 +114,7 @@ class FakeConn:
         s = sql.strip()
         if s.startswith("INSERT INTO chunks") and "RETURNING id" in s:
             (track_ids, langs, starts, ends, texts, ref_src,
-             embed_models, kinds) = params
+             embed_models, kinds, author_ids) = params
             out = []
             for i in range(len(track_ids)):
                 self._db._id += 1
@@ -134,6 +124,7 @@ class FakeConn:
                     "start_ms": starts[i], "end_ms": ends[i], "text": texts[i],
                     "reference_source_id": ref_src[i],
                     "embed_model": embed_models[i], "kind": kinds[i],
+                    "author_id": author_ids[i],
                 })
                 out.append({"id": cid})
             return out
@@ -164,8 +155,6 @@ class FakePg:
         self.embeddings: dict[int, dict] = {}
         self.indexed_items: dict[tuple, str] = {}
         self.owned: set[tuple[str, str]] = set()
-        # track_id -> the JSON the ingest reported (author_raw, title_raw, …).
-        self.facts: dict[str, str] = {}
         self._id = 0
 
     def acquire(self) -> _Acquire:
@@ -613,50 +602,109 @@ async def test_user_track_lane_is_acl_scoped_no_cross_user(monkeypatch) -> None:
     assert all(h.chunk.track_id != "corpus-A" for h in a_hits)
 
 
-async def test_ready_records_what_the_track_is(monkeypatch) -> None:
-    """`track.ready` already carries the ingest's metadata, and the private lane
-    needs one field of it: who is speaking. Without this projection an author
-    filter has nothing to ask about someone's own uploads and hides their whole
-    library."""
+async def test_the_speaker_is_stamped_on_the_chunks_at_index_time(monkeypatch) -> None:
+    """What makes a lecturer filter reach a private upload: the ingest's speaker
+    name is resolved ONCE here and written to `chunks.author_id`, the same column
+    the public lane filters by. No side table, no per-turn name matching."""
     import json
 
     db = FakePg()
+    monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
     monkeypatch.setattr(tec, "get_pool", lambda: db)
+
+    reviewed = {
+        "trackId": "rt-a", "language": "ru", "version": 1,
+        "blocks": [{"type": "sentence", "start": 0, "end": 3000,
+                    "text": "Смирение — основа преданности."}],
+    }
+
+    async def _fake_fetch(key, settings=None):
+        return reviewed
+
+    monkeypatch.setattr("lectorium_chat.indexer.s3.fetch_transcript", _fake_fetch)
+
+    class _Catalog:
+        def __init__(self) -> None:
+            self.asked: list[str] = []
+
+        async def resolve(self, kind, text, *, lang, limit):
+            self.asked.append(text)
+            from types import SimpleNamespace
+            # One row PER LOCALE, like the real dictionary — a single Latin row
+            # cannot match a name typed in Cyrillic, and that is what makes this
+            # resolve work at all.
+            return [
+                SimpleNamespace(
+                    id="author_prabhupada",
+                    full_name="A. C. Bhaktivedanta Swami Prabhupada",
+                ),
+                SimpleNamespace(
+                    id="author_prabhupada",
+                    full_name="А. Ч. Бхактиведанта Свами Прабхупада",
+                ),
+            ]
+
+    class _Redis:
+        def __init__(self) -> None:
+            self.s: set[bytes] = set()
+
+        async def sadd(self, key, member):
+            if member in self.s:
+                return 0
+            self.s.add(member)
+            return 1
+
+        async def expire(self, *a):
+            return True
+
+        async def srem(self, key, member):
+            self.s.discard(member)
+            return 1
+
+        async def xack(self, *a):
+            return 1
+
+    catalog = _Catalog()
     consumer = tec.TrackEventsConsumer.__new__(tec.TrackEventsConsumer)
+    consumer._settings = _Settings()
+    consumer._embedder = FakeEmbedder()
+    consumer._processed_set = "test:processed"
+    consumer._stream = "track.events"
+    consumer._group = "chat"
+    consumer._client = _Redis()
+    consumer._catalog_repo = catalog
 
     body = {
-        "id": "job-2:ready", "type": "track.ready", "user_id": "userA",
-        "doc_id": "rt-7", "track_id": "rt-7",
+        "id": "job-a:ready", "type": "track.ready", "user_id": "userA",
+        "doc_id": "rt-a", "track_id": "rt-a",
         "data": {
-            "status": "ready", "track_id": "rt-7", "lang": "ru",
-            "title_raw": "Лекция по БГ 2.13", "author_raw": "Прабхупада",
-            "location_raw": "Вриндаван", "date": "1974-04-01",
-            "audio_key": "public/tracks/rt-7/audio/original.mp3",
-            "transcript_key": "public/tracks/rt-7/transcripts/ru.json",
+            "status": "ready", "track_id": "rt-a", "lang": "ru",
+            # Typed in Cyrillic on the upload; the catalog row is Latin.
+            "author_raw": "Прабхупада", "title_raw": "О смирении",
+            "transcript_key": "public/tracks/rt-a/transcripts/ru.json",
         },
     }
-    # No transcript fetch stubbed — indexing is allowed to fail; the facts and
-    # the ACL must land regardless, since they are what retrieval reads.
-    await consumer._process("1700000000001-0", {b"payload": json.dumps(body).encode()})
+    await consumer._process("1700000000002-0", {b"payload": json.dumps(body).encode()})
 
-    facts = json.loads(db.facts["rt-7"])
-    assert facts["author_raw"] == "Прабхупада"
-    assert facts["title_raw"] == "Лекция по БГ 2.13"
-    # Blob keys and the lifecycle status describe where bytes live and how far
-    # the job got — not the recording.
-    assert "transcript_key" not in facts and "status" not in facts
+    assert catalog.asked == ["Прабхупада"]
+    assert db.chunks and all(
+        r["author_id"] == "author_prabhupada" for r in db.chunks
+    )
 
 
-async def test_facts_survive_one_owner_leaving_and_go_with_the_last(monkeypatch) -> None:
-    # A track id is a content hash: two people adding the same recording share
-    # the row, so it may only be dropped when nobody holds it any more.
+async def test_an_unknown_speaker_leaves_the_chunks_unattributed(monkeypatch) -> None:
+    # Nothing to resolve, or nobody in the catalog by that name: the rows carry
+    # no author, and a lecturer filter passes them over rather than guessing.
     db = FakePg()
-    monkeypatch.setattr(tec, "get_pool", lambda: db)
-    db.owned.update({("userA", "shared"), ("userB", "shared")})
-    db.facts["shared"] = '{"author_raw": "Прабхупада"}'
+    monkeypatch.setattr(indexer_run, "get_pool", lambda: db)
 
-    await tec.delete_owned("userA", "shared")
-    assert "shared" in db.facts
-
-    await tec.delete_owned("userB", "shared")
-    assert "shared" not in db.facts
+    reviewed = {
+        "trackId": "rt-b", "language": "ru", "version": 1,
+        "blocks": [{"type": "sentence", "start": 0, "end": 2000, "text": "Текст."}],
+    }
+    n = await indexer_run.index_one_track(
+        "rt-b", reviewed, "ru", kind="user_track",
+        embedder=FakeEmbedder(), settings=_Settings(), author_id=None,
+    )
+    assert n == 1
+    assert all(r["author_id"] is None for r in db.chunks)

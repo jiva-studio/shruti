@@ -56,6 +56,8 @@ class _Ctx:
     lang_code: str = "ru"
     kv_cache: Any = None
     author_scope: Any = None
+    chunk_repo: Any = None
+    user_id: str = ""
 
 
 def _scope(tracks: list[str] | None, *, constrained: bool = True) -> AuthorScope:
@@ -234,3 +236,58 @@ async def test_the_admission_is_not_stranded_under_the_paragraph_it_explains() -
         # And when it is held back, the synthesizer is the one given the intro.
         if not expect_early_paint:
             assert out["outline"].intro
+
+
+# ── their own untagged uploads ────────────────────────────────────────────
+
+
+class _Private:
+    def __init__(self, untagged: int) -> None:
+        self._untagged = untagged
+
+    async def unattributed_owned_count(self, _user_id):
+        return self._untagged
+
+
+async def test_it_mentions_their_own_untagged_recordings() -> None:
+    """Those uploads fall out of a filtered answer and nothing on screen says
+    why. Naming the count turns "where is my lecture" into something actionable:
+    tag the speaker."""
+    llm = _LLM()
+    ctx = _Ctx(llm=llm, author_scope=_scope([]))
+    ctx.chunk_repo = _Private(3)
+    ctx.user_id = "u-1"
+    assert await author_gap_note(ctx, [_VERSE])
+    assert "3 recording(s)" in llm.situations[0]
+
+
+async def test_no_such_clause_when_every_upload_is_tagged() -> None:
+    llm = _LLM()
+    ctx = _Ctx(llm=llm, author_scope=_scope([]))
+    ctx.chunk_repo = _Private(0)
+    ctx.user_id = "u-1"
+    await author_gap_note(ctx, [_VERSE])
+    assert "no speaker recorded" not in llm.situations[0]
+
+
+async def test_an_anonymous_turn_counts_nothing() -> None:
+    llm = _LLM()
+    ctx = _Ctx(llm=llm, author_scope=_scope([]))
+    ctx.chunk_repo = _Private(5)
+    ctx.user_id = ""
+    await author_gap_note(ctx, [_VERSE])
+    assert "recording(s)" not in llm.situations[0]
+
+
+async def test_a_failed_count_is_simply_left_out() -> None:
+    class _Broken:
+        async def unattributed_owned_count(self, _user_id):
+            raise RuntimeError("relation missing")
+
+    llm = _LLM()
+    ctx = _Ctx(llm=llm, author_scope=_scope([]))
+    ctx.chunk_repo = _Broken()
+    ctx.user_id = "u-1"
+    # The disclaimer still gets written; only the extra clause is dropped.
+    assert await author_gap_note(ctx, [_VERSE])
+    assert "recording(s)" not in llm.situations[0]

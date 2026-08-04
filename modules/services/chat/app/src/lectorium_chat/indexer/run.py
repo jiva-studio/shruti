@@ -304,6 +304,7 @@ async def index_one_track(
     embedder: Embedder | None = None,
     settings: Settings | None = None,
     etag: str | None = None,
+    author_id: str | None = None,
 ) -> int:
     """Chunk → embed → upsert ONE track's transcript. Returns chunk count.
 
@@ -318,6 +319,14 @@ async def index_one_track(
     `chunks.kind` and the embedding row's denormalised `kind`, so the private
     lane's rows are structurally invisible to the public `track_transcript`
     partial HNSW index (migration 0043) — the isolation guarantee.
+
+    `author_id` is the catalog author this recording's speaker was resolved to,
+    stamped on every chunk exactly as the library indexer stamps it on purports.
+    It is what lets a lecturer filter reach a private upload: the private lane
+    then narrows with the same SQL predicate the public lane uses, instead of
+    asking a side table who is speaking. None when the speaker is unknown or not
+    in the catalog — and under a filter those rows fall out, because a recording
+    we cannot attribute is not known to be by the person who was asked for.
     """
     s = settings or get_settings()
     emb = embedder or get_embedder(s)
@@ -379,15 +388,15 @@ async def index_one_track(
                 """
                 INSERT INTO chunks
                   (track_id, lang, start_ms, end_ms, text,
-                   reference_source_id, embed_model, kind)
+                   reference_source_id, embed_model, kind, author_id)
                 SELECT * FROM UNNEST(
                   $1::text[], $2::text[], $3::int[], $4::int[], $5::text[],
-                  $6::text[], $7::text[], $8::text[]
+                  $6::text[], $7::text[], $8::text[], $9::text[]
                 )
                 RETURNING id
                 """,
                 [track_id] * n, [lang] * n, starts, ends, texts, ref_src,
-                [emb.name] * n, [kind] * n,
+                [emb.name] * n, [kind] * n, [author_id] * n,
             )
             chunk_ids = [int(r["id"]) for r in id_rows]
             # kind/lang denormalized onto the embedding row (migrations 0035 /
