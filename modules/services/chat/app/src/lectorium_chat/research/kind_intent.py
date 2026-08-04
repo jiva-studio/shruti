@@ -29,10 +29,21 @@ _KIND_KEYWORDS: dict[str, tuple[str, ...]] = {
 }
 
 
-def boost_kinds_from(query: str, router_args: dict) -> frozenset[str]:
+def boost_kinds_from(
+    query: str, router_args: dict, *, author_asked: bool = False,
+) -> frozenset[str]:
     """Union of router-extracted `content_types` and keyword hits, restricted
-    to known corpus kinds. Empty frozenset when nothing explicit is asked."""
+    to known corpus kinds. Empty frozenset when nothing explicit is asked.
+
+    `author_asked` boosts LECTURES. Asking what a named teacher said makes their
+    own words the subject, and without this the answer is built from whatever sits
+    nearest in the corpus: production retrieved 59 fragments of the very lecturer
+    asked for, kept six in the top, and then planned the answer from ten purports
+    and two verses — a reply about him with nothing of his in it.
+    """
     kinds: set[str] = set()
+    if author_asked:
+        kinds.add("lecture")
 
     ct = (router_args or {}).get("content_types")
     if isinstance(ct, list):

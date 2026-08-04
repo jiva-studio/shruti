@@ -813,3 +813,44 @@ async def test_the_router_leaves_a_corpus_author_as_a_listing(monkeypatch) -> No
     )
     assert out["intent"] == "find_track"
     assert scope.selection.ids == (_OURS,)
+
+
+async def test_the_planner_is_told_whose_words_the_lecture_notes_are() -> None:
+    """Production rejected all thirteen notes — five of them the asked-for
+    teacher's own — on «что X говорил о карме». A transcript fragment rarely names
+    its own speaker, so the planner judged them off-topic. Retrieval had already
+    narrowed the lane to that teacher; the fact was ours and never passed on."""
+    from lectorium_chat.research.outline_builder import _format_user
+
+    notes = [{"type": "lecture", "text": "Karma binds the soul.", "meta": {}}]
+    with_speaker = _format_user(
+        "что X говорил о карме", "ru", notes, speaker="Rohini Suta Prabhu",
+    )
+    assert "SPOKEN BY Rohini Suta Prabhu" in with_speaker
+    assert "primary evidence" in with_speaker
+
+    # No selection, no claim — we do not know who is speaking then.
+    without = _format_user("что такое карма", "ru", notes)
+    assert "SPOKEN BY" not in without
+
+
+async def test_the_planner_node_passes_the_speaker(monkeypatch) -> None:
+    """The wire, again: the node must hand the name over, and only when the turn
+    is actually narrowed."""
+    import inspect
+
+    from lectorium_chat.agent.graph.nodes import synthesis_planner as planner_mod
+
+    src = inspect.getsource(planner_mod.synthesis_planner_node)
+    assert "speaker=" in src
+    assert "selection.names" in src
+
+
+async def test_a_named_lecturer_boosts_lectures_in_the_ranking() -> None:
+    """Their fragments reached the top-6 and still lost the plan to ten purports.
+    Asking what someone said makes their own words the subject."""
+    from lectorium_chat.research.kind_intent import boost_kinds_from
+
+    assert "lecture" in boost_kinds_from("что он говорил", {}, author_asked=True)
+    # Without a named lecturer nothing is boosted — normal ranking.
+    assert boost_kinds_from("что такое карма", {}) == frozenset()
