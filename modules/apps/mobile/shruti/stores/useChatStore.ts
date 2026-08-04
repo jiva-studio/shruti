@@ -784,12 +784,11 @@ export const useChatStore = defineStore("chat", () => {
         if (m.role === "assistant" && m.aliases && Object.keys(m.aliases).length > 0) {
           ;(turn as { aliases?: ChatTurn["aliases"] }).aliases = m.aliases
         }
-        // Ship back the language a previous turn settled on, so a request to
-        // answer in another language keeps holding — the server sees only the
-        // last 20 messages and can't find the request again once it scrolls out.
-        if (m.role === "assistant" && m.replyLanguage) {
-          ;(turn as { replyLanguage?: ChatTurn["replyLanguage"] }).replyLanguage =
-            m.replyLanguage
+        // Attributes a previous turn settled ride back with the message. The
+        // wire layer also folds them into ONE request-level aggregate, which is
+        // what carries a setting past the 20 messages the server can see.
+        if (m.role === "assistant" && m.attributes) {
+          ;(turn as { attributes?: ChatTurn["attributes"] }).attributes = m.attributes
         }
         return turn
       })
