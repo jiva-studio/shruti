@@ -62,3 +62,14 @@ export function pickPlayableVariant(track: Track): TrackVariant | null {
   // so any variant with audio is playable.
   return track.variants.find((v) => v.audio !== null) ?? null
 }
+
+/**
+ * CDN object key for a track's original recording — the same string the
+ * catalog holds in `track_audio.path`, derivable from the id alone.
+ *
+ * Prefer `pickPlayableVariant(track).audio.path` when the track is local: it
+ * may point at a cleaned variant rather than the original.
+ */
+export function canonicalAudioPath(trackId: string): string {
+  return `public/tracks/${trackId}/audio/original.mp3`
+}

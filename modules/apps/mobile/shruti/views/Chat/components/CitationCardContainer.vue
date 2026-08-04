@@ -52,7 +52,7 @@ import { buildServerUrl } from "@lib/domain/servers.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useChatLanguage } from "@shruti/composables/useChatLanguage.js"
 import { formatReference } from "@lib/domain/services/references.js"
-import { pickPlayableVariant } from "@lib/domain/track.js"
+import { canonicalAudioPath, pickPlayableVariant } from "@lib/domain/track.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useTranslatable } from "@lib/chat/useTranslatable.js"
 import { renderExcerptHtml } from "@lib/chat/chatMarkers.js"
@@ -94,17 +94,21 @@ const bodyHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 
 // Display metadata only — the action sheet is the host's (see
 // CitationActionSheet). `metaLoaded` gates the skeleton → card reveal (#926).
-const { track, metaLoaded, trackTitle, authorName } = useCitationMeta(() => ({
-  trackId: props.trackId,
-  startMs: props.startMs,
-  endMs: props.endMs,
-  caption: props.caption,
-}))
+const { track, metaLoaded, trackTitle, authorName } = useCitationMeta(
+  () => ({
+    trackId: props.trackId,
+    startMs: props.startMs,
+    endMs: props.endMs,
+    caption: props.caption,
+  }),
+  () => props.body
+)
 
+// A local variant first — it may point at a cleaned recording.
 const audioPath = computed<string>(() => {
-  if (!track.value) return ""
+  if (!track.value) return canonicalAudioPath(props.trackId)
   const variant = pickPlayableVariant(track.value)
-  return variant?.audio?.path ?? ""
+  return variant?.audio?.path ?? canonicalAudioPath(props.trackId)
 })
 
 /**
@@ -124,13 +128,17 @@ const playerRef = computed(() => ({
 // The shloka reference follows the chat answer language (chatLanguage ||
 // appLanguage) so it reads consistently with the verse/commentary labels the
 // server bakes in that same language — not the UI language.
+// The server's `label` is already formatted in the answer language; the local
+// formatter is compat for messages persisted before it shipped.
 const referenceLabel = computed<string>(() => {
+  const remote = props.body?.references?.[0]?.label
+  if (remote) return remote
   const first = track.value?.references?.[0]
   if (!first) return ""
   return formatReference(first, dictionaries.sourcesById, chatLanguage.value || appLanguage.value)
 })
 
-const trackDate = computed<string>(() => track.value?.date || "")
+const trackDate = computed<string>(() => props.body?.trackDate || track.value?.date || "")
 
 onMounted(() => {
   // Sources are needed to format the shloka reference, like the Notes

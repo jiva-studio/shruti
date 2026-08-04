@@ -11,6 +11,7 @@ import {
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Author } from "@lib/domain/author.js"
 import type { Track } from "@lib/domain/track.js"
+import type { ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 
 /** The fragment a citation card/chip points at. */
 export interface CitationCoords {
@@ -39,7 +40,10 @@ export interface UseCitationMeta {
  * Save / Studio / Playlist action sheet) lives in {@link useCitationActions},
  * which a HOST owns; a leaf card never launches a dialog of its own.
  */
-export function useCitationMeta(coords: () => CitationCoords): UseCitationMeta {
+export function useCitationMeta(
+  coords: () => CitationCoords,
+  fallback?: () => ChatCiteSnippet | null | undefined
+): UseCitationMeta {
   const app = useShruti()
   const appLanguage = useAppLanguage()
   const chatLanguage = useChatLanguage()
@@ -54,7 +58,13 @@ export function useCitationMeta(coords: () => CitationCoords): UseCitationMeta {
   const author = ref<Author | null>(null)
   const metaLoaded = ref(false)
 
-  const trackTitle = computed<string>(() => {
+  // Primary source: attribution the server resolved in the answer language,
+  // independent of what this device's catalog snapshot holds.
+  const remote = computed<ChatCiteSnippet | null>(() => fallback?.() ?? null)
+
+  /** @deprecated Compat for messages persisted before the server shipped
+   *  attribution in the cite payload. */
+  const localTitle = computed<string>(() => {
     if (!track.value) return ""
     // Title follows the content language (a library language the track has),
     // not the UI language — which still drives the author name label.
@@ -63,8 +73,10 @@ export function useCitationMeta(coords: () => CitationCoords): UseCitationMeta {
       appLanguage.value
     return resolveTrackTitle(track.value, cl) ?? ""
   })
+
+  const trackTitle = computed<string>(() => remote.value?.trackTitle || localTitle.value)
   const authorName = computed<string>(
-    () => resolveLocalizedName(author.value, answerLanguage.value) ?? ""
+    () => remote.value?.authorName || resolveLocalizedName(author.value, answerLanguage.value) || ""
   )
 
   async function loadMetadata(): Promise<void> {

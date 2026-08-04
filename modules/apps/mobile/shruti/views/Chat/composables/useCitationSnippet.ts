@@ -1,7 +1,7 @@
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
 import { SHORT_POLL_TIMEOUT_MS, pollUntilReady } from "@lib/chat/utils/pollUntilReady.js"
 import { useShruti } from "@shruti/shruti.js"
-import { pickPlayableVariant } from "@lib/domain/track.js"
+import { canonicalAudioPath, pickPlayableVariant } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 /**
@@ -60,10 +60,12 @@ export function useCitationSnippet() {
     const cached = urlCache.get(key)
     if (cached) return cached
 
+    // Absent from the local catalog is still playable — the key comes from the
+    // id. Only a local, translation-only track has no audio at all.
     const track = await repositories().tracks.getById(ref.trackId as TrackId)
-    if (!track) throw new Error("track-not-found")
-    const variant = pickPlayableVariant(track)
-    if (!variant || !variant.audio) throw new Error("no-audio")
+    const variant = track ? pickPlayableVariant(track) : null
+    if (track && !variant?.audio) throw new Error("no-audio")
+    const sourceKey = variant?.audio?.path ?? canonicalAudioPath(ref.trackId)
 
     const excerptId = citationExcerptId(ref)
     const predicted = predictedUrl(activeServer.value, excerptId)
@@ -84,7 +86,7 @@ export function useCitationSnippet() {
     } else {
       // 2. Cold path: ask the cutter, poll if async.
       const result = await shareAudioService.cut({
-        sourceKey: variant.audio.path,
+        sourceKey,
         startMs: ref.startMs,
         endMs: ref.endMs,
         excerptId,
