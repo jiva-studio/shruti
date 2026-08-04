@@ -5,13 +5,13 @@ Thin adapter: 8 lines of real logic. The LLM-prompt and intent classifier
 live in the use-case; this node just bridges state ↔ runtime.context.
 
 It also settles this turn's CONVERSATION ATTRIBUTES — today just the reply
-language. That happens here because this is the one node every path passes
-through before any prose is composed, and because `ctx` is mutable: writing the
-resolved locale to both `state["lang"]` and `ctx.lang` leaves every downstream
-hop reading a single value. Hops used to derive the language independently —
-the synthesizer from the history, `localized_reply` and the card blurbs from
-`ctx.lang` in code — which is how a Hindi answer shipped with an English
-summary paragraph on top.
+language. Here, because this is the one node every path passes through before
+any prose is composed, and because `ctx` is mutable: writing the resolved locale
+to both `state["lang"]` and `ctx.lang` leaves every downstream hop reading ONE
+value. That single value is the point — the hops draw the language from
+different places (the synthesizer from `state` plus the history, `localized_reply`
+and the card blurbs from `ctx.lang` in code), so any of them deciding for itself
+means an answer whose body and summary paragraph disagree.
 
 Merging and carrying attributes is generic; APPLYING one is not. The language
 becomes `ctx.lang` here in two explicit lines, and the next attribute will go
