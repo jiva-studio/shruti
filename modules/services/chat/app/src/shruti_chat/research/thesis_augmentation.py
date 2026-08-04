@@ -70,6 +70,7 @@ async def _fresh_fanout_for_thesis(
     router_args: dict[str, Any],
     lang: str | None,
     top_k: int,
+    author_scope: Any | None = None,
 ) -> tuple[list[Any], list[Any]]:
     """Single thesis-targeted ANN fetch. Mirrors `fanout_search_with_boost`'s
     inner per-query call but skips the boost / dedup / multi-query
@@ -86,6 +87,8 @@ async def _fresh_fanout_for_thesis(
         date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
         date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
     )
+    if author_scope is not None:
+        eligible = await author_scope.narrow(eligible)
     lectures_disabled = eligible is not None and not eligible
 
     async def _lectures() -> list[Any]:
@@ -130,6 +133,9 @@ async def augment_thin_theses(
     fresh_top_k: int = AUGMENT_FRESH_TOP_K,
     reranker: Any = None,
     user_query: str | None = None,
+    # The turn's author selection: the per-thesis top-up is lecture retrieval
+    # like any other, so it narrows too. The library top-up below does not.
+    author_scope: Any | None = None,
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Stage 2 — for each thin thesis, do a fresh thesis-targeted ANN
     fetch + re-rank.
@@ -261,6 +267,7 @@ async def augment_thin_theses(
                 router_args=router_args,
                 lang=lang,
                 top_k=fresh_top_k,
+                author_scope=author_scope,
             )
         except Exception as exc:  # noqa: BLE001
             log.warning("augment_fresh_fetch_failed", thesis_idx=i, error=str(exc))

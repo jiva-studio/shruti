@@ -21,6 +21,10 @@ class _Ctx:
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
     lang: str = "ru"
     request_id: str = "req-test"
+    # The turn's author selection; None ⇒ nothing constrained,
+    # which is what every test that does not care about it wants.
+    author_scope: Any | None = None
+
 
 
 @dataclass
