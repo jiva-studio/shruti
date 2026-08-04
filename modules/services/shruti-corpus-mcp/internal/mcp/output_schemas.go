@@ -150,7 +150,10 @@ func mediaGetObj() map[string]any {
 func lectureExcerptObj() map[string]any {
 	return obj(map[string]any{
 		"track_id": strS, "title": strS, "author": strS, "date": strS,
-		"start_ms": intS, "end_ms": intS, "excerpt_id": strS,
+		"start_ms": intS, "end_ms": intS, "excerpt_id": strS, "lang": strS,
+		"transcript": arr(obj(map[string]any{
+			"start_ms": intS, "end_ms": intS, "text": strS,
+		})),
 	}, "track_id", "excerpt_id")
 }
 
