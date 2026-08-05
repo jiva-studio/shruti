@@ -117,3 +117,34 @@ class LLMPort(Protocol):
     # has no callers and is intentionally NOT on the Protocol.
     # If a future feature needs the underlying LangChain model, add
     # it back here AND keep its only call site inside `agent/graph/`.
+
+
+class ProviderUnavailable(Exception):
+    """The provider could not service the call — out of credits, key rejected,
+    rate limited, model down — after retries AND the fallback model were spent.
+
+    Mirrors `RateLimitStoreUnavailable` in `rate_limit_store.py`: the adapter
+    knows the vendor's status codes, callers only need "the provider is down,
+    tell the user to retry" versus "our graph is broken". Before this,
+    `application/` and `research/` imported a predicate out of the OpenRouter
+    adapter to make that distinction — a use case reaching into a named vendor
+    to pick an error code.
+    """
+
+
+def provider_unavailable(exc: BaseException) -> bool:
+    """True if `exc` or anything in its cause/context chain is a
+    `ProviderUnavailable`.
+
+    Walks the chain because LangGraph re-raises node exceptions wrapped in its
+    own frames, so the original is rarely the outermost object a caller
+    catches.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, ProviderUnavailable):
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False

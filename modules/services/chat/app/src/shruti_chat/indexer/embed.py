@@ -18,6 +18,7 @@ import openai
 from openai import AsyncOpenAI
 
 from shruti_chat.config import Settings, get_settings
+from shruti_chat.domain.ports.llm_provider import ProviderUnavailable
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -33,6 +34,31 @@ _EMBED_BACKOFF_S = 2.0
 # ~30s of backoff before the caller degrades — so raise on the FIRST one.
 # 429 (rate limit) is deliberately NOT here: it IS transient and retryable.
 _NON_RETRYABLE_STATUSES = frozenset({400, 401, 403, 404, 422})
+
+
+def _embed_availability_error(exc: BaseException) -> bool:
+    """Vendor capacity/credential failure, as opposed to our bad request."""
+    status = getattr(exc, "status_code", None)
+    if not isinstance(status, int):
+        return False
+    return status in (401, 402, 403, 408, 429) or 500 <= status < 600
+
+
+def _terminal_embed(exc: BaseException) -> BaseException:
+    """Label a spent embedding failure so callers can classify it.
+
+    The embedder is a SEPARATE adapter from the LLM provider and its
+    availability failures reach the user through the same "chat unavailable"
+    path. Wrapping only the LLM adapter would have narrowed the
+    classification — the motivating incident (402 Insufficient credits, 56x in
+    one window) can just as easily arrive here, on the query embed that starts
+    every turn.
+    """
+    if not _embed_availability_error(exc):
+        return exc
+    wrapped = ProviderUnavailable(str(exc))
+    wrapped.__cause__ = exc
+    return wrapped
 
 
 def _is_non_retryable(exc: Exception) -> bool:
@@ -134,14 +160,14 @@ class OpenAICompatEmbedder(Embedder):
                 # the full backoff ladder.
                 if _is_non_retryable(exc):
                     log.warning("embed_non_retryable", error=str(exc)[:120])
-                    raise
+                    raise _terminal_embed(exc) from exc
                 last_exc = exc
                 if attempt == _EMBED_MAX_ATTEMPTS - 1:
                     break
                 log.warning("embed_retry", attempt=attempt + 1, error=str(exc)[:120])
                 await asyncio.sleep(_EMBED_BACKOFF_S * (2 ** attempt))
         assert last_exc is not None
-        raise last_exc
+        raise _terminal_embed(last_exc) from last_exc
 
     async def embed_query(self, text: str) -> list[float]:
         inp = f"{self._query_prefix}{text}" if self._query_prefix else text
