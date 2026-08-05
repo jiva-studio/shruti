@@ -43,4 +43,13 @@ ENV LECTORIUM_BUILD_SHA=$LECTORIUM_BUILD_SHA \
 
 EXPOSE 8080
 
-CMD ["uvicorn", "lectorium_chat.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# --timeout-graceful-shutdown: uvicorn drains open connections BEFORE running
+# the lifespan shutdown, and the lifespan shutdown is the only thing that
+# cancels detached turn producers (main.py: turn_runner.shutdown()). Without a
+# window the two wait on each other until Docker's SIGKILL, and the teardown
+# never runs: quota refunds, idempotency releases, the turn buffer's finish()
+# and the Langfuse flush are all skipped. Watchtower redeploys on every push,
+# so that was every deploy. Pair with `stop_grace_period` in compose, which
+# must be the larger of the two.
+CMD ["uvicorn", "lectorium_chat.main:app", "--host", "0.0.0.0", "--port", "8080", \
+     "--timeout-graceful-shutdown", "30"]
