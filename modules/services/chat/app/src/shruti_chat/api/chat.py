@@ -214,9 +214,11 @@ async def chat(
             await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
         raise
 
-    # Effective trace id keys the turn buffer. Client-minted when present
-    # (so the same id polls the result on return); a server-minted fallback
-    # for legacy clients — which then simply can't resume.
+    # The turn's ONE id: keys the turn buffer, the cancel flag, and the
+    # Langfuse trace. Client-minted when present (so the same id polls the
+    # result on return); a server-minted fallback for legacy clients — which
+    # then simply can't resume. Passed down to `run_chat_turn` rather than
+    # re-derived there, or a turn with no `X-Trace-Id` gets two different ids.
     effective_trace_id = client_trace_id or uuid.uuid4().hex
     turn_started = perf_counter()
 
@@ -267,7 +269,7 @@ async def chat(
                     request_id=request_id,
                     session_id=body.session_id,
                     session_title=body.session_title,
-                    client_trace_id=client_trace_id,
+                    trace_id=effective_trace_id,
                 ),
                 deps=deps,
                 is_disconnected=is_cancelled,
