@@ -2,8 +2,10 @@
 
 Every chunks_* / user_* tool that returns chunks calls into here to
 mint a `ref` via `TurnAliasMap` and assemble the type-discriminated
-envelope. Output is a plain `dict` (JSON-ready); the `ChunkEnvelope`
-dataclass in `domain/entities.py` documents the shape.
+envelope. The shape is defined by `ChunkEnvelope` in `domain/entities.py`:
+built here, serialised with `to_dict()`. It used to be hand-assembled dicts
+with the dataclass as documentation nobody constructed — so the contract had
+no single definition and had already been restated a second time.
 
 Lecture chunks have their `track_id` stripped from the LLM-visible
 payload — the model only sees `ref`, and the marker expander resolves
@@ -19,7 +21,7 @@ import re
 from typing import Any
 
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
-from lectorium_chat.domain.entities import Chunk, LibraryChunk
+from lectorium_chat.domain.entities import Chunk, ChunkEnvelope, LibraryChunk
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 
 
@@ -116,15 +118,17 @@ def lecture_to_envelope(
         meta["reference_source_id"] = chunk.reference_source_id
     if sub_query_id is not None:
         meta["sub_query_id"] = sub_query_id
-    return {
-        "type": "lecture",
-        "ref": ref,
-        "label": "",
-        "text": chunk.text,
-        "lang": chunk.lang,
-        "score": score,
-        "meta": meta,
-    }
+    return ChunkEnvelope(
+        type="lecture",
+        ref=ref,
+        # Deliberately empty: the timecode lives in `meta` and rides to the
+        # client via alias_map (see the docstring above).
+        label="",
+        text=chunk.text,
+        lang=chunk.lang,
+        score=score,
+        meta=meta,
+    ).to_dict()
 
 
 def library_to_envelope(
@@ -209,12 +213,12 @@ def library_to_envelope(
         meta["sentences"] = sentences
     if sub_query_id is not None:
         meta["sub_query_id"] = sub_query_id
-    return {
-        "type": item_kind,
-        "ref": ref,
-        "label": chunk.addr_label,
-        "text": chunk.text,
-        "lang": chunk.lang,
-        "score": score,
-        "meta": meta,
-    }
+    return ChunkEnvelope(
+        type=item_kind,
+        ref=ref,
+        label=chunk.addr_label,
+        text=chunk.text,
+        lang=chunk.lang,
+        score=score,
+        meta=meta,
+    ).to_dict()
