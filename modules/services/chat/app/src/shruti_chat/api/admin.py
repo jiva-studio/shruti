@@ -53,8 +53,8 @@ _started_at = time.monotonic()
 # Build stamps — set by the image build (Dockerfile ARG → ENV). Empty
 # in local-dev. Operators hit /healthz post-deploy to confirm
 # Watchtower rolled the new image.
-_BUILD_SHA = os.environ.get("SHRUTI_BUILD_SHA", "")
-_BUILD_TIME = os.environ.get("SHRUTI_BUILD_TIME", "")
+_BUILD_SHA = get_settings().shruti_build_sha
+_BUILD_TIME = get_settings().shruti_build_time
 
 
 def _check_token(token: str | None) -> None:
