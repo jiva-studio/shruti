@@ -10,17 +10,22 @@ from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_CORPUS_DIR = Path("/app/docs/help")
-_CORPUS_DIR = Path(os.environ.get("HELP_CORPUS_DIR", str(_DEFAULT_CORPUS_DIR)))
+def _corpus_dir() -> Path:
+    """Resolved per call rather than at import: read at import time this was
+    unswappable per-instance and invisible to `Settings`."""
+    from lectorium_chat.config import get_settings
+
+    return get_settings().help_corpus_dir
 
 
 def _read_pages(locale: str) -> dict[str, str]:
     suffix = f".{locale}.md"
     out: dict[str, str] = {}
-    if not _CORPUS_DIR.is_dir():
-        log.warning("help corpus dir missing: %s", _CORPUS_DIR)
+    corpus_dir = _corpus_dir()
+    if not corpus_dir.is_dir():
+        log.warning("help corpus dir missing: %s", corpus_dir)
         return out
-    for path in sorted(_CORPUS_DIR.glob(f"*{suffix}")):
+    for path in sorted(corpus_dir.glob(f"*{suffix}")):
         page_id = path.name[: -len(suffix)]
         out[page_id] = path.read_text(encoding="utf-8")
     return out

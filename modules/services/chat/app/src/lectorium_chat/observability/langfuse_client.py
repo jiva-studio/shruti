@@ -71,7 +71,7 @@ _LANGFUSE: Any | None = None
 def _force_fallback() -> bool:
     """`LANGFUSE_FORCE_FALLBACK=1` short-circuits every Langfuse call —
     eval suite + local dev without a Langfuse host depend on this."""
-    return os.environ.get("LANGFUSE_FORCE_FALLBACK", "").strip() in ("1", "true", "True")
+    return get_settings().langfuse_force_fallback
 
 
 def init_langfuse() -> None:
@@ -91,9 +91,10 @@ def init_langfuse() -> None:
         log.info("langfuse_disabled_force_fallback")
         return
 
-    host = os.environ.get("LANGFUSE_HOST")
-    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY")
-    secret_key = os.environ.get("LANGFUSE_SECRET_KEY")
+    s = get_settings()
+    host = s.langfuse_host
+    public_key = s.langfuse_public_key
+    secret_key = s.langfuse_secret_key
     if not (host and public_key and secret_key):
         log.info(
             "langfuse_disabled_missing_env",
@@ -109,11 +110,14 @@ def init_langfuse() -> None:
         log.warning("langfuse_sdk_import_failed", error=str(exc))
         return
 
-    # Environment label — surfaces in the Langfuse UI dropdown.
-    # `LECTORIUM_ENV` is the existing app-wide env name ("prod", "dev",
-    # "staging"); fall back to "default" so nothing breaks if unset.
-    environment = os.environ.get("LECTORIUM_ENV") or os.environ.get(
-        "LANGFUSE_TRACING_ENVIRONMENT") or "default"
+    # Environment label — surfaces in the Langfuse UI dropdown. Taken from
+    # `Settings.env`, the app-wide name. It used to read `LECTORIUM_ENV`
+    # directly: a SECOND spelling of the same concept, so a container with
+    # `ENV=prod` but no `LECTORIUM_ENV` labelled its traces "default" while
+    # every log line said prod.
+    environment = (
+        os.environ.get("LANGFUSE_TRACING_ENVIRONMENT") or s.env or "default"
+    )
     try:
         _LANGFUSE = Langfuse(
             host=host,
