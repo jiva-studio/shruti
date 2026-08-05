@@ -1,12 +1,15 @@
 name: Services / chat tests
 
-# Runs the chat-service pytest suite. The image-build workflow
-# (services-ghcr.yml) only builds + scans + pushes — it never ran the
-# tests, so a logic regression could ship to :latest unnoticed (the
-# «Перескажи текущую лекцию» empty-result bug, PR #1016, was found in
-# prod for exactly this reason). This workflow is the gate: it runs on
-# every PR that touches the chat subtree so a broken turn fails CI
-# before merge, and on push to main so the result is recorded there too.
+# Runs the chat-service pytest suite on every PR that touches the chat
+# subtree, so a broken turn fails CI before merge, and on push to main so
+# the result is recorded there too.
+#
+# This workflow is the FAST feedback path, not the deploy gate. It used to
+# be the only place the suite ran, and because `services-ghcr.yml` triggers
+# independently on the same push, the build raced it and could publish
+# :latest from a red commit (the «Перескажи текущую лекцию» empty-result
+# bug, PR #1016, reached prod that way). The build now runs the same suite
+# itself before pushing the chat image — keep the two in sync.
 
 on:
   pull_request:
