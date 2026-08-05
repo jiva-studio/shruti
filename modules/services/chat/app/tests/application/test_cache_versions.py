@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from shruti_chat.infra.cache import versions as v
+from shruti_chat.application import cache_versions as v
 
 
 def setup_function():

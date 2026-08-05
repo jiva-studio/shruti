@@ -84,7 +84,7 @@ async def ensure_library(settings: Settings | None = None, force: bool = False) 
     # (pg_chunk_search, pg_lib_search, pg_window, caption) miss
     # automatically without an explicit flush.
     try:
-        from shruti_chat.infra.cache import versions as cache_versions
+        from shruti_chat.application import cache_versions
         cache_versions.set_tag("library", latest)
     except Exception:
         pass

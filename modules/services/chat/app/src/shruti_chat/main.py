@@ -40,7 +40,7 @@ from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
-from shruti_chat.infra.cache import versions as cache_versions
+from shruti_chat.application import cache_versions
 from shruti_chat.infra.cache.cached_embedder import CachedEmbedder
 from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
 from shruti_chat.infra.cache.redis_kv_cache import RedisKVCache

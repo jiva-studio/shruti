@@ -30,7 +30,11 @@ for the lookups:
 
 from __future__ import annotations
 
+from typing import get_args
+
 from langfuse.api import ConfigCategory
+
+from shruti_chat.domain.routing import Intent
 
 
 # Each entry is the kwargs dict passed verbatim into
@@ -81,20 +85,27 @@ SCORE_CONFIGS: list[dict] = [
     dict(name="language_match", data_type="BOOLEAN"),
     dict(name="had_error", data_type="BOOLEAN"),
     dict(name="response_length_chars", data_type="NUMERIC", min_value=0, max_value=20000),
-    # Router intent — segmentation knob for dashboards. Labels mirror
-    # the intent strings emitted by `application/router_turn.py` /
-    # `agent/graph/conditional.py`; keep this list in sync when the
-    # enum changes.
+    # Outline shape. Emitted only when the synthesis planner actually built
+    # an outline, so they are absent on action / help / catalog turns.
+    dict(name="outline.n_theses", data_type="NUMERIC", min_value=0, max_value=20),
+    dict(name="outline.has_intro", data_type="BOOLEAN"),
+    dict(name="outline.has_conclusion", data_type="BOOLEAN"),
+    dict(
+        name="outline.skipped_notes_ratio",
+        data_type="NUMERIC", min_value=0, max_value=1,
+    ),
+    # Router intent — segmentation knob for dashboards. This is a CATEGORICAL
+    # config with a fixed list, so Langfuse can reject values outside it:
+    # a missing label does not degrade to "uncategorised", it can drop the
+    # score. Derived from `Intent` rather than retyped, because it had already
+    # drifted — the four newest intents were absent and may have been invisible
+    # in Scores Analytics since they shipped.
     dict(
         name="router_intent",
         data_type="CATEGORICAL",
         categories=[
-            ConfigCategory(label="direct_chat", value=1),
-            ConfigCategory(label="research", value=2),
-            ConfigCategory(label="find_track", value=3),
-            ConfigCategory(label="create_action", value=4),
-            ConfigCategory(label="help", value=5),
-            ConfigCategory(label="unknown", value=6),
+            ConfigCategory(label=intent, value=i)
+            for i, intent in enumerate(sorted(get_args(Intent)), start=1)
         ],
     ),
 ]

@@ -6,7 +6,7 @@ the result to bytes, and falls through to the factory on any backend
 issue. Call sites read like one-liners.
 
 Conventions:
-- `ns` is a stable short string (see `infra.cache.versions.NAMESPACE_DEPS`)
+- `ns` is a stable short string (see `application.cache_versions.NAMESPACE_DEPS`)
 - `key_parts` is anything that uniquely identifies the call inside `ns`;
   it's canonicalised (JSON, sort_keys) and blake2b-hashed to 12 bytes
 - pydantic models in `key_parts` are serialised via `.model_dump_json()`
@@ -23,7 +23,7 @@ from typing import Any, Awaitable, Callable, TypeVar
 from pydantic import BaseModel
 
 from shruti_chat.domain.ports.kv_cache import KVCache
-from shruti_chat.infra.cache import versions as cache_versions
+from shruti_chat.application import cache_versions
 
 
 T = TypeVar("T", bound=BaseModel)
