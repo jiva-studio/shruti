@@ -89,7 +89,7 @@ async def test_sentence_marker_leak_counts_single_index() -> None:
 # ── marker_validity gating ───────────────────────────────────────────
 
 
-def test_marker_validity_false_when_only_sentence_leak(monkeypatch) -> None:
+async def test_marker_validity_false_when_only_sentence_leak(monkeypatch) -> None:
     """A turn with malformed=0, broken=0 but a bare `[s=…]` leak
     should still trip `marker_validity` to false — the leak is visible
     garbage in the client bubble even when the strict-grammar scans
@@ -117,13 +117,13 @@ def test_marker_validity_false_when_only_sentence_leak(monkeypatch) -> None:
         intent=None,
         final_text="...",
     )
-    emit_turn_scores(_StubLangfuse(), "trace_xyz", summary, audit)
+    await emit_turn_scores(_StubLangfuse(), "trace_xyz", summary, audit)
 
     assert captured["marker_validity"] == 0
     assert captured["sentence_marker_leak_count"] == 1
 
 
-def test_marker_validity_true_when_all_clean() -> None:
+async def test_marker_validity_true_when_all_clean() -> None:
     captured: dict[str, object] = {}
 
     class _StubLangfuse:
@@ -147,7 +147,7 @@ def test_marker_validity_true_when_all_clean() -> None:
         intent=None,
         final_text="clean",
     )
-    emit_turn_scores(_StubLangfuse(), "trace_xyz", summary, audit)
+    await emit_turn_scores(_StubLangfuse(), "trace_xyz", summary, audit)
 
     assert captured["marker_validity"] == 1
     assert captured["sentence_marker_leak_count"] == 0
@@ -156,7 +156,7 @@ def test_marker_validity_true_when_all_clean() -> None:
 # ── language_match ───────────────────────────────────────────────────
 
 
-def _run_scores(*, request_lang: str, final_text: str) -> dict[str, object]:
+async def _run_scores(*, request_lang: str, final_text: str) -> dict[str, object]:
     """Drive `emit_turn_scores` once and return the captured score map."""
     captured: dict[str, object] = {}
 
@@ -175,48 +175,119 @@ def _run_scores(*, request_lang: str, final_text: str) -> dict[str, object]:
         intent=None,
         final_text=final_text,
     )
-    emit_turn_scores(_StubLangfuse(), "trace_xyz", summary, audit)
+    await emit_turn_scores(_StubLangfuse(), "trace_xyz", summary, audit)
     return captured
 
 
 # A correct Serbian (Latin-script) answer for a `sr-Latn` user. The old
 # Cyrillic-vs-Latin detector saw Latin → "en" → mismatch, so this case
 # (the whole point of the fix) used to score 0.
-def test_language_match_serbian_latin_answer_matches_sr_locale() -> None:
+async def test_language_match_serbian_latin_answer_matches_sr_locale() -> None:
     text = "Danas ćemo razgovarati o tome kako su učenici u Londonu predano širili duhovno znanje."
-    captured = _run_scores(request_lang="sr-Latn", final_text=text)
+    captured = await _run_scores(request_lang="sr-Latn", final_text=text)
     assert captured["language_match"] == 1
 
 
 # The actual production bug: the `find_track` path answered a Serbian
 # user in English. That genuinely IS a mismatch and must score 0.
-def test_language_match_english_answer_to_serbian_user_is_mismatch() -> None:
+async def test_language_match_english_answer_to_serbian_user_is_mismatch() -> None:
     text = "I didn't find any lectures or transcripts on this topic in the current research results."
-    captured = _run_scores(request_lang="sr-Latn", final_text=text)
+    captured = await _run_scores(request_lang="sr-Latn", final_text=text)
     assert captured["language_match"] == 0
 
 
-def test_language_match_spanish_answer_matches_es_locale() -> None:
+async def test_language_match_spanish_answer_matches_es_locale() -> None:
     text = "Hoy hablaremos de cómo los discípulos en Londres difundieron el conocimiento espiritual."
-    captured = _run_scores(request_lang="es", final_text=text)
+    captured = await _run_scores(request_lang="es", final_text=text)
     assert captured["language_match"] == 1
 
 
 # Non-Latin script still works (the old heuristic returned "ru" for any
 # Cyrillic and None/garbage for Devanagari).
-def test_language_match_hindi_answer_matches_hi_locale() -> None:
+async def test_language_match_hindi_answer_matches_hi_locale() -> None:
     text = "आज हम चर्चा करेंगे कि लंदन में शिष्यों ने किस प्रकार आध्यात्मिक ज्ञान का प्रचार किया।"
-    captured = _run_scores(request_lang="hi", final_text=text)
+    captured = await _run_scores(request_lang="hi", final_text=text)
     assert captured["language_match"] == 1
 
 
-def test_language_match_russian_answer_matches_ru_locale() -> None:
+async def test_language_match_russian_answer_matches_ru_locale() -> None:
     text = "Сегодня мы поговорим о том, как ученики в Лондоне преданно распространяли духовное знание."
-    captured = _run_scores(request_lang="ru", final_text=text)
+    captured = await _run_scores(request_lang="ru", final_text=text)
     assert captured["language_match"] == 1
 
 
 # Too short to identify reliably → abstain, don't emit a noisy score.
-def test_language_match_not_emitted_for_short_text() -> None:
-    captured = _run_scores(request_lang="sr-Latn", final_text="Hvala!")
+async def test_language_match_not_emitted_for_short_text() -> None:
+    captured = await _run_scores(request_lang="sr-Latn", final_text="Hvala!")
     assert "language_match" not in captured
+
+
+# ── broken verse refs ────────────────────────────────────────────────
+
+
+def _library_db(tmp_path, rows: list[tuple[str, str]]):
+    import sqlite3
+
+    path = tmp_path / "library.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE library_verses (source_id TEXT, tokens TEXT)")
+    conn.executemany("INSERT INTO library_verses VALUES (?,?)", rows)
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_missing_verses_counted_by_occurrence(tmp_path) -> None:
+    """Matches how broken TRACK refs are counted: a ghost cited three times
+    contributes three, so a repeatedly-hallucinated verse isn't flattened
+    into a single point of badness."""
+    from lectorium_chat.observability.auto_scores import _count_missing_verses
+
+    db = _library_db(tmp_path, [("BG", "2.13")])
+    refs = [("BG", "2.13"), ("BG", "9.99"), ("BG", "9.99"), ("SB", "1.1.1")]
+
+    assert _count_missing_verses(db, refs) == 3
+
+
+def test_present_verses_are_not_counted(tmp_path) -> None:
+    from lectorium_chat.observability.auto_scores import _count_missing_verses
+
+    db = _library_db(tmp_path, [("BG", "2.13"), ("SB", "1.1.1")])
+
+    assert _count_missing_verses(db, [("BG", "2.13"), ("SB", "1.1.1")]) == 0
+
+
+def test_verse_lookup_is_one_query(tmp_path, monkeypatch) -> None:
+    """It was a query per reference inside a Python loop, described in the
+    docstring as "one short SQLite read per turn" — an answer citing a dozen
+    verses paid for a dozen, on the event loop."""
+    import sqlite3 as sqlite3_mod
+
+    from lectorium_chat.observability import auto_scores as mod
+
+    db = _library_db(tmp_path, [("BG", "2.13")])
+    executed: list[str] = []
+    real_connect = sqlite3_mod.connect
+
+    class _CountingConn:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def execute(self, sql, *a):
+            executed.append(sql)
+            return self._inner.execute(sql, *a)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self._inner.close()
+            return False
+
+    monkeypatch.setattr(
+        mod.sqlite3, "connect", lambda *a, **kw: _CountingConn(real_connect(*a, **kw))
+    )
+
+    refs = [("BG", "2.13"), ("BG", "9.99"), ("SB", "1.1.1"), ("CC", "8.128")]
+    assert mod._count_missing_verses(db, refs) == 3
+    assert len(executed) == 1

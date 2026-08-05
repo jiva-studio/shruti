@@ -606,7 +606,7 @@ async def run_chat_turn(
                 outline_has_conclusion=outline_has_conclusion,
                 outline_skipped_notes_ratio=outline_skipped_notes_ratio,
             )
-            emit_turn_scores(get_langfuse(), langfuse_trace_id, summary, audit)
+            await emit_turn_scores(get_langfuse(), langfuse_trace_id, summary, audit)
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "auto_scores_failed",
