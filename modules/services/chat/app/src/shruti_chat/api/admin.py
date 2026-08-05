@@ -194,6 +194,9 @@ async def status(x_app_token: str | None = Header(default=None)) -> dict[str, An
         # means Langfuse is unreachable (or force-disabled) and those prompts
         # are the copy baked into the image — which `pull` only refreshes by
         # hand, so it can be arbitrarily far behind the live text.
+        # Non-empty means development defaults are live. On a prod deploy that
+        # lost `ENV` the boot guard never fires, so this is where it shows.
+        "insecure_defaults": s.insecure_defaults(),
         "prompts": {
             "registered": len(LANGFUSE_PROMPT_NAMES),
             **prompt_source_summary(),
