@@ -43,6 +43,7 @@ from shruti_chat.research.outline_builder import (
     synthesize_intro,
 )
 from shruti_chat.research.pipeline import resolve_retrieval_lang
+from shruti_chat.research.citation_index import citation_index_holds
 from shruti_chat.research.thesis_augmentation import augment_thin_theses
 
 
@@ -282,9 +283,16 @@ async def synthesis_planner_node(
     # fetch — respecting the user's router_args filters — and re-rank.
     # Fires conditionally per-thesis; if all are strong, no DB calls.
     with langfuse_span("planner.stage2_augment"):
+        # The [^N] index space, made explicit. `augment_thin_theses` numbers
+        # each fresh chunk `len(stage2_base) + 1 + i`, while the `tool_results`
+        # append-reducer concatenates whatever we return onto the notes already
+        # in state. Those two agree ONLY if the base pool is exactly
+        # (prior notes + Stage 1 commentaries) and we append them back in that
+        # same order — see `citation_index_holds`.
+        stage2_base = list(tool_results) + list(new_commentaries)
         augmented, fresh_chunks = await augment_thin_theses(
             enriched,
-            list(tool_results) + list(new_commentaries),
+            stage2_base,
             chunk_repo=ctx.chunk_repo,
             embedder=ctx.embedder,
             alias_map=ctx.aliases,
@@ -372,6 +380,23 @@ async def synthesis_planner_node(
         else:
             update["corpus_insufficient"] = _fallback_enabled(state, ctx)
     combined_appends = list(new_commentaries) + list(fresh_chunks)
+    if not citation_index_holds(
+        prior=tool_results,
+        stage2_base=stage2_base,
+        appended=combined_appends,
+        new_commentaries=new_commentaries,
+    ):
+        # Every `[^N]` in the answer now points at the wrong source. Nothing
+        # else would notice: no exception, no empty result, just confident
+        # prose citing the wrong lecture.
+        log.error(
+            "citation_index_contract_violated",
+            request_id=ctx.request_id,
+            prior=len(tool_results),
+            stage2_base=len(stage2_base),
+            new_commentaries=len(new_commentaries),
+            fresh=len(fresh_chunks),
+        )
     if combined_appends:
         # `tool_results` state field uses an append-reducer so returning
         # a list here gets concatenated onto what research_worker wrote.
