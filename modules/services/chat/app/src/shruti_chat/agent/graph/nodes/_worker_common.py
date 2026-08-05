@@ -134,6 +134,27 @@ async def localized_reply(ctx: TurnContext, situation: str) -> LocalizedReply:
 WORKER_PROMPT_SECTIONS = ("header", "tools", "actions", "quoting")
 
 
+async def owned_track_ids(ctx: TurnContext) -> list[str] | None:
+    """The tracks THIS user added, for the private lecture lane (#1227).
+
+    Resolved server-side from the verified JWT `sub` — NEVER from client-supplied
+    recent_tracks. Best-effort: a failed lookup degrades to public-corpus-only
+    rather than failing the turn.
+
+    Shared because two lanes retrieve lectures and only one of them remembered
+    to ask: the out-of-corpus fallback searched without this (and without the
+    author scope), so a personal library was invisible in exactly the turn that
+    announced the corpus had nothing.
+    """
+    if not ctx.user_id or ctx.chunk_repo is None:
+        return None
+    try:
+        return await ctx.chunk_repo.get_owned_track_ids(ctx.user_id)
+    except Exception as exc:  # noqa: BLE001 — private lane is best-effort
+        log.warning("owned_track_ids_lookup_failed", error=str(exc))
+        return None
+
+
 def tool_schemas_from(tools: dict[str, Any]) -> list[dict[str, Any]]:
     """Pull OpenAI-format schemas from the registered ToolDefs for the
     subset of tools this worker actually has bound."""

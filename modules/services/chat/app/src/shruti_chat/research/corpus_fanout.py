@@ -21,6 +21,7 @@ from shruti_chat.agent.tools._envelope import (
     resolve_commentary_author_names,
 )
 from shruti_chat.agent.tools._helpers import BOOK_PREFIX
+from shruti_chat.domain.source_ids import chunk_source_filter
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.constants import (
     ADDRESS_HIT_SCORE,
@@ -436,6 +437,13 @@ async def fanout_search_with_boost(
     #    router's own filters. Books stay canon, so the library lane below is
     #    left alone. The lane is disabled when the intersection matched zero
     #    tracks — same rule as an empty catalog filter.
+    # The book, as the CHUNK tables spell it. `filter_track_ids` above resolves a
+    # short code itself, so the lecture lane keeps `book_id` verbatim; the library
+    # and lexical lanes compare against `chunks.source_id` and would match nothing
+    # at all. Dropping it there searches every book — wrong, but recoverable, and
+    # the router resolves the code before it ever gets here.
+    lib_source_id = chunk_source_filter(book_id)
+
     lecture_eligible = eligible_track_ids
     if author_scope is not None:
         lecture_eligible = await author_scope.narrow(eligible_track_ids)
@@ -514,7 +522,7 @@ async def fanout_search_with_boost(
         async def _library(use_lang: str | None, kinds: list[str]) -> list[_RawScored]:
             _t = time.perf_counter()
             scored = await chunk_repo.search_library_by_embedding(
-                q_vec, kinds=kinds, source_id=book_id, author_id=author_id,
+                q_vec, kinds=kinds, source_id=lib_source_id, author_id=author_id,
                 lang=use_lang, date_from=date_from, date_to=date_to, top_k=fetch_k,
             )
             _record("library_verse" if kinds == ["verse"] else "library_rest", _t)
@@ -534,7 +542,7 @@ async def fanout_search_with_boost(
             try:
                 scored = await chunk_repo.search_chunks_lexical(
                     q_text, q_vec, kinds=list(_LIBRARY_KINDS),
-                    source_id=book_id, author_id=author_id, lang=use_lang,
+                    source_id=lib_source_id, author_id=author_id, lang=use_lang,
                     date_from=date_from, date_to=date_to,
                     top_k=LEXICAL_FETCH_TOP_K, trgm_min_sim=LEXICAL_TRGM_MIN_SIM,
                 )
