@@ -22,6 +22,10 @@ from typing import Iterable, Iterator
 
 from lectorium_chat.config import Settings, get_settings
 from lectorium_chat.db.client import get_pool
+from lectorium_chat.indexer._gc import (
+    delete_stale_library_items,
+    gc_would_prune_too_much,
+)
 from lectorium_chat.indexer.embed import Embedder, get_embedder
 from lectorium_chat.indexer.library import db as library_db
 from lectorium_chat.indexer.library.chunker import (
@@ -273,21 +277,24 @@ async def run_once_library(settings: Settings | None = None) -> dict:
 
     # GC: items present in indexed_items (library kinds) but no longer in library.db.
     # `current_keys` was populated during the streaming walk above.
-    stale = [k for k in indexed_hash if k not in current_keys]
+    #
+    # Guarded the same way the transcript GC is: a walk that yielded nothing
+    # means the library.db read failed or the file was swapped mid-pass — not
+    # that every item was deleted. The share check then covers a walk that came
+    # back partially populated, which loses data the same way.
+    stale = [k for k in indexed_hash if k not in current_keys] if items_total else []
+    if stale and gc_would_prune_too_much(len(stale), len(indexed_hash)):
+        log.warning(
+            "library_gc_refused",
+            stale=len(stale),
+            indexed=len(indexed_hash),
+            walked=items_total,
+        )
+        stale = []
     if stale:
-        async with pool.acquire() as conn:
-            await conn.executemany(
-                "DELETE FROM chunks WHERE item_id=$1 AND lang=$2",
-                stale,
-            )
-            await conn.executemany(
-                """
-                DELETE FROM indexed_items
-                WHERE item_kind = ANY($1::text[])
-                  AND item_id = $2 AND lang = $3 AND embed_model = $4
-                """,
-                [(list(LIBRARY_KINDS), i, l, embedder.name) for (i, l) in stale],
-            )
+        await delete_stale_library_items(
+            pool, stale, embedder.name, LIBRARY_KINDS,
+        )
         log.info("library_gc", removed=len(stale))
 
     log.info(
