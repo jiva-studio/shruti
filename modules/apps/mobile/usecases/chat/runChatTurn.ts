@@ -11,7 +11,12 @@ import type {
   ChatVerseBody,
   MediaPayload,
 } from "@lib/domain/chatMessage.js"
-import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
+import {
+  attributeValue,
+  BackendUnavailableError,
+  CHAT_ATTR_REPLY_LANGUAGE,
+  ProtocolVersionMismatchError,
+} from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
 import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionRepository.js"
@@ -709,8 +714,14 @@ export async function* runChatTurn(
       { role: "user", content: input.text },
       { role: "assistant", content: acc },
     ]
+    // The title names a reply, so it is written in the reply's language — the
+    // one the server settled for this turn, which is not always the language
+    // the client asked in (an English question in a Russian-set app is
+    // answered in English). No settled attribute ⇒ the requested language.
+    const settledLang = attributes?.[CHAT_ATTR_REPLY_LANGUAGE]
+    const titleLang = (settledLang ? attributeValue(settledLang) : "") || input.lang
     try {
-      const newTitle = await deps.title.fetchSessionTitle(turns, input.lang, {
+      const newTitle = await deps.title.fetchSessionTitle(turns, titleLang, {
         signal: input.signal,
       })
       if (newTitle) {
