@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     env: Literal["dev", "staging", "prod"] = "dev"
 
     # ── observability ──────────────────────────────────────────────────
+    # Langfuse credentials. Read from `Settings` rather than `os.environ`
+    # directly so they are discoverable — `LANGFUSE_FORCE_FALLBACK` in
+    # particular is the single most behaviour-changing switch in the service
+    # (it disables prompt management wholesale) and was documented nowhere.
+    langfuse_host: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    # Skip every Langfuse network call: prompts come from the bundled .md and
+    # no traces are emitted. Used by eval runs and local dev.
+    langfuse_force_fallback: bool = False
     # Per-stage `stage_ms` timing logs. Enabled for baseline collection;
     # sample rate is deterministic per trace_id so all stages of a sampled
     # turn co-occur, which keeps the per-turn breakdown coherent.
@@ -259,6 +269,15 @@ class Settings(BaseSettings):
     track_published_group: str = "chat-graft"
     track_published_consumer: str = "chat-1"
 
+    # In-app help corpus (the `help_get` tool). Path inside the image; the
+    # Dockerfile COPYs `modules/docs/help` there.
+    help_corpus_dir: Path = Path("/app/docs/help")
+
+    # Build stamps baked in by CI (Dockerfile ARG -> ENV) and surfaced on
+    # /healthz so an operator can confirm Watchtower rolled the new image.
+    shruti_build_sha: str = ""
+    shruti_build_time: str = ""
+
     # ── Indexer ─────────────────────────────────────────────────────────
     catalog_dir: Path = Path("/var/lib/chat")
     # Fractional values are allowed (e.g. 0.25 = every 15 min). The loop
@@ -450,6 +469,50 @@ class Settings(BaseSettings):
 
 
 _settings: Settings | None = None
+
+
+def warn_unknown_env_keys(env_file: str | Path | None = None) -> list[str]:
+    """Warn about keys in the dotenv file that no longer map to a setting.
+
+    `extra="ignore"` means a misspelled or retired variable is silently
+    discarded — and it had been, for months: the repo's own `.env` still
+    carried `DEVICE_RATE_LIMIT_PER_DAY` and `LLM_PREMIUM`, neither of which
+    exists any more, and nothing ever said so.
+
+    Warn rather than `extra="forbid"`. Forbid does catch exactly this case
+    (verified: it ignores unrelated process env vars and rejects stale dotenv
+    keys), but it turns a stale `.env` into a hard boot failure. On a running
+    service that trades a silent config bug for an outage — worse, and on the
+    deploy path where you least want a surprise. Returns the unknown keys so
+    callers/tests can assert on them.
+    """
+    path = Path(env_file) if env_file is not None else Path(
+        Settings.model_config.get("env_file", ".env")
+    )
+    if not path.exists():
+        return []
+    known = {name.upper() for name in Settings.model_fields}
+    unknown: list[str] = []
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key = line.split("=", 1)[0].strip().upper()
+        if key and key not in known:
+            unknown.append(key)
+    if unknown:
+        # Not `log` — config.py is imported before logging is configured.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "unknown_env_keys",
+            extra={"keys": sorted(set(unknown)), "env_file": str(path)},
+        )
+        print(
+            f"WARNING: {path} sets keys that are not settings and are ignored: "
+            f"{', '.join(sorted(set(unknown)))}",
+        )
+    return sorted(set(unknown))
 
 
 def get_settings() -> Settings:

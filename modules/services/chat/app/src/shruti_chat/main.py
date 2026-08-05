@@ -27,7 +27,7 @@ from shruti_chat.agent.tools import bind_repositories
 from shruti_chat.api import admin, chat, feedback, questions, title
 from shruti_chat.application.rate_limiter import RateLimiter
 from shruti_chat.composition import AppDeps
-from shruti_chat.config import get_settings
+from shruti_chat.config import get_settings, warn_unknown_env_keys
 from shruti_chat.infra.llm_provider import build_llm_provider
 from shruti_chat.db.client import close_pool, init_pool
 from shruti_chat.db.assert_schema import assert_schema_ready
@@ -84,6 +84,9 @@ async def lifespan(app: FastAPI):
     setup_logging()
     log = get_logger(__name__)
     s = get_settings()
+    # A retired or misspelled key in `.env` is silently ignored by
+    # pydantic-settings; say so at boot rather than letting it look applied.
+    warn_unknown_env_keys()
     started = time.monotonic()
     log.info("service_starting", version=s.service_version)
 

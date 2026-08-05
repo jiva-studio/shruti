@@ -48,3 +48,39 @@ def test_the_emitter_carries_the_config_comments() -> None:
     assert any("RFC1918" in c for c in comments.get("trusted_proxy_cidrs", []))
     # Section banners belong to the section, not to the field beneath them.
     assert not any("──" in c for block in comments.values() for c in block)
+
+
+# ── unknown env keys ──────────────────────────────────────────────────
+
+
+def test_unknown_env_keys_are_reported(tmp_path) -> None:
+    """`extra="ignore"` hid `DEVICE_RATE_LIMIT_PER_DAY` and `LLM_PREMIUM` in
+    the repo's own `.env` for months — both retired, both still set, nothing
+    ever said so."""
+    from shruti_chat.config import warn_unknown_env_keys
+
+    env = tmp_path / ".env"
+    env.write_text(
+        "# a comment\n"
+        "PORT=8080\n"
+        "DEVICE_RATE_LIMIT_PER_DAY=5\n"
+        "LLM_PREMIUM=some/model\n"
+        "\n"
+    )
+
+    assert warn_unknown_env_keys(env) == ["DEVICE_RATE_LIMIT_PER_DAY", "LLM_PREMIUM"]
+
+
+def test_a_clean_env_file_reports_nothing(tmp_path) -> None:
+    from shruti_chat.config import warn_unknown_env_keys
+
+    env = tmp_path / ".env"
+    env.write_text("PORT=8080\nLOG_LEVEL=info\n")
+
+    assert warn_unknown_env_keys(env) == []
+
+
+def test_a_missing_env_file_is_not_an_error(tmp_path) -> None:
+    from shruti_chat.config import warn_unknown_env_keys
+
+    assert warn_unknown_env_keys(tmp_path / "nope.env") == []
