@@ -30,7 +30,6 @@ from lectorium_chat.observability.logging import get_logger
 log = get_logger(__name__)
 
 
-_OP_TIMEOUT_S = 0.2
 _TTL_JITTER_S = 300
 
 # KEYS[1]=key, ARGV[1]=ttl_seconds (str), ARGV[2]=jitter_seconds (str).
@@ -68,12 +67,12 @@ def _seconds_until_next_midnight_utc() -> int:
 
 
 class RedisRateLimitStore:
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, *, op_timeout_s: float = 0.2) -> None:
         self._client = redis_async.from_url(
             url,
             decode_responses=False,
-            socket_timeout=_OP_TIMEOUT_S,
-            socket_connect_timeout=_OP_TIMEOUT_S,
+            socket_timeout=op_timeout_s,
+            socket_connect_timeout=op_timeout_s,
             retry_on_timeout=False,
             health_check_interval=30,
         )

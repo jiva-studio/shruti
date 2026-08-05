@@ -43,7 +43,6 @@ _HEARTBEAT_INTERVAL_S = 30
 # 0.2s socket timeout. That traffic is what pushes the instance toward the
 # timeout, and none of it carries information — the answer is "no" until the
 # user presses Stop.
-_CANCEL_POLL_INTERVAL_S = 1.0
 
 # Builds the turn's event stream given the runner's cancel predicate — the
 # runner owns the cancel state, the caller owns which turn (chat / proactive)
@@ -71,12 +70,14 @@ class TurnRunner:
         *,
         max_in_flight: int = 24,
         turn_budget_s: float = 300.0,
+        cancel_poll_interval_s: float = 1.0,
     ) -> None:
         self._turn_store = turn_store
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._cancels: dict[str, asyncio.Event] = {}
         self._max_in_flight = max_in_flight
         self._turn_budget_s = turn_budget_s
+        self._cancel_poll_interval_s = cancel_poll_interval_s
 
     def in_flight(self) -> int:
         return len(self._tasks)
@@ -145,12 +146,12 @@ class TurnRunner:
             # Handed to the turn, which polls it after every streamed event.
             # Explicit cancel only — NOT socket disconnect. The in-process
             # event is checked every call; the cross-replica flag is
-            # rate-limited (see _CANCEL_POLL_INTERVAL_S).
+            # rate-limited (see `cancel_poll_interval_s`).
             nonlocal last_remote_poll
             if cancel_event.is_set():
                 return True
             now = monotonic()
-            if now - last_remote_poll < _CANCEL_POLL_INTERVAL_S:
+            if now - last_remote_poll < self._cancel_poll_interval_s:
                 return False
             last_remote_poll = now
             return await self._turn_store.is_cancelled(trace_id)

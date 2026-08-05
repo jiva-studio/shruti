@@ -73,10 +73,15 @@ async def _capture_predicate(runner: TurnRunner, trace_id: str = "t-1"):
     return captured["fn"]
 
 
+# The runner's default, mirrored here so the tests step past exactly one
+# window without reaching into a private attribute.
+_POLL_INTERVAL_S = 1.0
+
+
 def _advance(clock: dict[str, float]) -> None:
     """Step past the throttle window. `produce()` polls once itself when the
     stream drains, so the predicate handed back is already armed."""
-    clock["t"] += turn_runner_mod._CANCEL_POLL_INTERVAL_S + 0.01
+    clock["t"] += _POLL_INTERVAL_S + 0.01
 
 
 async def test_a_burst_of_events_costs_one_remote_read(
@@ -125,7 +130,7 @@ async def test_a_remote_stop_is_still_observed(
     # Another replica sets the flag; this one notices on its next poll.
     store.cancelled.add("t-remote")
     assert await is_cancelled() is False  # still inside the interval
-    clock["t"] += turn_runner_mod._CANCEL_POLL_INTERVAL_S + 0.01
+    clock["t"] += _POLL_INTERVAL_S + 0.01
     assert await is_cancelled() is True
 
 

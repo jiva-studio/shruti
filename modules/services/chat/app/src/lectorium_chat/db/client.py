@@ -55,12 +55,17 @@ async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:
     # semaphore is what actually keeps the queue short.
     _pool = await asyncpg.create_pool(
         dsn=dsn,
-        min_size=5,
-        max_size=50,
-        command_timeout=15.0,
+        min_size=s.db_pool_min_size,
+        max_size=s.db_pool_max_size,
+        command_timeout=s.db_command_timeout_s,
         init=_init_connection,
     )
-    log.info("db_pool_ready", min_size=5, max_size=50, command_timeout=15.0)
+    log.info(
+        "db_pool_ready",
+        min_size=s.db_pool_min_size,
+        max_size=s.db_pool_max_size,
+        command_timeout=s.db_command_timeout_s,
+    )
     return _pool
 
 

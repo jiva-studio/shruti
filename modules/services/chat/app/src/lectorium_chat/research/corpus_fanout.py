@@ -21,11 +21,11 @@ from lectorium_chat.agent.tools._envelope import (
     resolve_commentary_author_names,
 )
 from lectorium_chat.agent.tools._helpers import BOOK_PREFIX
+from lectorium_chat.config import get_settings
 from lectorium_chat.domain.source_ids import chunk_source_filter
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.constants import (
     ADDRESS_HIT_SCORE,
-    FANOUT_DB_CONCURRENCY,
     LEXICAL_FETCH_TOP_K,
     LEXICAL_TRGM_MIN_SIM,
     MAX_PARSED_ADDRESSES,
@@ -477,8 +477,9 @@ async def fanout_search_with_boost(
 
     # Shared by every lane of every sub-query in THIS fanout, so the round's
     # burst against the connection pool is bounded regardless of how many
-    # sub-queries the planner produced. See FANOUT_DB_CONCURRENCY.
-    db_gate = asyncio.Semaphore(FANOUT_DB_CONCURRENCY)
+    # sub-queries the planner produced. Paired with `db_pool_max_size` — the
+    # two are only meaningful together, so both are Settings.
+    db_gate = asyncio.Semaphore(max(1, get_settings().fanout_db_concurrency))
 
     async def _gated(coro):
         async with db_gate:

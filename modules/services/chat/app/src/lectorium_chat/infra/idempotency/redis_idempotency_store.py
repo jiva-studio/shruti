@@ -17,19 +17,18 @@ from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
 
-_OP_TIMEOUT_S = 0.2  # per-call hard cap; matches RedisKVCache
 
 
 class RedisIdempotencyStore:
     """SET NX EX wrapper. Single Redis op per acquire; no breaker
     state since a single failure already degrades open."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, *, op_timeout_s: float = 0.2) -> None:
         self._client = redis_async.from_url(
             url,
             decode_responses=False,
-            socket_timeout=_OP_TIMEOUT_S,
-            socket_connect_timeout=_OP_TIMEOUT_S,
+            socket_timeout=op_timeout_s,
+            socket_connect_timeout=op_timeout_s,
             retry_on_timeout=False,
             health_check_interval=30,
         )

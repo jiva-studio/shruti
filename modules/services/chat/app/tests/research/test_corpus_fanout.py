@@ -21,10 +21,8 @@ from lectorium_chat.research.corpus_fanout import (
     fanout_search_with_boost,
     merge_fanout,
 )
-from lectorium_chat.research.constants import (
-    FANOUT_DB_CONCURRENCY,
-    MAX_PARSED_ADDRESSES,
-)
+from lectorium_chat.config import get_settings
+from lectorium_chat.research.constants import MAX_PARSED_ADDRESSES
 from lectorium_chat.research.models import FanoutResult
 
 
@@ -740,9 +738,8 @@ async def test_fanout_bounds_its_database_burst():
         lang="ru",
     )
 
-    assert repo.peak <= FANOUT_DB_CONCURRENCY, (
-        f"peak {repo.peak} lanes in flight exceeds the gate"
-    )
+    gate = get_settings().fanout_db_concurrency
+    assert repo.peak <= gate, f"peak {repo.peak} lanes in flight exceeds the gate"
     # And the gate is actually being used — a plan this wide should saturate it.
     assert repo.peak > 1
 

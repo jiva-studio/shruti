@@ -25,19 +25,30 @@ from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
 
-_OP_TIMEOUT_S = 0.2  # per-call hard cap; matches RedisKVCache / idempotency
-_RUNNING_TTL_S = 180  # liveness window for the `running` marker; heartbeat-refreshed
-_RESULT_TTL_S = 86_400  # 24h from completion — bridges "user comes back tomorrow"
-_CANCEL_TTL_S = 180  # cross-replica cancel flag; same horizon as a live turn
 
 
 class RedisTurnStore:
-    def __init__(self, url: str) -> None:
+    def __init__(
+        self,
+        url: str,
+        *,
+        op_timeout_s: float = 0.2,
+        running_ttl_s: int = 180,
+        result_ttl_s: int = 86_400,
+        cancel_ttl_s: int = 180,
+    ) -> None:
+        # `running` is the heartbeat-refreshed liveness window (lapses => a
+        # resuming client reads the turn as orphaned); `result` is how long a
+        # finished answer stays fetchable; `cancel` is the cross-replica Stop
+        # flag, kept on the same horizon as a live turn.
+        self._running_ttl_s = running_ttl_s
+        self._result_ttl_s = result_ttl_s
+        self._cancel_ttl_s = cancel_ttl_s
         self._client = redis_async.from_url(
             url,
             decode_responses=False,
-            socket_timeout=_OP_TIMEOUT_S,
-            socket_connect_timeout=_OP_TIMEOUT_S,
+            socket_timeout=op_timeout_s,
+            socket_connect_timeout=op_timeout_s,
             retry_on_timeout=False,
             health_check_interval=30,
         )
@@ -55,14 +66,14 @@ class RedisTurnStore:
             await self._client.set(
                 name=self._key(trace_id),
                 value=json.dumps({"state": "running", "user_id": user_id}).encode(),
-                ex=_RUNNING_TTL_S,
+                ex=self._running_ttl_s,
             )
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("turn_store_mark_running_error", err=str(exc))
 
     async def heartbeat(self, trace_id: str) -> None:
         try:
-            await self._client.expire(self._key(trace_id), _RUNNING_TTL_S)
+            await self._client.expire(self._key(trace_id), self._running_ttl_s)
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("turn_store_heartbeat_error", err=str(exc))
 
@@ -76,7 +87,7 @@ class RedisTurnStore:
                     {"state": state, "user_id": user_id, "events": events},
                     ensure_ascii=False,
                 ).encode(),
-                ex=_RESULT_TTL_S,
+                ex=self._result_ttl_s,
             )
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("turn_store_finish_error", err=str(exc))
@@ -93,7 +104,7 @@ class RedisTurnStore:
 
     async def request_cancel(self, trace_id: str) -> None:
         try:
-            await self._client.set(self._cancel_key(trace_id), b"1", ex=_CANCEL_TTL_S)
+            await self._client.set(self._cancel_key(trace_id), b"1", ex=self._cancel_ttl_s)
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("turn_store_request_cancel_error", err=str(exc))
 

@@ -125,15 +125,9 @@ TOPK_PER_QUERY = 8
 # the primary text of the first N regenerated sub_queries and drop alt_phrasings.
 REGEN_MAX_SUBQUERIES = 4
 
-# Ceiling on ANN lanes running against Postgres at once, for ONE turn's fanout.
-# Round 0 fans out up to 4 sub_queries × 3 phrasings = 12 queries, each of
-# which opens 5 lanes — ~60 concurrent `pool.acquire()` calls against a pool
-# that holds far fewer. asyncpg queues acquire waiters with no timeout, so the
-# excess did not error: it stalled until TIMEOUT_FANOUT_S fired and `_safe`
-# returned an empty result, i.e. an ungrounded answer rather than a failure.
-# Bounding the burst keeps a single turn from monopolising the pool and keeps
-# the wait inside the stage budget.
-FANOUT_DB_CONCURRENCY = 8
+# NOTE: the fanout's DB-concurrency ceiling lives in `Settings`
+# (`fanout_db_concurrency`), not here — it has to be tuned together with
+# `db_pool_max_size`, and an operator needs both without a rebuild.
 
 # Addresses ("БГ 2.13") parsed out of the RAW user query for the exact-match
 # fast path. One fetch per address, up to two round-trips each, and the input

@@ -21,21 +21,27 @@ from lectorium_chat.observability.logging import get_logger
 log = get_logger(__name__)
 
 
-_CIRCUIT_THRESHOLD = 3
-_CIRCUIT_OPEN_S = 30.0
-_OP_TIMEOUT_S = 0.2  # per-call hard cap
 
 
 class RedisKVCache:
-    def __init__(self, url: str) -> None:
+    def __init__(
+        self,
+        url: str,
+        *,
+        op_timeout_s: float = 0.2,
+        circuit_threshold: int = 3,
+        circuit_open_s: float = 30.0,
+    ) -> None:
         self._url = url
+        self._circuit_threshold = max(1, circuit_threshold)
+        self._circuit_open_s = circuit_open_s
         # decode_responses=False — we cache raw bytes; encoding is the
         # caller's concern (JSON helpers handle utf-8).
         self._client = redis_async.from_url(
             url,
             decode_responses=False,
-            socket_timeout=_OP_TIMEOUT_S,
-            socket_connect_timeout=_OP_TIMEOUT_S,
+            socket_timeout=op_timeout_s,
+            socket_connect_timeout=op_timeout_s,
             # Drop dead connections rather than hand them out to callers.
             retry_on_timeout=False,
             health_check_interval=30,
@@ -59,15 +65,15 @@ class RedisKVCache:
     def _record_failure(self) -> None:
         self._consecutive_failures += 1
         if (
-            self._consecutive_failures >= _CIRCUIT_THRESHOLD
+            self._consecutive_failures >= self._circuit_threshold
             and self._open_until == 0.0
         ):
-            self._open_until = monotonic() + _CIRCUIT_OPEN_S
+            self._open_until = monotonic() + self._circuit_open_s
             log.warning(
                 "cache_circuit_open",
                 backend="redis",
-                threshold=_CIRCUIT_THRESHOLD,
-                open_s=_CIRCUIT_OPEN_S,
+                threshold=self._circuit_threshold,
+                open_s=self._circuit_open_s,
             )
 
     def _record_success(self) -> None:
