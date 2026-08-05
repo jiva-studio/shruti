@@ -20,6 +20,10 @@ import structlog
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.indexer import catalog, s3
+from shruti_chat.indexer._gc import (
+    delete_stale_transcripts,
+    gc_would_prune_too_much,
+)
 from shruti_chat.indexer.chunker import chunk_reviewed
 from shruti_chat.indexer.embed import Embedder, get_embedder
 from shruti_chat.indexer.library import db as library_db
@@ -153,20 +157,18 @@ async def run_once(
         # does not happen in practice.
         objects_set = {(o.track_id, o.lang) for o in objects}
         stale = [k for k in indexed_map if k not in objects_set] if objects else []
+        if stale and gc_would_prune_too_much(len(stale), len(indexed_map)):
+            # A partially-populated listing passes the empty guard above and
+            # loses data the same way. Refuse and say so.
+            log.warning(
+                "transcript_gc_refused",
+                stale=len(stale),
+                indexed=len(indexed_map),
+                listed=len(objects),
+            )
+            stale = []
         if stale:
-            async with pool.acquire() as conn:
-                await conn.executemany(
-                    "DELETE FROM chunks WHERE track_id = $1 AND lang = $2",
-                    stale,
-                )
-                await conn.executemany(
-                    """
-                    DELETE FROM indexed_items
-                    WHERE item_kind = 'track_transcript'
-                      AND item_id = $1 AND lang = $2 AND embed_model = $3
-                    """,
-                    [(t, lang, embedder.name) for t, lang in stale],
-                )
+            await delete_stale_transcripts(pool, stale, embedder.name)
             log.info("transcript_gc", removed=len(stale))
 
         # Parallel processing: API embedder + HTTP S3 fetches are I/O bound,
