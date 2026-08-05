@@ -66,3 +66,80 @@ def test_domain_imports_only_inward(py_file: Path) -> None:
         f"{py_file.relative_to(_SRC)} imports outer layer(s): {offending}. "
         "domain/ must depend only inward (on other domain modules)."
     )
+
+
+# ── application/ ──────────────────────────────────────────────────────
+#
+# The use-case layer orchestrates ports; it must not reach for a concrete
+# adapter, the web framework, a driver, or the composition root. Nothing
+# enforced this, and it drifted.
+#
+# `agent/` is NOT forbidden: the graph is the agent runtime this layer drives,
+# and untangling that is a design change, not a lint rule.
+
+_APPLICATION = _SRC / "application"
+
+_APP_FORBIDDEN_PREFIXES = (
+    "shruti_chat.infra",
+    "shruti_chat.api",
+    "shruti_chat.indexer",
+    "shruti_chat.composition",
+    "fastapi",
+    "asyncpg",
+    "redis",
+    "sqlite3",
+    "httpx",
+    "langgraph",
+    "litellm",
+    "pydantic_settings",
+)
+
+# Known violations, each with the plan item that removes it. This is an
+# ALLOWLIST THAT MUST SHRINK: `test_no_stale_application_allowlist` fails once
+# an entry stops being needed, so a fixed leak can't quietly leave the rule
+# weakened behind it. Adding to it should take an argument.
+_APP_ALLOWED: dict[str, set[str]] = {
+    # `AppDeps` is a plain DTO but lives in `composition`, which imports
+    # fastapi + asyncpg — so the use case inherits both. Moving it to
+    # `application/deps.py` is its own change (it touches every api module).
+    "application/chat_turn.py": {
+        "shruti_chat.composition",
+        # Classifies a provider outage to pick an error code. The fix is a
+        # `ProviderUnavailable` domain exception, mirroring the one
+        # `domain/ports/rate_limit_store.py` already defines.
+        "shruti_chat.infra.llm_provider.openrouter",
+    },
+}
+
+
+def _violations(py_file: Path, forbidden: tuple[str, ...]) -> set[str]:
+    return {
+        mod for mod in _imported_modules(py_file) if mod.startswith(forbidden)
+    }
+
+
+@pytest.mark.parametrize(
+    "py_file",
+    sorted(_APPLICATION.rglob("*.py")),
+    ids=lambda p: str(p.relative_to(_SRC)),
+)
+def test_application_does_not_reach_outward(py_file: Path) -> None:
+    rel = str(py_file.relative_to(_SRC))
+    offending = _violations(py_file, _APP_FORBIDDEN_PREFIXES) - _APP_ALLOWED.get(rel, set())
+    assert not offending, (
+        f"{rel} imports {sorted(offending)}. application/ orchestrates ports; "
+        "it must not reach for a concrete adapter, the web framework, a "
+        "driver, or the composition root."
+    )
+
+
+def test_no_stale_application_allowlist() -> None:
+    """An allowlist that only ever grows is a rule that has been switched off.
+    Once a leak is fixed its entry must go, or the next one slips in under it."""
+    stale: dict[str, set[str]] = {}
+    for rel, allowed in _APP_ALLOWED.items():
+        actual = _violations(_SRC / rel, _APP_FORBIDDEN_PREFIXES)
+        unused = allowed - actual
+        if unused:
+            stale[rel] = unused
+    assert not stale, f"allowlist entries no longer needed — delete them: {stale}"
