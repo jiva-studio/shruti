@@ -66,21 +66,29 @@ log = get_logger(__name__)
 # Per-worker tool subsets — one bag, sliced by name per graph node.
 # Splitting cuts each worker's tool-menu to ~5-7 entries instead of
 # 17, which improves tool-selection accuracy on weaker models.
-_RESEARCH_TOOL_NAMES = frozenset({
+#
+# TUPLES, not sets: `_subset` preserves this order into the dict it
+# builds, and `tool_schemas_from` reads that dict to order the schema
+# list handed to the model. Set iteration order for strings varies with
+# PYTHONHASHSEED, so a set here made the tool menu shuffle between
+# process restarts — and menu order measurably moves tool selection on
+# the weak models this split exists to help. Same rule as the prompt
+# sections (see `agent/prompts/__init__.py`).
+_RESEARCH_TOOL_NAMES = (
     "chunks_search",
     "chunks_get_by_address",
     "chunks_get_window",
     "chunks_find_similar",
     "user_history_search",
     "track_outline_get",
-})
+)
 # Locate is code-driven (run_locate); these tools are only the ReAct
 # fallback toolset used when chunk_repo/embedder are absent (tests).
-_LOCATE_TOOL_NAMES = frozenset({
+_LOCATE_TOOL_NAMES = (
     "chunks_search",
     "chunks_get_by_address",
-})
-_CATALOG_TOOL_NAMES = frozenset({
+)
+_CATALOG_TOOL_NAMES = (
     "author_resolve",
     "source_resolve",
     "location_resolve",
@@ -94,8 +102,8 @@ _CATALOG_TOOL_NAMES = frozenset({
     # then pulls its chapter outline to write the recap. Without this the
     # catalog worker can find the track but has no summary tool.
     "track_outline_get",
-})
-_ACTION_TOOL_NAMES = frozenset({
+)
+_ACTION_TOOL_NAMES = (
     "track_pdf_generate",
     "reminder_propose",
     "smart_library_propose",
@@ -107,19 +115,20 @@ _ACTION_TOOL_NAMES = frozenset({
     # worker — without a resolver here the deictic-PDF request had no
     # track to operate on and track_pdf_generate never got a real id.
     "user_tracks_list",
-})
-_HELP_TOOL_NAMES = frozenset({
+)
+_HELP_TOOL_NAMES = (
     "help_get",
-})
+)
 
 
 def _subset(
-    tools: dict[str, Any], names: frozenset[str]
+    tools: dict[str, Any], names: tuple[str, ...]
 ) -> dict[str, Any]:
-    """Pick the named subset out of the full tool bag. Silently drop
-    names that aren't bound (e.g. an action tool that didn't register
-    because its dependency is unavailable) so partial deploys don't
-    crash the graph at build time."""
+    """Pick the named subset out of the full tool bag, in `names` order.
+
+    Silently drops names that aren't bound (e.g. an action tool that
+    didn't register because its dependency is unavailable) so partial
+    deploys don't crash the graph at build time."""
     return {n: tools[n] for n in names if n in tools}
 
 
