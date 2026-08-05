@@ -15,8 +15,36 @@ from lectorium_chat.config import get_settings
 from lectorium_chat.db.client import get_pool
 from lectorium_chat.indexer import run as indexer_run
 from lectorium_chat.indexer.embed import get_embedder
+from lectorium_chat.observability.logging import get_logger
 
 router = APIRouter()
+
+log = get_logger(__name__)
+
+# In-flight manual reindex, if any. Held rather than discarded for two
+# reasons: a second POST can see a run is already going, and `create_task`
+# keeps only a weak reference — a local variable let the task be collected
+# mid-run.
+#
+# This guards the MANUAL trigger only. The scheduler loop and the
+# `track.ready` consumer can still start a run alongside it; making the
+# triggers mutually exclusive belongs in the indexer, and doing it across
+# replicas needs a Postgres advisory lock.
+_reindex_task: asyncio.Task[str] | None = None
+
+
+def _log_reindex_result(task: asyncio.Task[str]) -> None:
+    """Surface how a detached reindex ended. The previous callback called
+    `task.exception()` and threw the result away, so a failed run left no
+    trace beyond whatever the indexer logged on its way down."""
+    if task.cancelled():
+        log.warning("reindex_cancelled")
+        return
+    exc = task.exception()
+    if exc is not None:
+        log.error("reindex_failed", error=str(exc))
+    else:
+        log.info("reindex_finished", run_id=task.result())
 
 _started_at = time.monotonic()
 
@@ -191,8 +219,14 @@ async def reindex(
 ) -> dict[str, Any]:
     _check_token(x_app_token)
     body = body or ReindexRequest()
+    global _reindex_task
+    # Single-flight. Without this, N POSTs spawned N full runs, each opening
+    # 8 concurrent transcript workers against the shared pool and paying for
+    # its own embeddings; they also raced the unscoped GC deletes.
+    if _reindex_task is not None and not _reindex_task.done():
+        raise HTTPException(status_code=409, detail="reindex already running")
     # Schedule on background loop without blocking response.
-    task = asyncio.create_task(
+    _reindex_task = asyncio.create_task(
         indexer_run.run_once(
             trigger="manual",
             track_ids_filter=body.track_ids,
@@ -200,6 +234,5 @@ async def reindex(
             force_catalog=body.force_catalog,
         )
     )
-    # Attach a no-op done callback so errors are at least logged
-    task.add_done_callback(lambda t: t.exception() if t.exception() else None)
+    _reindex_task.add_done_callback(_log_reindex_result)
     return {"accepted": True, "started_at": datetime.now(timezone.utc).isoformat()}
