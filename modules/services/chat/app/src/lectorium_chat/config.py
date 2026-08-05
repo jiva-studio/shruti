@@ -293,6 +293,21 @@ class Settings(BaseSettings):
     # short bursts.
     ip_rate_limit_per_day: int = 2000
 
+    # ── Turn admission ──────────────────────────────────────────────────
+    # The daily caps above bound VOLUME, not CONCURRENCY: nothing stopped
+    # every quota-holder from having a turn in flight at the same moment.
+    # Turns run detached (a dropped client does not cancel one), so they
+    # pile up rather than drain with the socket.
+    #
+    # Ceiling on producers in flight on this replica. Over it, /chat answers
+    # 503 with Retry-After and refunds the charge — a bounded rejection the
+    # client retries, instead of everyone queueing behind a saturated pool.
+    max_in_flight_turns: int = 24
+    # Hard wall-clock budget for one turn. Worst case without it is ~7 ReAct
+    # iterations x the 180s LLM timeout — ~21 minutes of billed generation for
+    # a client that walked away after the first token.
+    turn_budget_s: float = 300.0
+
     # ── CORS ────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins. Default `*` keeps dev easy;
     # production override pins to the real app origin via env

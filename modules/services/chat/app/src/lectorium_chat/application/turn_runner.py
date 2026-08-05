@@ -57,11 +57,29 @@ StreamFactory = Callable[[Callable[[], Awaitable[bool]]], AsyncIterator[AgentEve
 Finalize = Callable[[bool, bool, bool], Awaitable["dict[str, Any] | None"]]
 
 
+class TurnCapacityExceeded(RuntimeError):
+    """Too many turns already in flight on this replica.
+
+    Raised by `start()` BEFORE the producer is spawned, so the caller still
+    owns the quota charge and the idempotency key and can undo both."""
+
+
 class TurnRunner:
-    def __init__(self, turn_store: TurnStore) -> None:
+    def __init__(
+        self,
+        turn_store: TurnStore,
+        *,
+        max_in_flight: int = 24,
+        turn_budget_s: float = 300.0,
+    ) -> None:
         self._turn_store = turn_store
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._cancels: dict[str, asyncio.Event] = {}
+        self._max_in_flight = max_in_flight
+        self._turn_budget_s = turn_budget_s
+
+    def in_flight(self) -> int:
+        return len(self._tasks)
 
     async def shutdown(self) -> None:
         """Cancel in-flight producer tasks on lifespan teardown so a redeploy
@@ -92,7 +110,20 @@ class TurnRunner:
     ) -> "asyncio.Queue[dict[str, Any] | None]":
         """Spawn the detached producer and return the queue the SSE response
         tails. The producer keeps running if the SSE consumer drops (client
-        disconnect / background) — only `cancel()` stops it early."""
+        disconnect / background) — only `cancel()` stops it early.
+
+        Raises `TurnCapacityExceeded` when this replica is already at its
+        ceiling. Nothing has been spawned at that point, so the caller can
+        still refund the charge and release the idempotency key."""
+        if self._max_in_flight > 0 and len(self._tasks) >= self._max_in_flight:
+            log.warning(
+                "turn_capacity_exceeded",
+                in_flight=len(self._tasks),
+                max_in_flight=self._max_in_flight,
+            )
+            raise TurnCapacityExceeded(
+                f"{len(self._tasks)} turns in flight (max {self._max_in_flight})"
+            )
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         cancel_event = asyncio.Event()
         self._cancels[trace_id] = cancel_event
@@ -158,7 +189,8 @@ class TurnRunner:
                     log.warning("chat_turn_heartbeat_failed", trace_id=trace_id)
 
             heartbeat_task = asyncio.create_task(_heartbeat_loop())
-            try:
+            async def _consume() -> None:
+                nonlocal had_error, answer_started
                 stream = stream_factory(is_cancelled)
                 async for ev in stream:
                     if ev.type == "error":
@@ -171,6 +203,15 @@ class TurnRunner:
                     }
                     buffer.append(frame)
                     await queue.put(frame)
+
+            try:
+                # Hard wall-clock budget. A detached turn is not bounded by the
+                # client socket, so without this the ReAct ceiling times the LLM
+                # timeout (~21 min) is what an abandoned turn can bill.
+                if self._turn_budget_s > 0:
+                    await asyncio.wait_for(_consume(), timeout=self._turn_budget_s)
+                else:
+                    await _consume()
                 # Explicit Stop is CO-OPERATIVE: DELETE /chat/turn sets the
                 # cancel flag and the turn loop (run_chat_turn) notices it and
                 # `return`s — which ends this stream cleanly, looking exactly
@@ -202,6 +243,26 @@ class TurnRunner:
                 # completes.
                 cancelled = True
                 raise
+            except TimeoutError:
+                # Budget blown. `wait_for` already cancelled the producer, so
+                # nothing is still generating. Surface it to the client as an
+                # error frame — it is the last thing they will receive — and
+                # let the normal teardown refund and record state="error".
+                had_error = True
+                log.warning(
+                    "chat_turn_budget_exceeded",
+                    trace_id=trace_id,
+                    budget_s=self._turn_budget_s,
+                )
+                frame = {
+                    "event": "error",
+                    "data": json.dumps(
+                        {"code": "turn_timeout", "message": "turn took too long"},
+                        ensure_ascii=False,
+                    ),
+                }
+                buffer.append(frame)
+                await queue.put(frame)
             except Exception:
                 had_error = True
                 log.exception("chat_turn_producer_failed", trace_id=trace_id)
@@ -240,12 +301,20 @@ class TurnRunner:
                     await self._turn_store.finish(
                         trace_id, state=state, events=buffer, user_id=user_id,
                     )
+                    # Free the admission slot BEFORE the sentinel, so capacity
+                    # matches what the client can observe: releasing it after
+                    # left the turn counted as in-flight for another loop
+                    # iteration, and a client retrying on the sentinel could
+                    # be rejected by a turn that had already finished. The
+                    # turn is fully accounted by this point, so dropping it
+                    # from the registry only means `shutdown()` no longer has
+                    # to cancel something that is already exiting.
+                    self._tasks.pop(trace_id, None)
+                    self._cancels.pop(trace_id, None)
                     # Sentinel — unblocks the SSE consumer if still attached.
                     await queue.put(None)
 
                 await asyncio.shield(asyncio.ensure_future(_teardown()))
-                self._tasks.pop(trace_id, None)
-                self._cancels.pop(trace_id, None)
 
         task = asyncio.create_task(produce())
         self._tasks[trace_id] = task

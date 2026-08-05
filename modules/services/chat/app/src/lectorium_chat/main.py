@@ -176,7 +176,11 @@ async def lifespan(app: FastAPI):
 
     # Hosts chat turns as detached background tasks (buffer + resume + cancel).
     from lectorium_chat.application.turn_runner import TurnRunner
-    turn_runner = TurnRunner(turn_store)
+    turn_runner = TurnRunner(
+        turn_store,
+        max_in_flight=s.max_in_flight_turns,
+        turn_budget_s=s.turn_budget_s,
+    )
 
     # LangGraph wiring. Compile the chat graph once and stash on deps —
     # node fns are async and stateless, the compiled graph is reused
