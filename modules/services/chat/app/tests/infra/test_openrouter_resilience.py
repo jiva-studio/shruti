@@ -16,6 +16,7 @@ import httpx
 import openai
 
 from lectorium_chat.config import Settings
+from lectorium_chat.domain.ports.llm_provider import ProviderUnavailable
 from lectorium_chat.infra.llm_provider.openrouter import (
     EmptyCompletionError,
     OpenRouterLLMProvider,
@@ -171,8 +172,10 @@ async def test_stream_raises_when_all_attempts_fail():
     raised = False
     try:
         await _drain(p.stream_completion([{"role": "user", "content": "q"}]))
-    except _Transient:
-        raised = True
+    except ProviderUnavailable as exc:
+        # Labelled on the way out; the vendor exception is the cause, so
+        # callers classify without importing this adapter.
+        raised = isinstance(exc.__cause__, _Transient)
     assert raised
 
 
@@ -365,10 +368,13 @@ async def test_exhausted_empty_stream_maps_to_provider_unavailable():
     raised: BaseException | None = None
     try:
         await _drain(p.stream_completion([{"role": "user", "content": "q"}]))
-    except EmptyCompletionError as exc:
+    except ProviderUnavailable as exc:
         raised = exc
     assert raised is not None
-    assert is_provider_unavailable(raised)
+    # The empty-completion case still counts as unavailable, and the original
+    # is preserved so the logs say WHICH failure it was.
+    assert isinstance(raised.__cause__, EmptyCompletionError)
+    assert is_provider_unavailable(raised.__cause__)
 
 
 # ── _raw_text: no JSON asked, output cleaned ──────────────────────────

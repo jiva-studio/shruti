@@ -36,6 +36,7 @@ from pydantic import BaseModel, ValidationError
 
 from lectorium_chat.config import Settings
 from lectorium_chat.domain.entities import CompletionChunk, Message, ToolCallDelta
+from lectorium_chat.domain.ports.llm_provider import ProviderUnavailable
 from lectorium_chat.observability.langfuse_client import get_langfuse
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.observability.metrics import (
@@ -262,6 +263,24 @@ class EmptyCompletionError(Exception):
 # an upstream failure, not a deliberate empty answer. "stop"/"tool_calls"/
 # "length" are legitimate terminations and never treated as empty here.
 _ERROR_FINISH_REASONS = frozenset({"error", "content_filter"})
+
+
+def _terminal(exc: BaseException) -> BaseException:
+    """The exception to raise once retries AND the fallback model are spent.
+
+    A vendor-availability failure becomes `ProviderUnavailable` so callers can
+    classify it WITHOUT importing this adapter. Anything else propagates
+    unchanged — a 400 or a 404 is our bug and must stay a generic error.
+
+    All three public entry points (stream / structured / text) funnel their
+    failure through here, so an availability error cannot leave this adapter
+    unlabelled. The vendor exception is kept as `__cause__`.
+    """
+    if not is_provider_unavailable(exc):
+        return exc
+    wrapped = ProviderUnavailable(str(exc))
+    wrapped.__cause__ = exc
+    return wrapped
 
 
 def is_provider_unavailable(exc: BaseException) -> bool:
@@ -684,7 +703,7 @@ class OpenRouterLLMProvider:
                 )
 
         assert last_exc is not None
-        raise last_exc
+        raise _terminal(last_exc)
 
     async def _raw_stream(
         self,
@@ -866,7 +885,7 @@ class OpenRouterLLMProvider:
                 )
 
         assert last_exc is not None
-        raise last_exc
+        raise _terminal(last_exc)
 
     async def text_completion(
         self,
@@ -929,7 +948,7 @@ class OpenRouterLLMProvider:
                 )
 
         assert last_exc is not None
-        raise last_exc
+        raise _terminal(last_exc)
 
     async def _raw_text(
         self,

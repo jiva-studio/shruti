@@ -102,13 +102,7 @@ _APP_ALLOWED: dict[str, set[str]] = {
     # `AppDeps` is a plain DTO but lives in `composition`, which imports
     # fastapi + asyncpg — so the use case inherits both. Moving it to
     # `application/deps.py` is its own change (it touches every api module).
-    "application/chat_turn.py": {
-        "lectorium_chat.composition",
-        # Classifies a provider outage to pick an error code. The fix is a
-        # `ProviderUnavailable` domain exception, mirroring the one
-        # `domain/ports/rate_limit_store.py` already defines.
-        "lectorium_chat.infra.llm_provider.openrouter",
-    },
+    "application/chat_turn.py": {"lectorium_chat.composition"},
 }
 
 

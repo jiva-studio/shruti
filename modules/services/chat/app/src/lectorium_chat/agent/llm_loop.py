@@ -29,7 +29,7 @@ from lectorium_chat.agent.tool_executor import (
     execute_tool_call,
 )
 from lectorium_chat.agent.tools._registry import ToolFn
-from lectorium_chat.infra.llm_provider.openrouter import is_provider_unavailable
+from lectorium_chat.domain.ports.llm_provider import provider_unavailable
 from lectorium_chat.observability.logging import get_logger
 
 
@@ -236,7 +236,7 @@ async def run_llm_loop(
         log.exception("agent_loop_failed", request_id=rid, error=str(exc))
         # Out-of-credits / provider-down → calm "chat unavailable", not a
         # generic agent error (see is_provider_unavailable).
-        code = "chat_unavailable" if is_provider_unavailable(exc) else "agent_error"
+        code = "chat_unavailable" if provider_unavailable(exc) else "agent_error"
         yield AgentEvent(
             type="error",
             data={"code": code, "message": str(exc)},

@@ -94,7 +94,7 @@ async def test_provider_unavailable_is_marked_and_still_re_raised(
     """This one deliberately kills the turn rather than degrading — the span
     must record it on the way out."""
     span = _install_span(monkeypatch)
-    monkeypatch.setattr(pipeline_mod, "is_provider_unavailable", lambda exc: True)
+    monkeypatch.setattr(pipeline_mod, "provider_unavailable", lambda exc: True)
 
     async def _no_credits():
         raise RuntimeError("out of credits")

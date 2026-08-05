@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from lectorium_chat.domain.ports.llm_provider import ProviderUnavailable
 from lectorium_chat.indexer import embed as embed_mod
 from lectorium_chat.indexer.embed import OpenAICompatEmbedder
 
@@ -81,8 +82,15 @@ async def test_bad_request_not_retried(monkeypatch):
 async def test_client_errors_not_retried(monkeypatch, status):
     monkeypatch.setattr(embed_mod.asyncio, "sleep", _noop_sleep)
     emb, fake = _make_embedder(lambda call, inp: _StatusError(status))
-    with pytest.raises(_StatusError):
+    # Both are non-retryable, but they mean different things and now surface
+    # differently: 401/403 is the provider refusing us (availability — the
+    # user gets "try again later"), 404/422 is our own bad request and must
+    # stay a generic error.
+    expected = ProviderUnavailable if status in (401, 403) else _StatusError
+    with pytest.raises(expected) as err:
         await emb.embed_query("x")
+    if expected is ProviderUnavailable:
+        assert isinstance(err.value.__cause__, _StatusError)
     assert fake.calls == 1
 
 
@@ -95,8 +103,9 @@ async def test_transient_error_is_still_retried(monkeypatch):
 
     monkeypatch.setattr(embed_mod.asyncio, "sleep", _record_sleep)
     emb, fake = _make_embedder(lambda call, inp: _StatusError(429))
-    with pytest.raises(_StatusError):
+    with pytest.raises(ProviderUnavailable) as err:
         await emb.embed_query("x")
+    assert isinstance(err.value.__cause__, _StatusError)
     assert fake.calls == embed_mod._EMBED_MAX_ATTEMPTS
     assert len(sleeps) == embed_mod._EMBED_MAX_ATTEMPTS - 1
 
