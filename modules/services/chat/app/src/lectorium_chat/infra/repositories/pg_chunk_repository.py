@@ -51,6 +51,12 @@ _ALLOWED_KINDS = frozenset(
 # `_hnsw_lec` partial. Keep in sync with the `langs` array in 0036.
 _LECTURE_PARTIAL_LANGS = frozenset({"en", "ru"})
 
+# Over-fetch factor for the de-duplicated (one-chunk-per-track) search. The
+# candidate scan stays ordered by distance so the HNSW index drives it; this
+# many times `top_k` rows is enough to still hold `top_k` distinct tracks
+# after collapsing, without scanning the whole lane.
+_DEDUP_CANDIDATE_FACTOR = 10
+
 
 def _library_chunk_from_row(r: Any) -> LibraryChunk:
     """Build a reference-only `LibraryChunk` from a chunks row.
@@ -392,30 +398,52 @@ class PgChunkRepository:
             where.append(f"c.track_id <> ALL(${len(params) + 1}::text[])")
             params.append(excluded_track_ids)
         params.append(embedding)
+        emb_idx = len(params)
         params.append(top_k)
-        # When excluding tracks (recommend / similar), de-dupe to one
-        # chunk per track via DISTINCT ON; otherwise return raw top-k.
-        select_clause = (
-            "DISTINCT ON (c.track_id) c.track_id, c.lang, c.start_ms, c.end_ms, "
-            "c.text, c.reference_source_id"
-            if excluded_track_ids
-            else "c.track_id, c.lang, c.start_ms, c.end_ms, c.text, "
-                 "c.reference_source_id"
+        top_k_idx = len(params)
+        cols = (
+            "c.track_id, c.lang, c.start_ms, c.end_ms, c.text, "
+            "c.reference_source_id"
         )
-        order_clause = (
-            f"ORDER BY c.track_id, e.embedding <=> ${len(params) - 1}::vector"
-            if excluded_track_ids
-            else f"ORDER BY e.embedding <=> ${len(params) - 1}::vector"
-        )
-        sql = f"""
-          SELECT {select_clause},
-                 1 - (e.embedding <=> ${len(params) - 1}::vector) AS score
-          FROM chunks c
-          JOIN {emb_table} e ON e.chunk_id = c.id
-          WHERE {' AND '.join(where)}
-          {order_clause}
-          LIMIT ${len(params)}
-        """
+        if excluded_track_ids:
+            # Recommend / similar: one chunk per track. DISTINCT ON must be
+            # ordered by its own key, so it cannot also rank by distance —
+            # doing both at one level made LIMIT keep the lexicographically
+            # smallest track_ids rather than the nearest, and cost the index
+            # ordering too. Collapse inside a distance-ordered bounded scan,
+            # then rank and cut outside it.
+            params.append(top_k * _DEDUP_CANDIDATE_FACTOR)
+            sql = f"""
+              SELECT t.track_id, t.lang, t.start_ms, t.end_ms, t.text,
+                     t.reference_source_id, 1 - t.dist AS score
+              FROM (
+                SELECT DISTINCT ON (cand.track_id)
+                       cand.track_id, cand.lang, cand.start_ms, cand.end_ms,
+                       cand.text, cand.reference_source_id, cand.dist
+                FROM (
+                  SELECT {cols},
+                         e.embedding <=> ${emb_idx}::vector AS dist
+                  FROM chunks c
+                  JOIN {emb_table} e ON e.chunk_id = c.id
+                  WHERE {' AND '.join(where)}
+                  ORDER BY e.embedding <=> ${emb_idx}::vector
+                  LIMIT ${len(params)}
+                ) cand
+                ORDER BY cand.track_id, cand.dist
+              ) t
+              ORDER BY t.dist
+              LIMIT ${top_k_idx}
+            """
+        else:
+            sql = f"""
+              SELECT {cols},
+                     1 - (e.embedding <=> ${emb_idx}::vector) AS score
+              FROM chunks c
+              JOIN {emb_table} e ON e.chunk_id = c.id
+              WHERE {' AND '.join(where)}
+              ORDER BY e.embedding <=> ${emb_idx}::vector
+              LIMIT ${top_k_idx}
+            """
         pool = self._pool
         async with pool.acquire() as conn:
             async with conn.transaction():
