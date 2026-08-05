@@ -275,8 +275,9 @@ class _Found:
 
 async def _try(
     ctx: TurnContext, embedding: list[float], flt: dict, *, lang: str | None,
+    floor: float = _MIN_SCORE,
 ) -> list[ScoredChunk]:
-    return _top_lectures(await _search(ctx, embedding, flt, lang=lang))
+    return _top_lectures(await _search(ctx, embedding, flt, lang=lang), floor=floor)
 
 
 def _merge(runs: list[tuple[str, list[ScoredChunk]]]) -> list[ScoredChunk]:
@@ -295,7 +296,7 @@ def _merge(runs: list[tuple[str, list[ScoredChunk]]]) -> list[ScoredChunk]:
 
 
 async def _find_lectures(
-    ctx: TurnContext, embedding: list[float], full: dict,
+    ctx: TurnContext, embedding: list[float], full: dict, *, topical: bool = True,
 ) -> _Found:
     """Search for what was asked, and — only if that is empty — for the nearest
     thing to it, in one fan-out instead of a walk down a ladder.
@@ -327,10 +328,19 @@ async def _find_lectures(
         lectures = await _try(ctx, embedding, full, lang=None)
         return _Found(lectures, other_language=bool(lectures))
 
+    # A request with no TOPIC («покажи утренние прогулки 1976 года в Бомбее»)
+    # asks about metadata, and a transcript cannot resemble a description of
+    # metadata: the ten Bombay 1976 walks score 0.23 against that sentence in
+    # Russian, 0.39 in English, and the 0.45 relevance floor — there to keep
+    # junk out of TOPICAL searches — threw away the very lectures asked for.
+    # When the filters are the whole request, they are what selects; the score
+    # only orders what they selected.
+    exact_floor = _MIN_SCORE if topical else 0.0
+
     # 1-2. The whole request, both languages at once.
     exact_same, exact_any = await asyncio.gather(
-        _try(ctx, embedding, full, lang=ctx.lang_code),
-        _try(ctx, embedding, full, lang=None),
+        _try(ctx, embedding, full, lang=ctx.lang_code, floor=exact_floor),
+        _try(ctx, embedding, full, lang=None, floor=exact_floor),
     )
     if exact_same:
         return _Found(exact_same)
@@ -373,7 +383,9 @@ async def _find_lectures(
     return _Found([])
 
 
-def _top_lectures(chunks: list[ScoredChunk]) -> list[ScoredChunk]:
+def _top_lectures(
+    chunks: list[ScoredChunk], *, floor: float = _MIN_SCORE,
+) -> list[ScoredChunk]:
     """One ScoredChunk per track — the chunk we'll QUOTE — ranked by the
     track's relevance and filtered to the score floor.
 
@@ -387,7 +399,7 @@ def _top_lectures(chunks: list[ScoredChunk]) -> list[ScoredChunk]:
     picked: list[tuple[float, ScoredChunk]] = []
     for scs in by_track.values():
         relevance = max(s.score for s in scs)
-        if relevance < _MIN_SCORE:
+        if relevance < floor:
             continue
         body = [s for s in scs if s.chunk.start_ms >= _INTRO_MS] or scs
         quote = max(body, key=lambda s: s.score)
@@ -564,7 +576,10 @@ async def find_tracks_worker_node(
     embedding = await ctx.embedder.embed_query(query)
     full = await _build_filters(ctx, args, author_id=author_id)
 
-    found = await _find_lectures(ctx, embedding, full)
+    # The router extracts `topic` when the request is ABOUT something; a bare
+    # metadata request («утренние прогулки 1976 Бомбей») carries none.
+    topical = bool(str(args.get("topic") or "").strip())
+    found = await _find_lectures(ctx, embedding, full, topical=topical)
     lectures, relaxed = found.lectures, found.relaxed
     lang_note = ""
     if lectures and found.other_language:
