@@ -15,6 +15,20 @@ amelyeket meg is hallgathatsz.
   hallhatod a választ.
 - **Verseket talál és PDF-eket készít** — előhúzhat egy konkrét shlókát,
   vagy kérésre dokumentumként elkészítheti egy előadás átiratát.
+- **Megmondja, hol található** — kérdezd meg, „melyik énekben van Prahlāda
+  története?”, és a helyet kapod meg, nem újramesélést.
+- **Az általad választott előadókból válaszol.** Mondd azt, „csak Prabhupāda
+  előadásaiból válaszolj”, és minden további válasz azokból épül, amíg azt nem
+  mondod, „keress mindenkinél”. A könyveket ez sosem szűkíti — a szentírás
+  szentírás marad, bárki is beszél. Azok a tanítók is működnek, akiket csak a
+  saját könyvtárad ismer.
+- **Tudja, mit hallgattál.** Kérdezd meg, mit hallgattál ezen a héten, vagy
+  kérj összefoglalót az éppen megnyitott előadásról.
+- **Javasolja, mit hallgass ezután**, abból kiindulva, amit már hallottál.
+- **Előadásokat ad hozzá a webről (PRO)** — küldj egy YouTube-linket, vagy kérd
+  meg, hogy keressen a neten egy tanító előadásai után, és felajánlja őket a
+  személyes könyvtáradba. A hozzáadás után a katalógussal együtt keresi őket, és
+  csak te látod őket.
 - **Követő kérdéseket javasol** minden válasz végén, hogy tovább járhasd
   körül a témát.
 - **Megjegyzi a beszélgetést** egy munkameneten belül, így lépésről lépésre

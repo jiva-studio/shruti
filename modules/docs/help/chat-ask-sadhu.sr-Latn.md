@@ -13,6 +13,19 @@ koje možete da preslušate.
   trenutak u izvornom predavanju, pa odgovor možete da čujete sami.
 - **Pronalazi stihove i priprema PDF-ove** — može da izvuče određenu šloku
   ili da pripremi transkript predavanja kao dokument kada to zatražite.
+- **Pokazuje gde se nešto nalazi** — pitajte „u kom pevanju je priča o
+  Prahladu?“ i dobićete tačnu adresu umesto prepričavanja.
+- **Odgovara iz predavača koje izaberete.** Recite „odgovaraj samo iz
+  Prabhupadinih predavanja“ i svaki sledeći odgovor biće građen iz njih, dok ne
+  kažete „traži kod svih“. Knjige se time nikada ne sužavaju — spisi ostaju
+  spisi, ko god da govori. Rade i učitelji koje zna samo vaša lična biblioteka.
+- **Zna šta ste slušali.** Pitajte šta ste slušali ove nedelje ili tražite
+  sažetak predavanja koje vam je otvoreno.
+- **Predlaže šta da slušate dalje**, polazeći od onoga što ste već čuli.
+- **Dodaje predavanja sa interneta (PRO)** — pošaljite YouTube vezu ili
+  zatražite da potraži predavanja nekog učitelja na mreži, pa će vam ih ponuditi
+  za vašu ličnu biblioteku. Nakon dodavanja pretražuju se zajedno sa katalogom i
+  vidite ih samo vi.
 - **Predlaže naredna pitanja** na kraju svakog odgovora kako bi vam pomogao
   da temu istražite dublje.
 - **Pamti razgovor** u okviru jedne sesije, pa pitanje možete da precizirate

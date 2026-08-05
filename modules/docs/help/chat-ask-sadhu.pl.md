@@ -15,6 +15,21 @@ możesz od razu posłuchać.
 - **Znajduje wersety i przygotowuje pliki PDF** — może wyświetlić konkretną
   ślokę albo przygotować transkrypcję wykładu w postaci dokumentu, jeśli go
   o to poprosisz.
+- **Podpowiada, gdzie to jest** — zapytaj „w której pieśni jest historia
+  Prahlādy?”, a dostaniesz adres zamiast opowiadania.
+- **Odpowiada z wybranych przez Ciebie wykładowców.** Powiedz „odpowiadaj
+  tylko z wykładów Prabhupādy”, a każda kolejna odpowiedź będzie z nich
+  budowana, dopóki nie powiesz „szukaj u wszystkich”. Książek to nigdy nie
+  zawęża — pismo pozostaje pismem, kto by nie mówił. Działają też nauczyciele,
+  których zna wyłącznie Twoja własna biblioteka.
+- **Wie, czego słuchasz.** Zapytaj, czego słuchałeś w tym tygodniu, albo poproś
+  o streszczenie otwartego wykładu.
+- **Podpowiada, czego posłuchać dalej**, na podstawie tego, czego już
+  słuchałeś.
+- **Dodaje wykłady z internetu (PRO)** — wklej link z YouTube albo poproś, by
+  poszukał w sieci wykładów danego nauczyciela, a zaproponuje je do Twojej
+  osobistej biblioteki. Po dodaniu są przeszukiwane razem z katalogiem i widzisz
+  je tylko Ty.
 - **Podpowiada kolejne pytania** na końcu każdej odpowiedzi, by pomóc Ci
   zgłębić temat.
 - **Pamięta rozmowę** w obrębie jednej sesji, więc możesz doprecyzowywać

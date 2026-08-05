@@ -14,6 +14,20 @@ fornisce una risposta breve più le citazioni che puoi ascoltare.
   risposta.
 - **Trova versi e prepara PDF** — può richiamare una shloka specifica oppure
   preparare la trascrizione di una lezione come documento, se glielo chiedi.
+- **Indica dov'è una cosa** — chiedi «in quale canto c'è la storia di
+  Prahlāda?» e risponde con il riferimento invece che con un racconto.
+- **Risponde dai relatori che scegli.** Di' «rispondi solo dalle lezioni di
+  Prabhupāda» e ogni risposta successiva sarà costruita su di esse, finché non
+  dici «usa tutti i relatori». I libri non vengono mai ristretti così: la
+  scrittura resta la scrittura, chiunque stia parlando. Funzionano anche i
+  maestri che conosce solo la tua libreria personale.
+- **Sa cosa hai ascoltato.** Chiedi che cosa hai ascoltato questa settimana, o
+  un riassunto della lezione che hai aperta.
+- **Suggerisce cosa ascoltare dopo**, in base a quello che hai già ascoltato.
+- **Aggiunge lezioni dal web (PRO)** — incolla un link di YouTube, oppure
+  chiedigli di cercare online le lezioni di un maestro, e te le proporrà per la
+  tua libreria personale. Una volta aggiunte, vengono cercate insieme al
+  catalogo e solo tu puoi vederle.
 - **Suggerisce domande di approfondimento** alla fine di ogni risposta, per
   aiutarti a esplorare meglio l'argomento.
 - **Ricorda la conversazione** all'interno di una sessione, così puoi
