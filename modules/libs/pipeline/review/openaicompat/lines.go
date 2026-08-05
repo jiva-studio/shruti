@@ -19,7 +19,9 @@ const endsMarker = "ENDS"
 // means "unchanged" and is filled from the request. Lines that match nothing
 // are skipped rather than fatal: a stray apology should cost a chunk nothing,
 // while a genuinely broken reply still fails on the boundary checks below.
-func parseLines(body string, sent []review.ChunkSegment) ([]review.ChunkSegment, [][]int, error) {
+// ParseLines is exported for the batch path, which receives the same line
+// format from a job reply instead of a live call.
+func ParseLines(body string, sent []review.ChunkSegment) ([]review.ChunkSegment, [][]int, error) {
 	if len(sent) == 0 {
 		return nil, nil, fmt.Errorf("lines: no segments were sent")
 	}
