@@ -235,6 +235,13 @@ services:
       # RFC1918 defaults inside _region.py, so it's safe to pass the
       # bare egress IP / CIDR list here.
       REGION_HEADER_TRUSTED_SOURCES: ${SHRUTI_REGION_HEADER_TRUSTED_SOURCES:-}
+    # Docker's default is 10s, which SIGKILLs the container before uvicorn has
+    # drained connections and run the lifespan teardown — so in-flight turns
+    # died without refunding quota, releasing idempotency keys or flushing
+    # Langfuse. Must exceed the container's own --timeout-graceful-shutdown
+    # (30s, see modules/services/chat/Dockerfile) with room for the teardown
+    # sequence itself.
+    stop_grace_period: 45s
     volumes:
       - chatdata:/var/lib/chat
       - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}/public.pem:/secrets/public.pem:ro
