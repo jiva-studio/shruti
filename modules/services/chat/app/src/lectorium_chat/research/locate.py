@@ -25,6 +25,7 @@ import re
 from itertools import chain
 from typing import Any, Callable
 
+from lectorium_chat.domain.source_ids import chunk_source_filter
 from lectorium_chat.indexer.library.repo import fetch_titles
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.attribution_lookup import find_attributions
@@ -312,14 +313,12 @@ async def run_locate(
     # Per-call title memo — created fresh each invocation and threaded into
     # every helper, so there's no process-global keyed by a reusable id().
     titles_cache: _TitlesCache = {}
-    # The router emits a SHORT source code (e.g. "SB"/"BG"); chunks.source_id
-    # is the opaque catalog id ("source_…"). Passing the short code as the
-    # ANN's source filter matches nothing, so only honor an already-opaque
-    # id — otherwise search all books (the located region keeps its real
-    # source via grouping, so a named book still surfaces correctly).
-    book_id = router_args.get("source_id")
-    if book_id and not str(book_id).startswith("source_"):
-        book_id = None
+    # Chunk-side spelling only: a short code ("SB") matches no row, so it is
+    # dropped and every book is searched (the located region keeps its real
+    # source via grouping, so a named book still surfaces correctly). The router
+    # now resolves the code before this runs, so a named book usually DOES
+    # narrow the search — this stays as the floor, not the plan.
+    book_id = chunk_source_filter(router_args.get("source_id"))
 
     embedding = await _await_embedding(question, embedder, precomputed_query_embedding_task)
     if embedding is None:

@@ -24,6 +24,7 @@ from __future__ import annotations
 import operator
 from typing import Annotated, Any, TypedDict
 
+from lectorium_chat.domain.routing import Intent
 from lectorium_chat.research.models import Outline, ResearchNote
 
 
@@ -74,7 +75,11 @@ class ChatState(TypedDict, total=False):
     config: dict[str, Any]
 
     # ── Router output ─────────────────────────────────────────────────
-    intent: str               # one of domain.routing.Intent
+    # The enum, not `str`: `route_after_router` branches on this value, and a
+    # typo or a retired name would otherwise fall silently into the default
+    # research arm. (The dict is still a plain dict at runtime — TypedDict keys
+    # are not enforced — but a checker now sees the mismatch.)
+    intent: Intent
     confidence: float
     extracted_args: dict[str, Any]
 

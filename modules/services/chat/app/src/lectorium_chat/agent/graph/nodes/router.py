@@ -41,6 +41,7 @@ from lectorium_chat.application.conversation_attributes import (
 )
 from lectorium_chat.application.author_lookup import own_speaker_names, resolve_author
 from lectorium_chat.application.router_turn import run_router_turn
+from lectorium_chat.application.source_lookup import resolve_source_id
 from lectorium_chat.domain.author_selection import AuthorSelection
 from lectorium_chat.domain.conversation_attributes import (
     REPLY_LANGUAGE,
@@ -185,6 +186,35 @@ async def _turn_author(
     return False
 
 
+async def _settle_source(args: dict[str, Any], ctx: TurnContext) -> None:
+    """Rewrite the book this message named into the id the corpus is keyed by.
+
+    The router says «ШБ», the chunk filters compare against `chunks.source_id`,
+    and nothing reconciled the two: a question ABOUT a book was answered with
+    every lane that could quote it silently matching zero rows. Resolved once,
+    here, because five hops read this value and each one guessing costs a
+    different wrong answer.
+
+    Left untouched when it resolves to nothing — the lecture side normalizes
+    short codes itself, and the chunk side drops what it cannot use.
+    """
+    named = args.get("source_id")
+    if not isinstance(named, str) or not named.strip():
+        return
+    opaque = await resolve_source_id(
+        ctx.catalog_repo, named, request_id=ctx.request_id,
+    )
+    if opaque is None or opaque == named:
+        return
+    log.info(
+        "router_source_id_resolved",
+        request_id=ctx.request_id,
+        named=named[:40],
+        source_id=opaque,
+    )
+    args["source_id"] = opaque
+
+
 def _reroute_for_private_author(decision: RoutingDecision) -> RoutingDecision:
     """A lecture LISTING cannot show what only the private lane holds.
 
@@ -307,6 +337,7 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
     # to the refund path or to Langfuse — as the intent it no longer has.
     if await _turn_author(decision.extracted_args, ctx, attributes):
         decision = _reroute_for_private_author(decision)
+    await _settle_source(decision.extracted_args, ctx)
     get_stream_writer()(
         {"type": "status", "data": {"key": "router_decision", "params": {"intent": decision.intent}}}
     )

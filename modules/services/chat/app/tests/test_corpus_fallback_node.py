@@ -30,6 +30,8 @@ class _Ctx:
     aliases: Any | None = None
     reranker: Any | None = None
     retrieval_lang_code: str | None = None
+    author_scope: Any | None = None
+    user_id: str = ""
 
 
 @dataclass

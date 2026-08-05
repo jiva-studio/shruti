@@ -20,6 +20,21 @@ _CORPUS_KINDS = frozenset(
     {"verse", "commentary", "prose_chapter", "letter", "media", "lecture"}
 )
 
+# The router is told to say "transcript" for a lecture, and does — production
+# extracted `["verse","commentary","prose_chapter","transcript"]` on a live turn.
+# Only "transcript" was silently discarded, so the ONE kind the person spelled
+# out for us was the one kind that got no boost. The prompt now says "lecture";
+# the alias stays because the prompt is served from Langfuse and an older copy
+# of it must not quietly lose the boost again.
+_KIND_ALIASES = {"transcript": "lecture", "track": "lecture"}
+
+
+def _canonical(kind: object) -> str | None:
+    if not isinstance(kind, str):
+        return None
+    k = _KIND_ALIASES.get(kind.strip(), kind.strip())
+    return k if k in _CORPUS_KINDS else None
+
 # Unambiguous cue words → kind. ru + en; kept tight to avoid false boosts.
 _KIND_KEYWORDS: dict[str, tuple[str, ...]] = {
     "media": (r"виде[оа]", r"клип", r"ролик", r"\bvideo", r"\bclip", r"footage"),
@@ -47,9 +62,11 @@ def boost_kinds_from(
 
     ct = (router_args or {}).get("content_types")
     if isinstance(ct, list):
-        kinds |= {k for k in ct if k in _CORPUS_KINDS}
-    elif isinstance(ct, str) and ct in _CORPUS_KINDS:
-        kinds.add(ct)
+        kinds |= {c for c in (_canonical(k) for k in ct) if c}
+    else:
+        one = _canonical(ct)
+        if one:
+            kinds.add(one)
 
     low = (query or "").lower()
     for kind, patterns in _KIND_KEYWORDS.items():

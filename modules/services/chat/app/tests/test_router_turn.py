@@ -62,15 +62,14 @@ async def test_router_returns_decision_verbatim_when_confident() -> None:
 
 
 @pytest.mark.asyncio
-async def test_low_confidence_non_retrieval_collapses_to_unknown() -> None:
-    """Confidence < 0.5 on a non-retrieval intent means the router isn't
-    sure — collapse to `unknown` so downstream routing takes the soft
-    fallback. `create_action` carries no grounding of its own, so a
-    low-confidence one is safest flattened."""
+async def test_low_confidence_small_talk_collapses_to_unknown() -> None:
+    """`direct_chat` is the one intent whose worker does NOTHING, so an unsure
+    guess there answers a real question with small talk. Collapsing sends it
+    through the light research pass instead."""
     llm = FakeLLMForRouter(
         responses=[
             RoutingDecision(
-                intent="create_action", confidence=0.3, extracted_args={"hint": "foo"},
+                intent="direct_chat", confidence=0.3, extracted_args={"hint": "foo"},
             ),
         ]
     )
@@ -79,6 +78,35 @@ async def test_low_confidence_non_retrieval_collapses_to_unknown() -> None:
     assert out.confidence == 0.3
     # Extracted args survive the collapse — they may still be useful
     # to a fallback responder.
+    assert out.extracted_args == {"hint": "foo"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "intent",
+    ["help", "create_action", "add-to-library", "recommend", "show_verse"],
+)
+async def test_an_unsure_intent_still_reaches_the_worker_that_serves_it(
+    intent: str,
+) -> None:
+    """Being unsure is not a reason to route somewhere that cannot help.
+
+    Each of these lost something concrete to the old collapse: `help` answered
+    from the lecture corpus AND stopped being quota-exempt (the API reads the
+    intent after this rewrite); `create_action` broke the research→action chain
+    that compares against the literal "create_action", so no PDF card was ever
+    produced; `add-to-library` landed on the corpus-only path its own prompt
+    forbids; `recommend` semantic-searched «что мне послушать дальше»;
+    `show_verse` lost the verse card."""
+    llm = FakeLLMForRouter(
+        responses=[
+            RoutingDecision(
+                intent=intent, confidence=0.3, extracted_args={"hint": "foo"},
+            ),
+        ]
+    )
+    out = await run_router_turn("что-то странное", lang="ru", llm=llm)
+    assert out.intent == intent
     assert out.extracted_args == {"hint": "foo"}
 
 

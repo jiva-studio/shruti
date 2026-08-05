@@ -96,6 +96,48 @@ async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
     return hits[0].id if hits else None
 
 
+async def _resolve_kind_tag(ctx: TurnContext, kind: object) -> list[str] | None:
+    """The catalog tag for a recording TYPE («утренние прогулки» → morning_walk).
+
+    The router has always extracted `kind`, and nothing ever read it: the filter
+    slot said `tag_ids: None`, so «утренние прогулки 1976 Бомбей» narrowed by
+    year and city and served ordinary lectures from them.
+
+    Catalog tag ids are `tag_<kind>` exactly, so the resolved hit is accepted
+    only when it IS that id. That checks the tag exists AND makes a fuzzy near-
+    miss impossible — "lecture", which has no tag of its own (everything is one),
+    must narrow nothing rather than land on «Речь».
+    """
+    if not isinstance(kind, str) or not kind.strip():
+        return None
+    wanted = f"tag_{kind.strip().lower()}"
+    try:
+        hits = await ctx.catalog_repo.resolve(  # type: ignore[union-attr]
+            "tag", kind.replace("_", " "), lang=None, limit=5,
+        )
+    except Exception:  # noqa: BLE001 — a tag miss just means we don't constrain
+        return None
+    return [wanted] if any(h.id == wanted for h in hits) else None
+
+
+async def _selected_only(ctx: TurnContext, tracks: list) -> list:
+    """Drop tracks the turn's lecturer selection excludes.
+
+    Both catalog probes below are FALLBACKS reached after the semantic ladder —
+    which honours the selection — came back empty. Serving them unfiltered is
+    how a standing «отвечай только по лекциям X» leaked somebody else's lecture
+    in as the answer to a bare reference or date.
+    """
+    scope = getattr(ctx, "author_scope", None)
+    if scope is None or not tracks:
+        return tracks
+    kept = await scope.narrow([t.id for t in tracks])
+    if kept is None:
+        return tracks
+    allowed = set(kept)
+    return [t for t in tracks if t.id in allowed]
+
+
 async def _resolve_author(ctx: TurnContext, name: str):
     """The corpus author `name` denotes, shared with the `lecture_authors`
     attribute so the two cannot disagree about who is in the corpus."""
@@ -135,6 +177,7 @@ async def _build_filters(
         date_from, date_to = _year_range(args.get("year"))
     anniversary_md = _s("anniversary_md")
     location_id = await _resolve_id(ctx, "location", args.get("location"))
+    tag_ids = await _resolve_kind_tag(ctx, args.get("kind"))
     # A named chapter / canto («лекции по БГ 10») MUST constrain the search.
     # Without it the ANN search returned whatever was semantically closest —
     # chapter 9 lectures for a chapter 10 question — under a lead-in that
@@ -152,7 +195,7 @@ async def _build_filters(
         "author_ids": [author_id] if author_id else None,
         "source_id": source_id,
         "location_id": location_id,
-        "tag_ids": None,
+        "tag_ids": tag_ids,
         "date_from": date_from,
         "date_to": date_to,
         "anniversary_md": anniversary_md,
@@ -169,6 +212,10 @@ async def _build_filters(
         (_REF_RUNG, ("ref_prefix", "ref_from", "ref_to")),
         ("date", ("date_from", "date_to", "anniversary_md")),
         ("location", ("location_id",)),
+        # The TYPE of recording outlives the city: someone who asked for morning
+        # walks would rather see one from another year than a lecture from the
+        # right one. Dropped only when the pair above already failed.
+        ("kind", ("tag_ids",)),
         ("author", ("author_ids",)),
         ("source", ("source_id",)),
     ):
@@ -434,7 +481,9 @@ async def find_tracks_worker_node(
         source_id = args.get("source_id")
         tokens = args.get("tokens")
         if source_id and tokens:
-            return await _probe_and_answer_ref(ctx, writer, str(source_id), str(tokens))
+            return await _probe_and_answer_ref(
+                ctx, writer, str(source_id), str(tokens), author_id=author_id,
+            )
         # A date-only query ("лекции, прочитанные 9 июля") is also invisible to
         # semantic search (no topic to embed). The catalog stores a per-track
         # date, so probe it directly by year range and/or "on this day" (MM-DD
@@ -444,7 +493,7 @@ async def find_tracks_worker_node(
         anniversary = args.get("anniversary_md")
         if date_from or date_to or anniversary:
             return await _probe_and_answer_date(
-                ctx, writer, date_from, date_to, anniversary,
+                ctx, writer, date_from, date_to, anniversary, author_id=author_id,
             )
         # No lecture in the corpus (not a bare scripture ref / date probe):
         # route to add-to-library web discovery, read by route_after_find_tracks.
@@ -583,12 +632,19 @@ async def _resolve_source(ctx: TurnContext, source_id: str) -> tuple[str, str | 
 
 
 async def _probe_and_answer_ref(
-    ctx: TurnContext, writer, source_id: str, tokens: str
+    ctx: TurnContext, writer, source_id: str, tokens: str,
+    *, author_id: str | None = None,
 ) -> dict:
     """Semantic search missed a bare scripture ref. Probe the catalog's
     lecture→verse index (deterministic, no embedding) and either SERVE the
     lectures it finds, or — when that index is also empty — ask whether the user
-    wanted the verses themselves."""
+    wanted the verses themselves.
+
+    The teacher carries into the probe. This lane used to pass `author_id=None`
+    and skip the turn's selection, so «лекции Прабхупады по ШБ 2.9.1» — and any
+    standing «только по лекциям X» — served whoever the ref index happened to
+    hold. A fallback is still an answer; it does not get to forget who was
+    asked for."""
     opaque, short = await _resolve_source(ctx, source_id)
     ref = f"{short} {tokens}" if short else tokens
 
@@ -600,7 +656,7 @@ async def _probe_and_answer_ref(
 
         async def _probe(lang: str | None):
             return await ctx.catalog_repo.list_tracks(
-                author_id=None, source_id=opaque, location_id=None, tag_ids=None,
+                author_id=author_id, source_id=opaque, location_id=None, tag_ids=None,
                 title_query=None, date_from=None, date_to=None, lang=lang,
                 limit=8, offset=0,
                 ref_prefix=".".join(map(str, prefix)) or None,
@@ -623,6 +679,7 @@ async def _probe_and_answer_ref(
             log.exception("find_tracks_ref_probe_failed", request_id=ctx.request_id)
             tracks = []
 
+    tracks = await _selected_only(ctx, tracks)
     writer({"type": "status", "data": {"key": "composing_answer"}})
     cards = await _renderable(ctx, tracks)
 
@@ -666,18 +723,23 @@ async def _probe_and_answer_ref(
 
 async def _probe_and_answer_date(
     ctx: TurnContext, writer, date_from, date_to, anniversary_md,
+    *, author_id: str | None = None,
 ) -> dict:
     """A date-only query has no topic to embed, so probe the catalog's per-track
     date index directly: `date_from`/`date_to` bound a year/range, `anniversary_md`
     ("MM-DD") matches that calendar day across ALL years ("in this day in
-    history"). Serve what's found, else say so honestly."""
+    history"). Serve what's found, else say so honestly.
+
+    Narrowed by the named teacher and by the turn's selection, same as the ref
+    probe above — «что читали 9 июля» under «только Прабхупада» must not answer
+    with somebody else's talk."""
     tracks = []
     lang_note = ""
     if ctx.catalog_repo is not None:
 
         async def _probe(lang: str | None):
             return await ctx.catalog_repo.list_tracks(
-                author_id=None, source_id=None, location_id=None, tag_ids=None,
+                author_id=author_id, source_id=None, location_id=None, tag_ids=None,
                 title_query=None, date_from=date_from, date_to=date_to, lang=lang,
                 limit=8, offset=0, anniversary_md=anniversary_md,
             )
@@ -696,6 +758,7 @@ async def _probe_and_answer_date(
         except Exception:  # noqa: BLE001 — a probe miss falls back to the empty line
             log.exception("find_tracks_date_probe_failed", request_id=ctx.request_id)
             tracks = []
+    tracks = await _selected_only(ctx, tracks)
     # A plain-English description of the requested date so the localized lead-in
     # states the RIGHT date (never invents one — the LLM has no date otherwise).
     if anniversary_md and "-" in anniversary_md:

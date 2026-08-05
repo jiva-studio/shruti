@@ -4,7 +4,7 @@ One factory function; called once at app startup. The compiled graph
 is reused for every chat turn — node fns are async and stateless, all
 per-turn data flows via `state` and `context` (TurnContext).
 
-Topology:
+Topology (the full intent → node matrix lives in `conditional.py`):
 
                        START
                          │
@@ -12,19 +12,26 @@ Topology:
                       router ──── direct_chat ──────────────┐
             (unknown / default → research_worker, see #39)   │
                          │                                    │
-       ┌────────────┬────┴──────────┬──────────────┬───┐      │
-       │            │               │              │   │      │
-       ▼            ▼               ▼              ▼   ▼      │
-   help_worker  catalog_worker  research_worker  action_worker (short)
-       │            │               │                  │      │
-       │            │       create_action ──► action_worker   │
-       │            │               │                  │      │
-       │            │       else ───► synthesis_planner       │
-       │            │                  │               │      │
-       └────────────┴──► synthesizer ◄─┴───────────────┴──────┘
-                            │
-                            ▼
-                           END
+   ┌──────────┬──────────┼───────────┬────────────┬───────┐   │
+   ▼          ▼          ▼           ▼            ▼       ▼   │
+ help     catalog    research     locate     show_verse  action
+ _worker  _worker    _worker      _worker    _worker     _worker (short)
+   │          │          │            │           │        │   │
+   │          │   create_action ──► action_worker ─────► action_responder → END
+   │          │          │            │           │        │   │
+   │          │   else ─► synthesis_planner ─► (corpus_fallback)│
+   │          │                       │        │              │
+   └──────────┴──► synthesizer ◄──────┴────────┴──────────────┘
+                        │
+                        ▼
+                       END
+
+ Deterministic terminals that never reach the synthesizer:
+   find_tracks_worker → END (or → add_to_library_worker on a corpus miss)
+   add_to_library_worker → END
+   clarify_worker → END
+   action_responder → END
+   recommend_worker → synthesizer (cards are streamed; synth writes the lead-in)
 
 The short path (router → action_worker) is taken when the action
 doesn't need tracks (reminder / smart_library / pro) OR the user

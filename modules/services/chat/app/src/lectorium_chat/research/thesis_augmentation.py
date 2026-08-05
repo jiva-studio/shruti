@@ -27,6 +27,7 @@ from lectorium_chat.agent.tools._envelope import (
     library_to_envelope,
     resolve_commentary_author_names,
 )
+from lectorium_chat.domain.source_ids import chunk_source_filter
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.commentary_expansion import _balanced_topk, _cosine
 from lectorium_chat.research.constants import (
@@ -106,7 +107,9 @@ async def _fresh_fanout_for_thesis(
         scored = await chunk_repo.search_library_by_embedding(
             thesis_embedding,
             kinds=list(_LIBRARY_KINDS),
-            source_id=router_args.get("source_id"),
+            # Chunk-side spelling only — a short code here matches no row at all
+            # (see `domain.source_ids`); the track filter above resolves its own.
+            source_id=chunk_source_filter(router_args.get("source_id")),
             author_id=router_args.get("author_id"),
             lang=lang,
             date_from=router_args.get("date_from") or router_args.get("doc_date_from"),

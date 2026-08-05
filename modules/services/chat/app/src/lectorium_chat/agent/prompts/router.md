@@ -15,8 +15,8 @@ Intents:
   Examples (en): "what can you do", "how do I create a playlist",
                  "where is the export button",
                  "what does the green dot mean".
-  Personal-history asks like "что мне послушать" / "что я слушал" /
-  "recommend me a lecture" route to `find_track`, not `help`.
+  Personal asks are never `help`: «что я слушал» is `find_track`
+  (history_ref), «что мне послушать» / «посоветуй лекцию» is `recommend`.
 - research: a question to be ANSWERED from the corpus — the user wants
   synthesized prose (an explanation, retelling, or doctrinal answer),
   with citations, NOT a list of lecture cards. Covers verses, letters,
@@ -61,13 +61,13 @@ Intents:
   "chapter from KRSNA Book about X" is research+chunks_search with
   type=prose_chapter — the user wants the prose chapter's CONTENT.
   Contrast with "покажи лекции по главе" (find_track — lectures about).
-  Examples (ru): "найди про карму", "БГ 2.13",
+  Examples (ru): "найди про карму", "что говорится в БГ 2.13",
                  "комментарий к ШБ 5.5.3",
                  "из Книги Кришны главу про Говардхану",
                  "что я недавно слушал про карму",
                  "найди что-то похожее на эту лекцию",
                  "сколько лет богу", "вечен ли Бог", "что такое душа".
-  Examples (en): "what did he say about devotion", "BG 2.13",
+  Examples (en): "what did he say about devotion", "explain BG 2.13",
                  "letter about temple management",
                  "chapter from KRSNA Book about Govardhana",
                  "I heard about karma recently — find it",
@@ -161,6 +161,16 @@ Intents:
                  "what else should I listen to",
                  "recommend me a lecture",
                  "suggest something to listen to".
+- show_verse: ONE concrete scripture verse, asked for by its address and
+  nothing else — the answer is that verse's card, not prose about it.
+  Nearly always claimed before you see it: a bare address («БГ 2.13») is
+  resolved deterministically and never reaches you. Pick it only when a
+  message is JUST an address that the deterministic step missed, and set
+  source_id + tokens. A VERSE RANGE or a whole chapter is `find_track`
+  (see (c) there); «что говорится в БГ 2.13» / «объясни БГ 2.13» is
+  `research` — the question asks for an explanation, not a card.
+  Examples (ru): "БГ 2.13", "Мадхья лила 17.80".
+  Examples (en): "BG 2.13", "SB 5.5.3".
 - create_action: user wants to TRIGGER or CREATE something — PDF
   export, daily reminder, smart-library setup, Pro upgrade.
   HARD RULE: if the query contains ANY of these tokens (case-
@@ -269,9 +279,16 @@ Intents:
   NEVER unknown — when in doubt between unknown and research, choose
   research. Do NOT fall back to unknown just because a query is short,
   blunt, or reads like plain trivia.
+  Examples (ru): "какая завтра погода", "напиши мне код на питоне",
+                 "asdfgh".
+  Examples (en): "what's the weather tomorrow", "write me Python code",
+                 "asdfgh".
 
 Extract structured args ONLY for fields you can identify from the query:
 - year (int), location (str), author (str)
+- topic (str) — the subject in a few words, when the request is ABOUT
+  something («про карму» → "карма"). Used by the web-discovery worker to
+  search for an external lecture; harmless to set on other intents.
 - source_id (BG | SB | CC | KB | NoI | ISO | BS | MM | NBS)
 - tokens (verse address like "2.13" or chapter token)
 - date_from / date_to (ISO date "YYYY-MM-DD" — a specific lecture DELIVERY
@@ -283,9 +300,14 @@ Extract structured args ONLY for fields you can identify from the query:
   anniversary_md "07-09" / "01-01". Do NOT invent a year and do NOT put the
   day into date_from. If a year IS given, use date_from/date_to instead.
 - doc_date_from / doc_date_to (ISO date — for letters)
-- content_types (list of "transcript" | "verse" | "commentary" |
-  "prose_chapter" | "letter") — hint for which corpora to search first
-- kind (e.g. "morning_walk", "lecture", "conversation") — for transcripts
+- content_types (list of "lecture" | "verse" | "commentary" |
+  "prose_chapter" | "letter" | "media") — hint for which corpora to search
+  first. Use "lecture" for spoken material; that is the name retrieval knows.
+- kind — the TYPE of recording, one of "morning_walk", "conversation",
+  "initiation", "address", "festival", "interview", "press_conf", "bhajan",
+  "vyasa_puja", "wedding". Set it only when the user asks for that type
+  («утренние прогулки», "morning walks", «беседы»). There is no kind for an
+  ordinary lecture — leave it empty for those.
 - recent_ref (bool) — set `true` ONLY when the user deictically points
   at their OWN last / previous / most-recent lecture WITHOUT naming it
   («последнюю / прошлую / предыдущую лекцию», "my last / previous
