@@ -96,3 +96,25 @@ def test_renamed_section_is_gone() -> None:
     stale name sat in the warm-up list and logged a miss on every boot."""
     assert spec_for("chat-section-library") is None
     assert spec_for("chat-section-note_types") is not None
+
+
+def test_registry_import_does_not_cycle() -> None:
+    """`agent/prompts/__init__` imports `prompt_with_fallback` from
+    `langfuse_client`, so `langfuse_client` must not import the registry back —
+    that cycle only breaks under some import orders, which is the worst kind:
+    the full suite stayed green while importing `openrouter` first blew up."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "src"
+    for first in (
+        "lectorium_chat.infra.llm_provider.openrouter",
+        "lectorium_chat.observability.langfuse_client",
+        "lectorium_chat.agent.prompts",
+    ):
+        proc = subprocess.run(
+            [sys.executable, "-c", f"import sys; sys.path.insert(0, {str(src)!r}); import {first}"],
+            capture_output=True,
+        )
+        assert proc.returncode == 0, f"importing {first} first fails:\n{proc.stderr.decode()[-800:]}"

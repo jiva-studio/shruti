@@ -47,8 +47,8 @@ from lectorium_chat.infra.cache.redis_kv_cache import RedisKVCache
 from lectorium_chat.infra.cache.tiered_kv_cache import TieredKVCache
 from lectorium_chat.infra.auth.jwt_verifier import JwtVerifier
 from lectorium_chat.observability.bootstrap import bootstrap_score_configs
+from lectorium_chat.agent.prompts.registry import LANGFUSE_PROMPT_NAMES
 from lectorium_chat.observability.langfuse_client import (
-    LANGFUSE_PROMPT_NAMES,
     get_langfuse,
     init_langfuse,
     shutdown_langfuse,
