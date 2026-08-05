@@ -27,7 +27,11 @@ from lectorium_chat.agent.tools import bind_repositories
 from lectorium_chat.api import admin, chat, feedback, questions, title
 from lectorium_chat.application.rate_limiter import RateLimiter
 from lectorium_chat.composition import AppDeps
-from lectorium_chat.config import get_settings, warn_unknown_env_keys
+from lectorium_chat.config import (
+    get_settings,
+    warn_insecure_defaults,
+    warn_unknown_env_keys,
+)
 from lectorium_chat.infra.llm_provider import build_llm_provider
 from lectorium_chat.db.client import close_pool, init_pool
 from lectorium_chat.db.assert_schema import assert_schema_ready
@@ -87,6 +91,9 @@ async def lifespan(app: FastAPI):
     # A retired or misspelled key in `.env` is silently ignored by
     # pydantic-settings; say so at boot rather than letting it look applied.
     warn_unknown_env_keys()
+    # Reported whatever `env` says: the prod guard is armed by the one
+    # variable most likely to be forgotten, and forgetting it disarms it.
+    warn_insecure_defaults(s)
     started = time.monotonic()
     log.info("service_starting", version=s.service_version)
 

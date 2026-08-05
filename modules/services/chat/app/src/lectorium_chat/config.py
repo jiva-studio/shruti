@@ -427,26 +427,38 @@ class Settings(BaseSettings):
     def _forbid_insecure_prod_defaults(self) -> "Settings":
         """Fail-boot when running in prod with development defaults.
 
-        Catches two footguns where forgetting to override an env var would
-        otherwise silently open the service:
-          - `cors_allow_origins == "*"` → any web origin can call us
-          - `app_shared_token == "dev-token"` → the shared-secret gate is
-            effectively disabled
-        Dev / staging keep the relaxed defaults so local hacking and CI
-        smoke runs don't need to set them.
+        Dev / staging keep the relaxed defaults so local hacking and CI smoke
+        runs don't need to set them.
         """
-        if self.env == "prod":
-            if self.cors_allow_origins.strip() == "*":
-                raise ValueError(
-                    "cors_allow_origins='*' is forbidden when env=prod; "
-                    "set CORS_ALLOW_ORIGINS to the real app origin(s)"
-                )
-            if self.app_shared_token == "dev-token":
-                raise ValueError(
-                    "app_shared_token='dev-token' is forbidden when env=prod; "
-                    "set APP_SHARED_TOKEN to a non-default secret"
-                )
+        if self.env == "prod" and self.insecure_defaults():
+            raise ValueError(
+                "development defaults are forbidden when env=prod: "
+                + "; ".join(self.insecure_defaults())
+            )
         return self
+
+    def insecure_defaults(self) -> list[str]:
+        """Development defaults that would open the service if left in place.
+
+        Separate from the prod guard on purpose. That guard is armed by
+        `env == "prod"` — the ONE variable most likely to be forgotten, and
+        forgetting it disarms every check while the service reports healthy.
+        Nothing else distinguishes a production container from a laptop (the
+        insecure combination IS the normal local one), so instead of guessing,
+        this is reported unconditionally at boot and on /status: a prod deploy
+        that lost `ENV` still leaves a loud, greppable trace.
+        """
+        problems: list[str] = []
+        if self.cors_allow_origins.strip() == "*":
+            problems.append(
+                "cors_allow_origins='*' — any web origin can call this service"
+            )
+        if self.app_shared_token == "dev-token":
+            problems.append(
+                "app_shared_token='dev-token' — the admin gate on /status and "
+                "/reindex is effectively open"
+            )
+        return problems
 
     # ── Derived helpers ────────────────────────────────────────────────
     @property
@@ -469,6 +481,29 @@ class Settings(BaseSettings):
 
 
 _settings: Settings | None = None
+
+
+def warn_insecure_defaults(settings: "Settings | None" = None) -> list[str]:
+    """Say so at boot when development defaults are live, whatever `env` says.
+
+    The prod guard raises, but only if `env == "prod"`. This is the net under
+    it: a deploy that forgot `ENV` boots with wildcard CORS and the shared
+    admin token and reports healthy, and nothing anywhere mentioned it.
+    """
+    s = settings or get_settings()
+    problems = s.insecure_defaults()
+    if problems:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "insecure_defaults_active",
+            extra={"env": s.env, "problems": problems},
+        )
+        print(
+            f"WARNING: development defaults are active (env={s.env}): "
+            + "; ".join(problems)
+        )
+    return problems
 
 
 def warn_unknown_env_keys(env_file: str | Path | None = None) -> list[str]:
