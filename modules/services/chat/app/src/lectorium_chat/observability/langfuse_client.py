@@ -50,6 +50,7 @@ from __future__ import annotations
 import hashlib
 import os
 from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable
 
@@ -229,6 +230,11 @@ class LangfusePromptHandle:
     text: str
     config: dict[str, Any]
     from_langfuse: bool
+    # Langfuse's auto-incrementing version for this prompt. None on the
+    # fallback path — which is also how "this ran on the bundled .md" is
+    # recorded, so one field carries both facts.
+    version: int | None = None
+    labels: tuple[str, ...] = ()
 
 
 def prompt_with_fallback(
@@ -249,6 +255,19 @@ def prompt_with_fallback(
     "hot-reload" workflows, slow enough to absorb a burst of get_prompt
     calls during a turn without thundering-herding the Langfuse API.
     """
+    handle = _resolve_prompt(
+        name, fallback=fallback, cache_ttl_seconds=cache_ttl_seconds,
+    )
+    _record_prompt_use(name, handle.version)
+    return handle
+
+
+def _resolve_prompt(
+    name: str,
+    *,
+    fallback: str | Callable[[], str],
+    cache_ttl_seconds: int,
+) -> LangfusePromptHandle:
     client = _LANGFUSE
     if client is None or _force_fallback():
         return _fallback_handle(fallback)
@@ -270,7 +289,106 @@ def prompt_with_fallback(
         log.warning("langfuse_prompt_compile_failed", prompt=name, error=str(exc))
         return _fallback_handle(fallback)
 
-    return LangfusePromptHandle(text=text, config=config, from_langfuse=True)
+    return LangfusePromptHandle(
+        text=text,
+        config=config,
+        from_langfuse=True,
+        version=getattr(prompt, "version", None),
+        labels=tuple(getattr(prompt, "labels", ()) or ()),
+    )
+
+
+# ── Per-turn prompt ledger ────────────────────────────────────────────
+#
+# A hosted Langfuse prompt OVERRIDES the bundled `.md` and edits reach every
+# pod within `cache_ttl_seconds`. That is the point of prompt management and
+# stays exactly as it is — but it meant a trace could not be tied to the
+# prompts that produced it: nothing recorded which versions ran.
+#
+# The ledger is a MUTABLE DICT held in a ContextVar, not a value replaced with
+# `set()`. That distinction is what makes it work here: `asyncio.create_task`
+# copies the context MAPPING, so a `set()` in a child task would never reach
+# the parent — but both mappings point at the same dict, so mutations do. Every
+# prompt fetch in this service happens either in the turn's own task or in one
+# spawned from it, so installing the dict once at turn entry collects them all
+# with nothing threaded through. `asyncio.to_thread` is safe by the same
+# mechanism, which matters because `get_prompt` is a blocking HTTP call on a
+# cache miss and someone will eventually offload it.
+_PROMPT_LEDGER: ContextVar[dict[str, int | None] | None] = ContextVar(
+    "langfuse_prompt_ledger", default=None
+)
+
+# A turn assembles ~11 synthesizer sections plus a handful of standalone
+# prompts. The cap is a runaway guard, not a limit anyone should reach.
+_LEDGER_MAX_ENTRIES = 64
+
+
+def _record_prompt_use(name: str, version: int | None) -> None:
+    """Note which version of `name` this turn used. No-op outside a turn.
+
+    First write wins: with a 60s TTL a long turn can straddle a publish, and
+    "what this turn started with" is the deterministic answer. Never lazily
+    installs a dict — doing that from inside a subtask would create one nobody
+    reads and silently drop those prompts.
+    """
+    ledger = _PROMPT_LEDGER.get()
+    if ledger is None or name in ledger or len(ledger) >= _LEDGER_MAX_ENTRIES:
+        return
+    ledger[name] = version
+
+
+def current_prompt_ledger() -> dict[str, int | None] | None:
+    """The ledger for the turn in scope, if any. For tests and diagnostics."""
+    return _PROMPT_LEDGER.get()
+
+
+def _open_prompt_ledger() -> Token:
+    return _PROMPT_LEDGER.set({})
+
+
+def _close_prompt_ledger(token: Token) -> None:
+    try:
+        _PROMPT_LEDGER.reset(token)
+    except ValueError:  # pragma: no cover — entered/exited in different contexts
+        _PROMPT_LEDGER.set(None)
+
+
+def _flush_prompt_ledger(client: Any) -> None:
+    """Attach the turn's prompt versions to its trace.
+
+    Writes NOTHING when the ledger is empty — a trailing `update_current_trace`
+    on a turn that fetched no prompts would clobber what the caller last set,
+    and several trace tests assert on the final update call.
+
+    Metadata, not tags: `update_current_trace(tags=…)` is last-write-wins and
+    the cancel path sets a tag from inside this same context.
+    """
+    ledger = _PROMPT_LEDGER.get()
+    if not ledger:
+        return
+    try:
+        client.update_current_trace(
+            metadata={
+                "prompts": dict(sorted(ledger.items())),
+                "prompts_fallback": sorted(n for n, v in ledger.items() if v is None),
+            }
+        )
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks a turn
+        log.warning("langfuse_prompt_ledger_flush_failed", error=str(exc))
+
+
+def _log_prompt_ledger() -> None:
+    """Emit the ledger even when Langfuse is off — an all-None map is exactly
+    the "this turn ran entirely on bundled .md" signal, and that is the case
+    you most want visible."""
+    ledger = _PROMPT_LEDGER.get()
+    if not ledger:
+        return
+    log.info(
+        "turn_prompt_versions",
+        prompts=dict(sorted(ledger.items())),
+        fallback_count=sum(1 for v in ledger.values() if v is None),
+    )
 
 
 def _fallback_handle(fallback: str | Callable[[], str]) -> LangfusePromptHandle:
@@ -345,10 +463,29 @@ async def with_langfuse_trace(
     no explicit trace_id threading needed.
     """
     client = _LANGFUSE
-    if client is None:
-        yield None
-        return
+    # Opened even when Langfuse is off: an all-None ledger is precisely the
+    # "this turn ran entirely on bundled .md" signal, and it still reaches the
+    # structlog line below.
+    ledger_token = _open_prompt_ledger()
     try:
+        if client is None:
+            yield None
+            return
+        try:
+            span_cm = client.start_as_current_span(
+                name=name,
+                input=input,
+                trace_context={"trace_id": trace_id},
+            )
+        except Exception as exc:  # noqa: BLE001
+            # ONLY the span open is guarded here. The caller's body used to sit
+            # inside this try too, so an exception escaping it was thrown back
+            # in at the `yield` and hit `except Exception: ... yield None` —
+            # yielding during a throw raises `RuntimeError: generator didn't
+            # stop after throw()`, masking the original error.
+            log.warning("langfuse_trace_open_failed", trace_id=trace_id, error=str(exc))
+            yield None
+            return
         # `trace_context` forces Langfuse to use OUR `trace_id` for the
         # OTel trace instead of generating its own — that way the value
         # the client sent in `X-Trace-Id` (the assistant message id,
@@ -360,11 +497,7 @@ async def with_langfuse_trace(
         # is unreliable when nested observations exist (issue #9556) —
         # child generations overwrite trace.input/output attributes.
         # Setting them on the trace directly survives those rewrites.
-        with client.start_as_current_span(
-            name=name,
-            input=input,
-            trace_context={"trace_id": trace_id},
-        ) as span:
+        with span_cm as span:
             try:
                 trace_metadata: dict[str, Any] = {"region": region}
                 if session_title:
@@ -383,10 +516,16 @@ async def with_langfuse_trace(
                 log.warning("langfuse_trace_update_failed", error=str(exc))
             # Yield the span — caller does `update_current_trace(
             # output=...)` at end-of-turn before the with-block exits.
-            yield span
-    except Exception as exc:  # noqa: BLE001
-        log.warning("langfuse_trace_open_failed", trace_id=trace_id, error=str(exc))
-        yield None
+            try:
+                yield span
+            finally:
+                # Flush INSIDE the span: `update_current_trace` resolves the
+                # current OTel span. Langfuse merges metadata key-wise, so the
+                # region / session_title / output set elsewhere survive.
+                _flush_prompt_ledger(client)
+    finally:
+        _log_prompt_ledger()
+        _close_prompt_ledger(ledger_token)
 
 
 def langfuse_node_callback(trace_id: str, span_name: str) -> Any | None:
