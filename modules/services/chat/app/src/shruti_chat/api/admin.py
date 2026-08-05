@@ -14,8 +14,10 @@ from pydantic import BaseModel
 from shruti_chat.config import get_settings
 from shruti_chat.db.client import get_pool
 from shruti_chat.indexer import run as indexer_run
+from shruti_chat.agent.prompts.registry import LANGFUSE_PROMPT_NAMES
 from shruti_chat.indexer.embed import get_embedder
 from shruti_chat.observability.logging import get_logger
+from shruti_chat.observability.metrics import prompt_source_summary
 
 router = APIRouter()
 
@@ -187,6 +189,14 @@ async def status(x_app_token: str | None = Header(default=None)) -> dict[str, An
             "chunks_total": v_total or 0,
             "by_lang": {r["lang"]: r["n"] for r in v_by_lang},
             "by_model": {r["embed_model"]: r["n"] for r in v_models},
+        },
+        # Where prompts are coming from. A non-empty `serving_from_fallback`
+        # means Langfuse is unreachable (or force-disabled) and those prompts
+        # are the copy baked into the image — which `pull` only refreshes by
+        # hand, so it can be arbitrarily far behind the live text.
+        "prompts": {
+            "registered": len(LANGFUSE_PROMPT_NAMES),
+            **prompt_source_summary(),
         },
         "indexer": {
             "last_runs": [
