@@ -13,6 +13,12 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
+# RFC1918 docker private ranges — the peers Caddy can reach us from inside
+# the compose network. Named (rather than inlined in the field default) so
+# the validator can fall back to it when the env var is set but blank.
+_DEFAULT_TRUSTED_PROXY_CIDRS = ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -281,7 +287,7 @@ class Settings(BaseSettings):
     # these. Override via env (comma-separated) when fronting from a
     # different proxy topology.
     trusted_proxy_cidrs: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"],
+        default_factory=lambda: list(_DEFAULT_TRUSTED_PROXY_CIDRS),
     )
 
     # Additional source IPs / CIDRs allowed to set X-Lectorium-Region.
@@ -301,9 +307,18 @@ class Settings(BaseSettings):
 
         pydantic-settings parses `TRUSTED_PROXY_CIDRS=10.0.0.0/8,192.168.0.0/16`
         as a single string; without this validator the default list would
-        be replaced by `["10.0.0.0/8,192.168.0.0/16"]` (one bad entry)."""
+        be replaced by `["10.0.0.0/8,192.168.0.0/16"]` (one bad entry).
+
+        A blank value means "not configured", NOT "trust nobody". Compose
+        renders an unset `${VAR:+…}` substitution as an empty string, which
+        pydantic-settings sees as a present value — that emptied the list and
+        left `ProxyHeadersMiddleware(trusted_hosts=[])` ignoring every
+        X-Forwarded-For, collapsing the per-IP rate limit onto Caddy's bridge
+        address. Fall back to the defaults instead.
+        """
         if isinstance(value, str):
-            return [s.strip() for s in value.split(",") if s.strip()]
+            entries = [s.strip() for s in value.split(",") if s.strip()]
+            return entries or list(_DEFAULT_TRUSTED_PROXY_CIDRS)
         return value
 
     @field_validator("region_header_trusted_sources", mode="before")

@@ -221,14 +221,16 @@ services:
       # Public CDN base for client-facing media (recitation audio). Bunny edge.
       MEDIA_BASE_URL: ${LECTORIUM_MEDIA_BASE_URL:-https://akds-lectorium.b-cdn.net}
       # TRUSTED_PROXY_CIDRS gates ProxyHeadersMiddleware's XFF rewrite.
-      # When set, it REPLACES the RFC1918 defaults baked into Settings —
-      # so we re-include the docker-bridge ranges here alongside the RU
-      # proxy's public egress IP. Without the bridge ranges, Caddy
+      # It REPLACES the RFC1918 defaults baked into Settings, so the
+      # docker-bridge ranges are spelled out here — without them Caddy
       # (sitting in the same compose network) would itself be untrusted
-      # and the inner peer rewrite would never happen.
-      # Empty when LECTORIUM_REGION_HEADER_TRUSTED_SOURCES is unset
-      # (single-region deploy): Settings' defaults take over.
-      TRUSTED_PROXY_CIDRS: ${LECTORIUM_REGION_HEADER_TRUSTED_SOURCES:+172.16.0.0/12,192.168.0.0/16,10.0.0.0/8,${LECTORIUM_REGION_HEADER_TRUSTED_SOURCES}}
+      # and the inner peer rewrite would never happen. The RU proxy's
+      # public egress IP is appended when configured.
+      # Always non-empty: a `${VAR:+…}` that collapsed to "" still reached
+      # the container as a SET-but-blank env var, which pydantic-settings
+      # read as an explicit empty list — trusting nobody and silently
+      # dropping XFF on every single-region deploy.
+      TRUSTED_PROXY_CIDRS: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8${LECTORIUM_REGION_HEADER_TRUSTED_SOURCES:+,${LECTORIUM_REGION_HEADER_TRUSTED_SOURCES}}
       # REGION_HEADER_TRUSTED_SOURCES is additive to the loopback /
       # RFC1918 defaults inside _region.py, so it's safe to pass the
       # bare egress IP / CIDR list here.
