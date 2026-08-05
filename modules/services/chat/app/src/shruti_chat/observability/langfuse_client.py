@@ -198,25 +198,10 @@ def warm_prompt_cache(names: list[str]) -> None:
 
 # Canonical list of prompts the chat service expects in Langfuse. Used
 # for warm-up at startup and as the source-of-truth for the bootstrap
-# script (`scripts/bootstrap_langfuse_prompts.py`).
-LANGFUSE_PROMPT_NAMES: tuple[str, ...] = (
-    "query-planner",
-    "synthesis-planner",
-    "conclusion-writer",
-    "topic-extractor",
-    "caption-generator",
-    "chat-router",
-    "chat-section-header",
-    "chat-section-tools",
-    "chat-section-actions",
-    "chat-section-followups",
-    "chat-section-no_narration",
-    "chat-section-citations",
-    "chat-section-library",
-    "chat-section-quoting",
-    "chat-section-response_shape",
-    "chat-section-language",
-    "chat-section-safety",
+# The warm-up list lives with the prompt registry — the same table the
+# bootstrap script publishes from, so the two cannot drift again.
+from shruti_chat.agent.prompts.registry import (  # noqa: E402
+    LANGFUSE_PROMPT_NAMES,  # re-exported: main.py imports it from here
 )
 
 
