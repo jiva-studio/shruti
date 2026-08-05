@@ -29,6 +29,7 @@ adding a new score.
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -119,7 +120,13 @@ async def audit_post_expansion_text(
                 broken += 1
 
     if verse_refs and library_db_path is not None and library_db_path.exists():
-        broken += _count_missing_verses(library_db_path, verse_refs)
+        # Off-loop: this is a blocking SQLite read, and it runs inside the
+        # turn's SSE generator before the terminal `done` event — on the
+        # event loop it delayed that event for the user AND stalled every
+        # other concurrent turn.
+        broken += await asyncio.to_thread(
+            _count_missing_verses, library_db_path, verse_refs,
+        )
 
     # Bypass markers — LLM wrote `[cite:track_X@...]` directly instead
     # of going through the numbered `[^N]` protocol. Counted on the
@@ -156,24 +163,33 @@ def _count_missing_verses(
 ) -> int:
     """Return how many `(source_id, tokens)` pairs are NOT in library_verses.
 
-    One short SQLite read per turn — fine to keep sync. Pulled from a
-    fresh read-only connection so we don't fight a concurrent indexer
-    swap.
+    ONE query for the whole set, via a row-value `IN (VALUES …)`. It used to
+    be a query per reference in a Python loop, which the docstring described
+    as "one short SQLite read per turn" — it was N of them, and an answer
+    citing a dozen verses paid for a dozen.
+
+    Blocking: call it through `asyncio.to_thread`. Uses a fresh read-only
+    connection so we don't fight a concurrent indexer swap.
+
+    Counts OCCURRENCES, not distinct refs — a verse cited three times and
+    missing contributes three, matching how the caller counts broken track
+    refs. Only the lookup is deduplicated.
     """
     pairs = list(refs)
     if not pairs:
         return 0
+    unique = list(dict.fromkeys(pairs))
+    placeholders = ",".join("(?,?)" for _ in unique)
+    params = [value for pair in unique for value in pair]
     try:
         with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
-            missing = 0
-            for source_id, tokens in pairs:
-                row = conn.execute(
-                    "SELECT 1 FROM library_verses WHERE source_id = ? AND tokens = ? LIMIT 1",
-                    (source_id, tokens),
-                ).fetchone()
-                if row is None:
-                    missing += 1
-            return missing
+            rows = conn.execute(
+                "SELECT source_id, tokens FROM library_verses "
+                f"WHERE (source_id, tokens) IN (VALUES {placeholders})",
+                params,
+            ).fetchall()
+        found = {(r[0], r[1]) for r in rows}
+        return sum(1 for pair in pairs if pair not in found)
     except Exception as exc:  # noqa: BLE001
         log.warning("auto_scores_verse_check_failed", error=str(exc))
         return 0
@@ -254,13 +270,19 @@ class TurnSummary:
     outline_skipped_notes_ratio: float | None = None
 
 
-def emit_turn_scores(
+async def emit_turn_scores(
     langfuse: Any | None,
     trace_id: str,
     summary: TurnSummary,
     audit: MarkerAudit,
 ) -> None:
     """Fire-and-forget scoring at the very end of a turn.
+
+    Async only because language identification is pure-Python CPU work over
+    the whole answer, and this runs inside the turn's SSE generator before
+    the terminal `done` event — on the loop it delayed that event and stalled
+    every concurrent turn. The Langfuse SDK calls themselves are queued
+    client-side and stay sync.
 
     Uses `create_score(trace_id=...)` with an explicit trace id rather
     than `score_current_trace()`, so it works after the
@@ -309,7 +331,7 @@ def emit_turn_scores(
         "BOOLEAN",
     )
 
-    detected = _detect_language(summary.final_text)
+    detected = await asyncio.to_thread(_detect_language, summary.final_text)
     if detected is not None:
         _emit(
             "language_match",
