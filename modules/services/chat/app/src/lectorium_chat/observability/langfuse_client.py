@@ -55,6 +55,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable
 
 from lectorium_chat.config import get_settings
+from lectorium_chat.observability.metrics import prompt_fetch_counter
 from lectorium_chat.observability.logging import get_logger
 
 
@@ -259,6 +260,9 @@ def prompt_with_fallback(
         name, fallback=fallback, cache_ttl_seconds=cache_ttl_seconds,
     )
     _record_prompt_use(name, handle.version)
+    prompt_fetch_counter.labels(
+        name=name, source="langfuse" if handle.from_langfuse else "fallback",
+    ).inc()
     return handle
 
 

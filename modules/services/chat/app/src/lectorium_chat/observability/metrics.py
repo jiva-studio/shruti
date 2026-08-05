@@ -200,3 +200,46 @@ class _DbPoolCollector:
 # `register` calls `collect()` once immediately for the duplicate-name check,
 # so `collect` must tolerate a pool that does not exist yet.
 REGISTRY.register(_DbPoolCollector())
+
+
+# Which SOURCE served each prompt fetch. `LangfusePromptHandle.from_langfuse`
+# has existed all along, documented as the signal "operators can spot when
+# prompts are being served stale" — with zero readers. So during a Langfuse
+# outage the service silently reverted every prompt to whatever was baked into
+# the image (arbitrarily far behind the live copy, since `pull` is manual) and
+# nothing said so.
+#
+# Cardinality: 28 registered prompts x 2 sources = 56 series, closed set.
+prompt_fetch_counter = Counter(
+    "lectorium_chat_prompt_fetch_total",
+    "Prompt fetches by name and where the text came from",
+    labelnames=["name", "source"],
+)
+
+
+def prompt_source_summary() -> dict[str, object]:
+    """Per-source fetch tallies for `/status`.
+
+    Reads the counter rather than keeping a second tally, so the endpoint and
+    the metric can never disagree. `fallback_names` is the actionable part: a
+    non-empty list means those prompts are being served from the image copy,
+    which `pull` only refreshes manually.
+    """
+    langfuse_total = 0.0
+    fallback_total = 0.0
+    fallback_names: set[str] = set()
+    for metric in prompt_fetch_counter.collect():
+        for sample in metric.samples:
+            if not sample.name.endswith("_total"):
+                continue
+            source = sample.labels.get("source")
+            if source == "langfuse":
+                langfuse_total += sample.value
+            elif source == "fallback" and sample.value:
+                fallback_total += sample.value
+                fallback_names.add(sample.labels.get("name", "?"))
+    return {
+        "fetches_from_langfuse": int(langfuse_total),
+        "fetches_from_fallback": int(fallback_total),
+        "serving_from_fallback": sorted(fallback_names),
+    }
