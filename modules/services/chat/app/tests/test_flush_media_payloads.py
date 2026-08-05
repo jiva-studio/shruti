@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 import shruti_chat.agent.graph.nodes._worker_common as wc
+from shruti_chat.agent import cards as _cards
 from shruti_chat.agent.graph.nodes._worker_common import flush_card_payloads
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.agent.markers import MEDIA_RE
@@ -77,7 +78,7 @@ def _seed_media(
 @pytest.fixture
 def capture_writer(monkeypatch):
     events: list[dict] = []
-    monkeypatch.setattr(wc, "get_stream_writer", lambda: events.append)
+    monkeypatch.setattr(_cards, "get_stream_writer", lambda: events.append)
     return events
 
 
