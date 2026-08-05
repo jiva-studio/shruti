@@ -1,17 +1,25 @@
 """Conditional edges for the chat graph.
 
-Centralised routing matrix:
+Centralised routing matrix — every intent in `domain.routing.Intent`:
 
   direct_chat            → synthesizer        (no tools)
   unknown / default      → research_worker    → synthesizer  (light grounding, #39)
   help                   → help_worker        → synthesizer
+  locate                 → locate_worker      → synthesizer
+  show_verse             → show_verse_worker  → synthesizer
+  add-to-library         → add_to_library_worker → END  (PRO-gated, no synth)
   find_track             → find_tracks_worker → END  (semantic + metadata, no synth)
-                        OR catalog_worker     → synthesizer  (history_ref only)
+                                              OR add_to_library_worker (web fallback)
+                        OR catalog_worker     → synthesizer  (history_ref + history)
+                        OR clarify_worker     → END          (history_ref, no history)
   recommend              → recommend_worker   → synthesizer      (no LLM loop)
-  research               → research_worker    → synthesizer
-  create_action          → action_worker      → synthesizer      (short path)
-                        OR research_worker    → action_worker → synthesizer
-                        OR catalog_worker     → action_worker → synthesizer
+  research               → research_worker    → synthesis_planner → synthesizer
+                        OR catalog_worker     → synthesizer  (recent_ref/current_ref)
+                        OR clarify_worker     → END          (recent_ref, no history)
+  create_action          → action_worker      → action_responder / synthesizer
+                        OR research_worker    → action_worker
+                        OR catalog_worker     → action_worker
+                        OR clarify_worker     → END          (recent_ref, no history)
 
 The action chain (research/catalog → action) is wired as static edges
 in `builder.py`; this module only decides the FIRST hop out of the
@@ -262,8 +270,12 @@ def route_after_router(state: ChatState) -> str:
 
 
 def route_after_research(state: ChatState) -> str:
-    """After research_worker: branch to action_worker on
-    `create_action`, otherwise straight to synthesizer.
+    """After research_worker: branch to action_worker on `create_action`,
+    otherwise on to be written up.
+
+    The "synthesizer" arm is wired to `synthesis_planner` in builder.py — the
+    notes are planned into an outline first. The return value keeps the older
+    name because it names the DESTINATION of the arm, not the next node.
     """
     if state.get("intent") == "create_action":
         return "action_worker"

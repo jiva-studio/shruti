@@ -14,6 +14,21 @@ plus quotes you can listen to.
   yourself.
 - **Finds verses and prepares PDFs** — it can pull up a specific shloka, or
   prepare a lecture's transcript as a document when you ask.
+- **Points to where something is** — ask "which canto has the Prahlada
+  story" and it answers with the address rather than a retelling.
+- **Answers from the lecturers you choose.** Say "answer only from
+  Prabhupāda's lectures" and every following answer is built from them
+  until you say "use all speakers". Books are never narrowed this way —
+  scripture is scripture whoever is speaking. Teachers only your own
+  library knows work here too.
+- **Knows your listening.** Ask what you played this week, or for a
+  recap of the lecture you have open.
+- **Suggests what to listen to next**, based on what you have already
+  heard.
+- **Adds lectures from the web (PRO)** — paste a YouTube link, or ask it
+  to look for a teacher's talks online, and it offers them for your
+  personal library. Once added, they are searched alongside the catalog
+  and only you can see them.
 - **Suggests follow-up questions** at the end of each answer to help you
   explore the topic further.
 - **Remembers the conversation** within a session, so you can refine your

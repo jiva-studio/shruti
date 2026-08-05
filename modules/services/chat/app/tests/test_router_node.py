@@ -410,3 +410,84 @@ async def test_an_unknown_attribute_rides_through_untouched(
     assert "lang" not in out  # nothing language-related was settled
     emitted = _attribute_events(_capture_stream)[0]["data"]
     assert emitted["future_thing"]["value"] == "42"
+
+
+# ── the book a message named ──────────────────────────────────────────────
+
+
+@dataclass
+class _SourceHit:
+    id: str
+    confidence: float
+
+
+class _SourceCatalog:
+    """Resolves book codes; records what it was asked."""
+
+    def __init__(self, hits: list[_SourceHit] | None = None) -> None:
+        self._hits = hits if hits is not None else [_SourceHit("source_SB", 0.95)]
+        self.asked: list[str] = []
+
+    async def resolve(self, kind: str, text: str, *, lang=None, limit: int = 1):
+        self.asked.append(f"{kind}:{text}")
+        return self._hits[:limit]
+
+
+def _router_with_args(monkeypatch: pytest.MonkeyPatch, args: dict[str, Any]) -> None:
+    async def _fake_router_turn(*_a, **_k) -> RoutingDecision:
+        return RoutingDecision(intent="research", confidence=0.9, extracted_args=args)
+
+    monkeypatch.setattr(router_node_mod, "run_router_turn", _fake_router_turn)
+
+
+async def test_the_named_book_leaves_the_router_as_a_catalog_id(
+    monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
+) -> None:
+    """«Что Шримад-Бхагаватам говорит о карме?» reached the chunk lanes as "SB"
+    and matched nothing — on production it cost every verse and purport in the
+    answer. Resolved here, once, because five hops downstream read this value."""
+    _router_with_args(monkeypatch, {"source_id": "SB"})
+    catalog = _SourceCatalog()
+
+    out = await router_node(_state(), _Runtime(_Ctx(catalog_repo=catalog)))
+
+    assert out["extracted_args"]["source_id"] == "source_SB"
+    assert catalog.asked == ["source:SB"]
+
+
+async def test_a_catalog_id_is_left_alone_and_costs_no_lookup(
+    monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
+) -> None:
+    # The deterministic address classifier already emits this form.
+    _router_with_args(monkeypatch, {"source_id": "source_dsicuBsFvinZ"})
+    catalog = _SourceCatalog()
+
+    out = await router_node(_state(), _Runtime(_Ctx(catalog_repo=catalog)))
+
+    assert out["extracted_args"]["source_id"] == "source_dsicuBsFvinZ"
+    assert catalog.asked == []
+
+
+async def test_an_unresolvable_book_is_left_as_the_user_said_it(
+    monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
+) -> None:
+    """Nothing is invented: the lecture side normalizes short codes itself, and
+    the chunk side drops what it cannot use — so the honest value rides on."""
+    _router_with_args(monkeypatch, {"source_id": "Zohar"})
+    catalog = _SourceCatalog(hits=[])
+
+    out = await router_node(_state(), _Runtime(_Ctx(catalog_repo=catalog)))
+
+    assert out["extracted_args"]["source_id"] == "Zohar"
+
+
+async def test_a_turn_that_named_no_book_asks_the_catalog_nothing(
+    monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
+) -> None:
+    _router_with_args(monkeypatch, {"topic": "карма"})
+    catalog = _SourceCatalog()
+
+    out = await router_node(_state(), _Runtime(_Ctx(catalog_repo=catalog)))
+
+    assert "source_id" not in out["extracted_args"]
+    assert catalog.asked == []

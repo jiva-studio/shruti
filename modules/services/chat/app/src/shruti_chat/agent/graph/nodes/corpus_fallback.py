@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 
 from shruti_chat.agent.graph.nodes._worker_common import (
     flush_card_payloads,
+    owned_track_ids as _owned_track_ids,
     translate_commentaries,
 )
 from shruti_chat.agent.graph.state import ChatState
@@ -235,6 +236,14 @@ async def corpus_fallback_node(
                 lang=retrieval_lang_code,
                 reranker=reranker,
                 rerank_query=user_query,
+                # This was the ONE fanout in the codebase that searched without
+                # them. Under «отвечай только по лекциям X», a turn that reached
+                # here came back with somebody else's lecture cited beneath a
+                # disclaimer saying the corpus had nothing — and, because a
+                # lecture note was now present, the honest «у выбранных лекторов
+                # ничего нет» line was suppressed too.
+                author_scope=getattr(ctx, "author_scope", None),
+                owned_track_ids=await _owned_track_ids(ctx),
             )
             survivors = [
                 c
