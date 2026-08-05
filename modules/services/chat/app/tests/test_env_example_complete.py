@@ -84,3 +84,49 @@ def test_a_missing_env_file_is_not_an_error(tmp_path) -> None:
     from shruti_chat.config import warn_unknown_env_keys
 
     assert warn_unknown_env_keys(tmp_path / "nope.env") == []
+
+
+# ── insecure defaults ─────────────────────────────────────────────────
+
+
+def test_prod_still_refuses_to_boot_with_dev_defaults() -> None:
+    from shruti_chat.config import Settings
+
+    with pytest.raises(Exception) as err:
+        Settings(_env_file=None, env="prod")
+    assert "dev-token" in str(err.value) or "cors_allow_origins" in str(err.value)
+
+
+def test_prod_boots_once_the_defaults_are_overridden() -> None:
+    from shruti_chat.config import Settings
+
+    s = Settings(
+        _env_file=None, env="prod",
+        cors_allow_origins="https://app.example",
+        app_shared_token="a-real-secret",
+    )
+    assert s.insecure_defaults() == []
+
+
+def test_dev_defaults_are_reported_even_outside_prod() -> None:
+    """The whole point: `env` is what gets forgotten, so the report must not
+    depend on it. A prod deploy that lost ENV boots with wildcard CORS and the
+    shared admin token, and used to say nothing at all."""
+    from shruti_chat.config import Settings, warn_insecure_defaults
+
+    problems = warn_insecure_defaults(Settings(_env_file=None, env="dev"))
+
+    assert len(problems) == 2
+    assert any("cors_allow_origins" in p for p in problems)
+    assert any("app_shared_token" in p for p in problems)
+
+
+def test_a_configured_service_reports_nothing() -> None:
+    from shruti_chat.config import Settings, warn_insecure_defaults
+
+    s = Settings(
+        _env_file=None, env="dev",
+        cors_allow_origins="https://app.example",
+        app_shared_token="a-real-secret",
+    )
+    assert warn_insecure_defaults(s) == []
