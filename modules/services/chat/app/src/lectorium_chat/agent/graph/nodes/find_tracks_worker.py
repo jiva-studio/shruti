@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from dataclasses import dataclass
+from typing import Iterable
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
@@ -203,29 +205,37 @@ async def _build_filters(
         "ref_from": ref_from,
         "ref_to": ref_to,
     }
-    ladder: list[tuple[str, dict]] = [("", dict(full))]
-    relaxed: list[str] = []
-    for label, keys in (
-        # Narrowest first: the reference is the constraint most likely to leave
-        # nothing, and dropping it degrades to "lectures on this book" — which
-        # `_intro` then has to admit to.
-        (_REF_RUNG, ("ref_prefix", "ref_from", "ref_to")),
-        ("date", ("date_from", "date_to", "anniversary_md")),
-        ("location", ("location_id",)),
-        # The TYPE of recording outlives the city: someone who asked for morning
-        # walks would rather see one from another year than a lecture from the
-        # right one. Dropped only when the pair above already failed.
-        ("kind", ("tag_ids",)),
-        ("author", ("author_ids",)),
-        ("source", ("source_id",)),
-    ):
-        if not any(full[k] for k in keys):
-            continue
-        for k in keys:
-            full[k] = None
-        relaxed.append(label)
-        ladder.append((",".join(relaxed), dict(full)))
-    return ladder
+    return full
+
+
+# What each named constraint occupies in the filter dict, narrowest first —
+# also the order they are given up in when nothing matches the whole set.
+# `author` sits late on purpose: a person who named a teacher would rather hear
+# that he has nothing from that year than be handed somebody else's lecture.
+# `source` last: the book outlives everything else about the request.
+_CONSTRAINTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (_REF_RUNG, ("ref_prefix", "ref_from", "ref_to")),
+    ("date", ("date_from", "date_to", "anniversary_md")),
+    ("location", ("location_id",)),
+    ("kind", ("tag_ids",)),
+    ("author", ("author_ids",)),
+    ("source", ("source_id",)),
+)
+
+# Giving up the teacher is a different kind of answer — someone else's words —
+# so it is never offered as one of the "you asked for four things, three of them
+# exist" alternatives. It goes only in the last-resort walk below.
+_NEVER_ALONE = frozenset({"author"})
+
+
+def _stated(full: dict) -> list[str]:
+    """The constraints this request actually carries, narrowest first."""
+    return [name for name, keys in _CONSTRAINTS if any(full[k] for k in keys)]
+
+
+def _without(full: dict, names: Iterable[str]) -> dict:
+    drop = {k for name, keys in _CONSTRAINTS if name in set(names) for k in keys}
+    return {k: (None if k in drop else v) for k, v in full.items()}
 
 
 async def _search(
@@ -253,17 +263,114 @@ async def _search(
     )
 
 
-async def _run_ladder(
-    ctx: TurnContext, embedding: list[float], ladder: list[tuple[str, dict]],
-    *, lang: str | None,
-) -> tuple[list[ScoredChunk], str]:
-    """Walk the relaxation ladder until a rung yields lectures. Returns the
-    lectures and the label of the constraints that had to be dropped."""
-    for label, flt in ladder:
-        lectures = _top_lectures(await _search(ctx, embedding, flt, lang=lang))
+@dataclass(frozen=True)
+class _Found:
+    """What the search settled on, and what it cost to get there."""
+
+    lectures: list[ScoredChunk]
+    relaxed: str = ""          # constraints given up, comma-joined
+    other_language: bool = False
+    partial: bool = False      # each lecture misses ONE of `relaxed`, not all
+
+
+async def _try(
+    ctx: TurnContext, embedding: list[float], flt: dict, *, lang: str | None,
+) -> list[ScoredChunk]:
+    return _top_lectures(await _search(ctx, embedding, flt, lang=lang))
+
+
+def _merge(runs: list[tuple[str, list[ScoredChunk]]]) -> list[ScoredChunk]:
+    """One list out of several near-misses: best chunk per track, best first.
+
+    A track can surface in two of them (the year matched here, the city there);
+    it is one lecture and must be offered once.
+    """
+    best: dict[str, ScoredChunk] = {}
+    for _name, lectures in runs:
+        for sc in lectures:
+            prev = best.get(sc.chunk.track_id)
+            if prev is None or sc.score > prev.score:
+                best[sc.chunk.track_id] = sc
+    return sorted(best.values(), key=lambda sc: sc.score, reverse=True)[:_MAX_LECTURES]
+
+
+async def _find_lectures(
+    ctx: TurnContext, embedding: list[float], full: dict,
+) -> _Found:
+    """Search for what was asked, and — only if that is empty — for the nearest
+    thing to it, in one fan-out instead of a walk down a ladder.
+
+    The order of preference is the point:
+
+    1. everything the person said, in their language;
+    2. everything they said, in ANOTHER language — «этих на русском нет, вот
+       они по-английски» is a real answer, and it beats silently swapping the
+       year and the city, which is what walking the ladder in one language did:
+       «утренние прогулки 1976 в Бомбее» dropped all three and served two
+       unrelated Russian talks while the ten it asked for sat there in English;
+    3. everything but ONE constraint — every such near-miss at once, merged, so
+       the reply can say WHICH one has nothing («в Бомбее нет, но за 76 есть»)
+       instead of naming a blur of dropped filters;
+    4. the old cumulative give-up, for when even that is empty.
+
+    Steps 1-3 run their searches concurrently, so the whole thing is bounded by
+    the slowest single query rather than the sum of a sequential walk.
+    """
+    stated = _stated(full)
+    if not stated:
+        # Nothing to relax — a plain topical search. Keep the cheap two-step:
+        # this is the hot path and a speculative second query would double its
+        # ANN cost for every ordinary «найди лекции про карму».
+        lectures = await _try(ctx, embedding, full, lang=ctx.lang_code)
         if lectures:
-            return lectures, label
-    return [], ""
+            return _Found(lectures)
+        lectures = await _try(ctx, embedding, full, lang=None)
+        return _Found(lectures, other_language=bool(lectures))
+
+    # 1-2. The whole request, both languages at once.
+    exact_same, exact_any = await asyncio.gather(
+        _try(ctx, embedding, full, lang=ctx.lang_code),
+        _try(ctx, embedding, full, lang=None),
+    )
+    if exact_same:
+        return _Found(exact_same)
+    if exact_any:
+        return _Found(exact_any, other_language=True)
+
+    # 3. Each near-miss on its own, both languages, all at once. The teacher is
+    #    not offered up here (see `_NEVER_ALONE`).
+    alone = [n for n in stated if n not in _NEVER_ALONE]
+    if alone:
+        runs = await asyncio.gather(*(
+            _try(ctx, embedding, _without(full, [n]), lang=lg)
+            for lg in (ctx.lang_code, None)
+            for n in alone
+        ))
+        same = [(n, r) for n, r in zip(alone, runs[: len(alone)]) if r]
+        other = [(n, r) for n, r in zip(alone, runs[len(alone):]) if r]
+        for hits, foreign in ((same, False), (other, True)):
+            if hits:
+                return _Found(
+                    _merge(hits),
+                    relaxed=",".join(n for n, _ in hits),
+                    other_language=foreign,
+                    partial=True,
+                )
+
+    # 4. Still nothing: give constraints up cumulatively, narrowest first, as
+    #    before. Reached only when no single near-miss had anything either.
+    for lang in (ctx.lang_code, None):
+        dropped: list[str] = []
+        for name in stated:
+            dropped.append(name)
+            lectures = await _try(ctx, embedding, _without(full, dropped), lang=lang)
+            if lectures:
+                return _Found(
+                    lectures,
+                    relaxed=",".join(dropped),
+                    other_language=lang is None,
+                )
+    return _Found([])
 
 
 def _top_lectures(chunks: list[ScoredChunk]) -> list[ScoredChunk]:
@@ -357,6 +464,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
 async def _intro(
     ctx: TurnContext, query: str, n: int, relaxed: str, *,
     lang_note: str = "", ref: str = "", chosen_authors: str = "",
+    partial: bool = False,
 ) -> str:
     sys = standalone_prompt("find-tracks-intro", "find_tracks_intro")
     facts = [
@@ -364,6 +472,19 @@ async def _intro(
         f"Lectures found: {n}",
         f"Relaxed filters: {relaxed or 'none'}",
     ]
+    if partial:
+        # These lectures are near-misses of DIFFERENT constraints, not a list
+        # that gave all of them up: one matches the year but not the city, the
+        # next the other way round. Saying "relaxed: date, location" would read
+        # as "I ignored both", which is what the old single-list answer sounded
+        # like — «с немного изменённой датой и местом» above two unrelated talks.
+        facts.append(
+            f"IMPORTANT: nothing matches the request exactly. Each lecture below "
+            f"matches everything EXCEPT ONE of: {relaxed}. Say plainly that "
+            f"there is no exact match and which of these did not exist, e.g. "
+            f"«за 1976 в Бомбее ничего нет — вот прогулки 1976 года и вот "
+            f"бомбейские других лет». Do NOT claim the list matches the request."
+        )
     if lang_note:
         facts.append(lang_note)
     if ref:
@@ -441,34 +562,25 @@ async def find_tracks_worker_node(
         author_id = hit.id
 
     embedding = await ctx.embedder.embed_query(query)
-    ladder = await _build_filters(ctx, args, author_id=author_id)
+    full = await _build_filters(ctx, args, author_id=author_id)
 
-    # The teacher the user NAMED outranks the language. Giving the author up
-    # answers with somebody else's lecture and says nothing about it; crossing
-    # the language boundary keeps the person and can say which language they
-    # speak in. So the same-language pass stops before the author rung, and only
-    # the any-language pass below is allowed to drop the author. A query with no
-    # author has no such rung and walks the whole ladder either way.
-    keeps_author = [rung for rung in ladder if "author" not in rung[0].split(",")]
-    lectures, relaxed = await _run_ladder(ctx, embedding, keeps_author, lang=ctx.lang_code)
+    found = await _find_lectures(ctx, embedding, full)
+    lectures, relaxed = found.lectures, found.relaxed
     lang_note = ""
-    if not lectures:
-        # Nothing with a transcript in the user's language — but the lecture may
-        # exist in ANOTHER one, and hiding it reads as "the corpus doesn't have
-        # it" (a ru user asking for a Tokyo 1972 talk that only has an en
-        # transcript was told exactly that). Retry language-agnostically and,
-        # when that finds something, SAY which language it's in.
-        lectures, relaxed = await _run_ladder(ctx, embedding, ladder, lang=None)
-        if lectures:
-            lang_note = await _other_language_note(
-                ctx, [sc.chunk.lang for sc in lectures],
-            )
-            log.info(
-                "find_tracks_other_language",
-                request_id=ctx.request_id,
-                requested_lang=ctx.lang_code,
-                found_langs=sorted({sc.chunk.lang for sc in lectures}),
-            )
+    if lectures and found.other_language:
+        # The lecture exists, just not with a transcript in the language of the
+        # conversation. Hiding it reads as "the corpus doesn't have it" (a ru
+        # user asking for a Tokyo 1972 talk that only has an en transcript was
+        # told exactly that), so we serve it and SAY which language it is in.
+        lang_note = await _other_language_note(
+            ctx, [sc.chunk.lang for sc in lectures],
+        )
+        log.info(
+            "find_tracks_other_language",
+            request_id=ctx.request_id,
+            requested_lang=ctx.lang_code,
+            found_langs=sorted({sc.chunk.lang for sc in lectures}),
+        )
 
     if not lectures:
         # Semantic search found nothing — but for a BARE scripture reference
@@ -535,6 +647,7 @@ async def find_tracks_worker_node(
         ref_label = f"{short} {tokens}".strip() if short else tokens
     intro_task = _intro(
         ctx, query, len(kept), relaxed, lang_note=lang_note, ref=ref_label,
+        partial=found.partial,
     )
     prose = await asyncio.gather(intro_task, *desc_tasks)
     intro, descriptions = prose[0], list(prose[1:])

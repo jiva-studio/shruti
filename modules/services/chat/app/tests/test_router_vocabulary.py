@@ -102,10 +102,13 @@ class _Ctx:
 
 
 async def _filters(kind: object, catalog: Any = None) -> tuple[dict, list[str]]:
-    from lectorium_chat.agent.graph.nodes.find_tracks_worker import _build_filters
+    from lectorium_chat.agent.graph.nodes.find_tracks_worker import (
+        _build_filters,
+        _stated,
+    )
 
-    ladder = await _build_filters(_Ctx(catalog or _TagCatalog()), {"kind": kind})
-    return ladder[0][1], [label for label, _ in ladder]
+    full = await _build_filters(_Ctx(catalog or _TagCatalog()), {"kind": kind})
+    return full, _stated(full)
 
 
 async def test_morning_walks_actually_narrow_the_search() -> None:
@@ -122,9 +125,9 @@ async def test_the_word_is_humanized_before_it_is_looked_up() -> None:
 async def test_a_plain_lecture_narrows_nothing() -> None:
     # There is no `tag_lecture` — every recording is a lecture. Accepting the
     # resolver's best guess here would have filtered on «Речь».
-    flt, rungs = await _filters("lecture")
+    flt, stated = await _filters("lecture")
     assert flt["tag_ids"] is None
-    assert "kind" not in rungs
+    assert "kind" not in stated
 
 
 async def test_a_kind_the_catalog_never_heard_of_narrows_nothing() -> None:
@@ -149,11 +152,14 @@ async def test_a_broken_catalog_just_does_not_narrow() -> None:
     assert flt["tag_ids"] is None
 
 
-async def test_the_type_outlives_the_city_when_the_ladder_relaxes() -> None:
+async def test_the_type_outlives_the_city_when_constraints_are_given_up() -> None:
     """Someone who asked for morning walks would rather see one from another
     year than a lecture from the right one — so `kind` is given up after the
     date and the city, and before the teacher."""
-    from lectorium_chat.agent.graph.nodes.find_tracks_worker import _build_filters
+    from lectorium_chat.agent.graph.nodes.find_tracks_worker import (
+        _build_filters,
+        _stated,
+    )
 
     class _Loc(_TagCatalog):
         async def resolve(self, kind: str, text: str, *, lang=None, limit: int = 5):
@@ -161,12 +167,9 @@ async def test_the_type_outlives_the_city_when_the_ladder_relaxes() -> None:
                 return [_Tag("loc_bombay", "Bombay")]
             return await super().resolve(kind, text, lang=lang, limit=limit)
 
-    ladder = await _build_filters(
+    full = await _build_filters(
         _Ctx(_Loc()),
         {"kind": "morning_walk", "location": "Bombay", "year": 1976},
         author_id="author_prabhupada",
     )
-    assert [label for label, _ in ladder] == [
-        "", "date", "date,location", "date,location,kind",
-        "date,location,kind,author",
-    ]
+    assert _stated(full) == ["date", "location", "kind", "author"]
