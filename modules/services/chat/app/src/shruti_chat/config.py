@@ -168,8 +168,24 @@ class Settings(BaseSettings):
     rerank_model: str = "rerank-2"
     voyage_api_key: str | None = None       # required for provider=voyage
     rerank_base_url: str | None = None      # future self-hosted (tei)
-    rerank_concurrency: int = 2
+    # PROCESS-WIDE cap on concurrent rerank calls, shared by every turn — not
+    # a per-turn budget. A WIDE turn makes ~4-6 rerank calls (fanout pool per
+    # round, the attribution border gate, per-thesis Stage 1/2), so at 2 a
+    # single turn serialised most of its own reranking and two concurrent
+    # turns starved each other. Each call is I/O-bound and capped by
+    # `rerank_timeout_s`; the limit exists to bound spend and Voyage-side
+    # rate limits, not local CPU.
+    rerank_concurrency: int = 8
     rerank_timeout_s: float = 10.0
+    # Circuit breaker over the rerank provider. Every call site already
+    # degrades to cosine ordering on an exception, so an outage was already
+    # "correct" — it just cost `rerank_timeout_s` on every rerank of every
+    # turn first. After N consecutive failures the calls fail immediately for
+    # `rerank_circuit_open_s`, then one probe re-opens. Tunable because
+    # provider flakiness is exactly what an operator needs to react to
+    # mid-incident, without a rebuild.
+    rerank_circuit_threshold: int = 3
+    rerank_circuit_open_s: float = 30.0
 
     # ── Add-to-library: external lecture search + ingest broker (#1226) ──
     # PRO-only "add an external lecture to my library". The multi-provider
