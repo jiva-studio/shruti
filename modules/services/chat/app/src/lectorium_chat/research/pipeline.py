@@ -226,6 +226,27 @@ def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
         log.warning("on_event_research_question_failed", question_chars=len(q))
 
 
+# Stage outcomes that are NOT a clean run. Langfuse renders WARNING-level
+# observations distinctly, so a degraded stage is visible while scanning a
+# trace rather than only when you go looking for it.
+_DEGRADED_STAGE_STATUSES = frozenset({"timeout", "error", "provider_unavailable"})
+
+
+def _mark_span(span: Any, *, status: str, stage_ms: float) -> None:
+    """Record a stage's outcome on its Langfuse span. Best-effort: telemetry
+    must never break a turn, and the span is None whenever Langfuse is off."""
+    if span is None:
+        return
+    try:
+        span.update(
+            metadata={"status": status, "stage_ms": stage_ms},
+            level="WARNING" if status in _DEGRADED_STAGE_STATUSES else "DEFAULT",
+            status_message=status if status in _DEGRADED_STAGE_STATUSES else None,
+        )
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks a turn
+        log.warning("langfuse_span_update_failed", stage=status, error=str(exc))
+
+
 async def _safe(coro_factory, *, default, timeout: float, name: str, request_id: str | None):
     """Run a coroutine with a stage timeout; on TimeoutError / any exception,
     return `default` so the orchestrator can keep going with partial state.
@@ -247,7 +268,7 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
     """
     started = perf_counter()
     status = "ok"
-    with langfuse_span(f"retrieval.{name}"):
+    with langfuse_span(f"retrieval.{name}") as span:
         try:
             return await asyncio.wait_for(coro_factory(), timeout=timeout)
         except asyncio.TimeoutError:
@@ -266,13 +287,19 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
             log.warning("pipeline_stage_error", stage=name, error=str(exc), request_id=request_id)
             return default
         finally:
+            stage_ms = round((perf_counter() - started) * 1000, 1)
             log.info(
                 "stage_timing",
                 stage=name,
-                stage_ms=round((perf_counter() - started) * 1000, 1),
+                stage_ms=stage_ms,
                 status=status,
                 request_id=request_id,
             )
+            # Put the outcome ON the span too. Without it a degraded stage is
+            # indistinguishable from a fast one in the trace — the span just
+            # ends — and the only record of the timeout lived in Loki, i.e.
+            # in a different tool from the trace you are reading.
+            _mark_span(span, status=status, stage_ms=stage_ms)
 
 
 _LIBRARY_DOC_TYPES = ("commentary", "prose_chapter", "letter")
