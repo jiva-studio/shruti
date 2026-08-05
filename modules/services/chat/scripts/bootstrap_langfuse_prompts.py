@@ -59,100 +59,19 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-# Defaults match `Settings.llm_*` in `config.py`. When the config in
-# Langfuse is empty (fallback path) the chat code falls back to these
-# same values via `Settings`, so behaviour is identical.
-_DEFAULT_LLM = "openrouter/deepseek/deepseek-chat"
-_OUTLINE_LLM = "openrouter/google/gemini-2.5-flash-lite"
-_FLASH_LITE = "openrouter/google/gemini-3.1-flash-lite"
-_FLASH = "openrouter/google/gemini-2.5-flash"
+# The registry lives in the app package; this script runs from
+# `modules/services/chat/scripts/` without the package installed, so put its
+# `src/` on the path before importing.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app" / "src"))
+
+from lectorium_chat.agent.prompts.registry import PROMPTS  # noqa: E402
 
 
-# Each entry: (langfuse_prompt_name, source_ref, config, tags).
-# `source_ref` is the filename under `agent/prompts/` (without `.md`).
-# `tags` filter the prompt in the Langfuse UI — `synth`/`worker`/
-# `router`/`research` mirror the agent-graph role the section feeds.
+# The prompt table lives in the app package so the publisher, the boot-time
+# warm-up and the runtime fetch all read ONE list. It used to be duplicated
+# here, and had drifted: five prompts the code fetches were never published.
 _PROMPTS: list[tuple[str, str, dict, list[str]]] = [
-    # ── research pipeline (3 short structured_output calls) ────────────
-    (
-        "query-planner", "query_planner",
-        {"model": _FLASH_LITE, "temperature": 0, "note": "structured_output → temperature forced to 0"},
-        ["chat", "research"],
-    ),
-    (
-        "synthesis-planner", "synthesis_planner",
-        {"model": _FLASH, "temperature": 0, "schema": "Outline",
-         "note": "structured_output → temperature forced to 0; uses full Flash (not Lite) — attribution selection over 15-25 notes"},
-        ["chat", "synth"],
-    ),
-    (
-        "conclusion-writer", "conclusion_writer",
-        {"model": _FLASH_LITE, "temperature": 0, "schema": "ConclusionResponse",
-         "note": "structured_output → temperature forced to 0; fallback for outlines with 3+ theses where synthesis-planner left conclusion null"},
-        ["chat", "synth"],
-    ),
-    (
-        "intro-writer", "intro_writer",
-        {"model": _FLASH_LITE, "temperature": 0, "schema": "IntroResponse",
-         "note": "structured_output → temperature forced to 0; rewrites the intro from finished theses (2+ theses) so it states the claims, not a topic table-of-contents"},
-        ["chat", "synth"],
-    ),
-    (
-        "topic-extractor", "topic_extractor",
-        {"model": _FLASH_LITE, "temperature": 0, "note": "structured_output → temperature forced to 0"},
-        ["chat", "research"],
-    ),
-    (
-        "caption-generator", "caption_generator",
-        {"model": _FLASH_LITE, "temperature": 0, "note": "structured_output → temperature forced to 0"},
-        ["chat", "research"],
-    ),
-    # ── router ────────────────────────────────────────────────────────
-    (
-        "chat-router", "router",
-        {"model": _FLASH_LITE, "temperature": 0, "schema": "RoutingDecision",
-         "note": "structured_output → temperature forced to 0"},
-        ["chat", "router"],
-    ),
-    # ── reply language (runs in parallel with the router) ──────────────
-    (
-        "reply-language", "reply_language",
-        {"model": _FLASH_LITE, "temperature": 0, "schema": "Attribute",
-         "note": "structured_output → temperature forced to 0; one conversation ATTRIBUTE (see domain/conversation_attributes.py) — abstains (empty value) when the message carries no signal"},
-        ["chat", "router"],
-    ),
-    # ── standalone one-off prompts (not sections of the system prompt) ──
-    (
-        "localized-reply", "localized_reply",
-        {"model": _FLASH_LITE, "temperature": 0, "schema": "LocalizedReply",
-         "note": "structured_output → temperature forced to 0; localises a fixed reply into EVERY shipped locale. On a parse miss the caller re-asks with this same text plus a plain-text override (kept in code — an edit here must not be able to break the schema contract)"},
-        ["chat", "worker"],
-    ),
-    (
-        "find-tracks-intro", "find_tracks_intro",
-        {"model": _FLASH_LITE, "temperature": 0,
-         "note": "text_completion (no JSON envelope); the lead-in above a lecture list. When the reference filter was relaxed the caller adds the facts + an explicit ban on naming it"},
-        ["chat", "worker"],
-    ),
-    (
-        "find-tracks-description", "find_tracks_description",
-        {"model": _FLASH_LITE, "temperature": 0,
-         "note": "text_completion (no JSON envelope); the per-card blurb, one call per lecture"},
-        ["chat", "worker"],
-    ),
-    # ── chat-section-* (modular synth/worker prompt) ───────────────────
-    ("chat-section-header", "header", {}, ["chat", "synth", "worker"]),
-    ("chat-section-tools", "tools", {}, ["chat", "worker"]),
-    ("chat-section-actions", "actions", {}, ["chat", "synth", "worker"]),
-    ("chat-section-followups", "followups", {}, ["chat", "synth"]),
-    ("chat-section-no_narration", "no_narration", {}, ["chat", "synth"]),
-    ("chat-section-citations", "citations", {}, ["chat", "synth"]),
-    ("chat-section-note_types", "note_types", {}, ["chat", "synth"]),
-    ("chat-section-quoting", "quoting", {}, ["chat", "synth", "worker"]),
-    ("chat-section-response_shape", "response_shape", {}, ["chat", "synth"]),
-    ("chat-section-language", "language", {}, ["chat", "synth"]),
-    ("chat-section-safety", "safety", {}, ["chat", "synth"]),
-    ("chat-section-grounding", "grounding", {}, ["chat", "synth"]),
+    (p.name, p.md, p.config, p.tags) for p in PROMPTS
 ]
 
 
