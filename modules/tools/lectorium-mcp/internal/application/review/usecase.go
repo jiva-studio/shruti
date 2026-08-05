@@ -19,17 +19,17 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/alignpdf"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/align"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/stagefail"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	pipelinereview "github.com/jiva-studio/lectorium/pipeline/review"
-	"github.com/jiva-studio/lectorium/pipeline/transcript"
-	glossaryport "github.com/jiva-studio/lectorium/pipeline/ports/glossary"
 	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
+	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
+	glossaryport "github.com/jiva-studio/lectorium/pipeline/ports/glossary"
 	reviewport "github.com/jiva-studio/lectorium/pipeline/ports/review"
 	"github.com/jiva-studio/lectorium/pipeline/ports/sentencesplit"
-	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
+	pipelinereview "github.com/jiva-studio/lectorium/pipeline/review"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 type UseCase struct {
@@ -75,14 +75,23 @@ type UseCase struct {
 	GlossaryThreshold float64 // trigram cutoff for Match (default 0.55)
 	GlossaryMaxHints  int     // cap injection size (default 10)
 
-	// AlignPDF, when non-nil, enables the PDF-canon early-branch: if a
-	// transcript.pdf is present alongside the raw ASR for this track and
-	// opts.Method allows it, we skip the LLM path entirely and align the
-	// canonical PDF text to the raw timestamps. Run() handles claiming
-	// the stage once and dispatches to AlignPDF.RunInternal for the
-	// alignment work.
-	AlignPDF *alignpdf.UseCase
-	OutDir   string // for PDF presence check; required when AlignPDF is set
+	// Align, when non-nil, enables the canonical-text early branch: if the
+	// track ships an authoritative transcript (transcript.pdf, or the
+	// transcript.html an importer saved) and opts.Method allows it, we skip
+	// the LLM and project the ASR timings onto that text instead.
+	Align  *align.UseCase
+	OutDir string // for the canonical-text presence check; required when Align is set
+
+	// Batch, when set, enables the half-price job path: SubmitBatch queues
+	// chunks, CollectBatch turns the replies into chunk artifacts and lets
+	// the live path finish whatever the job did not deliver. BatchJobs holds
+	// the job records between the two calls.
+	Batch          Batcher
+	BatchJobs      BatchStore
+	BatchModel     string
+	BatchMaxTokens int
+	BatchPriceIn   float64 // USD per million input tokens
+	BatchPriceOut  float64 // USD per million output tokens
 }
 
 // Attempt is one entry in the chunk-level fallback chain. Models is
@@ -100,9 +109,9 @@ type Options struct {
 	// DefaultModelsFor(language), 1 = single pass, 2 = hybrid (first
 	// baseline, second premium on low-confidence islands). 3+ rejected.
 	Models      []string
-	ChunkSize   int    // 0 = use UseCase.ChunkSize
-	Overlap     int    // 0 = use UseCase.Overlap
-	Concurrency int    // 0 = use UseCase.Concurrency
+	ChunkSize   int // 0 = use UseCase.ChunkSize
+	Overlap     int // 0 = use UseCase.Overlap
+	Concurrency int // 0 = use UseCase.Concurrency
 
 	// ForceFullRerun: when true, re-run every chunk through the LLM even
 	// if a successful artifact already exists. Default (false) reuses
@@ -127,15 +136,15 @@ type Options struct {
 }
 
 type Result struct {
-	TrackId     track.Id `json:"track_id"`
-	Language    string   `json:"language"`
-	Models      []string `json:"models"`
-	ChunksRun   int      `json:"chunks_run"`
-	Succeeded   int      `json:"succeeded"`
-	Fallback    int      `json:"fallback"`
-	FallbackIdx []int    `json:"fallback_idx,omitempty"`
-	Blocks      int      `json:"blocks"`
-	TotalCostUSD float64 `json:"total_cost_usd,omitempty"`
+	TrackId      track.Id `json:"track_id"`
+	Language     string   `json:"language"`
+	Models       []string `json:"models"`
+	ChunksRun    int      `json:"chunks_run"`
+	Succeeded    int      `json:"succeeded"`
+	Fallback     int      `json:"fallback"`
+	FallbackIdx  []int    `json:"fallback_idx,omitempty"`
+	Blocks       int      `json:"blocks"`
+	TotalCostUSD float64  `json:"total_cost_usd,omitempty"`
 }
 
 func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Options) (res Result, rerr error) {
@@ -152,20 +161,20 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	// PDF-canon early branch. When a track ships with an authoritative
 	// transcript.pdf, the canonical text is already perfect; we just need
 	// to project ASR timestamps onto it. Skips the LLM entirely.
-	if uc.AlignPDF != nil {
+	if uc.Align != nil {
 		method := strings.ToLower(strings.TrimSpace(opts.Method))
 		if method == "" {
 			method = "auto"
 		}
 		// Either canonical source skips the LLM: the text is already correct
 		// and only needs the ASR timings projected onto it.
-		haveCanonical := alignpdf.PDFExists(uc.OutDir, id) || alignpdf.TextExists(uc.OutDir, id)
+		haveCanonical := align.PDFExists(uc.OutDir, id) || align.TextExists(uc.OutDir, id)
 		switch method {
 		case "pdf":
 			if !haveCanonical {
 				return Result{}, fmt.Errorf("review: method=pdf requested but no canonical transcript for %s", id)
 			}
-			ar, err := uc.AlignPDF.RunInternal(ctx, id, language)
+			ar, err := uc.Align.RunInternal(ctx, id, language)
 			if err != nil {
 				return Result{}, err
 			}
@@ -177,7 +186,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 			return res, nil
 		case "auto":
 			if haveCanonical {
-				ar, err := uc.AlignPDF.RunInternal(ctx, id, language)
+				ar, err := uc.Align.RunInternal(ctx, id, language)
 				if err != nil {
 					return Result{}, err
 				}
@@ -515,9 +524,9 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	// fall back to "one segment = one sentence" so we never silently drop content.
 	blocks := make([]transcript.Block, 0, len(raw.Segments))
 	var (
-		curStart  int64
-		curParts  []string
-		curOpen   bool
+		curStart int64
+		curParts []string
+		curOpen  bool
 	)
 	for i, s := range raw.Segments {
 		if !curOpen {
@@ -576,27 +585,27 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 	sort.Ints(res.FallbackIdx)
 
 	sessionPayload := map[string]any{
-		"track_id":             string(id),
-		"language":             language,
-		"models":               models,
-		"chunk_size":           chunkSize,
-		"overlap":              overlap,
-		"concurrency":          concurrency,
-		"chunks_run":           chunksRun,
-		"succeeded":            succeeded,
-		"fallback":             len(fallbackSet),
-		"fallback_idx":         res.FallbackIdx,
-		"raw_segments":         len(raw.Segments),
-		"noise_filtered_idx":   noiseFilteredIdx,
+		"track_id":               string(id),
+		"language":               language,
+		"models":                 models,
+		"chunk_size":             chunkSize,
+		"overlap":                overlap,
+		"concurrency":            concurrency,
+		"chunks_run":             chunksRun,
+		"succeeded":              succeeded,
+		"fallback":               len(fallbackSet),
+		"fallback_idx":           res.FallbackIdx,
+		"raw_segments":           len(raw.Segments),
+		"noise_filtered_idx":     noiseFilteredIdx,
 		"noise_filter_threshold": uc.NoiseFilterThreshold,
-		"reviewed_at":          time.Now().UTC().Format(time.RFC3339),
-		"total_cost_usd":      agg.TotalCostUSD,
-		"cost_by_model_usd":   agg.CostByModel,
-		"tokens_by_model":     agg.TokensByModel,
-		"models_distribution": agg.ModelsDistribution,
-		"low_conf_chunks":     agg.LowConfChunks,
-		"chunk_audit_flags":   agg.ChunkAuditFlags,
-		"degraded_chunks":     agg.DegradedChunks,
+		"reviewed_at":            time.Now().UTC().Format(time.RFC3339),
+		"total_cost_usd":         agg.TotalCostUSD,
+		"cost_by_model_usd":      agg.CostByModel,
+		"tokens_by_model":        agg.TokensByModel,
+		"models_distribution":    agg.ModelsDistribution,
+		"low_conf_chunks":        agg.LowConfChunks,
+		"chunk_audit_flags":      agg.ChunkAuditFlags,
+		"degraded_chunks":        agg.DegradedChunks,
 	}
 	sessionBody, _ := json.MarshalIndent(sessionPayload, "", "  ")
 	_ = uc.Transcripts.WriteReviewSession(ctx, id, language, sessionBody)

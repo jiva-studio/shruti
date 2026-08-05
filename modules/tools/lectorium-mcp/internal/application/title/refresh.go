@@ -24,15 +24,15 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/alignpdf"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/align"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/commit"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	"github.com/jiva-studio/lectorium/pipeline/transcript"
-	alignpdfport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
+	alignport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/align"
 	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
 	titleport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/title"
 	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
+	"github.com/jiva-studio/lectorium/pipeline/transcript"
 )
 
 const (
@@ -66,7 +66,7 @@ func isRefusalOutput(s string) bool {
 type UseCase struct {
 	Registry         lakeport.Registry
 	Transcripts      transcriptport.Store
-	Aligner          alignpdfport.Aligner // optional; nil when pdf_align is not configured
+	Aligner          alignport.Aligner // optional; nil when pdf_align is not configured
 	LLM              titleport.Extractor
 	SetTrackMetadata commit.SetTrackMetadataUseCase
 	OutDir           string
@@ -141,7 +141,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 	// 3. PDF header hint (best-effort; never fatal)
 	headerHint := ""
 	if uc.Aligner != nil {
-		pdfPath := alignpdf.PDFPath(uc.OutDir, id)
+		pdfPath := align.PDFPath(uc.OutDir, id)
 		if _, err := os.Stat(pdfPath); err == nil {
 			h, err := uc.Aligner.ExtractTitleHint(ctx, pdfPath)
 			if err == nil {

@@ -18,7 +18,7 @@ func chunk(idx ...int) []review.ChunkSegment {
 
 func TestParseLinesFillsUnreportedFromRequest(t *testing.T) {
 	sent := chunk(10, 11, 12, 13, 14)
-	segs, groups, err := parseLines("11|Шри Прабхупада говорил.\nENDS\n11,14", sent)
+	segs, groups, err := ParseLines("11|Шри Прабхупада говорил.\nENDS\n11,14", sent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestParseLinesFillsUnreportedFromRequest(t *testing.T) {
 // An empty delta is a legitimate answer: the chunk needed no correction.
 func TestParseLinesAcceptsEmptyDelta(t *testing.T) {
 	sent := chunk(0, 1, 2)
-	segs, groups, err := parseLines("ENDS\n2", sent)
+	segs, groups, err := ParseLines("ENDS\n2", sent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestParseLinesIgnoresNoise(t *testing.T) {
 	sent := chunk(4, 5)
 	body := "```\nSure, here is the corrected chunk:\n4|Первое предложение.\n" +
 		"not a segment line\nENDS\n5\n```"
-	segs, groups, err := parseLines(body, sent)
+	segs, groups, err := ParseLines(body, sent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestParseLinesIgnoresNoise(t *testing.T) {
 // after the first pipe is text, including further pipes.
 func TestParseLinesKeepsTextAfterFirstPipe(t *testing.T) {
 	sent := chunk(7)
-	segs, _, err := parseLines("7|a|b\nENDS\n7", sent)
+	segs, _, err := ParseLines("7|a|b\nENDS\n7", sent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestParseLinesRejects(t *testing.T) {
 		{"segment outside chunk", "9|Чужой.\nENDS\n3", "idx 9 was not in the chunk"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := parseLines(tc.body, sent)
+			_, _, err := ParseLines(tc.body, sent)
 			if err == nil {
 				t.Fatalf("want an error mentioning %q, got none", tc.want)
 			}
@@ -110,7 +110,7 @@ func TestParseLinesRejects(t *testing.T) {
 // must still yield ascending, non-overlapping groups.
 func TestGroupsFromEndsNormalises(t *testing.T) {
 	sent := chunk(0, 1, 2, 3)
-	_, groups, err := parseLines("ENDS\n3,1,1", sent)
+	_, groups, err := ParseLines("ENDS\n3,1,1", sent)
 	if err != nil {
 		t.Fatal(err)
 	}

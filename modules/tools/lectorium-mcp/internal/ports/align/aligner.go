@@ -1,11 +1,11 @@
-// Package alignpdfport defines the Aligner interface used by the alignpdf
+// Package alignport defines the Aligner interface used by the alignpdf
 // use case to convert a canonical PDF transcript + raw ASR JSON into a
 // reviewed v2 transcript.
 //
-// The canonical implementation lives in internal/infra/alignpdf/python and
+// The canonical implementation lives in internal/infra/align/python and
 // wraps a long-lived Python subprocess (mirrors the razdel pattern). Tests
 // can stub this with an in-process fake.
-package alignpdfport
+package alignport
 
 import (
 	"context"

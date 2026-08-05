@@ -12,7 +12,7 @@
 //     reviewed stage, does the work, releases.
 //   - Inside review.UseCase as the early-branch when prefer=auto+PDF exists:
 //     RunInternal() is called WITHOUT claiming (review already holds the lock).
-package alignpdf
+package align
 
 import (
 	"context"
@@ -25,7 +25,7 @@ import (
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/stagefail"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/track"
-	alignpdfport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
+	alignport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/align"
 	lakeport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/lake"
 	transcriptport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/transcript"
 )
@@ -33,7 +33,7 @@ import (
 type UseCase struct {
 	Registry    lakeport.Registry
 	Transcripts transcriptport.Store
-	Aligner     alignpdfport.Aligner
+	Aligner     alignport.Aligner
 	OutDir      string
 }
 
@@ -90,7 +90,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 		return Result{}, err
 	}
 	if !claimed {
-		return Result{}, fmt.Errorf("alignpdf: another worker holds reviewed stage for %s/%s", id, language)
+		return Result{}, fmt.Errorf("align: another worker holds reviewed stage for %s/%s", id, language)
 	}
 	defer stagefail.MarkOnExit(uc.Registry, id, stageKey, ctx, &rerr)
 
@@ -113,28 +113,28 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 // This is the entry point review.UseCase uses when forking on prefer=pdf.
 func (uc UseCase) RunInternal(ctx context.Context, id track.Id, language string) (Result, error) {
 	if uc.Aligner == nil {
-		return Result{}, fmt.Errorf("alignpdf: aligner not configured (set review.align_pdf.script_path in config)")
+		return Result{}, fmt.Errorf("align: aligner not configured (set review.align_pdf.script_path in config)")
 	}
 	pdfPath, textPath := PDFPath(uc.OutDir, id), ""
 	if _, err := os.Stat(pdfPath); err != nil {
 		pdfPath = ""
 		if textPath = TextPath(uc.OutDir, id); !TextExists(uc.OutDir, id) {
-			return Result{}, fmt.Errorf("alignpdf: no canonical transcript for %s (neither transcript.pdf nor transcript.html)", id)
+			return Result{}, fmt.Errorf("align: no canonical transcript for %s (neither transcript.pdf nor transcript.html)", id)
 		}
 	}
 	rawPath := RawPath(uc.OutDir, id, language)
 	if _, err := os.Stat(rawPath); err != nil {
-		return Result{}, fmt.Errorf("alignpdf: raw transcript not found at %s (run transcript_create first)", rawPath)
+		return Result{}, fmt.Errorf("align: raw transcript not found at %s (run transcript_create first)", rawPath)
 	}
 
-	rev, err := uc.Aligner.Align(ctx, alignpdfport.Request{
+	rev, err := uc.Aligner.Align(ctx, alignport.Request{
 		PDFPath:  pdfPath,
 		TextPath: textPath,
 		RawPath:  rawPath,
 		Language: language,
 	})
 	if err != nil {
-		return Result{}, fmt.Errorf("alignpdf: align: %w", err)
+		return Result{}, fmt.Errorf("align: align: %w", err)
 	}
 	// Trust the aligner's wire fields, but force trackId/language to match
 	// the request — the Python side reads trackId from raw.json which may
@@ -146,19 +146,19 @@ func (uc UseCase) RunInternal(ctx context.Context, id track.Id, language string)
 	}
 
 	if err := uc.Transcripts.WriteReviewed(ctx, rev); err != nil {
-		return Result{}, fmt.Errorf("alignpdf: write reviewed: %w", err)
+		return Result{}, fmt.Errorf("align: write reviewed: %w", err)
 	}
 
 	// Audit artifact alongside chunk_NNNN.json files so it's visible
 	// next to LLM review sessions for the same track.
 	session := map[string]any{
-		"track_id":     string(id),
-		"language":     language,
-		"method":       "pdf_align",
-		"pdf_path":     pdfPath,
-		"raw_path":     rawPath,
-		"blocks":       len(rev.Blocks),
-		"reviewed_at":  time.Now().UTC().Format(time.RFC3339),
+		"track_id":    string(id),
+		"language":    language,
+		"method":      "pdf_align",
+		"pdf_path":    pdfPath,
+		"raw_path":    rawPath,
+		"blocks":      len(rev.Blocks),
+		"reviewed_at": time.Now().UTC().Format(time.RFC3339),
 	}
 	if body, err := json.MarshalIndent(session, "", "  "); err == nil {
 		_ = uc.Transcripts.WriteReviewSession(ctx, id, language, body)

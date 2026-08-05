@@ -19,7 +19,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	adminconfigapp "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/adminconfig"
-	alignpdfuc "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/alignpdf"
+	alignpdfuc "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/align"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/assetsync"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/audiodenoise"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/audiotag"
@@ -58,7 +58,7 @@ import (
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/domain/pipeline"
 	adminconfigrt "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/adminconfig/runtime"
-	pythonalign "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/alignpdf/python"
+	pythonalign "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/align/python"
 	fsartifact "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/artifact/fs"
 	openaicompatattribtranslate "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/attributiontranslate/openaicompat"
 	fsaudio "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/audiostore/fs"
@@ -84,6 +84,8 @@ import (
 	sqlitepending "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/pending/sqlite"
 	reviewreg "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
 	throttledreview "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/review/throttled"
+	fsbatchstore "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/reviewbatch/fs"
+	geminibatch "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/reviewbatch/gemini"
 	sqliteruns "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/runregistry/sqlite"
 	awss3 "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/s3/aws"
 	bunnys3 "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/s3/bunny"
@@ -97,7 +99,7 @@ import (
 	fstranscript "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/infra/transcriptstore/fs"
 	mcpsrv "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/mcp/tools"
-	alignpdfport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
+	alignport "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/align"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
 	s3port "github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/worker"
@@ -459,6 +461,24 @@ func main() {
 	// Missing file keeps the feature dormant — no spammy errors.
 	reviewGlossary := loadGlossaryOrNil(cfg.Review.Glossary.Path)
 
+	// Batch review: half price, up to 24 hours. Left nil when no api_key is
+	// configured, which keeps the tools registered but refusing.
+	reviewBatchJobs := fsbatchstore.New(cfg.Out)
+	var reviewBatcher reviewuc.Batcher
+	if cfg.Review.Batch.APIKey != "" {
+		b, err := geminibatch.New(geminibatch.Config{
+			Endpoint:  cfg.Review.Batch.Endpoint,
+			APIKey:    cfg.Review.Batch.APIKey,
+			Model:     cfg.Review.Batch.Model,
+			MaxTokens: cfg.Review.Batch.MaxTokens,
+		})
+		if err != nil {
+			log.Fatalf("review batch: %v", err)
+		}
+		reviewBatcher = b
+		fmt.Fprintf(os.Stderr, "[review] batch path enabled: %s\n", cfg.Review.Batch.Model)
+	}
+
 	// Wrap every registered reviewer in a global throttle. The cap applies
 	// across all worker-pool slots and all per-track review.concurrency
 	// fan-out — preventing 429s when a batch run pushes through hundreds
@@ -733,8 +753,9 @@ func main() {
 	configRegistry.Register(configregistry.OnboardingTopicsDescriptor())
 
 	deps := tools.Deps{
-		Registry:    registry,
-		Transcripts: transcriptStore,
+		Registry:        registry,
+		Transcripts:     transcriptStore,
+		ReviewBatchJobs: reviewBatchJobs,
 		Ingest: ingest.UseCase{
 			Registry:   registry,
 			Audio:      audioStore,
@@ -825,7 +846,7 @@ func main() {
 			Transcripts: transcriptStore,
 			Reviewers:   reviewRegistry,
 			Splitter:    splitterOrNil(sentenceSplitter),
-			AlignPDF:    alignPDFOrNil(pdfAligner, &alignPDFUC),
+			Align:       alignPDFOrNil(pdfAligner, &alignPDFUC),
 			OutDir:      cfg.Out,
 			DefaultAttemptsFor: func(language string) []reviewuc.Attempt {
 				src := cfg.Review.DefaultReviewAttempts(language)
@@ -847,6 +868,12 @@ func main() {
 			LowConfThreshold:     cfg.Review.Hybrid.Threshold,
 			NoiseFilterThreshold: cfg.Review.NoiseFilterThreshold,
 			Glossary:             glossaryOrNil(reviewGlossary),
+			Batch:                reviewBatcher,
+			BatchJobs:            reviewBatchJobs,
+			BatchModel:           cfg.Review.Batch.Model,
+			BatchMaxTokens:       cfg.Review.Batch.MaxTokens,
+			BatchPriceIn:         cfg.Review.Batch.InputPerMillion,
+			BatchPriceOut:        cfg.Review.Batch.OutputPerMillion,
 			GlossaryThreshold:    cfg.Review.Glossary.MatchThreshold,
 			GlossaryMaxHints:     cfg.Review.Glossary.MaxHintsPerChunk,
 		},
@@ -1138,7 +1165,7 @@ func alignPDFOrNil(a *pythonalign.Aligner, uc *alignpdfuc.UseCase) *alignpdfuc.U
 // alignerOrNil dodges the same nil-interface trap as splitterOrNil — pass
 // nil through as a true nil interface, not a typed-nil whose method-set
 // would panic on first call.
-func alignerOrNil(a *pythonalign.Aligner) alignpdfport.Aligner {
+func alignerOrNil(a *pythonalign.Aligner) alignport.Aligner {
 	if a == nil {
 		return nil
 	}
