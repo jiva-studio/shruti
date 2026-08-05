@@ -7,6 +7,7 @@ Postgres-backed behaviour is covered by integration tests.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,6 +20,10 @@ from shruti_chat.research.corpus_fanout import (
     _parse_addresses,
     fanout_search_with_boost,
     merge_fanout,
+)
+from shruti_chat.research.constants import (
+    FANOUT_DB_CONCURRENCY,
+    MAX_PARSED_ADDRESSES,
 )
 from shruti_chat.research.models import FanoutResult
 
@@ -680,3 +685,74 @@ async def test_the_private_lane_ignores_the_answer_language() -> None:
 
     assert ("user_track", None) in seen, f"private lane must not filter by lang: {seen}"
     assert ("track_transcript", "ru") in seen, "public lane keeps its language"
+
+
+# ---- burst control -------------------------------------------------------
+
+
+class _ConcurrencyProbeRepo:
+    """Chunk repo that reports the peak number of overlapping lane calls.
+
+    Every lane sleeps briefly so siblings get a chance to pile up; without a
+    gate they all would.
+    """
+
+    def __init__(self) -> None:
+        self.in_flight = 0
+        self.peak = 0
+
+    async def _lane(self) -> list:
+        self.in_flight += 1
+        self.peak = max(self.peak, self.in_flight)
+        try:
+            await asyncio.sleep(0.01)
+            return []
+        finally:
+            self.in_flight -= 1
+
+    async def search_by_embedding(self, q_vec, **kwargs):
+        return await self._lane()
+
+    async def search_library_by_embedding(self, q_vec, **kwargs):
+        return await self._lane()
+
+    async def search_chunks_lexical(self, query_text, query_embedding, **kwargs):
+        return await self._lane()
+
+    async def get_chunks_by_addr_label(self, addr_label, **kwargs):
+        return await self._lane()
+
+
+@pytest.mark.asyncio
+async def test_fanout_bounds_its_database_burst():
+    """Round 0 fans out sub_queries x 5 lanes. Unbounded, a 12-sub-query plan
+    opened ~60 concurrent `pool.acquire()` calls against a much smaller pool;
+    asyncpg queues acquire waiters with no timeout, so the excess stalled
+    until the stage timeout fired and the turn answered ungrounded."""
+    repo = _ConcurrencyProbeRepo()
+
+    await fanout_search_with_boost(
+        queries=[(i, f"q{i}") for i in range(12)],
+        embedder=FakeEmbedder(),
+        chunk_repo=repo,
+        catalog_repo=FakeCatalogRepo(),
+        alias_map=FakeAliasMap(),
+        lang="ru",
+    )
+
+    assert repo.peak <= FANOUT_DB_CONCURRENCY, (
+        f"peak {repo.peak} lanes in flight exceeds the gate"
+    )
+    # And the gate is actually being used — a plan this wide should saturate it.
+    assert repo.peak > 1
+
+
+def test_parse_addresses_dedupes_and_caps():
+    # The same reference repeated costs one fetch, not many.
+    assert _parse_addresses("БГ 2.13 и снова БГ 2.13") == ["БГ 2.13"]
+
+    # A question stuffed with references cannot amplify without bound: each
+    # address is its own DB fetch (plus a lang-less retry) and the input is
+    # raw user text.
+    many = " ".join(f"БГ 1.{i}" for i in range(1, MAX_PARSED_ADDRESSES + 10))
+    assert len(_parse_addresses(many)) == MAX_PARSED_ADDRESSES

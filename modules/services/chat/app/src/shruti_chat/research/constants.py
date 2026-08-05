@@ -125,6 +125,22 @@ TOPK_PER_QUERY = 8
 # the primary text of the first N regenerated sub_queries and drop alt_phrasings.
 REGEN_MAX_SUBQUERIES = 4
 
+# Ceiling on ANN lanes running against Postgres at once, for ONE turn's fanout.
+# Round 0 fans out up to 4 sub_queries × 3 phrasings = 12 queries, each of
+# which opens 5 lanes — ~60 concurrent `pool.acquire()` calls against a pool
+# that holds far fewer. asyncpg queues acquire waiters with no timeout, so the
+# excess did not error: it stalled until TIMEOUT_FANOUT_S fired and `_safe`
+# returned an empty result, i.e. an ungrounded answer rather than a failure.
+# Bounding the burst keeps a single turn from monopolising the pool and keeps
+# the wait inside the stage budget.
+FANOUT_DB_CONCURRENCY = 8
+
+# Addresses ("БГ 2.13") parsed out of the RAW user query for the exact-match
+# fast path. One fetch per address, up to two round-trips each, and the input
+# is user-controlled — cap it so a question stuffed with references can't
+# amplify into an unbounded burst.
+MAX_PARSED_ADDRESSES = 8
+
 # ---- Cross-encoder rerank (Stage A) ----------------------------------------
 # Primary cutoff is TOP-K everywhere. Cross-encoder scores are NOT calibrated
 # across queries (Voyage/Cohere: relative-rank-within-a-query only), so an
