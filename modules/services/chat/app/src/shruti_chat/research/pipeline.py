@@ -44,6 +44,7 @@ from shruti_chat.indexer.library.repo import fetch_document_body
 from shruti_chat.infra.llm_provider.openrouter import is_provider_unavailable
 from shruti_chat.observability.langfuse_client import langfuse_span
 from shruti_chat.observability.logging import get_logger
+from shruti_chat.observability.metrics import pipeline_stage_counter
 from shruti_chat.research.attribution_lookup import find_attributions
 from shruti_chat.research.caption_generator import generate_captions
 from shruti_chat.research.constants import (
@@ -300,6 +301,7 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
             # ends — and the only record of the timeout lived in Loki, i.e.
             # in a different tool from the trace you are reading.
             _mark_span(span, status=status, stage_ms=stage_ms)
+            pipeline_stage_counter.labels(stage=name, status=status).inc()
 
 
 _LIBRARY_DOC_TYPES = ("commentary", "prose_chapter", "letter")

@@ -47,8 +47,8 @@ from shruti_chat.infra.cache.redis_kv_cache import RedisKVCache
 from shruti_chat.infra.cache.tiered_kv_cache import TieredKVCache
 from shruti_chat.infra.auth.jwt_verifier import JwtVerifier
 from shruti_chat.observability.bootstrap import bootstrap_score_configs
+from shruti_chat.agent.prompts.registry import LANGFUSE_PROMPT_NAMES
 from shruti_chat.observability.langfuse_client import (
-    LANGFUSE_PROMPT_NAMES,
     get_langfuse,
     init_langfuse,
     shutdown_langfuse,

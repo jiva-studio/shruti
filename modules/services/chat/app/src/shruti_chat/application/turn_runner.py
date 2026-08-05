@@ -25,6 +25,10 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 from shruti_chat.agent.events import AgentEvent
 from shruti_chat.domain.ports.turn_store import TurnStore
 from shruti_chat.observability.logging import get_logger
+from shruti_chat.observability.metrics import (
+    turn_terminal_counter,
+    turns_in_flight,
+)
 
 
 log = get_logger(__name__)
@@ -312,6 +316,11 @@ class TurnRunner:
                     # to cancel something that is already exiting.
                     self._tasks.pop(trace_id, None)
                     self._cancels.pop(trace_id, None)
+                    turns_in_flight.set(len(self._tasks))
+                    turn_terminal_counter.labels(
+                        state=state,
+                        answer_started="yes" if answer_started else "no",
+                    ).inc()
                     # Sentinel — unblocks the SSE consumer if still attached.
                     await queue.put(None)
 
@@ -319,4 +328,5 @@ class TurnRunner:
 
         task = asyncio.create_task(produce())
         self._tasks[trace_id] = task
+        turns_in_flight.set(len(self._tasks))
         return queue

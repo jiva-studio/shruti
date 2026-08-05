@@ -38,6 +38,10 @@ from shruti_chat.config import Settings
 from shruti_chat.domain.entities import CompletionChunk, Message, ToolCallDelta
 from shruti_chat.observability.langfuse_client import get_langfuse
 from shruti_chat.observability.logging import get_logger
+from shruti_chat.observability.metrics import (
+    llm_fallback_counter,
+    llm_retry_counter,
+)
 
 
 log = get_logger(__name__)
@@ -99,6 +103,27 @@ def _error_status(exc: BaseException) -> int | None:
         return int(body.get("code"))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+
+
+def _retry_reason(exc: BaseException) -> str:
+    """Bucket a failed attempt for the retry counter.
+
+    Deliberately coarse and closed-set — the label has to stay bounded, and
+    what an operator needs at 3am is "are we being rate limited or is the
+    provider down", not the exception text (which is already in the log line
+    right next to every increment)."""
+    if isinstance(exc, EmptyCompletionError):
+        return "empty_completion"
+    status = _error_status(exc)
+    if status == 429:
+        return "rate_limited"
+    if isinstance(status, int) and 500 <= status < 600:
+        return "server_error"
+    if isinstance(exc, openai.APITimeoutError):
+        return "timeout"
+    if isinstance(exc, openai.APIConnectionError):
+        return "connection"
+    return "other"
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -619,6 +644,9 @@ class OpenRouterLLMProvider:
                     raise
                 if attempt < self._max_retries and _is_retryable(exc):
                     delay = _retry_after_s(exc) or self._backoff_delay(attempt)
+                    llm_retry_counter.labels(
+                        call="stream", reason=_retry_reason(exc),
+                    ).inc()
                     log.warning(
                         "llm_stream_retry", model=validated_model,
                         attempt=attempt + 1, delay_s=round(delay, 3),
@@ -630,6 +658,7 @@ class OpenRouterLLMProvider:
 
         # Fallback model: one attempt, only if nothing has streamed yet.
         if fallback_model is not None and not produced:
+            llm_fallback_counter.labels(call="stream", outcome="escalated").inc()
             log.warning(
                 "llm_stream_fallback", primary=validated_model,
                 fallback=fallback_model, error=str(last_exc),
@@ -648,6 +677,7 @@ class OpenRouterLLMProvider:
                 last_exc = exc
                 if produced:
                     raise
+                llm_fallback_counter.labels(call="stream", outcome="exhausted").inc()
                 log.warning(
                     "llm_stream_fallback_failed",
                     fallback=fallback_model, error=str(exc),
@@ -805,6 +835,9 @@ class OpenRouterLLMProvider:
                 last_exc = exc
                 if attempt < self._max_retries and _is_retryable(exc):
                     delay = _retry_after_s(exc) or self._backoff_delay(attempt)
+                    llm_retry_counter.labels(
+                        call="structured", reason=_retry_reason(exc),
+                    ).inc()
                     log.warning(
                         "llm_structured_retry", model=validated_model,
                         attempt=attempt + 1, delay_s=round(delay, 3),
@@ -815,6 +848,7 @@ class OpenRouterLLMProvider:
                 break
 
         if fallback_model is not None:
+            llm_fallback_counter.labels(call="structured", outcome="escalated").inc()
             log.warning(
                 "llm_structured_fallback", primary=validated_model,
                 fallback=fallback_model, error=str(last_exc),
@@ -825,6 +859,7 @@ class OpenRouterLLMProvider:
                 )
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
+                llm_fallback_counter.labels(call="structured", outcome="exhausted").inc()
                 log.warning(
                     "llm_structured_fallback_failed",
                     fallback=fallback_model, error=str(exc),
@@ -863,6 +898,9 @@ class OpenRouterLLMProvider:
                 last_exc = exc
                 if attempt < self._max_retries and _is_retryable(exc):
                     delay = _retry_after_s(exc) or self._backoff_delay(attempt)
+                    llm_retry_counter.labels(
+                        call="text", reason=_retry_reason(exc),
+                    ).inc()
                     log.warning(
                         "llm_text_retry", model=validated_model,
                         attempt=attempt + 1, delay_s=round(delay, 3),
@@ -873,6 +911,7 @@ class OpenRouterLLMProvider:
                 break
 
         if fallback_model is not None:
+            llm_fallback_counter.labels(call="text", outcome="escalated").inc()
             log.warning(
                 "llm_text_fallback", primary=validated_model,
                 fallback=fallback_model, error=str(last_exc),
@@ -883,6 +922,7 @@ class OpenRouterLLMProvider:
                 )
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
+                llm_fallback_counter.labels(call="text", outcome="exhausted").inc()
                 log.warning(
                     "llm_text_fallback_failed",
                     fallback=fallback_model, error=str(exc),
