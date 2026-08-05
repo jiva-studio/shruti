@@ -198,11 +198,11 @@ def warm_prompt_cache(names: list[str]) -> None:
 
 # Canonical list of prompts the chat service expects in Langfuse. Used
 # for warm-up at startup and as the source-of-truth for the bootstrap
-# The warm-up list lives with the prompt registry — the same table the
-# bootstrap script publishes from, so the two cannot drift again.
-from shruti_chat.agent.prompts.registry import (  # noqa: E402
-    LANGFUSE_PROMPT_NAMES,  # re-exported: main.py imports it from here
-)
+# The warm-up list lives with the prompt registry (the same table the
+# bootstrap script publishes from). NOT re-exported from here: importing it
+# would pull in `agent/prompts/__init__`, which imports `prompt_with_fallback`
+# back out of this module — a cycle that only breaks under some import orders.
+# Callers take it from `agent.prompts.registry` directly.
 
 
 # ── Prompt fetching with disk fallback ───────────────────────────────

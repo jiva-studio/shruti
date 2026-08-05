@@ -13,7 +13,8 @@ samples — see `tests/application/test_rate_limiter_fail_closed.py`.
 
 from __future__ import annotations
 
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter, Gauge
+from prometheus_client.core import GaugeMetricFamily
 
 
 # Increments every time the rate-limit store raises
@@ -77,3 +78,125 @@ corpus_fallback_counter = Counter(
     "Out-of-corpus memory-pass fallbacks, by kind/confidence/corpus-hit",
     labelnames=["kind", "confidence", "had_corpus_hits"],
 )
+
+
+# ── Process state ─────────────────────────────────────────────────────
+#
+# Per-TURN signals (latency, TTFT, tokens, cost, per-stage timings) already
+# reach Langfuse and Loki, and are not duplicated here. What follows is the
+# class those cannot express: state of THIS process, aggregated across turns.
+# It is what tells you a pile-up is forming before users feel it.
+#
+# Single uvicorn worker (no --workers), so a default-registry gauge is
+# process-truthful. If workers are ever added these need
+# PROMETHEUS_MULTIPROC_DIR, and the custom collector below stops working
+# entirely under multiprocess mode.
+
+
+# Detached turn producers currently running. Set (not inc/dec) at the two
+# mutation points so it self-heals rather than drifting if an exit path is
+# ever added without a decrement. Initialised so the series exists before the
+# first turn — otherwise `absent()` alerts fire on a fresh pod.
+turns_in_flight = Gauge(
+    "shruti_chat_turns_in_flight",
+    "Detached chat-turn producers currently running on this replica",
+)
+turns_in_flight.set(0)
+
+
+# How a turn ended. `error` after the answer started is a materially different
+# incident from a blank one, hence the second label.
+# Cardinality: 3 states x 2 = 6 series.
+turn_terminal_counter = Counter(
+    "shruti_chat_turn_terminal_total",
+    "Chat turns by terminal state and whether any answer content streamed",
+    labelnames=["state", "answer_started"],
+)
+
+
+# Retrieval stage outcomes. Counting timeouts alone gives a numerator with no
+# denominator; {stage,status} gives the RATE, which is what you alert on.
+# Cardinality: ~14 stage names (all string literals in pipeline.py) x 4
+# statuses = 56 series, closed set, no user input.
+pipeline_stage_counter = Counter(
+    "shruti_chat_pipeline_stage_total",
+    "Research-pipeline stage completions by stage and outcome",
+    labelnames=["stage", "status"],
+)
+
+
+# LLM retry ladder. Every site already logs; none counted, so "OpenRouter
+# error rate spiked" was not alertable.
+#
+# NO `model` label, deliberately: `_validate_model` passes unrecognised model
+# ids through on purpose so a Langfuse prompt-config edit takes effect without
+# a deploy — which makes `model` operator-typeable and unbounded, and one typo
+# in the UI would mint a permanent time series. The exact model is already on
+# every Langfuse generation.
+# Cardinality: 3 call kinds x 6 reasons = 18 series.
+llm_retry_counter = Counter(
+    "shruti_chat_llm_retry_total",
+    "Same-model LLM retries, by call kind and why the attempt failed",
+    labelnames=["call", "reason"],
+)
+
+# `escalated` counts every fallback-model attempt, `exhausted` the ones where
+# the fallback ALSO failed — the ratio is how often the safety net didn't
+# catch. Cardinality: 3 x 2 = 6 series.
+llm_fallback_counter = Counter(
+    "shruti_chat_llm_fallback_total",
+    "Escalations to the fallback model, by call kind and outcome",
+    labelnames=["call", "outcome"],
+)
+
+
+# The asyncpg pool has no mutation point to hook — the alternative is wrapping
+# every `pool.acquire()`, which is dozens of call sites all on the hot path.
+# A scrape-time collector costs O(max_size) per scrape and nothing per request.
+class _DbPoolCollector:
+    """Samples the connection pool when Prometheus scrapes.
+
+    `size - idle` is in-use; saturation is `(size - idle) / max`. `waiters` is
+    the one that distinguishes "healthily busy" from "requests queueing" —
+    `size == max` alone cannot — and it is also the fragile one: asyncpg
+    exposes no public waiter count, so it reads two levels of private state
+    and is simply omitted when that fails.
+    """
+
+    def collect(self):
+        # Imported lazily so this module stays standalone-importable (a test
+        # imports it on its own) and free of import-order surprises.
+        from shruti_chat.db import client as db_client
+
+        pool = getattr(db_client, "_pool", None)
+        if pool is None:
+            return
+        try:
+            size = pool.get_size()
+            idle = pool.get_idle_size()
+            maximum = pool.get_max_size()
+        except Exception:  # noqa: BLE001 — a scrape must never raise
+            return
+        yield GaugeMetricFamily(
+            "shruti_chat_db_pool_size", "Open pool connections", value=size,
+        )
+        yield GaugeMetricFamily(
+            "shruti_chat_db_pool_idle", "Idle pool connections", value=idle,
+        )
+        yield GaugeMetricFamily(
+            "shruti_chat_db_pool_max", "Configured pool ceiling", value=maximum,
+        )
+        try:
+            waiters = len(pool._queue._getters)
+        except Exception:  # noqa: BLE001 — private on two levels; optional
+            return
+        yield GaugeMetricFamily(
+            "shruti_chat_db_pool_waiters",
+            "Coroutines waiting for a free pool connection",
+            value=waiters,
+        )
+
+
+# `register` calls `collect()` once immediately for the duplicate-name check,
+# so `collect` must tolerate a pool that does not exist yet.
+REGISTRY.register(_DbPoolCollector())
