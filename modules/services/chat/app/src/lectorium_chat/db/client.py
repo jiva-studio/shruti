@@ -41,18 +41,26 @@ async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:
     finally:
         await bootstrap.close()
 
-    # Sized to absorb a fanout burst (4-5 parallel ANN searches +
-    # window/refs lookups + rate-limiter UPSERT = ~10 conns/turn)
-    # under a handful of concurrent users without queuing. Caps below
-    # the Postgres `max_connections=50` set in compose with slack for
-    # ad-hoc psql.
+    # Sized for a research turn's fanout burst. The old comment estimated
+    # "~10 conns/turn" against a Postgres "max_connections=50"; both were
+    # stale — round 0 opens up to 5 lanes per sub-query (FANOUT_DB_CONCURRENCY
+    # now gates that), and compose sets max_connections=200. 50 leaves room
+    # for several concurrent turns and still reserves plenty for the other
+    # services and ad-hoc psql.
+    #
+    # `command_timeout` bounds execution so a pathological query surfaces as an
+    # error inside the stage budget instead of holding a connection open. Note
+    # it does NOT bound the wait for a connection: asyncpg queues acquire
+    # waiters and `create_pool` has no acquire-timeout knob, so the fanout
+    # semaphore is what actually keeps the queue short.
     _pool = await asyncpg.create_pool(
         dsn=dsn,
         min_size=5,
-        max_size=25,
+        max_size=50,
+        command_timeout=15.0,
         init=_init_connection,
     )
-    log.info("db_pool_ready", min_size=5, max_size=25)
+    log.info("db_pool_ready", min_size=5, max_size=50, command_timeout=15.0)
     return _pool
 
 

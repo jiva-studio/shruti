@@ -25,8 +25,10 @@ from lectorium_chat.domain.source_ids import chunk_source_filter
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.constants import (
     ADDRESS_HIT_SCORE,
+    FANOUT_DB_CONCURRENCY,
     LEXICAL_FETCH_TOP_K,
     LEXICAL_TRGM_MIN_SIM,
+    MAX_PARSED_ADDRESSES,
     RERANK_FETCH_TOP_K,
     RERANK_MIN_LECTURES,
     RERANK_MIN_LIBRARY,
@@ -57,8 +59,14 @@ def _parse_addresses(text: str) -> list[str]:
     """Extract canonical `addr_label`s ("БГ 2.13", "SB 1.1.1") mentioned in the
     query, so the fanout can fetch the exact verse/commentary deterministically
     instead of hoping dense ANN matches a number. Returns composed addr_labels
-    (e.g. "БГ 2.13") ready for `get_chunks_by_addr_label`."""
+    (e.g. "БГ 2.13") ready for `get_chunks_by_addr_label`.
+
+    Deduplicated and capped: each address costs its own DB fetch (plus a
+    lang-less retry), and the input is the raw user question — repeating a
+    reference, or listing dozens, must not turn into an unbounded burst.
+    """
     out: list[str] = []
+    seen: set[str] = set()
     for m in _ADDR_RE.finditer(text or ""):
         prefix = m.group("prefix")
         tokens = m.group("tokens").rstrip(".,-–")
@@ -67,7 +75,14 @@ def _parse_addresses(text: str) -> list[str]:
         canon = next(
             (p for p in _ADDR_PREFIXES if p.lower() == prefix.lower()), prefix
         )
-        out.append(f"{canon} {tokens}")
+        label = f"{canon} {tokens}"
+        if label in seen:
+            continue
+        seen.add(label)
+        out.append(label)
+        if len(out) >= MAX_PARSED_ADDRESSES:
+            log.info("fanout_addresses_capped", cap=MAX_PARSED_ADDRESSES)
+            break
     return out
 
 
@@ -460,6 +475,15 @@ async def fanout_search_with_boost(
     def _record(lane: str, started: float) -> None:
         lane_ms.setdefault(lane, []).append((time.perf_counter() - started) * 1000.0)
 
+    # Shared by every lane of every sub-query in THIS fanout, so the round's
+    # burst against the connection pool is bounded regardless of how many
+    # sub-queries the planner produced. See FANOUT_DB_CONCURRENCY.
+    db_gate = asyncio.Semaphore(FANOUT_DB_CONCURRENCY)
+
+    async def _gated(coro):
+        async with db_gate:
+            return await coro
+
     async def _one_query(q_vec: list[float], q_text: str, sq_id: int) -> list[_RawScored]:
         async def _lecture(use_lang: str | None) -> list[_RawScored]:
             if lectures_disabled:
@@ -568,11 +592,11 @@ async def fanout_search_with_boost(
             # lexical lane runs alongside (forced members).
             other_lib = [k for k in _LIBRARY_KINDS if k != "verse"]
             lec, usr_lec, verse_lib, rest_lib, lex = await asyncio.gather(
-                _lecture(use_lang),
-                _user_lecture(use_lang),
-                _library(use_lang, ["verse"]),
-                _library(use_lang, other_lib),
-                _lexical(use_lang),
+                _gated(_lecture(use_lang)),
+                _gated(_user_lecture(use_lang)),
+                _gated(_library(use_lang, ["verse"])),
+                _gated(_library(use_lang, other_lib)),
+                _gated(_lexical(use_lang)),
             )
             return lec + usr_lec + verse_lib + rest_lib + lex
 
