@@ -59,4 +59,4 @@ async def test_streaming_gets_the_longer_ceiling(_capture: dict[str, Any]) -> No
     ):
         pass
 
-    assert _capture["timeout"] == llm_mod._STREAM_TIMEOUT_S
+    assert _capture["timeout"] == llm_mod.get_settings().llm_stream_timeout_s

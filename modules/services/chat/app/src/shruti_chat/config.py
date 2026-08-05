@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     # false bypasses both tiers entirely; useful for A/B comparisons.
     redis_url: str | None = None
     cache_enabled: bool = True
+    # Per-call hard cap on every Redis client (cache, rate limit,
+    # idempotency, turn store). Deliberately tight: Redis is a fast path
+    # and a slow one must degrade rather than hold the turn.
+    redis_op_timeout_s: float = 0.2
+    # L2 circuit breaker: N consecutive failures open it for this long,
+    # then one probe re-closes. L1 keeps serving while it is open.
+    cache_circuit_threshold: int = 3
+    cache_circuit_open_s: float = 30.0
 
     # ── S3 ──────────────────────────────────────────────────────────────
     s3_bucket: str = "shruti-engine"
@@ -56,6 +64,18 @@ class Settings(BaseSettings):
 
     # ── Postgres ────────────────────────────────────────────────────────
     database_url: str = "postgresql://chat:chat@localhost:5432/chat"
+    # Connection pool. Sized for a research turn's fanout burst; the
+    # matching ceiling on how much of it ONE turn may take at once is
+    # `fanout_db_concurrency`, so the two are tuned together.
+    # `command_timeout_s` bounds query EXECUTION, not the wait for a free
+    # connection — asyncpg exposes no pool-level acquire timeout.
+    db_pool_min_size: int = 5
+    db_pool_max_size: int = 50
+    db_command_timeout_s: float = 15.0
+    # Ceiling on ANN lanes one turn runs against Postgres at once. Round 0
+    # fans out sub_queries x 5 lanes, which unbounded is ~60 concurrent
+    # acquires from a single turn.
+    fanout_db_concurrency: int = 8
 
     # ── LLM providers ───────────────────────────────────────────────────
     # Single-provider deployment: every region ships OpenRouter. Russia
@@ -91,6 +111,10 @@ class Settings(BaseSettings):
     # request open indefinitely. They are short structured calls against the
     # cheap model; 20s is generous for one.
     llm_oneshot_timeout_s: float = 20.0
+    # Ceiling for a STREAMED generation on the same LiteLLM path (the
+    # proactive turn). Matches the OpenRouter adapter's own stream cap so
+    # both LLM stacks fail on the same horizon.
+    llm_stream_timeout_s: float = 180.0
 
     # Research pipeline knobs.
     # Query planner + topic extractor share a model — both are short
@@ -242,6 +266,9 @@ class Settings(BaseSettings):
     indexer_interval_hours: float = 6
     indexer_langs: str = "ru,en"
     indexer_bootstrap_on_start: bool = True
+    # Concurrent transcript workers per run. Each holds a pool connection
+    # and an embedding call, and the indexer shares both with live traffic.
+    indexer_concurrency: int = 8
 
     # ── Abuse mitigation ────────────────────────────────────────────────
     app_shared_token: str = ""
@@ -307,6 +334,17 @@ class Settings(BaseSettings):
     # iterations x the 180s LLM timeout — ~21 minutes of billed generation for
     # a client that walked away after the first token.
     turn_budget_s: float = 300.0
+    # How often a running turn re-reads the CROSS-REPLICA cancel flag. The
+    # in-process event is checked every time regardless, so on a
+    # single-replica deploy this only bounds a Stop routed elsewhere.
+    cancel_poll_interval_s: float = 1.0
+    # Turn-buffer lifetimes. `running` is the heartbeat-refreshed liveness
+    # window (lapses => a resuming client reads the turn as orphaned);
+    # `result` is how long a finished answer stays fetchable; `cancel` is
+    # the cross-replica Stop flag.
+    turn_running_ttl_s: int = 180
+    turn_result_ttl_s: int = 86_400
+    turn_cancel_ttl_s: int = 180
 
     # ── CORS ────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins. Default `*` keeps dev easy;

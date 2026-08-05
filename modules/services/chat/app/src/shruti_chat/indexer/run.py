@@ -172,11 +172,13 @@ async def run_once(
             log.info("transcript_gc", removed=len(stale))
 
         # Parallel processing: API embedder + HTTP S3 fetches are I/O bound,
-        # 8 concurrent workers ≈ 5-7× speed-up over serial.
+        # so a handful of concurrent workers is a 5-7x speed-up over serial.
+        # Each holds a pool connection and an embedding call, and this runs
+        # alongside live traffic — hence configurable.
         chunks_total = 0
         tracks_done = 0
         progress_lock = asyncio.Lock()
-        sem = asyncio.Semaphore(8)
+        sem = asyncio.Semaphore(max(1, s.indexer_concurrency))
 
         async def worker(obj: s3.TranscriptObject) -> None:
             nonlocal chunks_total, tracks_done

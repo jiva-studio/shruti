@@ -118,7 +118,12 @@ async def lifespan(app: FastAPI):
     l1 = MemoryKVCache(max_entries=10000)
     l2: RedisKVCache | None = None
     if s.cache_enabled and s.redis_url:
-        l2 = RedisKVCache(s.redis_url)
+        l2 = RedisKVCache(
+            s.redis_url,
+            op_timeout_s=s.redis_op_timeout_s,
+            circuit_threshold=s.cache_circuit_threshold,
+            circuit_open_s=s.cache_circuit_open_s,
+        )
     kv_cache = TieredKVCache(l1, l2)
 
     # Seed version segments. `embed_model` is derived from settings now;
@@ -150,7 +155,9 @@ async def lifespan(app: FastAPI):
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)
     if not s.redis_url:
         raise RuntimeError("REDIS_URL is required for the rate-limit store")
-    rate_limit_store = RedisRateLimitStore(s.redis_url)
+    rate_limit_store = RedisRateLimitStore(
+        s.redis_url, op_timeout_s=s.redis_op_timeout_s,
+    )
     rate_limiter = RateLimiter(store=rate_limit_store, settings=s)
     jwt_verifier = JwtVerifier.from_file(s.jwt_public_key_path)
 
@@ -160,7 +167,9 @@ async def lifespan(app: FastAPI):
         from shruti_chat.infra.idempotency.redis_idempotency_store import (
             RedisIdempotencyStore,
         )
-        idempotency_store = RedisIdempotencyStore(s.redis_url)
+        idempotency_store = RedisIdempotencyStore(
+            s.redis_url, op_timeout_s=s.redis_op_timeout_s,
+        )
     else:
         from shruti_chat.infra.idempotency.noop import NoopIdempotencyStore
         idempotency_store = NoopIdempotencyStore()
@@ -169,7 +178,13 @@ async def lifespan(app: FastAPI):
     # configured; no-op otherwise (resume simply off).
     if s.redis_url:
         from shruti_chat.infra.turn_store.redis_turn_store import RedisTurnStore
-        turn_store = RedisTurnStore(s.redis_url)
+        turn_store = RedisTurnStore(
+            s.redis_url,
+            op_timeout_s=s.redis_op_timeout_s,
+            running_ttl_s=s.turn_running_ttl_s,
+            result_ttl_s=s.turn_result_ttl_s,
+            cancel_ttl_s=s.turn_cancel_ttl_s,
+        )
     else:
         from shruti_chat.infra.turn_store.noop import NoopTurnStore
         turn_store = NoopTurnStore()
@@ -180,6 +195,7 @@ async def lifespan(app: FastAPI):
         turn_store,
         max_in_flight=s.max_in_flight_turns,
         turn_budget_s=s.turn_budget_s,
+        cancel_poll_interval_s=s.cancel_poll_interval_s,
     )
 
     # LangGraph wiring. Compile the chat graph once and stash on deps —

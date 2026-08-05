@@ -19,11 +19,6 @@ log = get_logger(__name__)
 
 _INITIALIZED = False
 
-# Hard ceiling for a streamed generation on this path. Matches the OpenRouter
-# adapter's own stream timeout so both LLM stacks fail on the same horizon;
-# see `infra/llm_provider/openrouter.py`.
-_STREAM_TIMEOUT_S = 180.0
-
 
 def configure_providers(settings: Settings | None = None) -> None:
     """Populate LiteLLM's env-vars from our Settings. Idempotent."""
@@ -85,7 +80,7 @@ async def stream_completion(
     # runs far longer than a one-shot call, so it gets the ceiling the
     # OpenRouter adapter already uses for its own streams rather than the
     # short one-shot budget.
-    kwargs.setdefault("timeout", _STREAM_TIMEOUT_S)
+    kwargs.setdefault("timeout", get_settings().llm_stream_timeout_s)
     resp = await litellm.acompletion(
         model=model,
         messages=messages,
