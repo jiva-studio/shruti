@@ -15,6 +15,20 @@ y responde con una respuesta breve más citas que puedes escuchar.
 - **Encuentra versos y prepara archivos PDF** — puede mostrar una śloka
   concreta o preparar la transcripción de una clase como documento cuando se lo
   pidas.
+- **Señala dónde está algo** — pregunta «¿en qué canto está la historia de
+  Prahlāda?» y responde con la referencia en lugar de un resumen.
+- **Responde desde los maestros que elijas.** Di «responde solo desde las
+  clases de Prabhupāda» y todas las respuestas siguientes se construirán con
+  ellas hasta que digas «busca en todos los oradores». Los libros nunca se
+  limitan así: la escritura es la escritura, hable quien hable. También
+  funcionan los maestros que solo conoce tu propia biblioteca.
+- **Sabe qué has escuchado.** Pregúntale qué escuchaste esta semana, o pídele
+  un resumen de la clase que tienes abierta.
+- **Sugiere qué escuchar a continuación**, a partir de lo que ya has escuchado.
+- **Añade clases desde la web (PRO)** — pega un enlace de YouTube, o pídele que
+  busque en internet las clases de un maestro, y te las ofrecerá para tu
+  biblioteca personal. Una vez añadidas, se buscan junto con el catálogo y solo
+  tú puedes verlas.
 - **Sugiere preguntas de seguimiento** al final de cada respuesta para
   ayudarte a explorar más el tema.
 - **Recuerda la conversación** dentro de una sesión, así puedes afinar tu
