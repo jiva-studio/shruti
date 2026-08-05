@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from time import monotonic
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from lectorium_chat.agent.events import AgentEvent
@@ -29,6 +30,20 @@ from lectorium_chat.observability.logging import get_logger
 log = get_logger(__name__)
 
 _HEARTBEAT_INTERVAL_S = 30
+
+# How often the CROSS-REPLICA cancel flag is read. The in-process event is
+# still checked on every call, so a Stop that lands on this replica — which is
+# every Stop on a single-replica deploy — still takes effect immediately. Only
+# a Stop routed elsewhere waits this long.
+#
+# The predicate runs after every streamed event, including every token delta,
+# so an unthrottled read was one Redis `EXISTS` per token: a 1500-token answer
+# cost 1500 round-trips to the instance that also holds the KV cache, the
+# rate-limit counters, the idempotency keys and the turn buffers, behind a
+# 0.2s socket timeout. That traffic is what pushes the instance toward the
+# timeout, and none of it carries information — the answer is "no" until the
+# user presses Stop.
+_CANCEL_POLL_INTERVAL_S = 1.0
 
 # Builds the turn's event stream given the runner's cancel predicate — the
 # runner owns the cancel state, the caller owns which turn (chat / proactive)
@@ -82,11 +97,31 @@ class TurnRunner:
         cancel_event = asyncio.Event()
         self._cancels[trace_id] = cancel_event
 
-        async def is_cancelled() -> bool:
-            # Explicit cancel only — NOT socket disconnect. Fast in-process
-            # event OR the cross-replica Redis flag.
+        async def cancel_requested() -> bool:
+            """Authoritative read: in-process event, else the cross-replica
+            flag. Unthrottled — used for the once-per-turn accounting decision
+            below, which must never mistake a Stop for a completion."""
             if cancel_event.is_set():
                 return True
+            return await self._turn_store.is_cancelled(trace_id)
+
+        # Last time the cross-replica flag was read on the streaming path.
+        # 0.0 makes the first call poll, so a Stop issued before the stream
+        # opened is still seen immediately.
+        last_remote_poll = 0.0
+
+        async def is_cancelled() -> bool:
+            # Handed to the turn, which polls it after every streamed event.
+            # Explicit cancel only — NOT socket disconnect. The in-process
+            # event is checked every call; the cross-replica flag is
+            # rate-limited (see _CANCEL_POLL_INTERVAL_S).
+            nonlocal last_remote_poll
+            if cancel_event.is_set():
+                return True
+            now = monotonic()
+            if now - last_remote_poll < _CANCEL_POLL_INTERVAL_S:
+                return False
+            last_remote_poll = now
             return await self._turn_store.is_cancelled(trace_id)
 
         async def produce() -> None:
@@ -147,7 +182,11 @@ class TurnRunner:
                 # key ONLY if no answer content was delivered yet
                 # (`answer_started`). A Stop after the answer started keeps the
                 # charge — see finalize.
-                cancelled = await is_cancelled()
+                # Unthrottled on purpose: this runs once per turn and decides
+                # refund + recorded state. The throttled streaming predicate
+                # can legitimately answer "not yet" inside its window, which
+                # here would misfile a Stop as a delivered answer.
+                cancelled = await cancel_requested()
                 completed = not cancelled
             except asyncio.CancelledError:
                 # Shutdown (redeploy) OR explicit Stop (DELETE /chat/turn)
