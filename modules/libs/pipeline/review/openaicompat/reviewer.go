@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"github.com/jiva-studio/shruti/pipeline/openaicompat"
-	"github.com/jiva-studio/shruti/pipeline/review/prompts"
 	"github.com/jiva-studio/shruti/pipeline/ports/review"
+	"github.com/jiva-studio/shruti/pipeline/review/prompts"
 )
 
 var defaultSystemPrompt = prompts.System
@@ -110,29 +110,7 @@ type chunkContent struct {
 }
 
 func (r *Reviewer) ReviewChunk(ctx context.Context, req review.ChunkRequest) (review.ChunkResponse, error) {
-	chunkJSON, err := json.Marshal(req.Segments)
-	if err != nil {
-		return review.ChunkResponse{}, err
-	}
-	prevJSON := []byte("[]")
-	if len(req.PrevTail) > 0 {
-		prevJSON, _ = json.Marshal(req.PrevTail)
-	}
-	user := r.UserPrompt
-	user = strings.ReplaceAll(user, "__LANG__", req.Language)
-	user = strings.ReplaceAll(user, "__CHUNK__", string(chunkJSON))
-	user = strings.ReplaceAll(user, "__PREV_TAIL__", string(prevJSON))
-	if req.ExtraPrompt != "" {
-		// Inject between PREV_TAIL and CHUNK so hints sit fresh in
-		// context right before the segments. Falls back to prepend if
-		// the marker isn't present.
-		marker := "CHUNK:"
-		if i := strings.Index(user, marker); i >= 0 {
-			user = user[:i] + req.ExtraPrompt + "\n" + user[i:]
-		} else {
-			user = req.ExtraPrompt + "\n" + user
-		}
-	}
+	user := BuildUserPrompt(r.UserPrompt, req)
 
 	temp := 0.1
 	call := openaicompat.Call{
@@ -146,10 +124,11 @@ func (r *Reviewer) ReviewChunk(ctx context.Context, req review.ChunkRequest) (re
 
 	var out chunkContent
 	var res openaicompat.Result
+	var err error
 	if r.Format == FormatLines {
 		res, err = r.Client.Run(ctx, call)
 		if err == nil {
-			out.Segments, out.Sentences, err = parseLines(
+			out.Segments, out.Sentences, err = ParseLines(
 				openaicompat.StripFences(res.Text), req.Segments)
 		}
 	} else {
@@ -178,5 +157,33 @@ func (r *Reviewer) ReviewChunk(ctx context.Context, req review.ChunkRequest) (re
 		Models:    []review.ModelEntry{entry},
 	}, nil
 }
+
+// BuildUserPrompt fills the user template for one chunk. Exported so the
+// batch path builds byte-identical prompts.
+func BuildUserPrompt(tmpl string, req review.ChunkRequest) string {
+	chunkJSON, _ := json.Marshal(req.Segments)
+	prevJSON := []byte("[]")
+	if len(req.PrevTail) > 0 {
+		prevJSON, _ = json.Marshal(req.PrevTail)
+	}
+	user := tmpl
+	user = strings.ReplaceAll(user, "__LANG__", req.Language)
+	user = strings.ReplaceAll(user, "__CHUNK__", string(chunkJSON))
+	user = strings.ReplaceAll(user, "__PREV_TAIL__", string(prevJSON))
+	if req.ExtraPrompt != "" {
+		// Hints sit right before the segments so they stay fresh in context.
+		marker := "CHUNK:"
+		if i := strings.Index(user, marker); i >= 0 {
+			user = user[:i] + req.ExtraPrompt + "\n" + user[i:]
+		} else {
+			user = req.ExtraPrompt + "\n" + user
+		}
+	}
+	return user
+}
+
+// LinesSystemPrompt is the system text the batch path must send to get the
+// same line format back.
+var LinesSystemPrompt = linesSystemPrompt
 
 var _ review.Reviewer = (*Reviewer)(nil)

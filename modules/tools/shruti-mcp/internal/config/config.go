@@ -143,6 +143,10 @@ type Review struct {
 	// hint injection per chunk and a canonical-form safety net on
 	// reviewed text. Empty Path disables the feature.
 	Glossary GlossaryOptions `yaml:"glossary"`
+	// Batch optionally enables the half-price job path: chunks go to a
+	// provider batch endpoint that finishes within 24 hours instead of a
+	// live call. Empty APIKey disables it.
+	Batch ReviewBatchOptions `yaml:"batch"`
 	// AlignPDF optionally activates the PDF-canon early-branch: when a
 	// transcript.pdf is present alongside the raw ASR for a track, we
 	// skip the LLM entirely and align the canonical PDF text to the raw
@@ -158,6 +162,21 @@ type GlossaryOptions struct {
 	Path             string  `yaml:"path"`                // override path to glossary.yaml; empty = look next to the binary
 	MatchThreshold   float64 `yaml:"match_threshold"`     // trigram similarity cutoff (default 0.55)
 	MaxHintsPerChunk int     `yaml:"max_hints_per_chunk"` // cap injected hints (default 10)
+}
+
+// ReviewBatchOptions configures the batch review path. Only Gemini exposes a
+// batch endpoint for the models we use, so there is no provider switch.
+type ReviewBatchOptions struct {
+	Endpoint  string `yaml:"endpoint,omitempty"`
+	APIKey    string `yaml:"api_key,omitempty"`
+	Model     string `yaml:"model,omitempty"`
+	MaxTokens int    `yaml:"max_tokens,omitempty"`
+	// The batch endpoint reports no price — usageMetadata carries tokens and
+	// nothing else — so the per-million rates come from config. Set them to
+	// the discounted batch rates, not the live ones. Left at 0 the chunk
+	// artifacts carry tokens without a cost rather than a made-up one.
+	InputPerMillion  float64 `yaml:"input_per_million,omitempty"`
+	OutputPerMillion float64 `yaml:"output_per_million,omitempty"`
 }
 
 // SentencerOptions points at the razdel subprocess script.

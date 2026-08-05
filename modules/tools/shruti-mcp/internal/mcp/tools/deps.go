@@ -2,7 +2,7 @@ package tools
 
 import (
 	adminconfigapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/align"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiodenoise"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
@@ -37,7 +37,8 @@ type Deps struct {
 	Metadata            extractmeta.UseCase
 	Transcribe          transcribe.UseCase
 	Review              review.UseCase
-	AlignPDF            alignpdf.UseCase
+	ReviewBatchJobs     review.BatchStore
+	AlignPDF            align.UseCase
 	RefreshTitle        title.UseCase
 	Outline             outline.UseCase
 	Commit              commit.UseCase

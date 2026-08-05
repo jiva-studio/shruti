@@ -18,7 +18,7 @@ import (
 	"os/exec"
 	"sync"
 
-	alignpdfport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/alignpdf"
+	alignport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/align"
 	"github.com/jiva-studio/shruti/pipeline/transcript"
 )
 
@@ -81,7 +81,7 @@ func (a *Aligner) spawn() error {
 // Align sends one request to the running subprocess and decodes the reply.
 // On pipe failure it respawns once and retries — this covers crashes from
 // malformed input or OS pipe pressure without losing the call.
-func (a *Aligner) Align(ctx context.Context, req alignpdfport.Request) (transcript.Reviewed, error) {
+func (a *Aligner) Align(ctx context.Context, req alignport.Request) (transcript.Reviewed, error) {
 	body, err := json.Marshal(map[string]string{
 		"action":    "align",
 		"pdf_path":  req.PDFPath,
@@ -199,4 +199,4 @@ func truncate(b []byte, n int) string {
 	return string(b[:n]) + "..."
 }
 
-var _ alignpdfport.Aligner = (*Aligner)(nil)
+var _ alignport.Aligner = (*Aligner)(nil)
