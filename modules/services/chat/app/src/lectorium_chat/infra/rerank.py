@@ -13,6 +13,7 @@ unchanged. So default-on never breaks a keyless deploy.
 from __future__ import annotations
 
 import asyncio
+from time import monotonic
 
 import httpx
 
@@ -30,6 +31,13 @@ _RERANKER_BUILT = False  # distinguishes "not built yet" from "built → None"
 _MAX_TOTAL_TOKENS = 16_000
 _CHARS_PER_TOKEN = 4
 _MAX_DOCS = 1000
+
+
+class RerankerUnavailable(RuntimeError):
+    """Raised instead of calling the provider while the circuit is open.
+
+    Callers already treat any rerank failure as "fall back to cosine", so this
+    needs no special handling — it just makes the fallback free."""
 
 
 def _truncate_doc(doc: str, query: str) -> str:
@@ -62,18 +70,61 @@ class VoyageReranker(RerankerPort):
         base_url: str | None = None,
         concurrency: int = 2,
         timeout_s: float = 10.0,
+        circuit_threshold: int = 3,
+        circuit_open_s: float = 30.0,
     ) -> None:
         self._model = model
         self._api_key = api_key
         self._url = (base_url or "https://api.voyageai.com/v1").rstrip("/") + "/rerank"
         self._timeout_s = timeout_s
-        self._sem = asyncio.Semaphore(max(1, concurrency))
+        self._concurrency = max(1, concurrency)
+        self._circuit_threshold = max(1, circuit_threshold)
+        self._circuit_open_s = circuit_open_s
+        self._sem = asyncio.Semaphore(self._concurrency)
         # One pooled client for the reranker's lifetime — a research turn
         # reranks once per fanout round (up to MAX_FANOUT_ROUNDS), so a
         # fresh AsyncClient per call paid a TLS handshake to api.voyageai.com
         # every round. Keep-alive reuse removes that per-round setup cost.
         self._client = httpx.AsyncClient(timeout=self._timeout_s)
-        log.info("reranker_loaded", name=self.name, model=model, base_url=base_url)
+        self._consecutive_failures = 0
+        self._open_until: float = 0.0
+        log.info(
+            "reranker_loaded",
+            name=self.name, model=model, base_url=base_url,
+            concurrency=self._concurrency,
+        )
+
+    # ── circuit-breaker plumbing ──────────────────────────────────────
+
+    def _circuit_open(self) -> bool:
+        if self._open_until == 0.0:
+            return False
+        if monotonic() < self._open_until:
+            return True
+        # Window expired — half-open: let the next call probe.
+        self._open_until = 0.0
+        self._consecutive_failures = 0
+        log.info("reranker_circuit_close", provider=self.name)
+        return False
+
+    def _record_failure(self) -> None:
+        self._consecutive_failures += 1
+        if (
+            self._consecutive_failures >= self._circuit_threshold
+            and self._open_until == 0.0
+        ):
+            self._open_until = monotonic() + self._circuit_open_s
+            log.warning(
+                "reranker_circuit_open",
+                provider=self.name,
+                threshold=self._circuit_threshold,
+                open_s=self._circuit_open_s,
+            )
+
+    def _record_success(self) -> None:
+        if self._consecutive_failures or self._open_until:
+            self._consecutive_failures = 0
+            self._open_until = 0.0
 
     async def rerank(
         self,
@@ -87,19 +138,27 @@ class VoyageReranker(RerankerPort):
         if len(documents) <= 1:
             return [(i, 0.0) for i in range(len(documents))]
 
+        if self._circuit_open():
+            raise RerankerUnavailable("rerank circuit open")
+
         docs = [_truncate_doc(d, query) for d in documents[:_MAX_DOCS]]
         body: dict = {"query": query, "documents": docs, "model": self._model}
         if top_k is not None:
             body["top_k"] = top_k
 
-        async with self._sem:
-            resp = await self._client.post(
-                self._url,
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                json=body,
-            )
-        resp.raise_for_status()
-        data = resp.json().get("data") or []
+        try:
+            async with self._sem:
+                resp = await self._client.post(
+                    self._url,
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    json=body,
+                )
+            resp.raise_for_status()
+            data = resp.json().get("data") or []
+        except Exception:
+            self._record_failure()
+            raise
+        self._record_success()
         scored = [
             (int(item["index"]), float(item["relevance_score"]))
             for item in data
@@ -141,6 +200,8 @@ def _build_reranker(s: Settings) -> RerankerPort | None:
             base_url=s.rerank_base_url,
             concurrency=s.rerank_concurrency,
             timeout_s=s.rerank_timeout_s,
+            circuit_threshold=s.rerank_circuit_threshold,
+            circuit_open_s=s.rerank_circuit_open_s,
         )
     if s.rerank_provider == "tei":
         raise NotImplementedError(
