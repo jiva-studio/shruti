@@ -366,3 +366,61 @@ describe("runChatTurn — settled conversation attributes", () => {
     }
   })
 })
+
+describe("runChatTurn — session title language", () => {
+  function titleSpy(): { service: IChatTitleService; langs: string[] } {
+    const langs: string[] = []
+    return {
+      langs,
+      service: {
+        fetchSessionTitle: async (_turns, lang) => {
+          langs.push(lang)
+          return "A title"
+        },
+      },
+    }
+  }
+
+  it("titles in the language the server answered in, not the one asked in", async () => {
+    // English question typed in a Russian-set app: the server settles the
+    // reply as English, so the title that names that reply is English too.
+    const stream = makeStream([
+      { type: "delta", text: "Karma is…" } as ChatStreamEvent,
+      {
+        type: "done",
+        attributes: { reply_language: { value: "en", label: "English", explicit: false } },
+      } as ChatStreamEvent,
+    ])
+    const spy = titleSpy()
+    const ctl = new AbortController()
+    await collect(
+      runChatTurn(
+        { ...baseInput(ctl.signal), lang: "ru", isFirstAssistantTurn: true },
+        {
+          ...baseDeps(stream),
+          title: spy.service,
+        }
+      )
+    )
+    expect(spy.langs).toEqual(["en"])
+  })
+
+  it("falls back to the requested language when nothing was settled", async () => {
+    const stream = makeStream([
+      { type: "delta", text: "ответ" } as ChatStreamEvent,
+      { type: "done" } as ChatStreamEvent,
+    ])
+    const spy = titleSpy()
+    const ctl = new AbortController()
+    await collect(
+      runChatTurn(
+        { ...baseInput(ctl.signal), lang: "ru", isFirstAssistantTurn: true },
+        {
+          ...baseDeps(stream),
+          title: spy.service,
+        }
+      )
+    )
+    expect(spy.langs).toEqual(["ru"])
+  })
+})
