@@ -11,11 +11,17 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 
 from shruti_chat.config import Settings
 from shruti_chat.infra import rerank as rerank_mod
-from shruti_chat.infra.rerank import VoyageReranker, _truncate_doc, get_reranker
+from shruti_chat.infra.rerank import (
+    RerankerUnavailable,
+    VoyageReranker,
+    _truncate_doc,
+    get_reranker,
+)
 
 
 class _FakeResponse:
@@ -175,3 +181,84 @@ def test_get_reranker_tei_not_implemented():
         get_reranker(_settings(rerank_provider="tei"))
     rerank_mod._RERANKER = None
     rerank_mod._RERANKER_BUILT = False
+
+
+# ---- circuit breaker -----------------------------------------------------
+
+
+class _FailingClient:
+    """httpx stand-in that always fails, counting the attempts that got through."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def post(self, *a, **kw):
+        self.calls += 1
+        raise httpx.ConnectError("voyage down")
+
+    async def aclose(self) -> None:
+        return None
+
+
+def _breaker_reranker(threshold: int = 3, open_s: float = 30.0) -> VoyageReranker:
+    r = VoyageReranker(
+        model="rerank-2", api_key="k",
+        circuit_threshold=threshold, circuit_open_s=open_s,
+    )
+    r._client = _FailingClient()
+    return r
+
+
+@pytest.mark.asyncio
+async def test_circuit_opens_after_repeated_failures() -> None:
+    """Every call site already degrades to cosine on an exception, so an
+    outage was correct — it just cost a full timeout on every rerank of every
+    turn first. Past the threshold the calls must fail without leaving the
+    process."""
+    r = _breaker_reranker(threshold=3)
+    docs = ["a", "b"]
+
+    for _ in range(3):
+        with pytest.raises(httpx.ConnectError):
+            await r.rerank("q", docs)
+    assert r._client.calls == 3
+
+    # Circuit is open: no further provider calls, and a distinct error type.
+    with pytest.raises(RerankerUnavailable):
+        await r.rerank("q", docs)
+    assert r._client.calls == 3
+
+
+@pytest.mark.asyncio
+async def test_circuit_reopens_after_the_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(rerank_mod, "monotonic", lambda: clock["t"])
+    r = _breaker_reranker(threshold=1, open_s=30.0)
+    docs = ["a", "b"]
+
+    with pytest.raises(httpx.ConnectError):
+        await r.rerank("q", docs)
+    with pytest.raises(RerankerUnavailable):
+        await r.rerank("q", docs)
+
+    clock["t"] += 30.1
+    # Half-open: the next call probes the provider again.
+    with pytest.raises(httpx.ConnectError):
+        await r.rerank("q", docs)
+    assert r._client.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_a_success_clears_the_failure_run() -> None:
+    r = _breaker_reranker(threshold=3)
+    docs = ["a", "b"]
+
+    with pytest.raises(httpx.ConnectError):
+        await r.rerank("q", docs)
+    assert r._consecutive_failures == 1
+
+    r._record_success()
+    assert r._consecutive_failures == 0
+    assert r._open_until == 0.0
