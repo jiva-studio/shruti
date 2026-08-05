@@ -13,6 +13,7 @@ lands on this replica — every Stop on a single-replica deploy — is unaffecte
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -170,11 +171,34 @@ async def test_a_local_stop_needs_no_remote_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The single-replica path: DELETE lands on this process, so the answer
-    comes from the in-process event with no Redis call at all."""
+    comes from the in-process event with no Redis call at all.
+
+    Driven against a LIVE turn — the cancel registry is cleaned up as part of
+    teardown, so a finished turn has no in-process event left to set."""
     monkeypatch.setattr(turn_runner_mod, "monotonic", lambda: 100.0)
     store = _CountingStore()
     runner = TurnRunner(store)
-    is_cancelled = await _capture_predicate(runner, trace_id="t-local")
+    captured: dict[str, Any] = {}
+    release = asyncio.Event()
+
+    def factory(is_cancelled):
+        captured["fn"] = is_cancelled
+
+        async def _held():
+            await release.wait()
+            return
+            yield  # pragma: no cover — makes this an async generator
+
+        return _held()
+
+    async def finalize(had_error: bool, completed: bool, answer_started: bool):
+        return None
+
+    queue = runner.start(
+        "t-local", "user-1", stream_factory=factory, finalize=finalize,
+    )
+    await asyncio.sleep(0)
+    is_cancelled = captured["fn"]
 
     await is_cancelled()  # arms the throttle
     before = store.is_cancelled_calls
@@ -182,3 +206,7 @@ async def test_a_local_stop_needs_no_remote_read(
 
     assert await is_cancelled() is True
     assert store.is_cancelled_calls == before
+
+    release.set()
+    while await queue.get() is not None:
+        pass

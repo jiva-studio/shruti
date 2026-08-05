@@ -21,6 +21,7 @@ from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.application.proactive_turn import run_proactive_turn
 from shruti_chat.application.rate_limiter import _next_midnight_utc
+from shruti_chat.application.turn_runner import TurnCapacityExceeded
 from shruti_chat.composition import AppDeps, get_deps
 from shruti_chat.domain.user_context import UserContext
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
@@ -345,12 +346,28 @@ async def chat(
     # queue; closing it does NOT cancel the turn — only DELETE /chat/turn/{id}
     # does. The producer-task lifecycle + cancel registry live in the runner,
     # not as module globals in this route.
-    queue = deps.turn_runner.start(
-        effective_trace_id,
-        user.id,
-        stream_factory=build_stream,
-        finalize=finalize,
-    )
+    try:
+        queue = deps.turn_runner.start(
+            effective_trace_id,
+            user.id,
+            stream_factory=build_stream,
+            finalize=finalize,
+        )
+    except TurnCapacityExceeded:
+        # Rejected before anything was spawned, so `finalize` will never run —
+        # undo what the gates above already did (the charge, the held key)
+        # here, or a user who was told "try again" loses a quota unit and then
+        # bounces off their own idempotency key for its full TTL.
+        if idempotency_key:
+            await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
+        await deps.rate_limiter.refund(
+            user.id, user.anonymous, ip, scope="chat", quota_id=user.quota_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "server_busy"},
+            headers={"Retry-After": "5"},
+        ) from None
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         # Thin live view: drain the producer's queue until the sentinel or
