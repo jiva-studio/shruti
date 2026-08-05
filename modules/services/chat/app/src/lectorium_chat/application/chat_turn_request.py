@@ -71,11 +71,17 @@ class ChatTurnRequest:
     request_id: str | None = None
     session_id: str | None = None
     session_title: str | None = None
-    # The client's assistant-message id as 32 hex chars, validated upstream.
-    # Becomes the Langfuse trace id so a later `/chat/feedback` POST about that
-    # message lands on the right trace. Absent ⇒ a server-side id is minted and
-    # never exposed, and the feedback UI on that row stays hidden.
-    client_trace_id: str | None = None
+    # The turn's resolved trace id, 32 hex chars: the client's
+    # assistant-message id when it sent one (validated upstream), otherwise a
+    # server-minted fallback. Becomes the Langfuse trace id so a later
+    # `/chat/feedback` POST about that message lands on the right trace.
+    #
+    # Resolved by the CALLER, not here: `api/chat.py` already mints the
+    # fallback to key the turn buffer, and a second `or uuid4().hex` in
+    # `run_chat_turn` produced a DIFFERENT id for the same turn whenever the
+    # client sent no `X-Trace-Id` — leaving the resume buffer and the Langfuse
+    # trace impossible to correlate. One turn, one id.
+    trace_id: str | None = None
 
     def effective_tier(self, now: int) -> str:
         """`tier`, with a lapsed Pro claim coerced back to free.

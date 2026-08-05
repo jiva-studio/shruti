@@ -206,12 +206,13 @@ async def run_chat_turn(
     request_id = request.request_id
     user_context = request.user_context
     trace_id = request_id or "anon"
-    # Langfuse-side trace ID. Prefer the client-supplied one so message
-    # identity == trace identity for the feedback flow; otherwise fall
-    # back to a fresh server-minted id. The same value is bound into
-    # structlog so Grafana's Loki derived field
-    # `langfuse_trace_id=([a-f0-9]+)` resolves to the right Langfuse URL.
-    langfuse_trace_id = request.client_trace_id or uuid4().hex
+    # Langfuse-side trace ID — the turn id the caller already resolved, so the
+    # resume buffer (`api/chat.py` keys it on the same value) and the trace
+    # always agree. The `or uuid4()` is only a guard for callers that build a
+    # request without one; it must NOT be the normal path, or a turn ends up
+    # with two ids. The same value is bound into structlog so Grafana's Loki
+    # derived field `langfuse_trace_id=([a-f0-9]+)` resolves to the right URL.
+    langfuse_trace_id = request.trace_id or uuid4().hex
     bind_turn_context(
         trace_id=trace_id,
         request_id=request_id,
