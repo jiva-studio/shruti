@@ -16,6 +16,22 @@ une courte réponse accompagnée de citations que vous pouvez écouter.
 - **Trouve des versets et prépare des PDF** — il peut afficher un shloka
   précis, ou préparer la transcription d'une conférence sous forme de
   document quand vous le demandez.
+- **Indique où cela se trouve** — demandez « dans quel chant se trouve
+  l'histoire de Prahlāda ? » et il répond par la référence plutôt que par un
+  récit.
+- **Répond à partir des conférenciers que vous choisissez.** Dites « réponds
+  uniquement à partir des conférences de Prabhupāda » et chaque réponse
+  suivante sera construite à partir d'elles, jusqu'à ce que vous disiez
+  « prends tous les intervenants ». Les livres ne sont jamais restreints
+  ainsi : l'écriture reste l'écriture, quel que soit celui qui parle. Les
+  maîtres que seule votre bibliothèque connaît fonctionnent aussi.
+- **Connaît vos écoutes.** Demandez ce que vous avez écouté cette semaine, ou
+  un résumé de la conférence que vous avez ouverte.
+- **Suggère quoi écouter ensuite**, à partir de ce que vous avez déjà entendu.
+- **Ajoute des conférences venues du web (PRO)** — collez un lien YouTube, ou
+  demandez-lui de chercher en ligne les conférences d'un maître, et il vous les
+  proposera pour votre bibliothèque personnelle. Une fois ajoutées, elles sont
+  cherchées avec le catalogue et vous seul pouvez les voir.
 - **Suggère des questions de suivi** à la fin de chaque réponse pour vous
   aider à explorer le sujet plus loin.
 - **Se souvient de la conversation** au sein d'une session, pour que vous
