@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from lectorium_chat.domain.language import base_tag
 from lectorium_chat.agent.markers import (
     CARD_RE,
     CITE_RE,
@@ -226,11 +227,17 @@ _LANG_MIN_CHARS = 40
 
 
 def _base_lang(code: str | None) -> str | None:
-    """Normalize a BCP-47 / locale tag to a bucketed ISO-639-1 base:
-    'sr-Latn' → 'sr', 'en-US' → 'en', then fold the sr/hr/bs continuum."""
-    if not code:
+    """Bucket a language tag for COMPARISON: base subtag, then fold the
+    sr/hr/bs continuum.
+
+    The base-subtag step is shared with the content-language reduction (see
+    `domain/language.py`); folding hr/bs into sr is this scorer's own policy
+    and belongs here. The two were separate copies, and this one did not
+    normalise `_` — so `sr_Latn` became `sr_latn`, never matched a detected
+    `sr`, and a correct Serbian answer scored as a mismatch."""
+    base = base_tag(code)
+    if not base:
         return None
-    base = code.split("-")[0].lower()
     return _LANG_EQUIV.get(base, base)
 
 

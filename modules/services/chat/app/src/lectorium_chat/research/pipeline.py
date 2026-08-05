@@ -42,6 +42,7 @@ from lectorium_chat.agent.tools._envelope import (
 )
 from lectorium_chat.indexer.library.repo import fetch_document_body
 from lectorium_chat.infra.llm_provider.openrouter import is_provider_unavailable
+from lectorium_chat.domain.language import base_tag
 from lectorium_chat.observability.langfuse_client import langfuse_span
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.observability.metrics import pipeline_stage_counter
@@ -132,8 +133,7 @@ def reduce_locale_to_content_lang(locale: str) -> str:
     """Base content language a UI locale reduces to, ignoring corpus
     availability — the Python twin of `reduceLocaleToContentLanguage`.
     `uk`/`uk_UA`/`ru-RU` → `ru`; `sr-Latn`/`en-US`/unknown → `en`."""
-    base = (locale or "").lower().replace("_", "-").split("-", 1)[0]
-    return _LOCALE_CONTENT_LANG.get(base, _DEFAULT_CONTENT_LANG)
+    return _LOCALE_CONTENT_LANG.get(base_tag(locale), _DEFAULT_CONTENT_LANG)
 
 
 def _fallback_corpus_langs() -> list[str]:
