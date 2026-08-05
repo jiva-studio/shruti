@@ -291,3 +291,49 @@ def test_verse_lookup_is_one_query(tmp_path, monkeypatch) -> None:
     refs = [("BG", "2.13"), ("BG", "9.99"), ("SB", "1.1.1"), ("CC", "8.128")]
     assert mod._count_missing_verses(db, refs) == 3
     assert len(executed) == 1
+
+
+# ── score-config coverage ─────────────────────────────────────────────
+
+
+def test_every_emitted_score_has_a_config() -> None:
+    """`score_configs.py` asks to be kept in sync by hand, and had drifted:
+    the four `outline.*` scores were emitted with no config at all."""
+    import re
+    from pathlib import Path
+
+    from lectorium_chat.observability.score_configs import SCORE_CONFIGS
+
+    src = (
+        Path(__file__).resolve().parents[1]
+        / "src" / "lectorium_chat" / "observability" / "auto_scores.py"
+    ).read_text()
+    emitted = set(re.findall(r'_emit\(\s*"([a-z_.]+)"', src))
+    declared = {c["name"] for c in SCORE_CONFIGS}
+
+    assert emitted - declared == set()
+
+
+def test_router_intent_covers_every_intent() -> None:
+    """CATEGORICAL with a fixed list means Langfuse can REJECT a value outside
+    it — a missing label doesn't degrade to "uncategorised", the score can be
+    dropped. Six of ten intents were declared; the four newest may have been
+    invisible in Scores Analytics since they shipped."""
+    from typing import get_args
+
+    from lectorium_chat.domain.routing import Intent
+    from lectorium_chat.observability.score_configs import SCORE_CONFIGS
+
+    config = next(c for c in SCORE_CONFIGS if c["name"] == "router_intent")
+    labels = {c.label for c in config["categories"]}
+
+    assert set(get_args(Intent)) == labels
+
+
+def test_intent_category_values_are_unique() -> None:
+    from lectorium_chat.observability.score_configs import SCORE_CONFIGS
+
+    config = next(c for c in SCORE_CONFIGS if c["name"] == "router_intent")
+    values = [c.value for c in config["categories"]]
+
+    assert len(values) == len(set(values))

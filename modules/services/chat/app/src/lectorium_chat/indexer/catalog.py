@@ -92,7 +92,7 @@ async def ensure_catalog(settings: Settings | None = None, force: bool = False) 
     # TTL; we never DELETE so a half-failed swap doesn't poison the
     # cache mid-write.
     try:
-        from lectorium_chat.infra.cache import versions as cache_versions
+        from lectorium_chat.application import cache_versions
         cache_versions.set_tag("catalog", latest)
     except Exception:
         pass
