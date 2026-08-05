@@ -42,7 +42,7 @@ from shruti_chat.application.author_scope import AuthorScope
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.composition import AppDeps
 from shruti_chat.domain import UserContext
-from shruti_chat.infra.llm_provider.openrouter import is_provider_unavailable
+from shruti_chat.domain.ports.llm_provider import provider_unavailable
 from shruti_chat.observability.auto_scores import (
     TurnSummary,
     audit_post_expansion_text,
@@ -514,7 +514,7 @@ async def run_chat_turn(
                 # An out-of-credits / provider-down failure is not a graph
                 # bug — surface it as a calm "chat unavailable" so the
                 # client shows "try again later", not a generic error.
-                code = "chat_unavailable" if is_provider_unavailable(exc) else "agent_error"
+                code = "chat_unavailable" if provider_unavailable(exc) else "agent_error"
                 yield AgentEvent(
                     type="error",
                     data={"code": code, "message": str(exc)},

@@ -853,14 +853,23 @@ async def test_short_path_commentary_ref_resolves_author_name():
 
 import openai  # noqa: E402
 
-from shruti_chat.infra.llm_provider.openrouter import is_provider_unavailable  # noqa: E402
+from shruti_chat.domain.ports.llm_provider import (  # noqa: E402
+    ProviderUnavailable,
+    provider_unavailable,
+)
 
 
 @dataclass
 class _FanoutBoomEmbedder:
     """embed_query succeeds (so attribution lookup proceeds), but
     embed_documents raises a PROVIDER-UNAVAILABLE error — the failure mode of
-    OpenRouter being out of credits / down DURING the fanout embed call."""
+    OpenRouter being out of credits / down DURING the fanout embed call.
+
+    Raises what the real adapter raises. `OpenAIEmbedder` labels a spent
+    availability failure as `ProviderUnavailable` (keeping the vendor error as
+    __cause__), so a fake that emitted the raw vendor exception would be
+    modelling a contract the adapter no longer has — and would quietly stop
+    exercising the propagation this test exists for."""
 
     docs_called: int = 0
 
@@ -869,7 +878,8 @@ class _FanoutBoomEmbedder:
 
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         self.docs_called += 1
-        raise openai.APIConnectionError(request=None)  # type: ignore[arg-type]
+        vendor = openai.APIConnectionError(request=None)  # type: ignore[arg-type]
+        raise ProviderUnavailable(str(vendor)) from vendor
 
     async def embed_queries(self, texts: list[str]) -> list[list[float]]:
         # Fanout sub-queries route through the query path; raise the same
@@ -899,7 +909,7 @@ async def test_fanout_provider_unavailable_propagates_not_partial():
             pool=pool, llm=llm, embed_model="m", embed_dim=1536,
         )
     # The error chat_turn will classify is a provider-availability failure.
-    assert is_provider_unavailable(ei.value) is True
+    assert provider_unavailable(ei.value) is True
     assert embedder.docs_called >= 1
 
 
