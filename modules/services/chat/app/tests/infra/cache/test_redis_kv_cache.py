@@ -57,6 +57,8 @@ async def test_circuit_opens_after_repeated_failures(monkeypatch):
     c = RedisKVCache.__new__(RedisKVCache)
     c._url = "fake://"
     c._client = _Failing()
+    c._circuit_threshold = 3
+    c._circuit_open_s = 30.0
     c._consecutive_failures = 0
     c._open_until = 0.0
 
