@@ -14,7 +14,8 @@ from __future__ import annotations
 import pytest
 
 import lectorium_chat.agent.graph.nodes._worker_common as wc
-from lectorium_chat.agent.graph.nodes._worker_common import (
+from lectorium_chat.agent import cards as _cards
+from lectorium_chat.agent.cards import (
     _fetch_cite_text,
     flush_card_payloads,
 )
@@ -41,7 +42,7 @@ class FakeChunkRepo:
 def capture_writer(monkeypatch):
     """Patch get_stream_writer so flush_card_payloads' emits land in a list."""
     events: list[dict] = []
-    monkeypatch.setattr(wc, "get_stream_writer", lambda: events.append)
+    monkeypatch.setattr(_cards, "get_stream_writer", lambda: events.append)
     return events
 
 

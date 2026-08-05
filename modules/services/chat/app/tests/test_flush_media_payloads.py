@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 import lectorium_chat.agent.graph.nodes._worker_common as wc
+from lectorium_chat.agent import cards as _cards
 from lectorium_chat.agent.graph.nodes._worker_common import flush_card_payloads
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.agent.markers import MEDIA_RE
@@ -77,7 +78,7 @@ def _seed_media(
 @pytest.fixture
 def capture_writer(monkeypatch):
     events: list[dict] = []
-    monkeypatch.setattr(wc, "get_stream_writer", lambda: events.append)
+    monkeypatch.setattr(_cards, "get_stream_writer", lambda: events.append)
     return events
 
 

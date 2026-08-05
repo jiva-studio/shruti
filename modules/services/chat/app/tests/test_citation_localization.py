@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 import lectorium_chat.agent.graph.nodes._worker_common as wc
+from lectorium_chat.agent import cards as _cards
 from lectorium_chat.agent.graph.nodes._worker_common import (
     build_verse_payload,
     flush_card_payloads,
@@ -34,7 +35,7 @@ class FakeTranslator:
 @pytest.fixture
 def capture_writer(monkeypatch):
     events: list[dict] = []
-    monkeypatch.setattr(wc, "get_stream_writer", lambda: events.append)
+    monkeypatch.setattr(_cards, "get_stream_writer", lambda: events.append)
     return events
 
 
@@ -203,7 +204,7 @@ async def test_flush_verse_translates_into_lang(capture_writer, monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"en": "english verse"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
@@ -224,7 +225,7 @@ async def test_flush_verse_native_no_mt(capture_writer, monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"en": "english verse", "uk": "український вірш"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
@@ -245,7 +246,7 @@ async def test_flush_verse_skipped_for_card_client(capture_writer, monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"en": "english verse"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     await flush_card_payloads(ctx)
     assert capture_writer == []   # nothing emitted
     assert tr.calls == []         # nothing translated
@@ -265,7 +266,7 @@ async def test_build_verse_payload_translates_cited(monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"en": "english verse"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     payload = await build_verse_payload(ctx, vref)
     assert payload is not None
     assert payload["mt"] is True
@@ -284,7 +285,7 @@ async def test_build_verse_payload_ships_answer_lang_only(monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"en": "english verse", "ru": "русский стих"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     payload = await build_verse_payload(ctx, vref)
     assert payload["lang"] == "ru"
     assert payload["translation"] == {"ru": "русский стих"}
@@ -300,7 +301,7 @@ async def test_build_verse_payload_lang_falls_back_to_available(monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"en": "english verse"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     payload = await build_verse_payload(ctx, vref)
     assert payload["lang"] == "en"
     assert payload["translation"] == {"en": "english verse"}
@@ -319,7 +320,7 @@ async def test_build_verse_payload_mt_keeps_original(monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"en": "english verse"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     payload = await build_verse_payload(ctx, vref)
     assert payload["lang"] == "uk"
     assert payload["translation"] == {"uk": "[uk] english verse", "en": "english verse"}

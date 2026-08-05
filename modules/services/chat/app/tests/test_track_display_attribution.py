@@ -11,7 +11,8 @@ from __future__ import annotations
 import pytest
 
 import lectorium_chat.agent.graph.nodes._worker_common as wc
-from lectorium_chat.agent.graph.nodes._worker_common import (
+from lectorium_chat.agent import cards as _cards
+from lectorium_chat.agent.cards import (
     _format_reference_label,
     flush_card_payloads,
     resolve_track_display,
@@ -59,7 +60,7 @@ class FakeCatalogRepo:
 @pytest.fixture
 def capture_writer(monkeypatch):
     events: list[dict] = []
-    monkeypatch.setattr(wc, "get_stream_writer", lambda: events.append)
+    monkeypatch.setattr(_cards, "get_stream_writer", lambda: events.append)
     return events
 
 

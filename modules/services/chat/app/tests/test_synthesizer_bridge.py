@@ -6,6 +6,7 @@ build still happen correctly through the concurrent path."""
 from __future__ import annotations
 
 import lectorium_chat.agent.graph.nodes._worker_common as wc
+from lectorium_chat.agent import cards as _cards
 from lectorium_chat.agent.graph.nodes.synthesizer import _bridge_synth_events
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.agent.marker_expander import CardRequest
@@ -88,7 +89,7 @@ async def test_bridge_builds_verse_card(monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"en": "english verse"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     out: list[dict] = []
     events = _events(
         _card_req("verse", 0, vref),
@@ -112,7 +113,7 @@ async def test_bridge_dedups_repeated_verse(monkeypatch):
     async def fake_fetch(db, source_id, tokens):
         return _fake_verse_body({"ru": "русский стих"})
 
-    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    monkeypatch.setattr(_cards, "fetch_verse_body", fake_fetch)
     out: list[dict] = []
     events = _events(
         _card_req("verse", 0, vref),
