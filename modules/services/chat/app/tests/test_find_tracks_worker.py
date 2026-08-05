@@ -1066,3 +1066,46 @@ async def test_a_query_with_no_author_is_unaffected(_events) -> None:
     )
     # The Russian lecture is a perfectly good answer here.
     assert "[card:other_ru]" in text
+
+
+async def test_a_metadata_only_request_is_served_below_the_topical_floor(
+    _events,
+) -> None:
+    """«утренние прогулки 1976 года в Бомбее» carries no topic, so a transcript
+    cannot resemble it: on production the ten matching walks scored 0.23 against
+    that sentence and the 0.45 floor threw them all away, leaving two unrelated
+    talks from the fully-relaxed search. When the filters ARE the request, they
+    are what selects.
+
+    Wired at the worker, not the strategy: the signal comes from the router's
+    args, and hard-coding it "topical" upstream broke nothing in any other test.
+    """
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.23, "walk")]]),
+        catalog_repo=_Catalog(titles={"t1": "Утренняя прогулка"}, descriptions={"t1": "d"}),
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "утренние прогулки 1976 в Бомбее",
+         "extracted_args": {"year": 1976}},
+        _Runtime(ctx),
+    )
+    assert [e for e in _events if e["type"] == "action"], "the year selected it; serve it"
+
+
+async def test_a_topical_request_with_a_filter_keeps_the_floor(_events) -> None:
+    """«лекции 1976 про преданность» has something to be relevant TO, so a
+    lecture that merely carries the right year must not be served as an answer."""
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.23, "weak")]]),
+        catalog_repo=_Catalog(titles={"t1": "Лекция"}, descriptions={"t1": "d"}),
+        llm=_FakeLLM(),
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "лекции 1976 про преданность",
+         "extracted_args": {"year": 1976, "topic": "преданность"}},
+        _Runtime(ctx),
+    )
+    assert not [e for e in _events if e["type"] == "action"]

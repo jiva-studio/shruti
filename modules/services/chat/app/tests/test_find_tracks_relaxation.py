@@ -281,3 +281,69 @@ def test_the_stated_constraints_are_listed_narrowest_first() -> None:
     assert _stated(flt) == [
         "reference", "date", "location", "kind", "author", "source",
     ]
+
+
+# ── a request with no topic ───────────────────────────────────────────────
+
+
+class _WeakCorpus:
+    """The corpus as production has it: the exactly-matching lectures score far
+    below the topical floor, because the request they match is metadata, not a
+    subject. Measured on prod: 0.228 for the Russian phrasing, 0.394 for the
+    English one, against a floor of 0.45."""
+
+    def __init__(self, score: float = 0.23) -> None:
+        self._score = score
+        self.floors: list[float] = []
+
+    async def search(self, flt: dict, *, lang: str | None) -> list[_Scored]:
+        if _stated(flt) != ["date", "location", "kind"]:
+            return []
+        if lang not in (None, "en"):   # they exist in English only, as on prod
+            return []
+        return [_Scored(_Chunk(f"walk{i}", lang="en"), self._score) for i in range(3)]
+
+
+async def test_a_request_that_is_only_metadata_is_served_by_the_metadata(
+    _search_through_the_corpus,
+) -> None:
+    """Nothing to be relevant TO: the filters are the whole request, and the
+    score's only job is to order what they selected."""
+    _search_through_the_corpus["corpus"] = _WeakCorpus()
+    found = await _find_lectures(
+        _Ctx(), [0.0], _WALKS_1976_BOMBAY, topical=False,
+    )
+    assert [sc.chunk.track_id for sc in found.lectures] == ["walk0", "walk1", "walk2"]
+    assert found.relaxed == ""
+    assert found.other_language is True
+
+
+async def test_a_topical_request_keeps_the_floor(
+    _search_through_the_corpus,
+) -> None:
+    """«лекции 1976 про преданность» has something to be relevant to, so a
+    lecture that merely carries the right year must not be served as if it
+    answered the question — that is what the floor is for."""
+    _search_through_the_corpus["corpus"] = _WeakCorpus()
+    found = await _find_lectures(
+        _Ctx(), [0.0], _WALKS_1976_BOMBAY, topical=True,
+    )
+    assert found.lectures == []
+
+
+async def test_the_floor_still_applies_to_the_near_misses(
+    _search_through_the_corpus,
+) -> None:
+    """Relaxing a constraint is a guess about what the person meant; a
+    low-scoring guess is noise, so only the EXACT set gets the open floor."""
+    corpus = _WeakCorpus()
+
+    async def _search(flt, *, lang):
+        if _stated(flt) == ["date", "kind"]:
+            return [_Scored(_Chunk("weak_near_miss", lang="ru"), 0.2)]
+        return []
+
+    corpus.search = _search
+    _search_through_the_corpus["corpus"] = corpus
+    found = await _find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY, topical=False)
+    assert found.lectures == []
