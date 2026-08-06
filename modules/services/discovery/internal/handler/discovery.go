@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,12 +13,13 @@ import (
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/crawl"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/search"
+	"github.com/jiva-studio/lectorium/discovery/internal/metrics"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
 )
 
 // sourceView is a source plus what we know about how it is going.
 type sourceView struct {
-	store.Source
+	sourceOut
 	Items map[string]int `json:"items"`
 	// Media says how many recordings are still offered and how many stopped
 	// being — the second number is the one worth watching.
@@ -37,9 +40,10 @@ func sourcesHandler(repo *store.Repo, schedulerOn bool) http.HandlerFunc {
 		}
 		out := make([]sourceView, 0, len(sources))
 		for _, s := range sources {
-			// Credentials go in and never come back out.
-			s.AuthHeaders = nil
-			view := sourceView{Source: s, Schedule: scheduleWord(schedulerOn, s.Enabled)}
+			view := sourceView{
+				sourceOut: sourceFrom(s),
+				Schedule:  scheduleWord(schedulerOn, s.Enabled),
+			}
 			if view.Items, err = repo.CountItems(r.Context(), s.ID); err != nil {
 				writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
 				return
@@ -83,27 +87,35 @@ func scheduleWord(schedulerOn, sourceEnabled bool) string {
 
 func saveSourceHandler(repo *store.Repo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var src store.Source
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&src); err != nil {
+		var in sourceIn
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		if src.ID == "" || len(src.SeedURLs) == 0 {
+		if in.ID == "" || len(in.SeedURLs) == 0 {
 			writeErr(w, http.StatusBadRequest, "bad_request", "id and seed_urls are required")
 			return
 		}
+		src := in.source()
 		if err := repo.SaveSource(r.Context(), &src); err != nil {
 			writeErr(w, http.StatusInternalServerError, "save_failed", err.Error())
 			return
 		}
-		src.AuthHeaders = nil
-		writeJSON(w, http.StatusOK, src)
+		// Read back rather than echo. An edit that omits the credentials keeps
+		// the stored ones, and SaveSource fills in defaults, so what was
+		// submitted is not what the source now is.
+		saved, err := repo.Source(r.Context(), src.ID)
+		if err != nil || saved == nil {
+			writeJSON(w, http.StatusOK, sourceFrom(src))
+			return
+		}
+		writeJSON(w, http.StatusOK, sourceFrom(*saved))
 	}
 }
 
 // runSourceHandler triggers a pass by hand. It works whether or not the
 // scheduler is on: asking for a run is itself the authorization.
-func runSourceHandler(repo *store.Repo, svc *crawl.Service) http.HandlerFunc {
+func runSourceHandler(repo *store.Repo, svc *crawl.Background) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if svc == nil {
 			writeErr(w, http.StatusServiceUnavailable, "not_configured", "crawling is not wired")
@@ -124,12 +136,19 @@ func runSourceHandler(repo *store.Repo, svc *crawl.Service) http.HandlerFunc {
 			Full:   boolParam(r, "full"),
 			Limit:  intParam(r, "limit", 0),
 		}
-		run, err := svc.Run(r.Context(), src, opts)
+		// The walk outlives this request on purpose: a backfill takes minutes,
+		// and a client hanging up must not kill it half written.
+		run, err := svc.Start(src, opts)
+		if errors.Is(err, crawl.ErrAlreadyRunning) {
+			writeErr(w, http.StatusConflict, "already_running",
+				fmt.Sprintf("run %d is already walking this source", run.ID))
+			return
+		}
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, "run_failed", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, run)
+		writeJSON(w, http.StatusAccepted, run)
 	}
 }
 
@@ -189,9 +208,22 @@ func queueHandler(repo *store.Repo) http.HandlerFunc {
 
 // emptyPagesHandler lists the visits that found no file, with why when there
 // was a why. This is the "we were there and came away with nothing" view.
+//
+// ?failing=true narrows it to the pages that could not be read at all. Coming
+// away empty and being refused are different things, and mixing them means a
+// page failing for the fortieth time is filed alongside every menu on the site.
 func emptyPagesHandler(repo *store.Repo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pages, err := repo.EmptyPages(r.Context(), r.URL.Query().Get("source"), intParam(r, "limit", 50))
+		source, limit := r.URL.Query().Get("source"), intParam(r, "limit", 50)
+		failingOnly := r.URL.Query().Get("failing") == "true"
+
+		var pages []store.Page
+		var err error
+		if failingOnly {
+			pages, err = repo.FailingPages(r.Context(), source, limit)
+		} else {
+			pages, err = repo.EmptyPages(r.Context(), source, limit)
+		}
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
 			return
@@ -199,12 +231,13 @@ func emptyPagesHandler(repo *store.Repo) http.HandlerFunc {
 		out := make([]map[string]any, 0, len(pages))
 		for _, p := range pages {
 			out = append(out, map[string]any{
-				"url":             p.URL,
-				"source":          p.SourceID,
-				"http_status":     p.HTTPStatus,
-				"error":           p.Error,
-				"last_fetched_at": p.LastFetchedAt,
-				"next_check_at":   p.NextCheckAt,
+				"url":                  p.URL,
+				"source":               p.SourceID,
+				"http_status":          p.HTTPStatus,
+				"error":                p.Error,
+				"consecutive_failures": p.ConsecutiveFailures,
+				"last_fetched_at":      p.LastFetchedAt,
+				"next_check_at":        p.NextCheckAt,
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"pages": out, "count": len(out)})
@@ -288,5 +321,29 @@ func authorsHandler(repo *store.Repo) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"authors": authors, "count": len(authors)})
+	}
+}
+
+// statusHandler is what the scheduler leaves behind now that it leaves no runs.
+//
+// Continuous work has no beginning and no end to record, so there is nothing to
+// list. What there is instead is what this process has done since it started,
+// and how much is still waiting. Two readings a minute apart give a rate; one
+// reading says whether anything is moving at all.
+func statusHandler(repo *store.Repo, counters *metrics.Counters, schedulerOn bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		out := map[string]any{
+			"scheduler": schedulerOn,
+			"work":      counters.Snapshot(time.Now().UTC()),
+		}
+		if repo != nil {
+			depth, err := repo.QueueDepth(r.Context(), time.Now().UTC())
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, "query_failed", err.Error())
+				return
+			}
+			out["queue"] = depth
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }

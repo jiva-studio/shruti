@@ -247,3 +247,28 @@ func TestFrontierDoesNotVisitBothSpellings(t *testing.T) {
 		t.Error("the second spelling is the same page")
 	}
 }
+
+// A forbidden section must never reach the queue. One YouTube channel page
+// links to three thousand caption endpoints under a path robots.txt closes;
+// queued, they spend every run's whole budget on refusals and report the site
+// as having turned us away.
+func TestFrontierSkipsWhatRobotsForbids(t *testing.T) {
+	f := newFrontier([]string{"https://a.example/"}, 4, nil)
+	f.mayFetch = func(u string) bool { return !strings.Contains(u, "/api/") }
+	f.addAll([]string{
+		"https://a.example/api/timedtext?v=1",
+		"https://a.example/api/timedtext?v=2",
+		"https://a.example/watch?v=1",
+	}, 1)
+
+	got, _, ok := f.next()
+	if !ok || got != "https://a.example/watch?v=1" {
+		t.Fatalf("first = %q, want the one we may fetch", got)
+	}
+	if _, _, more := f.next(); more {
+		t.Error("a forbidden address must not be queued at all")
+	}
+	if f.offLimits != 2 {
+		t.Errorf("off-limits = %d, want 2 — a skipped section has to be visible", f.offLimits)
+	}
+}

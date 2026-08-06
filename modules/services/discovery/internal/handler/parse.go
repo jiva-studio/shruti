@@ -103,6 +103,8 @@ func writeParseErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, fetch.ErrDisallowed):
 		writeErr(w, http.StatusForbidden, "disallowed", err.Error())
+	case errors.Is(err, fetch.ErrRobotsUnread):
+		writeErr(w, http.StatusServiceUnavailable, "robots_unread", err.Error())
 	case errors.Is(err, fetch.ErrCircuitOpen):
 		writeErr(w, http.StatusServiceUnavailable, "host_cooling_down", err.Error())
 	case errors.Is(err, fetch.ErrTooLarge):

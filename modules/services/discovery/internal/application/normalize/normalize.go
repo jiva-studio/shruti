@@ -37,12 +37,15 @@ type Batch struct {
 
 // Result is what the model said about one file, after validation.
 type Result struct {
-	Title     string `json:"title,omitempty"`
-	Author    string `json:"author,omitempty"`
-	Location  string `json:"location,omitempty"`
-	Date      string `json:"date,omitempty"` // YYYY-MM-DD
-	Language  string `json:"language,omitempty"`
-	DurationS int    `json:"duration_s,omitempty"`
+	Title  string `json:"title,omitempty"`
+	Author string `json:"author,omitempty"`
+	// Authors is everyone who spoke, when more than one did. Author stays as
+	// the one written on the recording.
+	Authors   []string `json:"authors,omitempty"`
+	Location  string   `json:"location,omitempty"`
+	Date      string   `json:"date,omitempty"` // YYYY-MM-DD
+	Language  string   `json:"language,omitempty"`
+	DurationS int      `json:"duration_s,omitempty"`
 	// References is one entry per verse: a range in a filename is expanded
 	// before it gets here, the same way the corpus parser does it.
 	References []domain.Ref `json:"references,omitempty"`
@@ -73,6 +76,20 @@ type Series struct {
 	Members []string `json:"members"`
 }
 
+// Spend is what one call cost, as the provider reported it. Every reply
+// carries this and the service was throwing it away, so every statement about
+// what indexing costs has been arithmetic rather than a bill.
+type Spend struct {
+	Model string
+	Items int
+	// Reported says whether the provider sent any usage at all. Without it a
+	// zero cost cannot be told from a silent one.
+	Reported  bool
+	TokensIn  int64
+	TokensOut int64
+	CostUSD   float64
+}
+
 // Normalizer reads raw material and says what it means. The live
 // implementation calls a model; the stub returns fixed answers so the rest of
 // the pipeline can be tested without a key.
@@ -85,6 +102,9 @@ type Normalizer interface {
 	// stored input hash without anyone having to clear a table.
 	PromptVersion() string
 	Model() string
+	// Spent returns what has been billed since the last call to it, so a caller
+	// can attribute cost to the page it was reading.
+	Spent() []Spend
 }
 
 // InputHash identifies one item's normalizer input. Storing it lets a recheck

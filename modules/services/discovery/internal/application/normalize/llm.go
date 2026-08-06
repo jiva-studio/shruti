@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/domain"
@@ -48,6 +49,9 @@ type LLM struct {
 	knownSources map[string]bool
 	sourceList   string
 	now          func() time.Time
+
+	mu    sync.Mutex
+	spent []Spend
 }
 
 // LLMOptions configures the live normalizer.
@@ -82,6 +86,23 @@ func NewLLM(opts LLMOptions) (*LLM, error) {
 		sourceList:   strings.Join(codes, ", "),
 		now:          time.Now,
 	}, nil
+}
+
+// record keeps what a call cost until somebody asks. A call is charged whether
+// or not its reply parsed, so this is written before the error is checked.
+func (l *LLM) record(s Spend) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.spent = append(l.spent, s)
+}
+
+// Spent hands over what has been billed and forgets it.
+func (l *LLM) Spent() []Spend {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := l.spent
+	l.spent = nil
+	return out
 }
 
 func (l *LLM) PromptVersion() string { return promptVersion }
@@ -123,13 +144,13 @@ type promptItem struct {
 // cost forty.
 type reply struct {
 	Items []struct {
-		N          int    `json:"n"`
-		Title      string `json:"title"`
-		Author     string `json:"author"`
-		Location   string `json:"location"`
-		Date       string `json:"date"`
-		Language   string `json:"language"`
-		DurationS  int    `json:"duration_s"`
+		N          int      `json:"n"`
+		Title      string   `json:"title"`
+		Authors    []string `json:"authors"`
+		Location   string   `json:"location"`
+		Date       string   `json:"date"`
+		Language   string   `json:"language"`
+		DurationS  int      `json:"duration_s"`
 		References []struct {
 			Source string `json:"source"`
 			Tokens string `json:"tokens"`
@@ -160,13 +181,21 @@ func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
 	).Replace(userPrompt)
 
 	var got reply
-	if _, err := l.client.RunJSON(ctx, openaicompat.Call{
+	res, err := l.client.RunJSON(ctx, openaicompat.Call{
 		Model:     l.model,
 		MaxTokens: l.maxTokens,
 		System:    systemPrompt,
 		User:      user,
 		Reasoning: openaicompat.ReasoningOff,
-	}, &got); err != nil {
+	}, &got)
+	l.record(Spend{
+		Model: l.model, Items: len(batch.Items),
+		// A call always spends input tokens, so none reported means the
+		// provider sent no usage rather than that the call was free.
+		Reported: res.TokensIn > 0,
+		TokensIn: res.TokensIn, TokensOut: res.TokensOut, CostUSD: res.CostUSD,
+	})
+	if err != nil {
 		return nil, fmt.Errorf("normalize: %w", err)
 	}
 
@@ -185,7 +214,8 @@ func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
 		a := got.Items[j]
 		r := Result{
 			Title:     strings.TrimSpace(a.Title),
-			Author:    strings.TrimSpace(a.Author),
+			Author:    firstName(a.Authors),
+			Authors:   trimAll(a.Authors),
 			Location:  strings.TrimSpace(a.Location),
 			Date:      strings.TrimSpace(a.Date),
 			Language:  strings.TrimSpace(a.Language),
@@ -281,4 +311,25 @@ func truncateRunes(s string, max int) string {
 		return s
 	}
 	return string(r[:max])
+}
+
+// firstName is the speaker written on the recording, for the many places that
+// want one name. The rest are still linked; this is only what gets shown.
+func firstName(names []string) string {
+	for _, n := range names {
+		if t := strings.TrimSpace(n); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+func trimAll(names []string) []string {
+	var out []string
+	for _, n := range names {
+		if t := strings.TrimSpace(n); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

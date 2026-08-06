@@ -24,11 +24,18 @@ type Config struct {
 	// default: starting the service must not make it fetch anything. Explicit
 	// single-URL requests always run regardless.
 	SchedulerEnabled bool
-	// ScheduleInterval is how often the scheduler looks for work.
-	ScheduleInterval time.Duration
-	// SchedulerPageLimit caps how many pages one scheduled pass over a source
-	// will fetch, so an automatic run can never turn into a full sweep.
-	SchedulerPageLimit int
+	// SchedulerWorkers is how many pages the scheduler may have in flight at
+	// once, across every source. It only stops us idling through somebody
+	// else's round trip: what bounds the rate is the per-host gap below.
+	SchedulerWorkers int
+	// PageTimeout bounds one page end to end — fetch, model, embed, write. The
+	// individual steps have their own timeouts and they stack: a page could
+	// otherwise hold a worker and a database connection for tens of minutes.
+	PageTimeout time.Duration
+	// DBMaxConns sizes the pool. The default is max(4, NumCPU), which several
+	// scheduler workers and the HTTP handlers share, so a busy crawl can starve
+	// the API of connections on a small machine.
+	DBMaxConns int
 
 	// --- outbound HTTP politeness ---
 
@@ -42,6 +49,8 @@ type Config struct {
 	RequestTimeout time.Duration
 	// MaxBodyBytes caps a response body we are willing to read.
 	MaxBodyBytes int64
+	// Proxy is handed to the external reader.
+	Proxy string
 
 	// --- model access, all through OpenRouter ---
 
@@ -65,24 +74,41 @@ func Load() *Config {
 		Env:            env("ENV", "dev"),
 		ServiceVersion: env("SERVICE_VERSION", "dev"),
 
-		SchedulerEnabled:   envBool("DISCOVERY_SCHEDULER_ENABLED", false),
-		ScheduleInterval:   envDuration("DISCOVERY_SCHEDULE_INTERVAL", 10*time.Minute),
-		SchedulerPageLimit: envInt("DISCOVERY_SCHEDULER_PAGE_LIMIT", 200),
+		SchedulerEnabled: envBool("DISCOVERY_SCHEDULER_ENABLED", false),
+		SchedulerWorkers: envInt("DISCOVERY_SCHEDULER_WORKERS", 4),
+		PageTimeout:      envDuration("DISCOVERY_PAGE_TIMEOUT", 10*time.Minute),
+		DBMaxConns:       envInt("DISCOVERY_DB_MAX_CONNS", 16),
 
 		UserAgent:         env("DISCOVERY_USER_AGENT", "LectoriumDiscovery/1.0 (+https://shruti.app/about)"),
 		DefaultCrawlDelay: envDuration("DISCOVERY_CRAWL_DELAY", time.Second),
 		RequestTimeout:    envDuration("DISCOVERY_REQUEST_TIMEOUT", 30*time.Second),
 		MaxBodyBytes:      int64(envInt("DISCOVERY_MAX_BODY_BYTES", 8<<20)),
+		// A datacenter address reading YouTube is met with a bot check, so the
+		// one host that needs an external reader also needs somewhere else to
+		// be read from.
+		Proxy: env("DISCOVERY_PROXY", ""),
 
 		LLMBaseURL: env("DISCOVERY_LLM_BASE_URL", ""),
 		LLMAPIKey:  os.Getenv("DISCOVERY_LLM_API_KEY"),
-		LLMModel:   env("DISCOVERY_LLM_MODEL", "openai/gpt-4o-mini"),
+		// The same default compose and the env template carry. They disagreed
+		// for a while, which meant `discovery parse` on a laptop read pages
+		// with a different model than production — and since the prompt version
+		// and the input hash are model-scoped, it shifted the hashes too.
+		LLMModel: env("DISCOVERY_LLM_MODEL", "google/gemini-3.1-flash-lite"),
 
 		EmbedModel: env("DISCOVERY_EMBED_MODEL", "openai/text-embedding-3-small"),
 		EmbedDim:   envInt("DISCOVERY_EMBED_DIM", 1536),
 	}
 	if cfg.MaxBodyBytes <= 0 {
 		cfg.MaxBodyBytes = 8 << 20
+	}
+	if cfg.DBMaxConns <= 0 {
+		cfg.DBMaxConns = 16
+	}
+	// A pool smaller than the number of workers is a queue in front of the
+	// database, and every handler waits behind the crawl.
+	if cfg.DBMaxConns < cfg.SchedulerWorkers+4 {
+		cfg.DBMaxConns = cfg.SchedulerWorkers + 4
 	}
 	return cfg
 }

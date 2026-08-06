@@ -1,6 +1,13 @@
 package store
 
-import "context"
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
+)
 
 // Author is one speaker: a name of our own, and every spelling the archive
 // filed them under.
@@ -19,28 +26,37 @@ func (r *Repo) ResolveAuthor(ctx context.Context, name string) (int64, error) {
 	if name == "" {
 		return 0, nil
 	}
+	key := domain.Key(name)
+	if key == "" {
+		return 0, nil
+	}
 	var id int64
 	err := r.pool.QueryRow(ctx, `
-		WITH k AS (SELECT discovery.author_key($1) AS key),
-		found AS (
-			SELECT a.author_id FROM discovery.author_keys a, k WHERE a.key = k.key
+		WITH found AS (
+			SELECT a.author_id FROM discovery.author_keys a WHERE a.key = $2
 		),
 		made AS (
 			INSERT INTO discovery.authors (name)
-			SELECT $1 FROM k WHERE NOT EXISTS (SELECT 1 FROM found) AND k.key IS NOT NULL
+			SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM found)
 			RETURNING id
 		),
 		linked AS (
 			INSERT INTO discovery.author_keys (key, author_id)
-			SELECT k.key, made.id FROM k, made
+			SELECT $2, made.id FROM made
 			ON CONFLICT (key) DO NOTHING
 			RETURNING author_id
 		)
 		SELECT author_id FROM found
 		UNION ALL SELECT author_id FROM linked
-		LIMIT 1`, name).Scan(&id)
-	if err != nil {
+		LIMIT 1`, domain.Name(name), key).Scan(&id)
+	// No row means nobody by that name, which is an answer. Anything else is the
+	// database failing, and reporting that as "no author" files the recording
+	// under nobody while the run reports success.
+	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
+	}
+	if err != nil {
+		return 0, err
 	}
 	return id, nil
 }
@@ -55,7 +71,8 @@ func (r *Repo) Authors(ctx context.Context, sourceID string, limit int) ([]Autho
 		       count(i.id)::int
 		FROM discovery.authors a
 		LEFT JOIN discovery.author_keys k ON k.author_id = a.id
-		LEFT JOIN discovery.items i ON i.author_id = a.id AND ($1 = '' OR i.source_id = $1)
+		LEFT JOIN discovery.item_authors ia ON ia.author_id = a.id
+		LEFT JOIN discovery.items i ON i.id = ia.item_id AND ($1 = '' OR i.source_id = $1)
 		GROUP BY a.id, a.name
 		HAVING count(i.id) > 0
 		ORDER BY count(i.id) DESC, a.name
@@ -77,4 +94,28 @@ func (r *Repo) Authors(ctx context.Context, sourceID string, limit int) ([]Autho
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// SetItemAuthors replaces the people a recording is by. A set, not a list:
+// which speaker was named first carries no meaning worth storing.
+func (r *Repo) SetItemAuthors(ctx context.Context, itemID int64, authorIDs []int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM discovery.item_authors WHERE item_id = $1 AND NOT (author_id = ANY($2))`,
+		itemID, authorIDs); err != nil {
+		return err
+	}
+	for _, id := range authorIDs {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO discovery.item_authors (item_id, author_id) VALUES ($1,$2)
+			 ON CONFLICT DO NOTHING`, itemID, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }

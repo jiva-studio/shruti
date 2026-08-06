@@ -11,9 +11,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -141,11 +143,13 @@ func (c *Client) attempt(ctx context.Context, body []byte, want int) ([][]float3
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-		return nil, true, fmt.Errorf("embed: http %d", resp.StatusCode)
-	}
 	if resp.StatusCode >= 400 {
-		return nil, false, fmt.Errorf("embed: http %d", resp.StatusCode)
+		// The provider usually says which thing is wrong — the model name, the
+		// dimension, the quota — and those are precisely the mistakes this call
+		// surfaces. "http 400" on its own sends somebody reading code instead
+		// of the sentence that was already written for them.
+		retry := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+		return nil, retry, fmt.Errorf("embed: http %d: %s", resp.StatusCode, said(resp.Body))
 	}
 
 	var decoded response
@@ -178,4 +182,20 @@ func (c *Client) attempt(ctx context.Context, body []byte, want int) ([][]float3
 		vecs[i] = d.Embedding
 	}
 	return vecs, false, nil
+}
+
+// said is whatever the provider put in the body of a refusal, as its own error
+// message where it wrote one and as raw text otherwise. Bounded, because an
+// error is going into a log line and not everything answering on this address
+// is the provider.
+func said(r io.Reader) string {
+	raw, err := io.ReadAll(io.LimitReader(r, 4<<10))
+	if err != nil || len(raw) == 0 {
+		return "no message"
+	}
+	var decoded response
+	if err := json.Unmarshal(raw, &decoded); err == nil && decoded.Error != nil && decoded.Error.Message != "" {
+		return decoded.Error.Message
+	}
+	return strings.TrimSpace(string(raw))
 }

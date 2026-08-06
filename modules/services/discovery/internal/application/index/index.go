@@ -12,20 +12,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/normalize"
+	"github.com/jiva-studio/lectorium/discovery/internal/application/script"
 	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 	"github.com/jiva-studio/lectorium/discovery/internal/extract"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
+	"github.com/jiva-studio/lectorium/discovery/internal/metrics"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
 )
 
 // Fetcher is the polite HTTP client, narrowed to what indexing needs.
 type Fetcher interface {
 	Get(ctx context.Context, url string, req fetch.Request) (*fetch.Response, error)
+	Allowed(ctx context.Context, url string) bool
 }
 
 // Embedder turns text into vectors. Nil leaves items stored but unsearchable
@@ -41,7 +45,11 @@ type Service struct {
 	Normalizer normalize.Normalizer
 	Embedder   Embedder
 	Repo       *store.Repo
-	Now        func() time.Time
+	Scripts    *script.Runner
+	// Metrics is what this process has done, for the status endpoint. Nil is a
+	// service that keeps no count, which is what the single-URL CLI is.
+	Metrics *metrics.Counters
+	Now     func() time.Time
 }
 
 func (s *Service) now() time.Time {
@@ -57,19 +65,24 @@ type Report struct {
 	// FinalURL is where the request actually landed. A host that redirects its
 	// apex to www serves every link under the name it redirected to, and a
 	// crawl that only knows the name it asked for rejects all of them.
-	FinalURL        string    `json:"final_url,omitempty"`
-	Status          int       `json:"status,omitempty"`
-	NotModified     bool      `json:"not_modified,omitempty"`
-	Unchanged       bool      `json:"unchanged,omitempty"`
-	PageID          int64     `json:"page_id,omitempty"`
-	ItemsFound      int       `json:"items_found"`
-	ItemsNew        int       `json:"items_new"`
-	ItemsNormalized int       `json:"items_normalized"`
-	ChunksIndexed   int       `json:"chunks_indexed"`
-	MediaVanished   int       `json:"media_vanished,omitempty"`
-	Collection      string    `json:"collection,omitempty"`
-	Links           []string  `json:"-"`
-	NextCheckAt     time.Time `json:"next_check_at"`
+	FinalURL        string `json:"final_url,omitempty"`
+	Status          int    `json:"status,omitempty"`
+	NotModified     bool   `json:"not_modified,omitempty"`
+	Unchanged       bool   `json:"unchanged,omitempty"`
+	PageID          int64  `json:"page_id,omitempty"`
+	ItemsFound      int    `json:"items_found"`
+	ItemsNew        int    `json:"items_new"`
+	ItemsNormalized int    `json:"items_normalized"`
+	ChunksIndexed   int    `json:"chunks_indexed"`
+	// ItemsFromScript is how many files the source's own script accounted for
+	// in full, and which therefore cost no model call.
+	ItemsFromScript int `json:"items_from_script,omitempty"`
+	// AskedWhy counts, by reason, the files the script handed to the model.
+	AskedWhy      map[string]int `json:"asked_why,omitempty"`
+	MediaVanished int            `json:"media_vanished,omitempty"`
+	Collection    string         `json:"collection,omitempty"`
+	Links         []string       `json:"-"`
+	NextCheckAt   time.Time      `json:"next_check_at"`
 }
 
 // Item fetches one URL and stores everything it yielded.
@@ -98,12 +111,13 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	}
 	if src != nil {
 		req.Headers = src.AuthHeaders
+		req.Tool = src.Fetcher
 		req.MinDelay = time.Duration(src.CrawlDelayMS) * time.Millisecond
 	}
 
 	resp, err := s.Fetcher.Get(ctx, rawURL, req)
 	if err != nil {
-		return nil, s.recordFailure(ctx, page, rawURL, sourceID, err, now)
+		return nil, s.recordFailure(ctx, page, src, rawURL, sourceID, err, now)
 	}
 	report.Status = resp.Status
 	report.FinalURL = resp.URL
@@ -119,12 +133,39 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	}
 
 	if resp.NotModified && !force {
-		return report, s.recordUnchanged(ctx, page, report, now)
+		s.Metrics.Page(true, 0, 0, 0)
+		return report, s.recordUnchanged(ctx, page, src, report, now)
 	}
 
 	extraction, err := extract.Parse(resp.Body, resp.ContentType, resp.URL)
 	if err != nil {
-		return nil, s.recordFailure(ctx, page, rawURL, sourceID, err, now)
+		return nil, s.recordFailure(ctx, page, src, rawURL, sourceID, err, now)
+	}
+	// A source read by an external reader carries neither links nor files as
+	// such: a channel arrives as a list of ids, and a video page is itself the
+	// recording. Both are knowledge about that site.
+	if s.Scripts != nil && s.Scripts.Has(sourceID) {
+		page := script.Page{
+			URL: resp.URL, Text: string(resp.Body), HTML: string(resp.Body),
+			Path: pathSegments(resp.URL),
+		}
+		// A script that says where a page points replaces what flattening found
+		// rather than adding to it. The reader's output is full of addresses
+		// that are not pages — thumbnails, caption tracks, stream formats — and
+		// a crawl that follows them spends its budget being turned away by
+		// robots.txt.
+		if links, err := s.Scripts.Links(ctx, sourceID, page); err != nil {
+			slog.WarnContext(ctx, "script_links_failed", "source", sourceID, "err", err.Error())
+		} else if links.Answered {
+			extraction.Links = links.URLs
+		}
+		if own, err := s.Scripts.Recordings(ctx, sourceID, page); err != nil {
+			slog.WarnContext(ctx, "script_recordings_failed", "source", sourceID, "err", err.Error())
+		} else {
+			for _, u := range own.URLs {
+				extraction.Items = append(extraction.Items, domain.Item{MediaURL: u, PageURL: resp.URL})
+			}
+		}
 	}
 	report.Links = extraction.Links
 	report.ItemsFound = len(extraction.Items)
@@ -142,31 +183,76 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 		page.ItemSetSHA256 == itemSet &&
 		page.NormPromptVersion == s.promptVersion()
 	if unchanged && !force {
-		return report, s.recordUnchanged(ctx, page, report, now)
+		s.Metrics.Page(true, 0, 0, 0)
+		return report, s.recordUnchanged(ctx, page, src, report, now)
 	}
 
-	pageID, err := s.savePage(ctx, page, resp, sourceID, itemSet, len(extraction.Items), now, report)
+	pageID, err := s.savePage(ctx, page, resp, src, sourceID, len(extraction.Items), now, report)
 	if err != nil {
 		return nil, err
 	}
 	report.PageID = pageID
 
-	if err := s.storeItems(ctx, extraction, pageID, sourceID, force, now, report); err != nil {
+	if err := s.record(ctx, extraction, pageID, sourceID, resp.Body, force, now, report); err != nil {
+		return nil, s.recordFailure(ctx, page, src, resp.URL, sourceID, err, now)
+	}
+
+	// Only now may the page say it has been read. Until this write lands, its
+	// validators are whatever the last complete pass left, so the next visit
+	// finds them stale and does the work again.
+	if err := s.Repo.MarkPageIndexed(ctx, pageID, resp.BodySHA256, itemSet, s.promptVersion()); err != nil {
 		return nil, err
 	}
-	if err := s.markVanished(ctx, extraction, pageID, now, report); err != nil {
-		return nil, err
-	}
-	if err := s.storeSeries(ctx, pageID, extraction.Links, len(extraction.Items),
-		extraction.PageTitle, extraction.PageText, sourceID, report); err != nil {
-		return nil, err
-	}
+	s.recordSpend(ctx, sourceID)
+	s.Metrics.Page(report.Unchanged, report.ItemsNew, report.ItemsNormalized, report.ChunksIndexed)
 	return report, nil
+}
+
+// recordSpend keeps what the model calls for this page cost.
+//
+// A failure to write it is not a failure to index: the recording is stored and
+// the bill arrives regardless, so this complains and carries on.
+func (s *Service) recordSpend(ctx context.Context, sourceID string) {
+	if s.Normalizer == nil {
+		return
+	}
+	for _, sp := range s.Normalizer.Spent() {
+		row := store.Spend{SourceID: sourceID, Kind: "normalize", Model: sp.Model, Items: sp.Items}
+		if sp.Reported {
+			in, out, cost := sp.TokensIn, sp.TokensOut, sp.CostUSD
+			row.TokensIn, row.TokensOut, row.CostUSD = &in, &out, &cost
+		}
+		s.Metrics.Spend(sp.CostUSD)
+		if err := s.Repo.RecordSpend(ctx, row); err != nil {
+			slog.WarnContext(ctx, "spend_not_recorded", "source", sourceID, "err", err.Error())
+		}
+	}
 }
 
 // minSeriesParts is the fewest recordings a cycle can be made of. One is not a
 // series; it is a page with a recording on it.
 const minSeriesParts = 2
+
+// fetchable drops the addresses robots.txt puts out of bounds.
+//
+// This is why they are dropped before they are stored rather than before they
+// are fetched: page_links is where the crawl picks up work it has not done, and
+// an address we may never fetch stays unvisited forever. One page of a video
+// site links to three hundred caption endpoints under a forbidden path; stored,
+// they crowd every later run out of its own budget while the run reports that
+// the site refused it.
+func (s *Service) fetchable(ctx context.Context, links []string) []string {
+	if s.Fetcher == nil || len(links) == 0 {
+		return links
+	}
+	out := make([]string, 0, len(links))
+	for _, u := range links {
+		if s.Fetcher.Allowed(ctx, u) {
+			out = append(out, u)
+		}
+	}
+	return out
+}
 
 // storeSeries records what a page pointed at, and asks whether a page that
 // offered no audio presents a cycle. Links are kept for every page: they are
@@ -184,6 +270,7 @@ const minSeriesParts = 2
 func (s *Service) storeSeries(ctx context.Context, pageID int64, links []string,
 	mediaFound int, pageTitle, pageText, sourceID string, report *Report) error {
 
+	links = s.fetchable(ctx, links)
 	if len(links) > 0 {
 		if err := s.Repo.ReplacePageLinks(ctx, pageID, links); err != nil {
 			return err
@@ -205,20 +292,22 @@ func (s *Service) storeSeries(ctx context.Context, pageID int64, links []string,
 	if err != nil {
 		return err
 	}
+	// Everything below reads the page. A row that has gone — deleted while the
+	// visit was in flight — is not worth failing the page for, but it is not
+	// something to walk into either.
+	if page == nil {
+		return nil
+	}
 
 	// A cycle this page already defines absorbs any that its parts built by
 	// name in the meantime. That is a join, not a judgement, so it does not
 	// wait on asking the model anything — a duplicate appearing later would
 	// otherwise sit there until the page happened to be asked again.
-	if page != nil {
-		known, err := s.Repo.CollectionByURL(ctx, sourceID, page.URL)
-		if err != nil {
+	if defined, err := s.Repo.CollectionByURL(ctx, sourceID, page.URL); err != nil {
+		return err
+	} else if defined != nil {
+		if err := s.Repo.AbsorbByTitle(ctx, defined.ID, sourceID, defined.Title, defined.Author); err != nil {
 			return err
-		}
-		if known != nil {
-			if err := s.Repo.AbsorbByTitle(ctx, known.ID, sourceID, known.Title, known.Author); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -226,7 +315,7 @@ func (s *Service) storeSeries(ctx context.Context, pageID int64, links []string,
 	if err != nil {
 		return err
 	}
-	if known < minSeriesParts || (page != nil && known <= page.SeriesLinksSeen) {
+	if known < minSeriesParts || known <= page.SeriesLinksSeen {
 		return nil
 	}
 	if err := s.Repo.SetSeriesLinksSeen(ctx, pageID, known); err != nil {
@@ -311,23 +400,29 @@ func (s *Service) promptVersion() string {
 	return s.Normalizer.PromptVersion()
 }
 
+// savePage records the visit, but not the proof that it succeeded.
+//
+// The three validators — the hash of the body, the hash of the file set, and
+// the prompt version — are deliberately left empty here and written by
+// MarkPageIndexed once the recordings are stored. SavePage coalesces an empty
+// validator to whatever is already in the row, so an attempt that fails leaves
+// the last complete pass's proof intact rather than replacing it with a claim
+// this attempt did not earn.
 func (s *Service) savePage(ctx context.Context, page *store.Page, resp *fetch.Response,
-	sourceID, itemSet string, mediaFound int, now time.Time, report *Report) (int64, error) {
+	src *store.Source, sourceID string, mediaFound int, now time.Time, report *Report) (int64, error) {
 
-	next := NextCheck(0, now)
+	min, max := recheckBounds(src)
+	next := NextCheck(0, min, max, now)
 	report.NextCheckAt = next
 	p := &store.Page{
 		URL:                  resp.URL,
 		ETag:                 resp.ETag,
 		LastModified:         resp.LastModified,
-		BodySHA256:           resp.BodySHA256,
-		ItemSetSHA256:        itemSet,
 		HTTPStatus:           resp.Status,
 		LastFetchedAt:        &now,
 		LastChangedAt:        &now,
 		ConsecutiveUnchanged: 0,
 		NextCheckAt:          &next,
-		NormPromptVersion:    s.promptVersion(),
 		MediaFound:           mediaFound,
 	}
 	if page != nil {
@@ -341,15 +436,20 @@ func (s *Service) savePage(ctx context.Context, page *store.Page, resp *fetch.Re
 
 // recordUnchanged notes that a visit found nothing new and pushes the next one
 // further out.
-func (s *Service) recordUnchanged(ctx context.Context, page *store.Page, report *Report, now time.Time) error {
+func (s *Service) recordUnchanged(ctx context.Context, page *store.Page, src *store.Source,
+	report *Report, now time.Time) error {
+
 	report.NotModified = true
 	report.Unchanged = true
 	if page == nil {
 		return nil
 	}
 	page.ConsecutiveUnchanged++
+	// A visit that answered is not a failure, whatever the last one was.
+	page.ConsecutiveFailures = 0
 	page.LastFetchedAt = &now
-	next := NextCheck(page.ConsecutiveUnchanged, now)
+	min, max := recheckBounds(src)
+	next := NextCheck(page.ConsecutiveUnchanged, min, max, now)
 	page.NextCheckAt = &next
 	page.Error = ""
 	report.NextCheckAt = next
@@ -362,6 +462,16 @@ func (s *Service) recordUnchanged(ctx context.Context, page *store.Page, report 
 	return s.storeSeries(ctx, page.ID, nil, page.MediaFound, "", "", sourceIDOf(page), report)
 }
 
+// recheckBounds is how often this source wants its pages read again. A source
+// we know nothing about gets the service defaults rather than no bound at all.
+func recheckBounds(src *store.Source) (time.Duration, time.Duration) {
+	if src == nil {
+		return DefaultRecheckMin, DefaultRecheckMax
+	}
+	return time.Duration(src.RecheckMinS) * time.Second,
+		time.Duration(src.RecheckMaxS) * time.Second
+}
+
 func sourceIDOf(p *store.Page) string {
 	if p == nil || p.SourceID == nil {
 		return ""
@@ -371,13 +481,25 @@ func sourceIDOf(p *store.Page) string {
 
 // recordFailure stores why a page could not be read, so a persistent problem
 // is visible instead of showing up as a page that simply never updates.
-func (s *Service) recordFailure(ctx context.Context, page *store.Page, url, sourceID string, cause error, now time.Time) error {
-	next := RetryAt(now)
+func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *store.Source,
+	url, sourceID string, cause error, now time.Time) error {
+
+	s.Metrics.Failure(fetch.Kind(cause))
+	fails := 1
+	if page != nil {
+		fails = page.ConsecutiveFailures + 1
+	}
+	// The retry backs off the same way a page that never changes does, and
+	// stops at the source's own ceiling. An address that has been gone for
+	// years is not worth asking for twenty four times a day.
+	_, max := recheckBounds(src)
+	next := RetryAt(fails, max, now)
 	p := &store.Page{
-		URL:           url,
-		Error:         cause.Error(),
-		LastFetchedAt: &now,
-		NextCheckAt:   &next,
+		URL:                 url,
+		Error:               cause.Error(),
+		LastFetchedAt:       &now,
+		NextCheckAt:         &next,
+		ConsecutiveFailures: fails,
 	}
 	if page != nil {
 		p.ID = page.ID
@@ -393,14 +515,32 @@ func (s *Service) recordFailure(ctx context.Context, page *store.Page, url, sour
 	return cause
 }
 
+// record writes everything the page yielded.
+//
+// The three steps are gathered here so that a failure in any of them takes one
+// path out of Item: the page is marked failed, and the proof that it was read
+// is not written.
+func (s *Service) record(ctx context.Context, e *domain.Extraction, pageID int64,
+	sourceID string, body []byte, force bool, now time.Time, report *Report) error {
+
+	if err := s.storeItems(ctx, e, pageID, sourceID, body, force, now, report); err != nil {
+		return err
+	}
+	if err := s.markVanished(ctx, e, pageID, now, report); err != nil {
+		return err
+	}
+	return s.storeSeries(ctx, pageID, e.Links, len(e.Items), e.PageTitle, e.PageText, sourceID, report)
+}
+
 // storeItems writes every file the page offered, normalizing and embedding
 // only the ones whose input actually changed.
 func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID int64,
-	sourceID string, force bool, now time.Time, report *Report) error {
+	sourceID string, body []byte, force bool, now time.Time, report *Report) error {
 
 	if len(e.Items) == 0 {
 		return nil
 	}
+	fromScript := s.runScript(ctx, e, sourceID, body)
 	batch := normalize.BatchFor(e)
 	version, model := "", ""
 	if s.Normalizer != nil {
@@ -426,6 +566,42 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 	}
 
 	results := make([]normalize.Result, len(e.Items))
+	// What the script settled is settled. A file it accounted for in full is
+	// dropped from the model's work: the call is the cost, and there is nothing
+	// left to ask about.
+	var pending []chunkWork
+	// fresh are the files this pass has an answer for, from whichever side.
+	// Both count: a file the script settled is as freshly known as one the
+	// model just read, and treating only the model's as fresh would store the
+	// script's work nowhere.
+	fresh := map[int]bool{}
+	// settled are the files no model was asked about.
+	settled := map[int]bool{}
+	// reasons record what stopped the script on the rest.
+	reasons := map[int][]string{}
+	// texts are the prose an archive published about a recording — one entry per
+	// language, because a source that writes its own subtitles writes them in
+	// every language it has a translator for.
+	texts := map[int][]script.Text{}
+	var ask []int
+	for _, i := range todo {
+		f, ok := fromScript[e.Items[i].MediaURL]
+		if !ok {
+			ask = append(ask, i)
+			continue
+		}
+		results[i] = scriptResult(f)
+		texts[i] = f.Words()
+		fresh[i] = true
+		if f.Complete {
+			settled[i] = true
+			report.ItemsFromScript++
+			continue
+		}
+		reasons[i] = f.Reasons
+		ask = append(ask, i)
+	}
+	todo = ask
 	if len(todo) > 0 {
 		sub := normalize.Batch{PageURL: batch.PageURL, PageTitle: batch.PageTitle}
 		for _, i := range todo {
@@ -439,29 +615,45 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 			return fmt.Errorf("normalizer returned %d results for %d files", len(got), len(todo))
 		}
 		for n, i := range todo {
+			// The model's answer wins outright. A recording reaches it only
+			// because the script declared it could not read the line, and a
+			// parse its own author calls unreliable is not something to keep
+			// half of: keeping it stored "Glories of Srimati rani" over the
+			// model's correct reading.
 			results[i] = got[n]
 		}
 		report.ItemsNormalized = len(todo)
 	}
 
-	reindex := map[int]bool{}
 	for _, i := range todo {
-		reindex[i] = true
+		fresh[i] = true
 	}
 
 	for i, extracted := range e.Items {
 		item, err := s.buildItem(extracted, existing[i], results[i], hashes[i],
-			reindex[i], pageID, sourceID, version, model, now)
+			fresh[i], settled[i], pageID, sourceID, version, model, now)
 		if err != nil {
 			return err
 		}
-		// The written name is resolved to a person before the recording is
-		// stored.
-		if item.AuthorID, err = s.Repo.ResolveAuthor(ctx, item.Author); err != nil {
-			return err
-		}
+		item.NormReasons = reasons[i]
 		isNew, err := s.Repo.SaveItem(ctx, item)
 		if err != nil {
+			return err
+		}
+		// The written name is resolved to a person, and the recording is linked
+		// to them. More than one speaker is ordinary: a conversation, a joint
+		// class, a festival lecture given by four people in turn.
+		var authorIDs []int64
+		for _, name := range item.Authors {
+			id, err := s.Repo.ResolveAuthor(ctx, name)
+			if err != nil {
+				return err
+			}
+			if id != 0 {
+				authorIDs = append(authorIDs, id)
+			}
+		}
+		if err := s.Repo.SetItemAuthors(ctx, item.ID, authorIDs); err != nil {
 			return err
 		}
 		if err := s.Repo.ReplaceItemRefs(ctx, item.ID, item.References); err != nil {
@@ -472,18 +664,43 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		}
 		if isNew {
 			report.ItemsNew++
-			reindex[i] = true
+			fresh[i] = true
 		}
-		if !reindex[i] && !force {
+		if !fresh[i] && !force {
 			continue
 		}
-		n, err := s.indexChunks(ctx, item, extracted, pageID, sourceID)
-		if err != nil {
+		if err := s.Repo.ReplaceItemTexts(ctx, item.ID, store.ChunkPageText, itemTexts(texts[i])); err != nil {
 			return err
 		}
-		report.ChunksIndexed += n
+		pending = append(pending, chunkWork{item: item, extracted: extracted, texts: texts[i]})
 	}
+
+	n, err := s.indexChunks(ctx, pending, sourceID)
+	if err != nil {
+		return err
+	}
+	report.ChunksIndexed += n
 	return nil
+}
+
+// chunkWork is one recording waiting to be embedded, held back so that a whole
+// page goes to the embedder at once.
+type chunkWork struct {
+	item      *store.Item
+	extracted domain.Item
+	// texts is prose the archive published, already Markdown, one per language.
+	texts []script.Text
+}
+
+// itemTexts turns what a script said into what the store keeps. The two types
+// stay apart on purpose: one is the vocabulary a script writes in, the other is
+// a table.
+func itemTexts(texts []script.Text) []store.ItemText {
+	out := make([]store.ItemText, 0, len(texts))
+	for _, t := range texts {
+		out = append(out, store.ItemText{Lang: t.Lang, Text: t.Text})
+	}
+	return out
 }
 
 // linkCollection joins a recording to its cycle from whichever side is
@@ -525,8 +742,12 @@ func (s *Service) linkCollection(ctx context.Context, item *store.Item, pageURL,
 
 // buildItem merges what extraction found with what the normalizer said,
 // falling back to what we already knew when nothing was re-normalized.
+// scriptSource is what stands where a model's name would, for a recording the
+// source's own script accounted for.
+const scriptSource = "script"
+
 func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result normalize.Result,
-	hash string, normalized bool, pageID int64, sourceID, version, model string, seenAt time.Time) (*store.Item, error) {
+	hash string, normalized, byScript bool, pageID int64, sourceID, version, model string, seenAt time.Time) (*store.Item, error) {
 
 	raw, err := json.Marshal(extracted)
 	if err != nil {
@@ -550,15 +771,30 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 	switch {
 	case normalized:
 		item.CollectionTitle = result.CollectionTitle
-		item.Title, item.Author, item.Location = result.Title, result.Author, result.Location
+		item.Title, item.Author = result.Title, result.Author
+		item.Authors = result.Authors
+		if len(item.Authors) == 0 && item.Author != "" {
+			item.Authors = []string{item.Author}
+		}
+		// The model writes a location the way the page did — "ISKCON Chennai" —
+		// and the organisation is no more part of the place than a form of
+		// address is part of a name.
+		item.Location = domain.Place(result.Location)
 		item.Language, item.DurationS = result.Language, result.DurationS
 		item.RecordedOn = parseDate(result.Date)
 		item.References = result.References
 		item.NormInputSHA256, item.NormPromptVersion, item.NormModel = hash, version, model
+		if byScript {
+			// Nothing was asked of a model, so nothing names one. Recording the
+			// configured model here would put a cost against a call that never
+			// happened.
+			item.NormModel, item.NormPromptVersion = scriptSource, ""
+		}
 		item.Status = store.StatusNormalized
 	case prior != nil:
 		item.CollectionTitle = prior.CollectionTitle
 		item.Title, item.Author, item.Location = prior.Title, prior.Author, prior.Location
+		item.Authors = prior.Authors
 		item.Language, item.DurationS, item.RecordedOn = prior.Language, prior.DurationS, prior.RecordedOn
 		item.References = prior.References
 		item.NormInputSHA256 = prior.NormInputSHA256
@@ -568,84 +804,123 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 	return item, nil
 }
 
-// indexChunks re-embeds one item's searchable text.
+// indexChunks embeds what is searchable about a page's recordings, in one
+// request for the whole page and skipping whatever has been embedded before.
 //
-// The first chunk is the metadata line — speaker, place, date, reference —
-// because that is what people actually search for, and it appears nowhere in
-// the page prose on a file listing.
-func (s *Service) indexChunks(ctx context.Context, item *store.Item, extracted domain.Item,
-	pageID int64, sourceID string) (int, error) {
-
-	if s.Embedder == nil {
-		return 0, nil
-	}
-	texts := []string{}
-	if line := metadataLine(item, extracted); line != "" {
-		texts = append(texts, line)
-	}
-	texts = append(texts, Chunks(extracted.ContextText)...)
-	if len(texts) == 0 {
+// Only the title. The speaker, the date and the references are exact filters
+// living in columns, and folding them into the vector only blurs what it is
+// about; the text around a link on a file listing is the site's menu and the
+// names of the neighbouring files.
+//
+// A page of forty nine files was making forty nine round trips of a few seconds
+// each, so a page needing one model call took three minutes. The embedder takes
+// a list and always did.
+func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID string) (int, error) {
+	if s.Embedder == nil || len(work) == 0 {
 		return 0, nil
 	}
 
-	vectors, err := s.Embedder.Embed(ctx, texts)
+	// One page repeats a title many times — one listing carried twenty nine
+	// "Hare Krishna Kirtan" — so the same words are embedded once.
+	// Everything this page wants embedded, in order, with the repeats taken out:
+	// one listing carried twenty nine "Hare Krishna Kirtan".
+	plan := make([][]store.Chunk, len(work))
+	var wanted []string
+	seen := map[string]bool{}
+	want := func(text string) {
+		if text == "" || seen[text] {
+			return
+		}
+		seen[text] = true
+		wanted = append(wanted, text)
+	}
+	for i, w := range work {
+		if title := strings.TrimSpace(w.item.Title); title != "" {
+			plan[i] = append(plan[i], store.Chunk{
+				ItemID: w.item.ID, Kind: store.ChunkTitle,
+				Lang: w.item.Language, Text: title,
+			})
+			want(title)
+		}
+		// Each language is cut up separately and its pieces carry its name, so a
+		// hit can say which transcript it came from. The ordinal restarts per
+		// language: it places a piece within its own text, and running it on
+		// across two languages would say a Russian passage follows an English
+		// one, which is not a thing that happened.
+		for _, text := range w.texts {
+			for n, part := range Chunks(text.Text) {
+				plan[i] = append(plan[i], store.Chunk{
+					ItemID: w.item.ID, Kind: store.ChunkPageText,
+					Lang: text.Lang, Ordinal: n, Text: part,
+				})
+				want(part)
+			}
+		}
+	}
+	if len(wanted) == 0 {
+		return 0, nil
+	}
+
+	model := s.Embedder.Model()
+	vectors, err := s.Repo.CachedEmbeddings(ctx, model, wanted)
 	if err != nil {
 		return 0, err
 	}
-	role := string(extracted.TextRole)
-	if role == "" {
-		role = string(domain.TextShared)
+	if vectors == nil {
+		vectors = map[string][]float32{}
 	}
 
-	chunks := make([]store.Chunk, len(texts))
-	for i := range texts {
-		c := store.Chunk{
-			ItemID:    &item.ID,
-			PageID:    &pageID,
-			Language:  item.Language,
-			Role:      role,
-			Ordinal:   i,
-			Text:      texts[i],
-			Embedding: vectors[i],
+	var missing []string
+	for _, text := range wanted {
+		if _, ok := vectors[text]; !ok {
+			missing = append(missing, text)
 		}
-		if sourceID != "" {
-			c.SourceID = &sourceID
+	}
+	if len(missing) > 0 {
+		got, err := s.Embedder.Embed(ctx, missing)
+		if err != nil {
+			return 0, err
 		}
-		chunks[i] = c
+		if len(got) != len(missing) {
+			return 0, fmt.Errorf("embedder returned %d vectors for %d texts", len(got), len(missing))
+		}
+		fresh := make(map[string][]float32, len(missing))
+		for i, text := range missing {
+			vectors[text] = got[i]
+			fresh[text] = got[i]
+		}
+		if err := s.Repo.SaveEmbeddings(ctx, model, fresh); err != nil {
+			return 0, err
+		}
+		// Embedding was billed and counted nowhere: the spend table and the
+		// status figure both held the normalizer only, so the reported cost was
+		// short by however much of the corpus had been vectorised. The
+		// providers here do not report usage on this call, so what is kept is
+		// the count of texts actually paid for — the ones the cache did not
+		// already have — and not a made-up price.
+		s.Metrics.Embedded(len(missing))
+		if err := s.Repo.RecordSpend(ctx, store.Spend{
+			SourceID: sourceID, Kind: "embed", Model: model, Items: len(missing),
+		}); err != nil {
+			slog.WarnContext(ctx, "embed_spend_not_recorded", "source", sourceID, "err", err.Error())
+		}
 	}
-	if err := s.Repo.ReplaceItemChunks(ctx, item.ID, chunks); err != nil {
-		return 0, err
+
+	total := 0
+	for i, w := range work {
+		for n := range plan[i] {
+			plan[i][n].Embedding = vectors[plan[i][n].Text]
+		}
+		// A recording the archive never named and wrote nothing about keeps no
+		// chunks at all. It is still found by its speaker, its date and the
+		// verses it covers.
+		if err := s.Repo.ReplaceItemChunks(ctx, w.item.ID, plan[i]); err != nil {
+			return total, err
+		}
+		total += len(plan[i])
 	}
-	return len(chunks), nil
+	return total, nil
 }
-
-func metadataLine(item *store.Item, extracted domain.Item) string {
-	parts := []string{}
-	for _, v := range []string{item.Title, item.Author, item.Location} {
-		if v != "" {
-			parts = append(parts, v)
-		}
-	}
-	if item.RecordedOn != nil {
-		parts = append(parts, item.RecordedOn.Format("2006-01-02"))
-	}
-	for i, ref := range item.References {
-		if i == refsInLine {
-			parts = append(parts, fmt.Sprintf("+%d more", len(item.References)-refsInLine))
-			break
-		}
-		parts = append(parts, ref.Label())
-	}
-	if len(parts) == 0 {
-		parts = append(parts, extracted.Filename)
-	}
-	return strings.Join(parts, " — ")
-}
-
-// refsInLine caps how many passages go into the embedded line. A talk on a
-// whole chapter expands to every verse in it, and the vector would say more
-// about the range than about the talk. All of them are still stored.
-const refsInLine = 3
 
 func parseDate(s string) *time.Time {
 	if s == "" {

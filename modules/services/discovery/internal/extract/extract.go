@@ -31,7 +31,6 @@ func Parse(raw []byte, contentType, pageURL string) (*domain.Extraction, error) 
 	}
 	out.URL = pageURL
 	out.FetchedAt = time.Now().UTC()
-	assignTextRole(out)
 	return out, nil
 }
 
@@ -41,19 +40,4 @@ func isJSON(contentType string, raw []byte) bool {
 	}
 	trimmed := strings.TrimLeft(string(raw[:min(len(raw), 64)]), " \t\r\n")
 	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
-}
-
-// assignTextRole records how specific the page text is to each item: a page
-// carrying one recording describes it, a page carrying ten carries something
-// they share.
-func assignTextRole(e *domain.Extraction) {
-	switch len(e.Items) {
-	case 0:
-	case 1:
-		e.Items[0].TextRole = domain.TextCanonical
-	default:
-		for i := range e.Items {
-			e.Items[i].TextRole = domain.TextShared
-		}
-	}
 }

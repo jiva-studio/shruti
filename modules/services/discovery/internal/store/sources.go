@@ -18,6 +18,10 @@ type Source struct {
 	SeedURLs     []string `json:"seed_urls"`
 	Enabled      bool     `json:"enabled"`
 	CrawlDelayMS int      `json:"crawl_delay_ms"`
+	// CrawlWorkers is how many of this source's pages may be in flight at once.
+	CrawlWorkers int `json:"crawl_workers"`
+	// Fetcher names the reader this source needs. Empty is an ordinary request.
+	Fetcher string `json:"fetcher,omitempty"`
 	// MaxDepth bounds how far from the seed a crawl will follow links. Zero,
 	// the default, means no bound.
 	//
@@ -30,14 +34,36 @@ type Source struct {
 	// truncates an archive.
 	MaxDepth int `json:"max_depth"`
 
+	// RecheckMinS and RecheckMaxS bound how often a page of this source is read
+	// again. Seconds, because that is what an operator types into a config file
+	// and what the column holds; the schedule turns them into durations.
+	RecheckMinS int `json:"recheck_min_s"`
+	RecheckMaxS int `json:"recheck_max_s"`
+
 	// AuthHeaders are sent with every request to this source. They are
 	// credentials: never returned by the API, only set.
 	AuthHeaders map[string]string `json:"auth_headers,omitempty"`
+
+	// HasCredentials is derived, not stored. Sources deliberately does not read
+	// the headers themselves — a listing has no business holding a set of
+	// credentials in memory — but whether a source has any is worth showing.
+	HasCredentials bool `json:"-"`
 }
 
 func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
+	if s.CrawlWorkers <= 0 {
+		s.CrawlWorkers = 2
+	}
 	if s.CrawlDelayMS <= 0 {
 		s.CrawlDelayMS = 1000
+	}
+	// The same numbers the column defaults carry, for a source built in Go
+	// rather than inserted by hand. See migration 0001.
+	if s.RecheckMinS <= 0 {
+		s.RecheckMinS = 24 * 60 * 60
+	}
+	if s.RecheckMaxS < s.RecheckMinS {
+		s.RecheckMaxS = max(30*24*60*60, s.RecheckMinS)
 	}
 	// A nil map marshals to `null`, not `{}`, and the clause below only
 	// recognised `{}` — so saving a source without its credentials silently
@@ -50,18 +76,21 @@ func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
 		}
 	}
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO discovery.sources (id, title, seed_urls, enabled, crawl_delay_ms, max_depth, auth_headers)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		INSERT INTO discovery.sources (id, title, seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher, recheck_min_s, recheck_max_s)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		ON CONFLICT (id) DO UPDATE SET
 			title = EXCLUDED.title, seed_urls = EXCLUDED.seed_urls,
 			enabled = EXCLUDED.enabled, crawl_delay_ms = EXCLUDED.crawl_delay_ms,
+			crawl_workers = EXCLUDED.crawl_workers,
 			max_depth = EXCLUDED.max_depth,
+			recheck_min_s = EXCLUDED.recheck_min_s, recheck_max_s = EXCLUDED.recheck_max_s,
 			-- Empty headers leave the stored ones alone, so an ordinary edit
 			-- does not silently sign the source out.
-			auth_headers = CASE WHEN EXCLUDED.auth_headers = '{}'::jsonb
+			fetcher = EXCLUDED.fetcher, auth_headers = CASE WHEN EXCLUDED.auth_headers = '{}'::jsonb
 				THEN discovery.sources.auth_headers ELSE EXCLUDED.auth_headers END,
 			updated_at = now()`,
-		s.ID, s.Title, s.SeedURLs, s.Enabled, s.CrawlDelayMS, s.MaxDepth, headers)
+		s.ID, s.Title, s.SeedURLs, s.Enabled, s.CrawlDelayMS, s.CrawlWorkers, s.MaxDepth, headers, s.Fetcher,
+		s.RecheckMinS, s.RecheckMaxS)
 	return err
 }
 
@@ -69,9 +98,11 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 	var s Source
 	var headers []byte
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, max_depth, auth_headers
+		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher,
+		       recheck_min_s, recheck_max_s
 		FROM discovery.sources WHERE id = $1`, id,
-	).Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.MaxDepth, &headers)
+	).Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth, &headers, &s.Fetcher,
+		&s.RecheckMinS, &s.RecheckMaxS)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -81,12 +112,15 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 	if err := json.Unmarshal(headers, &s.AuthHeaders); err != nil {
 		return nil, err
 	}
+	s.HasCredentials = len(s.AuthHeaders) > 0
 	return &s, nil
 }
 
 func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, max_depth
+		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth,
+		       recheck_min_s, recheck_max_s,
+		       coalesce(auth_headers, '{}'::jsonb) <> '{}'::jsonb
 		FROM discovery.sources ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -96,7 +130,8 @@ func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	var out []Source
 	for rows.Next() {
 		var s Source
-		if err := rows.Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.MaxDepth); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth,
+			&s.RecheckMinS, &s.RecheckMaxS, &s.HasCredentials); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

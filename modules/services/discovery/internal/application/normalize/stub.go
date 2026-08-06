@@ -37,3 +37,6 @@ func titleFromFilename(name string) string {
 	base = strings.NewReplacer("_", " ", "-", " ", ".", " ").Replace(base)
 	return strings.Join(strings.Fields(base), " ")
 }
+
+// Spent is nothing: the stub calls no provider and is billed for none.
+func (Stub) Spent() []Spend { return nil }

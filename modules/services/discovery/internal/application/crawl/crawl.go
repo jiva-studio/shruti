@@ -9,21 +9,26 @@ package crawl
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/index"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/parse"
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
+	logpkg "github.com/jiva-studio/lectorium/discovery/internal/logging"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
 )
 
 // Fetcher is the polite HTTP client, narrowed to what enumeration needs.
 type Fetcher interface {
 	Get(ctx context.Context, url string, req fetch.Request) (*fetch.Response, error)
+	Allowed(ctx context.Context, url string) bool
 }
 
 // Service runs one source at a time.
@@ -56,6 +61,24 @@ type Options struct {
 	Limit int
 	// Full ignores the recheck schedule and sweeps from the seeds again.
 	Full bool
+	// Workers overrides the source's own setting for this pass.
+	Workers int
+	// Stop, once closed, means: finish the page in hand and take no more. It is
+	// not the context, and that is the point — cancelling the context aborts the
+	// writes that page is in the middle of, which is what shutting down
+	// gracefully is supposed to avoid.
+	Stop <-chan struct{}
+}
+
+// stopped reports whether a stop signal has been given. A nil channel never
+// has, so a caller that does not mean to stop anything passes nothing.
+func stopped(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
 }
 
 // defaultLimit is deliberately small. Widening it is a decision someone makes
@@ -66,31 +89,45 @@ const defaultLimit = 200
 // Often enough that a restart loses little, rarely enough to be free.
 const progressEvery = 25
 
-// Run walks a source and returns the run record.
+// Run walks a source and returns the run record. It is Begin and Resume in one,
+// for a caller that means to wait.
 func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*store.Run, error) {
-	if opts.Limit <= 0 {
-		opts.Limit = defaultLimit
-	}
-	run := &store.Run{DryRun: opts.DryRun, Errors: map[string]int{}}
-	if !opts.DryRun {
-		started, err := s.Repo.StartRun(ctx, src.ID, opts.DryRun)
-		if err != nil {
-			return nil, err
-		}
-		run = started
-	}
-
-	yields, err := s.Repo.ShapeYields(ctx, src.ID)
+	run, err := s.Begin(ctx, src, opts)
 	if err != nil {
 		return nil, err
 	}
+	return run, s.Resume(ctx, src, opts, run)
+}
+
+// Begin records that a pass is starting and returns it, so a caller that will
+// not be waiting has something to poll.
+func (s *Service) Begin(ctx context.Context, src *store.Source, opts Options) (*store.Run, error) {
+	if opts.DryRun {
+		return &store.Run{DryRun: true, Errors: map[string]int{}}, nil
+	}
+	return s.Repo.StartRun(ctx, src.ID, false)
+}
+
+// Resume does the walking. The run is filled in as it goes and written when it
+// finishes.
+func (s *Service) Resume(ctx context.Context, src *store.Source, opts Options, run *store.Run) error {
+	if opts.Limit <= 0 {
+		opts.Limit = defaultLimit
+	}
+	yields, err := s.Repo.ShapeYields(ctx, src.ID)
+	if err != nil {
+		return err
+	}
 	frontier := newFrontier(src.SeedURLs, src.MaxDepth, yields)
+	if s.Fetcher != nil {
+		frontier.mayFetch = func(u string) bool { return s.Fetcher.Allowed(ctx, u) }
+	}
 	// A full sweep is a deliberate request to ignore the schedule; an ordinary
 	// pass honours it, for links as much as for where it starts.
 	if !opts.Full {
 		notDue, err := s.Repo.NotDueURLs(ctx, src.ID, s.now())
 		if err != nil {
-			return nil, err
+			return err
 		}
 		frontier.setNotDue(notDue)
 	}
@@ -110,7 +147,7 @@ func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*st
 	if !opts.Full && !opts.DryRun {
 		due, err := s.Repo.DuePages(ctx, src.ID, s.now(), opts.Limit)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, p := range due {
 			frontier.add(p.URL, 0)
@@ -119,42 +156,112 @@ func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*st
 		// Those links come from the table rather than from fetching it again.
 		unvisited, err := s.Repo.UnvisitedLinks(ctx, src.ID, opts.Limit)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, u := range unvisited {
 			frontier.add(u, 0)
 		}
 	}
 
-	for attempts(run) < opts.Limit {
-		next, depth, ok := frontier.next()
-		if !ok {
-			break
-		}
-		if !opts.DryRun && attempts(run) > 0 && attempts(run)%progressEvery == 0 {
-			if err := s.Repo.SaveProgress(ctx, run); err != nil {
-				slog.WarnContext(ctx, "run_progress_not_saved", "run", run.ID, "err", err.Error())
-			}
-		}
-		if err := s.visit(ctx, next, depth, src, opts, run, frontier); err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				break
-			}
-			// The host has been dropped and will stay dropped for its
-			// cooldown. Carrying on would spend the rest of the budget on
-			// refusals in a few seconds and report them as pages fetched.
-			if errors.Is(err, fetch.ErrCircuitOpen) {
-				slog.WarnContext(ctx, "crawl_stopped_host_cooling_down",
-					"source", src.ID, "url", next, "pages_fetched", run.PagesFetched)
-				break
-			}
-		}
+	workers := src.CrawlWorkers
+	if opts.Workers > 0 {
+		workers = opts.Workers
+	}
+	if workers <= 0 {
+		workers = 1
+	}
+	s.walk(ctx, workers, src, opts, run, frontier)
+	if frontier.offLimits > 0 {
+		slog.InfoContext(ctx, "crawl_skipped_off_limits",
+			"source", src.ID, "addresses", frontier.offLimits)
 	}
 
 	if opts.DryRun {
-		return run, nil
+		return nil
 	}
-	return run, s.Repo.FinishRun(ctx, run)
+	// A pass cut short by shutdown is not a pass that finished. The row is left
+	// open on purpose: the next boot marks it interrupted, which is what
+	// happened. Closing it here would file a partial sweep as a complete one,
+	// and every page it never reached would look up to date.
+	if stopped(opts.Stop) {
+		return ErrStopped
+	}
+	return s.Repo.FinishRun(ctx, run)
+}
+
+// walk works the frontier with several pages in flight at once.
+//
+// The gap between requests is what bounds how hard a host is leaned on, and it
+// is enforced per host inside the fetcher; workers only stop us idling through
+// somebody else's round trip. A source with no gap at all is where they earn
+// their keep, because then nothing else limits the rate.
+//
+// The frontier and the run counters are shared, so both are held under one
+// lock: a queue ordered by what each shape has yielded is not something to
+// interleave unguarded.
+func (s *Service) walk(ctx context.Context, workers int, src *store.Source,
+	opts Options, run *store.Run, frontier *frontier) {
+
+	// halted ends the walk early when a host has dropped us. A channel rather
+	// than a cancelled context, for the same reason as Options.Stop: ending the
+	// walk must not abort the page another worker is in the middle of writing.
+	halted := make(chan struct{})
+	var once sync.Once
+	halt := func() { once.Do(func() { close(halted) }) }
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				if stopped(halted) || stopped(opts.Stop) || ctx.Err() != nil {
+					return
+				}
+				mu.Lock()
+				if attempts(run) >= opts.Limit {
+					mu.Unlock()
+					return
+				}
+				next, depth, ok := frontier.next()
+				if !ok {
+					mu.Unlock()
+					return
+				}
+				due := !opts.DryRun && attempts(run) > 0 && attempts(run)%progressEvery == 0
+				mu.Unlock()
+
+				if due {
+					if err := s.Repo.SaveProgress(ctx, run); err != nil {
+						slog.WarnContext(ctx, "run_progress_not_saved", "run", run.ID, "err", err.Error())
+					}
+				}
+
+				err := s.visit(ctx, next, depth, src, opts, run, frontier, &mu)
+				if err == nil {
+					continue
+				}
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return
+				}
+				// The host is not answering us and will not be for a while —
+				// either it has been dropped for its cooldown, or it never told
+				// us its rules. Carrying on would spend the rest of the budget
+				// on refusals in a few seconds, and every other worker is about
+				// to hit the same wall.
+				if errors.Is(err, fetch.ErrCircuitOpen) || errors.Is(err, fetch.ErrRobotsUnread) {
+					slog.WarnContext(ctx, "crawl_stopped_host_unavailable",
+						"source", src.ID, "url", next, "reason", errKind(err),
+						"pages_fetched", run.PagesFetched)
+					halt()
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 // visit processes one URL and folds the outcome into the run counters.
@@ -165,12 +272,26 @@ func (s *Service) Run(ctx context.Context, src *store.Source, opts Options) (*st
 // host — is a failure, not a page, and counting it would make a run that
 // fetched five pages report two hundred.
 func (s *Service) visit(ctx context.Context, rawURL string, depth int, src *store.Source,
-	opts Options, run *store.Run, frontier *frontier) error {
+	opts Options, run *store.Run, frontier *frontier, mu *sync.Mutex) (err error) {
+
+	// A panic reading one page is that page's failure, not the run's and not
+	// the process's. It is counted like any other so a document that keeps
+	// doing it is visible rather than silent.
+	defer func() {
+		if r := recover(); r != nil {
+			logpkg.Panicked(ctx, "crawl_visit", r)
+			mu.Lock()
+			defer mu.Unlock()
+			err = s.recordErr(ctx, run, rawURL, fmt.Errorf("panic: %v", r))
+		}
+	}()
 
 	if opts.DryRun {
 		layers, err := s.Parse.URL(ctx, rawURL, sourceRequest(src))
+		mu.Lock()
+		defer mu.Unlock()
 		if err != nil {
-			return s.recordErr(run, err)
+			return s.recordErr(ctx, run, rawURL, err)
 		}
 		run.PagesFetched++
 		run.ItemsFound += len(layers.Extracted.Items)
@@ -181,8 +302,10 @@ func (s *Service) visit(ctx context.Context, rawURL string, depth int, src *stor
 	}
 
 	report, err := s.Index.Item(ctx, rawURL, src.ID, opts.Full)
+	mu.Lock()
+	defer mu.Unlock()
 	if err != nil {
-		return s.recordErr(run, err)
+		return s.recordErr(ctx, run, rawURL, err)
 	}
 	run.PagesFetched++
 	run.ItemsFound += report.ItemsFound
@@ -198,10 +321,14 @@ func (s *Service) visit(ctx context.Context, rawURL string, depth int, src *stor
 }
 
 // recordErr keeps a tally by kind rather than a list, so a run summary stays
-// readable when one host is having a bad day.
-func (s *Service) recordErr(run *store.Run, err error) error {
+// readable when one host is having a bad day. The tally alone has twice been
+// too little to work from — a count of failures says nothing about whether a
+// site is refusing us or a link is dead — so each one also says what happened.
+func (s *Service) recordErr(ctx context.Context, run *store.Run, rawURL string, err error) error {
 	run.Failures++
-	run.Errors[errKind(err)]++
+	kind := errKind(err)
+	run.Errors[kind]++
+	slog.WarnContext(ctx, "crawl_page_failed", "url", rawURL, "kind", kind, "err", err.Error())
 	return err
 }
 
@@ -215,46 +342,16 @@ func attempts(run *store.Run) int { return run.PagesFetched + run.Failures }
 func sourceRequest(src *store.Source) fetch.Request {
 	return fetch.Request{
 		Headers:  src.AuthHeaders,
+		Tool:     src.Fetcher,
 		MinDelay: time.Duration(src.CrawlDelayMS) * time.Millisecond,
 	}
 }
 
-func errKind(err error) string {
-	switch {
-	case errors.Is(err, fetch.ErrDisallowed):
-		return "disallowed"
-	case errors.Is(err, fetch.ErrCircuitOpen):
-		return "circuit_open"
-	case errors.Is(err, fetch.ErrTooLarge):
-		return "too_large"
-	default:
-		return "fetch_failed"
-	}
-}
+func errKind(err error) string { return fetch.Kind(err) }
 
 // digits is what turns an address into a shape: /audios/7378 and /audios/4145
 // are the same kind of page and should be judged together.
 var digits = regexp.MustCompile(`[0-9]+`)
-
-// identity is what makes two addresses the same page.
-//
-// The scheme is dropped. A host that redirects http to https serves one page
-// under two names, and its own sitemap may well list the one it redirects away
-// from — this archive's does. Keyed by the full address, the schedule then
-// never matches: every entry from the sitemap looks new, gets fetched,
-// redirects onto a row we already had, and is fetched again ten minutes later.
-// Two hundred requests an hour to learn nothing.
-func identity(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-	id := strings.ToLower(u.Host) + u.EscapedPath()
-	if u.RawQuery != "" {
-		id += "?" + u.RawQuery
-	}
-	return strings.TrimSuffix(id, "/")
-}
 
 // urlShape is the address with its numbers blanked — the key everything about
 // a page's likely worth is learned under.
@@ -324,6 +421,15 @@ type frontier struct {
 	// not followed: the schedule is what keeps a settled archive from being
 	// refetched in full every time the scheduler ticks.
 	notDue map[string]bool
+	// mayFetch asks robots.txt before an address is queued. A section we are
+	// not allowed into is a permanent answer, and queueing it anyway spends a
+	// run's whole budget on refusals — every run, forever, because a refusal
+	// leaves no page behind to remember it by.
+	mayFetch func(string) bool
+	// offLimits counts what mayFetch turned away, so a source that publishes
+	// most of its links inside a forbidden section says so rather than looking
+	// like a crawl that found nothing.
+	offLimits int
 }
 
 type frontierEntry struct {
@@ -413,7 +519,7 @@ func (f *frontier) allowHostOf(rawURL string) {
 func (f *frontier) setNotDue(urls map[string]bool) {
 	f.notDue = make(map[string]bool, len(urls))
 	for u := range urls {
-		f.notDue[identity(u)] = true
+		f.notDue[domain.URLKey(u)] = true
 	}
 }
 
@@ -421,7 +527,7 @@ func (f *frontier) add(rawURL string, depth int) {
 	if f.maxDepth > 0 && depth > f.maxDepth {
 		return
 	}
-	id := identity(rawURL)
+	id := domain.URLKey(rawURL)
 	if f.seen[id] || f.notDue[id] {
 		return
 	}
@@ -430,6 +536,10 @@ func (f *frontier) add(rawURL string, depth int) {
 		return
 	}
 	f.seen[id] = true
+	if f.mayFetch != nil && !f.mayFetch(rawURL) {
+		f.offLimits++
+		return
+	}
 	f.queue = append(f.queue, frontierEntry{url: rawURL, depth: depth})
 }
 
@@ -482,51 +592,4 @@ func (f *frontier) next() (string, int, bool) {
 	e := f.queue[best]
 	f.queue = append(f.queue[:best], f.queue[best+1:]...)
 	return e.url, e.depth, true
-}
-
-// Scheduler is the periodic crawl. It exists only when switched on, and even
-// then it walks only sources that are themselves enabled — starting the
-// service must not touch anybody's website.
-type Scheduler struct {
-	Service  *Service
-	Repo     *store.Repo
-	Interval time.Duration
-	Limit    int
-}
-
-// Start runs until the context is cancelled. A failing source is logged and
-// the next one is tried; one bad archive does not stop the rest.
-func (s *Scheduler) Start(ctx context.Context) {
-	ticker := time.NewTicker(s.Interval)
-	defer ticker.Stop()
-
-	for {
-		s.tick(ctx)
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
-}
-
-func (s *Scheduler) tick(ctx context.Context) {
-	sources, err := s.Repo.Sources(ctx)
-	if err != nil {
-		slog.ErrorContext(ctx, "scheduler_sources_failed", "err", err.Error())
-		return
-	}
-	for i := range sources {
-		if !sources[i].Enabled {
-			continue
-		}
-		run, err := s.Service.Run(ctx, &sources[i], Options{Limit: s.Limit})
-		if err != nil {
-			slog.ErrorContext(ctx, "scheduler_run_failed", "source", sources[i].ID, "err", err.Error())
-			continue
-		}
-		slog.InfoContext(ctx, "scheduler_run_done",
-			"source", sources[i].ID, "pages", run.PagesFetched,
-			"items_new", run.ItemsNew, "failures", run.Failures)
-	}
 }
