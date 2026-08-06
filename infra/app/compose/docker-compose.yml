@@ -1056,6 +1056,10 @@ services:
     profiles: [origin, discovery-dev]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-discovery:${SHRUTI_DISCOVERY_TAG:-latest}
     restart: unless-stopped
+    # On SIGTERM the service stops claiming pages and waits up to 20s for the
+    # ones in hand to finish writing. The default 10s would kill it mid-page,
+    # every deploy, which is exactly what that wait exists to avoid.
+    stop_grace_period: 45s
     logging: *default-logging
     <<: *app-hardening
     labels:
@@ -1065,11 +1069,24 @@ services:
     environment:
       DATABASE_URL: postgresql://discovery:${SHRUTI_DISCOVERY_POSTGRES_PASSWORD:?}@discovery-postgres:5432/discovery?sslmode=disable
       DISCOVERY_SCHEDULER_ENABLED: ${SHRUTI_DISCOVERY_SCHEDULER_ENABLED:-false}
-      DISCOVERY_SCHEDULE_INTERVAL: ${SHRUTI_DISCOVERY_SCHEDULE_INTERVAL:-10m}
-      DISCOVERY_SCHEDULER_PAGE_LIMIT: ${SHRUTI_DISCOVERY_SCHEDULER_PAGE_LIMIT:-200}
+      # How many pages may be in flight at once, across every source. What
+      # bounds the rate is the per-host gap below, not this.
+      DISCOVERY_SCHEDULER_WORKERS: ${SHRUTI_DISCOVERY_SCHEDULER_WORKERS:-4}
+      # One page end to end — fetch, model, embed, write. Each step has its own
+      # timeout and they stack, so without this a page can hold a worker and a
+      # database connection for the better part of an hour.
+      DISCOVERY_PAGE_TIMEOUT: ${SHRUTI_DISCOVERY_PAGE_TIMEOUT:-10m}
+      # Shared between the scheduler's workers and every HTTP handler.
+      DISCOVERY_DB_MAX_CONNS: ${SHRUTI_DISCOVERY_DB_MAX_CONNS:-16}
       # Identify ourselves to the archives, with somewhere to complain to.
       DISCOVERY_USER_AGENT: ${SHRUTI_DISCOVERY_USER_AGENT:-ShrutiDiscovery/1.0 (+https://shruti.app/about)}
       DISCOVERY_CRAWL_DELAY: ${SHRUTI_DISCOVERY_CRAWL_DELAY:-1s}
+      # One outbound request, and the most of a response we will read.
+      DISCOVERY_REQUEST_TIMEOUT: ${SHRUTI_DISCOVERY_REQUEST_TIMEOUT:-30s}
+      DISCOVERY_MAX_BODY_BYTES: ${SHRUTI_DISCOVERY_MAX_BODY_BYTES:-8388608}
+      # Some archives cannot be read from a datacenter address at all: YouTube
+      # answers one with a bot check. Empty means read from here.
+      DISCOVERY_PROXY: ${SHRUTI_DISCOVERY_PROXY:-}
       DISCOVERY_LLM_BASE_URL: ${SHRUTI_DISCOVERY_LLM_BASE_URL:-https://openrouter.ai/api/v1}
       DISCOVERY_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
       DISCOVERY_LLM_MODEL: ${SHRUTI_DISCOVERY_LLM_MODEL:-google/gemini-3.1-flash-lite}

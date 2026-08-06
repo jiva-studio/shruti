@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -96,16 +97,96 @@ func TestRobotsMissingMeansAllowed(t *testing.T) {
 	}
 }
 
-// A host that cannot serve its own robots.txt has not given permission.
-func TestRobotsServerErrorMeansDisallowed(t *testing.T) {
+// A host that cannot serve its own robots.txt has not given permission — and
+// has not refused either, which is a different thing and must read as one.
+func TestRobotsServerErrorIsNotARefusal(t *testing.T) {
 	srv := server(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	if _, err := testClient(t).Get(context.Background(), srv.URL+"/a", fetch.Request{}); !errors.Is(err, fetch.ErrDisallowed) {
-		t.Fatalf("err = %v, want ErrDisallowed", err)
+	_, err := testClient(t).Get(context.Background(), srv.URL+"/a", fetch.Request{})
+	if !errors.Is(err, fetch.ErrRobotsUnread) {
+		t.Fatalf("err = %v, want ErrRobotsUnread", err)
+	}
+	if errors.Is(err, fetch.ErrDisallowed) {
+		t.Error("a host having a bad day must not read as a host refusing us")
+	}
+}
+
+// The bug this guards: one bad minute on robots.txt used to drop a host out of
+// the crawl for a whole day, silently, and looking exactly like a refusal.
+func TestRobotsRecoversAfterOneBadFetch(t *testing.T) {
+	var attempts int
+	srv := server(t, func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		robotsAllowAll(w, r)
+	}, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	c := testClient(t)
+	if _, err := c.Get(context.Background(), srv.URL+"/a", fetch.Request{}); !errors.Is(err, fetch.ErrRobotsUnread) {
+		t.Fatalf("first fetch: err = %v, want ErrRobotsUnread", err)
+	}
+	fetch.ExpireRobots(c)
+	if _, err := c.Get(context.Background(), srv.URL+"/a", fetch.Request{}); err != nil {
+		t.Fatalf("the host is answering again: %v", err)
+	}
+}
+
+// Rules that were actually read are read once, however many workers start
+// together: robots.txt is the one file a crawler must not hammer.
+func TestRobotsReadOncePerHost(t *testing.T) {
+	var mu sync.Mutex
+	var reads int
+	srv := server(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		reads++
+		mu.Unlock()
+		robotsAllowAll(w, r)
+	}, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	c := testClient(t)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = c.Get(context.Background(), srv.URL+"/a", fetch.Request{})
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if reads != 1 {
+		t.Errorf("robots.txt read %d times for one host, want 1", reads)
+	}
+}
+
+// A run we stopped ourselves says nothing about the host, and must not be
+// remembered as if it did.
+func TestCancelledRobotsFetchIsNotRemembered(t *testing.T) {
+	srv := server(t, robotsAllowAll, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	c := testClient(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := c.Get(ctx, srv.URL+"/a", fetch.Request{}); err == nil {
+		t.Fatal("a cancelled context must not fetch")
+	}
+	if _, err := c.Get(context.Background(), srv.URL+"/a", fetch.Request{}); err != nil {
+		t.Fatalf("the next run must start clean: %v", err)
 	}
 }
 

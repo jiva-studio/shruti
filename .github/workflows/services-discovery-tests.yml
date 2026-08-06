@@ -1,0 +1,89 @@
+name: Services / discovery tests
+
+# Runs the discovery Go suite on every PR that touches the service.
+#
+# It did not exist until now, which is worse than it sounds: the tests were
+# being written and were only ever run on somebody's laptop. `validate` on a
+# discovery PR is the pull-request title check and nothing else.
+#
+# Postgres comes up alongside because most of what this service does is I/O.
+# The pure parts — the name vocabulary, the extraction, the politeness client —
+# were the only things covered while the store had no test at all, and the store
+# is exactly where the bugs were: a claim that starved itself, a link write that
+# lost a race, a key that could hold one language.
+
+on:
+  pull_request:
+    paths:
+      - 'modules/services/discovery/**'
+      - 'modules/libs/pipeline/**'
+      - '.github/workflows/services-discovery-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'modules/services/discovery/**'
+      - 'modules/libs/pipeline/**'
+      - '.github/workflows/services-discovery-tests.yml'
+
+concurrency:
+  group: services-discovery-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  go-test:
+    name: go test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/services/discovery
+
+    services:
+      postgres:
+        # pgvector, not plain postgres: the chunks table declares vector(1536)
+        # and the migrations will not apply without the extension.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: discovery
+          POSTGRES_PASSWORD: discovery
+          POSTGRES_DB: discovery
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U discovery"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: modules/services/discovery/go.mod
+          cache-dependency-path: modules/services/discovery/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # -race because the scheduler hands work to several workers at once and
+      # the first live run of it lost a race no unit test would have seen.
+      #
+      # -p 1 because the packages that touch the database each start from a
+      # freshly migrated schema, and there is one database. Run in parallel they
+      # drop the schema out from under each other and fail in ways that look
+      # like product bugs and are not.
+      - name: Test
+        env:
+          DISCOVERY_TEST_DATABASE_URL: postgresql://discovery:discovery@localhost:5432/discovery?sslmode=disable
+        run: go test ./... -race -count=1 -p 1
+
+      - name: Coverage
+        env:
+          DISCOVERY_TEST_DATABASE_URL: postgresql://discovery:discovery@localhost:5432/discovery?sslmode=disable
+        run: go test ./... -count=1 -p 1 -cover

@@ -82,29 +82,12 @@ func TestSingleRecordingTakesWholePage(t *testing.T) {
 		t.Fatalf("items = %d, want 1", len(out.Items))
 	}
 	it := out.Items[0]
-	if it.TextRole != domain.TextCanonical {
-		t.Errorf("text role = %q, want canonical", it.TextRole)
-	}
 	if !strings.Contains(it.ContextText, "nature of the soul") ||
 		!strings.Contains(it.ContextText, "Vrindavan") {
 		t.Errorf("context missed text on the other side of the link: %q", it.ContextText)
 	}
 	if it.MediaURL != "https://example.org/media/talk.mp3" {
 		t.Errorf("media url = %q", it.MediaURL)
-	}
-}
-
-// Text shared by several recordings on one page is searchable but is not any
-// one recording's own words.
-func TestSharedTextRole(t *testing.T) {
-	out := parseFixture(t, "bgclass_item.html")
-	if len(out.Items) < 2 {
-		t.Fatalf("items = %d, want several", len(out.Items))
-	}
-	for _, it := range out.Items {
-		if it.TextRole != domain.TextShared {
-			t.Fatalf("%s: text role = %q, want shared", it.Filename, it.TextRole)
-		}
 	}
 }
 

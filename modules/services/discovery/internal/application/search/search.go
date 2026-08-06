@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/pgvector"
 )
 
@@ -111,8 +112,7 @@ const (
 func (s *Service) resolveAuthors(ctx context.Context, name string) ([]int64, error) {
 	rows, err := s.Pool.Query(ctx, `
 		WITH exact AS (
-			SELECT k.author_id AS id FROM discovery.author_keys k
-			WHERE k.key = discovery.author_key($1)
+			SELECT k.author_id AS id FROM discovery.author_keys k WHERE k.key = $2
 		)
 		SELECT id FROM exact
 		UNION
@@ -120,7 +120,7 @@ func (s *Service) resolveAuthors(ctx context.Context, name string) ([]int64, err
 		FROM discovery.authors a
 		LEFT JOIN discovery.author_keys k ON k.author_id = a.id
 		WHERE NOT EXISTS (SELECT 1 FROM exact)
-		  AND (k.key LIKE discovery.author_key($1) || '%' OR a.name ILIKE '%' || $1 || '%')`, name)
+		  AND (k.key LIKE $2 || '%' OR a.name ILIKE '%' || $1 || '%')`, name, domain.Key(name))
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,8 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 	// The name is resolved to people before the query runs; a text match here
 	// would cost both lanes their index on items.
 	if len(q.AuthorIDs) > 0 {
-		add("i.author_id = ANY($%d)", q.AuthorIDs)
+		add("EXISTS (SELECT 1 FROM discovery.item_authors ia WHERE ia.item_id = i.id AND ia.author_id = ANY($%d))",
+			q.AuthorIDs)
 	}
 	if q.Language != "" {
 		add("i.language = $%d", q.Language)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -14,11 +15,14 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/application/normalize"
 	"github.com/jiva-studio/shruti/discovery/internal/application/parse"
+	"github.com/jiva-studio/shruti/discovery/internal/application/script"
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
 	"github.com/jiva-studio/shruti/discovery/internal/config"
 	"github.com/jiva-studio/shruti/discovery/internal/handler"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/embed"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
+	"github.com/jiva-studio/shruti/discovery/internal/infra/ytdlp"
+	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
@@ -27,13 +31,19 @@ type Deps struct {
 	Pool      *pgxpool.Pool
 	Handler   http.Handler
 	Scheduler *crawl.Scheduler
+	// Background holds the hand-triggered runs, which outlive the requests that
+	// asked for them and have to be waited for at shutdown.
+	Background *crawl.Background
+	// Leader is the claim on being the process that crawls. Nil means another
+	// replica holds it, and this one only serves.
+	Leader *store.Leader
 }
 
 // Build connects the pool, applies the embedded migrations, and wires the
 // router. It starts no crawl: the scheduler is returned rather than started,
 // and boot must not touch anybody's website.
 func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
-	pool, err := store.Connect(ctx, cfg.DatabaseURL)
+	pool, err := store.ConnectWith(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
 	if err != nil {
 		return nil, fmt.Errorf("db connect: %w", err)
 	}
@@ -47,18 +57,40 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	}
 
 	repo := store.NewRepo(pool)
-	// Anything left open by the previous process was cut short by whatever
-	// stopped it; it cannot still be going now.
-	if n, err := repo.MarkInterruptedRuns(ctx); err != nil {
-		slog.WarnContext(ctx, "interrupted_runs_not_marked", "err", err.Error())
-	} else if n > 0 {
-		slog.InfoContext(ctx, "runs_marked_interrupted", "count", n)
+	counters := metrics.New(time.Now().UTC())
+
+	// One process crawls. See store.Lead for why: the per-host gap and the
+	// breaker live in this process's memory, so a second crawler is a second
+	// rate limiter and a doubled request rate at somebody else's site.
+	leader, err := store.Lead(ctx, pool)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	if leader == nil {
+		slog.InfoContext(ctx, "not_the_crawler", "reason", "another replica holds the lock")
+	} else {
+		// Anything left open by the previous process was cut short by whatever
+		// stopped it; it cannot still be going now. Only the crawling process
+		// may say so — a follower doing it would close the books on the runs
+		// the leader has in flight.
+		if n, err := repo.MarkInterruptedRuns(ctx); err != nil {
+			slog.WarnContext(ctx, "interrupted_runs_not_marked", "err", err.Error())
+		} else if n > 0 {
+			slog.InfoContext(ctx, "runs_marked_interrupted", "count", n)
+		}
 	}
 	fetcher := buildFetcher(cfg)
 	normalizer := buildNormalizer(ctx, cfg)
 	embedder := buildEmbedder(ctx, cfg)
 
-	indexer := &index.Service{Fetcher: fetcher, Normalizer: normalizer, Repo: repo}
+	// Sources may carry their own extraction script. One that will not compile
+	// is an error now rather than a surprise on the first page of a crawl.
+	scripts, err := script.New()
+	if err != nil {
+		return nil, err
+	}
+	indexer := &index.Service{Fetcher: fetcher, Normalizer: normalizer, Repo: repo, Scripts: scripts, Metrics: counters}
 	searcher := &search.Service{Pool: pool}
 	// Assigned only when non-nil: a nil pointer in an interface field is not a
 	// nil interface, and every "is it configured" check downstream would pass.
@@ -74,28 +106,30 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		Repo:    repo,
 	}
 
+	background := crawl.NewBackground(crawler)
 	deps := &Deps{
-		Pool: pool,
+		Pool:       pool,
+		Leader:     leader,
+		Background: background,
 		Handler: handler.NewRouter(handler.RouterDeps{
 			Pool:             pool,
 			Repo:             repo,
 			Parse:            parser,
 			Index:            indexer,
-			Crawl:            crawler,
+			Crawl:            background,
 			Search:           searcher,
+			Metrics:          counters,
 			SchedulerEnabled: cfg.SchedulerEnabled,
 		}),
 	}
 
-	if cfg.SchedulerEnabled {
-		deps.Scheduler = &crawl.Scheduler{
-			Service:  crawler,
-			Repo:     repo,
-			Interval: cfg.ScheduleInterval,
-			Limit:    cfg.SchedulerPageLimit,
-		}
-	} else {
+	switch {
+	case !cfg.SchedulerEnabled:
 		slog.InfoContext(ctx, "scheduler_disabled")
+	case leader == nil:
+		slog.InfoContext(ctx, "scheduler_disabled", "reason", "not the crawling replica")
+	default:
+		deps.Scheduler = crawl.NewScheduler(indexer, repo, fetcher, cfg.SchedulerWorkers, cfg.PageTimeout)
 	}
 	return deps, nil
 }
@@ -115,6 +149,11 @@ func buildFetcher(cfg *config.Config) *fetch.Client {
 		DefaultDelay: cfg.DefaultCrawlDelay,
 		Timeout:      cfg.RequestTimeout,
 		MaxBody:      cfg.MaxBodyBytes,
+		Readers: []fetch.Reader{ytdlp.New(ytdlp.Options{
+			UserAgent: cfg.UserAgent,
+			Proxy:     cfg.Proxy,
+			MaxBody:   cfg.MaxBodyBytes,
+		})},
 	})
 }
 

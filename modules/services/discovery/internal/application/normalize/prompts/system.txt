@@ -9,7 +9,7 @@ Return a STRICT JSON object:
     {
       "n": integer,                 // the file's number, so answers cannot drift out of order
       "title": string | null,       // THIS recording's own name, never the cycle's
-      "author": string | null,      // speaker name, exactly as the source writes it
+      "authors": [ string ],        // everyone who spoke, each name exactly as the source writes it
       "location": string | null,    // place name, exactly as the source writes it
       "date": "YYYY-MM-DD" | null,  // when the recording was made
       "language": string | null,    // ISO 639-1, the language SPOKEN in the recording
@@ -52,6 +52,9 @@ Rules:
 - A recurring occasion is not a cycle. A Sunday programme, a festival, an annual conference, a day of the calendar — these say when a talk was given, not that it belongs to a set given together. "Sunday Feast", "Gaura Purnima Festival", "Sunday Festival": collection_title is null. A cycle has an order and an end; an occasion comes round again.
 - language is what is SPOKEN, which is not always the language of the page around it. A Russian page listing an English lecture is "en".
 - A title that reads as an ordinary phrase in some language is evidence of the language spoken: "Fallacies Of Modern Education" is "en". Do not leave language null merely because nothing states it outright. A name that is a Sanskrit or Bengali title, a verse, or the first words of a song is not that kind of evidence — say what is sung, not the script it is written in.
-- author and location stay as raw strings. Do not translate, transliterate or canonicalize them; a separate resolver maps them to dictionary entries later.
+- authors is a LIST because a recording often has more than one speaker: a conversation, a joint kirtan, a class given in turns. "Amala Harinam Pr and Kirtan Premi Pr" is two people and two entries, never one name. So is "Radhanath Swami, Yamuna Mataji and Dina Tarini Mataji" — three. One speaker is a list of one, and no speaker named is an empty list.
+- Split on the words the source uses to join names — "and", "&", "+", a comma — and on nothing else. A name that merely contains one of them is still one name.
+- Every entry is a person. A group, a category or an occasion — "Various Devotees", "Panel Discussion", "ISKCON Bangladesh" — names nobody: leave the list empty rather than inventing a speaker out of it.
+- authors and location stay as raw strings. Do not translate, transliterate or canonicalize them; a separate resolver maps them to dictionary entries later.
 - Ignore the site's navigation, menus, footers and adverts. They repeat on every page and describe nothing.
 - The surrounding text of a page holding many files is shared by all of them, so it says little about any one file. In that case the filename is the stronger signal.

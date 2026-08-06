@@ -1,11 +1,17 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 )
+
+// pageTimeout bounds one page end to end. The same ceiling the scheduler puts
+// on a page it claims; this path is the same work, asked for by hand.
+const pageTimeout = 10 * time.Minute
 
 // itemsRequest asks for one URL to be processed for real.
 type itemsRequest struct {
@@ -36,7 +42,14 @@ func itemsHandler(svc *index.Service) http.HandlerFunc {
 			return
 		}
 
-		report, err := svc.Item(r.Context(), req.URL, req.Source, req.Force)
+		// One page has no natural end: a fetch with retries, then the model with
+		// retries, then the embedder per batch, all stacking. Without a ceiling
+		// this request holds a database connection for as long as they take,
+		// and the server sets no write timeout of its own.
+		ctx, cancel := context.WithTimeout(r.Context(), pageTimeout)
+		defer cancel()
+
+		report, err := svc.Item(ctx, req.URL, req.Source, req.Force)
 		if err != nil {
 			writeParseErr(w, err)
 			return
