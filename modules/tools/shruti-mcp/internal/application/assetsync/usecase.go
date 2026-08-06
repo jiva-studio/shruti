@@ -1,4 +1,5 @@
-// Package assetsync uploads the files under out/public/ to the publish targets.
+// Package assetsync uploads the files under out/public/ and out/artifacts/ to
+// the publish targets.
 //
 // It is resumable by construction rather than by bookkeeping: the decision to
 // upload is taken per file against the target itself, so an interrupted run
@@ -326,13 +327,15 @@ func (uc UseCase) put(ctx context.Context, target s3port.Uploader, f assetsport.
 
 // walk collects the assets to consider, sorted so a run is reproducible and an
 // interrupted one resumes in the same order.
+// Artifacts ride along with the public assets rather than being uploaded as
+// each one is written: inline uploads put a network round trip in the middle of
+// every review chunk, which cost more than the review itself.
+var defaultRoots = []string{"public", "artifacts"}
+
 func (uc UseCase) walk(opts Options) ([]assetsport.File, error) {
-	root := filepath.Join(uc.OutDir, "public")
+	roots := defaultRoots
 	if p := strings.Trim(opts.Prefix, "/"); p != "" {
-		root = filepath.Join(uc.OutDir, filepath.FromSlash(p))
-	}
-	if _, err := os.Stat(root); err != nil {
-		return nil, fmt.Errorf("assetsync: %s: %w", root, err)
+		roots = []string{p}
 	}
 	want := map[string]bool{}
 	for _, id := range opts.TrackIds {
@@ -340,7 +343,24 @@ func (uc UseCase) walk(opts Options) ([]assetsport.File, error) {
 	}
 
 	var files []assetsport.File
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	for _, r := range roots {
+		root := filepath.Join(uc.OutDir, filepath.FromSlash(r))
+		if _, err := os.Stat(root); err != nil {
+			if os.IsNotExist(err) && len(roots) > 1 {
+				continue // a lake without artifacts is fine
+			}
+			return nil, fmt.Errorf("assetsync: %s: %w", root, err)
+		}
+		if err := uc.walkRoot(root, want, &files); err != nil {
+			return nil, err
+		}
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Key < files[j].Key })
+	return files, nil
+}
+
+func (uc UseCase) walkRoot(root string, want map[string]bool, files *[]assetsport.File) error {
+	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -359,14 +379,9 @@ func (uc UseCase) walk(opts Options) ([]assetsport.File, error) {
 		if err != nil {
 			return err
 		}
-		files = append(files, assetsport.File{Key: key, Path: path, Size: info.Size()})
+		*files = append(*files, assetsport.File{Key: key, Path: path, Size: info.Size()})
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(files, func(i, j int) bool { return files[i].Key < files[j].Key })
-	return files, nil
 }
 
 // matchesTrack keeps keys of the form public/tracks/<id>/...
