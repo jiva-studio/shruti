@@ -301,3 +301,27 @@ func TestSourceCanAskForAWiderGap(t *testing.T) {
 		t.Errorf("three requests took %v; the source asked for 150ms between them", elapsed)
 	}
 }
+
+// A page bigger than our cap is our limit, not a failing host. Counting it
+// against the host opened the breaker on a run of oversized files and stopped
+// a crawl that the site was answering perfectly well.
+func TestOversizedBodyDoesNotOpenBreaker(t *testing.T) {
+	srv := server(t, robotsAllowAll, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", 4096)))
+	})
+
+	c := fetch.New(fetch.Config{
+		DefaultDelay: time.Millisecond,
+		MaxBody:      1024,
+		RetryMax:     0,
+		RetryWaitMin: time.Millisecond,
+		RetryWaitMax: 5 * time.Millisecond,
+	})
+	var last error
+	for range 6 {
+		_, last = c.Get(context.Background(), srv.URL+"/big", fetch.Request{})
+	}
+	if !errors.Is(last, fetch.ErrTooLarge) {
+		t.Fatalf("err = %v, want ErrTooLarge and an unbroken circuit", last)
+	}
+}

@@ -143,7 +143,7 @@ func (f *flattener) addMark(u string) {
 
 func (f *flattener) addLink(raw string) {
 	u, err := url.Parse(raw)
-	if err != nil || u.Host != f.base.Host {
+	if err != nil || u.Host != f.base.Host || !IsPageURL(raw) {
 		return
 	}
 	u.Fragment = ""

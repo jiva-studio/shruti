@@ -185,6 +185,10 @@ func hostHealthy(resp *Response, err error) bool {
 	if err == nil {
 		return true
 	}
+	// A body bigger than our cap is our limit, not the host misbehaving.
+	if errors.Is(err, ErrTooLarge) {
+		return true
+	}
 	if resp == nil {
 		return false // transport failure: timeout, connection refused, DNS
 	}

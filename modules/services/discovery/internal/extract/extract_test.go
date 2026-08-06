@@ -253,3 +253,32 @@ func firstBadByte(s string) int {
 	}
 	return -1
 }
+
+// A link to something that is not a page is not a page to visit. Fetching one
+// to find out costs its whole size, and archives carry presentations and zips
+// alongside the recordings.
+func TestLinksSkipNonPages(t *testing.T) {
+	html := `<html><body>
+		<a href="/lectures/">Lectures</a>
+		<a href="/slides/Chapter_09.ppt">Slides</a>
+		<a href="/slides/Chapter_09.pptx">Slides</a>
+		<a href="/kirtan/Festival-2014.rar">Festival</a>
+		<a href="/handout.pdf">Handout</a>
+		<a href="/logo.png">Logo</a>
+		<a href="/page.html">Page</a>
+	</body></html>`
+
+	out, err := extract.Parse([]byte(html), "text/html", "https://example.org/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"https://example.org/lectures/", "https://example.org/page.html"}
+	if len(out.Links) != len(want) {
+		t.Fatalf("links = %v, want %v", out.Links, want)
+	}
+	for i, w := range want {
+		if out.Links[i] != w {
+			t.Errorf("links[%d] = %q, want %q", i, out.Links[i], w)
+		}
+	}
+}
