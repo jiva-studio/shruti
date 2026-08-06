@@ -2,8 +2,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 )
 
 // Collection is a cycle of recordings: a course, a seminar, a set of talks
@@ -38,14 +43,15 @@ func (r *Repo) SaveCollection(ctx context.Context, c *Collection) error {
 		conflict = "(source_id, url) WHERE url IS NOT NULL"
 	}
 	return r.pool.QueryRow(ctx, `
-		INSERT INTO discovery.collections (source_id, url, title, description, author)
-		VALUES (nullif($1,''), nullif($2,''), $3, nullif($4,''), nullif($5,''))
+		INSERT INTO discovery.collections (source_id, url, title, description, author, author_key)
+		VALUES (nullif($1,''), nullif($2,''), $3, nullif($4,''), nullif($5,''), nullif($6,''))
 		ON CONFLICT `+conflict+` DO UPDATE SET
 			title       = EXCLUDED.title,
 			description = coalesce(EXCLUDED.description, discovery.collections.description),
-			author      = coalesce(EXCLUDED.author, discovery.collections.author)
+			author      = coalesce(EXCLUDED.author, discovery.collections.author),
+			author_key  = coalesce(EXCLUDED.author_key, discovery.collections.author_key)
 		RETURNING id`,
-		c.SourceID, c.URL, c.Title, c.Description, c.Author,
+		c.SourceID, c.URL, c.Title, c.Description, c.Author, domain.Key(c.Author),
 	).Scan(&c.ID)
 }
 
@@ -59,8 +65,15 @@ func (r *Repo) CollectionByURL(ctx context.Context, sourceID, url string) (*Coll
 		WHERE c.source_id IS NOT DISTINCT FROM nullif($1,'') AND c.url = $2`,
 		sourceID, url,
 	).Scan(&c.ID, &c.SourceID, &c.URL, &c.Title, &c.Description, &c.Author, &c.MemberCount)
-	if err != nil {
+	// "No such cycle" is an answer this is asked for on every listing page. A
+	// database failure is not that answer, and returning it as one reads as
+	// "this page presents no cycle we know" — so duplicates are never absorbed
+	// and the run still reports success.
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	return &c, nil
 }
@@ -76,12 +89,15 @@ func (r *Repo) CollectionByTitle(ctx context.Context, sourceID, title, author st
 		FROM discovery.collections c
 		WHERE c.source_id IS NOT DISTINCT FROM nullif($1,'')
 		  AND c.title = $2
-		  AND coalesce(c.author_key,'') = coalesce(discovery.author_key(nullif($3,'')),'')
+		  AND coalesce(c.author_key,'') = $3
 		  AND c.url IS NULL`,
-		sourceID, title, author,
+		sourceID, title, domain.Key(author),
 	).Scan(&c.ID, &c.SourceID, &c.URL, &c.Title, &c.Description, &c.Author, &c.MemberCount)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	return &c, nil
 }
@@ -165,9 +181,9 @@ func (r *Repo) AbsorbByTitle(ctx context.Context, into int64, sourceID, title, a
 		SELECT id FROM discovery.collections
 		WHERE source_id IS NOT DISTINCT FROM nullif($1,'')
 		  AND title = $2
-		  AND author_key IS NOT DISTINCT FROM discovery.author_key(nullif($3,''))
+		  AND author_key IS NOT DISTINCT FROM nullif($3,'')
 		  AND url IS NULL`,
-		sourceID, title, author).Scan(&from)
+		sourceID, title, domain.Key(author)).Scan(&from)
 	if err != nil {
 		return nil
 	}
@@ -304,9 +320,14 @@ func (r *Repo) ReplacePageLinks(ctx context.Context, pageID int64, urls []string
 		return err
 	}
 	for i, u := range urls {
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO discovery.page_links (page_id, ordinal, url) VALUES ($1,$2,$3)`,
-			pageID, i, u); err != nil {
+		// Idempotent on purpose. Two workers can be given the same page — a
+		// manual run over a source the scheduler is also draining — and without
+		// this the second one fails on the primary key after the first has
+		// already deleted and reinserted the same rows.
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO discovery.page_links (page_id, ordinal, url, url_key) VALUES ($1,$2,$3,$4)
+			ON CONFLICT (page_id, ordinal) DO UPDATE SET url = EXCLUDED.url, url_key = EXCLUDED.url_key`,
+			pageID, i, u, domain.URLKey(u)); err != nil {
 			return err
 		}
 	}

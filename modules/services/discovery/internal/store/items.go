@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"time"
@@ -41,8 +43,8 @@ type Item struct {
 
 	Title  string
 	Author string
-	// AuthorID is the person the written name resolved to.
-	AuthorID        int64
+	// Authors is everyone who spoke; Author is the one written on the recording.
+	Authors         []string
 	Location        string
 	RecordedOn      *time.Time
 	Language        string
@@ -57,6 +59,9 @@ type Item struct {
 	NormInputSHA256   string
 	NormPromptVersion string
 	NormModel         string
+	// NormReasons is everything that stopped the source's script, for the
+	// recordings a model had to read instead.
+	NormReasons []string
 
 	Status      string
 	FirstSeenAt time.Time
@@ -136,13 +141,13 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 	err = r.pool.QueryRow(ctx, `
 		INSERT INTO discovery.items
 			(media_url, source_id, page_id, raw, title, author, location, recorded_on,
-			 language, duration_s, collection_title, author_id,
+			 language, duration_s, collection_title, author_key,
 			 media_state, media_seen_at, media_missing_since,
-			 norm_input_sha256, norm_prompt_version, norm_model, status)
+			 norm_input_sha256, norm_prompt_version, norm_model, norm_reasons, status)
 		VALUES ($1,$2,$3,$4,nullif($5,''),nullif($6,''),nullif($7,''),$8,
-			 nullif($9,''),nullif($10,0),nullif($11,''),nullif($18,0),
+			 nullif($9,''),nullif($10,0),nullif($11,''),nullif($18,''),
 			 $12,$13,NULL,
-			 nullif($14,''),nullif($15,''),nullif($16,''),$17)
+			 nullif($14,''),nullif($15,''),nullif($16,''),$19,$17)
 		ON CONFLICT (media_url) DO UPDATE SET
 			source_id           = coalesce(EXCLUDED.source_id, discovery.items.source_id),
 			page_id             = coalesce(EXCLUDED.page_id, discovery.items.page_id),
@@ -154,7 +159,7 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 			language            = EXCLUDED.language,
 			duration_s          = EXCLUDED.duration_s,
 			collection_title    = EXCLUDED.collection_title,
-			author_id           = coalesce(EXCLUDED.author_id, discovery.items.author_id),
+			author_key          = EXCLUDED.author_key,
 			-- Seeing the file again clears the fact that it was ever missing.
 			media_state         = EXCLUDED.media_state,
 			media_seen_at       = EXCLUDED.media_seen_at,
@@ -162,13 +167,15 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 			norm_input_sha256   = EXCLUDED.norm_input_sha256,
 			norm_prompt_version = EXCLUDED.norm_prompt_version,
 			norm_model          = EXCLUDED.norm_model,
+			norm_reasons        = EXCLUDED.norm_reasons,
 			status              = EXCLUDED.status,
 			last_seen_at        = now()
 		RETURNING id, (xmax = 0)`,
 		it.MediaURL, it.SourceID, it.PageID, it.Raw, it.Title, it.Author, it.Location, it.RecordedOn,
 		it.Language, it.DurationS, it.CollectionTitle,
 		it.MediaState, it.MediaSeenAt,
-		it.NormInputSHA256, it.NormPromptVersion, it.NormModel, it.Status, it.AuthorID,
+		it.NormInputSHA256, it.NormPromptVersion, it.NormModel, it.Status,
+		domain.Key(it.Author), it.NormReasons,
 	).Scan(&it.ID, &isNew)
 	return isNew, err
 }
@@ -180,20 +187,29 @@ func (r *Repo) TouchItem(ctx context.Context, id int64) error {
 	return err
 }
 
+// What a chunk is. See migration 0004.
+const (
+	// ChunkTitle is the recording's own name.
+	ChunkTitle = "title"
+	// ChunkPageText is prose the archive published about it — a search key,
+	// never a transcript.
+	ChunkPageText = "page_text"
+)
+
 // Chunk is one searchable piece of text and its vector.
 type Chunk struct {
-	ItemID    *int64
-	PageID    *int64
-	SourceID  *string
-	Language  string
-	Role      string
+	ItemID int64
+	// Kind is "title" or "page_text". See migration 0004.
+	Kind string
+	// Lang is the language of this piece, where the archive stated one.
+	Lang      string
 	Ordinal   int
 	Text      string
 	Embedding []float32
 }
 
-// ReplaceItemChunks swaps an item's chunks for a new set in one transaction,
-// so a search never sees an item half re-indexed.
+// ReplaceItemChunks swaps a recording's chunks for a new set in one
+// transaction, so a search never sees an item half re-indexed.
 func (r *Repo) ReplaceItemChunks(ctx context.Context, itemID int64, chunks []Chunk) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -206,16 +222,65 @@ func (r *Repo) ReplaceItemChunks(ctx context.Context, itemID int64, chunks []Chu
 	}
 	for _, c := range chunks {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO discovery.chunks
-				(item_id, page_id, source_id, language, role, ordinal, text, embedding)
-			VALUES ($1,$2,$3,nullif($4,''),$5,$6,$7,$8::vector)`,
-			itemID, c.PageID, c.SourceID, c.Language, c.Role, c.Ordinal, c.Text,
-			pgvector.Literal(c.Embedding),
-		); err != nil {
+			INSERT INTO discovery.chunks (item_id, kind, lang, ordinal, text, embedding)
+			VALUES ($1,$2,$3,$4,$5,$6)`,
+			c.ItemID, c.Kind, c.Lang, c.Ordinal, c.Text, vector(c.Embedding)); err != nil {
 			return err
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// CachedEmbeddings returns the vectors already paid for, keyed by text.
+func (r *Repo) CachedEmbeddings(ctx context.Context, model string, texts []string) (map[string][]float32, error) {
+	if len(texts) == 0 {
+		return nil, nil
+	}
+	hashes := make([]string, len(texts))
+	for i, t := range texts {
+		hashes[i] = TextHash(t)
+	}
+	rows, err := r.pool.Query(ctx,
+		`SELECT text, embedding FROM discovery.embeddings
+		 WHERE model = $1 AND text_sha256 = ANY($2)`, model, hashes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string][]float32{}
+	for rows.Next() {
+		var text, raw string
+		if err := rows.Scan(&text, &raw); err != nil {
+			return nil, err
+		}
+		vec, err := pgvector.Parse(raw)
+		if err != nil {
+			return nil, err
+		}
+		out[text] = vec
+	}
+	return out, rows.Err()
+}
+
+// SaveEmbeddings records vectors so the next pass over the same words costs
+// nothing.
+func (r *Repo) SaveEmbeddings(ctx context.Context, model string, byText map[string][]float32) error {
+	for text, vec := range byText {
+		if _, err := r.pool.Exec(ctx, `
+			INSERT INTO discovery.embeddings (model, text_sha256, text, embedding)
+			VALUES ($1,$2,$3,$4) ON CONFLICT (model, text_sha256) DO NOTHING`,
+			model, TextHash(text), text, pgvector.Literal(vec)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TextHash keys a vector by what was embedded.
+func TextHash(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
 }
 
 // CountItems reports how many items a source has in each status.
@@ -321,4 +386,79 @@ func (r *Repo) CountMediaStates(ctx context.Context, sourceID string) (map[strin
 		counts[state] = n
 	}
 	return counts, rows.Err()
+}
+
+// Spend is what one model call cost. The call itself is a fact; its price is
+// only known if the provider said so, so the numbers are pointers and a null
+// means unreported rather than free.
+type Spend struct {
+	SourceID  string
+	Kind      string
+	Model     string
+	Items     int
+	TokensIn  *int64
+	TokensOut *int64
+	CostUSD   *float64
+}
+
+// RecordSpend keeps what a call cost, so a question about money has an answer
+// that is not arithmetic.
+func (r *Repo) RecordSpend(ctx context.Context, s Spend) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO discovery.spend (source_id, kind, model, items, tokens_in, tokens_out, cost_usd)
+		VALUES (nullif($1,''),$2,$3,$4,$5,$6,$7)`,
+		s.SourceID, s.Kind, s.Model, s.Items, s.TokensIn, s.TokensOut, s.CostUSD)
+	return err
+}
+
+// ItemText is prose an archive published about a recording, in one language.
+type ItemText struct {
+	Lang string
+	Text string
+}
+
+// ReplaceItemTexts swaps a recording's prose of one kind for a new set, in one
+// transaction.
+//
+// It is a replacement rather than an upsert so that a language the archive has
+// stopped publishing stops being here too. Left to accumulate, a withdrawn
+// translation would go on being searchable for ever with nothing to say it was
+// withdrawn.
+func (r *Repo) ReplaceItemTexts(ctx context.Context, itemID int64, kind string, texts []ItemText) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM discovery.item_texts WHERE item_id = $1 AND kind = $2`, itemID, kind); err != nil {
+		return err
+	}
+	for _, t := range texts {
+		if t.Text == "" {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO discovery.item_texts (item_id, kind, lang, text) VALUES ($1,$2,$3,$4)
+			ON CONFLICT (item_id, kind, lang) DO UPDATE SET text = EXCLUDED.text`,
+			itemID, kind, t.Lang, t.Text); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// vector is a chunk's embedding on its way into the column, or NULL when there
+// is none.
+//
+// An empty literal is "[]", which pgvector rejects outright — so one chunk
+// whose vector never arrived would fail the transaction and take every other
+// chunk of that recording with it. The column is nullable precisely so a piece
+// of text can be stored and searched lexically while it waits for a vector.
+func vector(v []float32) any {
+	if len(v) == 0 {
+		return nil
+	}
+	return pgvector.Literal(v)
 }

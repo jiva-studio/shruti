@@ -26,10 +26,30 @@ const migrateAdvisoryLockKey = 0x646973636F76 // "discov" bytes, fits int64
 // Connect opens a pool. Queries qualify objects with `discovery.<table>` so any
 // session works regardless of search_path.
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	return ConnectWith(ctx, dsn, 0)
+}
+
+// ConnectWith opens a pool of a stated size.
+//
+// The default is max(4, NumCPU), shared between the scheduler's workers, each
+// source's own crawl workers and every HTTP handler — so on a small machine a
+// busy crawl leaves the API waiting for a connection. maxConns of zero keeps
+// the default, which is what the one-off subcommands want.
+func ConnectWith(ctx context.Context, dsn string, maxConns int) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
+	if maxConns > 0 {
+		cfg.MaxConns = int32(maxConns)
+	}
+	// A connection that lives forever also holds a server-side backend forever,
+	// through a failover it cannot see. These are unremarkable numbers; the
+	// point is that they are stated rather than left to whatever pgx picks.
+	cfg.MaxConnLifetime = time.Hour
+	cfg.MaxConnIdleTime = 15 * time.Minute
+	cfg.HealthCheckPeriod = time.Minute
+
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -150,3 +170,7 @@ func SchemaReady(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	return nil
 }
+
+// Pool is the connection this repository was built on. It exists for tests that
+// have to look at a table this package has no reason to expose a reader for.
+func (r *Repo) Pool() *pgxpool.Pool { return r.pool }

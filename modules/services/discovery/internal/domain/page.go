@@ -53,24 +53,8 @@ type Item struct {
 	// them, not one strange one.
 	References []Ref `json:"references,omitempty"`
 
-	TextRole TextRole `json:"text_role,omitempty"`
-
 	Ordinal int `json:"ordinal,omitempty"`
 }
-
-// TextRole records how specific the surrounding text is to the item it hangs
-// off. A page carrying one recording describes that recording; a page carrying
-// ten carries something they share, typically scripture rather than anyone's
-// talk.
-type TextRole string
-
-const (
-	// TextCanonical — the text is this recording's own content.
-	TextCanonical TextRole = "canonical"
-	// TextShared — the text belongs to the page and is shared by every
-	// recording on it. Searchable, never quotable as speech.
-	TextShared TextRole = "shared"
-)
 
 // Ref is a scripture reference in the corpus's own shape: a source code plus a
 // single verse coordinate. It matches `track_references` so normalized output

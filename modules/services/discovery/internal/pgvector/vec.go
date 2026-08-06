@@ -3,6 +3,7 @@
 package pgvector
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -19,4 +20,25 @@ func Literal(v []float32) string {
 	}
 	b.WriteByte(']')
 	return b.String()
+}
+
+// Parse reads back what Literal wrote. Vectors only came out of this database
+// through a distance operator until the cache started keeping them.
+func Parse(s string) ([]float32, error) {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "[")
+	s = strings.TrimSuffix(s, "]")
+	if s == "" {
+		return nil, nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]float32, len(parts))
+	for i, p := range parts {
+		f, err := strconv.ParseFloat(strings.TrimSpace(p), 32)
+		if err != nil {
+			return nil, fmt.Errorf("vector element %d: %w", i, err)
+		}
+		out[i] = float32(f)
+	}
+	return out, nil
 }

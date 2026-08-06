@@ -30,10 +30,17 @@ import (
 var (
 	// ErrDisallowed means robots.txt forbids this path.
 	ErrDisallowed = errors.New("fetch: disallowed by robots.txt")
+	// ErrRobotsUnread means the host did not tell us its rules, so we have no
+	// permission to act on. It is not a refusal, and a run that reports it as
+	// one sends you looking at the wrong thing.
+	ErrRobotsUnread = errors.New("fetch: robots.txt could not be read")
 	// ErrCircuitOpen means this host has failed repeatedly and is cooling down.
 	ErrCircuitOpen = errors.New("fetch: circuit breaker open")
 	// ErrTooLarge means the response exceeded the body cap.
 	ErrTooLarge = errors.New("fetch: response too large")
+	// ErrGone means the address no longer holds anything — the state of one
+	// page, not of the host serving it.
+	ErrGone = errors.New("fetch: no longer available")
 )
 
 // Config is what the client needs to behave.
@@ -47,6 +54,9 @@ type Config struct {
 	Timeout time.Duration
 	// MaxBody caps how much of a response we will read.
 	MaxBody int64
+	// Readers are the external readers a source may name. Each says what it is
+	// called; a source picks one by that name in Request.Tool.
+	Readers []Reader
 	// RetryMax is how many times a 429 or 5xx is retried, honouring Retry-After.
 	RetryMax int
 	// RetryWaitMin and RetryWaitMax bound the backoff between those retries.
@@ -78,6 +88,34 @@ func (c *Config) withDefaults() {
 	}
 }
 
+// Reader reads an address some other way than an HTTP request: a subprocess, a
+// headless browser, a site's own client. Adding one is writing this interface
+// and naming it in the config — the crawl above and the politeness below both
+// stay as they are.
+//
+// A reader is called from Get, after the host's turn has come round and inside
+// the same breaker, so one that spawns a process is no less polite than one
+// that opens a socket. The gap between requests is what bounds how hard a host
+// is leaned on, and nothing may slip past it.
+//
+// An address that holds nothing any more is an error wrapping ErrGone. That is
+// the reader's 404: the state of one page, not of the host, and the breaker
+// must not count it against the site.
+type Reader interface {
+	// Name is what a source names to select this reader.
+	Name() string
+	// Read fetches one address. Whatever credentials the source carries are
+	// passed on; a reader with no use for them ignores them.
+	Read(ctx context.Context, rawURL string, headers map[string]string) (*Reading, error)
+}
+
+// Reading is what a reader hands back. The client hashes it and caps its size,
+// so a reader has neither to know about.
+type Reading struct {
+	Body        []byte
+	ContentType string
+}
+
 // Request is what to ask for: the validators stored from the last fetch of this
 // URL, plus any headers the source needs to answer at all.
 type Request struct {
@@ -86,6 +124,9 @@ type Request struct {
 	// Headers are the source's credentials — a session cookie, a bearer token,
 	// an API key. Sent verbatim, so no scheme needs to be understood here.
 	Headers map[string]string
+	// Tool names an external reader for a source an HTTP client cannot read.
+	// Empty is an ordinary request.
+	Tool string
 	// MinDelay is the source's own politeness setting. The gap actually used
 	// is the largest of this, the service default, and whatever robots.txt
 	// asked for — a source can be told to go gently, never to go faster.
@@ -108,9 +149,10 @@ type Response struct {
 
 // Client fetches pages politely. It is safe for concurrent use.
 type Client struct {
-	cfg    Config
-	http   *retryablehttp.Client
-	robots *robotsCache
+	cfg     Config
+	http    *retryablehttp.Client
+	robots  *robotsCache
+	readers map[string]Reader
 
 	mu    sync.Mutex
 	hosts map[string]*hostState
@@ -133,12 +175,33 @@ func New(cfg Config) *Client {
 	rc.Logger = nil
 	rc.HTTPClient = &http.Client{Timeout: cfg.Timeout}
 
-	return &Client{
-		cfg:    cfg,
-		http:   rc,
-		robots: newRobotsCache(cfg.UserAgent),
-		hosts:  map[string]*hostState{},
+	readers := make(map[string]Reader, len(cfg.Readers))
+	for _, r := range cfg.Readers {
+		readers[r.Name()] = r
 	}
+	return &Client{
+		cfg:     cfg,
+		http:    rc,
+		robots:  newRobotsCache(cfg.UserAgent),
+		readers: readers,
+		hosts:   map[string]*hostState{},
+	}
+}
+
+// Allowed reports whether robots.txt lets us fetch this address, without
+// fetching it. Rules are per host and already in memory, so asking before
+// queueing an address costs nothing after the first read of a host.
+//
+// A host that has not told us its rules gets the benefit of the doubt here.
+// Get will refuse anyway, and refusing there says why; refusing here would
+// empty the queue silently.
+func (c *Client) Allowed(ctx context.Context, rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	rules := c.robots.get(ctx, u)
+	return !rules.known() || rules.allows(u.RequestURI())
 }
 
 // Get fetches one URL, waiting its turn on this host and skipping the body
@@ -153,6 +216,9 @@ func (c *Client) Get(ctx context.Context, rawURL string, req Request) (*Response
 	}
 
 	rules := c.robots.get(ctx, u)
+	if !rules.known() {
+		return nil, ErrRobotsUnread
+	}
 	if !rules.allows(u.RequestURI()) {
 		return nil, ErrDisallowed
 	}
@@ -165,7 +231,12 @@ func (c *Client) Get(ctx context.Context, rawURL string, req Request) (*Response
 		return nil, err
 	}
 
-	resp, err := c.do(ctx, rawURL, req)
+	var resp *Response
+	if req.Tool != "" {
+		resp, err = c.read(ctx, req.Tool, rawURL, req)
+	} else {
+		resp, err = c.do(ctx, rawURL, req)
+	}
 	if host.breaker.record(hostHealthy(resp, err)) {
 		slog.WarnContext(ctx, "host_circuit_opened",
 			"host", u.Host, "cooldown", host.breaker.cooldown.String(),
@@ -209,6 +280,38 @@ func errText(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func errStatus(code int) error { return fmt.Errorf("http %d", code) }
+
+// read hands one address to the reader the source named, and turns what comes
+// back into an ordinary response so nothing above here has to know that a
+// subprocess was involved.
+func (c *Client) read(ctx context.Context, name, rawURL string, req Request) (*Response, error) {
+	reader, ok := c.readers[name]
+	if !ok {
+		return nil, fmt.Errorf("fetch: no reader named %q", name)
+	}
+	out, err := reader.Read(ctx, rawURL, req.Headers)
+	if err != nil {
+		// The reader's 404 comes back as one, so the breaker sees a page that
+		// is missing rather than a host that is failing.
+		if errors.Is(err, ErrGone) {
+			return &Response{URL: rawURL, Status: http.StatusNotFound}, err
+		}
+		return nil, err
+	}
+	if int64(len(out.Body)) > c.cfg.MaxBody {
+		return nil, ErrTooLarge
+	}
+	sum := sha256.Sum256(out.Body)
+	return &Response{
+		URL:         rawURL,
+		Status:      http.StatusOK,
+		Body:        out.Body,
+		BodySHA256:  hex.EncodeToString(sum[:]),
+		ContentType: out.ContentType,
+	}, nil
 }
 
 func (c *Client) do(ctx context.Context, rawURL string, want Request) (*Response, error) {
@@ -295,4 +398,27 @@ func (c *Client) hostState(host string, robotsDelay time.Duration) *hostState {
 func (r *Response) IsHTML() bool {
 	ct := strings.ToLower(r.ContentType)
 	return strings.Contains(ct, "html") || strings.Contains(ct, "xml")
+}
+
+// Kind names why a fetch did not produce a page, in the words the run summaries
+// and the counters both use. It lives here because these are this package's own
+// refusals, and two callers naming them differently would make a tally that
+// cannot be added up.
+func Kind(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrDisallowed):
+		return "disallowed"
+	case errors.Is(err, ErrRobotsUnread):
+		return "robots_unread"
+	case errors.Is(err, ErrCircuitOpen):
+		return "circuit_open"
+	case errors.Is(err, ErrGone):
+		return "gone"
+	case errors.Is(err, ErrTooLarge):
+		return "too_large"
+	default:
+		return "fetch_failed"
+	}
 }

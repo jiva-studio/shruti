@@ -14,7 +14,12 @@ type breaker struct {
 	cooldown  time.Duration
 	fails     int
 	openUntil time.Time
-	now       func() time.Time
+	// probing means one caller is already through the half-open door and the
+	// rest wait for what it finds. Without it every worker held back by the
+	// cooldown is let out at the same instant, all onto a host that has just
+	// spent five minutes not answering.
+	probing bool
+	now     func() time.Time
 }
 
 func newBreaker(threshold int, cooldown time.Duration) *breaker {
@@ -36,9 +41,12 @@ func (b *breaker) allow() bool {
 	if b.now().Before(b.openUntil) {
 		return false
 	}
-	// Cooldown elapsed — half-open: let one probe through and reset the window.
-	b.openUntil = time.Time{}
-	b.fails = 0
+	// Cooldown elapsed — half-open: one probe goes through and the rest keep
+	// waiting until it reports back.
+	if b.probing {
+		return false
+	}
+	b.probing = true
 	return true
 }
 
@@ -49,11 +57,18 @@ func (b *breaker) record(success bool) (justOpened bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if success {
-		b.fails = 0
+		b.fails, b.probing = 0, false
 		b.openUntil = time.Time{}
 		return false
 	}
 	b.fails++
+	// The probe failed, so the door shuts again for another cooldown rather
+	// than staying ajar for everyone behind it.
+	if b.probing {
+		b.probing = false
+		b.openUntil = b.now().Add(b.cooldown)
+		return false
+	}
 	if b.fails >= b.threshold && b.openUntil.IsZero() {
 		b.openUntil = b.now().Add(b.cooldown)
 		return true

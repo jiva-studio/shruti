@@ -7,12 +7,14 @@ import (
 	"os"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/crawl"
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/application/parse"
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
+	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
@@ -28,8 +30,9 @@ type RouterDeps struct {
 	Repo             *store.Repo
 	Parse            *parse.Service
 	Index            *index.Service
-	Crawl            *crawl.Service
+	Crawl            *crawl.Background
 	Search           *search.Service
+	Metrics          *metrics.Counters
 	SchedulerEnabled bool
 }
 
@@ -41,16 +44,22 @@ type RouterDeps struct {
 //	POST /discovery/items              single-URL write path
 //	GET  /discovery/sources            what is configured and how it is going
 //	POST /discovery/sources            add or update a source
-//	POST /discovery/sources/{id}/run   trigger a pass by hand
+//	POST /discovery/sources/{id}/run   start a pass by hand; returns at once
 //	GET  /discovery/runs               recent passes
 //	GET  /discovery/runs/{id}          one pass in detail
 //	GET  /discovery/queue              what is waiting for a recheck
 //	GET  /discovery/pages/empty        visits that found no file
 //	GET  /discovery/collections        cycles, and which parts we have
 //	GET  /discovery/search             free text plus filters
+//	GET  /discovery/status             what this process has done, and what is waiting
 func NewRouter(d RouterDeps) http.Handler {
 	r := chi.NewRouter()
+	// The logger goes outside the recoverer, not inside it. Recovering first
+	// means the panic never reaches the logger and the request is missing from
+	// the log entirely; this way the caller gets a 500 carrying its request id
+	// and the line that says so is written like any other.
 	r.Use(requestLogger)
+	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", healthz)
 	r.Get("/readyz", readyzHandler(d.Pool))
@@ -59,6 +68,7 @@ func NewRouter(d RouterDeps) http.Handler {
 		r.Post("/parse", parseHandler(d.Parse, d.Repo))
 		r.Post("/items", itemsHandler(d.Index))
 		r.Get("/search", searchHandler(d.Search))
+		r.Get("/status", statusHandler(d.Repo, d.Metrics, d.SchedulerEnabled))
 
 		if d.Repo == nil {
 			return

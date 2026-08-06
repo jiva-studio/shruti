@@ -100,6 +100,98 @@ Three separate things have to be true before anything is fetched on its own:
 Explicit requests ignore all of that: asking for one URL *is* the
 authorization.
 
+## How the scheduler works
+
+It is not a periodic job. The queue is already in the database — addresses
+nobody has visited, and pages whose next check has come around — and the
+scheduler takes from it until there is nothing left, then waits and looks again.
+New addresses go first: they are the reason a listing was re-read at all.
+
+Nothing paces it but the gap between requests to one host, which lives in the
+fetcher. `DISCOVERY_SCHEDULER_WORKERS` says how many pages may be in flight at
+once across every source; it stops us idling through somebody else's round trip
+and is not a rate limit. There is no page budget: a batch on top of the per-host
+gap would only delay work that was already due, and make two sources on
+different hosts wait for each other though neither can disturb the other.
+
+`/discovery/runs` records passes started by hand, and those now return at once:
+the walk outlives the request that asked for it, and `/discovery/runs/{id}` is
+where you watch it. One run per source at a time; pressing the button twice is
+answered with `409` and the id of the run already going.
+
+Work the scheduler does leaves no run behind — it has no beginning and no end to
+record. `GET /discovery/status` is what stands in its place: what this process
+has fetched, found, failed at and spent since it started, and how much is still
+waiting. Two readings a minute apart give a rate.
+
+### When a page is read again
+
+A visit that finds something new schedules the next one at the source's
+`recheck_min_s`; a visit that finds nothing doubles the wait, up to
+`recheck_max_s`. A page settles on its own rhythm: a listing that gains
+something weekly never gets far from the floor, because the visit that finds the
+new thing puts it back there, while a folder from 2008 goes quiet.
+
+A page inside a section `robots.txt` later closed leaves the queue for good,
+with the reason on it. Left in place it would fill every claim and be discarded
+afterwards, starving the work that could have been done.
+
+A page that cannot be read at all is retried in an hour, then two, then four,
+drifting out to about ten days and never past the source's `recheck_max_s`.
+`GET /discovery/pages/empty?failing=true` is the list of them, worst first —
+coming away empty and being refused are different things, and a menu is not a
+problem.
+
+### Only one replica crawls
+
+The service takes a Postgres advisory lock at boot. The process that gets it
+schedules; the others serve the whole API and do not crawl, and say so in the
+log. Nothing needs configuring and nothing needs clearing if a process dies —
+the lock is session-scoped.
+
+This is not about duplicated work, which would be cheap. The per-host gap and
+the circuit breaker are a map in one process's memory, so two crawlers are two
+rate limiters, each correctly observing an interval the other knows nothing
+about: a site that asked for one request a second gets two. Row locks would not
+fix that; only shared limiter state would.
+
+The lock covers the scheduler. A run started by hand fetches from whichever
+replica received the request — rare, and somebody pressed a button.
+
+### Shutting down
+
+`SIGTERM` stops the scheduler claiming pages and stops hand-started runs taking
+new ones, then waits up to 20 seconds for the pages in hand to finish writing.
+The context they write under stays alive for that whole time: cancelling it is
+what leaves a page written and its recordings not. Only if the drain runs out of
+time is it cancelled. `stop_grace_period` is 45s, because the 10s default would
+kill the drain every deploy.
+
+## Settings
+
+Everything is `DISCOVERY_*` in the container and `SHRUTI_DISCOVERY_*` in the
+deployment `.env`; compose maps between them.
+
+| variable | default | what it does |
+|---|---|---|
+| `DISCOVERY_SCHEDULER_ENABLED` | `false` | the only switch that makes the service crawl on its own |
+| `DISCOVERY_SCHEDULER_WORKERS` | `4` | pages in flight at once, across every source — not a rate limit |
+| `DISCOVERY_PAGE_TIMEOUT` | `10m` | one page end to end: fetch, model, embed, write |
+| `DISCOVERY_DB_MAX_CONNS` | `16` | pool size; raised automatically if smaller than the worker count |
+| `DISCOVERY_USER_AGENT` | names us, with a contact URL | who a volunteer archive sees, and where to complain |
+| `DISCOVERY_CRAWL_DELAY` | `1s` | gap between requests to one host where `robots.txt` states none |
+| `DISCOVERY_REQUEST_TIMEOUT` | `30s` | one outbound request |
+| `DISCOVERY_MAX_BODY_BYTES` | `8388608` | the most of one response we will read |
+| `DISCOVERY_PROXY` | empty | for archives a datacenter address cannot read; YouTube answers one with a bot check |
+| `DISCOVERY_LLM_BASE_URL` | empty | unset leaves the normalizer stubbed: pages are still fetched and stored, just not read |
+| `DISCOVERY_LLM_API_KEY` | empty | same |
+| `DISCOVERY_LLM_MODEL` | `google/gemini-3.1-flash-lite` | part of the input hash, so changing it re-reads everything |
+| `DISCOVERY_EMBED_MODEL` | `openai/text-embedding-3-small` | matches the corpus, so vectors stay comparable |
+| `DISCOVERY_EMBED_DIM` | `1536` | must match the vector column or every insert fails |
+
+Per-source settings — the crawl delay, worker count, recheck bounds, credentials
+and which reader to use — live on the source row, not here.
+
 ## Costing nothing on a re-run
 
 - an unchanged page costs one conditional GET and no body
@@ -110,6 +202,18 @@ authorization.
   by any change
 
 ## Working on it
+
+Most of the suite is offline. The parts that are not — the store, the HTTP
+surface, search — want a Postgres with pgvector and skip without one:
+
+```sh
+export DISCOVERY_TEST_DATABASE_URL=postgresql://discovery:discovery@localhost:5432/discovery
+go test ./... -p 1                   # -p 1: they share one schema and drop it
+```
+
+`-p 1` is not optional with a database. Each of those packages starts from a
+freshly migrated schema, and run in parallel they pull it out from under each
+other, failing in ways that look like product bugs and are not.
 
 ```sh
 go test ./...                        # offline, no keys, no database

@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -110,6 +111,25 @@ func runMigrate() int {
 	return 0
 }
 
+// drainTimeout is how long shutdown waits for work in hand to finish before it
+// starts cutting. It has to fit inside the container's stop grace period, or
+// the orchestrator kills the process mid-drain and the wait bought nothing.
+const drainTimeout = 20 * time.Second
+
+// waitFor waits on a WaitGroup with a deadline, and reports whether it got
+// there. sync.WaitGroup has no such thing, and an unbounded Wait in a shutdown
+// path is how a container hangs until it is killed.
+func waitFor(wg *sync.WaitGroup, within time.Duration) bool {
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return true
+	case <-time.After(within):
+		return false
+	}
+}
+
 // runServe starts the HTTP server. Starting the service crawls nothing: the
 // scheduler is off unless switched on, and even then it only walks sources that
 // are themselves enabled.
@@ -130,12 +150,21 @@ func runServe() {
 		os.Exit(1)
 	}
 	defer deps.Pool.Close()
+	// Released before the pool it borrows a connection from.
+	defer deps.Leader.Release()
 
+	// The background work runs under a context that is not cancelled by
+	// shutdown. Shutting down asks it to stop taking new pages; cancelling this
+	// is the last resort below, and it is what cuts a page in half.
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
+	var workers sync.WaitGroup
 	if deps.Scheduler != nil {
-		slog.Info("scheduler_starting", "interval", cfg.ScheduleInterval.String())
-		go deps.Scheduler.Start(workerCtx)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			deps.Scheduler.Run(workerCtx)
+		}()
 	}
 
 	srv := &http.Server{
@@ -156,7 +185,26 @@ func runServe() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	slog.Info("shutdown_start")
-	workerCancel()
+
+	// Stop taking work, then give what is already in hand time to land. One
+	// budget covers both the scheduler and the hand-started runs, so the whole
+	// drain stays inside the grace period the container is given.
+	deadline := time.Now().Add(drainTimeout)
+	if deps.Scheduler != nil {
+		deps.Scheduler.Stop()
+	}
+	// Runs started by hand outlive the request that asked for them, so they are
+	// stopped and waited for here rather than abandoned mid-write.
+	deps.Background.Shutdown(time.Until(deadline))
+
+	if !waitFor(&workers, time.Until(deadline)) {
+		// The drain has run out of time. Cancelling now may cut a page in half,
+		// which is worse than a clean stop and better than being killed
+		// outright — and it is bounded, which an unqualified Wait is not.
+		slog.Warn("shutdown_drain_timeout", "waited", drainTimeout.String())
+		workerCancel()
+		workers.Wait()
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
