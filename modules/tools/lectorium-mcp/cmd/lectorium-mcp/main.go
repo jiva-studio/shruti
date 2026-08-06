@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -330,10 +332,10 @@ func main() {
 		}
 	}
 
-	// One artifact writer for all private per-track textual artifacts: writes
-	// the lake copy AND uploads to the S3 targets above under the artifacts/
-	// prefix, in one call. Lake-only when no bucket is configured.
-	artifactWriter := fsartifact.New(cfg.Out, publishTargets...)
+	// Lake-only on purpose: artifacts reach the publish targets through
+	// assets.sync alongside the public assets. Uploading each one as it was
+	// written put a network round trip inside every review chunk.
+	artifactWriter := fsartifact.New(cfg.Out)
 
 	transcriptStore := fstranscript.New(cfg.Out, artifactWriter)
 
@@ -459,6 +461,18 @@ func main() {
 	// `glossary.yaml` next to the binary (deployment ships
 	// them as a pair); operators can override via review.glossary.path.
 	// Missing file keeps the feature dormant — no spammy errors.
+	// Wall-clock here is mostly waiting, not computing, so the block and
+	// mutex profiles are the ones that answer "where did the time go".
+	if os.Getenv("LECTORIUM_PPROF") != "" {
+		runtime.SetBlockProfileRate(1000)
+		runtime.SetMutexProfileFraction(10)
+		go func() {
+			addr := os.Getenv("LECTORIUM_PPROF")
+			fmt.Fprintf(os.Stderr, "[pprof] listening on %s\n", addr)
+			_ = http.ListenAndServe(addr, nil)
+		}()
+	}
+
 	reviewGlossary := loadGlossaryOrNil(cfg.Review.Glossary.Path)
 
 	// Batch review: half price, up to 24 hours. Left nil when no api_key is

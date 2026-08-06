@@ -195,11 +195,14 @@ func TestCollectBatchWritesChunkArtifacts(t *testing.T) {
 			TokensIn: 1000, TokensOut: 200,
 		})
 	}
-	// Run() needs a registry; nil short-circuits before that in this test by
-	// checking the artifacts directly instead.
+	// Run() needs a registry; this test checks the artifacts directly instead.
+	rec, _ := jobs.Load(context.Background(), "batches/x")
+	prepared, err := uc.prepareChunks(context.Background(), "track_a", rec)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, r := range fb.results {
-		rec, _ := jobs.Load(context.Background(), "batches/x")
-		if err := uc.persistBatchChunk(context.Background(), "track_a", rec, i, r); err != nil {
+		if err := uc.persistBatchChunk(context.Background(), "track_a", rec, prepared, i, r); err != nil {
 			t.Fatalf("chunk %d: %v", i, err)
 		}
 	}

@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -187,6 +188,14 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 		total := rec.Tracks[id]
 		got := byTrack[id]
 		written := 0
+		started := time.Now()
+		// Prepared once per track: persisting a reply used to re-read and
+		// re-chunk the whole raw transcript for every chunk in it.
+		chunks, prepErr := uc.prepareChunks(ctx, track.Id(id), rec)
+		if prepErr != nil {
+			out.Tracks = append(out.Tracks, CollectTrack{TrackId: id, Error: prepErr.Error()})
+			continue
+		}
 		for i := 0; i < total; i++ {
 			r, ok := got[i]
 			if !ok {
@@ -196,7 +205,7 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 			if r.Err != nil {
 				continue // left for the live pass
 			}
-			if err := uc.persistBatchChunk(ctx, track.Id(id), rec, i, r); err == nil {
+			if err := uc.persistBatchChunk(ctx, track.Id(id), rec, chunks, i, r); err == nil {
 				written++
 			}
 		}
@@ -211,6 +220,8 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 		} else {
 			ct.Blocks = res.Blocks
 		}
+		fmt.Fprintf(os.Stderr, "[review.batch] %s: %d/%d from batch, %d live, %d blocks, %.1fs\n",
+			id, ct.FromBatch, total, ct.Live, ct.Blocks, time.Since(started).Seconds())
 		out.Tracks = append(out.Tracks, ct)
 	}
 	return out, nil
@@ -218,13 +229,16 @@ func (uc UseCase) CollectBatch(ctx context.Context, name string, opts Options) (
 
 // persistBatchChunk stores a job reply in the same shape a live call would, so
 // the normal review picks it up without knowing where it came from.
-func (uc UseCase) persistBatchChunk(ctx context.Context, id track.Id, rec BatchRecord, idx int, r BatchResult) error {
+func (uc UseCase) prepareChunks(ctx context.Context, id track.Id, rec BatchRecord) ([]pipelinereview.Chunk, error) {
 	raw, err := uc.Transcripts.ReadRaw(ctx, id, rec.Language)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	segs := uc.filterNoise(raw.Segments)
-	chunks := pipelinereview.BuildChunks(segs, rec.ChunkSize, rec.Overlap)
+	return pipelinereview.BuildChunks(uc.filterNoise(raw.Segments), rec.ChunkSize, rec.Overlap), nil
+}
+
+func (uc UseCase) persistBatchChunk(ctx context.Context, id track.Id, rec BatchRecord,
+	chunks []pipelinereview.Chunk, idx int, r BatchResult) error {
 	if idx >= len(chunks) {
 		return fmt.Errorf("review: chunk %d is outside %s", idx, id)
 	}
