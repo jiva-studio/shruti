@@ -16,17 +16,44 @@ var mediaExt = map[string]bool{
 	".mp4": true, ".m4v": true, ".webm": true,
 }
 
+// notPageExt is the set of extensions that make a URL something other than a
+// page to read. Downloading one to discover it is not HTML costs its whole
+// size: an archive on one site was 8 MB of PowerPoint and a kirtan festival
+// packed into a .rar.
+var notPageExt = map[string]bool{
+	".ppt": true, ".pptx": true, ".doc": true, ".docx": true, ".xls": true,
+	".xlsx": true, ".pdf": true, ".rtf": true, ".epub": true, ".djvu": true,
+	".zip": true, ".rar": true, ".7z": true, ".gz": true, ".bz2": true,
+	".tar": true, ".iso": true, ".exe": true, ".dmg": true, ".apk": true,
+	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true,
+	".svg": true, ".ico": true, ".bmp": true, ".tif": true, ".tiff": true,
+	".css": true, ".js": true, ".woff": true, ".woff2": true, ".ttf": true,
+}
+
 // IsMediaURL reports whether a URL points at a media file we could ingest.
 func IsMediaURL(raw string) bool {
+	return extOf(raw) != "" && mediaExt[extOf(raw)]
+}
+
+// IsPageURL reports whether a URL is worth fetching as a page. An extension is
+// a fact about the URL, not a guess about the site; anything without one, or
+// with one we do not recognise, is still worth a look.
+func IsPageURL(raw string) bool {
+	ext := extOf(raw)
+	return !notPageExt[ext] && !mediaExt[ext]
+}
+
+// extOf is the lowercased extension of a URL's path, or "" if it has none.
+func extOf(raw string) string {
 	p := raw
 	if i := strings.IndexAny(p, "?#"); i >= 0 {
 		p = p[:i]
 	}
 	i := strings.LastIndex(p, ".")
-	if i < 0 {
-		return false
+	if i < 0 || strings.ContainsAny(p[i:], "/") {
+		return ""
 	}
-	return mediaExt[strings.ToLower(p[i:])]
+	return strings.ToLower(p[i:])
 }
 
 const (
