@@ -198,3 +198,67 @@ func TestNothingToEmbedCostsNoCall(t *testing.T) {
 		t.Errorf("%d calls for nothing", *calls)
 	}
 }
+
+// The provider reports what a call cost, unasked, on every answer — tokens and
+// a price in dollars. It went uncounted while embedding was quietly the larger
+// half of what this service spends: roughly five dollars against the
+// normalizer's one, over the corpus as it stood.
+func TestWhatTheProviderBilledIsKept(t *testing.T) {
+	c, _ := server(t, func(w http.ResponseWriter, r *http.Request, in map[string]any) {
+		inputs, _ := in["input"].([]any)
+		var out struct {
+			Data  []item `json:"data"`
+			Usage struct {
+				PromptTokens int     `json:"prompt_tokens"`
+				TotalTokens  int     `json:"total_tokens"`
+				Cost         float64 `json:"cost"`
+			} `json:"usage"`
+		}
+		for i := range inputs {
+			out.Data = append(out.Data, item{Index: i, Embedding: []float32{float32(i), 0, 0}})
+		}
+		out.Usage.PromptTokens, out.Usage.TotalTokens, out.Usage.Cost = 83353, 83353, 0.00166706
+		_ = json.NewEncoder(w).Encode(out)
+	})
+
+	if _, err := c.Embed(context.Background(), []string{"a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	spent := c.Spent()
+	if len(spent) != 1 {
+		t.Fatalf("spend rows = %d, want 1", len(spent))
+	}
+	s := spent[0]
+	if s.Tokens == nil || *s.Tokens != 83353 {
+		t.Errorf("tokens = %v", s.Tokens)
+	}
+	if s.CostUSD == nil || *s.CostUSD != 0.00166706 {
+		t.Errorf("cost = %v", s.CostUSD)
+	}
+	if s.Items != 2 || s.Model != "text-embedding-3-small" {
+		t.Errorf("items=%d model=%q", s.Items, s.Model)
+	}
+	if rest := c.Spent(); len(rest) != 0 {
+		t.Errorf("spend was handed over twice: %v", rest)
+	}
+}
+
+// A provider that says nothing about money leaves it unsaid. Nil reaches the
+// ledger as NULL, which is not the same claim as nothing — a call that
+// genuinely cost zero is still tellable from one nobody priced.
+func TestASilentProviderIsNotPricedForIt(t *testing.T) {
+	c, _ := server(t, vectors)
+	if _, err := c.Embed(context.Background(), []string{"a"}); err != nil {
+		t.Fatal(err)
+	}
+	spent := c.Spent()
+	if len(spent) != 1 {
+		t.Fatalf("spend rows = %d, want 1", len(spent))
+	}
+	if spent[0].Tokens != nil || spent[0].CostUSD != nil {
+		t.Errorf("invented tokens=%v cost=%v", spent[0].Tokens, spent[0].CostUSD)
+	}
+	if spent[0].Items != 1 {
+		t.Errorf("items = %d; the count is known even when the price is not", spent[0].Items)
+	}
+}
