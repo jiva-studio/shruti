@@ -50,8 +50,6 @@ type RouterDeps struct {
 //	GET  /discovery/queue              what is waiting for a recheck
 //	GET  /discovery/pages/empty        visits that found no file
 //	GET  /discovery/collections        cycles, and which parts we have
-//	GET  /discovery/authors/alike      people who may be one person
-//	POST /discovery/authors/merge      make two rows one person
 //	GET  /discovery/search             free text plus filters
 //	GET  /discovery/status             what this process has done, and what is waiting
 func NewRouter(d RouterDeps) http.Handler {
@@ -84,8 +82,6 @@ func NewRouter(d RouterDeps) http.Handler {
 		r.Get("/pages/empty", emptyPagesHandler(d.Repo))
 		r.Get("/collections", collectionsHandler(d.Repo))
 		r.Get("/authors", authorsHandler(d.Repo))
-		r.Get("/authors/alike", alikeAuthorsHandler(d.Repo))
-		r.Post("/authors/merge", mergeAuthorsHandler(d.Repo))
 	})
 
 	return r
