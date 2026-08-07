@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/dop251/goja"
+
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 )
 
 //go:embed scripts/*.js
@@ -216,6 +218,12 @@ func (r *Runner) start(ctx context.Context, sourceID string) (*goja.Runtime, cha
 		return nil, nil, err
 	}
 	if err := vm.Set("pageLanguage", Language); err != nil {
+		return nil, nil, err
+	}
+	// Who is speaking, out of a line the archive wrote. What a Vaishnava name
+	// looks like is knowledge about this corpus and not about any site, so it
+	// lives in domain; the script only says which line to look at.
+	if err := vm.Set("speaker", domain.Speaker); err != nil {
 		return nil, nil, err
 	}
 
