@@ -203,11 +203,18 @@ and which reader to use — live on the source row, not here.
 
 ## Working on it
 
-Most of the suite is offline. The parts that are not — the store, the HTTP
-surface, search — want a Postgres with pgvector and skip without one:
+Most of the suite is offline. The parts that are not — the store, the write
+path, the scheduler, the HTTP surface, search — want a Postgres with pgvector
+and skip without one. Any throwaway instance will do; these tests drop and
+recreate the schema on every run, so do not point them at anything you want to
+keep:
 
 ```sh
-export DISCOVERY_TEST_DATABASE_URL=postgresql://discovery:discovery@localhost:5432/discovery
+docker run -d --name disctest -p 55444:5432 \
+  -e POSTGRES_USER=discovery -e POSTGRES_PASSWORD=postgres
+  pgvector/pgvector:pg17
+
+export DISCOVERY_TEST_DATABASE_URL='postgresql://discovery:x@127.0.0.1:55444/discovery?sslmode=disable'
 go test ./... -p 1                   # -p 1: they share one schema and drop it
 ```
 
