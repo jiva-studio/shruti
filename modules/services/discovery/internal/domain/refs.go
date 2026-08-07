@@ -366,10 +366,40 @@ func spellingPattern(name string) string {
 	return b.String()
 }
 
-// foldName is how two spellings of one name are recognised as one: case and
-// every kind of spacing removed.
+// foldName is how two spellings of one name are recognised as one: case, every
+// kind of spacing, and the diacritics removed.
+//
+// The diacritics matter because of where a name comes from. The corpus
+// dictionary writes Śrīmad-Bhāgavatam and Śrī Īśopaniṣad, and that is what an
+// interface shows and what it sends back — while not one recording in the whole
+// archive is written that way. Without this fold, picking a book by the name on
+// the screen finds nothing.
 func foldName(s string) string {
-	return strings.ToLower(strings.Join(splitOnSpacing(s), ""))
+	return foldDiacritics(strings.ToLower(strings.Join(splitOnSpacing(s), "")))
+}
+
+// diacritics are the marked letters of IAST, each with the plain letter it is
+// the same letter as. A table rather than a Unicode normaliser, for the reason
+// the Cyrillic table in name.go is one: it is short, it is exactly this
+// alphabet, and it keeps this package to the standard library.
+var diacritics = map[rune]rune{
+	'ā': 'a', 'ī': 'i', 'ū': 'u', 'ē': 'e', 'ō': 'o',
+	'ṛ': 'r', 'ṝ': 'r', 'ḷ': 'l', 'ḹ': 'l',
+	'ṅ': 'n', 'ñ': 'n', 'ṇ': 'n', 'ṭ': 't', 'ḍ': 'd',
+	'ś': 's', 'ṣ': 's', 'ḥ': 'h', 'ṁ': 'm', 'ṃ': 'm',
+}
+
+func foldDiacritics(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if plain, marked := diacritics[r]; marked {
+			b.WriteRune(plain)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func splitOnSpacing(s string) []string {
