@@ -46,7 +46,6 @@ func testRouter(t *testing.T) (http.Handler, *store.Repo) {
 	return handler.NewRouter(handler.RouterDeps{
 		Pool:    pool,
 		Repo:    repo,
-		Search:  searcher,
 		Ask:     &ask.Service{Searcher: searcher},
 		Metrics: metrics.New(time.Now().UTC()),
 	}), repo

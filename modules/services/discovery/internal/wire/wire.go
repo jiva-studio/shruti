@@ -126,7 +126,6 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 			Parse:            parser,
 			Index:            indexer,
 			Crawl:            background,
-			Search:           searcher,
 			Ask:              asker,
 			Metrics:          counters,
 			SchedulerEnabled: cfg.SchedulerEnabled,

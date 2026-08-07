@@ -14,7 +14,6 @@ import (
 	"github.com/jiva-studio/lectorium/discovery/internal/application/crawl"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/index"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/parse"
-	"github.com/jiva-studio/lectorium/discovery/internal/application/search"
 	"github.com/jiva-studio/lectorium/discovery/internal/metrics"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
 )
@@ -32,7 +31,6 @@ type RouterDeps struct {
 	Parse            *parse.Service
 	Index            *index.Service
 	Crawl            *crawl.Background
-	Search           *search.Service
 	Ask              *ask.Service
 	Metrics          *metrics.Counters
 	SchedulerEnabled bool
@@ -70,7 +68,6 @@ func NewRouter(d RouterDeps) http.Handler {
 	r.Route("/discovery", func(r chi.Router) {
 		r.Post("/parse", parseHandler(d.Parse, d.Repo))
 		r.Post("/items", itemsHandler(d.Index))
-		r.Get("/search", searchHandler(d.Search))
 		r.Post("/search", askHandler(d.Ask))
 		r.Get("/status", statusHandler(d.Repo, d.Metrics, d.SchedulerEnabled))
 

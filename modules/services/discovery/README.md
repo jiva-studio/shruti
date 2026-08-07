@@ -264,32 +264,41 @@ say what anything means.
 | `GET /discovery/queue` | what is waiting for a recheck |
 | `GET /discovery/pages/empty` | visits that found no file, and why when there was a why |
 | `GET /discovery/collections` | cycles, their parts in order, and how many are still unindexed |
-| `GET /discovery/search` | `q`, `author`, `language`, `source`, `ref`, `collection`, `date_from`, `date_to` |
-| `POST /discovery/search` | a question in words; answers with the filter it was read into |
+| `POST /discovery/search` | a question in words, filters, or both; answers with the filter it was read into |
 
 ## Asking in words
 
-`GET /discovery/search` takes filters. `POST /discovery/search` takes a
-sentence, or filters, or both:
+One endpoint, one payload. `POST /discovery/search` takes a sentence, or
+filters, or both:
 
 ```json
 { "query": "лекции Шиварамы Свами за 2012 год о карме",
-  "filter": { "language": "ru", "limit": 20 } }
+  "filter": { "languages": ["ru"], "limit": 20 } }
 ```
+
+There is no GET twin. Two ways in are two vocabularies to keep in step, and they
+had already drifted: the sentence was `q` on one and `filter.text` on the other,
+and only one of them ever answered with `messages`.
 
 and answers with the recordings, **the filter it read the sentence into**, and
 the sentence itself unchanged:
 
 ```json
 { "query": "лекции Шиварамы Свами за 2012 год о карме",
-  "filter": { "author": "Шиварама Свами", "date_from": "2012-01-01",
-              "date_to": "2012-12-31", "language": "ru", "limit": 20 },
+  "filter": { "authors": ["Шиварама Свами"], "date_from": "2012-01-01",
+              "date_to": "2012-12-31", "languages": ["ru"], "limit": 20 },
   "messages": [], "hits": [ … ] }
 ```
 
 The filter is one model in both directions. That is the point: send it back with
-the year removed and no `query`, and it behaves like the GET — dropping a field
-does not mean rewriting the sentence and hoping it reads the same way twice.
+the year removed and no `query`, and it is a plain filtered search — dropping a
+field does not mean rewriting the sentence and hoping it reads the same way
+twice.
+
+`authors`, `languages` and `sources` are lists, because that is how an interface
+asks them. `sources` are scriptures — `BG`, `SB`, `CC_MADHYA` — with `tokens`
+for the coordinate; `ref: "BG 2.13"` is the same thing written the way a person
+writes it. Which archive a recording was found in is not a filter.
 
 Where the sentence and the filter disagree, **the sentence wins**: a filter is
 what was set last time, a sentence is what is being said now. Every field it
@@ -377,7 +386,7 @@ With no query text the parts come back in the order the series page gave them,
 so listing a cycle is the same endpoint as searching one:
 
 ```sh
-curl -G :8089/discovery/search --data-urlencode 'collection=Ведическая концепция здоровья'
+curl -XPOST :8089/discovery/search -d '{"filter":{"collection":"Ведическая концепция здоровья"}}'
 #  1/3  Из чего складывается здоровье     2013-12-29
 #  2/3  Тело человека согласно аюрведе    2014-01-05
 #  3/3  Режим еды, сна, отдыха и работы   2014-01-12
