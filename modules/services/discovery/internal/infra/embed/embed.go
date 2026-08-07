@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -37,6 +38,35 @@ type Client struct {
 	apiKey  string
 	model   string
 	dim     int
+
+	mu    sync.Mutex
+	spent []Spend
+}
+
+// Spend is what a call was billed. The pointers are the point: a provider that
+// says nothing leaves them nil, which reaches the ledger as NULL and stays
+// distinguishable from a call that genuinely cost nothing. Nothing here prices
+// anything itself — an estimate stored beside real figures reads like one.
+type Spend struct {
+	Model   string
+	Items   int
+	Tokens  *int64
+	CostUSD *float64
+}
+
+func (c *Client) record(s Spend) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.spent = append(c.spent, s)
+}
+
+// Spent hands over what has been billed and forgets it.
+func (c *Client) Spent() []Spend {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.spent
+	c.spent = nil
+	return out
 }
 
 // Options configures the embedder.
@@ -91,11 +121,23 @@ type request struct {
 	Dimensions int      `json:"dimensions,omitempty"`
 }
 
+// usage is what the provider billed for one call.
+type usage struct {
+	PromptTokens int     `json:"prompt_tokens"`
+	TotalTokens  int     `json:"total_tokens"`
+	Cost         float64 `json:"cost"`
+}
+
 type response struct {
 	Data []struct {
 		Index     int       `json:"index"`
 		Embedding []float32 `json:"embedding"`
 	} `json:"data"`
+	// Usage is what the call was billed, and it arrives unasked: this endpoint
+	// reports prompt_tokens and a cost in dollars on every answer. Embedding
+	// turned out to be the larger half of what this service spends, and it was
+	// counted nowhere because nobody had looked at the body.
+	Usage *usage `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
@@ -116,8 +158,14 @@ func (c *Client) embedBatch(ctx context.Context, texts []string) ([][]float32, e
 			case <-time.After(baseBackoff << (attempt - 1)):
 			}
 		}
-		vecs, retryable, err := c.attempt(ctx, body, len(texts))
+		vecs, used, retryable, err := c.attempt(ctx, body, len(texts))
 		if err == nil {
+			spend := Spend{Model: c.model, Items: len(texts)}
+			if used != nil {
+				tokens, cost := int64(used.TotalTokens), used.Cost
+				spend.Tokens, spend.CostUSD = &tokens, &cost
+			}
+			c.record(spend)
 			return vecs, nil
 		}
 		lastErr = err
@@ -129,17 +177,17 @@ func (c *Client) embedBatch(ctx context.Context, texts []string) ([][]float32, e
 }
 
 // attempt makes one call and reports whether a failure is worth retrying.
-func (c *Client) attempt(ctx context.Context, body []byte, want int) ([][]float32, bool, error) {
+func (c *Client) attempt(ctx context.Context, body []byte, want int) ([][]float32, *usage, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/embeddings", bytes.NewReader(body))
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
 	defer resp.Body.Close()
 
@@ -149,18 +197,18 @@ func (c *Client) attempt(ctx context.Context, body []byte, want int) ([][]float3
 		// surfaces. "http 400" on its own sends somebody reading code instead
 		// of the sentence that was already written for them.
 		retry := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
-		return nil, retry, fmt.Errorf("embed: http %d: %s", resp.StatusCode, said(resp.Body))
+		return nil, nil, retry, fmt.Errorf("embed: http %d: %s", resp.StatusCode, said(resp.Body))
 	}
 
 	var decoded response
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
 	if decoded.Error != nil {
-		return nil, false, fmt.Errorf("embed: %s", decoded.Error.Message)
+		return nil, nil, false, fmt.Errorf("embed: %s", decoded.Error.Message)
 	}
 	if len(decoded.Data) != want {
-		return nil, false, fmt.Errorf("embed: got %d vectors for %d inputs", len(decoded.Data), want)
+		return nil, nil, false, fmt.Errorf("embed: got %d vectors for %d inputs", len(decoded.Data), want)
 	}
 
 	// Providers are allowed to answer out of order, and the index is the only
@@ -170,18 +218,18 @@ func (c *Client) attempt(ctx context.Context, body []byte, want int) ([][]float3
 	vecs := make([][]float32, want)
 	for i, d := range decoded.Data {
 		if c.dim > 0 && len(d.Embedding) != c.dim {
-			return nil, false, fmt.Errorf("embed: vector %d has %d dimensions, want %d", i, len(d.Embedding), c.dim)
+			return nil, nil, false, fmt.Errorf("embed: vector %d has %d dimensions, want %d", i, len(d.Embedding), c.dim)
 		}
 		for _, f := range d.Embedding {
 			// A NaN reaching pgvector poisons every distance it takes part in,
 			// and nothing downstream would report it.
 			if math.IsNaN(float64(f)) || math.IsInf(float64(f), 0) {
-				return nil, false, fmt.Errorf("embed: vector %d is not finite", i)
+				return nil, nil, false, fmt.Errorf("embed: vector %d is not finite", i)
 			}
 		}
 		vecs[i] = d.Embedding
 	}
-	return vecs, false, nil
+	return vecs, decoded.Usage, false, nil
 }
 
 // said is whatever the provider put in the body of a refusal, as its own error
