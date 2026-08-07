@@ -17,9 +17,9 @@ import (
 
 func testRepo(t *testing.T) *store.Repo {
 	t.Helper()
-	dsn := os.Getenv("DISCOVERY_TEST_DATABASE_URL")
+	dsn := os.Getenv("SHRUTI_DISCOVERY_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("DISCOVERY_TEST_DATABASE_URL not set")
+		t.Skip("SHRUTI_DISCOVERY_TEST_DATABASE_URL not set")
 	}
 	ctx := context.Background()
 	pool, err := store.Connect(ctx, dsn)
