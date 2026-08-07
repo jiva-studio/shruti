@@ -195,14 +195,22 @@ type Work struct {
 // reason a listing was re-read at all. Last a page whose time has come, and
 // among those the one waiting longest goes first.
 //
-// That priority holds *within* a source. Between sources the claim goes round
-// in turns, and it has to: ordered by urgency alone, whichever source is
+// That priority holds *within* one archive. Above it the claim goes round in
+// turns, and it has to: ordered by urgency alone, whichever source is
 // producing pages fastest wins every place in every claim, because its newest
 // links keep arriving ahead of everybody else's. Measured on a live crawl — one
 // archive in full backfill, a second added an hour later — the second source's
 // two hundred and twenty-two links sat behind an ever-growing pile and a claim
 // of two hundred came back two hundred to nil. It was not slow; it was never
 // going to start.
+//
+// The turns are taken by host first and by source within it. Host, because that
+// is what politeness is measured against: one limiter and one breaker per host,
+// shared by every source on it. Twenty-four YouTube channels are twenty-four
+// sources and one host, and taking turns by source alone would hand them
+// twenty-four places in every claim — all of which then queue behind the same
+// one-request-at-a-time gap, while the other archives, which cannot disturb
+// anybody, wait for a worker.
 //
 // A turn nobody takes is not wasted: a source with five addresses contributes
 // five and the rest of the claim goes to whoever else has work.
@@ -246,10 +254,16 @@ func (r *Repo) ClaimWork(ctx context.Context, now time.Time, limit int) ([]Work,
 			WHERE p.next_check_at IS NOT NULL AND p.next_check_at <= $1
 		)
 		SELECT url, coalesce(source_id,'') FROM (
-			SELECT *, row_number() OVER (PARTITION BY source_id ORDER BY rank, ord DESC) AS turn
+			SELECT *, row_number() OVER (PARTITION BY host ORDER BY within_host, rank, ord DESC) AS turn
 			FROM (
-				SELECT * FROM seeds UNION ALL SELECT * FROM fresh UNION ALL SELECT * FROM due
-			) q
+				SELECT *, row_number() OVER (PARTITION BY host, source_id ORDER BY rank, ord DESC) AS within_host
+				FROM (
+					SELECT *, coalesce(substring(url from '^[a-zA-Z][a-zA-Z0-9+.-]*://([^/?#]+)'), url) AS host
+					FROM (
+						SELECT * FROM seeds UNION ALL SELECT * FROM fresh UNION ALL SELECT * FROM due
+					) q
+				) h
+			) s
 		) r ORDER BY turn, rank, ord DESC LIMIT $2`, now, limit)
 	if err != nil {
 		return nil, err
