@@ -310,8 +310,19 @@ nobody has keeps its filter and returns nothing, and says so — "nothing matche
 and "nothing could match" are different answers, and an empty list cannot tell
 them apart on its own. A question that could not be read, because no model is
 configured or the provider was slow, is searched as written and says that too.
-The reading has six seconds and no retries: somebody is waiting, and results
-without a reading beat a reading nobody stayed for.
+The reading has three seconds and one more try. A gateway serves one model from
+several upstreams and they are not equally quick — measured over twenty calls of
+the same request, one answered every time inside 1.1s and the other took up to
+4.7s, and every slow call in a day of use was the second one. So the request
+asks to be routed by latency, and a reading still missing at three seconds has
+met the slow one anyway: asking again gets a fresh routing decision, which beats
+waiting out the one already lost.
+
+And whatever the reader made of it, the question still says what it says. A
+verse in the words is found by the canon and a speaker by their form of address,
+both in microseconds, so a reading that failed costs precision rather than the
+question. A speaker is only taken this way when the corpus actually holds them:
+a name matching nobody would turn a search with results into an empty one.
 
 A topic is not a filter. "о карме" describes what is said inside a talk, so it
 stays in the text and is searched for. Nothing is cut out of the question,
