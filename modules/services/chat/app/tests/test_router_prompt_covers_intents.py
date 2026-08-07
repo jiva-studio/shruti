@@ -92,3 +92,30 @@ def test_one_phrase_is_not_taught_as_two_intents() -> None:
                 clashes.append(f"{ex!r}: {seen[ex]} vs {intent}")
             seen[ex] = intent
     assert not clashes, clashes
+
+
+def test_the_prompt_covers_asking_the_app_to_do_something() -> None:
+    """Two real requests fell through the cracks on 2026-08-06.
+
+    «Browse by author» became a lecture search with nothing to search for —
+    it timed out and the person got an empty bubble. «1st one start it», right
+    after a list of cards, produced five DIFFERENT lectures instead of playing
+    the one they pointed at.
+
+    Neither is something the assistant can do — it cannot open a screen or
+    press play — and both are documented in the help pages, so `help` is the
+    only honest destination. The line that keeps this from swallowing real
+    requests is the one about naming: «включи что-нибудь» still wants a
+    lecture chosen, and that is `recommend`."""
+    section = _bullets()["help"]
+    assert "browse by author" in section.lower()
+    assert "start it" in section.lower()
+    # …and the guard against over-reach.
+    assert "recommend" in section, "asking WHICH lecture to play is not app help"
+
+
+def test_facet_browsing_is_not_taught_as_a_lecture_search() -> None:
+    """The tell has to be written down, or the next reader re-litigates it:
+    naming what to look for is a search, naming a facet is navigation."""
+    section = _bullets()["help"]
+    assert "NAMES what to look for is find_track" in section
