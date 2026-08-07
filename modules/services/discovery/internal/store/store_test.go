@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -219,6 +220,91 @@ func TestFailingPagesAreTheirOwnList(t *testing.T) {
 	}
 	if len(empty) != 3 {
 		t.Errorf("empty pages = %d, want all three", len(empty))
+	}
+}
+
+// One source in full backfill must not take the whole claim.
+//
+// This is the defect as it happened: an archive being walked for the first time
+// produced new pages continuously, so its links always carried the highest page
+// id and always sorted first. A second source added later had its links sink
+// behind an ever-growing pile — a claim of 200 came back 200 to nil, and it was
+// never going to start.
+func TestOneBusySourceDoesNotTakeTheWholeClaim(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx, now := context.Background(), time.Now().UTC()
+	mustSource(t, r, &store.Source{ID: "busy", SeedURLs: []string{"https://busy.example/"}, Enabled: true})
+	mustSource(t, r, &store.Source{ID: "quiet", SeedURLs: []string{"https://quiet.example/"}, Enabled: true})
+
+	// The quiet source found its links early and then stopped producing pages.
+	quiet := mustPage(t, r, &store.Page{URL: "https://quiet.example/list", SourceID: ptr("quiet"), NextCheckAt: &now})
+	var quietLinks []string
+	for i := range 40 {
+		quietLinks = append(quietLinks, "https://quiet.example/talk/"+strconv.Itoa(i))
+	}
+	if err := r.ReplacePageLinks(ctx, quiet, quietLinks); err != nil {
+		t.Fatal(err)
+	}
+
+	// The busy one keeps producing pages, so its links keep arriving with a
+	// higher page id than anything the quiet source will ever have again.
+	for p := range 20 {
+		id := mustPage(t, r, &store.Page{
+			URL: "https://busy.example/list/" + strconv.Itoa(p), SourceID: ptr("busy"), NextCheckAt: &now,
+		})
+		var links []string
+		for i := range 20 {
+			links = append(links, "https://busy.example/talk/"+strconv.Itoa(p)+"-"+strconv.Itoa(i))
+		}
+		if err := r.ReplacePageLinks(ctx, id, links); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := r.ClaimWork(ctx, now, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]int{}
+	for _, w := range got {
+		by[w.SourceID]++
+	}
+	if by["quiet"] == 0 {
+		t.Fatalf("the quiet source got nothing: %v", by)
+	}
+	// Round robin over two sources with plenty each: near enough half.
+	if by["quiet"] < 40 || by["busy"] < 40 {
+		t.Errorf("claim split %v; want the two sources taking turns", by)
+	}
+}
+
+// A turn nobody takes is not wasted. A source with a handful of addresses
+// contributes them and the rest of the claim goes to whoever else has work.
+func TestASourceWithLittleWorkDoesNotHoldTheClaimOpen(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx, now := context.Background(), time.Now().UTC()
+	mustSource(t, r, &store.Source{ID: "big", SeedURLs: []string{"https://big.example/"}, Enabled: true})
+	mustSource(t, r, &store.Source{ID: "small", SeedURLs: []string{"https://small.example/"}, Enabled: true})
+
+	big := mustPage(t, r, &store.Page{URL: "https://big.example/list", SourceID: ptr("big"), NextCheckAt: &now})
+	var many []string
+	for i := range 60 {
+		many = append(many, "https://big.example/talk/"+strconv.Itoa(i))
+	}
+	if err := r.ReplacePageLinks(ctx, big, many); err != nil {
+		t.Fatal(err)
+	}
+	small := mustPage(t, r, &store.Page{URL: "https://small.example/list", SourceID: ptr("small"), NextCheckAt: &now})
+	if err := r.ReplacePageLinks(ctx, small, []string{"https://small.example/talk/1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := r.ClaimWork(ctx, now, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 50 {
+		t.Fatalf("claimed %d of 50; turns nobody could take were left empty", len(got))
 	}
 }
 
