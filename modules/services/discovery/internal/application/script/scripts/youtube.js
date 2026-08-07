@@ -54,7 +54,10 @@ function extract(page, items) {
 function recordings(page) {
   var doc = parse(page.html || '');
   if (!doc || doc.entries || !doc.id) return [];
-  return ['https://www.youtube.com/watch?v=' + doc.id];
+  // The address this page was read from, which for a video is its watch page.
+  // Building one out of the id worked until a page turned out not to be a
+  // video at all.
+  return page.url ? [page.url] : [];
 }
 
 // links are the videos a channel holds, for the crawl to visit one at a time.
@@ -64,9 +67,23 @@ function links(page) {
   var out = [];
   for (var i = 0; i < doc.entries.length; i++) {
     var e = doc.entries[i];
-    if (e && e.id) out.push('https://www.youtube.com/watch?v=' + e.id);
+    if (!e) continue;
+    // The address the reader gave, not one built out of an id. A channel does
+    // not always answer with its videos: some answer with their tabs, whose id
+    // is the channel's own, and building a watch address out of that produced
+    // three addresses to nowhere and a channel nobody ever walked. A video
+    // carries url, a tab carries webpage_url, and both are already right.
+    var u = e.url || e.webpage_url || '';
+    if (!u || isShorts(u)) continue;
+    out.push(u);
   }
   return out;
+}
+
+// isShorts drops the tab of vertical clips. They are not lectures, and a
+// channel read whole offers them alongside its videos and its streams.
+function isShorts(u) {
+  return /\/shorts(\/|$|\?)/i.test(u);
 }
 
 // The reader's output arrives whole in page.html. page.text is the flattened
