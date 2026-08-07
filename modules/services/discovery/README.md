@@ -263,6 +263,49 @@ say what anything means.
 | `GET /discovery/pages/empty` | visits that found no file, and why when there was a why |
 | `GET /discovery/collections` | cycles, their parts in order, and how many are still unindexed |
 | `GET /discovery/search` | `q`, `author`, `language`, `source`, `ref`, `collection`, `date_from`, `date_to` |
+| `POST /discovery/search` | a question in words; answers with the filter it was read into |
+
+## Asking in words
+
+`GET /discovery/search` takes filters. `POST /discovery/search` takes a
+sentence, or filters, or both:
+
+```json
+{ "query": "лекции Шиварамы Свами за 2012 год о карме",
+  "filter": { "language": "ru", "limit": 20 } }
+```
+
+and answers with the recordings, **the filter it read the sentence into**, and
+the sentence itself unchanged:
+
+```json
+{ "query": "лекции Шиварамы Свами за 2012 год о карме",
+  "filter": { "author": "Шиварама Свами", "date_from": "2012-01-01",
+              "date_to": "2012-12-31", "language": "ru", "limit": 20 },
+  "messages": [], "hits": [ … ] }
+```
+
+The filter is one model in both directions. That is the point: send it back with
+the year removed and no `query`, and it behaves like the GET — dropping a field
+does not mean rewriting the sentence and hoping it reads the same way twice.
+
+Where the sentence and the filter disagree, **the sentence wins**: a filter is
+what was set last time, a sentence is what is being said now. Every field it
+overrules appears in `messages`, so an interface can say "year changed to 2012"
+without diffing anything itself.
+
+`messages` is also where the other answers about the question go. A speaker
+nobody has keeps its filter and returns nothing, and says so — "nothing matches"
+and "nothing could match" are different answers, and an empty list cannot tell
+them apart on its own. A question that could not be read, because no model is
+configured or the provider was slow, is searched as written and says that too.
+The reading has six seconds and no retries: somebody is waiting, and results
+without a reading beat a reading nobody stayed for.
+
+A topic is not a filter. "о карме" describes what is said inside a talk, so it
+stays in the text and is searched for. Nothing is cut out of the question,
+including the speaker's name — the author filter already narrows, and a lecture
+that mentions somebody is a reasonable thing to find.
 
 ## Sources behind an account
 

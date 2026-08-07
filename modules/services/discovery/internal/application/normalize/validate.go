@@ -3,6 +3,8 @@ package normalize
 import (
 	"strings"
 	"time"
+
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 )
 
 // earliestPlausible is before any recording of a lecture we index could exist.
@@ -44,20 +46,10 @@ func Validate(r *Result, knownSources map[string]bool, now time.Time) {
 	}
 }
 
-// DefaultSourceCodes are the scripture codes the corpus addresses recordings
-// by — the same canon the corpus filename parser accepts. A reference to
-// anything else is an invention, not a citation.
-var DefaultSourceCodes = []string{
-	"BG", "SB", "CC_ADI", "CC_MADHYA", "CC_ANTYA", "ISO", "NOD", "BS",
-}
+// DefaultSourceCodes and SourceCodeSet moved to domain, where the canon
+// belongs: it is knowledge about the corpus rather than about reading a page,
+// and reading a question needs the same list.
+var DefaultSourceCodes = domain.ScriptureCodes
 
 // SourceCodeSet turns a code list into the lookup Validate wants.
-func SourceCodeSet(codes []string) map[string]bool {
-	set := make(map[string]bool, len(codes))
-	for _, c := range codes {
-		if c = strings.ToUpper(strings.TrimSpace(c)); c != "" {
-			set[c] = true
-		}
-	}
-	return set
-}
+func SourceCodeSet(codes []string) map[string]bool { return domain.ScriptureCodeSet(codes) }

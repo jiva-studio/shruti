@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/lectorium/discovery/internal/application/ask"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/crawl"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/index"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/parse"
@@ -32,6 +33,7 @@ type RouterDeps struct {
 	Index            *index.Service
 	Crawl            *crawl.Background
 	Search           *search.Service
+	Ask              *ask.Service
 	Metrics          *metrics.Counters
 	SchedulerEnabled bool
 }
@@ -51,6 +53,7 @@ type RouterDeps struct {
 //	GET  /discovery/pages/empty        visits that found no file
 //	GET  /discovery/collections        cycles, and which parts we have
 //	GET  /discovery/search             free text plus filters
+//	POST /discovery/search             a question in words; answers with the filter it read
 //	GET  /discovery/status             what this process has done, and what is waiting
 func NewRouter(d RouterDeps) http.Handler {
 	r := chi.NewRouter()
@@ -68,6 +71,7 @@ func NewRouter(d RouterDeps) http.Handler {
 		r.Post("/parse", parseHandler(d.Parse, d.Repo))
 		r.Post("/items", itemsHandler(d.Index))
 		r.Get("/search", searchHandler(d.Search))
+		r.Post("/search", askHandler(d.Ask))
 		r.Get("/status", statusHandler(d.Repo, d.Metrics, d.SchedulerEnabled))
 
 		if d.Repo == nil {

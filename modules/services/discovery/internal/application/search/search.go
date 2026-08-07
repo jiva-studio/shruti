@@ -468,3 +468,20 @@ func fuse(q Query, lanes ...[]Hit) []Hit {
 	}
 	return out
 }
+
+// Names reports whether an author filter can match anybody at all.
+//
+// It exists so an empty result can say which of the two empties it is. "Nothing
+// matches" is an answer about the corpus; "nothing could match" is an answer
+// about the question, and a caller shown a bare empty list has no way to tell
+// them apart.
+func (s *Service) Names(ctx context.Context, author string) (bool, error) {
+	if strings.TrimSpace(author) == "" {
+		return true, nil
+	}
+	ids, err := s.resolveAuthors(ctx, author)
+	if err != nil {
+		return false, err
+	}
+	return len(ids) > 0, nil
+}
