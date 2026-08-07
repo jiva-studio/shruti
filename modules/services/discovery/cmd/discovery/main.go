@@ -16,6 +16,9 @@
 //	discovery healthz       — self-call /healthz over localhost; exit 0/1
 //	discovery parse <url>   — fetch one URL, print what came out, write nothing
 //	                          (no credentials: use POST /discovery/parse for those)
+//	discovery relink-authors — attach stored recordings to the person they name,
+//	                          for when a fix to how names are read cannot reach
+//	                          what was already written. Fetches nothing.
 package main
 
 import (
@@ -50,6 +53,8 @@ func main() {
 		os.Exit(runMigrate())
 	case "parse":
 		os.Exit(runParse(os.Args[2:]))
+	case "relink-authors":
+		os.Exit(runRelink())
 	case "serve":
 		runServe()
 	default:
@@ -83,6 +88,41 @@ func runParse(args []string) int {
 	if err := enc.Encode(layers); err != nil {
 		return 1
 	}
+	return 0
+}
+
+// runRelink attaches recordings we already hold to the person they name.
+//
+// It exists because a correction to how a name is read does not reach what is
+// already stored: a recording is linked when its page is read, and a page is
+// only read again when the site changed, the prompt changed or the source's
+// script changed. A fix in Go changes none of those.
+//
+// A subcommand rather than something that happens at boot. It is a repair, and
+// a repair is a decision somebody makes.
+func runRelink() int {
+	cfg := config.Load()
+	if err := cfg.RequireDatabase(); err != nil {
+		slog.Error("config load failed", "err", err)
+		return 2
+	}
+	logpkg.Setup("lectorium-discovery", cfg.Env, cfg.ServiceVersion)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	pool, err := store.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		slog.ErrorContext(ctx, "db_connect_failed", "err", err.Error())
+		return 1
+	}
+	defer pool.Close()
+
+	linked, err := store.NewRepo(pool).RelinkAuthors(ctx, 500)
+	if err != nil {
+		slog.ErrorContext(ctx, "relink_failed", "linked", linked, "err", err.Error())
+		return 1
+	}
+	slog.InfoContext(ctx, "relink_done", "linked", linked)
 	return 0
 }
 

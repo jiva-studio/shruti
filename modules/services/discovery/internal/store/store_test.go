@@ -688,3 +688,109 @@ func TestMergingSomebodyIntoThemselvesIsRefused(t *testing.T) {
 		t.Error("merging a person into themselves was allowed")
 	}
 }
+
+// A fix to how a name is read does not reach what is already stored: a
+// recording is linked when its page is read, and a page is only read again when
+// the site changed, the prompt changed, or the source's script did. A
+// correction in Go changes none of those, so what was written before the fix
+// stays wrong for ever.
+//
+// This is the pass that repairs it, over the database and nothing else.
+func TestRelinkAttachesWhatWasAlreadyStored(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+
+	// Written the way the broken code left them: the name is on the row, the
+	// key is empty, and nothing is linked.
+	for i, name := range []string{"Олег Торсунов", "Олег Торсунов", "Е.М. Сарвагья дас", "Radhanath Swami"} {
+		item := &store.Item{
+			MediaURL: "https://a.example/" + strconv.Itoa(i) + ".mp3",
+			PageID:   &page, SourceID: ptr("a"), Author: name,
+		}
+		if _, err := r.SaveItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Pool().Exec(ctx, `UPDATE discovery.items SET author_key = '' WHERE id = $1`, item.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Pool().Exec(ctx, `DELETE FROM discovery.item_authors WHERE item_id = $1`, item.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	linked, err := r.RelinkAuthors(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked != 4 {
+		t.Errorf("linked %d, want 4", linked)
+	}
+
+	// Three people, not four: the same speaker written twice is one person.
+	authors, err := r.Authors(ctx, "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(authors) != 3 {
+		t.Fatalf("%d people: %+v", len(authors), authors)
+	}
+	for _, a := range authors {
+		if a.Name == "Олег Торсунов" && a.Items != 2 {
+			t.Errorf("Торсунов has %d recordings, want 2", a.Items)
+		}
+	}
+
+	// And the stored key is repaired too, or every filter that goes through the
+	// column rather than the link keeps missing the recording.
+	var empty int
+	if err := r.Pool().QueryRow(ctx,
+		`SELECT count(*) FROM discovery.items WHERE author <> '' AND coalesce(author_key,'') = ''`).Scan(&empty); err != nil {
+		t.Fatal(err)
+	}
+	if empty != 0 {
+		t.Errorf("%d recordings still carry an empty key", empty)
+	}
+}
+
+// Running it twice changes nothing the second time, and a name that is only a
+// form of address resolves to nobody without spinning the loop for ever.
+func TestRelinkIsSafeToRunAgain(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+
+	// The second is punctuation: it reduces to nothing, so it belongs to
+	// nobody. A bare "прабху" would not do — a form of address is only
+	// recognised as one when it follows a name, and on its own it is a word
+	// like any other.
+	for i, name := range []string{"Локанатха Свами", "—"} {
+		item := &store.Item{
+			MediaURL: "https://a.example/" + strconv.Itoa(i) + ".mp3",
+			PageID:   &page, SourceID: ptr("a"), Author: name,
+		}
+		if _, err := r.SaveItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Pool().Exec(ctx, `DELETE FROM discovery.item_authors WHERE item_id = $1`, item.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	first, err := r.RelinkAuthors(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != 1 {
+		t.Errorf("linked %d, want 1 — the other is a form of address and belongs to nobody", first)
+	}
+	second, err := r.RelinkAuthors(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != 0 {
+		t.Errorf("a second run linked %d more", second)
+	}
+}
