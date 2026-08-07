@@ -93,7 +93,7 @@ all that is left, and the crawl wanders off into the archive.
 
 Three separate things have to be true before anything is fetched on its own:
 
-- `DISCOVERY_SCHEDULER_ENABLED=true` — off by default
+- `SHRUTI_DISCOVERY_SCHEDULER_ENABLED=true` — off by default
 - the source row is `enabled`
 - a page is due by its `next_check_at`
 
@@ -108,7 +108,7 @@ scheduler takes from it until there is nothing left, then waits and looks again.
 New addresses go first: they are the reason a listing was re-read at all.
 
 Nothing paces it but the gap between requests to one host, which lives in the
-fetcher. `DISCOVERY_SCHEDULER_WORKERS` says how many pages may be in flight at
+fetcher. `SHRUTI_DISCOVERY_SCHEDULER_WORKERS` says how many pages may be in flight at
 once across every source; it stops us idling through somebody else's round trip
 and is not a rate limit. There is no page budget: a batch on top of the per-host
 gap would only delay work that was already due, and make two sources on
@@ -169,25 +169,28 @@ kill the drain every deploy.
 
 ## Settings
 
-Everything is `DISCOVERY_*` in the container and `SHRUTI_DISCOVERY_*` in the
-deployment `.env`; compose maps between them.
+One name, everywhere: `SHRUTI_DISCOVERY_*` in the deployment `.env`, in
+compose, and in the service. Compose passes the file through and states a
+value only where it computes one — a password into a DSN, or one variable
+standing in for another. The defaults below live in the service's own config
+and nowhere else, which is what keeps them from disagreeing.
 
 | variable | default | what it does |
 |---|---|---|
-| `DISCOVERY_SCHEDULER_ENABLED` | `false` | the only switch that makes the service crawl on its own |
-| `DISCOVERY_SCHEDULER_WORKERS` | `4` | pages in flight at once, across every source — not a rate limit |
-| `DISCOVERY_PAGE_TIMEOUT` | `10m` | one page end to end: fetch, model, embed, write |
-| `DISCOVERY_DB_MAX_CONNS` | `16` | pool size; raised automatically if smaller than the worker count |
-| `DISCOVERY_USER_AGENT` | names us, with a contact URL | who a volunteer archive sees, and where to complain |
-| `DISCOVERY_CRAWL_DELAY` | `1s` | gap between requests to one host where `robots.txt` states none |
-| `DISCOVERY_REQUEST_TIMEOUT` | `30s` | one outbound request |
-| `DISCOVERY_MAX_BODY_BYTES` | `8388608` | the most of one response we will read |
-| `DISCOVERY_PROXY` | empty | for archives a datacenter address cannot read; YouTube answers one with a bot check |
-| `DISCOVERY_LLM_BASE_URL` | empty | unset leaves the normalizer stubbed: pages are still fetched and stored, just not read |
-| `DISCOVERY_LLM_API_KEY` | empty | same |
-| `DISCOVERY_LLM_MODEL` | `google/gemini-3.1-flash-lite` | part of the input hash, so changing it re-reads everything |
-| `DISCOVERY_EMBED_MODEL` | `openai/text-embedding-3-small` | matches the corpus, so vectors stay comparable |
-| `DISCOVERY_EMBED_DIM` | `1536` | must match the vector column or every insert fails |
+| `SHRUTI_DISCOVERY_SCHEDULER_ENABLED` | `false` | the only switch that makes the service crawl on its own |
+| `SHRUTI_DISCOVERY_SCHEDULER_WORKERS` | `4` | pages in flight at once, across every source — not a rate limit |
+| `SHRUTI_DISCOVERY_PAGE_TIMEOUT` | `10m` | one page end to end: fetch, model, embed, write |
+| `SHRUTI_DISCOVERY_DB_MAX_CONNS` | `16` | pool size; raised automatically if smaller than the worker count |
+| `SHRUTI_DISCOVERY_USER_AGENT` | names us, with a contact URL | who a volunteer archive sees, and where to complain |
+| `SHRUTI_DISCOVERY_CRAWL_DELAY` | `1s` | gap between requests to one host where `robots.txt` states none |
+| `SHRUTI_DISCOVERY_REQUEST_TIMEOUT` | `30s` | one outbound request |
+| `SHRUTI_DISCOVERY_MAX_BODY_BYTES` | `8388608` | the most of one response we will read |
+| `SHRUTI_DISCOVERY_PROXY` | empty | for archives a datacenter address cannot read; YouTube answers one with a bot check |
+| `SHRUTI_DISCOVERY_LLM_BASE_URL` | `https://openrouter.ai/api/v1` | the endpoint; what decides whether the normalizer runs is the key below |
+| `SHRUTI_DISCOVERY_LLM_API_KEY` | empty | unset leaves the normalizer stubbed: pages are still fetched and stored, just not read |
+| `SHRUTI_DISCOVERY_LLM_MODEL` | `google/gemini-3.1-flash-lite` | part of the input hash, so changing it re-reads everything |
+| `SHRUTI_DISCOVERY_EMBED_MODEL` | `openai/text-embedding-3-small` | matches the corpus, so vectors stay comparable |
+| `SHRUTI_DISCOVERY_EMBED_DIM` | `1536` | must match the vector column or every insert fails |
 
 Per-source settings — the crawl delay, worker count, recheck bounds, credentials
 and which reader to use — live on the source row, not here.
@@ -214,7 +217,7 @@ docker run -d --name disctest -p 55444:5432 \
   -e POSTGRES_USER=discovery -e POSTGRES_PASSWORD=x -e POSTGRES_DB=discovery \
   pgvector/pgvector:pg17
 
-export DISCOVERY_TEST_DATABASE_URL='postgresql://discovery:x@127.0.0.1:55444/discovery?sslmode=disable'
+export SHRUTI_DISCOVERY_TEST_DATABASE_URL='postgresql://discovery:x@127.0.0.1:55444/discovery?sslmode=disable'
 go test ./... -p 1                   # -p 1: they share one schema and drop it
 ```
 

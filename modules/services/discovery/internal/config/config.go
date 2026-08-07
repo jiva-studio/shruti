@@ -1,4 +1,14 @@
 // Package config loads runtime configuration from environment variables.
+//
+// One prefix, everywhere. A setting is SHRUTI_DISCOVERY_… in the deployment
+// file, in compose, and here — rather than one name outside the container and a
+// shorter one inside it. That translation cost us twice: a variable that existed
+// in the code and in neither of the other two, and a default that disagreed
+// between the code and compose while both looked right on their own.
+//
+// The defaults live here and only here. Compose passes the deployment file
+// through and states a default only where it computes something — a password
+// into a DSN, one variable standing in for another.
 package config
 
 import (
@@ -54,8 +64,9 @@ type Config struct {
 
 	// --- model access, all through OpenRouter ---
 
-	// LLMBaseURL is an OpenAI-compatible endpoint. Empty leaves the normalizer
-	// unconfigured: extraction still runs and still stores raw records.
+	// LLMBaseURL is an OpenAI-compatible endpoint. What decides whether the
+	// normalizer runs is the key, not this: the endpoint has one sensible value
+	// and it is the default.
 	LLMBaseURL string
 	LLMAPIKey  string
 	LLMModel   string
@@ -74,30 +85,30 @@ func Load() *Config {
 		Env:            env("ENV", "dev"),
 		ServiceVersion: env("SERVICE_VERSION", "dev"),
 
-		SchedulerEnabled: envBool("DISCOVERY_SCHEDULER_ENABLED", false),
-		SchedulerWorkers: envInt("DISCOVERY_SCHEDULER_WORKERS", 4),
-		PageTimeout:      envDuration("DISCOVERY_PAGE_TIMEOUT", 10*time.Minute),
-		DBMaxConns:       envInt("DISCOVERY_DB_MAX_CONNS", 16),
+		SchedulerEnabled: envBool("SHRUTI_DISCOVERY_SCHEDULER_ENABLED", false),
+		SchedulerWorkers: envInt("SHRUTI_DISCOVERY_SCHEDULER_WORKERS", 4),
+		PageTimeout:      envDuration("SHRUTI_DISCOVERY_PAGE_TIMEOUT", 10*time.Minute),
+		DBMaxConns:       envInt("SHRUTI_DISCOVERY_DB_MAX_CONNS", 16),
 
-		UserAgent:         env("DISCOVERY_USER_AGENT", "ShrutiDiscovery/1.0 (+https://shruti.app/about)"),
-		DefaultCrawlDelay: envDuration("DISCOVERY_CRAWL_DELAY", time.Second),
-		RequestTimeout:    envDuration("DISCOVERY_REQUEST_TIMEOUT", 30*time.Second),
-		MaxBodyBytes:      int64(envInt("DISCOVERY_MAX_BODY_BYTES", 8<<20)),
+		UserAgent:         env("SHRUTI_DISCOVERY_USER_AGENT", "ShrutiDiscovery/1.0 (+https://shruti.app/about)"),
+		DefaultCrawlDelay: envDuration("SHRUTI_DISCOVERY_CRAWL_DELAY", time.Second),
+		RequestTimeout:    envDuration("SHRUTI_DISCOVERY_REQUEST_TIMEOUT", 30*time.Second),
+		MaxBodyBytes:      int64(envInt("SHRUTI_DISCOVERY_MAX_BODY_BYTES", 8<<20)),
 		// A datacenter address reading YouTube is met with a bot check, so the
 		// one host that needs an external reader also needs somewhere else to
 		// be read from.
-		Proxy: env("DISCOVERY_PROXY", ""),
+		Proxy: env("SHRUTI_DISCOVERY_PROXY", ""),
 
-		LLMBaseURL: env("DISCOVERY_LLM_BASE_URL", ""),
-		LLMAPIKey:  os.Getenv("DISCOVERY_LLM_API_KEY"),
+		LLMBaseURL: env("SHRUTI_DISCOVERY_LLM_BASE_URL", "https://openrouter.ai/api/v1"),
+		LLMAPIKey:  os.Getenv("SHRUTI_DISCOVERY_LLM_API_KEY"),
 		// The same default compose and the env template carry. They disagreed
 		// for a while, which meant `discovery parse` on a laptop read pages
 		// with a different model than production — and since the prompt version
 		// and the input hash are model-scoped, it shifted the hashes too.
-		LLMModel: env("DISCOVERY_LLM_MODEL", "google/gemini-3.1-flash-lite"),
+		LLMModel: env("SHRUTI_DISCOVERY_LLM_MODEL", "google/gemini-3.1-flash-lite"),
 
-		EmbedModel: env("DISCOVERY_EMBED_MODEL", "openai/text-embedding-3-small"),
-		EmbedDim:   envInt("DISCOVERY_EMBED_DIM", 1536),
+		EmbedModel: env("SHRUTI_DISCOVERY_EMBED_MODEL", "openai/text-embedding-3-small"),
+		EmbedDim:   envInt("SHRUTI_DISCOVERY_EMBED_DIM", 1536),
 	}
 	if cfg.MaxBodyBytes <= 0 {
 		cfg.MaxBodyBytes = 8 << 20
@@ -127,10 +138,10 @@ func (c *Config) RequireDatabase() error {
 func (c *Config) NormalizerReady() (bool, []string) {
 	var missing []string
 	if c.LLMBaseURL == "" {
-		missing = append(missing, "DISCOVERY_LLM_BASE_URL")
+		missing = append(missing, "SHRUTI_DISCOVERY_LLM_BASE_URL")
 	}
 	if c.LLMAPIKey == "" {
-		missing = append(missing, "DISCOVERY_LLM_API_KEY")
+		missing = append(missing, "SHRUTI_DISCOVERY_LLM_API_KEY")
 	}
 	return len(missing) == 0, missing
 }

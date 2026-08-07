@@ -50,19 +50,45 @@ func TestAPageAndThePoolAreBothBounded(t *testing.T) {
 // Raising the worker count without raising the pool is the easy mistake, so the
 // pool follows rather than waiting to be told.
 func TestThePoolFollowsTheWorkerCount(t *testing.T) {
-	t.Setenv("DISCOVERY_SCHEDULER_WORKERS", "64")
+	t.Setenv("SHRUTI_DISCOVERY_SCHEDULER_WORKERS", "64")
 	cfg := config.Load()
 	if cfg.DBMaxConns <= 64 {
 		t.Errorf("64 workers got a pool of %d", cfg.DBMaxConns)
 	}
 }
 
-// The model is part of the input hash, so a default that disagrees with what
-// production runs does not merely read pages differently — it shifts every
-// hash, and the work already done stops counting.
-func TestTheModelDefaultIsTheDeployedOne(t *testing.T) {
-	if got := config.Load().LLMModel; got != "google/gemini-3.1-flash-lite" {
-		t.Errorf("default model = %q; compose and the env template say google/gemini-3.1-flash-lite", got)
+// Every setting has one name, and it is the same name in the deployment file,
+// in compose and here. Translating between a long name outside the container
+// and a short one inside cost us a variable that existed in the code and
+// nowhere else, and a default that disagreed with compose while both looked
+// right on their own.
+func TestEverySettingHasOneName(t *testing.T) {
+	t.Setenv("SHRUTI_DISCOVERY_SCHEDULER_WORKERS", "7")
+	t.Setenv("DISCOVERY_SCHEDULER_WORKERS", "99")
+	if got := config.Load().SchedulerWorkers; got != 7 {
+		t.Errorf("workers = %d; the service still answers to the short name", got)
+	}
+}
+
+// The defaults live here and only here, so compose has nothing to disagree
+// with. The model is part of the input hash: a default that differs from what
+// production runs shifts every hash and the work already done stops counting.
+func TestTheDefaultsAreStatedOnlyInTheCode(t *testing.T) {
+	cfg := config.Load()
+	for what, got := range map[string]string{
+		"model":    cfg.LLMModel,
+		"endpoint": cfg.LLMBaseURL,
+		"embedder": cfg.EmbedModel,
+	} {
+		if got == "" {
+			t.Errorf("%s has no default; compose used to carry it", what)
+		}
+	}
+	if cfg.LLMModel != "google/gemini-3.1-flash-lite" {
+		t.Errorf("model = %q", cfg.LLMModel)
+	}
+	if cfg.LLMBaseURL != "https://openrouter.ai/api/v1" {
+		t.Errorf("endpoint = %q", cfg.LLMBaseURL)
 	}
 }
 
@@ -76,10 +102,10 @@ func TestUserAgentNamesUsAndSaysWhereToComplain(t *testing.T) {
 }
 
 func TestEnvironmentOverridesDefaults(t *testing.T) {
-	t.Setenv("DISCOVERY_SCHEDULER_ENABLED", "true")
-	t.Setenv("DISCOVERY_SCHEDULER_WORKERS", "9")
-	t.Setenv("DISCOVERY_CRAWL_DELAY", "3s")
-	t.Setenv("DISCOVERY_MAX_BODY_BYTES", "4096")
+	t.Setenv("SHRUTI_DISCOVERY_SCHEDULER_ENABLED", "true")
+	t.Setenv("SHRUTI_DISCOVERY_SCHEDULER_WORKERS", "9")
+	t.Setenv("SHRUTI_DISCOVERY_CRAWL_DELAY", "3s")
+	t.Setenv("SHRUTI_DISCOVERY_MAX_BODY_BYTES", "4096")
 
 	cfg := config.Load()
 	if !cfg.SchedulerEnabled || cfg.SchedulerWorkers != 9 {
@@ -96,10 +122,10 @@ func TestEnvironmentOverridesDefaults(t *testing.T) {
 // A misspelt value falls back rather than starting the service with nothing.
 // Zero here would mean no gap between requests and no cap on a body.
 func TestUnreadableValuesFallBack(t *testing.T) {
-	t.Setenv("DISCOVERY_CRAWL_DELAY", "soon")
-	t.Setenv("DISCOVERY_SCHEDULER_WORKERS", "lots")
-	t.Setenv("DISCOVERY_MAX_BODY_BYTES", "-1")
-	t.Setenv("DISCOVERY_SCHEDULER_ENABLED", "perhaps")
+	t.Setenv("SHRUTI_DISCOVERY_CRAWL_DELAY", "soon")
+	t.Setenv("SHRUTI_DISCOVERY_SCHEDULER_WORKERS", "lots")
+	t.Setenv("SHRUTI_DISCOVERY_MAX_BODY_BYTES", "-1")
+	t.Setenv("SHRUTI_DISCOVERY_SCHEDULER_ENABLED", "perhaps")
 
 	cfg := config.Load()
 	if cfg.DefaultCrawlDelay <= 0 || cfg.SchedulerWorkers <= 0 || cfg.MaxBodyBytes <= 0 {
@@ -123,18 +149,16 @@ func TestOnlyServingRequiresADatabase(t *testing.T) {
 	}
 }
 
-// Without a model the service still fetches, extracts and stores; it just
-// cannot say what anything means. It has to say which part is missing.
+// Without a key the service still fetches, extracts and stores; it just cannot
+// say what anything means. It has to say what is missing.
 func TestAMissingModelIsNamedNotGuessed(t *testing.T) {
-	t.Setenv("DISCOVERY_LLM_BASE_URL", "")
-	t.Setenv("DISCOVERY_LLM_API_KEY", "")
+	t.Setenv("SHRUTI_DISCOVERY_LLM_API_KEY", "")
 	ok, missing := config.Load().NormalizerReady()
-	if ok || len(missing) != 2 {
+	if ok || len(missing) != 1 {
 		t.Errorf("ready=%v missing=%v", ok, missing)
 	}
 
-	t.Setenv("DISCOVERY_LLM_BASE_URL", "https://example/v1")
-	t.Setenv("DISCOVERY_LLM_API_KEY", "k")
+	t.Setenv("SHRUTI_DISCOVERY_LLM_API_KEY", "k")
 	if ok, missing := config.Load().NormalizerReady(); !ok {
 		t.Errorf("configured but reported missing %v", missing)
 	}

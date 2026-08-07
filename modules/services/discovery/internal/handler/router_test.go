@@ -19,12 +19,12 @@ import (
 // shape, and credentials that go in and never come back out — is exactly the
 // sort of thing that changes by accident.
 //
-// Without DISCOVERY_TEST_DATABASE_URL these skip. CI always sets it.
+// Without SHRUTI_DISCOVERY_TEST_DATABASE_URL these skip. CI always sets it.
 func testRouter(t *testing.T) (http.Handler, *store.Repo) {
 	t.Helper()
-	dsn := os.Getenv("DISCOVERY_TEST_DATABASE_URL")
+	dsn := os.Getenv("SHRUTI_DISCOVERY_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("DISCOVERY_TEST_DATABASE_URL not set")
+		t.Skip("SHRUTI_DISCOVERY_TEST_DATABASE_URL not set")
 	}
 	ctx := context.Background()
 	pool, err := store.Connect(ctx, dsn)
