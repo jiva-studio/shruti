@@ -99,9 +99,6 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	}
 
 	req := fetch.Request{}
-	if page != nil && !force {
-		req.ETag, req.LastModified = page.ETag, page.LastModified
-	}
 	// A source whose media sits behind an account only shows the address of the
 	// file to someone signed in, so its credentials ride along — and so does
 	// the gap it asked to be left between requests.
@@ -113,6 +110,17 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 		req.Headers = src.AuthHeaders
 		req.Tool = src.Fetcher
 		req.MinDelay = time.Duration(src.CrawlDelayMS) * time.Millisecond
+	}
+	// Ask "has this changed?" only when an unchanged answer would settle it.
+	//
+	// A page read with a superseded prompt or a superseded script has stale
+	// answers however still its bytes are, and a conditional request is
+	// answered 304 before there is a body to read — so the page is recorded as
+	// unchanged and its validators are never refreshed. It never catches up.
+	// audioveda serves an ETag on 14,534 of its 14,586 pages, so editing its
+	// script had no effect there at all.
+	if page != nil && !force && s.readWithCurrentTools(page, scriptOf(src, sourceID)) {
+		req.ETag, req.LastModified = page.ETag, page.LastModified
 	}
 
 	resp, err := s.Fetcher.Get(ctx, rawURL, req)
@@ -184,8 +192,7 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	unchanged := page != nil &&
 		page.BodySHA256 == resp.BodySHA256 &&
 		page.ItemSetSHA256 == itemSet &&
-		page.NormPromptVersion == s.promptVersion() &&
-		page.ScriptVersion == s.scriptVersion(scriptID)
+		s.readWithCurrentTools(page, scriptID)
 	if unchanged && !force {
 		s.Metrics.Page(true, 0, 0, 0)
 		return report, s.recordUnchanged(ctx, page, src, report, now)
@@ -428,6 +435,13 @@ func scriptOf(src *store.Source, sourceID string) string {
 // It sits beside the prompt version in the skip test for the same reason:
 // correcting how a source is read must re-read that source, and until this was
 // here, editing a script changed nothing that had already been stored.
+// readWithCurrentTools reports whether this page was last read with the prompt
+// and the script we would read it with now.
+func (s *Service) readWithCurrentTools(page *store.Page, scriptID string) bool {
+	return page.NormPromptVersion == s.promptVersion() &&
+		page.ScriptVersion == s.scriptVersion(scriptID)
+}
+
 func (s *Service) scriptVersion(sourceID string) string {
 	return s.Scripts.Version(sourceID)
 }
@@ -695,7 +709,7 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		if err := s.Repo.SetItemAuthors(ctx, item.ID, authorIDs); err != nil {
 			return err
 		}
-		if err := s.Repo.ReplaceItemRefs(ctx, item.ID, item.References); err != nil {
+		if err := s.Repo.ReplaceItemRefs(ctx, item.ID, item.References, store.OriginCrawl); err != nil {
 			return err
 		}
 		if err := s.linkCollection(ctx, item, e.URL, sourceID); err != nil {

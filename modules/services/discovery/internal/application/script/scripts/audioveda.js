@@ -19,6 +19,7 @@ function extract(page, items) {
       author: meta.author || '',
       authors: meta.author ? [meta.author] : [],
       date: (meta.datePublished || '').slice(0, 10),
+      references: refs(meta.name || '').refs,
       duration_s: seconds(meta.duration),
       language: pageLanguage(page.html || ''),
       collection_title: meta.series || '',

@@ -103,7 +103,38 @@ func (r *Repo) ItemByMediaURL(ctx context.Context, mediaURL string) (*Item, erro
 	if it.References, err = r.ItemRefs(ctx, it.ID); err != nil {
 		return nil, err
 	}
+	// Authors come along for the same reason references do, and for a sharper
+	// one: a re-visit that skips normalization writes back what it read, and
+	// what it read was nobody. It survived only because a nil slice reaches
+	// Postgres as NULL and "NOT (author_id = ANY(NULL))" matches no row — a
+	// tidy-up of either half would have unlinked every recording from every
+	// speaker on the next crawl.
+	if it.Authors, err = r.ItemAuthorNames(ctx, it.ID); err != nil {
+		return nil, err
+	}
 	return it, nil
+}
+
+// ItemAuthorNames is who a recording is linked to, as they are written.
+func (r *Repo) ItemAuthorNames(ctx context.Context, itemID int64) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT a.name FROM discovery.item_authors ia
+		JOIN discovery.authors a ON a.id = ia.author_id
+		WHERE ia.item_id = $1 ORDER BY a.name`, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
 }
 
 // ItemsByPage returns everything we know that was found on one page.
@@ -308,7 +339,10 @@ func (r *Repo) CountItems(ctx context.Context, sourceID string) (map[string]int,
 
 // ReplaceItemRefs swaps a recording's scripture references for a new set.
 // One row per verse, ordered, mirroring the corpus's track_references.
-func (r *Repo) ReplaceItemRefs(ctx context.Context, itemID int64, refs []domain.Ref) error {
+//
+// origin is who is writing them. A crawl and a repair pass write the same rows
+// and are not the same event, and only one of them can be undone.
+func (r *Repo) ReplaceItemRefs(ctx context.Context, itemID int64, refs []domain.Ref, origin string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -320,8 +354,8 @@ func (r *Repo) ReplaceItemRefs(ctx context.Context, itemID int64, refs []domain.
 	}
 	for i, ref := range refs {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO discovery.item_refs (item_id, ref_idx, source_id, tokens)
-			VALUES ($1,$2,$3,$4)`, itemID, i, ref.Source, ref.Tokens); err != nil {
+			INSERT INTO discovery.item_refs (item_id, ref_idx, source_id, tokens, origin)
+			VALUES ($1,$2,$3,$4,$5)`, itemID, i, ref.Source, ref.Tokens, origin); err != nil {
 			return err
 		}
 	}
@@ -461,4 +495,71 @@ func vector(v []float32) any {
 		return nil
 	}
 	return pgvector.Literal(v)
+}
+
+// OriginCrawl and OriginRead name the two things that write a reference: an
+// ordinary visit to the page, and the repair pass that reads the titles we
+// already hold.
+const (
+	OriginCrawl = "crawl"
+	OriginRead  = "read-refs"
+)
+
+// TitleToRead is a recording whose title has not been read for citations.
+type TitleToRead struct {
+	ID       int64
+	SourceID string
+	Title    string
+}
+
+// UnreadTitles hands over recordings that carry no reference at all, oldest
+// first. A recording that already has one is left alone: it was put there by
+// something that saw more than a title, and a title is all this sees.
+func (r *Repo) UnreadTitles(ctx context.Context, afterID int64, limit int) ([]TitleToRead, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT i.id, coalesce(i.source_id,''), coalesce(i.title,'')
+		FROM discovery.items i
+		WHERE i.id > $1
+		  AND coalesce(i.title,'') <> ''
+		  AND NOT EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id)
+		ORDER BY i.id
+		LIMIT $2`, afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []TitleToRead
+	for rows.Next() {
+		var t TitleToRead
+		if err := rows.Scan(&t.ID, &t.SourceID, &t.Title); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// SnapshotItemRefs copies the reference table aside, once, before anything
+// rewrites it. It reports how many rows the copy holds, and does nothing at all
+// if a copy is already there — a second snapshot taken after the damage is
+// worse than none, because it looks like a way back.
+func (r *Repo) SnapshotItemRefs(ctx context.Context) (int64, bool, error) {
+	var exists bool
+	if err := r.pool.QueryRow(ctx, `SELECT to_regclass('discovery.item_refs_before_read') IS NOT NULL`).
+		Scan(&exists); err != nil {
+		return 0, false, err
+	}
+	if !exists {
+		if _, err := r.pool.Exec(ctx, `
+			CREATE TABLE discovery.item_refs_before_read AS
+			SELECT * FROM discovery.item_refs`); err != nil {
+			return 0, false, err
+		}
+	}
+	var n int64
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM discovery.item_refs_before_read`).Scan(&n); err != nil {
+		return 0, false, err
+	}
+	return n, !exists, nil
 }

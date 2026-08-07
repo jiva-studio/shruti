@@ -16,6 +16,9 @@
 //	discovery healthz       — self-call /healthz over localhost; exit 0/1
 //	discovery parse <url>   — fetch one URL, print what came out, write nothing
 //	                          (no credentials: use POST /discovery/parse for those)
+//	discovery read-refs [--apply] — read the scripture citations out of the
+//	titles we already hold. Prints what it would do; writes only with --apply.
+//
 //	discovery relink-authors — attach stored recordings to the person they name,
 //	                          for when a fix to how names are read cannot reach
 //	                          what was already written. Fetches nothing.
@@ -34,6 +37,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/discovery/internal/config"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	logpkg "github.com/jiva-studio/shruti/discovery/internal/logging"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
@@ -55,6 +59,8 @@ func main() {
 		os.Exit(runParse(os.Args[2:]))
 	case "relink-authors":
 		os.Exit(runRelink())
+	case "read-refs":
+		os.Exit(runReadRefs(os.Args[2:]))
 	case "serve":
 		runServe()
 	default:
@@ -270,6 +276,112 @@ func selfHealthz() int {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return 1
+	}
+	return 0
+}
+
+// runReadRefs reads the citations out of the titles already stored.
+//
+// A repair rather than a crawl: the titles are here, and for the archives whose
+// scripts answer completely nothing else will ever produce these references —
+// their recordings are never shown to a model, and a script edit does not reach
+// a recording already stored.
+//
+// It writes nothing without --apply, and it never writes an empty set. A
+// recording that already carries a reference is not touched at all: something
+// that saw more than a title put it there.
+func runReadRefs(args []string) int {
+	apply := false
+	for _, a := range args {
+		switch a {
+		case "--apply":
+			apply = true
+		default:
+			slog.Error("usage: discovery read-refs [--apply]")
+			return 2
+		}
+	}
+
+	cfg := config.Load()
+	if err := cfg.RequireDatabase(); err != nil {
+		slog.Error("config load failed", "err", err)
+		return 2
+	}
+	logpkg.Setup("shruti-discovery", cfg.Env, cfg.ServiceVersion)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	pool, err := store.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		slog.ErrorContext(ctx, "db_connect_failed", "err", err.Error())
+		return 1
+	}
+	defer pool.Close()
+	repo := store.NewRepo(pool)
+
+	if apply {
+		rows, took, err := repo.SnapshotItemRefs(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "snapshot_failed", "err", err.Error())
+			return 1
+		}
+		slog.InfoContext(ctx, "snapshot", "table", "discovery.item_refs_before_read",
+			"rows", rows, "taken_now", took)
+	}
+
+	var (
+		after     int64
+		scanned   int
+		cited     int
+		written   int
+		collapsed int
+		perSource = map[string]int{}
+	)
+	for {
+		batch, err := repo.UnreadTitles(ctx, after, 500)
+		if err != nil {
+			slog.ErrorContext(ctx, "read_failed", "after", after, "err", err.Error())
+			return 1
+		}
+		if len(batch) == 0 {
+			break
+		}
+		for _, it := range batch {
+			after = it.ID
+			scanned++
+
+			var expanded []domain.Ref
+			for _, ref := range domain.Refs(it.Title) {
+				refs, note := domain.ExpandRefs(ref.Source, ref.Tokens)
+				if note != "" {
+					// A range too wide to believe keeps only where it starts,
+					// and that is the one mistake this pass can make without
+					// leaving a trace. So it leaves one.
+					collapsed++
+					slog.InfoContext(ctx, "range_collapsed", "item", it.ID, "note", note, "title", it.Title)
+				}
+				expanded = append(expanded, refs...)
+			}
+			if len(expanded) == 0 {
+				continue
+			}
+			cited++
+			perSource[it.SourceID]++
+			if !apply {
+				continue
+			}
+			if err := repo.ReplaceItemRefs(ctx, it.ID, expanded, store.OriginRead); err != nil {
+				slog.ErrorContext(ctx, "write_failed", "item", it.ID, "err", err.Error())
+				return 1
+			}
+			written += len(expanded)
+		}
+	}
+
+	slog.InfoContext(ctx, "read_refs_done", "apply", apply, "scanned", scanned,
+		"recordings_cited", cited, "refs_written", written, "ranges_collapsed", collapsed)
+	for source, n := range perSource {
+		slog.InfoContext(ctx, "read_refs_source", "source", source, "recordings", n)
 	}
 	return 0
 }
