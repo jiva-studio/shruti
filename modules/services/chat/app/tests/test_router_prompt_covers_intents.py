@@ -119,3 +119,13 @@ def test_facet_browsing_is_not_taught_as_a_lecture_search() -> None:
     naming what to look for is a search, naming a facet is navigation."""
     section = _bullets()["help"]
     assert "NAMES what to look for is find_track" in section
+
+
+def test_a_pointer_at_the_previous_list_outranks_the_topic_in_it() -> None:
+    """«включи первую» after a list of five was answered with five DIFFERENT
+    lectures. The follow-up rewriter had done its job — it expanded the message
+    to «включи первую лекцию про смирение» — and the topic it added then won
+    over the pointer, so the search replaced the very list being pointed at."""
+    section = _bullets()["help"]
+    assert "POINTER" in section
+    assert "WINS over any topic" in section
