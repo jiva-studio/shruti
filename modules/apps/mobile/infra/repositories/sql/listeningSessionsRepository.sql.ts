@@ -187,10 +187,17 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
     },
 
     async getTotalListenedSeconds(): Promise<number> {
-      // MAX(0, …) per row so any legacy negative-delta sessions (written
-      // before the `start()` clamp) can't drag the total below the truth.
+      // Storm dedup: a pre-#1214 reentrancy race could flush hundreds of
+      // zero-duration sessions at one instant, all sharing (item, started_at,
+      // ended_at, from_position) and differing only in to_position — summed raw
+      // they recount one slice hundreds of times. Collapse each such cluster to
+      // MAX(to_position) first; a real session (replays included) never shares
+      // that key. Outer MAX(0, …) still guards legacy negative-delta rows.
       const rows = await db.query<{ total: number | null }>(
-        "SELECT SUM(MAX(0, to_position - from_position)) AS total FROM listening_sessions"
+        `SELECT SUM(MAX(0, mx_to - from_position)) AS total
+           FROM (SELECT from_position, MAX(to_position) AS mx_to
+                   FROM listening_sessions
+                  GROUP BY item_id, started_at, ended_at, from_position)`
       )
       return Number(rows[0]?.total ?? 0)
     },
@@ -198,11 +205,14 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
     async getDailyTotals(fromMs, toMs): Promise<readonly DailyListeningTotal[]> {
       const fromSec = Math.floor(fromMs / 1000)
       const toSec = Math.floor(toMs / 1000)
+      // Storm dedup before bucketing — see getTotalListenedSeconds.
       const rows = await db.query<{ date: string; listened_seconds: number }>(
         `SELECT date(ended_at, 'unixepoch', 'localtime') AS date,
-                SUM(MAX(0, to_position - from_position)) AS listened_seconds
-           FROM listening_sessions
-          WHERE ended_at >= ? AND ended_at < ?
+                SUM(MAX(0, mx_to - from_position)) AS listened_seconds
+           FROM (SELECT ended_at, from_position, MAX(to_position) AS mx_to
+                   FROM listening_sessions
+                  WHERE ended_at >= ? AND ended_at < ?
+                  GROUP BY item_id, started_at, ended_at, from_position)
           GROUP BY date
           ORDER BY date`,
         [fromSec, toSec]
@@ -219,11 +229,14 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       // columns from the same `fromMs`, so offset `i` ↔ column `i` exactly,
       // regardless of the device timezone (`getDailyTotals`' local-date string
       // could disagree with the client's, dropping bars to zero).
+      // Storm dedup before bucketing — see getTotalListenedSeconds.
       const rows = await db.query<{ day_offset: number; listened_seconds: number }>(
         `SELECT CAST((ended_at - ?) / 86400 AS INTEGER) AS day_offset,
-                SUM(MAX(0, to_position - from_position)) AS listened_seconds
-           FROM listening_sessions
-          WHERE ended_at >= ? AND ended_at < ?
+                SUM(MAX(0, mx_to - from_position)) AS listened_seconds
+           FROM (SELECT ended_at, from_position, MAX(to_position) AS mx_to
+                   FROM listening_sessions
+                  WHERE ended_at >= ? AND ended_at < ?
+                  GROUP BY item_id, started_at, ended_at, from_position)
           GROUP BY day_offset
           ORDER BY day_offset`,
         [fromSec, fromSec, toSec]
@@ -268,12 +281,15 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
     async getTracksListenedInRange(fromMs, toMs): Promise<readonly TrackListeningTotal[]> {
       const fromSec = Math.floor(fromMs / 1000)
       const toSec = Math.floor(toMs / 1000)
+      // Storm dedup before the track join — see getTotalListenedSeconds.
       const rows = await db.query<{ track_id: string; listened_seconds: number }>(
         `SELECT pi.track_id AS track_id,
-                SUM(MAX(0, ls.to_position - ls.from_position)) AS listened_seconds
-           FROM listening_sessions ls
-           JOIN playlist_items pi ON pi.id = ls.item_id
-          WHERE ls.ended_at >= ? AND ls.ended_at < ?
+                SUM(MAX(0, d.mx_to - d.from_position)) AS listened_seconds
+           FROM (SELECT item_id, from_position, MAX(to_position) AS mx_to
+                   FROM listening_sessions
+                  WHERE ended_at >= ? AND ended_at < ?
+                  GROUP BY item_id, started_at, ended_at, from_position) d
+           JOIN playlist_items pi ON pi.id = d.item_id
           GROUP BY pi.track_id
          HAVING listened_seconds > 0
           ORDER BY listened_seconds DESC`,

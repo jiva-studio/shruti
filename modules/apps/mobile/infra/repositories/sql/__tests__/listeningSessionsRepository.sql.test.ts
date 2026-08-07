@@ -66,6 +66,35 @@ describe("listeningSessionsRepository.sql", () => {
     expect(sessions[1].to_position).toBe(5400)
   })
 
+  it("getTotalListenedSeconds collapses a storm cluster instead of double-counting", async () => {
+    // One real session (1000s of content) …
+    await rawInsert(db, {
+      id: "real",
+      itemId: ITEM_A,
+      startedAt: 100,
+      endedAt: 1100,
+      fromPosition: 0,
+      toPosition: 1000,
+    })
+    // … then a pre-#1214 storm: many zero-duration rows flushed at one instant,
+    // all sharing (item, started_at, ended_at, from_position), differing only in
+    // to_position. Raw SUM would add 10+20+30+40+50 = 150s of phantom; the dedup
+    // keeps MAX(to)=1050 → a single 50s span.
+    for (const [i, to] of [1010, 1020, 1030, 1040, 1050].entries()) {
+      await rawInsert(db, {
+        id: `storm-${i}`,
+        itemId: ITEM_A,
+        startedAt: 2000,
+        endedAt: 2000,
+        fromPosition: 1000,
+        toPosition: to,
+      })
+    }
+    const repo = createSqlListeningSessionRepository(db)
+    // 1000 (real) + 50 (deduped storm), NOT 1000 + 150 (raw double-count).
+    expect(await repo.getTotalListenedSeconds()).toBe(1050)
+  })
+
   it("start() clamps from_position to position when (re)starting before the prior end", async () => {
     // Prior session finished the lecture at 1467s; the user replays it and
     // resume resets to 0. from_position must clamp to the new position, not
