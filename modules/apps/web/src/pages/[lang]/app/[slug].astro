@@ -4,10 +4,21 @@ import WebApp from '../../../components/vue/WebApp.vue'
 import type { LectureRecord, LectureVariant } from '@lib/catalog/types.js'
 import { type Lang } from '../../../i18n/ui'
 import { topicForId, pickName as pickLang } from '../../../lib/catalog'
+import { readFileSync, readdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 export async function getStaticPaths() {
-  const records = import.meta.glob('../../../../public/data/lectures/*.json', { eager: true, import: 'default' })
-  const lectures = Object.values(records).map((rec) => rec as LectureRecord)
+  // Read each lecture record from disk at build time instead of
+  // `import.meta.glob({ eager: true })`. The eager glob inlines the whole
+  // ~600MB corpus into one bundled module string, which trips V8's max string
+  // length once the catalog is large enough ("Failed to convert rust &str into
+  // napi string"). fs reads keep the data out of the bundler entirely.
+  // Resolve from the build cwd (the web root) — `import.meta.url` points into
+  // the bundled output at build time, not this source file.
+  const dir = resolve(process.cwd(), 'public/data/lectures')
+  const lectures = readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as LectureRecord)
   return (['en', 'ru'] as const).flatMap((lang) =>
     lectures.map((r) => ({
       params: { lang, slug: r.slug.replace(/^track_/, '') },
