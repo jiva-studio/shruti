@@ -344,6 +344,14 @@ var sourceByName = func() map[string]Source {
 	return out
 }()
 
+// SourceByName resolves any spelling of a scripture to its entry — "Бхагавад
+// гита", "BG", "Bhagavad-gita" are one source. A filter carries what a person
+// wrote, and what a person writes is a name, not a code.
+func SourceByName(name string) (Source, bool) {
+	src, ok := sourceByName[foldName(name)]
+	return src, ok
+}
+
 // spellingPattern lets one spelling stand for every way the space between its
 // words is written. "Бхагавад-гита", "Бхагавад гита" and "Бхагавад - гита" are
 // the same name, so the canon carries one entry rather than three.

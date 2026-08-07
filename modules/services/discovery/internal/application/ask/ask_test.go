@@ -240,3 +240,47 @@ func sourcesOf(q search.Query) string {
 	}
 	return q.Sources[0]
 }
+
+// A reference is read with the canon. "CC Madhya 8.128" is how a person writes
+// it and "Бхагавад-гита 2.13" is how another does; cutting on the space found
+// neither, while the corpus held both.
+func TestAReferenceIsReadTheWayPeopleWriteIt(t *testing.T) {
+	for _, c := range []struct{ ref, source, tokens string }{
+		{"CC Madhya 8.128", "CC_MADHYA", "8.128"},
+		{"CC_MADHYA 8.128", "CC_MADHYA", "8.128"},
+		{"Бхагавад-гита 2.13", "BG", "2.13"},
+		{"БГ 2.13", "BG", "2.13"},
+		{"Шримад Бхагаватам 1.2.10", "SB", "1.2.10"},
+	} {
+		s := &searcher{}
+		if _, err := (&ask.Service{Searcher: s, Now: func() time.Time { return now }}).
+			Ask(context.Background(), "", ask.Filter{Ref: c.ref}); err != nil {
+			t.Fatal(err)
+		}
+		if sourcesOf(s.got) != c.source || s.got.Tokens != c.tokens {
+			t.Errorf("%q searched for %v %q, want %s %s",
+				c.ref, s.got.Sources, s.got.Tokens, c.source, c.tokens)
+		}
+	}
+}
+
+// A reading that did not arrive still leaves the question saying what it says.
+// A verse is in the words, and finding it costs nothing.
+func TestAVerseSurvivesAReadingThatFailed(t *testing.T) {
+	s := &searcher{}
+	svc := &ask.Service{
+		Searcher: s,
+		Reader:   &reader{err: errors.New("provider was slow")},
+		Now:      func() time.Time { return now },
+	}
+	got, err := svc.Ask(context.Background(), "что читали по Бхагавад-гите 2.13", ask.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Filter.Ref != "BG 2.13" {
+		t.Errorf("ref = %q; the question said it plainly", got.Filter.Ref)
+	}
+	if sourcesOf(s.got) != "BG" || s.got.Tokens != "2.13" {
+		t.Errorf("searched for %v %q", s.got.Sources, s.got.Tokens)
+	}
+}

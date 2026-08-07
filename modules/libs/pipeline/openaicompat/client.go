@@ -72,6 +72,13 @@ type Call struct {
 	// `response_format` field (e.g. an OpenRouter json_schema structured-output
 	// spec). Leave nil for free-form text completions.
 	ResponseFormat json.RawMessage
+	// Provider, when set, is sent verbatim as the request's `provider` field —
+	// an OpenRouter routing preference such as {"sort":"latency"}. A gateway
+	// serves one model from several upstreams, and they are not equally quick:
+	// measured on gemini-3.1-flash-lite, one answered every call inside a
+	// second and the other took up to five. Leave nil to let the gateway
+	// choose.
+	Provider json.RawMessage
 }
 
 // Result carries the assistant text plus per-call accounting that the
@@ -97,6 +104,7 @@ type chatRequest struct {
 	Stream         bool              `json:"stream"`
 	Reasoning      *reasoningOptions `json:"reasoning,omitempty"`
 	ResponseFormat json.RawMessage   `json:"response_format,omitempty"`
+	Provider       json.RawMessage   `json:"provider,omitempty"`
 }
 
 type chatMessage struct {
@@ -193,6 +201,7 @@ func (c *Client) Run(ctx context.Context, call Call) (Result, error) {
 	}
 	body.Reasoning = reasoningFromString(call.Reasoning)
 	body.ResponseFormat = call.ResponseFormat
+	body.Provider = call.Provider
 
 	raw, err := json.Marshal(body)
 	if err != nil {
