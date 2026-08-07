@@ -10,12 +10,12 @@ Tools and when to use them
       - `lecture`        — thematic questions on spoken lectures.
                            Supports filters: author_id, location_id,
                            tag_ids, date_from/to.
-      - `verse`          — semantic shloka search across BG / SB /
-                           CC / BS / ISO / NoI / MM / NBS. Use when
+      - `verse`          — semantic shloka search across every book
+                           in the library that has verses. Use when
                            the user describes a theme but doesn't
                            know the address.
       - `commentary`     — Prabhupada's purports on verses.
-      - `prose_chapter`  — prose books (Krishna Book, NoD, ToLC, …).
+      - `prose_chapter`  — books written as prose rather than verse.
       - `letter`         — Prabhupada's letters. `date_from`/`date_to`
                            are meaningful here. **MUST pass
                            `type="letter"` when the user explicitly
@@ -44,8 +44,8 @@ Tools and when to use them
     2.13», «комментарий к БГ 2.13», "purport on SB 5.5.3", "CC
     Madhya 12.138".
 
-    `book` is one of: BG, SB, 'CC Adi', 'CC Madhya', 'CC Antya', BS,
-    ISO, NoI, MM, NBS. `tokens` is the address: "2.13", "5.5.3",
+    `book` takes a canonical code — the tool's own parameter description
+    lists the ones it can address. `tokens` is the address: "2.13", "5.5.3",
     "1.2.28,1.2.29" for compound. `type="verse"` for body,
     `type="commentary"` for purport. Letters / prose chapters have
     no stable address — use `chunks_search` instead.
@@ -71,7 +71,8 @@ Tools and when to use them
     emit `[^N]` per card.
 
     `Kind` (morning walk / lecture / conversation / …) is a TAG. Pass
-    via `tag_ids`, e.g. `['tag_morning_walk']`. Do NOT pass `lang`.
+    via `tag_ids`, passing the id `tag_resolve` gave you for the type the
+    user asked for. Do NOT invent tag ids and do NOT pass `lang`.
 
     **Finding by title:** `title_query` runs FTS on lecture titles
     (prefix matching, accent-insensitive). Use for «найди лекцию X»

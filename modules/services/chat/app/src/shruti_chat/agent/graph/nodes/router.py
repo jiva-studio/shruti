@@ -187,31 +187,43 @@ async def _turn_author(
 
 
 async def _settle_source(args: dict[str, Any], ctx: TurnContext) -> None:
-    """Rewrite the book this message named into the id the corpus is keyed by.
+    """Turn the book a message NAMES into the id the corpus is keyed by.
 
-    The router says «ШБ», the chunk filters compare against `chunks.source_id`,
-    and nothing reconciled the two: a question ABOUT a book was answered with
-    every lane that could quote it silently matching zero rows. Resolved once,
-    here, because five hops read this value and each one guessing costs a
-    different wrong answer.
+    The router used to pick from a list of nine book codes baked into its
+    prompt. The catalog holds nineteen sources, so «Шикшаштака 1 найди лекции»
+    — a real request, from a real person — was answered out of the
+    Nārada-bhakti-sūtra: the nearest thing on a list that could not contain
+    what they asked for. Every book added to the library since that list was
+    written was equally unaskable.
 
-    Left untouched when it resolves to nothing — the lecture side normalizes
-    short codes itself, and the chunk side drops what it cannot use.
+    So the model now repeats the name as the person said it and the catalog
+    decides what it means. A name the catalog does not know does NOT become a
+    filter — it is set aside under `unknown_source`, which no filter reads and
+    the lead-in does, so the answer can say the book is missing instead of
+    quietly searching a different one. That key is also the record of what
+    people ask for and we do not have.
     """
-    named = args.get("source_id")
-    if not isinstance(named, str) or not named.strip():
+    named = (args.pop("source", None) or args.get("source_id") or "")
+    named = named.strip() if isinstance(named, str) else ""
+    if not named:
         return
     opaque = await resolve_source_id(
         ctx.catalog_repo, named, request_id=ctx.request_id,
     )
-    if opaque is None or opaque == named:
+    if opaque is None:
+        args.pop("source_id", None)
+        args["unknown_source"] = named
+        log.info(
+            "router_source_unresolved", request_id=ctx.request_id, named=named[:60],
+        )
         return
-    log.info(
-        "router_source_id_resolved",
-        request_id=ctx.request_id,
-        named=named[:40],
-        source_id=opaque,
-    )
+    if opaque != named:
+        log.info(
+            "router_source_resolved",
+            request_id=ctx.request_id,
+            named=named[:60],
+            source_id=opaque,
+        )
     args["source_id"] = opaque
 
 
