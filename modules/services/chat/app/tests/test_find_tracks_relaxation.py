@@ -455,7 +455,8 @@ async def test_the_slow_lane_still_runs_when_it_is_the_only_answer(
 
     assert [sc.chunk.track_id for sc in found.lectures] == ["only_in_english"]
     assert found.other_language is True
-    assert (everything, None) in corpus.searched
+    # Asked for by name — there is no language-less sweep left to fall into.
+    assert (everything, "en") in corpus.searched
 
 
 async def test_near_misses_abroad_are_not_searched_when_home_has_them(
@@ -521,11 +522,13 @@ async def test_hits_from_several_languages_come_back_as_one_list(
     assert sorted(sc.chunk.track_id for sc in found.lectures) == ["walk_en", "walk_sr"]
 
 
-async def test_an_unreadable_language_list_still_answers(
+async def test_an_unreadable_language_list_falls_back_to_the_configured_ones(
     _search_through_the_corpus,
 ) -> None:
-    """A slow answer beats none: if the corpus languages cannot be read, fall
-    back to the unindexed sweep rather than skipping the step."""
+    """Even the degraded path stays on an index. The corpus languages are also
+    known statically — the deployment configures them ("ru,en") — so a failed
+    probe uses those instead of dropping the predicate. After this there is no
+    query shape left in this worker that sweeps 559k chunks."""
     everything = frozenset({"date", "location", "kind"})
     corpus = _Corpus({(everything, "en"): ["walk_en"]})
     _search_through_the_corpus["corpus"] = corpus
@@ -534,4 +537,24 @@ async def test_an_unreadable_language_list_still_answers(
     )
 
     assert [sc.chunk.track_id for sc in found.lectures] == ["walk_en"]
-    assert [c for c in corpus.searched if c[1] is None], "the sweep is the floor"
+    assert not [c for c in corpus.searched if c[1] is None], corpus.searched
+
+
+def test_no_lecture_search_in_this_worker_drops_the_language() -> None:
+    """The guard, stated once: `lang=None` on a transcript search matches no
+    index (12 ms with a language, 1954 ms without, measured). The catalog
+    lookups a few lines away legitimately pass `lang=None` — those are SQLite
+    dictionary reads, not ANN — so this checks the ANN call sites only."""
+    import ast
+    import inspect
+    import textwrap
+
+    from shruti_chat.agent.graph.nodes import find_tracks_worker as mod
+
+    for fn in (mod._elsewhere, mod._find_lectures):
+        node = ast.parse(textwrap.dedent(inspect.getsource(fn))).body[0]
+        if ast.get_docstring(node):          # prose may DISCUSS lang=None
+            node.body = node.body[1:]        # code may not pass it
+        assert "lang=None" not in ast.unparse(node), (
+            f"{fn.__name__} sweeps the whole corpus"
+        )
