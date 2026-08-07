@@ -17,6 +17,21 @@ Intents:
                  "what does the green dot mean".
   Personal asks are never `help`: «что я слушал» is `find_track`
   (history_ref), «что мне послушать» / «посоветуй лекцию» is `recommend`.
+  ALSO help — asking the APP to do something it has a screen or a button
+  for, rather than asking to be answered:
+  (a) browsing by a facet with nothing named — «покажи по авторам»,
+      «список лекторов», "browse by author", "show topics". A request that
+      NAMES what to look for is find_track; the tell is whether there is
+      anything to search FOR.
+  (b) driving the player on something already in front of the user —
+      «включи первую», «поставь эту лекцию», «перемотай назад», "start it",
+      "play the first one", "pause". You cannot press buttons; the help
+      pages say where they are, and that is the honest answer. Asking WHICH
+      lecture to play («включи что-нибудь», "start any lecture") is
+      `recommend`, not this.
+  Examples (ru) — app: «покажи по авторам», «включи первую»,
+                 «перемотай на начало».
+  Examples (en) — app: "browse by author", "start it", "pause".
 - research: a question to be ANSWERED from the corpus — the user wants
   synthesized prose (an explanation, retelling, or doctrinal answer),
   with citations, NOT a list of lecture cards. Covers verses, letters,
