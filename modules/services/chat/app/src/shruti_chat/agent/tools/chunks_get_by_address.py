@@ -107,14 +107,15 @@ register_tool(ToolDef(
             "book": {
                 "type": "string",
                 "description": (
-                    "Canonical book code. One of: "
-                    "BG (Bhagavad-gītā / Бхагавад-гита), "
-                    "SB (Śrīmad-Bhāgavatam / Шримад-Бхагаватам), "
-                    "'CC Adi' (Caitanya-caritāmṛta Ādi-līlā), "
-                    "'CC Madhya', 'CC Antya', "
-                    "BS (Brahma-saṁhitā), ISO (Śrī Īśopaniṣad), "
-                    "NoI (Nectar of Instruction / Upadeśāmṛta), "
-                    "MM (Mukunda-mālā-stotra), NBS (Nārada Bhakti Sūtra)."
+                    # Written from BOOK_PREFIX rather than typed out beside
+                    # it: this tool matches an address label it builds from
+                    # that map, so a book missing there cannot be addressed no
+                    # matter what the description promises. Two hand-kept
+                    # copies of one list is how «Шикшаштака» got answered out
+                    # of the Nārada-bhakti-sūtra.
+                    "Canonical book code, one of: "
+                    + ", ".join(BOOK_PREFIX)
+                    + ". Anything else has no verse addresses here."
                 ),
             },
             "tokens": {

@@ -468,17 +468,20 @@ async def test_a_catalog_id_is_left_alone_and_costs_no_lookup(
     assert catalog.asked == []
 
 
-async def test_an_unresolvable_book_is_left_as_the_user_said_it(
+async def test_an_unresolvable_book_is_set_aside_not_used_as_a_filter(
     monkeypatch: pytest.MonkeyPatch, _capture_stream: list[dict[str, Any]]
 ) -> None:
-    """Nothing is invented: the lecture side normalizes short codes itself, and
-    the chunk side drops what it cannot use — so the honest value rides on."""
+    """A name the catalog does not know must not narrow anything — «Шикшаштака»
+    used to be answered out of whichever book scored closest. The name is kept
+    (the lead-in has to admit it, and it is the record of what people ask for
+    and we lack), but nothing downstream reads it as a filter."""
     _router_with_args(monkeypatch, {"source_id": "Zohar"})
     catalog = _SourceCatalog(hits=[])
 
     out = await router_node(_state(), _Runtime(_Ctx(catalog_repo=catalog)))
 
-    assert out["extracted_args"]["source_id"] == "Zohar"
+    assert "source_id" not in out["extracted_args"]
+    assert out["extracted_args"]["unknown_source"] == "Zohar"
 
 
 async def test_a_turn_that_named_no_book_asks_the_catalog_nothing(
