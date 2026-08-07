@@ -19,10 +19,19 @@ type ProfilePurger interface {
 	PurgeUser(ctx context.Context, userID string) error
 }
 
+// LibraryPurger is the narrow interface the user.deleted handler needs from
+// the chat service: erase the private library — the rows granting a user
+// access to their own uploads, and the transcript chunks of uploads nobody
+// owns any more. Deleting an account used to leave those indexed; three
+// deleted accounts still had 27 chunks of theirs in the corpus.
+type LibraryPurger interface {
+	PurgeLibrary(ctx context.Context, userID string) error
+}
+
 // UserDeleted returns a Handler that erases everything the deleted user
-// left behind outside the auth database: their Langfuse traces, and their
+// left behind outside the auth database: their Langfuse traces, their
 // synced profile data (library, history, notes, chat) on the `profile`
-// service. The aggregate_id IS the auth.users.id (uuid as text) — see the
+// service, and the uploads they had indexed in `chat`. The aggregate_id IS the auth.users.id (uuid as text) — see the
 // trigger definition in 0023_outbox.up.sql.
 //
 // Ordering / idempotency: both steps are individually idempotent (Langfuse
@@ -32,11 +41,17 @@ type ProfilePurger interface {
 // the outbox retries, and re-running the already-completed Langfuse purge on
 // that retry is harmless. Neither step must run before the other for
 // correctness — the fixed order just keeps the retry story simple.
-func UserDeleted(lf LangfusePurger, profile ProfilePurger) Handler {
+func UserDeleted(lf LangfusePurger, profile ProfilePurger, chat LibraryPurger) Handler {
 	return func(ctx context.Context, evt Event) error {
 		if err := lf.PurgeUserTraces(ctx, evt.AggregateID); err != nil {
 			return err
 		}
-		return profile.PurgeUser(ctx, evt.AggregateID)
+		if err := profile.PurgeUser(ctx, evt.AggregateID); err != nil {
+			return err
+		}
+		if chat == nil {
+			return nil
+		}
+		return chat.PurgeLibrary(ctx, evt.AggregateID)
 	}
 }
