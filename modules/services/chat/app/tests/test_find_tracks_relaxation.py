@@ -96,10 +96,25 @@ class _Corpus:
         return out
 
 
+class _Corpus_Langs:
+    """The corpus's own language list, as `distinct_langs` reports it."""
+
+    def __init__(self, langs=("en", "ru"), fails: bool = False) -> None:
+        self._langs, self._fails = list(langs), fails
+        self.asked = 0
+
+    async def distinct_langs(self):
+        self.asked += 1
+        if self._fails:
+            raise RuntimeError("pool exhausted")
+        return list(self._langs)
+
+
 @dataclass
 class _Ctx:
     lang_code: str = "ru"
     request_id: str = "req"
+    chunk_repo: Any = None
 
 
 @pytest.fixture(autouse=True)
@@ -452,3 +467,71 @@ async def test_near_misses_abroad_are_not_searched_when_home_has_them(
     langless = [c for c in corpus.searched if c[1] is None and c[0] != frozenset(
         {"date", "location", "kind"})]
     assert not langless, f"searched abroad for nothing: {langless}"
+
+
+# ── the other languages are asked one by one, on their own indexes ─────────
+
+
+async def test_the_other_language_is_asked_by_name_not_by_absence(
+    _search_through_the_corpus,
+) -> None:
+    """Lecture embeddings are indexed per language (`hnsw_lec_ru`,
+    `hnsw_lec_en`). A query with no language predicate matches no index at all:
+    12 ms with a language, 1954 ms without, measured on the live corpus of 559k
+    transcript chunks. So "somewhere else" is spelled out as the languages the
+    corpus actually has."""
+    everything = frozenset({"date", "location", "kind"})
+    corpus = _Corpus({(everything, "en"): ["walk_en"]})
+    _search_through_the_corpus["corpus"] = corpus
+    found = await _find_lectures(
+        _Ctx(chunk_repo=_Corpus_Langs()), [0.0], _WALKS_1976_BOMBAY,
+    )
+
+    assert [sc.chunk.track_id for sc in found.lectures] == ["walk_en"]
+    assert found.other_language is True
+    assert (everything, "en") in corpus.searched
+    assert not [c for c in corpus.searched if c[1] is None], corpus.searched
+
+
+async def test_the_users_own_language_is_not_asked_twice(
+    _search_through_the_corpus,
+) -> None:
+    everything = frozenset({"date", "location", "kind"})
+    corpus = _Corpus({(everything, "en"): ["walk_en"]})
+    _search_through_the_corpus["corpus"] = corpus
+    await _find_lectures(_Ctx(chunk_repo=_Corpus_Langs()), [0.0], _WALKS_1976_BOMBAY)
+
+    ru_queries = [c for c in corpus.searched if c[1] == "ru"]
+    assert len(ru_queries) == 1, f"the home language was searched twice: {corpus.searched}"
+
+
+async def test_hits_from_several_languages_come_back_as_one_list(
+    _search_through_the_corpus,
+) -> None:
+    everything = frozenset({"date", "location", "kind"})
+    corpus = _Corpus({
+        (everything, "en"): ["walk_en"],
+        (everything, "sr"): ["walk_sr"],
+    })
+    _search_through_the_corpus["corpus"] = corpus
+    found = await _find_lectures(
+        _Ctx(chunk_repo=_Corpus_Langs(langs=("en", "ru", "sr"))),
+        [0.0], _WALKS_1976_BOMBAY,
+    )
+    assert sorted(sc.chunk.track_id for sc in found.lectures) == ["walk_en", "walk_sr"]
+
+
+async def test_an_unreadable_language_list_still_answers(
+    _search_through_the_corpus,
+) -> None:
+    """A slow answer beats none: if the corpus languages cannot be read, fall
+    back to the unindexed sweep rather than skipping the step."""
+    everything = frozenset({"date", "location", "kind"})
+    corpus = _Corpus({(everything, "en"): ["walk_en"]})
+    _search_through_the_corpus["corpus"] = corpus
+    found = await _find_lectures(
+        _Ctx(chunk_repo=_Corpus_Langs(fails=True)), [0.0], _WALKS_1976_BOMBAY,
+    )
+
+    assert [sc.chunk.track_id for sc in found.lectures] == ["walk_en"]
+    assert [c for c in corpus.searched if c[1] is None], "the sweep is the floor"
