@@ -194,7 +194,7 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	}
 	report.PageID = pageID
 
-	if err := s.record(ctx, extraction, pageID, sourceID, resp.Body, force, now, report); err != nil {
+	if err := s.record(ctx, extraction, pageID, sourceID, src, resp.Body, force, now, report); err != nil {
 		return nil, s.recordFailure(ctx, page, src, resp.URL, sourceID, err, now)
 	}
 
@@ -395,6 +395,22 @@ func (s *Service) source(ctx context.Context, sourceID string) (*store.Source, e
 
 // promptVersion is the normalizer's current prompt, or empty when there is no
 // normalizer to have one.
+// written puts every name the way we write names, dropping any that turns out
+// to be a form of address and nothing else.
+func written(raw []string) []string {
+	out := make([]string, 0, len(raw))
+	seen := map[string]bool{}
+	for _, r := range raw {
+		n := domain.Name(r)
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	return out
+}
+
 // scriptVersion is which version of this source's own script read the page.
 // It sits beside the prompt version in the skip test for the same reason:
 // correcting how a source is read must re-read that source, and until this was
@@ -531,9 +547,9 @@ func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *stor
 // path out of Item: the page is marked failed, and the proof that it was read
 // is not written.
 func (s *Service) record(ctx context.Context, e *domain.Extraction, pageID int64,
-	sourceID string, body []byte, force bool, now time.Time, report *Report) error {
+	sourceID string, src *store.Source, body []byte, force bool, now time.Time, report *Report) error {
 
-	if err := s.storeItems(ctx, e, pageID, sourceID, body, force, now, report); err != nil {
+	if err := s.storeItems(ctx, e, pageID, sourceID, src, body, force, now, report); err != nil {
 		return err
 	}
 	if err := s.markVanished(ctx, e, pageID, now, report); err != nil {
@@ -545,7 +561,7 @@ func (s *Service) record(ctx context.Context, e *domain.Extraction, pageID int64
 // storeItems writes every file the page offered, normalizing and embedding
 // only the ones whose input actually changed.
 func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID int64,
-	sourceID string, body []byte, force bool, now time.Time, report *Report) error {
+	sourceID string, src *store.Source, body []byte, force bool, now time.Time, report *Report) error {
 
 	if len(e.Items) == 0 {
 		return nil
@@ -641,7 +657,7 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 
 	for i, extracted := range e.Items {
 		item, err := s.buildItem(extracted, existing[i], results[i], hashes[i],
-			fresh[i], settled[i], pageID, sourceID, version, model, now)
+			fresh[i], settled[i], pageID, sourceID, src, version, model, now)
 		if err != nil {
 			return err
 		}
@@ -757,7 +773,8 @@ func (s *Service) linkCollection(ctx context.Context, item *store.Item, pageURL,
 const scriptSource = "script"
 
 func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result normalize.Result,
-	hash string, normalized, byScript bool, pageID int64, sourceID, version, model string, seenAt time.Time) (*store.Item, error) {
+	hash string, normalized, byScript bool, pageID int64, sourceID string, src *store.Source,
+	version, model string, seenAt time.Time) (*store.Item, error) {
 
 	raw, err := json.Marshal(extracted)
 	if err != nil {
@@ -781,8 +798,14 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 	switch {
 	case normalized:
 		item.CollectionTitle = result.CollectionTitle
-		item.Title, item.Author = result.Title, result.Author
-		item.Authors = result.Authors
+		item.Title = result.Title
+		// The same settling the script path does. Without it a speaker read by
+		// the model is stored as "HH Radhanath Swami" and one read by a script
+		// as "Radhanath Swami", and the two disagree in every list that shows
+		// the name -- while grouping quietly works, because the key is computed
+		// separately and hides the difference.
+		item.Author = domain.Name(result.Author)
+		item.Authors = written(result.Authors)
 		if len(item.Authors) == 0 && item.Author != "" {
 			item.Authors = []string{item.Author}
 		}
@@ -810,6 +833,21 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 		item.NormInputSHA256 = prior.NormInputSHA256
 		item.NormPromptVersion, item.NormModel = prior.NormPromptVersion, prior.NormModel
 		item.Status = prior.Status
+	}
+
+	// Last, and only where nothing else said. A personal channel names its
+	// speaker once, in the channel, and never again in the title of a talk; an
+	// aggregator's name is a temple and every talk on it is by somebody else,
+	// which is why this is stated per source and empty by default.
+	//
+	// It cannot overrule the page. A personal channel carrying a guest lecture
+	// would otherwise file it under its owner — and on one of these channels
+	// there are lectures by two other swamis sitting among the owner's own.
+	if item.Author == "" && src != nil && src.DefaultAuthor != "" {
+		item.Author = domain.Name(src.DefaultAuthor)
+		if len(item.Authors) == 0 && item.Author != "" {
+			item.Authors = []string{item.Author}
+		}
 	}
 	return item, nil
 }

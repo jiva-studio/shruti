@@ -18,29 +18,46 @@ import (
 // and belongs in its script.
 
 // honorifics precede a name and are never part of it.
+//
+// Both alphabets, because one speaker is written in both: a Russian archive
+// files them in Cyrillic and an English one in Latin, and they are one person.
 var honorifics = []string{
 	"His Holiness", "His Grace", "Her Grace",
 	"Srila", "Sriman", "Srimati", "Sripad", "Sri", "Shri", "Dr",
+	"Его Святейшество", "Его Милость", "Её Милость", "Ее Милость",
+	"Шрила", "Шриман", "Шримати", "Шрипад", "Шри",
 }
 
 // initials are the same honorifics written as letters, with or without the
 // stops and spaces an archive happens to use: HH, H.H., "H G".
-var reInitials = regexp.MustCompile(`(?i)^\s*h\s*\.?\s*[gh]\s*\.?[\s_]+`)
+var reInitials = regexp.MustCompile(`(?i)^\s*(?:h\s*\.?\s*[gh]|е\s*\.?\s*[смc])\s*\.?[\s_]+`)
 
 // dropped follows a name and is how one addresses a person rather than how one
 // names them.
-var dropped = []string{"Prabhuji", "Prabhu", "Prabh", "Pr", "P"}
+var dropped = []string{
+	"Prabhuji", "Prabhu", "Prabh", "Pr", "P",
+	"Прабхуджи", "Прабху", "Прабх", "пр",
+}
 
 // canonical is the part of a name that stays, with every spelling the archives
 // use for it mapped to the one we write. "Sw" and "Maharaja" are a Swami; "dd"
 // and "Mataji" are a Devi Dasi.
 var canonical = map[string][]string{
-	"Swami":   {"Swami", "Swamiji", "Sw", "Maharaja", "Maharaj", "Mharaj"},
-	"Goswami": {"Goswami", "Gosvami", "Gsw"},
-	"Das":     {"Das", "Dasa", "Ds"},
+	"Swami": {
+		"Swami", "Swamiji", "Sw", "Maharaja", "Maharaj", "Mharaj",
+		"Свами Махарадж", "Свами Махараджа", "Свами", "Махарадж", "Махараджа",
+	},
+	"Goswami": {
+		"Goswami", "Gosvami", "Gsw",
+		"Госвами Махарадж", "Госвами Махараджа", "Госвами", "Госвамй",
+	},
+	"Das": {"Das", "Dasa", "Ds", "дас", "даса", "дасу"},
 	// Devi on its own is the same marker: "Mahamaya Devi" is a woman, and must
 	// meet "Mahamaya Devi Dasi".
-	"Devi Dasi": {"Devi Dasi", "Devi Dasa", "Devi", "Dasi", "dd", "Mataji", "Mtj"},
+	"Devi Dasi": {
+		"Devi Dasi", "Devi Dasa", "Devi", "Dasi", "dd", "Mataji", "Mtj",
+		"деви даси", "деви даса", "деви", "даси", "матаджи", "д.д.", "дд",
+	},
 }
 
 // feminine marks a woman. It is the one thing in a form of address that
@@ -52,7 +69,11 @@ var (
 	reHonorific  = alternation(honorifics, `^\s*(%s)\s*\.?[\s_]+`)
 	reDropTail   = alternation(dropped, `[\s_,.]+(%s)\s*\.?\s*$`)
 	reCanonTail  = alternation(canonKeys(), `[\s_,.]+(%s)\s*\.?\s*$`)
-	reNonLetters = regexp.MustCompile(`[^a-z0-9]+`)
+	// Cyrillic is a letter here too. It was not, and the whole of a Russian
+	// name fell through the filter: Key came back empty, an empty key resolves
+	// to nobody, and five thousand recordings that name their speaker were
+	// attached to no speaker at all.
+	reNonLetters = regexp.MustCompile(`[^a-zа-яё0-9]+`)
 )
 
 // canonToFull resolves any spelling to the one we keep.
@@ -113,11 +134,55 @@ func Name(raw string) string {
 		}
 		s = trimmed
 	}
-	if m := reCanonTail.FindStringSubmatch(s); m != nil {
+	// Every trailing marker comes off, not just the outermost. "Radhanath Swami
+	// Maharaja" is two ways of saying the same thing and used to become
+	// "Radhanath Swami Swami": the first was replaced by its canonical form and
+	// appended to the second, which was still there.
+	//
+	// The one put back is the outermost, and a feminine marker anywhere wins:
+	// it is the only part of a form of address that distinguishes rather than
+	// decorates.
+	var mark string
+	for {
+		m := reCanonTail.FindStringSubmatch(s)
+		if m == nil {
+			break
+		}
 		full := canonToFull[strings.ToLower(strings.Join(strings.Fields(m[1]), " "))]
-		s = strings.TrimSpace(s[:len(s)-len(m[0])]) + " " + full
+		if mark == "" || feminine[full] {
+			mark = full
+		}
+		s = strings.TrimSpace(s[:len(s)-len(m[0])])
+	}
+	if mark != "" {
+		// In the alphabet the name is written in. "Бхакти Викаша Swami" is
+		// nobody's name; the form of address belongs to the language that was
+		// addressing them.
+		if isCyrillic(s) {
+			if ru, ok := canonInCyrillic[mark]; ok {
+				mark = ru
+			}
+		}
+		s = strings.TrimSpace(s + " " + mark)
 	}
 	return strings.TrimSpace(s)
+}
+
+// canonInCyrillic is how each marker is written when the name is.
+var canonInCyrillic = map[string]string{
+	"Swami":     "Свами",
+	"Goswami":   "Госвами",
+	"Das":       "дас",
+	"Devi Dasi": "деви даси",
+}
+
+func isCyrillic(s string) bool {
+	for _, r := range s {
+		if r >= 0x0400 && r <= 0x04ff {
+			return true
+		}
+	}
+	return false
 }
 
 // Key is who a name belongs to: every form of address folded away, so that four
@@ -150,6 +215,20 @@ func Key(raw string) string {
 	return s
 }
 
+// cyrillic is the same name written in the other alphabet. A Russian archive
+// files a speaker in Cyrillic and an English one in Latin, and Fold has to see
+// one person: "Локанатха" and "Lokanatha", "Радханатх" and "Radhanath".
+//
+// Sound, not spelling — this feeds the same folding as the Latin rules below,
+// so ч becomes ch and then c, and the two routes end up in the same place.
+var cyrillic = strings.NewReplacer(
+	"а", "a", "б", "b", "в", "v", "г", "g", "д", "d", "е", "e", "ё", "e",
+	"ж", "j", "з", "z", "и", "i", "й", "i", "к", "k", "л", "l", "м", "m",
+	"н", "n", "о", "o", "п", "p", "р", "r", "с", "s", "т", "t", "у", "u",
+	"ф", "f", "х", "h", "ц", "c", "ч", "ch", "ш", "sh", "щ", "sh",
+	"ъ", "", "ы", "i", "ь", "", "э", "e", "ю", "yu", "я", "ya",
+)
+
 // transliteration is where romanisations of the same sound differ: ch for c,
 // sh for s, ri for r, a trailing -a that comes and goes. Folding them lets
 // "Chandramouli" meet "Candramauli".
@@ -168,7 +247,7 @@ var transliteration = []struct {
 // romanisations of one name meet. It is coarser again than Key and is meant for
 // proposing that two people are one, not for asserting it.
 func Fold(key string) string {
-	s := key
+	s := cyrillic.Replace(key)
 	for _, r := range transliteration {
 		s = r.from.ReplaceAllString(s, r.to)
 	}
