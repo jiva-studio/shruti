@@ -27,6 +27,10 @@ type sourceIn struct {
 	MaxDepth     int      `json:"max_depth"`
 	RecheckMinS  int      `json:"recheck_min_s"`
 	RecheckMaxS  int      `json:"recheck_max_s"`
+	// Script names the extraction script that reads this source. Empty means
+	// the source's own id. Several sources may name one script — fourteen
+	// YouTube channels are fourteen sources and one youtube.js.
+	Script string `json:"script"`
 	// DefaultAuthor is who a recording is by when the page does not say — a
 	// personal channel's owner. Leave it empty for an archive of many speakers,
 	// or every talk on it is filed under one name that is not a person.
@@ -48,6 +52,7 @@ func (in sourceIn) source() store.Source {
 		MaxDepth:      in.MaxDepth,
 		RecheckMinS:   in.RecheckMinS,
 		RecheckMaxS:   in.RecheckMaxS,
+		Script:        in.Script,
 		DefaultAuthor: in.DefaultAuthor,
 		AuthHeaders:   in.AuthHeaders,
 	}
@@ -66,6 +71,9 @@ type sourceOut struct {
 	MaxDepth     int      `json:"max_depth"`
 	RecheckMinS  int      `json:"recheck_min_s"`
 	RecheckMaxS  int      `json:"recheck_max_s"`
+	// Script is the extraction script that reads this source; empty means its
+	// own id.
+	Script string `json:"script,omitempty"`
 	// DefaultAuthor is who this source's recordings are by when the page does
 	// not say. Empty means the page has to.
 	DefaultAuthor string `json:"default_author,omitempty"`
@@ -86,6 +94,7 @@ func sourceFrom(s store.Source) sourceOut {
 		MaxDepth:       s.MaxDepth,
 		RecheckMinS:    s.RecheckMinS,
 		RecheckMaxS:    s.RecheckMaxS,
+		Script:         s.Script,
 		DefaultAuthor:  s.DefaultAuthor,
 		HasCredentials: s.HasCredentials,
 	}

@@ -16,8 +16,8 @@ import (
 // A source without a script, or a script that fails, yields nothing and the
 // model answers as it always did. Breaking a crawl because somebody's regex
 // threw would be a worse outcome than a slower one.
-func (s *Service) runScript(ctx context.Context, e *domain.Extraction, sourceID string, body []byte) map[string]script.Fields {
-	if s.Scripts == nil || !s.Scripts.Has(sourceID) {
+func (s *Service) runScript(ctx context.Context, e *domain.Extraction, scriptID string, body []byte) map[string]script.Fields {
+	if s.Scripts == nil || !s.Scripts.Has(scriptID) {
 		return nil
 	}
 	page := script.Page{
@@ -36,9 +36,9 @@ func (s *Service) runScript(ctx context.Context, e *domain.Extraction, sourceID 
 			Context:  it.ContextText,
 		}
 	}
-	out, err := s.Scripts.Run(ctx, sourceID, page, items)
+	out, err := s.Scripts.Run(ctx, scriptID, page, items)
 	if err != nil {
-		slog.WarnContext(ctx, "script_failed", "source", sourceID, "url", e.URL, "err", err.Error())
+		slog.WarnContext(ctx, "script_failed", "script", scriptID, "url", e.URL, "err", err.Error())
 		return nil
 	}
 	return out
