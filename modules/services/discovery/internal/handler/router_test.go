@@ -313,3 +313,47 @@ func TestAnEmptyAskIsRefused(t *testing.T) {
 		t.Errorf("= %d, want 400", code)
 	}
 }
+
+// A browser will not send a POST carrying JSON until it has been told, in a
+// preflight, that it may. Without an answer to that the client never reaches
+// the service and the browser reports a network failure, which is the one
+// explanation that is not true.
+func TestABrowserMayAsk(t *testing.T) {
+	h, _ := testRouter(t)
+
+	req := httptest.NewRequest(http.MethodOptions, "/discovery/search", nil)
+	req.Header.Set("Origin", "null")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "content-type")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("preflight = %d, want 204", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("allow-origin = %q", got)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(strings.ToLower(got), "content-type") {
+		t.Errorf("allow-headers = %q; a JSON body needs Content-Type allowed", got)
+	}
+
+	// And the answer itself carries it, or the browser hides the body it just
+	// fetched.
+	post := httptest.NewRequest(http.MethodPost, "/discovery/search", strings.NewReader(`{"query":"x"}`))
+	post.Header.Set("Origin", "null")
+	post.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, post)
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("the answer did not say who may read it: %q", got)
+	}
+
+	// Nothing is granted to an origin that did not ask.
+	plain := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, plain)
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("a request with no Origin was answered with %q", got)
+	}
+}
