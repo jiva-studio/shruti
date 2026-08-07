@@ -1109,3 +1109,36 @@ async def test_a_topical_request_with_a_filter_keeps_the_floor(_events) -> None:
         _Runtime(ctx),
     )
     assert not [e for e in _events if e["type"] == "action"]
+
+
+async def test_the_lead_in_hears_that_the_book_was_given_up(_events) -> None:
+    """«найди лекции по письмам Прабхупады»: the book resolves, no lecture in
+    the library is on it, the filter is given up — and the line went on saying
+    «вот лекции по письмам Прабхупады». The worker must hand the dropped book
+    to the lead-in; asserting on `_intro` alone leaves that wire untested, and
+    removing it broke nothing until this test existed."""
+    class _BookThenNothing(_Catalog):
+        """Filtering by the book matches nothing; without it, one lecture."""
+
+        async def filter_track_ids(self, **kwargs):
+            self.filter_kwargs = kwargs
+            return [] if kwargs.get("source_id") else None
+
+    llm = _FakeLLM()
+    ctx = _Ctx(
+        embedder=_Embedder(),
+        chunk_repo=_ChunkRepo([[_sc("t1", 70000, 0.9, "quote")]]),
+        catalog_repo=_BookThenNothing(
+            titles={"t1": "Лекция"}, descriptions={"t1": "d"},
+            sources={"source_29BBziLVQh2Y": "Письма"},
+        ),
+        llm=llm,
+        lang_code="ru",
+    )
+    await ftw.find_tracks_worker_node(
+        {"user_query": "найди лекции по письмам Прабхупады",
+         "extracted_args": {"source_id": "source_29BBziLVQh2Y"}},
+        _Runtime(ctx),
+    )
+    intro = llm.prompt_for("find_tracks_intro")
+    assert "NO lectures on" in intro, intro[:200]

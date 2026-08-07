@@ -220,3 +220,39 @@ def test_the_prompt_no_longer_carries_a_list_of_books() -> None:
     ).read_text(encoding="utf-8")
     assert "BG | SB" not in md
     assert "source_id" not in md, "the router names a book, it does not pick an id"
+
+
+async def test_the_lead_in_admits_the_book_had_no_lectures() -> None:
+    """«найди лекции по письмам Прабхупады» came back as «вот лекции по письмам
+    Прабхупады, но не из всех источников» — over lectures with nothing to do
+    with the letters. The book resolved, the search found nothing on it, the
+    filter was given up, and the line went on speaking as though it held."""
+    from lectorium_chat.agent.graph.nodes import find_tracks_worker as ftw
+
+    seen: dict[str, str] = {}
+
+    class _LLM:
+        async def text_completion(self, msgs, **_kw):
+            seen["user"] = msgs[-1]["content"]
+            return "line"
+
+    await ftw._intro(
+        _Ctx(llm=_LLM()), "найди лекции по письмам Прабхупады", 5, "source",
+        dropped_source="Письма",
+    )
+    assert "NO lectures on Письма" in seen["user"]
+    assert "do NOT describe" in seen["user"]
+
+
+async def test_a_kept_book_says_nothing_of_the_sort() -> None:
+    from lectorium_chat.agent.graph.nodes import find_tracks_worker as ftw
+
+    seen: dict[str, str] = {}
+
+    class _LLM:
+        async def text_completion(self, msgs, **_kw):
+            seen["user"] = msgs[-1]["content"]
+            return "line"
+
+    await ftw._intro(_Ctx(llm=_LLM()), "лекции по Гите", 5, "")
+    assert "NO lectures on" not in seen["user"]

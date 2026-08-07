@@ -513,7 +513,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
 async def _intro(
     ctx: TurnContext, query: str, n: int, relaxed: str, *,
     lang_note: str = "", ref: str = "", chosen_authors: str = "",
-    partial: bool = False, unknown_source: str = "",
+    partial: bool = False, unknown_source: str = "", dropped_source: str = "",
 ) -> str:
     sys = standalone_prompt("find-tracks-intro", "find_tracks_intro")
     facts = [
@@ -521,6 +521,18 @@ async def _intro(
         f"Lectures found: {n}",
         f"Relaxed filters: {relaxed or 'none'}",
     ]
+    if dropped_source:
+        # The book exists, the lectures about it do not. «найди лекции по
+        # письмам Прабхупады» came back as «вот лекции по письмам Прабхупады,
+        # но не из всех источников» over lectures that have nothing to do with
+        # the letters — the filter had been given up and the line still spoke
+        # as if it held.
+        facts.append(
+            f"IMPORTANT: the library has NO lectures on {dropped_source}. The "
+            f"list below was found by the words of the request instead. Say "
+            f"that there is nothing on {dropped_source} and do NOT describe "
+            f"these lectures as being on it."
+        )
     if unknown_source:
         # The person named a book the catalog does not have. Searching the rest
         # of the corpus for it is fine; pretending we looked inside that book is
@@ -706,6 +718,10 @@ async def find_tracks_worker_node(
     # When the reference filter had to be dropped, the lead-in gets the human
     # address it must NOT claim («БГ 10»). Costs a catalog lookup only on that
     # miss path.
+    dropped_source = ""
+    if _was_relaxed(relaxed, "source") and args.get("source_id"):
+        _, short = await _resolve_source(ctx, str(args.get("source_id")))
+        dropped_source = short or ""
     ref_label = ""
     if _was_relaxed(relaxed, _REF_RUNG):
         _, short = await _resolve_source(ctx, str(args.get("source_id") or ""))
@@ -714,6 +730,7 @@ async def find_tracks_worker_node(
     intro_task = _intro(
         ctx, query, len(kept), relaxed, lang_note=lang_note, ref=ref_label,
         partial=found.partial, unknown_source=unknown_source,
+        dropped_source=dropped_source,
     )
     prose = await asyncio.gather(intro_task, *desc_tasks)
     intro, descriptions = prose[0], list(prose[1:])
