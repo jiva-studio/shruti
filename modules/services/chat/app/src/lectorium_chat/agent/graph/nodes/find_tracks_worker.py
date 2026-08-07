@@ -51,6 +51,7 @@ from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prompts import standalone_prompt
 from lectorium_chat.application.author_lookup import resolve_author
 from lectorium_chat.agent.graph.turn_context import TurnContext
+from lectorium_chat.research.pipeline import _fallback_corpus_langs
 from lectorium_chat.config import get_settings
 from lectorium_chat.domain.entities import Message, ScoredChunk
 from lectorium_chat.domain.scripture_ref import parse_tokens
@@ -352,12 +353,16 @@ async def _elsewhere(
             if l and l != ctx.lang_code
         ]
     except Exception as exc:  # noqa: BLE001
+        # The corpus languages are also known statically — the deployment
+        # configures them (`indexer_langs`, "ru,en"). Using that instead of
+        # dropping the predicate keeps even the degraded path on an index:
+        # there is no query shape left in this worker that sweeps 559k chunks.
         log.warning(
             "find_tracks_langs_unknown", request_id=ctx.request_id, error=str(exc),
         )
-        langs = []
+        langs = [l for l in _fallback_corpus_langs() if l != ctx.lang_code]
     if not langs:
-        return await _try(ctx, embedding, flt, lang=None, floor=floor)
+        return []
     runs = await asyncio.gather(*(
         _try(ctx, embedding, flt, lang=l, floor=floor) for l in langs
     ))
