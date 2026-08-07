@@ -39,6 +39,12 @@ const (
 // that changes and a preference is not.
 var routing = json.RawMessage(`{"sort":"latency","allow_fallbacks":true}`)
 
+// Reading a question into fields is not a creative task, and sampling made it
+// an unreliable one: the same sentence gave up its speaker seven times out of
+// ten and shrugged the other three, so a person asking twice got two different
+// answers with nothing to say why.
+var deterministic = 0.0
+
 // LLM reads a question through an OpenAI-compatible endpoint.
 type LLM struct {
 	client *openaicompat.Client
@@ -85,12 +91,13 @@ func (l *LLM) Read(ctx context.Context, question string, now time.Time) (Filter,
 		attempt, cancel := context.WithTimeout(ctx, readTimeout)
 		var got reply
 		_, err := l.client.RunJSON(attempt, openaicompat.Call{
-			Model:     l.model,
-			MaxTokens: 400,
-			System:    systemPrompt,
-			User:      user,
-			Reasoning: openaicompat.ReasoningOff,
-			Provider:  routing,
+			Model:       l.model,
+			MaxTokens:   400,
+			System:      systemPrompt,
+			User:        user,
+			Reasoning:   openaicompat.ReasoningOff,
+			Provider:    routing,
+			Temperature: &deterministic,
 		}, &got)
 		cancel()
 		if err == nil {
