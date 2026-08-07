@@ -223,6 +223,67 @@ func TestFailingPagesAreTheirOwnList(t *testing.T) {
 	}
 }
 
+// Many sources on one host must not take the whole claim either. Politeness is
+// measured per host — one limiter, one breaker, shared by every source on it —
+// so twenty-four channels of one site are twenty-four sources and one gap
+// between requests. Handed a place each, they fill the claim and then queue
+// behind that gap, while an archive on its own host waits for a worker.
+func TestOneHostDoesNotTakeTheWholeClaim(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx, now := context.Background(), time.Now().UTC()
+
+	// Eight sources on one host, one on another.
+	for i := range 8 {
+		id := "ch" + strconv.Itoa(i)
+		mustSource(t, r, &store.Source{ID: id, SeedURLs: []string{"https://one.example/" + id}, Enabled: true})
+		p := mustPage(t, r, &store.Page{URL: "https://one.example/" + id + "/list", SourceID: ptr(id), NextCheckAt: &now})
+		var links []string
+		for j := range 30 {
+			links = append(links, "https://one.example/"+id+"/talk/"+strconv.Itoa(j))
+		}
+		if err := r.ReplacePageLinks(ctx, p, links); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustSource(t, r, &store.Source{ID: "alone", SeedURLs: []string{"https://other.example/"}, Enabled: true})
+	p := mustPage(t, r, &store.Page{URL: "https://other.example/list", SourceID: ptr("alone"), NextCheckAt: &now})
+	var links []string
+	for j := range 30 {
+		links = append(links, "https://other.example/talk/"+strconv.Itoa(j))
+	}
+	if err := r.ReplacePageLinks(ctx, p, links); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := r.ClaimWork(ctx, now, 40)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var crowded, alone int
+	for _, w := range got {
+		if w.SourceID == "alone" {
+			alone++
+		} else {
+			crowded++
+		}
+	}
+	if alone < 15 {
+		t.Errorf("claim split %d crowded / %d alone; the single-host archive was crowded out", crowded, alone)
+	}
+
+	// And within the crowded host the sources still take turns, or one channel
+	// of twenty-four would have the host's whole share.
+	bySource := map[string]int{}
+	for _, w := range got {
+		if w.SourceID != "alone" {
+			bySource[w.SourceID]++
+		}
+	}
+	if len(bySource) < 4 {
+		t.Errorf("only %d of the eight sources on that host appeared: %v", len(bySource), bySource)
+	}
+}
+
 // One source in full backfill must not take the whole claim.
 //
 // This is the defect as it happened: an archive being walked for the first time
