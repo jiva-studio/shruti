@@ -242,3 +242,88 @@ type Similar struct {
 	Fold    string   `json:"fold"`
 	Authors []Author `json:"authors"`
 }
+
+// RelinkAuthors attaches recordings we already hold to the person they name.
+//
+// A fix to how a name is read does not reach what is already stored. A
+// recording is linked to a person when it is written, and it is written when
+// its page is read, and a page is only read again when the site changed, or the
+// prompt did, or the source's script did. A correction in Go changes none of
+// those, so the pages stay "up to date" and the recordings stay unlinked --
+// which for an archived lecture from 2015 means for ever.
+//
+// This is that one pass, over what is in the database and nothing else. No page
+// is fetched: the name is on the row, it always was, and it is only the reading
+// of it that was broken.
+//
+// It takes what items.author says, so a recording naming several speakers
+// recovers the first of them. The rest were never stored on the row.
+func (r *Repo) RelinkAuthors(ctx context.Context, batch int) (linked int, err error) {
+	if batch <= 0 {
+		batch = 500
+	}
+	for {
+		rows, err := r.pool.Query(ctx, `
+			SELECT i.id, i.author
+			FROM discovery.items i
+			WHERE i.author <> ''
+			  AND NOT EXISTS (SELECT 1 FROM discovery.item_authors ia WHERE ia.item_id = i.id)
+			ORDER BY i.id
+			LIMIT $1`, batch)
+		if err != nil {
+			return linked, err
+		}
+		type row struct {
+			id     int64
+			author string
+		}
+		var pending []row
+		for rows.Next() {
+			var x row
+			if err := rows.Scan(&x.id, &x.author); err != nil {
+				rows.Close()
+				return linked, err
+			}
+			pending = append(pending, x)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return linked, err
+		}
+		if len(pending) == 0 {
+			return linked, nil
+		}
+
+		var progressed int
+		for _, x := range pending {
+			id, err := r.ResolveAuthor(ctx, x.author)
+			if err != nil {
+				return linked, err
+			}
+			if id == 0 {
+				// A name that is only a form of address resolves to nobody, and
+				// that is an answer. Left alone it would be selected again on
+				// the next round for ever, so it is not counted as progress.
+				continue
+			}
+			if err := r.SetItemAuthors(ctx, x.id, []int64{id}); err != nil {
+				return linked, err
+			}
+			// The stored key was computed by the code that could not read this
+			// name. Left as it is, every filter that goes through the column
+			// rather than the link keeps missing the recording.
+			if _, err := r.pool.Exec(ctx,
+				`UPDATE discovery.items SET author_key = $2 WHERE id = $1`,
+				x.id, domain.Key(x.author)); err != nil {
+				return linked, err
+			}
+			linked++
+			progressed++
+		}
+		// Every row in this batch resolved to nobody, so the next query returns
+		// the same rows. Stopping is the only way out.
+		if progressed == 0 {
+			return linked, nil
+		}
+	}
+}
