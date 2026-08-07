@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
 	"github.com/jiva-studio/shruti/discovery/internal/application/crawl"
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/application/normalize"
@@ -99,6 +100,9 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		searcher.Embedder = embedder
 	}
 	parser := &parse.Service{Fetcher: fetcher, Normalizer: normalizer}
+	// Asking in words needs a model; asking with filters does not. Without a
+	// key the question is still searched, as written.
+	asker := &ask.Service{Searcher: searcher, Reader: buildQueryReader(ctx, cfg)}
 	crawler := &crawl.Service{
 		Index:   indexer,
 		Parse:   parser,
@@ -118,6 +122,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 			Index:            indexer,
 			Crawl:            background,
 			Search:           searcher,
+			Ask:              asker,
 			Metrics:          counters,
 			SchedulerEnabled: cfg.SchedulerEnabled,
 		}),
@@ -175,6 +180,23 @@ func buildNormalizer(ctx context.Context, cfg *config.Config) normalize.Normaliz
 		return normalize.Stub{}
 	}
 	return llm
+}
+
+// buildQueryReader returns nil when no model is configured, and nil is a
+// working service: a question nobody read is searched as it was written.
+func buildQueryReader(ctx context.Context, cfg *config.Config) ask.Reader {
+	if ok, missing := cfg.NormalizerReady(); !ok {
+		slog.WarnContext(ctx, "questions_not_read", "missing", missing)
+		return nil
+	}
+	reader, err := ask.NewLLM(ask.LLMOptions{
+		Endpoint: cfg.LLMBaseURL, APIKey: cfg.LLMAPIKey, Model: cfg.QueryModel,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "questions_not_read", "err", err.Error())
+		return nil
+	}
+	return reader
 }
 
 // buildEmbedder returns nil when embeddings are unconfigured. Items are still

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
+	"github.com/jiva-studio/shruti/discovery/internal/application/search"
 	"github.com/jiva-studio/shruti/discovery/internal/handler"
 	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
@@ -40,9 +42,12 @@ func testRouter(t *testing.T) (http.Handler, *store.Repo) {
 	}
 
 	repo := store.NewRepo(pool)
+	searcher := &search.Service{Pool: pool}
 	return handler.NewRouter(handler.RouterDeps{
 		Pool:    pool,
 		Repo:    repo,
+		Search:  searcher,
+		Ask:     &ask.Service{Searcher: searcher},
 		Metrics: metrics.New(time.Now().UTC()),
 	}), repo
 }
@@ -257,4 +262,55 @@ func mustJSON(t *testing.T, v any) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// A question in words answers with the recordings, the filter it was read into,
+// and the question itself unchanged — so the caller can drop a field and ask
+// again without rewriting anything.
+//
+// Without a model configured, which is what these tests run with, the question
+// is searched as written and a message says so. That is the degraded path, and
+// it is the one that must not be a failure.
+func TestAQuestionIsStillASearchWithoutAModel(t *testing.T) {
+	h, _ := testRouter(t)
+
+	code, body := do(t, h, http.MethodPost, "/discovery/search",
+		`{"query":"лекции Шиварамы Свами за 2012 год о карме","filter":{"limit":5}}`)
+	if code != http.StatusOK {
+		t.Fatalf("= %d %v", code, body)
+	}
+	if body["query"] != "лекции Шиварамы Свами за 2012 год о карме" {
+		t.Errorf("the question came back as %v", body["query"])
+	}
+	f, _ := body["filter"].(map[string]any)
+	if f == nil || f["text"] != "лекции Шиварамы Свами за 2012 год о карме" {
+		t.Errorf("filter = %v", body["filter"])
+	}
+	if f["limit"] != float64(5) {
+		t.Errorf("the caller's own field was lost: %v", f["limit"])
+	}
+	if !strings.Contains(mustJSON(t, body), "not_read") {
+		t.Errorf("nothing said the question was not read: %s", mustJSON(t, body))
+	}
+}
+
+// A filter with no question is the plain search, in a body.
+func TestAFilterAloneNeedsNoQuestion(t *testing.T) {
+	h, _ := testRouter(t)
+	code, body := do(t, h, http.MethodPost, "/discovery/search", `{"filter":{"author":"Локанатха Свами"}}`)
+	if code != http.StatusOK {
+		t.Fatalf("= %d %v", code, body)
+	}
+	// Nobody by that name is in an empty corpus, so this is the "nothing could
+	// match" answer rather than the "nothing matches" one.
+	if !strings.Contains(mustJSON(t, body), "matches_nobody") {
+		t.Errorf("= %s", mustJSON(t, body))
+	}
+}
+
+func TestAnEmptyAskIsRefused(t *testing.T) {
+	h, _ := testRouter(t)
+	if code, _ := do(t, h, http.MethodPost, "/discovery/search", `{}`); code != http.StatusBadRequest {
+		t.Errorf("= %d, want 400", code)
+	}
 }
