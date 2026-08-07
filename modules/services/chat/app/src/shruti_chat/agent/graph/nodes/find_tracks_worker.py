@@ -332,6 +332,38 @@ def _merge(runs: list[tuple[str, list[ScoredChunk]]]) -> list[ScoredChunk]:
     return sorted(best.values(), key=lambda sc: sc.score, reverse=True)[:_MAX_LECTURES]
 
 
+async def _elsewhere(
+    ctx: TurnContext, embedding: list[float], flt: dict, *, floor: float = _MIN_SCORE,
+) -> list[ScoredChunk]:
+    """The same search, in every corpus language except the one we just tried.
+
+    Not `lang=None`. The lecture embeddings are indexed per language —
+    `hnsw_lec_ru`, `hnsw_lec_en` — and a query without the predicate matches no
+    index at all: measured on the live corpus, 12 ms with a language against
+    1954 ms without one over 559k transcript chunks. Asking each language in
+    turn keeps every query on its index and answers the same question.
+
+    Falls back to the unindexed sweep only when the corpus languages cannot be
+    read — a slow answer beats none.
+    """
+    try:
+        langs = [
+            l for l in await ctx.chunk_repo.distinct_langs()  # type: ignore[union-attr]
+            if l and l != ctx.lang_code
+        ]
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "find_tracks_langs_unknown", request_id=ctx.request_id, error=str(exc),
+        )
+        langs = []
+    if not langs:
+        return await _try(ctx, embedding, flt, lang=None, floor=floor)
+    runs = await asyncio.gather(*(
+        _try(ctx, embedding, flt, lang=l, floor=floor) for l in langs
+    ))
+    return _merge(list(zip(langs, runs)))
+
+
 async def _find_lectures(
     ctx: TurnContext, embedding: list[float], full: dict, *, topical: bool = True,
 ) -> _Found:
@@ -362,7 +394,7 @@ async def _find_lectures(
         lectures = await _try(ctx, embedding, full, lang=ctx.lang_code)
         if lectures:
             return _Found(lectures)
-        lectures = await _try(ctx, embedding, full, lang=None)
+        lectures = await _elsewhere(ctx, embedding, full)
         return _Found(lectures, other_language=bool(lectures))
 
     # A request with no TOPIC («покажи утренние прогулки 1976 года в Бомбее»)
@@ -388,7 +420,7 @@ async def _find_lectures(
     exact_same = await _try(ctx, embedding, full, lang=ctx.lang_code, floor=exact_floor)
     if exact_same:
         return _Found(exact_same)
-    exact_any = await _try(ctx, embedding, full, lang=None, floor=exact_floor)
+    exact_any = await _elsewhere(ctx, embedding, full, floor=exact_floor)
     if exact_any:
         return _Found(exact_any, other_language=True)
 
@@ -400,9 +432,13 @@ async def _find_lectures(
             break
         # The near-misses of one language DO go together: they are different
         # questions and their answers are merged into one list. The languages
-        # do not — a hit at home ends it, and the slow lane is never opened.
+        # do not — a hit at home ends it, and nothing abroad is searched.
+        search = (
+            (lambda f: _try(ctx, embedding, f, lang=lang)) if not foreign
+            else (lambda f: _elsewhere(ctx, embedding, f))
+        )
         runs = await asyncio.gather(*(
-            _try(ctx, embedding, _without(full, [n]), lang=lang) for n in alone
+            search(_without(full, [n])) for n in alone
         ))
         hits = [(n, r) for n, r in zip(alone, runs) if r]
         if hits:
@@ -419,7 +455,11 @@ async def _find_lectures(
         dropped: list[str] = []
         for name in stated:
             dropped.append(name)
-            lectures = await _try(ctx, embedding, _without(full, dropped), lang=lang)
+            probe = _without(full, dropped)
+            lectures = (
+                await _try(ctx, embedding, probe, lang=lang) if lang is not None
+                else await _elsewhere(ctx, embedding, probe)
+            )
             if lectures:
                 return _Found(
                     lectures,
