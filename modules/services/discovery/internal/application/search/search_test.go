@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
+	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
@@ -141,5 +142,45 @@ func TestSearchWorksWithoutAnEmbedder(t *testing.T) {
 	}
 	if len(hits) == 0 {
 		t.Error("no hits without an embedder; the lexical lane should stand on its own")
+	}
+}
+
+// A verse is a book AND a coordinate, on the same reference. Asked as two
+// conditions they are satisfied by two different references on one recording,
+// so a talk on ISO 4 that mentions the Bhagavatam once answered to "SB 4" — of
+// which the corpus held none. The more verses a recording covers the more
+// coordinates it wrongly answers to, and one of ours covers a thousand.
+func TestAVerseIsOneReferenceNotTwoConditions(t *testing.T) {
+	svc, repo, pool := testSearch(t)
+	ctx := context.Background()
+
+	mixed := add(t, repo, pool, "https://a.example/mixed.mp3", "Sri Isopanisad mantra four", "Sacinandana Swami", "en")
+	if err := repo.ReplaceItemRefs(ctx, mixed, []domain.Ref{
+		{Source: "ISO", Tokens: "4"},
+		{Source: "SB", Tokens: "1.2.10"},
+	}, store.OriginCrawl); err != nil {
+		t.Fatal(err)
+	}
+	real := add(t, repo, pool, "https://a.example/sb.mp3", "Fourth canto", "Radhanath Swami", "en")
+	if err := repo.ReplaceItemRefs(ctx, real, []domain.Ref{{Source: "SB", Tokens: "4"}},
+		store.OriginCrawl); err != nil {
+		t.Fatal(err)
+	}
+
+	hits, err := svc.Search(ctx, search.Query{RefSource: "SB", RefTokens: "4", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 1 || hits[0].ItemID != real {
+		t.Errorf("SB 4 returned %v; the recording citing ISO 4 and SB 1.2.10 is not a match", titles(hits))
+	}
+
+	// Asking for the book alone still finds everything in it.
+	book, err := svc.Search(ctx, search.Query{RefSource: "SB", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(book) != 2 {
+		t.Errorf("SB alone returned %d, want both recordings that cite it", len(book))
 	}
 }
