@@ -1,0 +1,12 @@
+-- Who this source's recordings are by, when we know better than the page.
+--
+-- It was a fallback: used only where nothing else named a speaker. That never
+-- fired for YouTube, because the script fills the author in from the channel
+-- name for every video -- so a channel of one teacher's lectures was right by
+-- accident, and an aggregator filed four hundred lectures by forty people under
+-- the name of a temple.
+--
+-- It is an override now. Somebody setting it knows whose archive this is, and
+-- that beats a channel name every time. The cost is stated where it is applied:
+-- a channel that carries guests must not have it set.
+ALTER TABLE discovery.sources RENAME COLUMN default_author TO author_override;

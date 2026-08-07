@@ -31,10 +31,10 @@ type sourceIn struct {
 	// the source's own id. Several sources may name one script — fourteen
 	// YouTube channels are fourteen sources and one youtube.js.
 	Script string `json:"script"`
-	// DefaultAuthor is who a recording is by when the page does not say — a
-	// personal channel's owner. Leave it empty for an archive of many speakers,
-	// or every talk on it is filed under one name that is not a person.
-	DefaultAuthor string `json:"default_author"`
+	// AuthorOverride is who this source's recordings are by, winning over
+	// whatever the page says. Leave it empty for an archive of many speakers,
+	// and for a channel that carries guests.
+	AuthorOverride string `json:"author_override"`
 	// AuthHeaders go in and never come back out. Omitting them leaves whatever
 	// was set before, so an edit does not sign the source out of the archive.
 	AuthHeaders map[string]string `json:"auth_headers,omitempty"`
@@ -42,19 +42,19 @@ type sourceIn struct {
 
 func (in sourceIn) source() store.Source {
 	return store.Source{
-		ID:            in.ID,
-		Title:         in.Title,
-		SeedURLs:      in.SeedURLs,
-		Enabled:       in.Enabled,
-		CrawlDelayMS:  in.CrawlDelayMS,
-		CrawlWorkers:  in.CrawlWorkers,
-		Fetcher:       in.Fetcher,
-		MaxDepth:      in.MaxDepth,
-		RecheckMinS:   in.RecheckMinS,
-		RecheckMaxS:   in.RecheckMaxS,
-		Script:        in.Script,
-		DefaultAuthor: in.DefaultAuthor,
-		AuthHeaders:   in.AuthHeaders,
+		ID:             in.ID,
+		Title:          in.Title,
+		SeedURLs:       in.SeedURLs,
+		Enabled:        in.Enabled,
+		CrawlDelayMS:   in.CrawlDelayMS,
+		CrawlWorkers:   in.CrawlWorkers,
+		Fetcher:        in.Fetcher,
+		MaxDepth:       in.MaxDepth,
+		RecheckMinS:    in.RecheckMinS,
+		RecheckMaxS:    in.RecheckMaxS,
+		Script:         in.Script,
+		AuthorOverride: in.AuthorOverride,
+		AuthHeaders:    in.AuthHeaders,
 	}
 }
 
@@ -74,9 +74,9 @@ type sourceOut struct {
 	// Script is the extraction script that reads this source; empty means its
 	// own id.
 	Script string `json:"script,omitempty"`
-	// DefaultAuthor is who this source's recordings are by when the page does
-	// not say. Empty means the page has to.
-	DefaultAuthor string `json:"default_author,omitempty"`
+	// AuthorOverride is who this source's recordings are by. Empty means the
+	// page decides.
+	AuthorOverride string `json:"author_override,omitempty"`
 	// HasCredentials says whether requests to this source carry an account,
 	// which is worth knowing and is not the account itself.
 	HasCredentials bool `json:"has_credentials,omitempty"`
@@ -95,7 +95,7 @@ func sourceFrom(s store.Source) sourceOut {
 		RecheckMinS:    s.RecheckMinS,
 		RecheckMaxS:    s.RecheckMaxS,
 		Script:         s.Script,
-		DefaultAuthor:  s.DefaultAuthor,
+		AuthorOverride: s.AuthorOverride,
 		HasCredentials: s.HasCredentials,
 	}
 }
