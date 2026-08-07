@@ -70,14 +70,18 @@ func (r *Repo) Authors(ctx context.Context, sourceID string, limit int) ([]Autho
 		SELECT a.id, a.name,
 		       coalesce(array_agg(DISTINCT k.key) FILTER (WHERE k.key IS NOT NULL), '{}'),
 		       coalesce(array_agg(DISTINCT i.author) FILTER (WHERE i.author IS NOT NULL), '{}'),
-		       count(i.id)::int
+		       -- DISTINCT, because the join to the spellings multiplies the
+		       -- rows: a person with two spellings counted every recording
+		       -- twice. Invisible while everyone had one spelling, which is
+		       -- until the first merge.
+		       count(DISTINCT i.id)::int
 		FROM discovery.authors a
 		LEFT JOIN discovery.author_keys k ON k.author_id = a.id
 		LEFT JOIN discovery.item_authors ia ON ia.author_id = a.id
 		LEFT JOIN discovery.items i ON i.id = ia.item_id AND ($1 = '' OR i.source_id = $1)
 		GROUP BY a.id, a.name
-		HAVING count(i.id) > 0
-		ORDER BY count(i.id) DESC, a.name
+		HAVING count(DISTINCT i.id) > 0
+		ORDER BY count(DISTINCT i.id) DESC, a.name
 		LIMIT $2`, sourceID, limit)
 	if err != nil {
 		return nil, err

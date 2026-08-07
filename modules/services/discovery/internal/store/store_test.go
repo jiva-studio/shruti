@@ -578,3 +578,113 @@ func itemTexts(t *testing.T, r *store.Repo, itemID int64) map[string]string {
 }
 
 func ptr(s string) *string { return &s }
+
+// Two spellings of one person are proposed, never joined. A rule loose enough
+// to catch every spelling of one speaker is loose enough to join two speakers,
+// and afterwards the result does not say which rows were wrong.
+func TestAlikeProposesAcrossAlphabets(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+
+	ru, err := r.ResolveAuthor(ctx, "Локанатха Свами")
+	if err != nil || ru == 0 {
+		t.Fatalf("= %d, %v", ru, err)
+	}
+	en, err := r.ResolveAuthor(ctx, "Lokanatha Swami")
+	if err != nil || en == 0 {
+		t.Fatalf("= %d, %v", en, err)
+	}
+	if ru == en {
+		t.Fatal("the two alphabets resolved to one person on their own; nothing left to propose")
+	}
+
+	groups, err := r.Alike(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, g := range groups {
+		var sawRU, sawEN bool
+		for _, a := range g.Authors {
+			sawRU = sawRU || a.ID == ru
+			sawEN = sawEN || a.ID == en
+		}
+		found = found || (sawRU && sawEN)
+	}
+	if !found {
+		t.Errorf("the two spellings were not proposed as one person: %+v", groups)
+	}
+}
+
+// Merging moves the spellings, not the recordings. That is what keeps the next
+// crawl from resolving the absorbed name back to a row it just recreated.
+func TestMergingMovesTheSpellings(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+
+	keep, _ := r.ResolveAuthor(ctx, "Локанатха Свами")
+	absorb, _ := r.ResolveAuthor(ctx, "Lokanatha Swami")
+
+	item := &store.Item{MediaURL: "https://a.example/1.mp3", PageID: &page, SourceID: ptr("a"), Author: "Lokanatha Swami"}
+	if _, err := r.SaveItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetItemAuthors(ctx, item.ID, []int64{absorb}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.MergeAuthors(ctx, keep, absorb); err != nil {
+		t.Fatal(err)
+	}
+
+	again, err := r.ResolveAuthor(ctx, "Lokanatha Swami")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != keep {
+		t.Errorf("the absorbed spelling resolves to %d, want %d — the next crawl would undo the merge", again, keep)
+	}
+	authors, err := r.Authors(ctx, "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(authors) != 1 || authors[0].ID != keep || authors[0].Items != 1 {
+		t.Errorf("after merging: %+v", authors)
+	}
+}
+
+// A recording linked to both would break the primary key, so one link is
+// dropped rather than moved.
+func TestMergingARecordingLinkedToBoth(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+
+	keep, _ := r.ResolveAuthor(ctx, "Локанатха Свами")
+	absorb, _ := r.ResolveAuthor(ctx, "Lokanatha Swami")
+	item := &store.Item{MediaURL: "https://a.example/1.mp3", PageID: &page, SourceID: ptr("a")}
+	if _, err := r.SaveItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetItemAuthors(ctx, item.ID, []int64{keep, absorb}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.MergeAuthors(ctx, keep, absorb); err != nil {
+		t.Fatalf("merging a recording linked to both: %v", err)
+	}
+	authors, _ := r.Authors(ctx, "", 20)
+	if len(authors) != 1 || authors[0].Items != 1 {
+		t.Errorf("= %+v", authors)
+	}
+}
+
+func TestMergingSomebodyIntoThemselvesIsRefused(t *testing.T) {
+	r, _ := testRepo(t)
+	id, _ := r.ResolveAuthor(context.Background(), "Локанатха Свами")
+	if err := r.MergeAuthors(context.Background(), id, id); err == nil {
+		t.Error("merging a person into themselves was allowed")
+	}
+}
