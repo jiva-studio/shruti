@@ -64,13 +64,48 @@ async def user_tracks_list(
         since=since_dt, until=until_dt, status=status,
     )
     if not rows:
-        return []
+        return _nothing_here(user_context)
     capped = rows[: max(1, min(limit, 50))]
     track_ids = [t.track_id for t in capped]
     live = set(await catalog_repo.filter_existing_track_ids(track_ids))
-    return [
+    wire = [
         _track_to_wire(t, alias_map=alias_map) for t in capped if t.track_id in live
     ]
+    return wire or _nothing_here(user_context)
+
+
+def _nothing_here(user_context: UserContext) -> dict[str, Any] | list[Any]:
+    """Empty result — but say WHETHER there is a history at all.
+
+    A bare `[]` reads to the model as "this person has never listened to
+    anything", and that is what it wrote: «I didn't find any record of your
+    recent activity» to someone who had listened, just not this week and not
+    to something still in progress. Five minutes later the recommender —
+    working off the very same one track — told them it was suggesting lectures
+    on «the topics you have recently been exploring». One of those two was
+    always going to be wrong.
+
+    So the empty answer carries the shape of the history behind it: how much
+    there is and when it was, which is exactly what an honest «nothing in that
+    window, the last thing you played was …» needs.
+    """
+    played = [t for t in user_context.recent_tracks if t.last_played_at is not None]
+    if not played:
+        return []
+    newest = max(played, key=lambda t: t.last_played_at)
+    return {
+        "tracks": [],
+        "history_exists": True,
+        "n_tracks": len(user_context.recent_tracks),
+        "last_played_at": newest.last_played_at.isoformat(),
+        "hint": (
+            "Nothing matches THIS window/status, but the person does have "
+            "listening history. Say that plainly — nothing in the period they "
+            "asked about — and offer what is there (the last listen was "
+            f"{newest.last_played_at.isoformat()}). Do NOT tell them they have "
+            "no history."
+        ),
+    }
 
 
 register_tool(ToolDef(
