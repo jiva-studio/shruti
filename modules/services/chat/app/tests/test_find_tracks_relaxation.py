@@ -410,3 +410,45 @@ async def test_the_plain_search_survives_a_stall_too(
     found = await _find_lectures(_Ctx(), [0.0], _filters())
 
     assert [sc.chunk.track_id for sc in found.lectures] == ["found"]
+
+
+# ── what the search costs ─────────────────────────────────────────────────
+
+
+async def test_the_slow_lane_is_not_opened_when_the_fast_one_answers(
+    _search_through_the_corpus,
+) -> None:
+    """A language-less lookup cannot use the per-(kind,lang) partial index:
+    measured against the live index it is 1954 ms over the whole corpus versus
+    12 ms with a language. Issuing it alongside the language one meant every
+    constrained turn paid for the slowest query shape we have — and two ANN
+    timeouts followed. It is needed only when the fast one comes back empty."""
+    everything = frozenset({"date", "location", "kind"})
+    corpus = _Corpus({(everything, "ru"): ["found_at_home"]})
+    found = await _run(_search_through_the_corpus, corpus, _WALKS_1976_BOMBAY)
+
+    assert [sc.chunk.track_id for sc in found.lectures] == ["found_at_home"]
+    assert corpus.searched == [(everything, "ru")], corpus.searched
+
+
+async def test_the_slow_lane_still_runs_when_it_is_the_only_answer(
+    _search_through_the_corpus,
+) -> None:
+    everything = frozenset({"date", "location", "kind"})
+    corpus = _Corpus({(everything, "en"): ["only_in_english"]})
+    found = await _run(_search_through_the_corpus, corpus, _WALKS_1976_BOMBAY)
+
+    assert [sc.chunk.track_id for sc in found.lectures] == ["only_in_english"]
+    assert found.other_language is True
+    assert (everything, None) in corpus.searched
+
+
+async def test_near_misses_abroad_are_not_searched_when_home_has_them(
+    _search_through_the_corpus,
+) -> None:
+    corpus = _Corpus({(frozenset({"date", "kind"}), "ru"): ["near_at_home"]})
+    await _run(_search_through_the_corpus, corpus, _WALKS_1976_BOMBAY)
+
+    langless = [c for c in corpus.searched if c[1] is None and c[0] != frozenset(
+        {"date", "location", "kind"})]
+    assert not langless, f"searched abroad for nothing: {langless}"
