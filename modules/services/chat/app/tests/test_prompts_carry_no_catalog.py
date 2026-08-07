@@ -85,3 +85,18 @@ def test_the_one_tool_that_must_have_a_list_builds_it_from_the_code() -> None:
     for code in BOOK_PREFIX:
         assert code in desc, f"{code} is addressable but undocumented"
     assert "Śikṣāṣṭaka" not in desc
+
+
+def test_the_schema_the_model_sees_defines_no_field_names_of_its_own() -> None:
+    """A pydantic docstring becomes the JSON-schema description sent with the
+    request, so it is a second prompt. It listed `source_id` for a while after
+    the router prompt had moved to `source`, and the model — hearing both —
+    kept answering with the retired key even against the new instruction."""
+    from shruti_chat.domain.routing import RoutingDecision
+
+    desc = RoutingDecision.model_json_schema().get("description", "")
+    assert "source_id" not in desc
+    # The prompt is the only place that names the fields; if this docstring
+    # starts enumerating them again the two will drift exactly as they did.
+    for retired in ("doc_date_from", "content_types", "anniversary_md"):
+        assert retired not in desc
