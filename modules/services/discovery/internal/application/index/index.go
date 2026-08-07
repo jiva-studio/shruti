@@ -181,7 +181,8 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	unchanged := page != nil &&
 		page.BodySHA256 == resp.BodySHA256 &&
 		page.ItemSetSHA256 == itemSet &&
-		page.NormPromptVersion == s.promptVersion()
+		page.NormPromptVersion == s.promptVersion() &&
+		page.ScriptVersion == s.scriptVersion(sourceID)
 	if unchanged && !force {
 		s.Metrics.Page(true, 0, 0, 0)
 		return report, s.recordUnchanged(ctx, page, src, report, now)
@@ -200,7 +201,8 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	// Only now may the page say it has been read. Until this write lands, its
 	// validators are whatever the last complete pass left, so the next visit
 	// finds them stale and does the work again.
-	if err := s.Repo.MarkPageIndexed(ctx, pageID, resp.BodySHA256, itemSet, s.promptVersion()); err != nil {
+	if err := s.Repo.MarkPageIndexed(ctx, pageID, resp.BodySHA256, itemSet,
+		s.promptVersion(), s.scriptVersion(sourceID)); err != nil {
 		return nil, err
 	}
 	s.recordSpend(ctx, sourceID)
@@ -393,6 +395,14 @@ func (s *Service) source(ctx context.Context, sourceID string) (*store.Source, e
 
 // promptVersion is the normalizer's current prompt, or empty when there is no
 // normalizer to have one.
+// scriptVersion is which version of this source's own script read the page.
+// It sits beside the prompt version in the skip test for the same reason:
+// correcting how a source is read must re-read that source, and until this was
+// here, editing a script changed nothing that had already been stored.
+func (s *Service) scriptVersion(sourceID string) string {
+	return s.Scripts.Version(sourceID)
+}
+
 func (s *Service) promptVersion() string {
 	if s.Normalizer == nil {
 		return ""

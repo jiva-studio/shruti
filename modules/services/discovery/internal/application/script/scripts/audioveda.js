@@ -19,6 +19,7 @@ function extract(page, items) {
       author: meta.author || '',
       authors: meta.author ? [meta.author] : [],
       date: (meta.datePublished || '').slice(0, 10),
+      language: pageLanguage(page.html || ''),
       collection_title: meta.series || '',
       page_text: text,
       // The site said all of it outright. What it did not say, it does not have.
@@ -42,38 +43,15 @@ function jsonLD(html) {
   };
 }
 
-// transcript turns the published prose into Markdown.
+// The transcript is read out of the page by the host, not by a regular
+// expression here. Everything this file knows is which element holds the prose
+// and which parts of it are not prose.
 //
-// The timings the page carries are dropped. Only this archive publishes them,
-// and a citation cut against somebody else's clock does not line up with our own
-// re-encode of the audio — so keeping them would be keeping something that
-// looks usable and is not.
+// Two things inside the block are not the lecture. The timings are the
+// archive's own clock and do not line up with our re-encode of the audio, so a
+// citation cut against them would be wrong in a way nobody could see. The staff
+// block is who transcribed it and where they live — a credit worth having on
+// the site and not part of what was said.
 function transcript(html) {
-  var m = html.match(/<div[^>]+itemprop=["']transcript["'][^>]*>([\s\S]*?)<\/div>/i);
-  if (!m) return '';
-
-  var body = m[1]
-    .replace(/<span[^>]+class=["']timing["'][^>]*>[\s\S]*?<\/span>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p\s*>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '');
-
-  return unescapeHTML(body)
-    .replace(/[ \t ]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .split('\n')
-    .map(function (line) { return line.trim(); })
-    .join('\n')
-    .trim();
-}
-
-function unescapeHTML(s) {
-  var named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', laquo: '«', raquo: '»', mdash: '—', ndash: '–', hellip: '…' };
-  return s
-    .replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(parseInt(n, 10)); })
-    .replace(/&#x([0-9a-f]+);/gi, function (_, n) { return String.fromCharCode(parseInt(n, 16)); })
-    .replace(/&([a-z]+);/gi, function (whole, name) {
-      var c = named[name.toLowerCase()];
-      return c === undefined ? whole : c;
-    });
+  return markdown(html, { select: 'itemprop=transcript', drop: ['.timing', '.staff'] });
 }

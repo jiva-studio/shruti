@@ -50,20 +50,24 @@ type Page struct {
 	// A newer prompt means the stored answers are stale even when the page is
 	// byte-identical.
 	NormPromptVersion string
+	// ScriptVersion is the source's own extraction script, for the same reason:
+	// correcting a script must re-read what the old one wrote, and without this
+	// editing one appears to do nothing.
+	ScriptVersion string
 }
 
 const pageCols = `id, source_id, url, coalesce(etag,''), coalesce(last_modified,''),
 	coalesce(body_sha256,''), coalesce(item_set_sha256,''), coalesce(http_status,0),
 	coalesce(error,''), last_fetched_at, last_changed_at, consecutive_unchanged,
 	consecutive_failures, next_check_at,
-	coalesce(norm_prompt_version,''), media_found, series_links_seen`
+	coalesce(norm_prompt_version,''), coalesce(script_version,''), media_found, series_links_seen`
 
 func scanPage(row pgx.Row) (*Page, error) {
 	var p Page
 	err := row.Scan(&p.ID, &p.SourceID, &p.URL, &p.ETag, &p.LastModified,
 		&p.BodySHA256, &p.ItemSetSHA256, &p.HTTPStatus, &p.Error,
 		&p.LastFetchedAt, &p.LastChangedAt, &p.ConsecutiveUnchanged, &p.ConsecutiveFailures, &p.NextCheckAt,
-		&p.NormPromptVersion, &p.MediaFound, &p.SeriesLinksSeen)
+		&p.NormPromptVersion, &p.ScriptVersion, &p.MediaFound, &p.SeriesLinksSeen)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -131,12 +135,12 @@ func (r *Repo) SavePage(ctx context.Context, p *Page) (int64, error) {
 // believes. Everything else about a visit can be written as it happens; this
 // may only be written once the recordings are safely stored, or a failure
 // halfway through leaves a page claiming to be done that is never read again.
-func (r *Repo) MarkPageIndexed(ctx context.Context, id int64, bodySHA, itemSet, promptVersion string) error {
+func (r *Repo) MarkPageIndexed(ctx context.Context, id int64, bodySHA, itemSet, promptVersion, scriptVersion string) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE discovery.pages
 		SET body_sha256 = nullif($2,''), item_set_sha256 = nullif($3,''),
-		    norm_prompt_version = nullif($4,'')
-		WHERE id = $1`, id, bodySHA, itemSet, promptVersion)
+		    norm_prompt_version = nullif($4,''), script_version = nullif($5,'')
+		WHERE id = $1`, id, bodySHA, itemSet, promptVersion, scriptVersion)
 	return err
 }
 
