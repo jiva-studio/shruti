@@ -81,17 +81,20 @@ func (l *LLM) Read(ctx context.Context, question string, now time.Time) (Filter,
 
 func (r reply) filter() Filter {
 	f := Filter{
-		Author:     strings.TrimSpace(r.Author),
-		Source:     strings.TrimSpace(r.Source),
 		Collection: strings.TrimSpace(r.Collection),
 		DateFrom:   date(r.DateFrom),
 		DateTo:     date(r.DateTo),
+	}
+	// The model names one speaker; the filter holds a list, because a person
+	// choosing in an interface ticks several.
+	if name := strings.TrimSpace(r.Author); name != "" {
+		f.Authors = []string{name}
 	}
 	// A language is a two-letter code or it is nothing. "Russian" is the model
 	// describing rather than answering, and the same check guards the write
 	// path for the same reason.
 	if len(r.Language) == 2 {
-		f.Language = strings.ToLower(r.Language)
+		f.Languages = []string{strings.ToLower(r.Language)}
 	}
 	// The reference is checked against the books the corpus can address. A
 	// model that invents one costs the asker every result, and a reference to
