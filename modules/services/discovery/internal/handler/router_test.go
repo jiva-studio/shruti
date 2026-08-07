@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -257,4 +258,58 @@ func mustJSON(t *testing.T, v any) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// Two spellings of one person are proposed, not joined. A rule loose enough to
+// catch every spelling of one speaker is loose enough to join two speakers, and
+// that is not recoverable by looking at the result — so this proposes and
+// somebody decides.
+func TestAlikeProposesAndMergeDecides(t *testing.T) {
+	h, repo := testRouter(t)
+	ctx := context.Background()
+
+	ru, err := repo.ResolveAuthor(ctx, "Локанатха Свами")
+	if err != nil || ru == 0 {
+		t.Fatalf("= %d, %v", ru, err)
+	}
+	en, err := repo.ResolveAuthor(ctx, "Lokanatha Swami")
+	if err != nil || en == 0 {
+		t.Fatalf("= %d, %v", en, err)
+	}
+	if ru == en {
+		t.Fatal("the two alphabets resolved to one person on their own; nothing left to propose")
+	}
+
+	code, body := do(t, h, http.MethodGet, "/discovery/authors/alike", "")
+	if code != http.StatusOK {
+		t.Fatalf("alike = %d %v", code, body)
+	}
+	if !strings.Contains(mustJSON(t, body), "Локанатха") || !strings.Contains(mustJSON(t, body), "Lokanatha") {
+		t.Errorf("the two spellings were not proposed: %s", mustJSON(t, body))
+	}
+
+	code, body = do(t, h, http.MethodPost, "/discovery/authors/merge",
+		`{"keep":`+strconv.FormatInt(ru, 10)+`,"absorb":`+strconv.FormatInt(en, 10)+`}`)
+	if code != http.StatusOK {
+		t.Fatalf("merge = %d %v", code, body)
+	}
+
+	// The spellings moved, so the absorbed one now resolves to the survivor.
+	// That is what keeps the next crawl from recreating the row just removed.
+	again, err := repo.ResolveAuthor(ctx, "Lokanatha Swami")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != ru {
+		t.Errorf("the absorbed spelling resolves to %d, want %d — the next crawl would undo the merge", again, ru)
+	}
+}
+
+func TestMergeRefusesNonsense(t *testing.T) {
+	h, _ := testRouter(t)
+	for _, body := range []string{`{"keep":1,"absorb":1}`, `{"keep":0,"absorb":2}`, `{}`} {
+		if code, _ := do(t, h, http.MethodPost, "/discovery/authors/merge", body); code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", body, code)
+		}
+	}
 }

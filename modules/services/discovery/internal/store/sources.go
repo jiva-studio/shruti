@@ -40,6 +40,14 @@ type Source struct {
 	RecheckMinS int `json:"recheck_min_s"`
 	RecheckMaxS int `json:"recheck_max_s"`
 
+	// DefaultAuthor is who a recording is by when the page does not say. It is
+	// the last word, never the first: what the page states always wins, or a
+	// personal channel carrying a guest's lecture would file it under its owner.
+	//
+	// Empty is the right answer for an archive whose recordings are by many
+	// people, and it is the default.
+	DefaultAuthor string `json:"default_author,omitempty"`
+
 	// AuthHeaders are sent with every request to this source. They are
 	// credentials: never returned by the API, only set.
 	AuthHeaders map[string]string `json:"auth_headers,omitempty"`
@@ -76,21 +84,22 @@ func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
 		}
 	}
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO discovery.sources (id, title, seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher, recheck_min_s, recheck_max_s)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		INSERT INTO discovery.sources (id, title, seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher, recheck_min_s, recheck_max_s, default_author)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,nullif($12,''))
 		ON CONFLICT (id) DO UPDATE SET
 			title = EXCLUDED.title, seed_urls = EXCLUDED.seed_urls,
 			enabled = EXCLUDED.enabled, crawl_delay_ms = EXCLUDED.crawl_delay_ms,
 			crawl_workers = EXCLUDED.crawl_workers,
 			max_depth = EXCLUDED.max_depth,
 			recheck_min_s = EXCLUDED.recheck_min_s, recheck_max_s = EXCLUDED.recheck_max_s,
+			default_author = EXCLUDED.default_author,
 			-- Empty headers leave the stored ones alone, so an ordinary edit
 			-- does not silently sign the source out.
 			fetcher = EXCLUDED.fetcher, auth_headers = CASE WHEN EXCLUDED.auth_headers = '{}'::jsonb
 				THEN discovery.sources.auth_headers ELSE EXCLUDED.auth_headers END,
 			updated_at = now()`,
 		s.ID, s.Title, s.SeedURLs, s.Enabled, s.CrawlDelayMS, s.CrawlWorkers, s.MaxDepth, headers, s.Fetcher,
-		s.RecheckMinS, s.RecheckMaxS)
+		s.RecheckMinS, s.RecheckMaxS, s.DefaultAuthor)
 	return err
 }
 
@@ -99,10 +108,10 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 	var headers []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher,
-		       recheck_min_s, recheck_max_s
+		       recheck_min_s, recheck_max_s, coalesce(default_author,'')
 		FROM discovery.sources WHERE id = $1`, id,
 	).Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth, &headers, &s.Fetcher,
-		&s.RecheckMinS, &s.RecheckMaxS)
+		&s.RecheckMinS, &s.RecheckMaxS, &s.DefaultAuthor)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -119,7 +128,7 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth,
-		       recheck_min_s, recheck_max_s,
+		       recheck_min_s, recheck_max_s, coalesce(default_author,''),
 		       coalesce(auth_headers, '{}'::jsonb) <> '{}'::jsonb
 		FROM discovery.sources ORDER BY id`)
 	if err != nil {
@@ -131,7 +140,7 @@ func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	for rows.Next() {
 		var s Source
 		if err := rows.Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth,
-			&s.RecheckMinS, &s.RecheckMaxS, &s.HasCredentials); err != nil {
+			&s.RecheckMinS, &s.RecheckMaxS, &s.DefaultAuthor, &s.HasCredentials); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

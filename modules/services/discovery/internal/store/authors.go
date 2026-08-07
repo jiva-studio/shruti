@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sort"
 
 	"github.com/jackc/pgx/v5"
 
@@ -118,4 +120,121 @@ func (r *Repo) SetItemAuthors(ctx context.Context, itemID int64, authorIDs []int
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+// MergeAuthors makes two rows one person.
+//
+// The keys move rather than the recordings: every spelling that resolved to the
+// absorbed person now resolves to the surviving one, so the next crawl finds
+// them there and does not recreate what was just removed. That is the whole
+// reason spellings live in a table of their own.
+//
+// Idempotent, and refuses to merge somebody into themselves.
+func (r *Repo) MergeAuthors(ctx context.Context, keep, absorb int64) error {
+	if keep == absorb {
+		return fmt.Errorf("merge: %d into itself", keep)
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE discovery.author_keys SET author_id = $1 WHERE author_id = $2`, keep, absorb); err != nil {
+		return err
+	}
+	// A recording already linked to both would break the primary key, so the
+	// ones that would collide are dropped rather than moved.
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM discovery.item_authors a
+		WHERE a.author_id = $2
+		  AND EXISTS (SELECT 1 FROM discovery.item_authors b
+		              WHERE b.item_id = a.item_id AND b.author_id = $1)`, keep, absorb); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE discovery.item_authors SET author_id = $1 WHERE author_id = $2`, keep, absorb); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM discovery.authors WHERE id = $1`, absorb); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// Alike is pairs of people who may be one, by the sound of their names rather
+// than their spelling.
+//
+// This is what domain.Fold is for, and until now nothing called it. It is
+// deliberately coarser than the key: it proposes, and somebody decides. Two
+// romanisations of one name meet here, and so do the two alphabets — a Russian
+// archive writes Локанатха and an English one Lokanatha, and they are one man.
+//
+// Where it cannot see a match it says nothing. Russian renders the Sanskrit
+// "jña" as "гья", so Сарвагья and Sarvajna stay apart, and joining them is a
+// decision rather than a rule.
+func (r *Repo) Alike(ctx context.Context, limit int) ([]Similar, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT a.id, a.name, count(ia.item_id)::int
+		FROM discovery.authors a
+		LEFT JOIN discovery.item_authors ia ON ia.author_id = a.id
+		GROUP BY a.id, a.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type row struct {
+		id    int64
+		name  string
+		items int
+	}
+	var all []row
+	for rows.Next() {
+		var x row
+		if err := rows.Scan(&x.id, &x.name, &x.items); err != nil {
+			return nil, err
+		}
+		all = append(all, x)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Grouped in Go rather than in SQL: the folding is corpus knowledge and
+	// lives in domain, and a thousand names is nothing to walk.
+	byFold := map[string][]row{}
+	for _, x := range all {
+		f := domain.Fold(domain.Key(x.name))
+		if f == "" {
+			continue
+		}
+		byFold[f] = append(byFold[f], x)
+	}
+
+	var out []Similar
+	for f, group := range byFold {
+		if len(group) < 2 {
+			continue
+		}
+		sort.Slice(group, func(i, j int) bool { return group[i].items > group[j].items })
+		s := Similar{Fold: f}
+		for _, x := range group {
+			s.Authors = append(s.Authors, Author{ID: x.id, Name: x.name, Items: x.items})
+		}
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Fold < out[j].Fold })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// Similar is a set of people who sound like one person.
+type Similar struct {
+	// Fold is what they all reduce to, which is the reason they are here.
+	Fold    string   `json:"fold"`
+	Authors []Author `json:"authors"`
 }
