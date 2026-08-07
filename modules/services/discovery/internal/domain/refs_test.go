@@ -191,3 +191,31 @@ func label(refs []domain.Ref) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// A book is picked from a list on a screen, and that list comes from the corpus
+// dictionary, which writes Śrīmad-Bhāgavatam and Śrī Īśopaniṣad. Not one
+// recording in the archive is written that way, so without folding the marks
+// off, picking a book by the name shown finds nothing.
+func TestAScriptureIsKnownByItsMarkedSpellingToo(t *testing.T) {
+	for _, c := range []struct{ name, code string }{
+		{"Śrīmad-Bhāgavatam", "SB"},
+		{"Śrī Īśopaniṣad", "ISO"},
+		{"Bhagavad-gītā", "BG"},
+		{"Brahma-saṁhitā", "BS"},
+		{"Caitanya-caritāmṛta Madhya-līlā", "CC_MADHYA"},
+		{"Nārada-bhakti-sūtra", "NBS"},
+		{"Kṛṣṇa Book", "KB"},
+		// And the plain spellings still are.
+		{"Шримад-Бхагаватам", "SB"},
+		{"Srimad Bhagavatam", "SB"},
+		{"БГ", "BG"},
+	} {
+		src, ok := domain.SourceByName(c.name)
+		if !ok || src.Code != c.code {
+			t.Errorf("%q -> %q (found=%v), want %s", c.name, src.Code, ok, c.code)
+		}
+	}
+	if _, ok := domain.SourceByName("Коран"); ok {
+		t.Error("a book the corpus does not hold was recognised")
+	}
+}
