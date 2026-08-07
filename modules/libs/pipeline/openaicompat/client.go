@@ -97,9 +97,14 @@ type Result struct {
 }
 
 type chatRequest struct {
-	Model          string            `json:"model"`
-	Messages       []chatMessage     `json:"messages"`
-	Temperature    float64           `json:"temperature,omitempty"`
+	Model    string        `json:"model"`
+	Messages []chatMessage `json:"messages"`
+	// A pointer, so that nil means "do not ask" and zero means zero. As a bare
+	// float64 with omitempty the two were the same request, and a caller asking
+	// for a deterministic answer silently got the provider's default sampling
+	// instead — which for one reader showed up as the same question extracting
+	// a speaker seven times out of ten.
+	Temperature    *float64          `json:"temperature,omitempty"`
 	MaxTokens      int               `json:"max_tokens,omitempty"`
 	Stream         bool              `json:"stream"`
 	Reasoning      *reasoningOptions `json:"reasoning,omitempty"`
@@ -197,7 +202,7 @@ func (c *Client) Run(ctx context.Context, call Call) (Result, error) {
 		Stream:    false,
 	}
 	if call.Temperature != nil {
-		body.Temperature = *call.Temperature
+		body.Temperature = call.Temperature
 	}
 	body.Reasoning = reasoningFromString(call.Reasoning)
 	body.ResponseFormat = call.ResponseFormat
