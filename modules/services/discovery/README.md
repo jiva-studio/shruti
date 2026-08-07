@@ -228,6 +228,8 @@ other, failing in ways that look like product bugs and are not.
 ```sh
 go test ./...                        # offline, no keys, no database
 discovery parse <url>                # fetch one URL, print the three layers
+discovery read-refs                  # what the stored titles cite; writes nothing
+discovery read-refs --apply          # and write it, after snapshotting item_refs
 curl -XPOST :8089/discovery/parse -d '{"url": "..."}'
 curl -XPOST :8089/discovery/parse -d '{"body": "<html>…", "base_url": "..."}'
 ```

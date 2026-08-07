@@ -45,35 +45,6 @@ var VOCAB = {
 
   // Scripture. Longest spelling first — the first match wins, so
   // "CC Madhya Lila" must be tried before "CC".
-  books: [
-    ['Chaitanya Charitamrita Adi Lila', 'CC_ADI'],
-    ['Caitanya Caritamrta Adi Lila', 'CC_ADI'],
-    ['Chaitanya Charitamrita Madhya Lila', 'CC_MADHYA'],
-    ['Caitanya Caritamrta Madhya Lila', 'CC_MADHYA'],
-    ['Chaitanya Charitamrita Antya Lila', 'CC_ANTYA'],
-    ['Caitanya Caritamrta Antya Lila', 'CC_ANTYA'],
-    ['CC Adi Lila', 'CC_ADI'],
-    ['CC Madhya Lila', 'CC_MADHYA'],
-    ['CC Antya Lila', 'CC_ANTYA'],
-    ['CC Adi', 'CC_ADI'],
-    ['CC Madhya', 'CC_MADHYA'],
-    ['CC Antya', 'CC_ANTYA'],
-    ['Srimad Bhagavatam', 'SB'],
-    ['Bhagavad Gita', 'BG'],
-    ['Nectar of Devotion', 'NOD'],
-    ['Brahma Samhita', 'BS'],
-    ['Isopanisad', 'ISO'],
-    ['SB', 'SB'],
-    ['BG', 'BG'],
-    ['NOD', 'NOD'],
-    ['BS', 'BS'],
-    ['ISO', 'ISO'],
-  ],
-
-  // How many levels a coordinate has: SB is canto.chapter.verse, the rest are
-  // chapter.verse.
-  depth: { SB: 3 },
-
   // Words that introduce a place rather than being one. "ISKCON Chennai" is a
   // temple; "ISKCON" alone is not a location, and listing every centre the
   // movement has would never end. The marker takes the capitalised words that
@@ -370,39 +341,16 @@ function pad(y, mo, d) {
   return y + '-' + ('0' + mo).slice(-2) + '-' + ('0' + d).slice(-2);
 }
 
-// eatRefs takes a book and the numbers beside it. Dashes separate the levels of
-// a coordinate here — "13-148-150" is chapter 13, verses 148 to 150 — so the
-// groups past the book's depth are a range.
+// eatRefs takes the citation out of the line and hands it back.
+//
+// The reading is refs(), which is the same reading every source gets: the book
+// names, the depth of a coordinate and where one ends are knowledge about this
+// corpus rather than about this archive. What stays here is the removal — the
+// hole left behind is how the title is found.
 function eatRefs(state) {
-  for (var i = 0; i < VOCAB.books.length; i++) {
-    var pattern = new RegExp('\\b' + esc(VOCAB.books[i][0]).replace(/\s+/g, '[\\s_-]+') + '\\b', 'i');
-    var at = state.s.match(pattern);
-    if (!at) continue;
-
-    // Only the numbers touching the book are its coordinate. Taken from
-    // anywhere in the string, "2015-02-18_SB_08-22-20" hands the reference the
-    // date and leaves the recording undated.
-    var after = state.s.slice(at.index + at[0].length);
-    // The levels of a coordinate are separated by a dash, a dot or a plain
-    // space: this archive writes "15-103" and "15 103" for the same verse.
-    var nums = after.match(/^[\s_.:-]*(\d{1,3}(?:[-. ]\d{1,3})+|\d{1,3})\b/);
-
-    // A book named with no coordinate beside it is being talked about, not
-    // cited: "Glories of Srimad Bhagavatam" is a title.
-    if (!nums) continue;
-
-    state.s = state.s.slice(0, at.index) + GAP +
-              after.slice(nums[0].length);
-
-    var code = VOCAB.books[i][1];
-    var parts = nums[1].split(/[-. ]/).map(function (x) { return String(parseInt(x, 10)); });
-    var depth = VOCAB.depth[code] || 2;
-    if (parts.length <= depth) return [code + ' ' + parts.join('.')];
-    var head = parts.slice(0, depth - 1).join('.');
-    var range = parts.slice(depth - 1);
-    return [code + ' ' + head + '.' + range[0] + '-' + range[range.length - 1]];
-  }
-  return [];
+  var found = refs(state.s, GAP);
+  state.s = found.rest;
+  return found.refs;
 }
 
 // eatSpeaker removes the name however the listing wrote it: in full, in

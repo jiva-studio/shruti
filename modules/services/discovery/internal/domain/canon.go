@@ -1,37 +1,84 @@
 package domain
 
-import "strings"
+import (
+	_ "embed"
+	"encoding/json"
+	"strings"
+)
 
-// ScriptureCodes are the books this corpus can address a recording by. A
+// sources.json is the canon: every scripture the corpus can address a recording
+// by, beside every spelling the archives write it in.
+//
+// A source here is a scripture, which is what the corpus calls one, what the
+// client calls one, and what item_refs.source_id holds. It is not a
+// store.Source — that is an archive we crawl. Two meanings, one word, and the
+// database has carried both since the first migration.
+//
+// The canon's job is to pin spelling. "Бхагавад-Гита 2.13", "БГ 2.13" and
+// "Bhagavad-gita 2.13" are one verse, and stored as written they are three — so
+// a list of codes cannot do this work on its own. Nothing in a code says that
+// "Шримад Бхагаватам" is SB.
+//
+// The codes and token schemes come from the corpus. The spellings cannot: the
+// corpus dictionary writes Śrīmad-Bhāgavatam with diacritics and ЧЧ Мадхйа with
+// an й, and neither of those appears in a single recording we hold. Every name
+// below was counted in the titles themselves — "Шримад Бхагаватам" with a space
+// rather than a hyphen is 816 of them, and no dictionary would have supplied
+// it.
+//
+//go:embed sources.json
+var sourcesJSON []byte
+
+// Source is one addressable scripture.
+type Source struct {
+	Code string `json:"code"`
+	// TokenScheme is how deep a full coordinate goes, in the corpus's own
+	// words: "canto.chapter.verse", "chapter.verse" or "flat".
+	TokenScheme string   `json:"token_scheme"`
+	Names       []string `json:"names"`
+}
+
+// Depth is how many numbers a complete coordinate has: three for
+// Śrīmad-Bhāgavatam (canto, chapter, verse), two for Bhagavad-gītā, one for a
+// flat text. It is what tells a reader where a coordinate ends and the rest of
+// the title begins.
+func (s Source) Depth() int {
+	switch s.TokenScheme {
+	case "canto.chapter.verse":
+		return 3
+	case "flat":
+		return 1
+	default:
+		return 2
+	}
+}
+
+var sources = func() []Source {
+	var out []Source
+	if err := json.Unmarshal(sourcesJSON, &out); err != nil {
+		panic("domain: sources.json: " + err.Error())
+	}
+	return out
+}()
+
+// Sources is the canon, in the order it is written.
+func Sources() []Source { return append([]Source(nil), sources...) }
+
+// SourceCodes are the scriptures this corpus can address a recording by. A
 // reference to anything else is an invention, not a citation: it cannot be
 // resolved, it cannot be searched for, and stored it is worse than nothing
 // because it looks like one.
-//
-// It lives here rather than beside the one caller that used to have it because
-// this is knowledge about the corpus, not about reading a page or reading a
-// question. Both of those now need it.
-//
-// This list held eight books and the corpus holds nineteen. The nine that were
-// missing were not merely unlisted: a citation to any of them was taken for an
-// invention and dropped, so every reference to the Nectar of Instruction, the
-// Ramayana or Prabhupada's letters that a lecture made was thrown away, and the
-// throwing away leaves no trace.
-//
-// It is still a copy of a list that lives in the corpus, and a copy drifts. The
-// corpus also writes them differently — "CC Madhya" where this writes
-// "CC_MADHYA", "NoI" where this writes "NOI" — so a reference found here does
-// not travel there without translation. Both are worth fixing at the seam
-// rather than by copying harder.
-var ScriptureCodes = []string{
-	"BG", "SB",
-	"CC_ADI", "CC_MADHYA", "CC_ANTYA",
-	"ISO", "NOD", "NOI", "BS", "NBS", "MM",
-	"TQK", "TLC", "KB", "RMN", "MK", "LETTERS",
-}
+var SourceCodes = func() []string {
+	out := make([]string, 0, len(sources))
+	for _, s := range sources {
+		out = append(out, s.Code)
+	}
+	return out
+}()
 
-// ScriptureCodeSet turns a code list into a lookup, upper-cased and trimmed so
-// two spellings of one book are one entry.
-func ScriptureCodeSet(codes []string) map[string]bool {
+// SourceCodeSet turns a code list into a lookup, upper-cased and trimmed so two
+// spellings of one code are one entry.
+func SourceCodeSet(codes []string) map[string]bool {
 	set := make(map[string]bool, len(codes))
 	for _, c := range codes {
 		if c = strings.ToUpper(strings.TrimSpace(c)); c != "" {
@@ -41,10 +88,21 @@ func ScriptureCodeSet(codes []string) map[string]bool {
 	return set
 }
 
-// knownScripture is the default set, built once.
-var knownScripture = ScriptureCodeSet(ScriptureCodes)
+var knownSources = SourceCodeSet(SourceCodes)
 
-// Addressable reports whether the corpus can address a reference to this book.
+// Addressable reports whether the corpus can address a reference to this
+// source.
 func Addressable(code string) bool {
-	return knownScripture[strings.ToUpper(strings.TrimSpace(code))]
+	return knownSources[strings.ToUpper(strings.TrimSpace(code))]
+}
+
+// SourceByCode finds a source by its canonical code.
+func SourceByCode(code string) (Source, bool) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	for _, s := range sources {
+		if s.Code == code {
+			return s, true
+		}
+	}
+	return Source{}, false
 }

@@ -1,0 +1,199 @@
+[
+  {
+    "code": "SB",
+    "token_scheme": "canto.chapter.verse",
+    "names": [
+      "Шримад-Бхагаватам",
+      "Бхагаватам",
+      "Srimad-Bhagavatam",
+      "Srimad-Bhagavatham",
+      "Bhagavatam",
+      "ШБ",
+      "SB"
+    ]
+  },
+  {
+    "code": "BG",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Бхагавад-гита",
+      "Бхагавад-гиты",
+      "Бхагавад-гите",
+      "Бхагавад-гиту",
+      "Бхагавад-гитой",
+      "Бхагавадгита",
+      "Bhagavad-gita",
+      "Bhagavad-geeta",
+      "Bhagvad-gita",
+      "Bhagvat-gita",
+      "Bhagavat-gita",
+      "БГ",
+      "BG"
+    ]
+  },
+  {
+    "code": "CC_ADI",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Чайтанья-чаритамрита Ади-лила",
+      "Чайтанья-чаритамрите Ади-лила",
+      "Чайтанья-чаритамриты Ади-лила",
+      "ЧЧ Ади-лила",
+      "ЧЧ Ади",
+      "Ади-лила",
+      "Caitanya-caritamrta Adi-lila",
+      "Chaitanya-charitamrita Adi-lila",
+      "CC Adi-lila",
+      "CC Adi",
+      "Adi-lila"
+    ]
+  },
+  {
+    "code": "CC_MADHYA",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Чайтанья-чаритамрита Мадхья-лила",
+      "Чайтанья-чаритамрите Мадхья-лила",
+      "Чайтанья-чаритамриты Мадхья-лила",
+      "ЧЧ Мадхья-лила",
+      "ЧЧ Мадхйа-лила",
+      "ЧЧ Мадхья",
+      "ЧЧ Мадхйа",
+      "Мадхья-лила",
+      "Caitanya-caritamrta Madhya-lila",
+      "Chaitanya-charitamrita Madhya-lila",
+      "CC Madhya-lila",
+      "CC Madhy-lila",
+      "CC Madhya",
+      "Madhya-lila"
+    ]
+  },
+  {
+    "code": "CC_ANTYA",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Чайтанья-чаритамрита Антья-лила",
+      "Чайтанья-чаритамрите Антья-лила",
+      "Чайтанья-чаритамриты Антья-лила",
+      "ЧЧ Антья-лила",
+      "ЧЧ Антйа-лила",
+      "ЧЧ Антья",
+      "ЧЧ Антйа",
+      "Антья-лила",
+      "Caitanya-caritamrta Antya-lila",
+      "Chaitanya-charitamrita Antya-lila",
+      "CC Antya-lila",
+      "CC Antya",
+      "Antya-lila"
+    ]
+  },
+  {
+    "code": "ISO",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Шри Ишопанишад",
+      "Ишопанишад",
+      "Ишопанишада",
+      "Sri Isopanisad",
+      "Isopanisad",
+      "Isopanishad"
+    ]
+  },
+  {
+    "code": "NOD",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Нектар преданности",
+      "Nectar of Devotion",
+      "NOD"
+    ]
+  },
+  {
+    "code": "NOI",
+    "token_scheme": "flat",
+    "names": [
+      "Нектар наставлений",
+      "Упадешамрита",
+      "Nectar of Instruction",
+      "Upadesamrta"
+    ]
+  },
+  {
+    "code": "BS",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Брахма-самхита",
+      "Brahma-samhita",
+      "Bramha-samhita"
+    ]
+  },
+  {
+    "code": "NBS",
+    "token_scheme": "flat",
+    "names": [
+      "Нарада-бхакти-сутра",
+      "Narada-bhakti-sutra"
+    ]
+  },
+  {
+    "code": "MM",
+    "token_scheme": "flat",
+    "names": [
+      "Мукунда-мала-стотра",
+      "Mukunda-mala-stotra"
+    ]
+  },
+  {
+    "code": "TQK",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Молитвы царицы Кунти",
+      "Учение царицы Кунти",
+      "Teachings of Queen Kunti"
+    ]
+  },
+  {
+    "code": "TLC",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Учение Господа Чайтаньи",
+      "Teachings of Lord Caitanya",
+      "Teachings of Lord Chaitanya"
+    ]
+  },
+  {
+    "code": "KB",
+    "token_scheme": "chapter.verse",
+    "names": [
+      "Источник Вечного Наслаждения",
+      "Книга о Кришне",
+      "Krsna Book",
+      "Krishna Book"
+    ]
+  },
+  {
+    "code": "RMN",
+    "token_scheme": "flat",
+    "names": [
+      "Рамаяна",
+      "Ramayana"
+    ]
+  },
+  {
+    "code": "MK",
+    "token_scheme": "flat",
+    "names": [
+      "Мадхурья-кадамбини",
+      "Madhurya-kadambini"
+    ]
+  },
+  {
+    "code": "LETTERS",
+    "token_scheme": "flat",
+    "names": [
+      "Письма Шрилы Прабхупады",
+      "Letters of Srila Prabhupada",
+      "ПШП"
+    ]
+  }
+]
