@@ -66,9 +66,9 @@ var canonical = map[string][]string{
 var feminine = map[string]bool{"Devi Dasi": true}
 
 var (
-	reHonorific  = alternation(honorifics, `^\s*(%s)\s*\.?[\s_]+`)
-	reDropTail   = alternation(dropped, `[\s_,.]+(%s)\s*\.?\s*$`)
-	reCanonTail  = alternation(canonKeys(), `[\s_,.]+(%s)\s*\.?\s*$`)
+	reHonorific = alternation(honorifics, `^\s*(%s)\s*\.?[\s_]+`)
+	reDropTail  = alternation(dropped, `[\s_,.]+(%s)\s*\.?\s*$`)
+	reCanonTail = alternation(canonKeys(), `[\s_,.]+(%s)\s*\.?\s*$`)
 	// Cyrillic is a letter here too. It was not, and the whole of a Russian
 	// name fell through the filter: Key came back empty, an empty key resolves
 	// to nobody, and five thousand recordings that name their speaker were

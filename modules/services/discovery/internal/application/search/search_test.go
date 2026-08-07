@@ -20,12 +20,12 @@ import (
 // works with no key and no vectors, and it is also the half a wrong WHERE
 // clause shows up in first.
 //
-// Without DISCOVERY_TEST_DATABASE_URL they skip. CI always sets it.
+// Without LECTORIUM_DISCOVERY_TEST_DATABASE_URL they skip. CI always sets it.
 func testSearch(t *testing.T) (*search.Service, *store.Repo, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("DISCOVERY_TEST_DATABASE_URL")
+	dsn := os.Getenv("LECTORIUM_DISCOVERY_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("DISCOVERY_TEST_DATABASE_URL not set")
+		t.Skip("LECTORIUM_DISCOVERY_TEST_DATABASE_URL not set")
 	}
 	ctx := context.Background()
 	pool, err := store.Connect(ctx, dsn)

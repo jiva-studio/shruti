@@ -80,10 +80,10 @@ jobs:
       # like product bugs and are not.
       - name: Test
         env:
-          DISCOVERY_TEST_DATABASE_URL: postgresql://discovery:discovery@localhost:5432/discovery?sslmode=disable
+          LECTORIUM_DISCOVERY_TEST_DATABASE_URL: postgresql://discovery:discovery@localhost:5432/discovery?sslmode=disable
         run: go test ./... -race -count=1 -p 1
 
       - name: Coverage
         env:
-          DISCOVERY_TEST_DATABASE_URL: postgresql://discovery:discovery@localhost:5432/discovery?sslmode=disable
+          LECTORIUM_DISCOVERY_TEST_DATABASE_URL: postgresql://discovery:discovery@localhost:5432/discovery?sslmode=disable
         run: go test ./... -count=1 -p 1 -cover

@@ -1068,31 +1068,18 @@ services:
       - ${LECTORIUM_ENV_FILE:-../../../.env}
     environment:
       DATABASE_URL: postgresql://discovery:${LECTORIUM_DISCOVERY_POSTGRES_PASSWORD:?}@discovery-postgres:5432/discovery?sslmode=disable
-      DISCOVERY_SCHEDULER_ENABLED: ${LECTORIUM_DISCOVERY_SCHEDULER_ENABLED:-false}
-      # How many pages may be in flight at once, across every source. What
-      # bounds the rate is the per-host gap below, not this.
-      DISCOVERY_SCHEDULER_WORKERS: ${LECTORIUM_DISCOVERY_SCHEDULER_WORKERS:-4}
-      # One page end to end — fetch, model, embed, write. Each step has its own
-      # timeout and they stack, so without this a page can hold a worker and a
-      # database connection for the better part of an hour.
-      DISCOVERY_PAGE_TIMEOUT: ${LECTORIUM_DISCOVERY_PAGE_TIMEOUT:-10m}
-      # Shared between the scheduler's workers and every HTTP handler.
-      DISCOVERY_DB_MAX_CONNS: ${LECTORIUM_DISCOVERY_DB_MAX_CONNS:-16}
-      # Identify ourselves to the archives, with somewhere to complain to.
-      DISCOVERY_USER_AGENT: ${LECTORIUM_DISCOVERY_USER_AGENT:-LectoriumDiscovery/1.0 (+https://shruti.app/about)}
-      DISCOVERY_CRAWL_DELAY: ${LECTORIUM_DISCOVERY_CRAWL_DELAY:-1s}
-      # One outbound request, and the most of a response we will read.
-      DISCOVERY_REQUEST_TIMEOUT: ${LECTORIUM_DISCOVERY_REQUEST_TIMEOUT:-30s}
-      DISCOVERY_MAX_BODY_BYTES: ${LECTORIUM_DISCOVERY_MAX_BODY_BYTES:-8388608}
+      # Everything else the service reads is LECTORIUM_DISCOVERY_… and arrives
+      # through env_file under that name, unchanged. Only what has to be
+      # computed is stated here, and the defaults live in the service's own
+      # config — repeating them here is how they came to disagree.
+      #
+      # The model key is shared with the rest of the stack under its own name.
+      LECTORIUM_DISCOVERY_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
       # Some archives cannot be read from a datacenter address at all: YouTube
-      # answers one with a bot check. Empty means read from here.
-      DISCOVERY_PROXY: ${LECTORIUM_DISCOVERY_PROXY:-}
-      DISCOVERY_LLM_BASE_URL: ${LECTORIUM_DISCOVERY_LLM_BASE_URL:-https://openrouter.ai/api/v1}
-      DISCOVERY_LLM_API_KEY: ${OPENROUTER_API_KEY:-}
-      DISCOVERY_LLM_MODEL: ${LECTORIUM_DISCOVERY_LLM_MODEL:-google/gemini-3.1-flash-lite}
-      # Same model and dimension as the corpus, so vectors stay comparable.
-      DISCOVERY_EMBED_MODEL: ${LECTORIUM_DISCOVERY_EMBED_MODEL:-openai/text-embedding-3-small}
-      DISCOVERY_EMBED_DIM: ${LECTORIUM_DISCOVERY_EMBED_DIM:-1536}
+      # answers one with a bot check. The residential proxy the ingest pipeline
+      # already uses for the same reason is the fallback, so there is one proxy
+      # to keep working rather than two.
+      LECTORIUM_DISCOVERY_PROXY: ${LECTORIUM_DISCOVERY_PROXY:-${LECTORIUM_YTDLP_PROXY:-}}
       PORT: "8089"
       ENV: ${LECTORIUM_ENV:-dev}
       SERVICE_VERSION: ${LECTORIUM_DISCOVERY_TAG:-latest}

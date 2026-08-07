@@ -22,12 +22,12 @@ import (
 // A fake would answer whatever it was told and prove only that the code calls
 // what its author thinks it calls.
 //
-// Without DISCOVERY_TEST_DATABASE_URL they skip. CI always sets it.
+// Without LECTORIUM_DISCOVERY_TEST_DATABASE_URL they skip. CI always sets it.
 func testRepo(t *testing.T) *store.Repo {
 	t.Helper()
-	dsn := os.Getenv("DISCOVERY_TEST_DATABASE_URL")
+	dsn := os.Getenv("LECTORIUM_DISCOVERY_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("DISCOVERY_TEST_DATABASE_URL not set")
+		t.Skip("LECTORIUM_DISCOVERY_TEST_DATABASE_URL not set")
 	}
 	ctx := context.Background()
 	pool, err := store.Connect(ctx, dsn)

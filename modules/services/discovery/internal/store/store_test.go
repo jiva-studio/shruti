@@ -19,12 +19,12 @@ import (
 // itself, a write that must survive two workers, a key that must hold several
 // languages — are properties of the database and not of Go.
 //
-// Without DISCOVERY_TEST_DATABASE_URL they skip. CI always sets it.
+// Without LECTORIUM_DISCOVERY_TEST_DATABASE_URL they skip. CI always sets it.
 func testRepo(t *testing.T) (*store.Repo, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("DISCOVERY_TEST_DATABASE_URL")
+	dsn := os.Getenv("LECTORIUM_DISCOVERY_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("DISCOVERY_TEST_DATABASE_URL not set")
+		t.Skip("LECTORIUM_DISCOVERY_TEST_DATABASE_URL not set")
 	}
 	ctx := context.Background()
 	pool, err := store.Connect(ctx, dsn)
