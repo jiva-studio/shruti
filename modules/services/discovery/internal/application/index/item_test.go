@@ -11,6 +11,7 @@ import (
 
 	"github.com/jiva-studio/shruti/discovery/internal/application/index"
 	"github.com/jiva-studio/shruti/discovery/internal/application/normalize"
+	"github.com/jiva-studio/shruti/discovery/internal/application/script"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
@@ -359,5 +360,96 @@ func TestAnAggregatorLeavesItEmpty(t *testing.T) {
 	items, _ := repo.ItemsByPage(ctx, page.ID)
 	if got := items[0].Author; got != "" {
 		t.Errorf("author = %q, want nobody", got)
+	}
+}
+
+// A script is chosen by which script reads the source, not by which source it
+// is. Those were the same thing, so one script served exactly one source, and
+// fourteen YouTube channels read by one youtube.js were impossible: either
+// fourteen copies of the script, or one source holding every channel — and then
+// default_author, the one thing a source says about its speaker, is shared by
+// all of them and useless.
+func TestSeveralSourcesShareOneScript(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+
+	// Two sources, neither named after a script, both naming the same one.
+	for _, id := range []string{"channel-one", "channel-two"} {
+		if err := repo.SaveSource(ctx, &store.Source{
+			ID: id, SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
+			Script: "audioveda", DefaultAuthor: id,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const page = `<html lang="ru"><body>
+		<script type="application/ld+json">{"name":"Лекция","author":{"name":"Леонид Тугутов"},"datePublished":"2023-01-23"}</script>
+		<div itemprop="transcript"><p>Текст лекции.</p></div>
+		<a href="/audio/x.mp3">слушать</a></body></html>`
+
+	runner, err := script.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &index.Service{
+		Fetcher: &pageFetcher{body: page}, Normalizer: normalize.Stub{},
+		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://audioveda.ru/audios/1", "channel-one", false); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := repo.PageByURL(ctx, "https://audioveda.ru/audios/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := repo.ItemsByPage(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("%d recordings", len(items))
+	}
+	// The script ran, so the archive's own words are here rather than a
+	// filename turned into a title by the stub.
+	if items[0].Title != "Лекция" || items[0].Author != "Леонид Тугутов" {
+		t.Errorf("the script did not run for a source not named after it: %+v", items[0])
+	}
+	if p.ScriptVersion == "" {
+		t.Error("no script version recorded, so editing the script would change nothing")
+	}
+}
+
+// A source named after its script keeps working with nothing set, which is how
+// idt and audioveda have always been configured.
+func TestASourceNamedAfterItsScriptStillWorks(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	if err := repo.SaveSource(ctx, &store.Source{
+		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner, err := script.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const page = `<html lang="ru"><body>
+		<script type="application/ld+json">{"name":"Лекция","author":{"name":"Леонид Тугутов"},"datePublished":"2023-01-23"}</script>
+		<a href="/audio/x.mp3">слушать</a></body></html>`
+	svc := &index.Service{
+		Fetcher: &pageFetcher{body: page}, Normalizer: normalize.Stub{},
+		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://audioveda.ru/audios/1", "audioveda", false); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := repo.PageByURL(ctx, "https://audioveda.ru/audios/1")
+	items, _ := repo.ItemsByPage(ctx, p.ID)
+	if len(items) != 1 || items[0].Title != "Лекция" {
+		t.Errorf("= %+v", items)
 	}
 }

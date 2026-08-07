@@ -1,0 +1,11 @@
+-- Which extraction script reads this source.
+--
+-- The script was chosen by the source's own id, which meant one script could
+-- serve exactly one source. Fourteen YouTube channels all read by youtube.js
+-- were therefore impossible: either fourteen identical copies of the script, or
+-- one source holding every channel — and then the one thing a source says about
+-- its speaker, default_author, is shared by all of them and useless.
+--
+-- Empty falls back to the id, so a source named after its script keeps working
+-- without being touched.
+ALTER TABLE discovery.sources ADD COLUMN IF NOT EXISTS script text;
