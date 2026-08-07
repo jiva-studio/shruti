@@ -19,6 +19,7 @@ function extract(page, items) {
       author: meta.author || '',
       authors: meta.author ? [meta.author] : [],
       date: (meta.datePublished || '').slice(0, 10),
+      duration_s: seconds(meta.duration),
       language: pageLanguage(page.html || ''),
       collection_title: meta.series || '',
       page_text: text,
@@ -39,8 +40,30 @@ function jsonLD(html) {
     name: d.name || '',
     author: (d.author && d.author.name) || '',
     datePublished: d.datePublished || '',
+    duration: d.duration || '',
     series: (d.isPartOf && d.isPartOf.name) || '',
   };
+}
+
+// seconds reads how long the recording runs out of the ISO 8601 duration the
+// archive publishes — "PT1H10M45S".
+//
+// Worth taking because it is free. Every other source here would cost a request
+// per recording to learn this: the length of an mp3 is not in any header, only
+// in the file, so it has to be computed from the bitrate in its first frame.
+// This archive simply says it.
+//
+// Anything unreadable is nothing rather than a guess: a duration of zero means
+// "not stated", and a wrong one would be believed.
+function seconds(iso) {
+  if (!iso) return 0;
+  var m = /^P(?:([0-9]+)D)?T(?:([0-9]+)H)?(?:([0-9]+)M)?(?:([0-9.]+)S)?$/.exec(iso);
+  if (!m) return 0;
+  var total = (parseInt(m[1] || 0, 10) * 86400) + (parseInt(m[2] || 0, 10) * 3600) +
+    (parseInt(m[3] || 0, 10) * 60) + Math.round(parseFloat(m[4] || 0));
+  // A talk that claims to run for a week is the archive being wrong about
+  // itself, and believing it would put it at the top of every "longest" list.
+  return total > 0 && total < 24 * 3600 ? total : 0;
 }
 
 // The transcript is read out of the page by the host, not by a regular
