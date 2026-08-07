@@ -60,6 +60,7 @@ func NewRouter(d RouterDeps) http.Handler {
 	// the log entirely; this way the caller gets a 500 carrying its request id
 	// and the line that says so is written like any other.
 	r.Use(requestLogger)
+	r.Use(browsable)
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", healthz)

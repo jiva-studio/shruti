@@ -11,6 +11,34 @@ import (
 	logpkg "github.com/jiva-studio/lectorium/discovery/internal/logging"
 )
 
+// browsable lets a page in a browser call this service.
+//
+// The index is public and there is nothing to authenticate, so any origin may
+// read it — which is what a browser needs told, in a preflight, before it will
+// send a POST carrying JSON at all. Without this a client opened from a file
+// never reaches the service and the browser reports it as a network failure,
+// which is the one explanation that is not true.
+//
+// Nothing here grants credentials: no cookies, no Allow-Credentials. An origin
+// may ask the same questions anyone with curl may ask.
+func browsable(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != "" {
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", "*")
+			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			h.Set("Access-Control-Allow-Headers", "Content-Type, X-Request-Id")
+			h.Set("Access-Control-Max-Age", "86400")
+			h.Add("Vary", "Origin")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requestLogger mints/propagates a request id and logs one line per response.
 func requestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
