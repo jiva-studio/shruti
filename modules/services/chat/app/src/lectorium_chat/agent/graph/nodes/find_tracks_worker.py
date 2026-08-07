@@ -374,35 +374,44 @@ async def _find_lectures(
     # only orders what they selected.
     exact_floor = _MIN_SCORE if topical else 0.0
 
-    # 1-2. The whole request, both languages at once.
-    exact_same, exact_any = await asyncio.gather(
-        _try(ctx, embedding, full, lang=ctx.lang_code, floor=exact_floor),
-        _try(ctx, embedding, full, lang=None, floor=exact_floor),
-    )
+    # 1-2. The whole request in the conversation's language; only if that is
+    #      empty, the same request in any language.
+    #
+    #      Sequential on purpose, and it costs nothing: the second lookup is
+    #      needed exactly when the first found nothing. Issuing both at once —
+    #      as this did — meant every constrained turn paid for the slowest
+    #      query shape we have. Measured on production against the live index:
+    #      with a language it is 12 ms (the per-(kind,lang) partial index), and
+    #      without one, over the whole corpus, 1954 ms. Two ANN timeouts in
+    #      five days followed that change; this removes the query nobody was
+    #      waiting for.
+    exact_same = await _try(ctx, embedding, full, lang=ctx.lang_code, floor=exact_floor)
     if exact_same:
         return _Found(exact_same)
+    exact_any = await _try(ctx, embedding, full, lang=None, floor=exact_floor)
     if exact_any:
         return _Found(exact_any, other_language=True)
 
     # 3. Each near-miss on its own, both languages, all at once. The teacher is
     #    not offered up here (see `_NEVER_ALONE`).
     alone = [n for n in stated if n not in _NEVER_ALONE]
-    if alone:
+    for lang, foreign in ((ctx.lang_code, False), (None, True)):
+        if not alone:
+            break
+        # The near-misses of one language DO go together: they are different
+        # questions and their answers are merged into one list. The languages
+        # do not — a hit at home ends it, and the slow lane is never opened.
         runs = await asyncio.gather(*(
-            _try(ctx, embedding, _without(full, [n]), lang=lg)
-            for lg in (ctx.lang_code, None)
-            for n in alone
+            _try(ctx, embedding, _without(full, [n]), lang=lang) for n in alone
         ))
-        same = [(n, r) for n, r in zip(alone, runs[: len(alone)]) if r]
-        other = [(n, r) for n, r in zip(alone, runs[len(alone):]) if r]
-        for hits, foreign in ((same, False), (other, True)):
-            if hits:
-                return _Found(
-                    _merge(hits),
-                    relaxed=",".join(n for n, _ in hits),
-                    other_language=foreign,
-                    partial=True,
-                )
+        hits = [(n, r) for n, r in zip(alone, runs) if r]
+        if hits:
+            return _Found(
+                _merge(hits),
+                relaxed=",".join(n for n, _ in hits),
+                other_language=foreign,
+                partial=True,
+            )
 
     # 4. Still nothing: give constraints up cumulatively, narrowest first, as
     #    before. Reached only when no single near-miss had anything either.
