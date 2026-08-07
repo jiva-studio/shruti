@@ -125,6 +125,54 @@ class PgChunkRepository:
         # cached_json round-trips through JSON; the value is a list of str.
         return list(result) if isinstance(result, list) else await _raw()
 
+    async def purge_owner(self, user_id: str) -> dict[str, int]:
+        """Erase what a deleted account left in the private lane.
+
+        Two steps, one transaction: drop that owner's `chunk_meta` rows, then
+        the `user_track` chunks of any track nobody owns any more (embeddings
+        go with them — `ON DELETE CASCADE`, migration 0030). A track shared by
+        two people keeps its chunks; only the departing owner's row goes, which
+        is exactly what the owner-per-row shape was for.
+
+        Nothing did this before: deleting an account purged its Langfuse traces
+        and its synced profile, and left the transcripts of its uploads
+        indexed. Three deleted accounts and 27 chunks of theirs were still in
+        the corpus when this was written.
+        """
+        if not user_id:
+            return {"meta_rows": 0, "chunks": 0}
+        async with self._pool.acquire() as conn, conn.transaction():
+            meta = await conn.fetch(
+                "DELETE FROM chunk_meta WHERE owner_id = $1 RETURNING track_id",
+                user_id,
+            )
+            track_ids = sorted({r["track_id"] for r in meta})
+            chunks = 0
+            if track_ids:
+                chunks = await conn.fetchval(
+                    """
+                    WITH gone AS (
+                        DELETE FROM chunks
+                         WHERE kind = 'user_track'
+                           AND track_id = ANY($1::text[])
+                           AND NOT EXISTS (
+                               SELECT 1 FROM chunk_meta cm
+                                WHERE cm.track_id = chunks.track_id
+                           )
+                        RETURNING 1
+                    )
+                    SELECT count(*) FROM gone
+                    """,
+                    track_ids,
+                )
+        log.info(
+            "private_library_purged",
+            user_id=user_id,
+            meta_rows=len(meta),
+            chunks=chunks or 0,
+        )
+        return {"meta_rows": len(meta), "chunks": int(chunks or 0)}
+
     async def get_owned_track_ids(self, user_id: str) -> list[str]:
         """Track ids the given user (JWT `sub`) may retrieve in the private
         lane — read from the server-side `owned` projection (migration 0044).

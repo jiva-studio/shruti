@@ -32,6 +32,7 @@ import (
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/handlers"
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/logging"
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/observability"
+	"github.com/jiva-studio/lectorium/cleanup-worker/internal/chatclient"
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/profileclient"
 	"github.com/jiva-studio/lectorium/cleanup-worker/internal/worker"
 )
@@ -74,9 +75,10 @@ func main() {
 	// more events to clean up after (media.deleted → S3 prefix wipe,
 	// etc).
 	lf := observability.NewClientFromEnv()
-	profile := profileclient.NewClientFromEnv() // PROFILE_INTERNAL_URL; empty = no-op
+	profile := profileclient.NewClientFromEnv()
+	chat := chatclient.NewClientFromEnv() // CHAT_INTERNAL_URL + APP_SHARED_TOKEN; empty = no-op
 	reg := handlers.NewRegistry()
-	reg.Register("user.deleted", handlers.UserDeleted(lf, profile))
+	reg.Register("user.deleted", handlers.UserDeleted(lf, profile, chat))
 	reg.Register("subscription.changed", handlers.SubscriptionChanged())
 
 	slog.InfoContext(bootCtx, "handlers_registered",

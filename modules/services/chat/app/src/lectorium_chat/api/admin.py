@@ -249,3 +249,45 @@ async def reindex(
     )
     _reindex_task.add_done_callback(_log_reindex_result)
     return {"accepted": True, "started_at": datetime.now(timezone.utc).isoformat()}
+
+
+class PurgeUserRequest(BaseModel):
+    user_id: str
+
+
+@router.post("/internal/purge")
+async def purge_user(
+    body: PurgeUserRequest,
+    x_app_token: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Erase a deleted account's private library — the chat's half of
+    `user.deleted`.
+
+    Deleting an account already purged its Langfuse traces and its synced
+    profile; the transcripts of the lectures it had uploaded stayed indexed
+    here, searchable by nobody and deleted by nothing. Three such accounts and
+    27 of their chunks were still in the corpus when this endpoint was written.
+
+    Called container-to-container by the cleanup worker, guarded by the same
+    app token as the rest of this router. Idempotent: a second call finds
+    nothing and returns zeroes, which is what the outbox needs on a retry.
+    """
+    _check_token(x_app_token)
+    user_id = body.user_id.strip()
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+    pool = await get_pool()
+    from lectorium_chat.infra.repositories.embedding_router import (
+        EmbeddingTableRouter,
+    )
+    from lectorium_chat.infra.repositories.pg_chunk_repository import (
+        PgChunkRepository,
+    )
+
+    settings = get_settings()
+    repo = PgChunkRepository(
+        pool=pool,
+        embed_model=settings.embed_model,
+        router=EmbeddingTableRouter(settings.embed_dim),
+    )
+    return await repo.purge_owner(user_id)
