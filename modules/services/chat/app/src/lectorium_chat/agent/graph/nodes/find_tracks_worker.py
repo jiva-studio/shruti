@@ -295,7 +295,26 @@ async def _try(
     ctx: TurnContext, embedding: list[float], flt: dict, *, lang: str | None,
     floor: float = _MIN_SCORE,
 ) -> list[ScoredChunk]:
-    return _top_lectures(await _search(ctx, embedding, flt, lang=lang), floor=floor)
+    """One search. A search that fails counts as a search that found nothing.
+
+    Every OTHER lookup in this worker already works that way — the reference
+    probe, the date probe, the tag lookup all swallow their failures — but the
+    semantic search did not, so a single slow ANN query killed the whole turn
+    and the person got an empty bubble. It happened twice in five days
+    («Browse by author», «Шикшаштака 1 найди лекции»), and with several
+    variants now searched at once, one of them stalling must cost that variant
+    and nothing more.
+    """
+    try:
+        return _top_lectures(await _search(ctx, embedding, flt, lang=lang), floor=floor)
+    except Exception as exc:  # noqa: BLE001 — a dead lane, not a dead turn
+        log.warning(
+            "find_tracks_search_failed",
+            request_id=ctx.request_id,
+            lang=lang,
+            error=type(exc).__name__,
+        )
+        return []
 
 
 def _merge(runs: list[tuple[str, list[ScoredChunk]]]) -> list[ScoredChunk]:

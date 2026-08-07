@@ -347,3 +347,66 @@ async def test_the_floor_still_applies_to_the_near_misses(
     _search_through_the_corpus["corpus"] = corpus
     found = await _find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY, topical=False)
     assert found.lectures == []
+
+
+# ── a search that fails is a search that found nothing ────────────────────
+
+
+async def test_one_stalled_query_does_not_kill_the_turn(
+    _search_through_the_corpus,
+) -> None:
+    """Twice in five days a Postgres timeout inside the semantic search
+    propagated out of the worker and the person got an empty bubble — no cards,
+    no line, nothing. Every other lookup here already degrades to "found
+    nothing"; this one did not, and with several variants searched at once a
+    single slow lane must cost that lane alone."""
+    class _OneLaneStalls:
+        async def search(self, flt, *, lang):
+            if lang == "ru":                      # the user's language times out
+                raise TimeoutError("statement timeout")
+            if _stated(flt) == ["date", "location", "kind"]:
+                return [_Scored(_Chunk("walk", lang="en"))]
+            return []
+
+    holder = _search_through_the_corpus
+    holder["corpus"] = _OneLaneStalls()
+    found = await _find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY)
+
+    assert [sc.chunk.track_id for sc in found.lectures] == ["walk"]
+    assert found.other_language is True
+
+
+async def test_every_query_failing_is_an_honest_empty(
+    _search_through_the_corpus,
+) -> None:
+    class _AllStall:
+        async def search(self, flt, *, lang):
+            raise TimeoutError("statement timeout")
+
+    holder = _search_through_the_corpus
+    holder["corpus"] = _AllStall()
+    found = await _find_lectures(_Ctx(), [0.0], _WALKS_1976_BOMBAY)
+
+    assert found.lectures == []      # the worker then offers what it offers on empty
+
+
+async def test_the_plain_search_survives_a_stall_too(
+    _search_through_the_corpus,
+) -> None:
+    """The turn that first showed this («Browse by author») carried no filters
+    at all, so it never reached the fan-out."""
+    class _StallThenAnswer:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def search(self, flt, *, lang):
+            self.calls += 1
+            if self.calls == 1:
+                raise TimeoutError("statement timeout")
+            return [_Scored(_Chunk("found", lang="en"))]
+
+    holder = _search_through_the_corpus
+    holder["corpus"] = _StallThenAnswer()
+    found = await _find_lectures(_Ctx(), [0.0], _filters())
+
+    assert [sc.chunk.track_id for sc in found.lectures] == ["found"]
