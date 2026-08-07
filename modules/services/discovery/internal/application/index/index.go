@@ -21,6 +21,7 @@ import (
 	"github.com/jiva-studio/shruti/discovery/internal/application/script"
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/extract"
+	"github.com/jiva-studio/shruti/discovery/internal/infra/embed"
 	"github.com/jiva-studio/shruti/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
@@ -37,6 +38,10 @@ type Fetcher interface {
 type Embedder interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 	Model() string
+	// Spent is what the calls made so far were billed, and forgets them. The
+	// larger half of what this service spends is embedding, and it went
+	// uncounted while the provider was reporting it on every answer.
+	Spent() []embed.Spend
 }
 
 // Service indexes one URL at a time. The crawl loop is just this in a loop.
@@ -970,17 +975,21 @@ func (s *Service) indexChunks(ctx context.Context, work []chunkWork, sourceID st
 		if err := s.Repo.SaveEmbeddings(ctx, model, fresh); err != nil {
 			return 0, err
 		}
-		// Embedding was billed and counted nowhere: the spend table and the
-		// status figure both held the normalizer only, so the reported cost was
-		// short by however much of the corpus had been vectorised. The
-		// providers here do not report usage on this call, so what is kept is
-		// the count of texts actually paid for — the ones the cache did not
-		// already have — and not a made-up price.
+		// Embedding is the larger half of what this service spends — roughly
+		// five dollars against the normalizer's one, over the corpus as it
+		// stands — and it was counted nowhere. The provider reports tokens and
+		// a price on every answer; nobody had read the body.
 		s.Metrics.Embedded(len(missing))
-		if err := s.Repo.RecordSpend(ctx, store.Spend{
-			SourceID: sourceID, Kind: "embed", Model: model, Items: len(missing),
-		}); err != nil {
-			slog.WarnContext(ctx, "embed_spend_not_recorded", "source", sourceID, "err", err.Error())
+		for _, sp := range s.Embedder.Spent() {
+			if err := s.Repo.RecordSpend(ctx, store.Spend{
+				SourceID: sourceID, Kind: "embed", Model: sp.Model, Items: sp.Items,
+				TokensIn: sp.Tokens, CostUSD: sp.CostUSD,
+			}); err != nil {
+				slog.WarnContext(ctx, "embed_spend_not_recorded", "source", sourceID, "err", err.Error())
+			}
+			if sp.CostUSD != nil {
+				s.Metrics.Spend(*sp.CostUSD)
+			}
 		}
 	}
 
