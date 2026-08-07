@@ -173,3 +173,91 @@ async def test_the_type_outlives_the_city_when_constraints_are_given_up() -> Non
         author_id="author_prabhupada",
     )
     assert _stated(full) == ["date", "location", "kind", "author"]
+
+
+# ── the type as people actually say it ────────────────────────────────────
+
+
+class _RealScores:
+    """The catalog's own scorer, as measured against it on 2026-08-06.
+
+    The phrase people say is NOT what the dictionary holds: «утренние прогулки»
+    against the entry «Прогулка» comes out at 0.56 — under the 0.6 bar — while
+    the bare word clears it easily. That gap is the whole reason the lookup
+    tries the words as well as the phrase.
+    """
+
+    _SCORES = {
+        "утренние прогулки": ("tag_morning_walk", 0.56),
+        "утренних прогулок": ("tag_morning_walk", 0.56),
+        "прогулки": ("tag_morning_walk", 0.88),
+        "прогулок": ("tag_morning_walk", 0.88),
+        "утренняя прогулка": ("tag_morning_walk", 1.0),
+        "morning walks": ("tag_morning_walk", 0.96),
+        "беседах": ("tag_conversation", 0.92),
+        "инициации": ("tag_initiation", 0.89),
+        # Every recording is a lecture; there is no tag for it, and the nearest
+        # row is «Речь».
+        "лекция": ("tag_address", 0.4),
+        "лекции": ("tag_address", 0.4),
+    }
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def resolve(self, kind: str, text: str, *, lang=None, limit: int = 1):
+        self.asked.append(text)
+        hit = self._SCORES.get(text.strip().lower())
+        return [_Tag(hit[0], hit[0], hit[1])] if hit else []
+
+
+@pytest.mark.parametrize(
+    ("said", "tag"),
+    [
+        ("утренние прогулки", "tag_morning_walk"),
+        ("утренних прогулок", "tag_morning_walk"),
+        ("утренняя прогулка", "tag_morning_walk"),
+        ("morning walks", "tag_morning_walk"),
+        ("беседах", "tag_conversation"),
+        ("инициации", "tag_initiation"),
+    ],
+)
+async def test_the_type_is_found_from_the_words_people_use(said, tag) -> None:
+    flt, _ = await _filters(said, _RealScores())
+    assert flt["tag_ids"] == [tag]
+
+
+async def test_the_phrase_is_tried_before_its_words() -> None:
+    catalog = _RealScores()
+    await _filters("утренние прогулки", catalog)
+    assert catalog.asked[0] == "утренние прогулки"
+    assert "прогулки" in catalog.asked, "the phrase alone is under the bar — 0.56"
+
+
+@pytest.mark.parametrize("said", ["лекция", "лекции"])
+async def test_an_ordinary_lecture_still_narrows_nothing(said) -> None:
+    # 0.4 for «Речь» is the scorer grasping; a filter here is one nobody asked for.
+    flt, stated = await _filters(said, _RealScores())
+    assert flt["tag_ids"] is None
+    assert "kind" not in stated
+
+
+async def test_short_words_are_not_looked_up_on_their_own() -> None:
+    """«о беседах» must not send «о» to the dictionary — a two-letter query
+    matches noise."""
+    catalog = _RealScores()
+    await _filters("о беседах", catalog)
+    assert "о" not in catalog.asked
+
+
+def test_the_prompt_no_longer_carries_a_list_of_types() -> None:
+    from pathlib import Path
+
+    import lectorium_chat
+
+    md = (
+        Path(lectorium_chat.__file__).resolve().parent
+        / "agent" / "prompts" / "router.md"
+    ).read_text(encoding="utf-8")
+    assert "vyasa_puja" not in md and "press_conf" not in md
+    assert "tag_" not in md

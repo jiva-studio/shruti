@@ -30,6 +30,7 @@ Everything happens in this node, which terminates at END (no synthesizer):
 from __future__ import annotations
 
 import asyncio
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable
@@ -98,28 +99,45 @@ async def _resolve_id(ctx: TurnContext, kind: str, text: object) -> str | None:
     return hits[0].id if hits else None
 
 
+# A tag is worth trusting only when the dictionary is fairly sure: below this
+# the scorer starts handing back «Речь» for "lecture" and «Прочее» for anything.
+_TAG_CONFIDENCE = 0.6
+
+
 async def _resolve_kind_tag(ctx: TurnContext, kind: object) -> list[str] | None:
-    """The catalog tag for a recording TYPE («утренние прогулки» → morning_walk).
+    """The catalog tag for the TYPE of recording a request asks for.
 
-    The router has always extracted `kind`, and nothing ever read it: the filter
-    slot said `tag_ids: None`, so «утренние прогулки 1976 Бомбей» narrowed by
-    year and city and served ordinary lectures from them.
+    The prompt used to list our ten tag names for the model to choose from —
+    a second copy of the catalog, kept by hand, exactly like the book list that
+    answered «Шикшаштака» out of the wrong scripture. Now the model writes the
+    words the person used and the tag dictionary decides.
 
-    Catalog tag ids are `tag_<kind>` exactly, so the resolved hit is accepted
-    only when it IS that id. That checks the tag exists AND makes a fuzzy near-
-    miss impossible — "lecture", which has no tag of its own (everything is one),
-    must narrow nothing rather than land on «Речь».
+    Two passes, because the phrase people actually say does not match the
+    dictionary entry: «утренние прогулки» scores 0.56 against «Прогулка» — under
+    the bar — while «прогулки» alone scores 0.88, «прогулок» 0.88, «беседах»
+    0.92. So the whole phrase first, then its words, longest first.
+
+    A miss narrows nothing, which is the right answer for «лекция»: every
+    recording is one, there is no `tag_lecture`, and the nearest match («Речь»,
+    0.4) would be a filter nobody asked for.
     """
     if not isinstance(kind, str) or not kind.strip():
         return None
-    wanted = f"tag_{kind.strip().lower()}"
-    try:
-        hits = await ctx.catalog_repo.resolve(  # type: ignore[union-attr]
-            "tag", kind.replace("_", " "), lang=None, limit=5,
-        )
-    except Exception:  # noqa: BLE001 — a tag miss just means we don't constrain
-        return None
-    return [wanted] if any(h.id == wanted for h in hits) else None
+    phrase = kind.replace("_", " ").strip()
+    words = sorted(
+        (w for w in re.split(r"[^\w-]+", phrase) if len(w) >= 4),
+        key=len, reverse=True,
+    )
+    for text in [phrase, *(w for w in words if w != phrase)]:
+        try:
+            hits = await ctx.catalog_repo.resolve(  # type: ignore[union-attr]
+                "tag", text, lang=None, limit=1,
+            )
+        except Exception:  # noqa: BLE001 — a tag miss just means we don't constrain
+            return None
+        if hits and hits[0].confidence >= _TAG_CONFIDENCE:
+            return [hits[0].id]
+    return None
 
 
 async def _selected_only(ctx: TurnContext, tracks: list) -> list:
@@ -476,7 +494,7 @@ async def _describe(ctx: TurnContext, query: str, title: str, description: str, 
 async def _intro(
     ctx: TurnContext, query: str, n: int, relaxed: str, *,
     lang_note: str = "", ref: str = "", chosen_authors: str = "",
-    partial: bool = False,
+    partial: bool = False, unknown_source: str = "",
 ) -> str:
     sys = standalone_prompt("find-tracks-intro", "find_tracks_intro")
     facts = [
@@ -484,6 +502,17 @@ async def _intro(
         f"Lectures found: {n}",
         f"Relaxed filters: {relaxed or 'none'}",
     ]
+    if unknown_source:
+        # The person named a book the catalog does not have. Searching the rest
+        # of the corpus for it is fine; pretending we looked inside that book is
+        # not — «Шикшаштака 1 найди лекции» was answered out of a different
+        # scripture entirely, and nothing in the reply said so.
+        facts.append(
+            f"IMPORTANT: the user named «{unknown_source}», and there is no such "
+            f"book in the library. Say that plainly first — the library does not "
+            f"have «{unknown_source}» — and then that these are lectures found by "
+            f"the words of the request. Never imply the list came from that book."
+        )
     if partial:
         # These lectures are near-misses of DIFFERENT constraints, not a list
         # that gave all of them up: one matches the year but not the city, the
@@ -579,6 +608,9 @@ async def find_tracks_worker_node(
     # The router extracts `topic` when the request is ABOUT something; a bare
     # metadata request («утренние прогулки 1976 Бомбей») carries none.
     topical = bool(str(args.get("topic") or "").strip())
+    # A book the catalog never heard of: no filter was built from it (the router
+    # set it aside), so the only thing left to do is admit it.
+    unknown_source = str(args.get("unknown_source") or "").strip()
     found = await _find_lectures(ctx, embedding, full, topical=topical)
     lectures, relaxed = found.lectures, found.relaxed
     lang_note = ""
@@ -625,7 +657,7 @@ async def find_tracks_worker_node(
         # No lecture in the corpus (not a bare scripture ref / date probe):
         # route to add-to-library web discovery, read by route_after_find_tracks.
         if not ctx.capabilities.get("personal_library"):
-            return await _emit_empty(ctx, writer, query)
+            return await _emit_empty(ctx, writer, query, unknown_source=unknown_source)
         log.info("find_tracks_empty_web_fallback", request_id=ctx.request_id, query=query[:80])
         return {"web_fallback": True}
 
@@ -662,7 +694,7 @@ async def find_tracks_worker_node(
         ref_label = f"{short} {tokens}".strip() if short else tokens
     intro_task = _intro(
         ctx, query, len(kept), relaxed, lang_note=lang_note, ref=ref_label,
-        partial=found.partial,
+        partial=found.partial, unknown_source=unknown_source,
     )
     prose = await asyncio.gather(intro_task, *desc_tasks)
     intro, descriptions = prose[0], list(prose[1:])
@@ -954,7 +986,9 @@ def _stream_cards(writer, cards: list[tuple[str, dict]]) -> None:
         writer({"type": "delta", "data": {"text": f"[card:{track_id}]\n\n"}})
 
 
-async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
+async def _emit_empty(
+    ctx: TurnContext, writer, query: str, *, unknown_source: str = "",
+) -> dict:
     """No lectures found — one localized line, nothing else."""
     writer({"type": "status", "data": {"key": "composing_answer"}})
     line = ""
@@ -966,7 +1000,10 @@ async def _emit_empty(ctx: TurnContext, writer, query: str) -> dict:
     )
     if ctx.llm is not None and query:
         try:
-            line = await _intro(ctx, query, 0, "", chosen_authors=chosen)
+            line = await _intro(
+                ctx, query, 0, "", chosen_authors=chosen,
+                unknown_source=unknown_source,
+            )
         except Exception:
             log.exception("find_tracks_empty_intro_failed", request_id=ctx.request_id)
     if line:

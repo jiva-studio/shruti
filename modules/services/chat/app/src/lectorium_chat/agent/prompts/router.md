@@ -113,7 +113,7 @@ Intents:
   (c) a bare verse RANGE / multi-verse span with no verb — "sb 1.2.6-1.2.18",
       "БГ 2.13-2.20", a whole chapter "ШБ 1.2". A single concrete verse is
       shown as a card by the deterministic pre-classifier and never reaches
-      you; a SPAN can't be one card, so classify it `find_track` (source_id +
+      you; a SPAN can't be one card, so classify it `find_track` (source +
       tokens) — the worker serves the lectures on that span and offers the
       verses. Do NOT use `show_verse` for a range.
   The two combine freely ("лекции 1976 про преданность" = topic + year).
@@ -166,7 +166,7 @@ Intents:
   Nearly always claimed before you see it: a bare address («БГ 2.13») is
   resolved deterministically and never reaches you. Pick it only when a
   message is JUST an address that the deterministic step missed, and set
-  source_id + tokens. A VERSE RANGE or a whole chapter is `find_track`
+  source + tokens. A VERSE RANGE or a whole chapter is `find_track`
   (see (c) there); «что говорится в БГ 2.13» / «объясни БГ 2.13» is
   `research` — the question asks for an explanation, not a card.
   Examples (ru): "БГ 2.13", "Мадхья лила 17.80".
@@ -187,7 +187,7 @@ Intents:
   the matching lectures itself. A scripture reference does NOT make it
   `show_verse`, and a topic does NOT make it `research`: the action
   token wins. («сделай pdf лекции по БГ 4.18» → create_action,
-  action_kind=pdf, source_id=BG, tokens=4.18 — NOT show_verse.)
+  action_kind=pdf, source="БГ", tokens=4.18 — NOT show_verse.)
   ALSO create_action (action_kind=pdf), even WITHOUT the word "pdf":
   a request for a lecture's TRANSCRIPT AS A DOCUMENT — «дай / нужна /
   пришли транскрипцию / транскрибацию / транскрипт лекции», «дай
@@ -206,10 +206,10 @@ Intents:
     "сохрани этот фрагмент в PDF",
     "сгенерируй pdf лекции про карму",
     "дай транскрибацию лекции по БГ 4.18"  → create_action,
-        action_kind=pdf, source_id=BG, tokens=4.18.
+        action_kind=pdf, source="БГ", tokens=4.18.
     "мне нужна транскрипция этой лекции"   → create_action, action_kind=pdf.
     "сделай pdf транскрипции лекции по БГ 4.18"  → create_action,
-        NOT show_verse (source_id=BG, tokens=4.18).
+        NOT show_verse (source="БГ", tokens=4.18).
     "сделай pdf последней лекции"   → also set recent_ref: true.
   Examples (en) — PDF:
     "generate a pdf of this lecture",
@@ -219,7 +219,7 @@ Intents:
     "save this fragment as PDF",
     "make a pdf about karma",
     "give me the transcript of the lecture on BG 4.18"  → create_action,
-        action_kind=pdf, source_id=BG, tokens=4.18.
+        action_kind=pdf, source="BG", tokens=4.18.
     "I need the lecture transcript",
     "pdf of my last lecture"        → also set recent_ref: true.
   Examples (ru) — reminder / smart_library / pro:
@@ -289,7 +289,13 @@ Extract structured args ONLY for fields you can identify from the query:
 - topic (str) — the subject in a few words, when the request is ABOUT
   something («про карму» → "карма"). Used by the web-discovery worker to
   search for an external lecture; harmless to set on other intents.
-- source_id (BG | SB | CC | KB | NoI | ISO | BS | MM | NBS)
+- source (str) — the book the request names, written the way the user wrote
+  it: «Шримад-Бхагаватам», «Гита», «письма Прабхупады», «Мадхья-лила»,
+  "Nectar of Devotion", "Ramayana". Do NOT translate it, do NOT turn it into
+  a code, and do NOT substitute a book you are more sure of — the server
+  looks the name up in the catalog, which holds far more books than any
+  list here could, and a name it does not recognize is a better answer than
+  the wrong book. Leave it empty when no book is named.
 - tokens (verse address like "2.13" or chapter token)
 - date_from / date_to (ISO date "YYYY-MM-DD" — a specific lecture DELIVERY
   date or bounded range, e.g. «лекции за март 1975» → date_from 1975-03-01,
@@ -303,11 +309,12 @@ Extract structured args ONLY for fields you can identify from the query:
 - content_types (list of "lecture" | "verse" | "commentary" |
   "prose_chapter" | "letter" | "media") — hint for which corpora to search
   first. Use "lecture" for spoken material; that is the name retrieval knows.
-- kind — the TYPE of recording, one of "morning_walk", "conversation",
-  "initiation", "address", "festival", "interview", "press_conf", "bhajan",
-  "vyasa_puja", "wedding". Set it only when the user asks for that type
-  («утренние прогулки», "morning walks", «беседы»). There is no kind for an
-  ordinary lecture — leave it empty for those.
+- kind (str) — the TYPE of recording the request asks for, in the user's own
+  words: «утренние прогулки», «беседы», «инициация», "morning walks",
+  "interview". Do NOT translate it and do NOT map it to an identifier — the
+  server looks it up in the catalog's own list of types. Leave it empty for an
+  ordinary lecture (every recording is one, so it narrows nothing) and whenever
+  the request does not ask for a particular type.
 - recent_ref (bool) — set `true` ONLY when the user deictically points
   at their OWN last / previous / most-recent lecture WITHOUT naming it
   («последнюю / прошлую / предыдущую лекцию», "my last / previous
