@@ -36,15 +36,22 @@ Intent = Literal[
 ]
 
 
+# NOTE — this class's docstring is not documentation, it is prompt: pydantic
+# puts it in the JSON-schema description that travels with every structured
+# request, so the model reads it alongside the router prompt. It used to list
+# the extracted-arg keys, and kept advertising `source_id` after the prompt had
+# moved to `source` — the model heard both and sometimes answered with the
+# retired one, which is why «Шикшаштака» was still being mapped to a book after
+# the prompt said not to. Field names belong in exactly one place: the prompt.
 class RoutingDecision(BaseModel):
-    """Router output. `confidence` is the model's self-reported
-    confidence in `intent`; we treat <0.5 as "unknown" downstream.
+    """Router output.
 
-    `extracted_args` is a free-form bag of seed args (year, location,
-    source_id, tokens, doc_date_from/to, content_types, kind, author).
-    Workers MAY use them as hints; not all fields are present in every
-    decision. Schema is intentionally loose — the model wins, we don't
-    fight it on edge structures we didn't anticipate.
+    `confidence` is the model's own certainty in `intent`; below 0.5 the
+    classification is treated as unsure downstream.
+
+    `extracted_args` carries whatever the router prompt asks it to extract for
+    this turn. Deliberately unconstrained: a worker takes what it recognizes
+    and ignores the rest.
     """
 
     model_config = ConfigDict(extra="ignore")
