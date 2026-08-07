@@ -144,7 +144,10 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	// A source read by an external reader carries neither links nor files as
 	// such: a channel arrives as a list of ids, and a video page is itself the
 	// recording. Both are knowledge about that site.
-	if s.Scripts != nil && s.Scripts.Has(sourceID) {
+	// Which script reads this source, which is not the same as which source it
+	// is: fourteen YouTube channels are fourteen sources and one youtube.js.
+	scriptID := scriptOf(src, sourceID)
+	if s.Scripts != nil && s.Scripts.Has(scriptID) {
 		page := script.Page{
 			URL: resp.URL, Text: string(resp.Body), HTML: string(resp.Body),
 			Path: pathSegments(resp.URL),
@@ -154,12 +157,12 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 		// that are not pages — thumbnails, caption tracks, stream formats — and
 		// a crawl that follows them spends its budget being turned away by
 		// robots.txt.
-		if links, err := s.Scripts.Links(ctx, sourceID, page); err != nil {
+		if links, err := s.Scripts.Links(ctx, scriptID, page); err != nil {
 			slog.WarnContext(ctx, "script_links_failed", "source", sourceID, "err", err.Error())
 		} else if links.Answered {
 			extraction.Links = links.URLs
 		}
-		if own, err := s.Scripts.Recordings(ctx, sourceID, page); err != nil {
+		if own, err := s.Scripts.Recordings(ctx, scriptID, page); err != nil {
 			slog.WarnContext(ctx, "script_recordings_failed", "source", sourceID, "err", err.Error())
 		} else {
 			for _, u := range own.URLs {
@@ -182,7 +185,7 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 		page.BodySHA256 == resp.BodySHA256 &&
 		page.ItemSetSHA256 == itemSet &&
 		page.NormPromptVersion == s.promptVersion() &&
-		page.ScriptVersion == s.scriptVersion(sourceID)
+		page.ScriptVersion == s.scriptVersion(scriptID)
 	if unchanged && !force {
 		s.Metrics.Page(true, 0, 0, 0)
 		return report, s.recordUnchanged(ctx, page, src, report, now)
@@ -194,7 +197,7 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	}
 	report.PageID = pageID
 
-	if err := s.record(ctx, extraction, pageID, sourceID, src, resp.Body, force, now, report); err != nil {
+	if err := s.record(ctx, extraction, pageID, sourceID, src, scriptID, resp.Body, force, now, report); err != nil {
 		return nil, s.recordFailure(ctx, page, src, resp.URL, sourceID, err, now)
 	}
 
@@ -202,7 +205,7 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	// validators are whatever the last complete pass left, so the next visit
 	// finds them stale and does the work again.
 	if err := s.Repo.MarkPageIndexed(ctx, pageID, resp.BodySHA256, itemSet,
-		s.promptVersion(), s.scriptVersion(sourceID)); err != nil {
+		s.promptVersion(), s.scriptVersion(scriptID)); err != nil {
 		return nil, err
 	}
 	s.recordSpend(ctx, sourceID)
@@ -411,6 +414,16 @@ func written(raw []string) []string {
 	return out
 }
 
+// scriptOf is which script reads a source. Empty means the source's own id,
+// which is how a source named after its script has always worked and is what
+// keeps idt and audioveda running untouched.
+func scriptOf(src *store.Source, sourceID string) string {
+	if src != nil && src.Script != "" {
+		return src.Script
+	}
+	return sourceID
+}
+
 // scriptVersion is which version of this source's own script read the page.
 // It sits beside the prompt version in the skip test for the same reason:
 // correcting how a source is read must re-read that source, and until this was
@@ -547,9 +560,9 @@ func (s *Service) recordFailure(ctx context.Context, page *store.Page, src *stor
 // path out of Item: the page is marked failed, and the proof that it was read
 // is not written.
 func (s *Service) record(ctx context.Context, e *domain.Extraction, pageID int64,
-	sourceID string, src *store.Source, body []byte, force bool, now time.Time, report *Report) error {
+	sourceID string, src *store.Source, scriptID string, body []byte, force bool, now time.Time, report *Report) error {
 
-	if err := s.storeItems(ctx, e, pageID, sourceID, src, body, force, now, report); err != nil {
+	if err := s.storeItems(ctx, e, pageID, sourceID, src, scriptID, body, force, now, report); err != nil {
 		return err
 	}
 	if err := s.markVanished(ctx, e, pageID, now, report); err != nil {
@@ -561,12 +574,12 @@ func (s *Service) record(ctx context.Context, e *domain.Extraction, pageID int64
 // storeItems writes every file the page offered, normalizing and embedding
 // only the ones whose input actually changed.
 func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID int64,
-	sourceID string, src *store.Source, body []byte, force bool, now time.Time, report *Report) error {
+	sourceID string, src *store.Source, scriptID string, body []byte, force bool, now time.Time, report *Report) error {
 
 	if len(e.Items) == 0 {
 		return nil
 	}
-	fromScript := s.runScript(ctx, e, sourceID, body)
+	fromScript := s.runScript(ctx, e, scriptID, body)
 	batch := normalize.BatchFor(e)
 	version, model := "", ""
 	if s.Normalizer != nil {
