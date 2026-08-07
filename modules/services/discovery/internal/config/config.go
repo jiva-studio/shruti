@@ -71,6 +71,12 @@ type Config struct {
 	LLMAPIKey  string
 	LLMModel   string
 
+	// QueryModel reads a question written in words into search filters. Its own
+	// knob because it is a far easier job than reading a lecture page, and a
+	// person is waiting for it — it should be possible to make it cheaper and
+	// faster without touching the normalizer.
+	QueryModel string
+
 	EmbedModel string
 	EmbedDim   int
 }
@@ -106,6 +112,8 @@ func Load() *Config {
 		// with a different model than production — and since the prompt version
 		// and the input hash are model-scoped, it shifted the hashes too.
 		LLMModel: env("SHRUTI_DISCOVERY_LLM_MODEL", "google/gemini-3.1-flash-lite"),
+
+		QueryModel: env("SHRUTI_DISCOVERY_QUERY_MODEL", "google/gemini-3.1-flash-lite"),
 
 		EmbedModel: env("SHRUTI_DISCOVERY_EMBED_MODEL", "openai/text-embedding-3-small"),
 		EmbedDim:   envInt("SHRUTI_DISCOVERY_EMBED_DIM", 1536),

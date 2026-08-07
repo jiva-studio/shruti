@@ -1,0 +1,5 @@
+Today is __TODAY__.
+
+Question: __QUESTION__
+
+Answer with a JSON object holding only the fields the question states.
