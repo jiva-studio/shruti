@@ -32,8 +32,16 @@ function extract(page, items) {
     return {
       url: it.url,
       title: (doc.title || '').trim(),
-      author: (doc.channel || doc.uploader || '').trim(),
-      authors: doc.channel ? [doc.channel] : [],
+      // Whoever uploaded it wrote the speaker into the title, because a channel
+      // name is not one: a temple's channel carries forty people, and even one
+      // teacher's own carries guests — there are lectures by two other swamis
+      // sitting among the owner's on one of these. Taking the channel name
+      // filed all of them under whoever the channel belongs to.
+      //
+      // A title that names nobody yields nothing, which leaves the question to
+      // the source's own setting, or to the model.
+      author: speaker(doc.title || ''),
+      authors: [],
       date: uploadDate(doc.upload_date || ''),
       duration_s: doc.duration || 0,
       // The language of the words, where we have words; otherwise what the
