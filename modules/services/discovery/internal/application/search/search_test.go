@@ -238,3 +238,35 @@ func TestSeveralSpeakersAreSeveral(t *testing.T) {
 		t.Errorf("= %d hits, want none", len(none))
 	}
 }
+
+// A filter carries what a person wrote, and a person writes a name rather than
+// a code. "Бхагавад-гита" and "BG" are one book; only one of them is what the
+// column holds, and the other used to match nothing.
+func TestAScriptureIsAskedForByName(t *testing.T) {
+	svc, repo, pool := testSearch(t)
+	ctx := context.Background()
+	id := add(t, repo, pool, "https://a.example/bg.mp3", "Bhagavad-gita 2.13", "Radhanath Swami", "en")
+	if err := repo.ReplaceItemRefs(ctx, id, []domain.Ref{{Source: "BG", Tokens: "2.13"}},
+		store.OriginCrawl); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"BG", "bg", "Бхагавад-гита", "Бхагавад гита", "Bhagavad-gita", "БГ"} {
+		hits, err := svc.Search(ctx, search.Query{Sources: []string{name}, Limit: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hits) != 1 {
+			t.Errorf("%q found %d, want the one recording that cites it", name, len(hits))
+		}
+	}
+
+	// A book nobody named is still nothing, rather than everything.
+	hits, err := svc.Search(ctx, search.Query{Sources: []string{"Коран"}, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 0 {
+		t.Errorf("an unknown book returned %d hits", len(hits))
+	}
+}

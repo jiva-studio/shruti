@@ -152,6 +152,16 @@ func (s *Service) resolveAuthors(ctx context.Context, name string) ([]int64, err
 const noAuthor = -1
 
 func (s *Service) prepare(ctx context.Context, q *Query) error {
+	// A scripture is asked for by name as often as by code: "Бхагавад-гита" and
+	// "BG" are one book, and only one of them is what the column holds.
+	for i, name := range q.Sources {
+		if domain.Addressable(name) {
+			continue
+		}
+		if src, ok := domain.SourceByName(name); ok {
+			q.Sources[i] = src.Code
+		}
+	}
 	if len(q.Authors) == 0 || len(q.AuthorIDs) > 0 {
 		return nil
 	}

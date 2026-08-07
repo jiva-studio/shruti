@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/search"
+	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 )
 
 // Filter is the question as fields. Every one is optional, and empty means "do
@@ -195,6 +196,28 @@ func (s *Service) Ask(ctx context.Context, question string, given Filter) (*Answ
 		out.Filter.Text = firstNonEmpty(out.Filter.Text, question)
 	}
 
+	// What the question says plainly, whoever else read it. A verse and a
+	// speaker are in the words themselves, and finding them costs microseconds
+	// — so a reading that timed out or came back shrugging loses precision
+	// rather than losing the question.
+	if question != "" {
+		if out.Filter.Ref == "" && len(out.Filter.Sources) == 0 {
+			if refs := domain.Refs(question); len(refs) > 0 {
+				out.Filter.Ref = refs[0].Label()
+			}
+		}
+		if len(out.Filter.Authors) == 0 {
+			// Only a speaker the corpus actually holds. A name read out of a
+			// sentence and matching nobody would turn a search with results
+			// into an empty one, which is worse than not having looked.
+			if who := domain.Speaker(question); who != "" {
+				if known, err := s.Searcher.Names(ctx, who); err == nil && known {
+					out.Filter.Authors = []string{who}
+				}
+			}
+		}
+	}
+
 	q := out.Filter.query()
 	if vecDone != nil {
 		<-vecDone
@@ -296,12 +319,18 @@ func (f Filter) query() search.Query {
 		Limit:      f.Limit,
 		Offset:     f.Offset,
 	}
-	// "CC Madhya 8.128" is how a person writes it, and a code is not always one
-	// word. The last field is the coordinate; everything before it is the
-	// scripture.
-	if fields := strings.Fields(f.Ref); len(fields) >= 2 && len(q.Sources) == 0 {
-		q.Sources = []string{strings.Join(fields[:len(fields)-1], " ")}
-		q.Tokens = fields[len(fields)-1]
+	// A reference is read with the canon, not cut on a space. "CC Madhya
+	// 8.128" and "Бхагавад-гита 2.13" are how people write them, and splitting
+	// on the space found nothing for either while the corpus held both.
+	if f.Ref != "" && len(q.Sources) == 0 {
+		if refs := domain.Refs(f.Ref); len(refs) > 0 {
+			// One verse: the stored rows are one per verse, so a range would
+			// match none of them.
+			if expanded, _ := domain.ExpandRefs(refs[0].Source, refs[0].Tokens); len(expanded) > 0 {
+				q.Sources = []string{expanded[0].Source}
+				q.Tokens = expanded[0].Tokens
+			}
+		}
 	}
 	return q
 }
