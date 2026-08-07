@@ -29,6 +29,15 @@ Intents:
       pages say where they are, and that is the honest answer. Asking WHICH
       lecture to play («включи что-нибудь», "start any lecture") is
       `recommend`, not this.
+      The tell is a POINTER at what the previous answer already offered —
+      «первую», «вторую», «эту», «последнюю из них», "the first one", "that
+      one" — together with a play/open verb. That pointer WINS over any topic
+      in the sentence: this message reaches you already rewritten to stand on
+      its own, so «включи первую» becomes «включи первую лекцию про
+      смирение» — and answering it with a NEW search replaces the very list
+      they were pointing at. It happened; the person got five different
+      lectures. When the turn-context line below says the previous answer
+      offered lectures, treat such a message as `help`.
   Examples (ru) — app: «покажи по авторам», «включи первую»,
                  «перемотай на начало».
   Examples (en) — app: "browse by author", "start it", "pause".
