@@ -98,7 +98,7 @@ func TestFiltersNarrow(t *testing.T) {
 		t.Fatalf("unfiltered = %v, want both", titles(all))
 	}
 
-	byLang, err := svc.Search(ctx, search.Query{Text: "holy name", Language: "ru", Limit: 10})
+	byLang, err := svc.Search(ctx, search.Query{Text: "holy name", Languages: []string{"ru"}, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,8 +116,8 @@ func TestNoMatchIsEmpty(t *testing.T) {
 
 	for _, q := range []search.Query{
 		{Text: "nothing here matches this", Limit: 10},
-		{Text: "holy name", Language: "xx", Limit: 10},
-		{Text: "holy name", Source: "nosuchsource", Limit: 10},
+		{Text: "holy name", Languages: []string{"xx"}, Limit: 10},
+		{Text: "holy name", Sources: []string{"NOSUCHBOOK"}, Limit: 10},
 	} {
 		hits, err := svc.Search(context.Background(), q)
 		if err != nil {
@@ -167,7 +167,7 @@ func TestAVerseIsOneReferenceNotTwoConditions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits, err := svc.Search(ctx, search.Query{RefSource: "SB", RefTokens: "4", Limit: 10})
+	hits, err := svc.Search(ctx, search.Query{Sources: []string{"SB"}, Tokens: "4", Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,11 +176,65 @@ func TestAVerseIsOneReferenceNotTwoConditions(t *testing.T) {
 	}
 
 	// Asking for the book alone still finds everything in it.
-	book, err := svc.Search(ctx, search.Query{RefSource: "SB", Limit: 10})
+	book, err := svc.Search(ctx, search.Query{Sources: []string{"SB"}, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(book) != 2 {
 		t.Errorf("SB alone returned %d, want both recordings that cite it", len(book))
+	}
+}
+
+// Several speakers ticked is several speakers, not the first one. Taking the
+// first silently answers a question nobody asked, and nothing in the response
+// says the rest were dropped.
+func TestSeveralSpeakersAreSeveral(t *testing.T) {
+	svc, repo, pool := testSearch(t)
+	ctx := context.Background()
+	// Speakers are rows a recording points at, and the indexer links them in a
+	// second step. A fixture that only writes the name on the item is a corpus
+	// with nobody in it.
+	link := func(media, name string) {
+		t.Helper()
+		id := add(t, repo, pool, media, "The holy name", name, "en")
+		who, err := repo.ResolveAuthor(ctx, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.SetItemAuthors(ctx, id, []int64{who}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link("https://a.example/1.mp3", "Radhanath Swami")
+	link("https://a.example/2.mp3", "Bhakti Caitanya Swami")
+	link("https://a.example/3.mp3", "Sacinandana Swami")
+
+	both, err := svc.Search(ctx, search.Query{
+		Authors: []string{"Radhanath Swami", "Bhakti Caitanya Swami"}, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(both) != 2 {
+		t.Errorf("two speakers returned %d hits: %v", len(both), titles(both))
+	}
+
+	// A name matching nobody, beside one that does, narrows to the one.
+	mixed, err := svc.Search(ctx, search.Query{
+		Authors: []string{"Radhanath Swami", "Nobody At All"}, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mixed) != 1 {
+		t.Errorf("= %d hits, want the one speaker who exists", len(mixed))
+	}
+
+	// And every name matching nobody is an empty answer, not an unfiltered one.
+	none, err := svc.Search(ctx, search.Query{
+		Authors: []string{"Nobody At All", "Nor This One"}, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none) != 0 {
+		t.Errorf("= %d hits, want none", len(none))
 	}
 }

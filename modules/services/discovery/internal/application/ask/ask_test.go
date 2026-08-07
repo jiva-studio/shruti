@@ -59,15 +59,15 @@ func svc(r ask.Reader, s ask.Searcher) *ask.Service {
 
 func TestTheQuestionIsReadIntoTheFilter(t *testing.T) {
 	r := &reader{give: ask.Filter{
-		Author: "Шиварама Свами", DateFrom: day("2012-01-01"), DateTo: day("2012-12-31"),
+		Authors: []string{"Шиварама Свами"}, DateFrom: day("2012-01-01"), DateTo: day("2012-12-31"),
 	}}
 	s := &searcher{}
 	got, err := svc(r, s).Ask(context.Background(), "лекции Шиварамы Свами за 2012 год о карме", ask.Filter{Limit: 20})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Filter.Author != "Шиварама Свами" {
-		t.Errorf("author = %q", got.Filter.Author)
+	if len(got.Filter.Authors) != 1 || got.Filter.Authors[0] != "Шиварама Свами" {
+		t.Errorf("authors = %v", got.Filter.Authors)
 	}
 	if got.Filter.DateFrom == nil || got.Filter.DateFrom.Year() != 2012 {
 		t.Errorf("date_from = %v", got.Filter.DateFrom)
@@ -75,7 +75,7 @@ func TestTheQuestionIsReadIntoTheFilter(t *testing.T) {
 	if got.Filter.Limit != 20 {
 		t.Errorf("the caller's own field was lost: limit = %d", got.Filter.Limit)
 	}
-	if s.got.Author != "Шиварама Свами" || s.got.Limit != 20 {
+	if len(s.got.Authors) != 1 || s.got.Authors[0] != "Шиварама Свами" || s.got.Limit != 20 {
 		t.Errorf("the search was handed %+v", s.got)
 	}
 	// The reading is told the date rather than reading a clock, or "за прошлый
@@ -89,7 +89,7 @@ func TestTheQuestionIsReadIntoTheFilter(t *testing.T) {
 // rewriting it is how a search box stops being one.
 func TestTheQuestionComesBackUntouched(t *testing.T) {
 	const q = "лекции Шиварамы Свами за 2012 год о карме"
-	got, err := svc(&reader{give: ask.Filter{Author: "Шиварама Свами"}}, &searcher{}).
+	got, err := svc(&reader{give: ask.Filter{Authors: []string{"Шиварама Свами"}}}, &searcher{}).
 		Ask(context.Background(), q, ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
@@ -129,12 +129,13 @@ func TestTheQuestionOverrulesTheFilterAndSaysSo(t *testing.T) {
 
 // A field the question says nothing about is left alone.
 func TestWhatTheQuestionDoesNotSayIsKept(t *testing.T) {
-	got, err := svc(&reader{give: ask.Filter{Author: "Локанатха Свами"}}, &searcher{}).
-		Ask(context.Background(), "лекции Локанатхи Свами", ask.Filter{Language: "ru", Source: "audioveda"})
+	got, err := svc(&reader{give: ask.Filter{Authors: []string{"Локанатха Свами"}}}, &searcher{}).
+		Ask(context.Background(), "лекции Локанатхи Свами", ask.Filter{Languages: []string{"ru"}, Sources: []string{"audioveda"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Filter.Language != "ru" || got.Filter.Source != "audioveda" {
+	if len(got.Filter.Languages) != 1 || got.Filter.Languages[0] != "ru" ||
+		len(got.Filter.Sources) != 1 || got.Filter.Sources[0] != "audioveda" {
 		t.Errorf("= %+v", got.Filter)
 	}
 	if len(got.Messages) != 0 {
@@ -148,7 +149,7 @@ func TestWhatTheQuestionDoesNotSayIsKept(t *testing.T) {
 // from "no such person" is not an option either.
 func TestAnUnknownSpeakerAnswersEmptyAndSaysWhy(t *testing.T) {
 	s := &searcher{unknown: true}
-	got, err := svc(&reader{give: ask.Filter{Author: "Кто-то Свами"}}, s).
+	got, err := svc(&reader{give: ask.Filter{Authors: []string{"Кто-то Свами"}}}, s).
 		Ask(context.Background(), "лекции Кого-то Свами", ask.Filter{})
 	if err != nil {
 		t.Fatal(err)
@@ -159,12 +160,12 @@ func TestAnUnknownSpeakerAnswersEmptyAndSaysWhy(t *testing.T) {
 	if s.calls != 0 {
 		t.Error("the search ran anyway")
 	}
-	if got.Filter.Author != "Кто-то Свами" {
+	if len(got.Filter.Authors) != 1 || got.Filter.Authors[0] != "Кто-то Свами" {
 		t.Errorf("the filter was quietly dropped: %+v", got.Filter)
 	}
 	var said bool
 	for _, m := range got.Messages {
-		if m.Kind == ask.KindMatchesNobody && m.Field == "author" {
+		if m.Kind == ask.KindMatchesNobody && m.Field == "authors" {
 			said = true
 		}
 	}
@@ -210,13 +211,13 @@ func TestAFailedReadingStillSearches(t *testing.T) {
 func TestAFilterWithoutAQuestionAsksNobody(t *testing.T) {
 	r := &reader{}
 	s := &searcher{}
-	if _, err := svc(r, s).Ask(context.Background(), "", ask.Filter{Author: "Локанатха Свами"}); err != nil {
+	if _, err := svc(r, s).Ask(context.Background(), "", ask.Filter{Authors: []string{"Локанатха Свами"}}); err != nil {
 		t.Fatal(err)
 	}
 	if r.asked != "" {
 		t.Errorf("the model was asked %q", r.asked)
 	}
-	if s.got.Author != "Локанатха Свами" {
+	if len(s.got.Authors) != 1 || s.got.Authors[0] != "Локанатха Свами" {
 		t.Errorf("= %+v", s.got)
 	}
 }
@@ -228,7 +229,14 @@ func TestAReferenceIsSplitForTheColumns(t *testing.T) {
 		Ask(context.Background(), "лекции по БГ 2.13", ask.Filter{}); err != nil {
 		t.Fatal(err)
 	}
-	if s.got.RefSource != "BG" || s.got.RefTokens != "2.13" {
-		t.Errorf("ref = %q / %q", s.got.RefSource, s.got.RefTokens)
+	if sourcesOf(s.got) != "BG" || s.got.Tokens != "2.13" {
+		t.Errorf("ref = %q / %q", sourcesOf(s.got), s.got.Tokens)
 	}
+}
+
+func sourcesOf(q search.Query) string {
+	if len(q.Sources) == 0 {
+		return ""
+	}
+	return q.Sources[0]
 }

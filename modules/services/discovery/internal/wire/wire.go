@@ -103,6 +103,11 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	// Asking in words needs a model; asking with filters does not. Without a
 	// key the question is still searched, as written.
 	asker := &ask.Service{Searcher: searcher, Reader: buildQueryReader(ctx, cfg)}
+	// The question's vector is wanted before the reading is finished, so the
+	// two overlap rather than queue.
+	if embedder != nil {
+		asker.Embedder = embedder
+	}
 	crawler := &crawl.Service{
 		Index:   indexer,
 		Parse:   parser,

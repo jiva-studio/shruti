@@ -262,23 +262,26 @@ func searchHandler(svc *search.Service) http.HandlerFunc {
 			return
 		}
 		q := r.URL.Query()
+		// Repeated parameters are several values, not a first one and some
+		// noise: author=A&author=B is two speakers. Taking the first silently
+		// answers a question nobody asked.
 		query := search.Query{
 			Text:       q.Get("q"),
-			Author:     q.Get("author"),
-			Language:   q.Get("language"),
-			Source:     q.Get("source"),
+			Authors:    q["author"],
+			Languages:  q["language"],
+			Sources:    q["source"],
+			Tokens:     q.Get("tokens"),
 			DateFrom:   dateParam(q.Get("date_from")),
 			DateTo:     dateParam(q.Get("date_to")),
 			Limit:      intParam(r, "limit", 20),
 			Offset:     intParam(r, "offset", 0),
-			RefSource:  q.Get("ref_source"),
-			RefTokens:  q.Get("ref_tokens"),
 			Collection: q.Get("collection"),
 		}
-		// `ref=SB 1.2.10` is how a person writes it; the columns store the two
-		// halves separately.
-		if ref := strings.Fields(q.Get("ref")); len(ref) == 2 {
-			query.RefSource, query.RefTokens = ref[0], ref[1]
+		// `ref=CC Madhya 8.128` is how a person writes it, and a code is not
+		// always one word. The last field is the coordinate.
+		if ref := strings.Fields(q.Get("ref")); len(ref) >= 2 {
+			query.Sources = []string{strings.Join(ref[:len(ref)-1], " ")}
+			query.Tokens = ref[len(ref)-1]
 		}
 
 		hits, err := svc.Search(r.Context(), query)
