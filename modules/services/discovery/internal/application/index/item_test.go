@@ -281,13 +281,13 @@ func (silentNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]norma
 	return make([]normalize.Result, len(b.Items)), nil
 }
 
-func TestTheSourcesDefaultAuthorFillsASilentPage(t *testing.T) {
+func TestTheSourcesAuthorOverrideFillsASilentPage(t *testing.T) {
 	repo := testRepo(t)
 	ctx := context.Background()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "personal", SeedURLs: []string{"https://a.example/"}, Enabled: true,
-		DefaultAuthor: "Е.С. Локанатха Свами Махарадж",
+		AuthorOverride: "Е.С. Локанатха Свами Махарадж",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -310,16 +310,16 @@ func TestTheSourcesDefaultAuthorFillsASilentPage(t *testing.T) {
 	}
 }
 
-// And it must not overrule the page. A personal channel carrying a guest's
-// lecture would otherwise file it under its owner — which is not hypothetical:
-// one of these channels has two other swamis' lectures sitting among its own.
-func TestTheDefaultAuthorNeverOverrulesThePage(t *testing.T) {
+// And it overrules the page, because somebody setting it knows whose archive it
+// is. The cost is that a channel carrying guests must not have it set — it is
+// an assertion, not a hint.
+func TestTheAuthorOverrideWinsOverThePage(t *testing.T) {
 	repo := testRepo(t)
 	ctx := context.Background()
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "personal", SeedURLs: []string{"https://a.example/"}, Enabled: true,
-		DefaultAuthor: "Локанатха Свами",
+		AuthorOverride: "Локанатха Свами",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -333,8 +333,8 @@ func TestTheDefaultAuthorNeverOverrulesThePage(t *testing.T) {
 	}
 	page, _ := repo.PageByURL(ctx, "https://a.example/talk")
 	items, _ := repo.ItemsByPage(ctx, page.ID)
-	if got := items[0].Author; got != "Radhanath Swami" {
-		t.Errorf("author = %q; the source default overruled what the page said", got)
+	if got := items[0].Author; got != "Локанатха Свами" {
+		t.Errorf("author = %q; the source override lost to what the page said", got)
 	}
 }
 
@@ -378,7 +378,7 @@ func TestSeveralSourcesShareOneScript(t *testing.T) {
 	for _, id := range []string{"channel-one", "channel-two"} {
 		if err := repo.SaveSource(ctx, &store.Source{
 			ID: id, SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
-			Script: "audioveda", DefaultAuthor: id,
+			Script: "audioveda",
 		}); err != nil {
 			t.Fatal(err)
 		}

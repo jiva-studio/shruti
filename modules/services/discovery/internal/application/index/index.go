@@ -848,18 +848,21 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 		item.Status = prior.Status
 	}
 
-	// Last, and only where nothing else said. A personal channel names its
-	// speaker once, in the channel, and never again in the title of a talk; an
-	// aggregator's name is a temple and every talk on it is by somebody else,
-	// which is why this is stated per source and empty by default.
+	// Last, and it wins. Somebody setting this knows whose archive they pointed
+	// us at, and that beats anything read off the page.
 	//
-	// It cannot overrule the page. A personal channel carrying a guest lecture
-	// would otherwise file it under its owner — and on one of these channels
-	// there are lectures by two other swamis sitting among the owner's own.
-	if item.Author == "" && src != nil && src.DefaultAuthor != "" {
-		item.Author = domain.Name(src.DefaultAuthor)
-		if len(item.Authors) == 0 && item.Author != "" {
-			item.Authors = []string{item.Author}
+	// It had to win. As a fallback it never fired: a source script fills the
+	// author in from the channel name for every video, so nothing fell through
+	// to it — and what it fell through to was wrong, four hundred lectures by
+	// forty people filed under the name of a temple.
+	//
+	// Which is why it is empty by default and must stay empty on a channel that
+	// carries guests: it is an assertion, and asserting it where it is not true
+	// is worse than leaving the question open.
+	if src != nil && src.AuthorOverride != "" {
+		if named := domain.Name(src.AuthorOverride); named != "" {
+			item.Author = named
+			item.Authors = []string{named}
 		}
 	}
 	return item, nil

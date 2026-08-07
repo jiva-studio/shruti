@@ -49,13 +49,18 @@ type Source struct {
 	// schedule, its own account — and one youtube.js.
 	Script string `json:"script,omitempty"`
 
-	// DefaultAuthor is who a recording is by when the page does not say. It is
-	// the last word, never the first: what the page states always wins, or a
-	// personal channel carrying a guest's lecture would file it under its owner.
+	// AuthorOverride is who this source's recordings are by, and it wins over
+	// whatever the page says. Somebody setting it knows whose archive this is.
 	//
-	// Empty is the right answer for an archive whose recordings are by many
-	// people, and it is the default.
-	DefaultAuthor string `json:"default_author,omitempty"`
+	// It was a fallback and that was useless here: a source script fills the
+	// author in from the channel name for every video, so nothing ever fell
+	// through to it. What it fell back to was wrong — an aggregator's four
+	// hundred lectures by forty people all filed under the name of a temple.
+	//
+	// Empty is the right answer for an archive of many speakers, and for a
+	// channel that carries guests: it is an assertion, and asserting it where
+	// it is not true is worse than leaving the question open.
+	AuthorOverride string `json:"author_override,omitempty"`
 
 	// AuthHeaders are sent with every request to this source. They are
 	// credentials: never returned by the API, only set.
@@ -93,7 +98,7 @@ func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
 		}
 	}
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO discovery.sources (id, title, seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher, recheck_min_s, recheck_max_s, default_author, script)
+		INSERT INTO discovery.sources (id, title, seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher, recheck_min_s, recheck_max_s, author_override, script)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,nullif($12,''),nullif($13,''))
 		ON CONFLICT (id) DO UPDATE SET
 			title = EXCLUDED.title, seed_urls = EXCLUDED.seed_urls,
@@ -101,14 +106,14 @@ func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
 			crawl_workers = EXCLUDED.crawl_workers,
 			max_depth = EXCLUDED.max_depth,
 			recheck_min_s = EXCLUDED.recheck_min_s, recheck_max_s = EXCLUDED.recheck_max_s,
-			default_author = EXCLUDED.default_author, script = EXCLUDED.script,
+			author_override = EXCLUDED.author_override, script = EXCLUDED.script,
 			-- Empty headers leave the stored ones alone, so an ordinary edit
 			-- does not silently sign the source out.
 			fetcher = EXCLUDED.fetcher, auth_headers = CASE WHEN EXCLUDED.auth_headers = '{}'::jsonb
 				THEN discovery.sources.auth_headers ELSE EXCLUDED.auth_headers END,
 			updated_at = now()`,
 		s.ID, s.Title, s.SeedURLs, s.Enabled, s.CrawlDelayMS, s.CrawlWorkers, s.MaxDepth, headers, s.Fetcher,
-		s.RecheckMinS, s.RecheckMaxS, s.DefaultAuthor, s.Script)
+		s.RecheckMinS, s.RecheckMaxS, s.AuthorOverride, s.Script)
 	return err
 }
 
@@ -117,10 +122,10 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 	var headers []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher,
-		       recheck_min_s, recheck_max_s, coalesce(default_author,''), coalesce(script,'')
+		       recheck_min_s, recheck_max_s, coalesce(author_override,''), coalesce(script,'')
 		FROM discovery.sources WHERE id = $1`, id,
 	).Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth, &headers, &s.Fetcher,
-		&s.RecheckMinS, &s.RecheckMaxS, &s.DefaultAuthor, &s.Script)
+		&s.RecheckMinS, &s.RecheckMaxS, &s.AuthorOverride, &s.Script)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -137,7 +142,7 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth,
-		       recheck_min_s, recheck_max_s, coalesce(default_author,''), coalesce(script,''),
+		       recheck_min_s, recheck_max_s, coalesce(author_override,''), coalesce(script,''),
 		       coalesce(auth_headers, '{}'::jsonb) <> '{}'::jsonb
 		FROM discovery.sources ORDER BY id`)
 	if err != nil {
@@ -149,7 +154,7 @@ func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	for rows.Next() {
 		var s Source
 		if err := rows.Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth,
-			&s.RecheckMinS, &s.RecheckMaxS, &s.DefaultAuthor, &s.Script, &s.HasCredentials); err != nil {
+			&s.RecheckMinS, &s.RecheckMaxS, &s.AuthorOverride, &s.Script, &s.HasCredentials); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
