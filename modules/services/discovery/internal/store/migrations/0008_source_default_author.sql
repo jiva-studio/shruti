@@ -1,0 +1,12 @@
+-- Who a recording is by, where the page does not say.
+--
+-- A personal channel names its speaker once, in the channel, and never again in
+-- the title of a talk: "Мантра Йога" is the whole of what one video is called.
+-- An aggregator is the opposite -- its channel name is a temple, and every
+-- talk on it is by somebody different.
+--
+-- So this is stated per source rather than inferred from anything. Empty means
+-- "the page has to say", which is the right answer for an aggregator and the
+-- only safe default: filling it in from a channel name would file two thousand
+-- lectures by forty people under one name that is not a person.
+ALTER TABLE discovery.sources ADD COLUMN IF NOT EXISTS default_author text;

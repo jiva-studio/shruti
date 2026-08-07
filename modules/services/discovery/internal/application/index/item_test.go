@@ -205,3 +205,159 @@ func TestAFailureKeepsTheLastCompletePassesProof(t *testing.T) {
 			good.BodySHA256, good.NormPromptVersion, after.BodySHA256, after.NormPromptVersion)
 	}
 }
+
+// A speaker read by the model is written the way a speaker read by a script is
+// written. They were not: the script path settled the name and the model path
+// stored whatever the model said, so the same person appeared as "HH Radhanath
+// Swami" from one page and "Radhanath Swami" from another. Grouping hid it,
+// because the key is computed separately.
+type namingNormalizer struct{ normalize.Stub }
+
+func (namingNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]normalize.Result, error) {
+	out := make([]normalize.Result, len(b.Items))
+	for i := range out {
+		out[i] = normalize.Result{
+			Title:   "Talk",
+			Author:  "HH Radhanath Swami Maharaja",
+			Authors: []string{"HH Radhanath Swami Maharaja", "Е.М. Ватсала прабху"},
+		}
+	}
+	return out, nil
+}
+
+func TestAModelReadNameIsSettledLikeAScriptReadOne(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+
+	svc := &index.Service{
+		Fetcher:    &pageFetcher{body: talk},
+		Normalizer: namingNormalizer{},
+		Repo:       repo,
+		Now:        func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://a.example/talk", "", false); err != nil {
+		t.Fatal(err)
+	}
+	page, err := repo.PageByURL(ctx, "https://a.example/talk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := repo.ItemsByPage(ctx, page.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("%d items", len(items))
+	}
+	if got := items[0].Author; got != "Radhanath Swami" {
+		t.Errorf("author = %q, want %q", got, "Radhanath Swami")
+	}
+	// And the Cyrillic one is attached to a person, not dropped: "прабху" is a
+	// form of address and comes off entirely, so the person is "Ватсала".
+	authors, err := repo.Authors(ctx, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, a := range authors {
+		if a.Name == "Ватсала" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no Cyrillic author was created: %+v", authors)
+	}
+}
+
+// A personal channel names its speaker once, in the channel, and never again in
+// the title of a talk. An aggregator's name is a temple and every talk on it is
+// by somebody else — so this is stated per source, and it is the last word
+// rather than the first.
+type silentNormalizer struct{ normalize.Stub }
+
+func (silentNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]normalize.Result, error) {
+	return make([]normalize.Result, len(b.Items)), nil
+}
+
+func TestTheSourcesDefaultAuthorFillsASilentPage(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	if err := repo.SaveSource(ctx, &store.Source{
+		ID: "personal", SeedURLs: []string{"https://a.example/"}, Enabled: true,
+		DefaultAuthor: "Е.С. Локанатха Свами Махарадж",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &index.Service{
+		Fetcher: &pageFetcher{body: talk}, Normalizer: silentNormalizer{},
+		Repo: repo, Now: func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://a.example/talk", "personal", false); err != nil {
+		t.Fatal(err)
+	}
+	page, _ := repo.PageByURL(ctx, "https://a.example/talk")
+	items, err := repo.ItemsByPage(ctx, page.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Settled on the way in, like any other name.
+	if got := items[0].Author; got != "Локанатха Свами" {
+		t.Errorf("author = %q, want %q", got, "Локанатха Свами")
+	}
+}
+
+// And it must not overrule the page. A personal channel carrying a guest's
+// lecture would otherwise file it under its owner — which is not hypothetical:
+// one of these channels has two other swamis' lectures sitting among its own.
+func TestTheDefaultAuthorNeverOverrulesThePage(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	if err := repo.SaveSource(ctx, &store.Source{
+		ID: "personal", SeedURLs: []string{"https://a.example/"}, Enabled: true,
+		DefaultAuthor: "Локанатха Свами",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &index.Service{
+		Fetcher: &pageFetcher{body: talk}, Normalizer: namingNormalizer{},
+		Repo: repo, Now: func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://a.example/talk", "personal", false); err != nil {
+		t.Fatal(err)
+	}
+	page, _ := repo.PageByURL(ctx, "https://a.example/talk")
+	items, _ := repo.ItemsByPage(ctx, page.ID)
+	if got := items[0].Author; got != "Radhanath Swami" {
+		t.Errorf("author = %q; the source default overruled what the page said", got)
+	}
+}
+
+// An archive of many speakers leaves it empty, and a page that names nobody
+// stays nameless rather than being filed under a temple.
+func TestAnAggregatorLeavesItEmpty(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	if err := repo.SaveSource(ctx, &store.Source{
+		ID: "temple", SeedURLs: []string{"https://a.example/"}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	svc := &index.Service{
+		Fetcher: &pageFetcher{body: talk}, Normalizer: silentNormalizer{},
+		Repo: repo, Now: func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://a.example/talk", "temple", false); err != nil {
+		t.Fatal(err)
+	}
+	page, _ := repo.PageByURL(ctx, "https://a.example/talk")
+	items, _ := repo.ItemsByPage(ctx, page.ID)
+	if got := items[0].Author; got != "" {
+		t.Errorf("author = %q, want nobody", got)
+	}
+}

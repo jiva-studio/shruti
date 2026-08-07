@@ -27,6 +27,10 @@ type sourceIn struct {
 	MaxDepth     int      `json:"max_depth"`
 	RecheckMinS  int      `json:"recheck_min_s"`
 	RecheckMaxS  int      `json:"recheck_max_s"`
+	// DefaultAuthor is who a recording is by when the page does not say — a
+	// personal channel's owner. Leave it empty for an archive of many speakers,
+	// or every talk on it is filed under one name that is not a person.
+	DefaultAuthor string `json:"default_author"`
 	// AuthHeaders go in and never come back out. Omitting them leaves whatever
 	// was set before, so an edit does not sign the source out of the archive.
 	AuthHeaders map[string]string `json:"auth_headers,omitempty"`
@@ -34,17 +38,18 @@ type sourceIn struct {
 
 func (in sourceIn) source() store.Source {
 	return store.Source{
-		ID:           in.ID,
-		Title:        in.Title,
-		SeedURLs:     in.SeedURLs,
-		Enabled:      in.Enabled,
-		CrawlDelayMS: in.CrawlDelayMS,
-		CrawlWorkers: in.CrawlWorkers,
-		Fetcher:      in.Fetcher,
-		MaxDepth:     in.MaxDepth,
-		RecheckMinS:  in.RecheckMinS,
-		RecheckMaxS:  in.RecheckMaxS,
-		AuthHeaders:  in.AuthHeaders,
+		ID:            in.ID,
+		Title:         in.Title,
+		SeedURLs:      in.SeedURLs,
+		Enabled:       in.Enabled,
+		CrawlDelayMS:  in.CrawlDelayMS,
+		CrawlWorkers:  in.CrawlWorkers,
+		Fetcher:       in.Fetcher,
+		MaxDepth:      in.MaxDepth,
+		RecheckMinS:   in.RecheckMinS,
+		RecheckMaxS:   in.RecheckMaxS,
+		DefaultAuthor: in.DefaultAuthor,
+		AuthHeaders:   in.AuthHeaders,
 	}
 }
 
@@ -61,6 +66,9 @@ type sourceOut struct {
 	MaxDepth     int      `json:"max_depth"`
 	RecheckMinS  int      `json:"recheck_min_s"`
 	RecheckMaxS  int      `json:"recheck_max_s"`
+	// DefaultAuthor is who this source's recordings are by when the page does
+	// not say. Empty means the page has to.
+	DefaultAuthor string `json:"default_author,omitempty"`
 	// HasCredentials says whether requests to this source carry an account,
 	// which is worth knowing and is not the account itself.
 	HasCredentials bool `json:"has_credentials,omitempty"`
@@ -78,6 +86,7 @@ func sourceFrom(s store.Source) sourceOut {
 		MaxDepth:       s.MaxDepth,
 		RecheckMinS:    s.RecheckMinS,
 		RecheckMaxS:    s.RecheckMaxS,
+		DefaultAuthor:  s.DefaultAuthor,
 		HasCredentials: s.HasCredentials,
 	}
 }
