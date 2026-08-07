@@ -201,3 +201,50 @@ func TestAPageWithNoTranscriptYieldsNoText(t *testing.T) {
 		t.Errorf("= %q", got["u"].PageText)
 	}
 }
+
+// The archive states how long the recording runs, in the ISO 8601 form
+// schema.org uses. It is the one source here that gives this for free: an
+// mp3's length is in no header, only in its first frame, so anywhere else it
+// costs a request per recording.
+func TestTheStatedDurationIsRead(t *testing.T) {
+	for iso, want := range map[string]int{
+		"PT1H10M45S": 4245,
+		"PT45M":      2700,
+		"PT2H":       7200,
+		"PT90S":      90,
+		"PT1H0M0S":   3600,
+		// Unreadable, absent, or longer than any talk: nothing rather than a
+		// guess, because a wrong number would be believed.
+		"":        0,
+		"1:10:45": 0,
+		"PT":      0,
+		"PT200H":  0,
+		"P1DT2H":  0,
+	} {
+		f := durationOf(t, iso)
+		if f.DurationS != want {
+			t.Errorf("%q = %d, want %d", iso, f.DurationS, want)
+		}
+	}
+}
+
+func durationOf(t *testing.T, iso string) script.Fields {
+	t.Helper()
+	r, err := script.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ld := `{"name":"Лекция","author":{"name":"Леонид Тугутов"},"datePublished":"2023-01-23"`
+	if iso != "" {
+		ld += `,"duration":"` + iso + `"`
+	}
+	ld += `}`
+	html := `<html lang="ru"><body><script type="application/ld+json">` + ld +
+		`</script><div itemprop="transcript"><p>Текст.</p></div></body></html>`
+	got, err := r.Run(context.Background(), "audioveda",
+		script.Page{HTML: html}, []script.Item{{URL: "u", Filename: "x.mp3"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got["u"]
+}
