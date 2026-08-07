@@ -64,8 +64,11 @@ type Fields struct {
 	Language        string   `json:"language"`
 	CollectionTitle string   `json:"collection_title"`
 	// DurationS is how long the recording runs, where the archive says so.
-	DurationS  int      `json:"duration_s"`
-	References []string `json:"references"`
+	DurationS int `json:"duration_s"`
+	// References are the scripture passages the line cites, already folded to
+	// the canon. Objects rather than "BG 2.13" strings: a code with a space in
+	// it cannot survive being cut back apart on the first one.
+	References []domain.Ref `json:"references"`
 
 	// Complete is the script asserting it accounted for the whole of what the
 	// page said about this file — that the fields left empty are empty because
@@ -224,6 +227,17 @@ func (r *Runner) start(ctx context.Context, sourceID string) (*goja.Runtime, cha
 	// looks like is knowledge about this corpus and not about any site, so it
 	// lives in domain; the script only says which line to look at.
 	if err := vm.Set("speaker", domain.Speaker); err != nil {
+		return nil, nil, err
+	}
+	// Which scripture a line cites, and the line with the citation taken out.
+	// Both halves are needed by one script and one half by the others, so the
+	// binding always returns both and a caller ignores what it does not want.
+	//
+	// The canon of scripture names lives in domain for the same reason a
+	// Vaishnava name does: it is knowledge about this corpus, not about a site.
+	// Handing the table to the script instead would move that judgement into
+	// JavaScript once per script, where \b has the same defect it has in Go.
+	if err := vm.Set("refs", readRefs); err != nil {
 		return nil, nil, err
 	}
 

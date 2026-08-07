@@ -58,11 +58,14 @@ func scriptResult(f script.Fields) normalize.Result {
 		DurationS:       f.DurationS,
 	}
 	for _, ref := range f.References {
-		source, tokens, ok := strings.Cut(strings.TrimSpace(ref), " ")
-		if !ok {
+		// A script can only cite what the corpus can address. The model's
+		// answers are checked this way already; the script's were not, so a
+		// script naming a book we have no code for stored the name as if it
+		// were one.
+		if !domain.Addressable(ref.Source) {
 			continue
 		}
-		expanded, _ := domain.ExpandRefs(source, tokens)
+		expanded, _ := domain.ExpandRefs(ref.Source, ref.Tokens)
 		r.References = append(r.References, expanded...)
 	}
 	return r

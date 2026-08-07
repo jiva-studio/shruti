@@ -49,7 +49,7 @@ func Validate(r *Result, knownSources map[string]bool, now time.Time) {
 // DefaultSourceCodes and SourceCodeSet moved to domain, where the canon
 // belongs: it is knowledge about the corpus rather than about reading a page,
 // and reading a question needs the same list.
-var DefaultSourceCodes = domain.ScriptureCodes
+var DefaultSourceCodes = domain.SourceCodes
 
 // SourceCodeSet turns a code list into the lookup Validate wants.
-func SourceCodeSet(codes []string) map[string]bool { return domain.ScriptureCodeSet(codes) }
+func SourceCodeSet(codes []string) map[string]bool { return domain.SourceCodeSet(codes) }

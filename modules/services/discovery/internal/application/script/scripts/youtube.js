@@ -43,6 +43,9 @@ function extract(page, items) {
       author: speaker(doc.title || ''),
       authors: [],
       date: uploadDate(doc.upload_date || ''),
+      // What the title cites. The archive states nothing about scripture, so
+      // the title is the only place a coordinate can be.
+      references: refs(doc.title || '').refs,
       duration_s: doc.duration || 0,
       // The language of the words, where we have words; otherwise what the
       // site says about the recording. Never guessed from the text.

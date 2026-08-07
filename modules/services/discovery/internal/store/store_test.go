@@ -855,3 +855,77 @@ func TestRelinkIsSafeToRunAgain(t *testing.T) {
 		t.Errorf("a second run linked %d more", second)
 	}
 }
+
+// A recording that is read again without being re-normalized writes back what
+// it read, so what it reads has to include who it is by. It did not: Authors
+// was never selected, so every re-visit wrote nobody.
+//
+// It stayed harmless only because a nil slice reaches Postgres as NULL and
+// "NOT (author_id = ANY(NULL))" matches no row. Both halves are fixed together,
+// because fixing either one alone is what would have done the damage.
+func TestAReadRecordingKnowsWhoItIsBy(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+
+	item := &store.Item{
+		MediaURL: "https://a.example/1.mp3", PageID: &page, SourceID: ptr("a"),
+		Author: "Radhanath Swami", Authors: []string{"Radhanath Swami", "Yamuna Devi Dasi"},
+	}
+	if _, err := r.SaveItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	var ids []int64
+	for _, name := range item.Authors {
+		id, err := r.ResolveAuthor(ctx, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := r.SetItemAuthors(ctx, item.ID, ids); err != nil {
+		t.Fatal(err)
+	}
+
+	read, err := r.ItemByMediaURL(ctx, item.MediaURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(read.Authors) != 2 {
+		t.Fatalf("read back %v; a re-visit would write that, unlinking both", read.Authors)
+	}
+}
+
+// And an empty set really does clear the links, rather than quietly doing
+// nothing. The old form was NULL for an empty set, so "this recording is by
+// nobody" was unrepresentable — and would have become "delete everything" the
+// moment somebody tidied the nil away.
+func TestNobodyMeansNobody(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+	page := mustPage(t, r, &store.Page{URL: "https://a.example/p", SourceID: ptr("a")})
+
+	item := &store.Item{MediaURL: "https://a.example/2.mp3", PageID: &page, SourceID: ptr("a"), Author: "Somebody"}
+	if _, err := r.SaveItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	id, err := r.ResolveAuthor(ctx, "Somebody")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetItemAuthors(ctx, item.ID, []int64{id}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetItemAuthors(ctx, item.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	names, err := r.ItemAuthorNames(ctx, item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 0 {
+		t.Errorf("still linked to %v", names)
+	}
+}

@@ -111,8 +111,12 @@ func (r *Repo) SetItemAuthors(ctx context.Context, itemID int64, authorIDs []int
 	}
 	defer tx.Rollback(ctx)
 
+	// Written out rather than "NOT (author_id = ANY($2))", which is NULL for an
+	// empty set and therefore deletes nothing. The difference only ever showed
+	// up as a bug that had not happened yet.
 	if _, err := tx.Exec(ctx,
-		`DELETE FROM discovery.item_authors WHERE item_id = $1 AND NOT (author_id = ANY($2))`,
+		`DELETE FROM discovery.item_authors
+		 WHERE item_id = $1 AND author_id <> ALL(coalesce($2::bigint[], '{}'))`,
 		itemID, authorIDs); err != nil {
 		return err
 	}
