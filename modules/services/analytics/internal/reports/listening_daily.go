@@ -31,22 +31,35 @@ type listeningDailyResult struct {
 }
 
 // listeningDailyQuery buckets listening spans by local calendar day in the
-// requested timezone, over a dense from..to series (missing days -> 0). The
-// span formula mirrors the per-user report: GREATEST(0, to-from) seconds, NULL
-// endpoints excluded. Bucketing is by ended_at (the projection's last-touch
-// time) — see the report doc for the multi-day-session approximation caveat.
+// requested timezone, over a dense from..to series (missing days -> 0). Span =
+// GREATEST(0, to-from) seconds, NULL endpoints excluded. Bucketing is by
+// ended_at (the projection's last-touch time) — see the report doc for the
+// multi-day-session approximation caveat.
+//
+// Storm dedup: a pre-#1214 client reentrancy race could flush hundreds of
+// zero-duration sessions at one instant, all sharing (item, started_at,
+// ended_at, from_position) and differing only in to_position — summed raw they
+// recount the same slice hundreds of times (once inflated the corpus total
+// ~2.8×). We keep every row (client fidelity matters for diagnosis) but collapse
+// each such cluster to MAX(to_position) before summing. A real session — replays
+// included — never shares that exact key, so nothing legitimate is merged.
 const listeningDailyQuery = `
 SELECT to_char(g::date, 'YYYY-MM-DD') AS date,
        COALESCE(t.secs, 0)::bigint    AS seconds
 FROM generate_series($1::date, $2::date, interval '1 day') AS g
 LEFT JOIN (
-    SELECT ((ended_at AT TIME ZONE $3)::date) AS day,
-           SUM(GREATEST(0, to_position - from_position)) AS secs
-    FROM profile.listening_sessions
-    WHERE from_position IS NOT NULL
-      AND to_position   IS NOT NULL
-      AND ended_at >= (($1::date)::timestamp AT TIME ZONE $3)
-      AND ended_at <  ((($2::date + 1))::timestamp AT TIME ZONE $3)
+    SELECT ((d.ended_at AT TIME ZONE $3)::date) AS day,
+           SUM(GREATEST(0, d.mx_to - d.from_position)) AS secs
+    FROM (
+        SELECT user_id, item_id, track_id, started_at, ended_at, from_position,
+               MAX(to_position) AS mx_to
+        FROM profile.listening_sessions
+        WHERE from_position IS NOT NULL
+          AND to_position   IS NOT NULL
+          AND ended_at >= (($1::date)::timestamp AT TIME ZONE $3)
+          AND ended_at <  ((($2::date + 1))::timestamp AT TIME ZONE $3)
+        GROUP BY user_id, item_id, track_id, started_at, ended_at, from_position
+    ) AS d
     GROUP BY day
 ) AS t ON t.day = g::date
 ORDER BY g`
