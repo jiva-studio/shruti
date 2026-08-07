@@ -207,11 +207,23 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 	}
 	// A recording matches when ANY of its references does — a talk covering
 	// sixty verses is findable by every one of them.
-	if q.RefSource != "" {
+	//
+	// One clause, not two. Asked separately, "cites BG" and "cites something
+	// numbered 4" are satisfied by different references on the same recording,
+	// so a talk on ISO 4 that mentions the Bhagavatam once came back as a match
+	// for SB 4 — of which the corpus holds none at all. The more verses a
+	// recording covers the more coordinates it answers to, and one here covers
+	// a thousand.
+	switch {
+	case q.RefSource != "" && q.RefTokens != "":
+		args = append(args, strings.ToUpper(q.RefSource), q.RefTokens)
+		where = append(where, fmt.Sprintf(
+			"EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.source_id = $%d AND r.tokens = $%d)",
+			len(args)-1, len(args)))
+	case q.RefSource != "":
 		add("EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.source_id = $%d)",
 			strings.ToUpper(q.RefSource))
-	}
-	if q.RefTokens != "" {
+	case q.RefTokens != "":
 		add("EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.tokens = $%d)",
 			q.RefTokens)
 	}
