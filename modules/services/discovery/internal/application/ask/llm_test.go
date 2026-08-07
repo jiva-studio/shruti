@@ -13,8 +13,12 @@ func TestALanguageIsACodeOrNothing(t *testing.T) {
 	for given, want := range map[string]string{
 		"ru": "ru", "EN": "en", "russian": "", "Russian": "", "r": "", "": "",
 	} {
-		if got := (reply{Language: given}).filter().Language; got != want {
-			t.Errorf("%q -> %q, want %q", given, got, want)
+		got := (reply{Language: given}).filter().Languages
+		if want == "" && len(got) != 0 {
+			t.Errorf("%q -> %v, want nothing", given, got)
+		}
+		if want != "" && (len(got) != 1 || got[0] != want) {
+			t.Errorf("%q -> %v, want [%q]", given, got, want)
 		}
 	}
 }

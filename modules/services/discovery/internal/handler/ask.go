@@ -34,7 +34,7 @@ func askHandler(svc *ask.Service) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		if req.Query == "" && req.Filter == (ask.Filter{}) {
+		if req.Query == "" && req.Filter.Empty() {
 			writeErr(w, http.StatusBadRequest, "bad_request", "query or filter is required")
 			return
 		}

@@ -297,7 +297,7 @@ func TestAQuestionIsStillASearchWithoutAModel(t *testing.T) {
 // A filter with no question is the plain search, in a body.
 func TestAFilterAloneNeedsNoQuestion(t *testing.T) {
 	h, _ := testRouter(t)
-	code, body := do(t, h, http.MethodPost, "/discovery/search", `{"filter":{"author":"Локанатха Свами"}}`)
+	code, body := do(t, h, http.MethodPost, "/discovery/search", `{"filter":{"authors":["Локанатха Свами"]}}`)
 	if code != http.StatusOK {
 		t.Fatalf("= %d %v", code, body)
 	}

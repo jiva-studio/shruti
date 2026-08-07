@@ -42,22 +42,32 @@ type HitCollection struct {
 }
 
 // Query is free text plus the structured filters that narrow it.
+//
+// The narrowing fields are lists because that is how they are asked: a person
+// choosing speakers in an interface ticks several, and one of them silently
+// winning is not an answer to what they asked.
 type Query struct {
-	Text   string
-	Author string
-	// AuthorIDs are the people Author resolved to, filled in before the query
+	Text    string
+	Authors []string
+	// AuthorIDs are the people Authors resolved to, filled in before the query
 	// runs so the filter can be an indexed equality rather than a text match.
 	AuthorIDs []int64
-	Language  string
-	Source    string
-	RefSource string
-	RefTokens string
+	Languages []string
+	// Sources are scriptures — BG, SB, CC_MADHYA — which is what a source is in
+	// this corpus and in the client. Which archive a recording was found in is
+	// not something anybody searches by.
+	Sources []string
+	// Tokens is a coordinate within those scriptures: "2.13".
+	Tokens string
 	// Collection narrows to one cycle, by id or by name.
 	Collection string
 	DateFrom   *time.Time
 	DateTo     *time.Time
 	Limit      int
 	Offset     int
+	// Vector is the query already embedded. Set it to skip the round trip — the
+	// caller may have started it before it knew the rest of the filter.
+	Vector []float32
 }
 
 // Hit is one recording, with the piece of text that matched.
@@ -142,17 +152,30 @@ func (s *Service) resolveAuthors(ctx context.Context, name string) ([]int64, err
 const noAuthor = -1
 
 func (s *Service) prepare(ctx context.Context, q *Query) error {
-	if q.Author == "" || len(q.AuthorIDs) > 0 {
+	if len(q.Authors) == 0 || len(q.AuthorIDs) > 0 {
 		return nil
 	}
-	ids, err := s.resolveAuthors(ctx, q.Author)
-	if err != nil {
-		return err
+	seen := map[int64]bool{}
+	for _, name := range q.Authors {
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		ids, err := s.resolveAuthors(ctx, name)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if !seen[id] {
+				seen[id] = true
+				q.AuthorIDs = append(q.AuthorIDs, id)
+			}
+		}
 	}
-	if len(ids) == 0 {
-		ids = []int64{noAuthor}
+	// Every name given matched nobody, which is an empty answer rather than an
+	// unfiltered one.
+	if len(q.AuthorIDs) == 0 {
+		q.AuthorIDs = []int64{noAuthor}
 	}
-	q.AuthorIDs = ids
 	return nil
 }
 
@@ -169,7 +192,12 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 	}
 
 	var vector, lexical []Hit
-	if s.Embedder != nil {
+	if v := q.Vector; len(v) > 0 {
+		var err error
+		if vector, err = s.vector(ctx, q, v); err != nil {
+			return nil, err
+		}
+	} else if s.Embedder != nil {
 		vecs, err := s.Embedder.Embed(ctx, []string{q.Text})
 		if err != nil {
 			return nil, fmt.Errorf("embed query: %w", err)
@@ -199,11 +227,8 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 		add("EXISTS (SELECT 1 FROM discovery.item_authors ia WHERE ia.item_id = i.id AND ia.author_id = ANY($%d))",
 			q.AuthorIDs)
 	}
-	if q.Language != "" {
-		add("i.language = $%d", q.Language)
-	}
-	if q.Source != "" {
-		add("i.source_id = $%d", q.Source)
+	if len(q.Languages) > 0 {
+		add("i.language = ANY($%d)", q.Languages)
 	}
 	// A recording matches when ANY of its references does — a talk covering
 	// sixty verses is findable by every one of them.
@@ -214,18 +239,22 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 	// for SB 4 — of which the corpus holds none at all. The more verses a
 	// recording covers the more coordinates it answers to, and one here covers
 	// a thousand.
+	codes := make([]string, 0, len(q.Sources))
+	for _, c := range q.Sources {
+		if c = strings.ToUpper(strings.TrimSpace(c)); c != "" {
+			codes = append(codes, c)
+		}
+	}
 	switch {
-	case q.RefSource != "" && q.RefTokens != "":
-		args = append(args, strings.ToUpper(q.RefSource), q.RefTokens)
+	case len(codes) > 0 && q.Tokens != "":
+		args = append(args, codes, q.Tokens)
 		where = append(where, fmt.Sprintf(
-			"EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.source_id = $%d AND r.tokens = $%d)",
+			"EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.source_id = ANY($%d) AND r.tokens = $%d)",
 			len(args)-1, len(args)))
-	case q.RefSource != "":
-		add("EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.source_id = $%d)",
-			strings.ToUpper(q.RefSource))
-	case q.RefTokens != "":
-		add("EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.tokens = $%d)",
-			q.RefTokens)
+	case len(codes) > 0:
+		add("EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.source_id = ANY($%d))", codes)
+	case q.Tokens != "":
+		add("EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id AND r.tokens = $%d)", q.Tokens)
 	}
 	if q.Collection != "" {
 		// A cycle can be named or numbered; both are how a person has it to
@@ -246,9 +275,8 @@ func (s *Service) filters(q Query, args []any) ([]string, []any) {
 }
 
 func (q Query) filtered() bool {
-	return len(q.AuthorIDs) > 0 || q.Language != "" || q.Source != "" ||
-		q.RefSource != "" || q.RefTokens != "" || q.Collection != "" ||
-		q.DateFrom != nil || q.DateTo != nil
+	return len(q.AuthorIDs) > 0 || len(q.Languages) > 0 || len(q.Sources) > 0 ||
+		q.Tokens != "" || q.Collection != "" || q.DateFrom != nil || q.DateTo != nil
 }
 
 const hitCols = `i.id, i.media_url, coalesce(p.url,''), coalesce(i.title,''),
