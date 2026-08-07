@@ -90,20 +90,20 @@ func (c *Counters) Embedded(texts int) {
 
 // Snapshot is what the status endpoint hands over.
 type Snapshot struct {
-	UptimeS        int64            `json:"uptime_s"`
-	PagesFetched   int64            `json:"pages_fetched"`
-	PagesUnchanged int64            `json:"pages_unchanged"`
-	PagesFailed    int64            `json:"pages_failed"`
-	ItemsNew       int64            `json:"items_new"`
-	ItemsChanged   int64            `json:"items_changed"`
-	ChunksIndexed  int64            `json:"chunks_indexed"`
-	ModelCalls     int64            `json:"model_calls"`
-	TextsEmbedded  int64            `json:"texts_embedded"`
+	UptimeS        int64 `json:"uptime_s"`
+	PagesFetched   int64 `json:"pages_fetched"`
+	PagesUnchanged int64 `json:"pages_unchanged"`
+	PagesFailed    int64 `json:"pages_failed"`
+	ItemsNew       int64 `json:"items_new"`
+	ItemsChanged   int64 `json:"items_changed"`
+	ChunksIndexed  int64 `json:"chunks_indexed"`
+	ModelCalls     int64 `json:"model_calls"`
+	TextsEmbedded  int64 `json:"texts_embedded"`
 	// CostUSD is what the normalizer reported. Embedding is billed too and is
 	// not in here: the provider states no usage for it, so TextsEmbedded is
 	// what there is.
-	CostUSD float64 `json:"cost_usd"`
-	Failures       map[string]int64 `json:"failures"`
+	CostUSD  float64          `json:"cost_usd"`
+	Failures map[string]int64 `json:"failures"`
 	// PagesPerMinute is the average over the whole of this process's life, not
 	// a recent rate. It answers "is it moving at all" rather than "how fast
 	// right now"; for the latter, take two readings.

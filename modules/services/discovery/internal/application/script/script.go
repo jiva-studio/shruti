@@ -13,7 +13,9 @@ package script
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -131,6 +133,10 @@ type Answer struct {
 // Runner holds the scripts, compiled once.
 type Runner struct {
 	programs map[string]*goja.Program
+	// versions is what each script hashes to. A page stores the version it was
+	// read with, so correcting a script re-reads that source's pages instead of
+	// leaving them as the old one left them.
+	versions map[string]string
 }
 
 // New compiles every embedded script. A script that will not compile is an
@@ -140,7 +146,7 @@ func New() (*Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Runner{programs: map[string]*goja.Program{}}
+	r := &Runner{programs: map[string]*goja.Program{}, versions: map[string]string{}}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".js") {
 			continue
@@ -153,9 +159,22 @@ func New() (*Runner, error) {
 		if err != nil {
 			return nil, fmt.Errorf("compile %s: %w", e.Name(), err)
 		}
-		r.programs[strings.TrimSuffix(e.Name(), ".js")] = p
+		id := strings.TrimSuffix(e.Name(), ".js")
+		r.programs[id] = p
+		sum := sha256.Sum256(src)
+		r.versions[id] = hex.EncodeToString(sum[:])[:12]
 	}
 	return r, nil
+}
+
+// Version identifies the script a source is read with, so a page read by an
+// older one is not mistaken for a page that is up to date. Empty for a source
+// that has no script, which is most of them.
+func (r *Runner) Version(sourceID string) string {
+	if r == nil {
+		return ""
+	}
+	return r.versions[sourceID]
 }
 
 // Has reports whether a source has a script at all.
@@ -169,14 +188,36 @@ func (r *Runner) Has(sourceID string) bool {
 
 // start compiles a runtime for one call and arms its budget.
 //
-// Nothing is injected: no filesystem, no network, no clock, no randomness. A
-// goja runtime begins with none of them, and this is where they would have to
-// be added on purpose.
+// No filesystem, no network, no clock, no randomness. A goja runtime begins
+// with none of them, and this is where they would have to be added on purpose.
+//
+// Two pure functions are added, and only because the alternative is worse:
+// reading somebody's markup with regular expressions works until a nested
+// element ends the match early or an entity nobody listed survives into the
+// stored text, and both were happening. They take a string and return a string,
+// they touch nothing, and they hold no knowledge of any site — the script still
+// says which part of the page it means.
 func (r *Runner) start(ctx context.Context, sourceID string) (*goja.Runtime, chan struct{}, error) {
 	vm := goja.New()
 	// Fields reach the script under their JSON names, so a script reads
 	// page.url rather than page.URL.
 	vm.SetFieldNameMapper(goja.TagFieldNameMapper("json", true))
+
+	if err := vm.Set("markdown", func(fragment string, opts mdOptions) string {
+		out, err := Markdown(fragment, opts)
+		if err != nil {
+			// A page this cannot be read out of is a page with no text, which
+			// is an ordinary answer here. Failing the whole visit over it would
+			// lose the recording as well as its prose.
+			return ""
+		}
+		return out
+	}); err != nil {
+		return nil, nil, err
+	}
+	if err := vm.Set("pageLanguage", Language); err != nil {
+		return nil, nil, err
+	}
 
 	done := make(chan struct{})
 	go func() {
