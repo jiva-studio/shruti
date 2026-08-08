@@ -846,6 +846,7 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 		// address is part of a name.
 		item.Location = domain.Place(result.Location)
 		item.Language, item.DurationS = result.Language, result.DurationS
+		item.CoverURL = result.CoverURL
 		item.RecordedOn = parseDate(result.Date)
 		item.References = result.References
 		item.NormInputSHA256, item.NormPromptVersion, item.NormModel = hash, version, model
@@ -861,6 +862,7 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 		item.Title, item.Author, item.Location = prior.Title, prior.Author, prior.Location
 		item.Authors = prior.Authors
 		item.Language, item.DurationS, item.RecordedOn = prior.Language, prior.DurationS, prior.RecordedOn
+		item.CoverURL = prior.CoverURL
 		item.References = prior.References
 		item.NormInputSHA256 = prior.NormInputSHA256
 		item.NormPromptVersion, item.NormModel = prior.NormPromptVersion, prior.NormModel

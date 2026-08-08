@@ -56,6 +56,7 @@ func scriptResult(f script.Fields) normalize.Result {
 		Language:        f.Language,
 		CollectionTitle: strings.TrimSpace(f.CollectionTitle),
 		DurationS:       f.DurationS,
+		CoverURL:        strings.TrimSpace(f.CoverURL),
 	}
 	for _, ref := range f.References {
 		// A script can only cite what the corpus can address. The model's

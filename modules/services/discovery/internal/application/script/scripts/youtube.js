@@ -46,6 +46,11 @@ function extract(page, items) {
       // What the title cites. The archive states nothing about scripture, so
       // the title is the only place a coordinate can be.
       references: refs(doc.title || '').refs,
+      // The still, built from the id this very document is keyed by. mqdefault
+      // and not one of the larger ones: it is the only size that exists for
+      // every video and the only one that is not letterboxed, and a picture
+      // that 404s is worse than a small one.
+      cover_url: doc.id ? 'https://i.ytimg.com/vi/' + doc.id + '/mqdefault.jpg' : '',
       duration_s: doc.duration || 0,
       // The language of the words, where we have words; otherwise what the
       // site says about the recording. Never guessed from the text.

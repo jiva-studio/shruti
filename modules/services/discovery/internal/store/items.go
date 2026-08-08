@@ -44,11 +44,14 @@ type Item struct {
 	Title  string
 	Author string
 	// Authors is everyone who spoke; Author is the one written on the recording.
-	Authors         []string
-	Location        string
-	RecordedOn      *time.Time
-	Language        string
-	DurationS       int
+	Authors    []string
+	Location   string
+	RecordedOn *time.Time
+	Language   string
+	DurationS  int
+	// CoverURL is the picture the archive publishes for this recording, as the
+	// script that read the page said it.
+	CoverURL        string
 	References      []domain.Ref
 	CollectionTitle string
 
@@ -71,6 +74,7 @@ type Item struct {
 const itemCols = `id, media_url, source_id, page_id, raw,
 	coalesce(title,''), coalesce(author,''), coalesce(location,''), recorded_on,
 	coalesce(language,''), coalesce(duration_s,0), coalesce(collection_title,''),
+	coalesce(cover_url,''),
 	media_state, media_seen_at, media_missing_since,
 	coalesce(norm_input_sha256,''), coalesce(norm_prompt_version,''), coalesce(norm_model,''),
 	status, first_seen_at, last_seen_at`
@@ -79,7 +83,7 @@ func scanItem(row pgx.Row) (*Item, error) {
 	var it Item
 	err := row.Scan(&it.ID, &it.MediaURL, &it.SourceID, &it.PageID, &it.Raw,
 		&it.Title, &it.Author, &it.Location, &it.RecordedOn,
-		&it.Language, &it.DurationS, &it.CollectionTitle,
+		&it.Language, &it.DurationS, &it.CollectionTitle, &it.CoverURL,
 		&it.MediaState, &it.MediaSeenAt, &it.MediaMissingSince,
 		&it.NormInputSHA256, &it.NormPromptVersion, &it.NormModel,
 		&it.Status, &it.FirstSeenAt, &it.LastSeenAt)
@@ -172,11 +176,11 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 	err = r.pool.QueryRow(ctx, `
 		INSERT INTO discovery.items
 			(media_url, source_id, page_id, raw, title, author, location, recorded_on,
-			 language, duration_s, collection_title, author_key,
+			 language, duration_s, collection_title, author_key, cover_url,
 			 media_state, media_seen_at, media_missing_since,
 			 norm_input_sha256, norm_prompt_version, norm_model, norm_reasons, status)
 		VALUES ($1,$2,$3,$4,nullif($5,''),nullif($6,''),nullif($7,''),$8,
-			 nullif($9,''),nullif($10,0),nullif($11,''),nullif($18,''),
+			 nullif($9,''),nullif($10,0),nullif($11,''),nullif($18,''),nullif($20,''),
 			 $12,$13,NULL,
 			 nullif($14,''),nullif($15,''),nullif($16,''),$19,$17)
 		ON CONFLICT (media_url) DO UPDATE SET
@@ -191,6 +195,9 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 			duration_s          = EXCLUDED.duration_s,
 			collection_title    = EXCLUDED.collection_title,
 			author_key          = EXCLUDED.author_key,
+			-- Kept when a visit did not bring one, so a picture we already have
+			-- is not lost to a page that failed to state it again.
+			cover_url           = coalesce(EXCLUDED.cover_url, discovery.items.cover_url),
 			-- Seeing the file again clears the fact that it was ever missing.
 			media_state         = EXCLUDED.media_state,
 			media_seen_at       = EXCLUDED.media_seen_at,
@@ -206,7 +213,7 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 		it.Language, it.DurationS, it.CollectionTitle,
 		it.MediaState, it.MediaSeenAt,
 		it.NormInputSHA256, it.NormPromptVersion, it.NormModel, it.Status,
-		domain.Key(it.Author), it.NormReasons,
+		domain.Key(it.Author), it.NormReasons, it.CoverURL,
 	).Scan(&it.ID, &isNew)
 	return isNew, err
 }
