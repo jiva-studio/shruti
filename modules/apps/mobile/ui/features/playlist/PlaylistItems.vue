@@ -22,6 +22,10 @@
           <RadialIndicator slot="end" :value="groupProgress(item.rows)" color="medium" />
         </template>
       </TrackListItem>
+      <!-- Rows carry their place in the source collection, resolved from the
+           catalog by usePlaylistGroups. Not counted here on purpose: a group is
+           a run of consecutive queue rows, so counting them would renumber the
+           rest as soon as one is removed. -->
       <template v-for="row in item.rows" :key="row.id">
         <RowDivider />
         <PlaylistRow :row="row" @click="emit('click', $event)" @delete="emit('delete', $event)" />

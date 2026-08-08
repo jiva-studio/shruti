@@ -103,7 +103,16 @@ const adding = ref(false)
 const loading = ref(false)
 
 const coverUrl = computed(() => (coverKey.value ? resolveAssetUrl(coverKey.value) : undefined))
-const rows = mapper.mapRows(() => tracks.value, { context: "discovery" })
+const mappedRows = mapper.mapRows(() => tracks.value, { context: "discovery" })
+
+// A collection has a running order an editor arranged, so each lecture is
+// numbered by its place in it. A topic listing is a ranking, not a sequence —
+// numbering it would claim an order the tracks do not have.
+const rows = computed(() =>
+  props.kind === "topic"
+    ? mappedRows.value
+    : mappedRows.value.map((row, index) => ({ ...row, position: index + 1 }))
+)
 
 const HERO_HEIGHT = 240
 const scrollTop = ref(0)
