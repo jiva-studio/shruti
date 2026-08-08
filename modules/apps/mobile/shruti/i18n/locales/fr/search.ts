@@ -15,16 +15,16 @@ export default {
   readQuestion: "Rechercher",
   clearQuery: "Effacer",
   web: {
-    title: "Trouvé sur Internet",
+    title: "Internet",
     add: "Ajouter à ma bibliothèque",
     empty: "Rien dans les archives que nous indexons.",
     unavailable: "La recherche sur Internet est indisponible pour le moment.",
     more: "Afficher plus",
   },
   library: {
-    title: "Trouvé dans la bibliothèque",
-    empty: "Rien dans la bibliothèque ne correspond.",
-    mine: "Trouvé dans votre bibliothèque",
+    title: "Bibliothèque",
+    empty: "Essayez d'autres mots ou retirez un filtre.",
+    mine: "Bibliothèque personnelle",
   },
   smartLibrary: {
     title: "Bibliothèque intelligente",

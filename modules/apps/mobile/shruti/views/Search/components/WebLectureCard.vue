@@ -1,8 +1,8 @@
 <template>
   <TrackTile
+    :cover="hit.cover_url"
     :title="title"
     :subtitle="subtitle"
-    :cover="hit.media_url"
     :status="add.state.value"
     :progress="{ label: add.stageLabel.value, percent: add.percent.value }"
     :can-retry="true"
@@ -24,7 +24,11 @@ import { useWebLectureAdd } from "../composables/useWebLectureAdd.js"
  * becomes the moment somebody taps the plus. The corner then stops being an
  * offer and starts reporting the stage, on the very same tile.
  *
- * The cover is the address the service gave, used as it came.
+ * The cover is `cover_url`, the picture the archive publishes — the service
+ * works it out and hands it over ready to show. Nothing is derived here, and
+ * the media address never reaches an <img>: it is an mp3 or a watch page, and
+ * pointing a tile at it made the app fetch the recording itself from somebody
+ * else's archive on every search.
  */
 const props = defineProps<{ hit: DiscoveryHit }>()
 

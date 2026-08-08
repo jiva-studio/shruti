@@ -14,16 +14,16 @@ export default {
   readQuestion: "Search",
   clearQuery: "Clear",
   web: {
-    title: "Found on the internet",
+    title: "Internet",
     add: "Add to my library",
     empty: "Nothing on the archives we index.",
     unavailable: "Couldn't reach the internet search right now.",
     more: "Show more",
   },
   library: {
-    title: "Found in the library",
-    empty: "Nothing in the library matches.",
-    mine: "Found in your library",
+    title: "Library",
+    empty: "Try another wording, or clear a filter or two.",
+    mine: "Personal library",
   },
   smartLibrary: {
     title: "Smart library",

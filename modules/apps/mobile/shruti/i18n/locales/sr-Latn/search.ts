@@ -14,16 +14,16 @@ export default {
   readQuestion: "Pretraži",
   clearQuery: "Obriši",
   web: {
-    title: "Pronađeno na internetu",
+    title: "Internet",
     add: "Dodaj u moju biblioteku",
     empty: "Nema ničega u arhivama koje pretražujemo.",
     unavailable: "Pretraga interneta trenutno nije dostupna.",
     more: "Prikaži još",
   },
   library: {
-    title: "Pronađeno u biblioteci",
-    empty: "U biblioteci nema podudaranja.",
-    mine: "Pronađeno u vašoj biblioteci",
+    title: "Biblioteka",
+    empty: "Probajte druge reči ili uklonite neki filter.",
+    mine: "Lična biblioteka",
   },
   smartLibrary: {
     title: "Pametna biblioteka",

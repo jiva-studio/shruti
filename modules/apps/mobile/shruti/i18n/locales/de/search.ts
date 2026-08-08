@@ -14,16 +14,16 @@ export default {
   readQuestion: "Suchen",
   clearQuery: "Löschen",
   web: {
-    title: "Im Internet gefunden",
+    title: "Internet",
     add: "Zu meiner Bibliothek hinzufügen",
     empty: "In den erfassten Archiven ist nichts zu finden.",
     unavailable: "Die Internetsuche ist gerade nicht erreichbar.",
     more: "Mehr anzeigen",
   },
   library: {
-    title: "In der Bibliothek gefunden",
-    empty: "In der Bibliothek passt nichts dazu.",
-    mine: "In deiner Bibliothek gefunden",
+    title: "Bibliothek",
+    empty: "Versuch es mit anderen Worten oder nimm einen Filter weg.",
+    mine: "Eigene Bibliothek",
   },
   smartLibrary: {
     title: "Intelligente Bibliothek",

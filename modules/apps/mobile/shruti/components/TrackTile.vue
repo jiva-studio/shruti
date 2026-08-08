@@ -11,11 +11,10 @@
     @keydown.enter.prevent="onTap"
     @keydown.space.prevent="onTap"
   >
-    <!-- The disc is the floor, not an alternative: an address that turns out
-         not to be an image leaves it showing rather than a hole. -->
-    <div class="cover-placeholder" aria-hidden="true">
-      <IconVinyl :size="28" />
-    </div>
+    <!-- A plain tinted floor, so an address that turns out not to be an image
+         leaves the tile whole rather than a hole. Deliberately empty: a glyph
+         behind the title only competes with it for the same small space. -->
+    <div class="cover-placeholder" aria-hidden="true" />
     <CachedImage v-if="cover" :url="cover" @loaded="loaded = true" />
 
     <!-- One corner, whatever the tile currently is: fetching, broken, not ours
@@ -62,7 +61,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { IconVinyl, IconAlertTriangle, IconReload, IconPlus } from "@tabler/icons-vue"
+import { IconAlertTriangle, IconReload, IconPlus } from "@tabler/icons-vue"
 import { CachedImage } from "@ui/primitives/index.js"
 import IngestProgressBadge from "./IngestProgressBadge.vue"
 
@@ -147,10 +146,6 @@ function onTap(): void {
 .cover-placeholder {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ion-color-medium, #92949c);
 }
 
 .corner {
