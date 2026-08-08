@@ -16,6 +16,9 @@
 //	discovery healthz       — self-call /healthz over localhost; exit 0/1
 //	discovery parse <url>   — fetch one URL, print what came out, write nothing
 //	                          (no credentials: use POST /discovery/parse for those)
+//	discovery refold-authors — fill in the folded spelling of every stored name,
+//	so a speaker can be found however their name was written.
+//
 //	discovery read-refs [--apply] — read the scripture citations out of the
 //	titles we already hold. Prints what it would do; writes only with --apply.
 //
@@ -61,6 +64,8 @@ func main() {
 		os.Exit(runRelink())
 	case "read-refs":
 		os.Exit(runReadRefs(os.Args[2:]))
+	case "refold-authors":
+		os.Exit(runRefold())
 	case "serve":
 		runServe()
 	default:
@@ -383,5 +388,37 @@ func runReadRefs(args []string) int {
 	for source, n := range perSource {
 		slog.InfoContext(ctx, "read_refs_source", "source", source, "recordings", n)
 	}
+	return 0
+}
+
+// runRefold fills in the folded spelling of every stored key.
+//
+// The fold lives in Go, so the migration that adds the column cannot fill it,
+// and a key written before the column existed would never be findable by its
+// other alphabet. Running it twice is harmless: it only touches rows that have
+// no fold yet.
+func runRefold() int {
+	cfg := config.Load()
+	if err := cfg.RequireDatabase(); err != nil {
+		slog.Error("config load failed", "err", err)
+		return 2
+	}
+	logpkg.Setup("lectorium-discovery", cfg.Env, cfg.ServiceVersion)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	pool, err := store.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		slog.ErrorContext(ctx, "db_connect_failed", "err", err.Error())
+		return 1
+	}
+	defer pool.Close()
+
+	done, err := store.NewRepo(pool).RefoldAuthorKeys(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "refold_failed", "folded", done, "err", err.Error())
+		return 1
+	}
+	slog.InfoContext(ctx, "refold_done", "folded", done)
 	return 0
 }

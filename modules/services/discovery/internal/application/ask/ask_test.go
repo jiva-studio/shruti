@@ -3,6 +3,7 @@ package ask_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,6 +43,9 @@ type searcher struct {
 	got     search.Query
 	unknown bool
 	calls   int
+	// speakers is what the dictionary holds, by the spelling that finds them.
+	speakers map[string]search.Speaker
+	asked    []string
 }
 
 func (s *searcher) Search(_ context.Context, q search.Query) ([]search.Hit, error) {
@@ -51,6 +55,18 @@ func (s *searcher) Search(_ context.Context, q search.Query) ([]search.Hit, erro
 
 func (s *searcher) Names(_ context.Context, author string) (bool, error) {
 	return !s.unknown, nil
+}
+
+func (s *searcher) SpeakersNamed(_ context.Context, spellings, _ []string) ([]search.Speaker, error) {
+	s.asked = spellings
+	var out []search.Speaker
+	for _, sp := range spellings {
+		if who, ok := s.speakers[strings.ToLower(sp)]; ok {
+			who.Spelling = sp
+			out = append(out, who)
+		}
+	}
+	return out, nil
 }
 
 func svc(r ask.Reader, s ask.Searcher) *ask.Service {
@@ -282,5 +298,103 @@ func TestAVerseSurvivesAReadingThatFailed(t *testing.T) {
 	}
 	if sourcesOf(s.got) != "BG" || s.got.Tokens != "2.13" {
 		t.Errorf("searched for %v %q", s.got.Sources, s.got.Tokens)
+	}
+}
+
+// "карма ватсала" is a topic and half a name. The reader does not call
+// "ватсала" a speaker — it has no form of address beside it, and 74% of the
+// people this corpus holds are stored without one — so nothing looked him up
+// and his recordings were nowhere in the answer. Nothing in the corpus carries
+// both words either, so no amount of text matching reaches him: only the
+// dictionary does.
+func TestANameWithNoFormOfAddressIsStillFound(t *testing.T) {
+	dictionary := map[string]search.Speaker{
+		// Measured on the corpus: two recordings of his own against two
+		// mentions elsewhere.
+		"ватсала": {Name: "Ватсала дас", Own: 2, Other: 2},
+		// And a word that is a deity far more often than a speaker.
+		"кришна": {Name: "Krishna", Own: 4, Other: 284},
+		// A name nobody could mistake for a word.
+		"парататтва": {Name: "Парататтва дас", Own: 135, Other: 29},
+	}
+
+	// Sure enough to narrow by.
+	s := &searcher{speakers: dictionary}
+	got, err := svc(&reader{}, s).Ask(context.Background(), "парататтва о терпении", ask.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Filter.Authors) != 1 || got.Filter.Authors[0] != "Парататтва дас" {
+		t.Errorf("authors = %v, want the speaker the words name", got.Filter.Authors)
+	}
+
+	// Sure enough to mention, not to narrow by: the answer keeps whatever it
+	// found and says his name beside it.
+	s = &searcher{speakers: dictionary}
+	got, err = svc(&reader{}, s).Ask(context.Background(), "карма ватсала", ask.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Filter.Authors) != 0 {
+		t.Errorf("narrowed to %v on two recordings against two mentions", got.Filter.Authors)
+	}
+	if len(got.Hits) == 0 {
+		t.Error("the topical answer was thrown away")
+	}
+	var offered bool
+	for _, m := range got.Messages {
+		if m.Kind == ask.KindDidYouMean && strings.Contains(m.Text, "Ватсала дас") {
+			offered = true
+		}
+	}
+	if !offered {
+		t.Errorf("he was not offered: %+v", got.Messages)
+	}
+
+	// And a word that is a deity is left alone entirely.
+	s = &searcher{speakers: dictionary}
+	got, err = svc(&reader{}, s).Ask(context.Background(), "кто такой Кришна", ask.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Filter.Authors) != 0 || len(got.Messages) != 0 {
+		t.Errorf("four recordings against two hundred mentions became %v / %+v",
+			got.Filter.Authors, got.Messages)
+	}
+}
+
+// Inside almost every real name there is a false one: "Krishna Hari das" holds
+// a "Krishna" with four recordings and six hundred mentions. The longest run of
+// words wins and the shorter ones inside it are dropped.
+func TestTheLongestNameWins(t *testing.T) {
+	s := &searcher{speakers: map[string]search.Speaker{
+		"krishna hari": {Name: "Krishna Hari", Own: 128, Other: 0},
+		"krishna":      {Name: "Krishna", Own: 4, Other: 643},
+	}}
+	got, err := svc(&reader{}, s).Ask(context.Background(), "krishna hari das on humility", ask.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Filter.Authors) != 1 || got.Filter.Authors[0] != "Krishna Hari" {
+		t.Errorf("authors = %v, want Krishna Hari", got.Filter.Authors)
+	}
+}
+
+// A speaker the reader did name is the reader's to name. The dictionary only
+// speaks when nobody else has.
+func TestTheDictionaryDoesNotOverruleTheReader(t *testing.T) {
+	s := &searcher{speakers: map[string]search.Speaker{
+		"парататтва": {Name: "Парататтва дас", Own: 135, Other: 29},
+	}}
+	r := &reader{give: ask.Filter{Authors: []string{"Шиварама Свами"}}}
+	got, err := svc(r, s).Ask(context.Background(), "парататтва о терпении", ask.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Filter.Authors) != 1 || got.Filter.Authors[0] != "Шиварама Свами" {
+		t.Errorf("authors = %v; the reader had already answered", got.Filter.Authors)
+	}
+	if len(s.asked) != 0 {
+		t.Errorf("the dictionary was consulted anyway: %v", s.asked)
 	}
 }

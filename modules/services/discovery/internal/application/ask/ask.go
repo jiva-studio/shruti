@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/application/search"
 	"github.com/jiva-studio/lectorium/discovery/internal/domain"
@@ -84,6 +85,21 @@ const (
 	KindMatchesNobody = "matches_nobody"
 	// KindNotRead: there was a sentence and nothing read it.
 	KindNotRead = "not_read"
+	// KindDidYouMean: a word of the question names somebody the corpus holds,
+	// firmly enough to mention and not firmly enough to narrow by. The results
+	// are untouched; the caller may offer it and let a person decide.
+	KindDidYouMean = "did_you_mean"
+)
+
+// How sure a spelling has to be that it names a person. Both numbers were
+// measured rather than chosen: over the whole speaker table and every title,
+// the least certain real speaker scored 0.50 and the most certain ordinary word
+// 0.37, so the line between them is wide and empty. Above the upper number the
+// name is unmistakable — Парататтва дас is 135 recordings against 29 mentions,
+// Vaisesika 861 against 1.
+const (
+	nameIsCertain  = 0.80
+	nameIsPossible = 0.45
 )
 
 // Reader turns a sentence into a filter.
@@ -108,6 +124,9 @@ type Searcher interface {
 	// Names reports whether an author filter can match anybody, so an empty
 	// result can say which of the two empties it is.
 	Names(ctx context.Context, author string) (bool, error)
+	// SpeakersNamed finds who the corpus knows under any of these spellings,
+	// with the counts that say whether a spelling is a name or a word.
+	SpeakersNamed(ctx context.Context, spellings, folded []string) ([]search.Speaker, error)
 }
 
 // Service answers a question.
@@ -196,25 +215,22 @@ func (s *Service) Ask(ctx context.Context, question string, given Filter) (*Answ
 		out.Filter.Text = firstNonEmpty(out.Filter.Text, question)
 	}
 
-	// What the question says plainly, whoever else read it. A verse and a
-	// speaker are in the words themselves, and finding them costs microseconds
-	// — so a reading that timed out or came back shrugging loses precision
-	// rather than losing the question.
-	if question != "" {
-		if out.Filter.Ref == "" && len(out.Filter.Sources) == 0 {
-			if refs := domain.Refs(question); len(refs) > 0 {
-				out.Filter.Ref = refs[0].Label()
-			}
+	// What the question says plainly, whoever else read it. A verse is in the
+	// words themselves and costs microseconds to find, so a reading that timed
+	// out or came back shrugging loses precision rather than the question.
+	if question != "" && out.Filter.Ref == "" && len(out.Filter.Sources) == 0 {
+		if refs := domain.Refs(question); len(refs) > 0 {
+			out.Filter.Ref = refs[0].Label()
 		}
-		if len(out.Filter.Authors) == 0 {
-			// Only a speaker the corpus actually holds. A name read out of a
-			// sentence and matching nobody would turn a search with results
-			// into an empty one, which is worse than not having looked.
-			if who := domain.Speaker(question); who != "" {
-				if known, err := s.Searcher.Names(ctx, who); err == nil && known {
-					out.Filter.Authors = []string{who}
-				}
-			}
+	}
+	// And a speaker may be named without being introduced. "карма ватсала" is a
+	// topic and half a name: the reader does not call "ватсала" a speaker, so
+	// nothing looked him up and his two recordings were nowhere in the fifty
+	// eight that came back. Nothing in the corpus carries both words, so no
+	// amount of text matching reaches him either — only the dictionary does.
+	if question != "" && len(out.Filter.Authors) == 0 {
+		if err := s.nameInTheWords(ctx, question, out); err != nil {
+			return nil, err
 		}
 	}
 
@@ -260,6 +276,82 @@ func (s *Service) Ask(ctx context.Context, question string, given Filter) (*Answ
 		out.Hits = hits
 	}
 	return out, nil
+}
+
+// nameInTheWords looks every run of words in the question up in the dictionary
+// of speakers, and decides what to do with whoever it finds.
+//
+// The dictionary comes first and the model second, which is the order the field
+// settled on: an exact lookup is right about nine times in ten where a learned
+// guess is right about nine in ten of *those*. Here it does the half the model
+// cannot — a name with no form of address beside it, which is 74% of the people
+// this corpus holds.
+//
+// The longest run wins and shorter runs inside it are dropped: inside "Krishna
+// Hari das" there is a "Krishna" who has four recordings and six hundred
+// mentions, and taking him would answer a question nobody asked.
+func (s *Service) nameInTheWords(ctx context.Context, question string, out *Answer) error {
+	runs := wordRuns(question)
+	if len(runs) == 0 {
+		return nil
+	}
+	spellings := make([]string, 0, len(runs))
+	folded := make([]string, 0, len(runs))
+	for _, r := range runs {
+		spellings = append(spellings, r)
+		folded = append(folded, domain.Fold(domain.Key(r)))
+	}
+	found, err := s.Searcher.SpeakersNamed(ctx, spellings, folded)
+	if err != nil {
+		return err
+	}
+	best, ok := longest(found)
+	if !ok {
+		return nil
+	}
+	switch p := best.Confidence(); {
+	case p >= nameIsCertain:
+		out.Filter.Authors = []string{best.Name}
+	case p >= nameIsPossible:
+		// Not sure enough to spend somebody's whole answer on. Ватсала дас is
+		// two recordings against two mentions; one more title naming him and he
+		// would not be here at all. So the results stay as they are and the
+		// name is offered beside them.
+		out.Messages = append(out.Messages, Message{
+			Field: "authors", Kind: KindDidYouMean,
+			Text: fmt.Sprintf("%s is in the corpus, with %d recordings", best.Name, best.Own),
+		})
+	}
+	return nil
+}
+
+// wordRuns is every run of one to three words in the question, longest first.
+func wordRuns(question string) []string {
+	words := strings.FieldsFunc(question, func(r rune) bool { return !unicode.IsLetter(r) })
+	var out []string
+	for n := 3; n >= 1; n-- {
+		for i := 0; i+n <= len(words); i++ {
+			out = append(out, strings.Join(words[i:i+n], " "))
+		}
+	}
+	return out
+}
+
+// longest picks the speaker found by the most words, and among equals the one
+// the corpus is surest of.
+func longest(found []search.Speaker) (search.Speaker, bool) {
+	var best search.Speaker
+	var ok bool
+	for _, f := range found {
+		switch {
+		case !ok,
+			len(strings.Fields(f.Spelling)) > len(strings.Fields(best.Spelling)),
+			len(strings.Fields(f.Spelling)) == len(strings.Fields(best.Spelling)) &&
+				f.Confidence() > best.Confidence():
+			best, ok = f, true
+		}
+	}
+	return best, ok
 }
 
 // fold puts what was read over what was given.

@@ -120,17 +120,40 @@ const (
 // happens to appear in. Only a name that matches nobody falls back to a loose
 // match, which is what makes a partial name work.
 func (s *Service) resolveAuthors(ctx context.Context, name string) ([]int64, error) {
+	// The key is the settled spelling of a name; the folded key is that spelling
+	// past its alphabet, so "Vatsala das" finds "Ватсала дас" and "Adi
+	// Gadadhara" finds "Adi Gadadhar".
+	//
+	// Exact and folded are taken together, not one before the other. Tried in
+	// order, the exact tier wins and stops — and "Srila Prabhupada" lands on a
+	// Latin row of 10 recordings while the Cyrillic row of 1,526 sits behind the
+	// fold, unreachable. One person spelled two ways is what the fold is for;
+	// preferring either spelling defeats it.
+	//
+	// A fold can land on two people — it drops what a form of address carries,
+	// and "Govinda Swami" and "Govinda das" are not one man — so it is a way to
+	// look somebody up and never a claim about who they are. Both come back,
+	// which is what a filter asked by name should do. The loose tier stays last
+	// and fires only when neither found anybody.
 	rows, err := s.Pool.Query(ctx, `
 		WITH exact AS (
 			SELECT k.author_id AS id FROM discovery.author_keys k WHERE k.key = $2
+		),
+		folded AS (
+			SELECT k.author_id AS id FROM discovery.author_keys k
+			WHERE $3 <> '' AND k.key_folded = $3
 		)
 		SELECT id FROM exact
+		UNION
+		SELECT id FROM folded
 		UNION
 		SELECT a.id
 		FROM discovery.authors a
 		LEFT JOIN discovery.author_keys k ON k.author_id = a.id
 		WHERE NOT EXISTS (SELECT 1 FROM exact)
-		  AND (k.key LIKE $2 || '%' OR a.name ILIKE '%' || $1 || '%')`, name, domain.Key(name))
+		  AND NOT EXISTS (SELECT 1 FROM folded)
+		  AND (k.key LIKE $2 || '%' OR a.name ILIKE '%' || $1 || '%')`,
+		name, domain.Key(name), domain.Fold(domain.Key(name)))
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +166,70 @@ func (s *Service) resolveAuthors(ctx context.Context, name string) ([]int64, err
 			return nil, err
 		}
 		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// Speaker is somebody the corpus knows under a spelling that was asked for,
+// with how firmly that spelling names a person rather than an ordinary word.
+type Speaker struct {
+	// Spelling is the words from the question that found them.
+	Spelling string
+	Name     string
+	// Own is how many recordings they are the speaker of; Other is how many
+	// other people's recordings merely mention the spelling in their title.
+	Own   int
+	Other int
+}
+
+// Confidence is Own out of everything the spelling touches. Measured against
+// the corpus, every real speaker scored 0.50 or better and every ordinary word
+// 0.37 or worse: Krishna is 4 recordings against 284 mentions, Vrindavan 42
+// against 434, while Ватсала дас is 2 against 2 and Парататтва дас 135 against
+// 29.
+func (s Speaker) Confidence() float64 {
+	if s.Own+s.Other == 0 {
+		return 0
+	}
+	return float64(s.Own) / float64(s.Own+s.Other)
+}
+
+// SpeakersNamed finds who the corpus knows under any of these spellings.
+//
+// The spellings come folded, so a name is found past its alphabet; the counts
+// come back with them because whether a word is a name at all is a question
+// about this corpus and not about language.
+func (s *Service) SpeakersNamed(ctx context.Context, spellings, folded []string) ([]Speaker, error) {
+	if len(spellings) == 0 {
+		return nil, nil
+	}
+	rows, err := s.Pool.Query(ctx, `
+		WITH want AS (SELECT * FROM unnest($1::text[], $2::text[]) AS t(spelling, fold)),
+		found AS (
+			SELECT w.spelling, a.id, a.name
+			FROM want w
+			JOIN discovery.author_keys k ON k.key_folded = w.fold
+			JOIN discovery.authors a ON a.id = k.author_id
+		)
+		SELECT f.spelling, f.name,
+			(SELECT count(*) FROM discovery.item_authors ia WHERE ia.author_id = f.id),
+			(SELECT count(*) FROM discovery.items i
+			 WHERE i.title ILIKE '%' || f.spelling || '%'
+			   AND NOT EXISTS (SELECT 1 FROM discovery.item_authors ia
+			                   WHERE ia.item_id = i.id AND ia.author_id = f.id))
+		FROM found f`, spellings, folded)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Speaker
+	for rows.Next() {
+		var sp Speaker
+		if err := rows.Scan(&sp.Spelling, &sp.Name, &sp.Own, &sp.Other); err != nil {
+			return nil, err
+		}
+		out = append(out, sp)
 	}
 	return out, rows.Err()
 }
@@ -416,22 +503,47 @@ func (s *Service) useExactScan(ctx context.Context, tx pgx.Tx, q Query) (bool, e
 	return n <= exactScanMax, nil
 }
 
-// lexical matches the words themselves. Postgres ships no configuration for
-// several of the languages here, so the simple configuration is used
-// throughout: no stemming, but no wrong stemming either.
+// lexical matches the words themselves, in the language they are written in.
+//
+// It used to match them in no language at all — the `simple` configuration,
+// chosen so that nothing would be stemmed wrongly. What it cost was every
+// question shaped like a sentence: "лекции о карме" asks for 'лекции' AND 'о'
+// AND 'карме', and a title contains none of those three, so the lane returned
+// nothing and the fusion had one opinion to fuse. Measured before and after on
+// the same corpus: 5 chunks against 669.
+//
+// And a sentence is still asked for whole first, then loosened once. Requiring
+// every word finds the exact talk when it exists; requiring any of them, ranked
+// by how many matched, finds something when it does not. One step, not a
+// cascade — a search that quietly drops half a question cannot explain itself.
 func (s *Service) lexical(ctx context.Context, q Query) ([]Hit, error) {
+	hits, err := s.lexicalWith(ctx, q, allWords)
+	if err != nil || len(hits) > 0 {
+		return hits, err
+	}
+	return s.lexicalWith(ctx, q, anyWord)
+}
+
+// allWords wants the whole sentence; anyWord wants as much of it as a chunk
+// happens to hold, and lets the rank sort out how much that was.
+const (
+	allWords = "(websearch_to_tsquery('russian', $1) || websearch_to_tsquery('english', $1))"
+	anyWord  = "discovery.words_tsquery($1)"
+)
+
+func (s *Service) lexicalWith(ctx context.Context, q Query, query string) ([]Hit, error) {
 	where, args := s.filters(q, []any{q.Text})
-	clause := append([]string{"to_tsvector('simple', c.text) @@ websearch_to_tsquery('simple', $1)"}, where...)
+	clause := append([]string{"discovery.chunk_tsv(c.text) @@ " + query}, where...)
 	args = append(args, candidates)
 
 	sql := fmt.Sprintf(`
-		SELECT %s, ts_rank(to_tsvector('simple', c.text), websearch_to_tsquery('simple', $1)) AS score
+		SELECT %s, ts_rank(discovery.chunk_tsv(c.text), %s) AS score
 		FROM discovery.chunks c
 		JOIN discovery.items i ON i.id = c.item_id
 		LEFT JOIN discovery.pages p ON p.id = i.page_id`+collectionJoin+`
 		WHERE %s
 		ORDER BY score DESC
-		LIMIT $%d`, hitCols, strings.Join(clause, " AND "), len(args))
+		LIMIT $%d`, hitCols, query, strings.Join(clause, " AND "), len(args))
 
 	rows, err := s.Pool.Query(ctx, sql, args...)
 	if err != nil {
