@@ -16,6 +16,7 @@ export default {
   web: {
     title: "Internet",
     add: "Hozzáadás a könyvtáramhoz",
+    prompt: "Írj be egy keresőkifejezést.",
     empty: "Nincs semmi az általunk feldolgozott archívumokban.",
     unavailable: "Az internetes keresés most nem érhető el.",
     more: "Több megjelenítése",

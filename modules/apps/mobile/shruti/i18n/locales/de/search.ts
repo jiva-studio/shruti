@@ -16,6 +16,7 @@ export default {
   web: {
     title: "Internet",
     add: "Zu meiner Bibliothek hinzufügen",
+    prompt: "Gib einen Suchbegriff ein.",
     empty: "In den erfassten Archiven ist nichts zu finden.",
     unavailable: "Die Internetsuche ist gerade nicht erreichbar.",
     more: "Mehr anzeigen",

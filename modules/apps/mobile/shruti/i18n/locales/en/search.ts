@@ -16,6 +16,7 @@ export default {
   web: {
     title: "Internet",
     add: "Add to my library",
+    prompt: "Type a query to search.",
     empty: "Nothing on the archives we index.",
     unavailable: "Couldn't reach the internet search right now.",
     more: "Show more",
