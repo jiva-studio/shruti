@@ -2876,16 +2876,20 @@
   "167": {
     "suite_id": 3,
     "automation": 2,
-    "title": "Lectures found on other archives are offered in two shapes, and adding one is Pro-gated",
-    "description": "The library tab's search reaches beyond the local catalog to the archives we index. What comes back is rendered by the shape of the source material: a recording published as video shows its poster in a carousel, a file on a web server has none and reads as a row. Adding either one is a Pro capability, so a free account is sent to the paywall rather than starting a fetch it is not entitled to. Offline, with the search service stubbed.",
-    "preconditions": "Offline boot on a clean user db (free tier). The discovery search endpoint is stubbed with two hits — one YouTube address and one direct mp3.",
+    "title": "Tracks found on other archives use the library's own tile, and adding one is Pro-gated",
+    "description": "The library tab's search reaches beyond the local catalog to the archives we index. What comes back is rendered with the same tile the personal library is made of — a hit is that object already, one nobody has added yet — so the corner offers a plus and, once tapped, reports the fetch stage on the very same tile. The shelf is a glance; its chevron opens the full set on its own page. Adding is a Pro capability, so a free account is sent to the paywall rather than starting a fetch it is not entitled to. Offline, with the search service stubbed.",
+    "preconditions": "Offline boot on a clean user db (free tier). The discovery search endpoint is stubbed with two hits.",
     "steps": [
       {
         "action": "Type a query into the docked search field on the library tab.",
-        "expected": "A \"found on the internet\" section appears above the library results, holding a poster card in a carousel for the video-hosted lecture and a plain row for the file-hosted one."
+        "expected": "A \"found on the internet\" shelf appears above the library results, one tile per hit, each offering a plus."
       },
       {
-        "action": "Tap the add control on the poster card as a free user.",
+        "action": "Tap the chevron on the shelf header.",
+        "expected": "The full set opens on its own page at /tabs/search/web, carrying the query, and shows the same tiles."
+      },
+      {
+        "action": "Tap the plus on a tile as a free user.",
         "expected": "The paywall opens; no ingest is started."
       }
     ],

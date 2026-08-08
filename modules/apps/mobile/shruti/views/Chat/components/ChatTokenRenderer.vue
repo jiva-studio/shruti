@@ -140,6 +140,7 @@ import { parseChatMarkers } from "@lib/chat/chatMarkers.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { useIngestStatusFor } from "@shruti/composables/useIngestStatusFor.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { CitationCoords } from "../composables/useCitationMeta.js"
 import AccentFrame from "@lib/ui/chat/AccentFrame.vue"
@@ -176,33 +177,11 @@ const library = useLibraryStore()
 // repeated calls are free.
 void library.ensureLoaded()
 const app = useShruti()
-const { locale, t, te } = useI18n()
+const { locale } = useI18n()
 
-/**
- * Live ingest status for an add-to-library candidate, matched to its library
- * item by source URL. Drives the card's inline progress (stage + download
- * percent) while the lecture ingests, so the user sees it advance without
- * leaving chat. Undefined once ready / never added — the card falls back to its
- * add / done chrome.
- */
-function ingestStatus(
-  url: string | undefined
-): { kind: "pending" | "failed"; label: string; percent?: number } | undefined {
-  if (!url) return undefined
-  // Match by the deterministic job id (= item id), which exists from submit —
-  // the processing row lacks sourceUrl, so a source match alone would miss it.
-  const id = library.ingestIdForUrl(url)
-  if (!id) return undefined
-  const status = library.getById(id)?.status
-  if (status === "ready") return undefined // done → the card's checkmark
-  if (status === "failed") return { kind: "failed", label: t("library.status.failed") }
-  // queued / processing, or just-submitted before its row synced: show progress.
-  // The ring shows the percent, so the label is the stage name only.
-  const stage = library.liveStages.get(id)
-  const key = stage ? `library.status.stages.${stage}` : ""
-  const base = key && te(key) ? t(key) : t("library.status.processing")
-  return { kind: "pending", label: base, percent: library.livePercents.get(id) }
-}
+/** Where a track the chat offered is in the pipeline. One rule, shared with the
+ *  search results — see `useIngestStatusFor`. */
+const ingestStatus = useIngestStatusFor()
 
 // MediaCard turns a relative storage path into the active server's CDN URL.
 const storagePublicUrlGet = (path: string): string => app.storagePublicUrl.get(path)
