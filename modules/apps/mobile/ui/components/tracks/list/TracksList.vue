@@ -1,5 +1,5 @@
 <template>
-  <IonList>
+  <IonList :class="{ flush }">
     <IonItem v-if="rows.length === 0" lines="none">
       <IonLabel color="medium">{{ emptyMessage }}</IonLabel>
     </IonItem>
@@ -38,8 +38,21 @@ import type { UiTrackRow } from "./types.js"
 interface Props {
   rows: readonly UiTrackRow[]
   emptyMessage?: string
+  /** Drop the list's own top padding — for a list that sits directly under a
+   *  section header, which already owns the gap above the first row. */
+  flush?: boolean
 }
 
-withDefaults(defineProps<Props>(), { emptyMessage: "" })
+withDefaults(defineProps<Props>(), { emptyMessage: "", flush: false })
 defineEmits<{ select: [trackId: string] }>()
 </script>
+
+<style scoped>
+/* The section header owns the gap below it; cancel the list's intrinsic top
+   (Ionic's own padding plus the first item's) so nothing adds to it. */
+ion-list.flush {
+  --padding-top: 0;
+  padding-top: 0;
+  margin-top: -7px;
+}
+</style>
