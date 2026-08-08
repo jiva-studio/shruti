@@ -79,6 +79,12 @@ type Config struct {
 
 	EmbedModel string
 	EmbedDim   int
+
+	// AuthPublicKeyFile is the PEM RSA public half of the signer whose tokens
+	// /discovery/search accepts. Unprefixed on purpose: it is the platform's
+	// key, the same file the orchestrator reads, and giving it a second name
+	// here would be two names for one path. Unset means that route refuses.
+	AuthPublicKeyFile string
 }
 
 // Load reads the environment. It does not require a database, because the
@@ -117,6 +123,8 @@ func Load() *Config {
 
 		EmbedModel: env("SHRUTI_DISCOVERY_EMBED_MODEL", "openai/text-embedding-3-small"),
 		EmbedDim:   envInt("SHRUTI_DISCOVERY_EMBED_DIM", 1536),
+
+		AuthPublicKeyFile: env("AUTH_JWT_PUBLIC_KEY_FILE", ""),
 	}
 	if cfg.MaxBodyBytes <= 0 {
 		cfg.MaxBodyBytes = 8 << 20

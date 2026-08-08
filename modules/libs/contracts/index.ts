@@ -96,3 +96,19 @@ export type {
   IngestStatusResponse,
   IIngestClient,
 } from "./ingest/ingestClient.js"
+
+/* -------------------------------------------------------------------------- */
+/*  Discovery search wire protocol (POST /discovery/search) — the index of     */
+/*  lectures published on archives we do not own. Mirrored from the discovery  */
+/*  Go handler; the `IDiscoveryClient` port is consumed by the search surface  */
+/*  and implemented by an @infra HTTP adapter.                                 */
+/* -------------------------------------------------------------------------- */
+export type {
+  DiscoveryFilter,
+  DiscoverySearchRequest,
+  DiscoveryHit,
+  DiscoveryHitCollection,
+  DiscoveryMessage,
+  DiscoverySearchResponse,
+  IDiscoveryClient,
+} from "./discovery/discoveryClient.js"

@@ -1,7 +1,7 @@
 <template>
   <!-- Three pulsing dots — the web mirror of the app's `<IonSpinner name="dots" />`.
        Rendered as an SVG so the parent slot rule `.spinner :deep(*) { width/height: 100% }`
-       (StatusPill / ChatComposer) sizes the whole glyph without squishing the dots:
+       (StatusPill / FloatingInput) sizes the whole glyph without squishing the dots:
        SVG <circle> geometry comes from cx/cy/r, so the ignored width/height do no harm. -->
   <svg class="chat-dots" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <circle class="d1" cx="5" cy="12" r="2.4" />

@@ -9,12 +9,20 @@ export default {
   noResultsAction: "Szűrők módosítása",
   lecturesTitle: "Előadások",
   recommendedForYou: "Ajánlások",
-  allLectures: "Összes előadás",
   topicsSection: "Előadások különböző témákban",
   topics: "Témák",
-  fullLibrary: {
-    title: "Keresés a könyvtárban",
-    subtitle: "Keresés {count} előadás között | Keresés {count} előadás között",
+  readQuestion: "Keresés",
+  clearQuery: "Törlés",
+  web: {
+    title: "Az interneten találtuk",
+    add: "Hozzáadás a könyvtáramhoz",
+    empty: "Nincs semmi az általunk feldolgozott archívumokban.",
+    unavailable: "Az internetes keresés most nem érhető el.",
+    more: "Több megjelenítése",
+  },
+  library: {
+    title: "A könyvtáradban találtuk",
+    empty: "A könyvtáradban nincs találat.",
   },
   smartLibrary: {
     title: "Okos könyvtár",
@@ -24,6 +32,7 @@ export default {
     addToPlaylist: "Hozzáadás a lejátszási listához",
     downloadAgain: "Letöltés újra",
     alreadyInPlaylist: "Már a lejátszási listán",
+    alreadyInLibrary: "Már a könyvtáradban van",
     openTranscript: "Átirat megnyitása",
     share: "Megosztás",
   },
@@ -46,6 +55,7 @@ export default {
     error: "Nem sikerült előkészíteni a fájlt. Kérlek, próbáld újra.",
   },
   filters: {
+    clearOne: "Szűrő eltávolítása: {name}",
     any: "Bármely",
     sort: "Rendezés",
     authors: "Szerzők",

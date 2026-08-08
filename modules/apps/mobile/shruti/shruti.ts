@@ -23,7 +23,12 @@ import type {
   IShareVideoService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
-import type { IProactiveChatService, ISyncClient, IIngestClient } from "@lib/contracts"
+import type {
+  IProactiveChatService,
+  ISyncClient,
+  IIngestClient,
+  IDiscoveryClient,
+} from "@lib/contracts"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
@@ -131,6 +136,11 @@ export interface Shruti {
    */
   readonly ingestClient: IIngestClient
   /**
+   * Discovery search transport (POST /discovery/search) — the index of lectures
+   * published on archives we do not own. The search surface drives it.
+   */
+  readonly discoveryClient: IDiscoveryClient
+  /**
    * Resolves this device's stable id (Capacitor `Device.getId()`) — the HLC
    * tiebreak, the `sync_state` key, and the pull `X-Device-Id`. Wiring it also
    * turns on the sync-journal decorator + engine repositories in the bundle.
@@ -206,6 +216,8 @@ export interface InitShrutiSeed {
   readonly syncClient: ISyncClient
   /** Orchestrator ingest control-plane transport (add/retry + live status). */
   readonly ingestClient: IIngestClient
+  /** Discovery search transport — lectures on archives we do not own. */
+  readonly discoveryClient: IDiscoveryClient
   /** Stable device-id provider; enables journaling + the sync engine repos. */
   readonly getDeviceId: () => Promise<string>
   /** Factory invoked inside `initShruti` with a `() => databases.user`
@@ -313,6 +325,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     chatResumeService,
     syncClient: seed.syncClient,
     ingestClient: seed.ingestClient,
+    discoveryClient: seed.discoveryClient,
     getDeviceId: seed.getDeviceId,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,

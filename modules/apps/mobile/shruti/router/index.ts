@@ -86,11 +86,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@shruti/views/Collection/CollectionListView.vue"),
       },
       {
-        path: "search/tracks",
-        name: "tracks",
-        component: () => import("@shruti/views/Tracks/TracksView.vue"),
-      },
-      {
         // Personal library (epic #1236) — user-added lectures, NOT the corpus.
         // Named `my-library` to avoid colliding with the library-language /
         // landing "library" surfaces.

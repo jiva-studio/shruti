@@ -1,18 +1,27 @@
 <template>
   <div class="chat-inputbar">
     <ChatUsageChip :chat-usage="chatUsage" :quota-locked="quotaLocked" />
-    <ChatComposer
+    <FloatingInput
       ref="composerRef"
       :sending="sending"
       :disabled="quotaLocked"
       :placeholder="placeholder"
-      :send-aria-label="sendAriaLabel"
       :compose-aria-label="ariaLabel"
-      @send="(t: string) => emit('send', t)"
-      @cancel="emit('cancel')"
+      @submit="onSubmit"
     >
-      <template #spinner><IonSpinner name="dots" /></template>
-    </ChatComposer>
+      <template #action="{ hasText, sending: streaming, disabled, submit }">
+        <ChatSendButton
+          :sending="streaming"
+          :disabled="disabled"
+          :has-text="hasText"
+          :label="sendAriaLabel ?? placeholder"
+          @send="submit()"
+          @cancel="emit('cancel')"
+        >
+          <template #spinner><IonSpinner name="dots" /></template>
+        </ChatSendButton>
+      </template>
+    </FloatingInput>
   </div>
 </template>
 
@@ -20,7 +29,8 @@
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
-import ChatComposer from "@lib/ui/chat/ChatComposer.vue"
+import FloatingInput from "@lib/ui/input/FloatingInput.vue"
+import ChatSendButton from "@lib/ui/chat/ChatSendButton.vue"
 import ChatUsageChip from "./ChatUsageChip.vue"
 
 const props = defineProps<{
@@ -44,7 +54,17 @@ const emit = defineEmits<{ send: [text: string]; cancel: [] }>()
 
 const { t } = useI18n()
 
-const composerRef = ref<{ setText: (s: string) => void; focus: () => void } | null>(null)
+const composerRef = ref<{
+  setText: (s: string) => void
+  focus: () => void
+  clear: () => void
+} | null>(null)
+
+/** The field hands the text over and empties itself; the button and Enter both
+ *  go through it, so there is one path out of the capsule. */
+function onSubmit(textValue: string): void {
+  emit("send", textValue)
+}
 
 /** Format the `{when}` fragment for the lockout copy: `"at HH:MM"` when
  *  the reset lands later today (local), `"tomorrow at HH:MM"` when it

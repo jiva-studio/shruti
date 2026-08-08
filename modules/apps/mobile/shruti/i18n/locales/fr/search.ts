@@ -10,12 +10,20 @@ export default {
   noResultsAction: "Modifier les filtres",
   lecturesTitle: "Conférences",
   recommendedForYou: "Recommandations",
-  allLectures: "Toutes les conférences",
   topicsSection: "Conférences sur divers thèmes",
   topics: "Thèmes",
-  fullLibrary: {
-    title: "Rechercher dans la bibliothèque",
-    subtitle: "Rechercher dans {count} conférence | Rechercher dans {count} conférences",
+  readQuestion: "Rechercher",
+  clearQuery: "Effacer",
+  web: {
+    title: "Trouvé sur Internet",
+    add: "Ajouter à ma bibliothèque",
+    empty: "Rien dans les archives que nous indexons.",
+    unavailable: "La recherche sur Internet est indisponible pour le moment.",
+    more: "Afficher plus",
+  },
+  library: {
+    title: "Trouvé dans votre bibliothèque",
+    empty: "Rien dans votre bibliothèque ne correspond.",
   },
   smartLibrary: {
     title: "Bibliothèque intelligente",
@@ -25,6 +33,7 @@ export default {
     addToPlaylist: "Ajouter à la playlist",
     downloadAgain: "Télécharger à nouveau",
     alreadyInPlaylist: "Déjà dans la playlist",
+    alreadyInLibrary: "Déjà dans votre bibliothèque",
     openTranscript: "Ouvrir la transcription",
     share: "Partager",
   },
@@ -47,6 +56,7 @@ export default {
     error: "Impossible de préparer le fichier. Veuillez réessayer.",
   },
   filters: {
+    clearOne: "Retirer le filtre : {name}",
     any: "Tous",
     sort: "Tri",
     authors: "Auteurs",

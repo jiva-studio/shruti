@@ -76,7 +76,7 @@ test(
       await capture()
 
       // …and the library STILL keeps its lifetime badge after the re-add. The
-      // search tab kept its `/tabs/search/tracks` stack, so return directly.
+      // search tab kept its query, so returning to it is enough.
       await gotoTab(page, "search")
       await searchInput(page).fill(COMPLETED_TITLE)
       const libRow2 = trackRows(page).filter({ hasText: COMPLETED_TITLE })

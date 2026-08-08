@@ -10,12 +10,20 @@ export default {
   noResultsAction: "ফিল্টার পরিবর্তন করুন",
   lecturesTitle: "লেকচার",
   recommendedForYou: "সুপারিশ",
-  allLectures: "সব লেকচার",
   topicsSection: "বিভিন্ন বিষয়ের লেকচার",
   topics: "প্রসঙ্গ",
-  fullLibrary: {
-    title: "লাইব্রেরিতে অনুসন্ধান করুন",
-    subtitle: "{count}টি লেকচারে অনুসন্ধান | {count}টি লেকচারে অনুসন্ধান",
+  readQuestion: "খুঁজুন",
+  clearQuery: "মুছুন",
+  web: {
+    title: "ইন্টারনেটে পাওয়া গেছে",
+    add: "আমার লাইব্রেরিতে যোগ করুন",
+    empty: "আমরা যে সংগ্রহশালাগুলি দেখি, সেখানে কিছু নেই।",
+    unavailable: "ইন্টারনেট অনুসন্ধান এখন উপলব্ধ নয়।",
+    more: "আরও দেখুন",
+  },
+  library: {
+    title: "আপনার লাইব্রেরিতে পাওয়া গেছে",
+    empty: "আপনার লাইব্রেরিতে কিছু মেলেনি।",
   },
   smartLibrary: {
     title: "স্মার্ট লাইব্রেরি",
@@ -25,6 +33,7 @@ export default {
     addToPlaylist: "প্লেলিস্টে যোগ করুন",
     downloadAgain: "আবার ডাউনলোড করুন",
     alreadyInPlaylist: "ইতিমধ্যে প্লেলিস্টে আছে",
+    alreadyInLibrary: "ইতিমধ্যে আপনার লাইব্রেরিতে আছে",
     openTranscript: "ট্রান্সক্রিপ্ট খুলুন",
     share: "শেয়ার করুন",
   },
@@ -47,6 +56,7 @@ export default {
     error: "ফাইলটি প্রস্তুত করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
   },
   filters: {
+    clearOne: "ফিল্টার সরান: {name}",
     any: "যেকোনো",
     sort: "সাজান",
     authors: "বক্তা",

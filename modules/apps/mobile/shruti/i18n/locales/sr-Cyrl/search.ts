@@ -11,13 +11,20 @@ export default {
   noResultsAction: "Измени филтере",
   lecturesTitle: "Предавања",
   recommendedForYou: "Препоруке",
-  allLectures: "Сва предавања",
   topicsSection: "Предавања о разним темама",
   topics: "Теме",
-  fullLibrary: {
-    title: "Претражи библиотеку",
-    subtitle:
-      "Претражи {count} предавање | Претражи {count} предавања | Претражи {count} предавања",
+  readQuestion: "Претражи",
+  clearQuery: "Обриши",
+  web: {
+    title: "Пронађено на интернету",
+    add: "Додај у моју библиотеку",
+    empty: "Нема ничега у архивама које претражујемо.",
+    unavailable: "Претрага интернета тренутно није доступна.",
+    more: "Прикажи још",
+  },
+  library: {
+    title: "Пронађено у вашој библиотеци",
+    empty: "У вашој библиотеци нема подударања.",
   },
   smartLibrary: {
     title: "Паметна библиотека",
@@ -27,6 +34,7 @@ export default {
     addToPlaylist: "Додај на листу нумера",
     downloadAgain: "Преузми поново",
     alreadyInPlaylist: "Већ на листи нумера",
+    alreadyInLibrary: "Већ у вашој библиотеци",
     openTranscript: "Отвори транскрипт",
     share: "Подели",
   },
@@ -49,6 +57,7 @@ export default {
     error: "Није могуће припремити датотеку. Покушајте поново.",
   },
   filters: {
+    clearOne: "Уклони филтер: {name}",
     any: "Било који",
     sort: "Редослед",
     authors: "Аутори",

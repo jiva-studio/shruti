@@ -20,8 +20,11 @@ test(qase(20, caseTitle(20)), { tag: ["@offline", "@library"] }, async ({ page }
   })
 
   await step(page, 20, 1, async () => {
-    // Drive Ionic infinite-scroll: scroll the list to the bottom until it pages in.
-    const content = page.locator("ion-content").last()
+    // Drive Ionic infinite-scroll: scroll the list to the bottom until it pages
+    // in. Scope to the VISIBLE scroller — Ionic keeps every tab's page mounted,
+    // and search no longer pushes one on top, so "the last ion-content" is some
+    // other tab's rather than this one's.
+    const content = page.locator("ion-content:visible").last()
     for (let i = 0; i < 8; i++) {
       await content.evaluate((el: HTMLElement & { scrollToBottom?: (d: number) => Promise<void> }) =>
         el.scrollToBottom?.(0)
@@ -53,24 +56,34 @@ test(qase(22, caseTitle(22)), { tag: ["@offline", "@library"] }, async ({ page }
 
   await step(page, 22, 1, async () => {
     // Title word: a word taken from a lecture title narrows to matching titles.
-    await searchInput(page).fill("")
+    // Re-widen first — an EMPTY box is the browsing landing now, not the whole
+    // catalog, so "show me everything again" is a broad query.
+    await openLibrary(page)
     await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
     const firstTitle = (await trackTitles(page))[0] ?? ""
     const word = (firstTitle.match(/[A-Za-z]{4,}/g) ?? [])[0]
     expect(word, `no searchable word in title "${firstTitle}"`).toBeTruthy()
 
+    const before = (await trackTitles(page)).join("|")
     await searchInput(page).fill(word)
+    // The word re-queries to a different, non-empty set. NOT "every visible
+    // title contains it": the index is one combined row per lecture — titles,
+    // every reference spelling, locations, tags, dates — so a word can
+    // legitimately match through a tag, and which rows the page shows follows
+    // the Sort facet. Nor a smaller COUNT: both pages fill to PAGE_SIZE.
     await expect
       .poll(
         async () => {
           const titles = await trackTitles(page)
-          return (
-            titles.length > 0 && titles.every((t) => t.toLowerCase().includes(word.toLowerCase()))
-          )
+          return titles.length > 0 && titles.join("|") !== before
         },
         { timeout: 15_000 }
       )
       .toBe(true)
+    // The lecture the word came from is still reachable by it.
+    await expect(trackRows(page).filter({ hasText: word }).first()).toBeVisible({
+      timeout: 15_000,
+    })
   })
 
   await step(page, 22, 2, async () => {

@@ -2,20 +2,70 @@ package handler_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	gjwt "github.com/golang-jwt/jwt/v5"
+
 	"github.com/jiva-studio/shruti/discovery/internal/application/ask"
 	"github.com/jiva-studio/shruti/discovery/internal/application/search"
 	"github.com/jiva-studio/shruti/discovery/internal/handler"
+	"github.com/jiva-studio/shruti/discovery/internal/infra/authjwt"
 	"github.com/jiva-studio/shruti/discovery/internal/metrics"
 	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
+
+// One signer for the whole package. The routes care that a token came from the
+// deployment's signer, never which key that is.
+var testKey = func() *rsa.PrivateKey {
+	k, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	return k
+}()
+
+// testBearer is a token that signer would issue.
+var testBearer = func() string {
+	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, gjwt.RegisteredClaims{
+		Subject:   "user-1",
+		ExpiresAt: gjwt.NewNumericDate(time.Now().Add(time.Hour)),
+	})
+	tok.Header["kid"] = "v1"
+	s, err := tok.SignedString(testKey)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}()
+
+// testVerifier hands the public half over the way a deployment does — as a file.
+func testVerifier(t *testing.T) *authjwt.Verifier {
+	t.Helper()
+	der, err := x509.MarshalPKIXPublicKey(&testKey.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal public key: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "public.pem")
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), 0o600); err != nil {
+		t.Fatalf("write public key: %v", err)
+	}
+	v, err := authjwt.NewFromFile(path)
+	if err != nil {
+		t.Fatalf("verifier: %v", err)
+	}
+	return v
+}
 
 // The HTTP surface had no test at all. What it promises — a status code, a
 // shape, and credentials that go in and never come back out — is exactly the
@@ -44,10 +94,11 @@ func testRouter(t *testing.T) (http.Handler, *store.Repo) {
 	repo := store.NewRepo(pool)
 	searcher := &search.Service{Pool: pool}
 	return handler.NewRouter(handler.RouterDeps{
-		Pool:    pool,
-		Repo:    repo,
-		Ask:     &ask.Service{Searcher: searcher},
-		Metrics: metrics.New(time.Now().UTC()),
+		Pool:     pool,
+		Repo:     repo,
+		Ask:      &ask.Service{Searcher: searcher},
+		Metrics:  metrics.New(time.Now().UTC()),
+		Verifier: testVerifier(t),
 	}), repo
 }
 
@@ -60,6 +111,8 @@ func do(t *testing.T, h http.Handler, method, target, body string) (int, map[str
 		r = httptest.NewRequest(method, target, strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
 	}
+	// Only /discovery/search reads it; the rest are indifferent.
+	r.Header.Set("Authorization", "Bearer "+testBearer)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 
@@ -355,5 +408,63 @@ func TestABrowserMayAsk(t *testing.T) {
 	h.ServeHTTP(rec, plain)
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
 		t.Errorf("a request with no Origin was answered with %q", got)
+	}
+}
+
+// The search route is the only one published past the edge, so it is the only
+// one that asks who is calling. These need no database: the gate answers before
+// anything is looked up, which is the property being checked.
+func gateRouter(v *authjwt.Verifier) http.Handler {
+	return handler.NewRouter(handler.RouterDeps{Ask: &ask.Service{}, Verifier: v})
+}
+
+func askSearch(h http.Handler, bearer string) int {
+	r := httptest.NewRequest(http.MethodPost, "/discovery/search", strings.NewReader(`{"query":"health"}`))
+	r.Header.Set("Content-Type", "application/json")
+	if bearer != "" {
+		r.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w.Code
+}
+
+func TestSearchNeedsAToken(t *testing.T) {
+	h := gateRouter(testVerifier(t))
+	if code := askSearch(h, ""); code != http.StatusUnauthorized {
+		t.Fatalf("no token: got %d, want 401", code)
+	}
+	if code := askSearch(h, "not-a-token"); code != http.StatusUnauthorized {
+		t.Fatalf("junk token: got %d, want 401", code)
+	}
+}
+
+// A key that was never configured must close the route, not open it. The
+// service is otherwise internal; this one address is not, and answering
+// unauthenticated because nobody finished the deployment is how a corpus and an
+// embedding budget become public.
+func TestSearchRefusesWhenNoKeyIsConfigured(t *testing.T) {
+	if code := askSearch(gateRouter(nil), testBearer); code != http.StatusServiceUnavailable {
+		t.Fatalf("nil verifier: got %d, want 503", code)
+	}
+}
+
+// A token this signer did not issue is no token at all.
+func TestSearchRejectsAForeignSigner(t *testing.T) {
+	other, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("keygen: %v", err)
+	}
+	tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, gjwt.RegisteredClaims{
+		Subject:   "user-1",
+		ExpiresAt: gjwt.NewNumericDate(time.Now().Add(time.Hour)),
+	})
+	tok.Header["kid"] = "v1"
+	signed, err := tok.SignedString(other)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if code := askSearch(gateRouter(testVerifier(t)), signed); code != http.StatusUnauthorized {
+		t.Fatalf("foreign signer: got %d, want 401", code)
 	}
 }

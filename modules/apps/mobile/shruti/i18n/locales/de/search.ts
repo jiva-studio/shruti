@@ -9,12 +9,20 @@ export default {
   noResultsAction: "Filter ändern",
   lecturesTitle: "Vorträge",
   recommendedForYou: "Empfehlungen",
-  allLectures: "Alle Vorträge",
   topicsSection: "Vorträge zu verschiedenen Themen",
   topics: "Themen",
-  fullLibrary: {
-    title: "Bibliothek durchsuchen",
-    subtitle: "In {count} Vortrag suchen | In {count} Vorträgen suchen",
+  readQuestion: "Suchen",
+  clearQuery: "Löschen",
+  web: {
+    title: "Im Internet gefunden",
+    add: "Zu meiner Bibliothek hinzufügen",
+    empty: "In den erfassten Archiven ist nichts zu finden.",
+    unavailable: "Die Internetsuche ist gerade nicht erreichbar.",
+    more: "Mehr anzeigen",
+  },
+  library: {
+    title: "In deiner Bibliothek gefunden",
+    empty: "In deiner Bibliothek passt nichts dazu.",
   },
   smartLibrary: {
     title: "Intelligente Bibliothek",
@@ -24,6 +32,7 @@ export default {
     addToPlaylist: "Zur Playlist hinzufügen",
     downloadAgain: "Erneut herunterladen",
     alreadyInPlaylist: "Bereits in der Playlist",
+    alreadyInLibrary: "Bereits in deiner Bibliothek",
     openTranscript: "Transkript öffnen",
     share: "Teilen",
   },
@@ -46,6 +55,7 @@ export default {
     error: "Die Datei konnte nicht vorbereitet werden. Bitte versuche es erneut.",
   },
   filters: {
+    clearOne: "Filter entfernen: {name}",
     any: "Beliebig",
     sort: "Sortierung",
     authors: "Autoren",

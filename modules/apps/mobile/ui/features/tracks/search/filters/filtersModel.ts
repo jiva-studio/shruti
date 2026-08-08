@@ -142,3 +142,28 @@ export function asSingle(section: SearchFilterSectionDef | null): SingleSectionD
 export function asDate(section: SearchFilterSectionDef | null): DateSectionDef | null {
   return section && section.kind === "date" ? section : null
 }
+
+/**
+ * Drop one section's selection, whatever kind it is.
+ *
+ * The sheet clears a section from inside it, where the kind is already in
+ * hand. A chip above the results only knows the key it came from, so the
+ * dispatch lives here rather than being repeated by every caller that has a
+ * key and not a section.
+ *
+ * An unknown key returns the filters unchanged: a stale chip is not worth an
+ * exception.
+ */
+export function clearSection(filters: FiltersModel, key: string): FiltersModel {
+  const next = { ...filters }
+  if (key === "dates") {
+    delete next.dateFrom
+    delete next.dateTo
+    return next
+  }
+  if (key in next) {
+    delete next[key as keyof FiltersModel]
+    return next
+  }
+  return filters
+}

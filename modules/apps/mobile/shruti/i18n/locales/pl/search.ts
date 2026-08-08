@@ -9,13 +9,20 @@ export default {
   noResultsAction: "Zmień filtry",
   lecturesTitle: "Wykłady",
   recommendedForYou: "Rekomendacje",
-  allLectures: "Wszystkie wykłady",
   topicsSection: "Wykłady na różne tematy",
   topics: "Tematy",
-  fullLibrary: {
-    title: "Przeszukaj bibliotekę",
-    subtitle:
-      "Przeszukaj {count} wykład | Przeszukaj {count} wykłady | Przeszukaj {count} wykładów",
+  readQuestion: "Szukaj",
+  clearQuery: "Wyczyść",
+  web: {
+    title: "Znalezione w internecie",
+    add: "Dodaj do mojej biblioteki",
+    empty: "Nie ma nic w archiwach, które przeglądamy.",
+    unavailable: "Wyszukiwanie w internecie jest teraz niedostępne.",
+    more: "Pokaż więcej",
+  },
+  library: {
+    title: "Znalezione w twojej bibliotece",
+    empty: "Nic w twojej bibliotece nie pasuje.",
   },
   smartLibrary: {
     title: "Inteligentna biblioteka",
@@ -25,6 +32,7 @@ export default {
     addToPlaylist: "Dodaj do playlisty",
     downloadAgain: "Pobierz ponownie",
     alreadyInPlaylist: "Już na playliście",
+    alreadyInLibrary: "Już w twojej bibliotece",
     openTranscript: "Otwórz transkrypcję",
     share: "Udostępnij",
   },
@@ -47,6 +55,7 @@ export default {
     error: "Nie udało się przygotować pliku. Spróbuj ponownie.",
   },
   filters: {
+    clearOne: "Usuń filtr: {name}",
     any: "Dowolne",
     sort: "Sortowanie",
     authors: "Autorzy",
