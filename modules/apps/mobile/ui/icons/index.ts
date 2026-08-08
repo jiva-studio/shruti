@@ -1,6 +1,8 @@
 export {
   IconHomeFilled as IconHome,
-  IconLayoutDashboardFilled as IconSearch,
+  // A magnifier, because the tab is search. It used to be a dashboard grid
+  // aliased under this name, which drew four squares and said nothing.
+  IconSearch,
   IconBookmarkFilled as IconBookmark,
   IconSettingsFilled as IconSettings,
   IconPlayerPlayFilled as IconPlay,
