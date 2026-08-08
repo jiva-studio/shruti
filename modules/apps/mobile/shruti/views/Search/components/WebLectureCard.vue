@@ -1,39 +1,39 @@
 <template>
-  <AddableLectureCard
+  <TrackTile
     :title="title"
     :subtitle="subtitle"
-    :cover="cover"
-    :state="add.state.value === 'pending' ? 'pending' : add.state.value"
+    :cover="hit.media_url"
+    :status="add.state.value"
     :progress="{ label: add.stageLabel.value, percent: add.percent.value }"
+    :can-retry="true"
     :add-label="$t('search.web.add')"
-    :retry-label="$t('library.status.retry')"
-    :done-label="$t('search.actions.alreadyInLibrary')"
     @add="onAdd"
+    @retry="onAdd"
   />
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue"
-import AddableLectureCard from "@shruti/components/AddableLectureCard.vue"
+import TrackTile from "@shruti/components/TrackTile.vue"
 import type { DiscoveryHit } from "@lib/contracts"
 import { useWebLectureAdd } from "../composables/useWebLectureAdd.js"
 
 /**
- * A lecture found on YouTube, as a poster card in the carousel — the same
- * `AddableLectureCard` chat shows for a candidate it found, so the two read as
- * one kind of thing.
+ * A track found on an archive we do not own, as a tile in the search results —
+ * the same `TrackTile` the personal library is made of, because that is what it
+ * becomes the moment somebody taps the plus. The corner then stops being an
+ * offer and starts reporting the stage, on the very same tile.
  *
- * The adapter is thinner here than chat's: the state comes from the library
- * store keyed by the media URL, rather than from an action lifecycle.
+ * The cover is the address the service gave, used as it came.
  */
-const props = defineProps<{ hit: DiscoveryHit; cover: string }>()
+const props = defineProps<{ hit: DiscoveryHit }>()
 
 const add = useWebLectureAdd(() => props.hit)
 
 const title = computed(() => props.hit.title || props.hit.media_url)
 
 const subtitle = computed(() =>
-  [props.hit.author, props.hit.recorded_on?.slice(0, 4)].filter(Boolean).join(" · ")
+  [props.hit.author, props.hit.recorded_on?.slice(0, 10)].filter(Boolean).join(" · ")
 )
 
 function onAdd(): void {

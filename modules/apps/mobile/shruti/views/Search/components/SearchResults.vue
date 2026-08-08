@@ -9,11 +9,21 @@
     />
 
     <!-- ── Found on the internet ─────────────────────────────────────────
-         First, because it is the part the user cannot get any other way.
-         It is also the slow half, so it holds its own space while it loads
-         rather than shoving the library results down when it arrives. -->
+         First, because it is the part the user cannot get any other way. It is
+         also the slow half, so it holds its own space while it loads rather
+         than shoving the library results down when it arrives.
+
+         One shelf, one tile — the same one the personal library is made of,
+         because that is what a hit becomes the moment somebody adds it.
+         "See all" opens the full set on its own page; the shelf stays a
+         glance. -->
     <section class="lane">
-      <SectionHeader :title="$t('search.web.title')" />
+      <SectionHeader
+        :title="$t('search.web.title')"
+        :see-all="web.hits.value.length > 0"
+        :see-all-label="$t('search.collections.seeAllNamed', { name: $t('search.web.title') })"
+        @more="emit('see-all-web')"
+      />
 
       <div v-if="web.isLoadingFirstPage.value" class="lane-state">
         <IonSpinner name="dots" />
@@ -29,30 +39,15 @@
              lane cannot tell "nothing matches" from "nothing could". -->
         <p v-for="(m, i) in web.messages.value" :key="i" class="lane-note">{{ m.text }}</p>
 
-        <div v-if="withCovers.length" class="carousel">
-          <div v-for="hit in withCovers" :key="hit.item_id" class="carousel-cell">
-            <WebLectureCard :hit="hit" :cover="coverOf(hit)!" />
+        <div v-if="web.hits.value.length" class="carousel">
+          <div v-for="hit in web.hits.value" :key="hit.item_id" class="carousel-cell">
+            <WebLectureCard :hit="hit" />
           </div>
         </div>
 
-        <template v-if="withoutCovers.length">
-          <WebLectureRow v-for="hit in withoutCovers" :key="hit.item_id" :hit="hit" />
-        </template>
-
-        <div v-if="!web.hits.value.length" class="lane-state lane-state--muted">
+        <div v-else class="lane-state lane-state--muted">
           {{ $t("search.web.empty") }}
         </div>
-
-        <IonButton
-          v-if="web.hasMore.value"
-          class="more"
-          fill="clear"
-          size="small"
-          :disabled="web.isLoading.value"
-          @click="web.loadMore()"
-        >
-          {{ $t("search.web.more") }}
-        </IonButton>
       </template>
     </section>
 
@@ -83,24 +78,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
 import {
-  IonButton,
   IonInfiniteScroll,
   IonInfiniteScrollContent,
   IonSpinner,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
-import { SectionHeader } from "@ui/primitives/index.js"
+import { SectionHeader } from "@ui/features/collections/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
-import type { DiscoveryHit } from "@lib/contracts"
-import { youtubeCoverUrl } from "@shruti/utils/youtubeCover.js"
 import type { SearchControllerReturn } from "../SearchView.controller.js"
 import type { UseWebSearchReturn } from "../composables/useWebSearch.js"
 import ActiveFilterChips from "./ActiveFilterChips.vue"
 import WebLectureCard from "./WebLectureCard.vue"
-import WebLectureRow from "./WebLectureRow.vue"
 
 /**
  * What a search turned up, in two lanes: lectures on other archives, then the
@@ -108,11 +98,9 @@ import WebLectureRow from "./WebLectureRow.vue"
  *
  * The internet lane comes first because it is what the library tab could not
  * do before, and it is where the interesting answer usually is — the local
- * catalog is what the user has already chosen to keep. Within it the shape
- * follows the source material: recordings published as video have a poster and
- * ride a carousel, files on a web server have none and read as rows. That is
- * the only reason there are two shapes, and it is decided by the address (see
- * `youtubeCoverUrl`) rather than by a stored column.
+ * catalog is what the user has already chosen to keep. It is one shelf of the
+ * same tile the personal library is made of: a hit is that object already, one
+ * nobody has added yet.
  *
  * Both composables are created by the page and passed in, so clearing the
  * field does not tear down the controller and re-run its dictionary load on
@@ -126,14 +114,12 @@ const props = defineProps<{
 // The filters are the page's to change, not this component's: it is handed a
 // controller to read from, and writing back through it would be reaching into
 // somebody else's state.
-const emit = defineEmits<{ "open-filters": []; "clear-filter": [key: string] }>()
-
-function coverOf(hit: DiscoveryHit): string | null {
-  return youtubeCoverUrl(hit.media_url, hit.page_url)
-}
-
-const withCovers = computed(() => props.web.hits.value.filter((h) => coverOf(h) !== null))
-const withoutCovers = computed(() => props.web.hits.value.filter((h) => coverOf(h) === null))
+const emit = defineEmits<{
+  "open-filters": []
+  "clear-filter": [key: string]
+  /** Open the full set of internet results on its own page. */
+  "see-all-web": []
+}>()
 
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   await props.search.loadMore()
@@ -210,12 +196,8 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 
 .carousel-cell {
   flex: 0 0 auto;
-  width: 220px;
+  width: 132px;
   scroll-snap-align: start;
-}
-
-.more {
-  margin-inline-start: 8px;
 }
 
 /* The section header owns the 6px gap below it; cancel each content type's
