@@ -17,6 +17,7 @@ export default {
   web: {
     title: "Internet",
     add: "Ajouter à ma bibliothèque",
+    prompt: "Saisissez une requête pour lancer la recherche.",
     empty: "Rien dans les archives que nous indexons.",
     unavailable: "La recherche sur Internet est indisponible pour le moment.",
     more: "Afficher plus",

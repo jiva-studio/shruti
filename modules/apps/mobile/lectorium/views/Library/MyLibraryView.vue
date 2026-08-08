@@ -26,15 +26,23 @@
         <span class="empty-message">{{ $t("library.myLibrary.emptyMessage") }}</span>
       </div>
 
-      <div v-else class="grid">
+      <div v-if="shown.length" class="grid">
         <LibraryItemCard
-          v-for="item in library.items"
+          v-for="item in shown"
           :key="item.id"
           :item="item"
           @select="onSelect"
           @retry="onRetry"
         />
       </div>
+
+      <!-- Narrowed to nothing: the library is not empty, this query is. -->
+      <div v-else class="empty">
+        <b class="empty-title">{{ $t("search.noResultsTitle") }}</b>
+        <span class="empty-message">{{ $t("search.library.empty") }}</span>
+      </div>
+
+      <DockSpacer />
     </IonContent>
   </IonPage>
 </template>
@@ -51,9 +59,12 @@ import {
   IonToolbar,
   onIonViewWillEnter,
 } from "@ionic/vue"
+import { computed } from "vue"
 import { IconVinyl } from "@tabler/icons-vue"
 import { FlatHeader } from "@ui/primitives/index.js"
 import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
+import { useSearchDock } from "@lectorium/composables/useSearchDock.js"
+import DockSpacer from "@lectorium/components/DockSpacer.vue"
 import { useOpenLibraryItem } from "@lectorium/composables/useOpenLibraryItem.js"
 import { useRetryLibraryItem } from "@lectorium/composables/useRetryLibraryItem.js"
 import { useIngestStatusPolling } from "@lectorium/composables/useIngestStatusPolling.js"
@@ -64,10 +75,29 @@ import LibraryItemCard from "./components/LibraryItemCard.vue"
  * (epic #1236), newest-first, as cover cards with an ingest-status badge.
  * Read-only: the rows are pulled from the server-owned `library_items`
  * collection; the sync poller flips `processing → ready` in place.
+ *
+ * The search field narrows it to what matches — where the search page's
+ * personal-library shelf leads. A second page for "the same list, but from a
+ * search" would be this one with a filter, and then two of them to keep in
+ * step.
+ *
+ * That field is docked at the root and floats over this page, so the query is
+ * read live from the shared ref; `?q=` only seeds it on a cold arrival.
  */
+const props = withDefaults(defineProps<{ initialQuery?: string }>(), { initialQuery: "" })
+
 const library = useLibraryStore()
 const onSelect = useOpenLibraryItem()
 const onRetry = useRetryLibraryItem()
+
+const { text: query } = useSearchDock()
+if (props.initialQuery && !query.value.trim()) query.value = props.initialQuery
+
+const shown = computed(() => {
+  const needle = query.value.trim().toLocaleLowerCase()
+  if (!needle) return library.items
+  return library.items.filter((i) => (i.titleRaw ?? "").toLocaleLowerCase().includes(needle))
+})
 
 useIngestStatusPolling()
 

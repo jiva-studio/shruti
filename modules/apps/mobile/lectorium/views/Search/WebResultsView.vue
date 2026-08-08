@@ -12,59 +12,56 @@
     </FlatHeader>
 
     <IonContent :fullscreen="true">
-      <p v-if="query" class="query">{{ query }}</p>
-
-      <div v-if="web.isLoadingFirstPage.value" class="state">
-        <IonSpinner name="dots" />
-      </div>
-
-      <div v-else-if="web.error.value" class="state state--muted">
-        {{ $t("search.web.unavailable") }}
-      </div>
-
-      <template v-else>
+      <div class="page-content">
+        <!-- What the service said about the request itself: a speaker it does
+             not know, a field the sentence overruled. Without these an empty
+             page cannot tell "nothing matches" from "nothing could". -->
         <p v-for="(m, i) in web.messages.value" :key="i" class="note">{{ m.text }}</p>
 
-        <div v-if="web.hits.value.length" class="grid">
-          <WebTrackCard v-for="hit in web.hits.value" :key="hit.item_id" :hit="hit" />
-        </div>
+        <PageSticker v-if="sticker" :header="sticker.header" :message="sticker.message" />
 
-        <div v-else class="state state--muted">{{ $t("search.web.empty") }}</div>
+        <template v-else>
+          <!-- The grid that is coming, drawn empty — same tile, no content — so
+               the page has its shape before the archives answer. -->
+          <div v-if="web.isLoadingFirstPage.value" class="grid">
+            <TrackTile v-for="n in SKELETON_COUNT" :key="n" status="loading" />
+          </div>
 
-        <IonButton
-          v-if="web.hasMore.value"
-          class="more"
-          fill="clear"
-          size="small"
-          :disabled="web.isLoading.value"
-          @click="web.loadMore()"
-        >
-          {{ $t("search.web.more") }}
-        </IonButton>
-      </template>
+          <div v-else class="grid">
+            <WebTrackCard v-for="hit in web.hits.value" :key="hit.item_id" :hit="hit" />
+          </div>
 
-      <div class="bottom-spacer" aria-hidden="true" />
+          <IonButton
+            v-if="web.hasMore.value"
+            class="more"
+            fill="clear"
+            size="small"
+            :disabled="web.isLoading.value"
+            @click="web.loadMore()"
+          >
+            {{ $t("search.web.more") }}
+          </IonButton>
+        </template>
+      </div>
+
+      <DockSpacer />
     </IonContent>
   </IonPage>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
-import { useRoute, useRouter } from "vue-router"
-import {
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue"
+import { computed } from "vue"
+import { useI18n } from "vue-i18n"
+import { useRouter } from "vue-router"
+import { IonButton, IonButtons, IonContent, IonPage, IonTitle, IonToolbar } from "@ionic/vue"
 import { IconArrowLeft } from "@tabler/icons-vue"
-import { FlatHeader } from "@ui/primitives/index.js"
+import { FlatHeader, PageSticker } from "@ui/primitives/index.js"
 import { useSearchFiltersBinding } from "./composables/useSearchFiltersBinding.js"
+import { useSearchDock } from "@lectorium/composables/useSearchDock.js"
+import DockSpacer from "@lectorium/components/DockSpacer.vue"
 import { useWebSearch } from "./composables/useWebSearch.js"
 import WebTrackCard from "./components/WebTrackCard.vue"
+import TrackTile from "@lectorium/components/TrackTile.vue"
 
 /**
  * Everything the archives turned up for one search, as a page.
@@ -73,48 +70,57 @@ import WebTrackCard from "./components/WebTrackCard.vue"
  * through. This is where "see all" lands: the same card, laid out to be read
  * down rather than across, and the only place that pages in more.
  *
- * The query travels in the URL rather than through a store, so the page is a
- * real address: it survives a reload and can be linked to. The filters come
- * from the same persisted binding the tab uses, so the two agree without one
- * having to hand them over.
+ * The tab's field floats over this page too, so the query is read live from the
+ * shared ref: editing the words here re-runs the search. `?q=` is the address
+ * the page was opened at — it seeds the field on a cold arrival (reload, link)
+ * and nothing more. The filters come from the same persisted binding the tab
+ * uses, so the two agree without one having to hand them over.
  */
-const route = useRoute()
-const router = useRouter()
+const SKELETON_COUNT = 8
 
-const query = ref<string>(typeof route.query.q === "string" ? route.query.q : "")
+const props = withDefaults(defineProps<{ initialQuery?: string }>(), { initialQuery: "" })
+
+const router = useRouter()
+const { t } = useI18n()
+
+const { text: query } = useSearchDock()
+if (props.initialQuery && !query.value.trim()) query.value = props.initialQuery
+
 const { filters } = useSearchFiltersBinding()
 const enabled = computed(() => query.value.trim().length > 0)
 
 const web = useWebSearch({ query, filters, enabled })
+
+// The three ways this page has nothing to lay out. An empty field is the one
+// that used to read as an answer — "nothing on the archives we index" is what
+// the archives said, and with nothing asked they were never asked at all.
+const sticker = computed<{ header?: string; message: string } | null>(() => {
+  if (!enabled.value) return { message: t("search.web.prompt") }
+  // Before the last answer: the skeletons hold the page, and the error still
+  // standing from the previous words is not this search's verdict.
+  if (web.isLoadingFirstPage.value) return null
+  if (web.error.value) return { message: t("search.web.unavailable") }
+  if (web.hits.value.length === 0) {
+    return { header: t("search.noResultsTitle"), message: t("search.web.empty") }
+  }
+  return null
+})
 </script>
 
 <style scoped>
-.query {
-  margin: 4px 16px 12px;
-  color: var(--ion-color-medium);
-  font-size: 14px;
+/* A column that fills the page, so the sticker centres in it. */
+.page-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 /* Read down, not across: two to a row on a phone, more as the screen allows. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
   padding: 0 16px;
-}
-
-.state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 96px;
-  padding: 8px 16px;
-  text-align: center;
-}
-
-.state--muted {
-  color: var(--ion-color-medium);
-  font-size: 14px;
 }
 
 .note {
@@ -126,9 +132,5 @@ const web = useWebSearch({ query, filters, enabled })
 
 .more {
   margin: 12px 8px 0;
-}
-
-.bottom-spacer {
-  height: var(--kit-page-reserved-space, 0px);
 }
 </style>

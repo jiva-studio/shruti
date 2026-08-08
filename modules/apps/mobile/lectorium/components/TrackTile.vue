@@ -4,58 +4,72 @@
        saying otherwise reports that control as disabled too. -->
   <div
     class="track-tile"
-    :class="{ pending: status === 'pending', 'is-loaded': loaded }"
+    :class="{ pending: status === 'pending', 'is-loaded': loaded, loading }"
     :role="tappable ? 'button' : undefined"
     :tabindex="tappable ? 0 : undefined"
+    :aria-hidden="loading ? 'true' : undefined"
     @click="onTap"
     @keydown.enter.prevent="onTap"
     @keydown.space.prevent="onTap"
   >
-    <!-- A plain tinted floor, so an address that turns out not to be an image
-         leaves the tile whole rather than a hole. Deliberately empty: a glyph
-         behind the title only competes with it for the same small space. -->
-    <div class="cover-placeholder" aria-hidden="true" />
-    <CachedImage v-if="cover" :url="cover" @loaded="loaded = true" />
+    <!-- A tile that stands in for one still on its way. It is this component
+         and not a skeleton of its own so the two cannot drift apart: the shelf
+         that fills in has exactly the box that was holding the place. -->
+    <template v-if="loading">
+      <div class="cover-placeholder shimmer" aria-hidden="true" />
+      <div class="meta">
+        <span class="bar shimmer" />
+        <span class="bar bar--short shimmer" />
+      </div>
+    </template>
 
-    <!-- One corner, whatever the tile currently is: fetching, broken, not ours
+    <template v-else>
+      <!-- A plain tinted floor, so an address that turns out not to be an image
+           leaves the tile whole rather than a hole. Deliberately empty: a glyph
+           behind the title only competes with it for the same small space. -->
+      <div class="cover-placeholder" aria-hidden="true" />
+      <CachedImage v-if="cover" :url="cover" @loaded="loaded = true" />
+
+      <!-- One corner, whatever the tile currently is: fetching, broken, not ours
          yet, or simply ours. -->
-    <IngestProgressBadge
-      v-if="status === 'pending'"
-      class="corner"
-      :percent="progress?.percent"
-      :label="progress?.label ?? ''"
-    />
-    <button
-      v-else-if="status === 'failed' && canRetry"
-      type="button"
-      class="corner status failed as-button"
-      @click.stop="emit('retry')"
-    >
-      <IconReload :size="13" />
-      {{ $t("library.status.retry") }}
-    </button>
-    <span v-else-if="status === 'failed'" class="corner status failed">
-      <IconAlertTriangle :size="13" />
-      {{ $t("library.status.failed") }}
-    </span>
-    <button
-      v-else-if="status === 'addable'"
-      type="button"
-      class="corner add"
-      :aria-label="addLabel"
-      @click.stop="emit('add')"
-    >
-      <IconPlus :size="18" />
-    </button>
-
-    <span class="scrim" aria-hidden="true" />
-    <div class="meta">
-      <span class="title">{{ title }}</span>
-      <span v-if="status === 'failed' && errorMessage" class="subtitle error">
-        {{ errorMessage }}
+      <IngestProgressBadge
+        v-if="status === 'pending'"
+        class="corner"
+        :percent="progress?.percent"
+        :label="progress?.label ?? ''"
+      />
+      <button
+        v-else-if="status === 'failed' && canRetry"
+        type="button"
+        class="corner status failed as-button"
+        @click.stop="emit('retry')"
+      >
+        <IconReload :size="13" />
+        {{ $t("library.status.retry") }}
+      </button>
+      <span v-else-if="status === 'failed'" class="corner status failed">
+        <IconAlertTriangle :size="13" />
+        {{ $t("library.status.failed") }}
       </span>
-      <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
-    </div>
+      <button
+        v-else-if="status === 'addable'"
+        type="button"
+        class="corner add"
+        :aria-label="addLabel"
+        @click.stop="emit('add')"
+      >
+        <IconPlus :size="18" />
+      </button>
+
+      <span class="scrim" aria-hidden="true" />
+      <div class="meta">
+        <span class="title">{{ title }}</span>
+        <span v-if="status === 'failed' && errorMessage" class="subtitle error">
+          {{ errorMessage }}
+        </span>
+        <span v-else-if="subtitle" class="subtitle">{{ subtitle }}</span>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -78,11 +92,11 @@ import IngestProgressBadge from "./IngestProgressBadge.vue"
  *
  * Presentational. It is told what it is and emits what was done to it.
  */
-export type TileStatus = "addable" | "pending" | "ready" | "failed"
+export type TileStatus = "loading" | "addable" | "pending" | "ready" | "failed"
 
 const props = withDefaults(
   defineProps<{
-    title: string
+    title?: string
     subtitle?: string
     /** Cover art, or nothing — then the placeholder disc. */
     cover?: string | null
@@ -96,6 +110,7 @@ const props = withDefaults(
     addLabel?: string
   }>(),
   {
+    title: "",
     subtitle: "",
     cover: null,
     progress: undefined,
@@ -110,6 +125,7 @@ const emit = defineEmits<{ select: []; add: []; retry: [] }>()
 const loaded = ref(false)
 // Only a track that is ours and ready has something to open.
 const tappable = computed(() => props.status === "ready")
+const loading = computed(() => props.status === "loading")
 
 function onTap(): void {
   if (tappable.value) emit("select")
@@ -146,6 +162,51 @@ function onTap(): void {
 .cover-placeholder {
   position: absolute;
   inset: 0;
+}
+
+.track-tile.loading {
+  cursor: default;
+}
+
+/* A slow sweep rather than a pulse: it reads as "on its way" without drawing
+   the eye away from the results that already arrived above it. */
+.shimmer {
+  background: linear-gradient(
+    100deg,
+    var(--ion-color-light, #f4f5f8) 30%,
+    var(--ion-color-light-shade, #e6e7e9) 50%,
+    var(--ion-color-light, #f4f5f8) 70%
+  );
+  background-size: 300% 100%;
+  animation: tile-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes tile-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
+  }
+}
+
+/* Where the title and the line under it will land, so the text does not jump
+   into a different place than the one being held for it. */
+.bar {
+  height: 9px;
+  border-radius: 3px;
+}
+
+.bar--short {
+  width: 60%;
+  height: 7px;
+  margin-top: 3px;
 }
 
 .corner {
