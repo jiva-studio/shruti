@@ -21,8 +21,9 @@ export default {
     more: "Több megjelenítése",
   },
   library: {
-    title: "A könyvtáradban találtuk",
-    empty: "A könyvtáradban nincs találat.",
+    title: "A könyvtárban találtuk",
+    empty: "A könyvtárban nincs találat.",
+    mine: "A saját könyvtáradban találtuk",
   },
   smartLibrary: {
     title: "Okos könyvtár",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "Hivatkozás szerint",
   },
   collections: {
+    title: "Gyűjtemények",
     addAll: "Gyűjtemény hozzáadása",
     trackCount: "Előadások: {count}",
     addError: "Nem sikerült hozzáadni a gyűjteményt",

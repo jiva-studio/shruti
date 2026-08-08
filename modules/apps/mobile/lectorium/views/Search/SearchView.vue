@@ -9,9 +9,11 @@
           v-if="searching"
           :search="search"
           :web="web"
+          :grouping="grouping"
           @open-filters="search.filtersOpen.value = true"
           @clear-filter="onClearFilter"
           @see-all-web="openWebResults"
+          @open-grouping="openGrouping"
         />
       </div>
       <div class="bottom-spacer" aria-hidden="true" />
@@ -44,6 +46,7 @@ import { SearchFiltersSheet, clearSection } from "@ui/features/tracks/search/fil
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useSearchController } from "./SearchView.controller.js"
 import { useWebSearch } from "./composables/useWebSearch.js"
+import { useGroupingSearch, type GroupingHit } from "./composables/useGroupingSearch.js"
 import SearchLanding from "./components/SearchLanding.vue"
 import SearchResults from "./components/SearchResults.vue"
 import SearchBar from "./components/SearchBar.vue"
@@ -77,11 +80,24 @@ const router = useRouter()
 const search = useSearchController()
 const searching = computed(() => search.query.value.trim().length > 0)
 
+// Collections and topics whose name the query names — the same objects the
+// landing browses, matched in memory.
+const grouping = useGroupingSearch(search.query)
+
 const web = useWebSearch({
   query: search.query,
   filters: search.filters,
   enabled: searching,
 })
+
+/** A collection and a topic each have their own page; the shelf mixes them. */
+function openGrouping(hit: GroupingHit): void {
+  void router.push(
+    hit.kind === "collection"
+      ? { name: "collection", params: { id: hit.id } }
+      : { name: "topic-tracks", params: { topicId: hit.id } }
+  )
+}
 
 /** Open the full set of internet results, carrying the query in the URL. */
 function openWebResults(): void {

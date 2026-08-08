@@ -21,8 +21,9 @@ export default {
     more: "Mehr anzeigen",
   },
   library: {
-    title: "In deiner Bibliothek gefunden",
-    empty: "In deiner Bibliothek passt nichts dazu.",
+    title: "In der Bibliothek gefunden",
+    empty: "In der Bibliothek passt nichts dazu.",
+    mine: "In deiner Bibliothek gefunden",
   },
   smartLibrary: {
     title: "Intelligente Bibliothek",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "Nach Quellenangabe",
   },
   collections: {
+    title: "Sammlungen",
     addAll: "Sammlung hinzufügen",
     trackCount: "Vorträge: {count}",
     addError: "Sammlung konnte nicht hinzugefügt werden",
