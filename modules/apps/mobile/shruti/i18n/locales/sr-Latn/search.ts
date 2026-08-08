@@ -16,6 +16,7 @@ export default {
   web: {
     title: "Internet",
     add: "Dodaj u moju biblioteku",
+    prompt: "Unesite upit za pretragu.",
     empty: "Nema ničega u arhivama koje pretražujemo.",
     unavailable: "Pretraga interneta trenutno nije dostupna.",
     more: "Prikaži još",

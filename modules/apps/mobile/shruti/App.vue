@@ -21,6 +21,17 @@
       @skip-back="onSkipBack"
       @skip-forward="onSkipForward"
     />
+    <!-- The library tab's search field: root chrome beside the player, so it
+         stays over the pages the tab pushes onto itself and keeps editing
+         whichever of them is on top. -->
+    <SearchBar
+      v-if="searchDock.visible.value"
+      v-model="searchDock.text.value"
+      :style="{ '--search-dock-bottom': searchDockBottom }"
+      :placeholder="$t('app.search')"
+      :search-label="$t('search.readQuestion')"
+      :clear-label="$t('search.clearQuery')"
+    />
     <TranscriptDialog
       ref="transcriptDialogRef"
       v-model:open="dialog.isOpen.value"
@@ -80,6 +91,8 @@ import { createAssetFailover } from "@shruti/services/withAssetRegionFailover.js
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
+import SearchBar from "@shruti/views/Search/components/SearchBar.vue"
+import { useSearchDock } from "@shruti/composables/useSearchDock.js"
 import TrackSheet from "@shruti/components/TrackSheet.vue"
 import EmailSignInModal from "@shruti/components/EmailSignInModal.vue"
 import type { SelectionActionEvent } from "@shruti/composables/transcript/useTranscriptSelectionActions.js"
@@ -150,6 +163,15 @@ const floatingPlayerHidden = computed<boolean>(() => {
   if (routeName === "chat" || routeName === "subscription") return true
   return false
 })
+const searchDock = useSearchDock()
+// Above the player (58px tall, starting 56px up) only while it is on screen —
+// keyed to the same flag, so the field doesn't drop when the keyboard hides it.
+const searchDockBottom = computed(() =>
+  floatingPlayerHidden.value
+    ? "calc(56px + var(--ion-safe-area-bottom, 0px))"
+    : "calc(114px + var(--ion-safe-area-bottom, 0px))"
+)
+
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)
 const showPlayerProgress = computed(() => showPlayerProgressConfig.value)
 

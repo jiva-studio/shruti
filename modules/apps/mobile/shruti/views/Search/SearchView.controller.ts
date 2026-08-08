@@ -10,6 +10,7 @@ import type {
   SearchFilterSectionDef,
 } from "@ui/features/tracks/search/filters/index.js"
 import { useSearchQuery } from "./composables/useSearchQuery.js"
+import { useSearchDock } from "@shruti/composables/useSearchDock.js"
 import { useSearchFiltersBinding } from "./composables/useSearchFiltersBinding.js"
 import { useSearchFilterSections } from "./composables/useSearchFilterSections.js"
 
@@ -41,7 +42,9 @@ export function useSearchController(): SearchControllerReturn {
   const repos = app.repositories()
   const dictionaries = useDictionariesStore()
 
-  const query = ref<string>("")
+  // Not this controller's own ref: the field that writes it is docked at the
+  // root, above the page stack, and the pages it floats over read it too.
+  const { text: query } = useSearchDock()
   const {
     filters,
     ready: filtersReady,
