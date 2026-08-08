@@ -92,6 +92,7 @@ export default {
       "Ajouter {count} conférence à la playlist ? | Ajouter {count} conférences à la playlist ?",
     others: "Autres collections",
     all: "Toutes les collections",
+    partOf: "Cours {position} sur {total}",
     seeAll: "Tout voir",
     seeAllNamed: "Tout voir : {name}",
   },

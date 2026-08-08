@@ -91,6 +91,7 @@ export default {
     addConfirm: "{count}টি লেকচার প্লেলিস্টে যোগ করবেন? | {count}টি লেকচার প্লেলিস্টে যোগ করবেন?",
     others: "অন্যান্য সংগ্রহ",
     all: "সব সংগ্রহ",
+    partOf: "{total}-এর মধ্যে {position} নম্বর বক্তৃতা",
     seeAll: "সব দেখুন",
     seeAllNamed: "সব দেখুন: {name}",
   },

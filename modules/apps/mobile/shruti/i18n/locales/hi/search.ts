@@ -91,6 +91,7 @@ export default {
       "{count} प्रवचन को प्लेलिस्ट में जोड़ें? | {count} प्रवचनों को प्लेलिस्ट में जोड़ें?",
     others: "अन्य संग्रह",
     all: "सभी संग्रह",
+    partOf: "{total} में से व्याख्यान {position}",
     seeAll: "सभी देखें",
     seeAllNamed: "सभी देखें: {name}",
   },

@@ -92,6 +92,7 @@ export default {
       "Aggiungere {count} lezione alla playlist? | Aggiungere {count} lezioni alla playlist?",
     others: "Altre raccolte",
     all: "Tutte le raccolte",
+    partOf: "Lezione {position} di {total}",
     seeAll: "Vedi tutto",
     seeAllNamed: "Vedi tutto: {name}",
   },

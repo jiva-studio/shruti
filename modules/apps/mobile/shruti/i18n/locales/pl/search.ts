@@ -91,6 +91,7 @@ export default {
       "Dodać {count} wykład do playlisty? | Dodać {count} wykłady do playlisty? | Dodać {count} wykładów do playlisty?",
     others: "Inne kolekcje",
     all: "Wszystkie kolekcje",
+    partOf: "Wykład {position} z {total}",
     seeAll: "Zobacz wszystkie",
     seeAllNamed: "Zobacz wszystkie: {name}",
   },
