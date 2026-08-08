@@ -379,3 +379,67 @@ func TestASentenceFindsWhatItIsAbout(t *testing.T) {
 		t.Errorf("= %d hits; loosening should have found both talks", len(hits))
 	}
 }
+
+// A recording comes back with its picture, so a client shows one and knows
+// nothing about which archives have pictures or how each builds an address.
+// Every client that worked that out for itself would be a client that
+// disagreed with the next.
+func TestARecordingCarriesItsCover(t *testing.T) {
+	svc, repo, pool := testSearch(t)
+	ctx := context.Background()
+	const still = "https://i.ytimg.com/vi/YyE4VhKt59U/mqdefault.jpg"
+
+	id := add(t, repo, pool, "https://www.youtube.com/watch?v=YyE4VhKt59U", "Лекция", "Радханатх Свами", "ru")
+	if _, err := pool.Exec(ctx, `UPDATE discovery.items SET cover_url = $2 WHERE id = $1`, id, still); err != nil {
+		t.Fatal(err)
+	}
+	// And one whose archive publishes no picture at all.
+	other := add(t, repo, pool, "https://audioveda.ru/1.mp3", "Лекция без картинки", "Радханатх Свами", "ru")
+
+	// Speakers are a second step, and the filtered path goes through them.
+	who, err := repo.ResolveAuthor(ctx, "Радханатх Свами")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []int64{id, other} {
+		if err := repo.SetItemAuthors(ctx, item, []int64{who}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Through the text lanes.
+	hits, err := svc.Search(ctx, search.Query{Text: "Лекция", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen, blank int
+	for _, h := range hits {
+		switch h.CoverURL {
+		case still:
+			seen++
+		case "":
+			blank++
+		default:
+			t.Errorf("invented a cover: %q", h.CoverURL)
+		}
+	}
+	if seen != 1 || blank != 1 {
+		t.Errorf("covers = %d, blanks = %d over %d hits", seen, blank, len(hits))
+	}
+
+	// And through the filter-only path, which has a projection of its own and
+	// is where a new column is forgotten.
+	only, err := svc.Search(ctx, search.Query{Authors: []string{"Радханатх Свами"}, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen = 0
+	for _, h := range only {
+		if h.CoverURL == still {
+			seen++
+		}
+	}
+	if seen != 1 {
+		t.Errorf("the filtered path returned %d covers over %d hits", seen, len(only))
+	}
+}

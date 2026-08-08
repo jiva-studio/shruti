@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
@@ -89,5 +90,45 @@ func TestPlaceDropsTheOrganisation(t *testing.T) {
 		if got := domain.Place(c.in); got != c.want {
 			t.Errorf("Place(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// The vocabulary is a file now, and a file can be edited into nonsense in ways
+// a Go literal could not: a form with no spellings, a canonical that is not
+// among its own spellings, a Cyrillic table missing half the alphabet. None of
+// those fail to compile, and all of them quietly stop names from folding.
+func TestTheVocabularyIsWhole(t *testing.T) {
+	forms := domain.Forms()
+	if len(forms) == 0 {
+		t.Fatal("no forms of address at all")
+	}
+	for _, f := range forms {
+		if f.Canonical == "" || len(f.Spellings) == 0 {
+			t.Errorf("%+v", f)
+			continue
+		}
+		var itself bool
+		for _, s := range f.Spellings {
+			if strings.EqualFold(s, f.Canonical) {
+				itself = true
+			}
+		}
+		if !itself {
+			t.Errorf("%q is not among its own spellings, so a name already "+
+				"written the way we write it would not be recognised", f.Canonical)
+		}
+	}
+
+	// Every Russian letter has to become something, or a name transliterates
+	// into a hole. Ъ and Ь become nothing on purpose.
+	for _, r := range "абвгдеёжзийклмнопрстуфхцчшщыэюя" {
+		if _, ok := domain.CyrillicLetter(string(r)); !ok {
+			t.Errorf("%q has no Latin form, so any name holding it folds wrongly", string(r))
+		}
+	}
+
+	// And the whole point of the file: the same name, both alphabets, one key.
+	if domain.Fold(domain.Key("Радханатх Свами")) != domain.Fold(domain.Key("Radhanath Swami")) {
+		t.Error("the two alphabets stopped meeting")
 	}
 }
