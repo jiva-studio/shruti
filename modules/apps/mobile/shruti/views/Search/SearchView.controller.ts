@@ -27,6 +27,9 @@ export interface SearchControllerReturn {
   filterSections: ComputedRef<readonly SearchFilterSectionDef[]>
   filtersOpen: Ref<boolean>
   activeFilterCount: ComputedRef<number>
+  /** Sections a fresh install never chose (seeded language, default sort) —
+   *  the chips leave these out. */
+  defaultSections: ComputedRef<ReadonlySet<string>>
   resetFilters: () => Promise<void>
   /** Tap on a track row → open the per-track sheet (any download state). */
   onSelect: (trackId: string) => Promise<void>
@@ -43,6 +46,7 @@ export function useSearchController(): SearchControllerReturn {
     filters,
     ready: filtersReady,
     activeFilterCount,
+    defaultSections,
     reset: resetFilters,
   } = useSearchFiltersBinding()
   const { sections: filterSections } = useSearchFilterSections()
@@ -106,6 +110,7 @@ export function useSearchController(): SearchControllerReturn {
     filterSections,
     filtersOpen,
     activeFilterCount,
+    defaultSections,
     resetFilters,
     onSelect,
     loadMore,

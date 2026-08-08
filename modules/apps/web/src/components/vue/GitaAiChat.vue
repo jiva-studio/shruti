@@ -13,7 +13,8 @@ import ChatDots from './icons/ChatDots.vue'
 import { OPEN_TRACK } from './injection'
 // Real reused chat primitives (status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
-import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
+import FloatingInput from '@lib/ui/input/FloatingInput.vue'
+import ChatSendButton from '@lib/ui/chat/ChatSendButton.vue'
 import { webLocale } from '../../lib/i18n'
 import { useChatStream, type Msg } from '../../composables/useChatStream'
 import { useChatHistory } from '../../composables/useChatHistory'
@@ -326,15 +327,24 @@ function statusLabelFor(m: Msg): string {
           <h1 class="text-center font-serif text-3xl font-bold text-ink sm:text-4xl">{{ L.title }}</h1>
           <p class="mx-auto mt-3 max-w-md text-center text-sm text-medium">{{ L.sub }}</p>
           <div class="mt-7">
-            <ChatComposer
+            <FloatingInput
               :sending="busy"
               :placeholder="L.placeholder"
-              :send-aria-label="L.send"
-              @send="send"
-              @cancel="stop"
+              @submit="send"
             >
-              <template #spinner><ChatDots /></template>
-            </ChatComposer>
+              <template #action="{ hasText, sending, disabled, submit }">
+                <ChatSendButton
+                  :sending="sending"
+                  :disabled="disabled"
+                  :has-text="hasText"
+                  :label="L.send"
+                  @send="submit()"
+                  @cancel="stop"
+                >
+                  <template #spinner><ChatDots /></template>
+                </ChatSendButton>
+              </template>
+            </FloatingInput>
           </div>
         </div>
       </div>
@@ -408,16 +418,25 @@ function statusLabelFor(m: Msg): string {
         <div class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-cream via-cream/95 to-transparent px-3 pb-4 pt-10">
           <div class="pointer-events-auto mx-auto max-w-2xl">
             <p v-if="!capped && (srvLimit !== null || turns > 0)" class="mb-2 text-center text-xs text-medium">{{ L.left(left) }}</p>
-            <ChatComposer
+            <FloatingInput
               :sending="busy"
               :disabled="capped"
               :placeholder="L.placeholder"
-              :send-aria-label="L.send"
-              @send="send"
-              @cancel="stop"
+              @submit="send"
             >
-              <template #spinner><ChatDots /></template>
-            </ChatComposer>
+              <template #action="{ hasText, sending, disabled, submit }">
+                <ChatSendButton
+                  :sending="sending"
+                  :disabled="disabled"
+                  :has-text="hasText"
+                  :label="L.send"
+                  @send="submit()"
+                  @cancel="stop"
+                >
+                  <template #spinner><ChatDots /></template>
+                </ChatSendButton>
+              </template>
+            </FloatingInput>
           </div>
         </div>
       </template>

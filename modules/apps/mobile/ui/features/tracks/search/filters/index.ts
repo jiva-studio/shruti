@@ -10,3 +10,4 @@ export type {
   SingleSectionKey,
   DateSectionKey,
 } from "./types.js"
+export { getSectionSummary, getMultiSelected, getMultiCount, clearSection } from "./filtersModel.js"

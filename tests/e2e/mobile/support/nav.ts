@@ -10,25 +10,69 @@ export async function gotoTab(page: Page, tab: string): Promise<void> {
 }
 
 /**
- * The real "open my library" gesture: Search tab → the "All lectures" button in
- * the lectures section header → the flat, filterable catalog list at
- * /tabs/search/tracks. Returns once at least one track row is on screen.
+ * A query broad enough to fill several pages under the filters the clean
+ * fixture ships with (English + Bhagavad-gita + sort by reference): 809 of the
+ * 5470 indexed rows match `bg*`, against 30 for a bare `1*`, which is under one
+ * page and so cannot exercise paging at all.
+ *
+ * It stands in for what an empty box used to do. Search and the library are one
+ * screen now — an empty box means the browsing landing, not the catalog — so a
+ * helper that wants "a list of library tracks" has to ask for one.
  */
-export async function openLibrary(page: Page): Promise<void> {
+const BROAD_QUERY = "bg"
+
+/**
+ * The real "search the library" gesture: Search tab → type into the docked box
+ * → the library lane lists what matched. Returns once at least one track row is
+ * on screen.
+ *
+ * There is no navigation any more. The tab swaps the landing for the results in
+ * place, which is also why this no longer waits out a page transition: there
+ * isn't one, and the rows it finds cannot belong to a screen sliding away.
+ */
+export async function openLibrary(page: Page, query: string = BROAD_QUERY): Promise<void> {
   await gotoTab(page, "search")
-  const allLectures = page.locator("ion-button.all-lectures")
-  await allLectures.waitFor({ state: "visible", timeout: 20_000 })
-  await allLectures.click()
-  await page.waitForURL("**/tabs/search/tracks", { timeout: 10_000 })
-  // Wait for the library page (its search box) and let the Ionic page transition
-  // settle. The transition is a JS Web-Animation (not CSS, so our animation
-  // killer doesn't touch it): until it finishes, the router outlet intercepts
-  // clicks AND the discovery SearchView — which also renders `.track` rows — is
-  // still on-screen, so "the first visible track" would latch onto a row that's
-  // about to be hidden.
   await searchInput(page).waitFor({ state: "visible", timeout: 20_000 })
-  await page.waitForTimeout(600)
+  await searchInput(page).fill(query)
   await trackRows(page).first().waitFor({ state: "visible", timeout: 20_000 })
+  await settled(page)
+}
+
+/**
+ * Empty the search field and wait for the browsing landing to come back.
+ *
+ * The field keeps what was typed while you are on the tab, so leaving and
+ * returning lands you back in the results, not on the landing. A spec that
+ * wants the landing has to say so.
+ */
+export async function clearSearch(page: Page): Promise<void> {
+  await searchInput(page).fill("")
+  await expect(page.locator(".landing")).toBeVisible({ timeout: 20_000 })
+}
+
+/**
+ * Wait until the list stops changing under us.
+ *
+ * The query is debounced and the filter binding hydrates separately, so the
+ * first rows on screen can still be replaced a moment later. A caller that
+ * grabbed "the first row" before that lands is holding a detached element, and
+ * the failure reads as a missing child rather than a stale handle. This used to
+ * be a fixed pause for the page transition; there is no transition any more,
+ * but there is still a settle.
+ */
+async function settled(page: Page): Promise<void> {
+  let previous = -1
+  await expect
+    .poll(
+      async () => {
+        const count = await trackRows(page).count()
+        const stable = count > 0 && count === previous
+        previous = count
+        return stable
+      },
+      { timeout: 20_000, intervals: [250] }
+    )
+    .toBe(true)
 }
 
 /**
@@ -45,9 +89,14 @@ export function playlistRows(page: Page): Locator {
   return page.locator(".playlist-row:visible")
 }
 
-/** The library search box (Android variant → <ion-input>; its native input). */
+/**
+ * The library search box — the floating capsule at the bottom of the Search
+ * tab, the same one the chat writes into. `.search-row` outlived the screen it
+ * used to sit on, deliberately, so every spec that types into it still can; the
+ * field inside is a textarea rather than an ion-input since it became shared.
+ */
 export function searchInput(page: Page): Locator {
-  return page.locator(".search-row ion-input input")
+  return page.locator(".search-row textarea")
 }
 
 /** Matches any Cyrillic letter. Used to tell a Russian lecture title apart from a

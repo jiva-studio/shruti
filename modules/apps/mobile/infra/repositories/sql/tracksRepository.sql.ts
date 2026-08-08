@@ -483,6 +483,34 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
         ? ` AND ${filterParts.clauses.join(" AND ")}`
         : ""
 
+      // A sort that was asked for decides the order, and until now was accepted
+      // and dropped: `sortBy` is declared on this query and passed by the use
+      // case, but only `list()` ever read it. Invisible while the library
+      // listed with an empty box — that went down the list path — and it became
+      // "the Sort facet does nothing" once every library view carried a query.
+      //
+      // The scoring below stays for callers that ask for no sort at all.
+      //
+      // Ordering by shloka needs a subquery the scored path has no column for,
+      // so this hands the whole job to SQL exactly as `list()` does, with FTS
+      // membership as one more condition.
+      if (query.sortBy) {
+        const sort = sortOrderClause(query.sortBy, getActiveLanguage())
+        const rows = await contentDb.query<TrackRow>(
+          `SELECT t.* FROM tracks t
+           WHERE t.id IN (
+                   SELECT track_id FROM tracks_search
+                   WHERE tracks_search MATCH ? AND kind = 'combined'
+                   LIMIT ?
+                 )
+             AND t.hidden = 0${filterSql}
+           ${sort.clause}
+           LIMIT ? OFFSET ?`,
+          [fts, SCORE_CAP, ...filterParts.params, ...sort.params, limit, offset]
+        )
+        return hydrate(contentDb, rows)
+      }
+
       // Two-stage query: (1) FTS subquery emits the top SCORE_CAP
       // candidate `combined` rows with their matchinfo blob, bounded
       // so the virtual table stops yielding immediately — this is the

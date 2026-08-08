@@ -9,12 +9,20 @@ export default {
   noResultsAction: "Change filters",
   lecturesTitle: "Lectures",
   recommendedForYou: "Recommendations",
-  allLectures: "All lectures",
   topicsSection: "Lectures on various topics",
   topics: "Topics",
-  fullLibrary: {
-    title: "Search the library",
-    subtitle: "Search through {count} lecture | Search through {count} lectures",
+  readQuestion: "Search",
+  clearQuery: "Clear",
+  web: {
+    title: "Found on the internet",
+    add: "Add to my library",
+    empty: "Nothing on the archives we index.",
+    unavailable: "Couldn't reach the internet search right now.",
+    more: "Show more",
+  },
+  library: {
+    title: "Found in your library",
+    empty: "Nothing in your library matches.",
   },
   smartLibrary: {
     title: "Smart library",
@@ -47,6 +55,7 @@ export default {
     error: "Couldn't prepare the file. Please try again.",
   },
   filters: {
+    clearOne: "Remove filter: {name}",
     any: "Any",
     sort: "Sort",
     authors: "Authors",

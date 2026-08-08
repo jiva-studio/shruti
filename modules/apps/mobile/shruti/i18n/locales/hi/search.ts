@@ -9,12 +9,20 @@ export default {
   noResultsAction: "फ़िल्टर बदलें",
   lecturesTitle: "प्रवचन",
   recommendedForYou: "अनुशंसाएँ",
-  allLectures: "सभी प्रवचन",
   topicsSection: "विभिन्न विषयों पर प्रवचन",
   topics: "विषय",
-  fullLibrary: {
-    title: "लाइब्रेरी में खोजें",
-    subtitle: "{count} प्रवचन में खोजें | {count} प्रवचनों में खोजें",
+  readQuestion: "खोजें",
+  clearQuery: "साफ़ करें",
+  web: {
+    title: "इंटरनेट पर मिला",
+    add: "मेरी लाइब्रेरी में जोड़ें",
+    empty: "हम जिन संग्रहों को देखते हैं, उनमें कुछ नहीं है।",
+    unavailable: "इंटरनेट खोज अभी उपलब्ध नहीं है।",
+    more: "और दिखाएँ",
+  },
+  library: {
+    title: "आपकी लाइब्रेरी में मिला",
+    empty: "आपकी लाइब्रेरी में कुछ भी मेल नहीं खाता।",
   },
   smartLibrary: {
     title: "स्मार्ट लाइब्रेरी",
@@ -24,6 +32,7 @@ export default {
     addToPlaylist: "प्लेलिस्ट में जोड़ें",
     downloadAgain: "फिर से डाउनलोड करें",
     alreadyInPlaylist: "पहले से प्लेलिस्ट में",
+    alreadyInLibrary: "पहले से आपकी लाइब्रेरी में है",
     openTranscript: "प्रतिलिपि खोलें",
     share: "साझा करें",
   },
@@ -46,6 +55,7 @@ export default {
     error: "फ़ाइल तैयार नहीं हो सकी। कृपया फिर कोशिश करें।",
   },
   filters: {
+    clearOne: "फ़िल्टर हटाएँ: {name}",
     any: "कोई भी",
     sort: "क्रम",
     authors: "वक्ता",

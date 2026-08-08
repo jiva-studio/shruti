@@ -24,7 +24,7 @@ function sheet(page: Page): Locator {
 }
 
 async function openSheet(page: Page): Promise<Locator> {
-  await page.locator(".search-row-filter-button").click()
+  await page.locator(".filters-button").click()
   const s = sheet(page)
   await expect(s).toBeVisible({ timeout: 10_000 })
   await page.waitForTimeout(400) // let the modal-present web-animation settle
@@ -54,14 +54,18 @@ async function closeSheet(page: Page, s: Locator): Promise<void> {
   await expect(sheet(page)).toBeHidden({ timeout: 10_000 })
 }
 
-const filterBadge = (page: Page) => page.locator(".search-row-filter-button")
+const filterBadge = (page: Page) => page.locator(".filters-button")
 
 test(
   qase(26, caseTitle(26)),
   { tag: ["@offline", "@library"] },
   async ({ page }) => {
     await boot(page)
-    await openLibrary(page)
+    // A query that is not tied to one scripture: this case swaps the pinned
+    // source and needs BOTH sides to be non-empty. The helper's default is
+    // "bg", which is precisely the source being switched away from, so the
+    // list after the swap would be empty for the wrong reason.
+    await openLibrary(page, "1")
 
     let s!: Locator
     let baseline: string[] = []
@@ -77,20 +81,21 @@ test(
       await enterFacet(s, "Sources")
       const checkboxes = s.locator("ion-checkbox")
       await expect(checkboxes.first()).toBeVisible({ timeout: 10_000 })
+      // A NAMED source, not "whichever is first unchecked". The fixture holds
+      // 87 English lectures under Madhya-lila and one under Antya-lila, so
+      // taking the alphabetical next one made later steps — which need several
+      // rows to re-order — depend on where the list happened to start.
       const total = await checkboxes.count()
-      let enabledOne = false
       for (let i = 0; i < total; i++) {
         const cb = checkboxes.nth(i)
         const checked = await cb.evaluate(
           (el) => (el as HTMLElement & { checked?: boolean }).checked === true
         )
         if (checked) await cb.click()
-        else if (!enabledOne) {
-          await cb.click()
-          enabledOne = true
-        }
       }
-      expect(enabledOne, "expected a different source to enable").toBe(true)
+      const target = s.locator("ion-checkbox", { hasText: "Madhya" }).first()
+      await expect(target).toBeVisible({ timeout: 10_000 })
+      await target.click()
       await backToList(s)
       // Screenshot the sheet with the new Sources selection before it closes.
       await capture()
@@ -113,17 +118,20 @@ test(
     })
 
     await step(page, 26, 2, async (capture) => {
-      // Change the Sort to oldest-first.
+      // Change the Sort to newest-first — the REVERSE of the by-shloka order
+      // the list is in. Oldest-first would not do: these lectures were given in
+      // shloka sequence, so date-ascending and reference-ascending put them in
+      // the same order and "the list re-ordered" could not be observed.
       byReference = await trackTitles(page)
       expect(byReference.length).toBeGreaterThan(1)
       s = await openSheet(page)
       await enterFacet(s, "Sort")
-      await s.locator("ion-item", { hasText: "Date (oldest first)" }).first().click()
+      await s.locator("ion-item", { hasText: "Date (newest first)" }).first().click()
       await page.waitForTimeout(200)
       await backToList(s)
       // Wait until the Sort summary reflects the choice, THEN screenshot the sheet
       // — otherwise the frame can catch the pre-selection state.
-      await expect(facetSummary(s, "Sort")).toContainText(/oldest/i, { timeout: 10_000 })
+      await expect(facetSummary(s, "Sort")).toContainText(/newest/i, { timeout: 10_000 })
       await capture()
     })
 

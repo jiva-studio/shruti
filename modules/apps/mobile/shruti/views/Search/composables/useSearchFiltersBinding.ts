@@ -23,6 +23,12 @@ export interface UseSearchFiltersBindingReturn {
    *  Filters button badge so the user sees the live count without
    *  opening the sheet. */
   activeFilterCount: ComputedRef<number>
+  /** Sections whose current value is not a user choice: the locale-seeded
+   *  language and the default sort. The same rule `activeFilterCount` applies,
+   *  named per section so a surface that SHOWS the filters can leave these out
+   *  rather than telling a fresh install it is filtering by three things it
+   *  never picked. */
+  defaultSections: ComputedRef<ReadonlySet<string>>
   /** Clear every dimension in a single round-trip. Live-apply UI uses
    *  this for the sheet's Reset action. */
   reset: () => Promise<void>
@@ -145,6 +151,17 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
     )
   })
 
+  const defaultSections = computed<ReadonlySet<string>>(() => {
+    const f = filters.value
+    const out = new Set<string>()
+    const langs = f.languages ?? []
+    if (seededLanguages.value.length > 0 && sameLanguageSet(langs, seededLanguages.value)) {
+      out.add("languages")
+    }
+    if (f.sort === undefined || f.sort === "" || f.sort === DEFAULT_SORT) out.add("sort")
+    return out
+  })
+
   async function reset(): Promise<void> {
     filters.value = {
       authors: [],
@@ -160,5 +177,5 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
     }
   }
 
-  return { filters, hasActiveFilter, activeFilterCount, reset, ready }
+  return { filters, hasActiveFilter, activeFilterCount, defaultSections, reset, ready }
 }
