@@ -10,13 +10,20 @@ export default {
   noResultsAction: "Изменить фильтры",
   lecturesTitle: "Лекции",
   recommendedForYou: "Рекомендации",
-  allLectures: "Все лекции",
   topics: "Темы",
   topicsSection: "Лекции на различные темы",
-  fullLibrary: {
-    title: "Поиск по библиотеке",
-    subtitle:
-      "Поиск среди {count} лекции | Поиск среди {count} лекций | Поиск среди {count} лекций",
+  readQuestion: "Найти",
+  clearQuery: "Очистить",
+  web: {
+    title: "Найдено в интернете",
+    add: "Добавить в мою библиотеку",
+    empty: "В архивах, которые мы просматриваем, ничего нет.",
+    unavailable: "Поиск в интернете сейчас недоступен.",
+    more: "Показать ещё",
+  },
+  library: {
+    title: "Найдено в вашей библиотеке",
+    empty: "В вашей библиотеке ничего не подошло.",
   },
   smartLibrary: {
     title: "Умная библиотека",
@@ -49,6 +56,7 @@ export default {
     error: "Не удалось подготовить файл. Попробуйте ещё раз.",
   },
   filters: {
+    clearOne: "Убрать фильтр «{name}»",
     any: "Любые",
     sort: "Порядок",
     authors: "Авторы",

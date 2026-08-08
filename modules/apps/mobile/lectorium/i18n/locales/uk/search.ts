@@ -10,13 +10,20 @@ export default {
   noResultsAction: "Змінити фільтри",
   lecturesTitle: "Лекції",
   recommendedForYou: "Рекомендації",
-  allLectures: "Усі лекції",
   topicsSection: "Лекції на різні теми",
   topics: "Теми",
-  fullLibrary: {
-    title: "Пошук у бібліотеці",
-    subtitle:
-      "Пошук серед {count} лекції | Пошук серед {count} лекцій | Пошук серед {count} лекцій",
+  readQuestion: "Знайти",
+  clearQuery: "Очистити",
+  web: {
+    title: "Знайдено в інтернеті",
+    add: "Додати до моєї бібліотеки",
+    empty: "В архівах, які ми переглядаємо, нічого немає.",
+    unavailable: "Пошук в інтернеті зараз недоступний.",
+    more: "Показати ще",
+  },
+  library: {
+    title: "Знайдено у вашій бібліотеці",
+    empty: "У вашій бібліотеці нічого не підійшло.",
   },
   smartLibrary: {
     title: "Розумна бібліотека",
@@ -26,6 +33,7 @@ export default {
     addToPlaylist: "Додати до плейлиста",
     downloadAgain: "Завантажити знову",
     alreadyInPlaylist: "Вже у плейлисті",
+    alreadyInLibrary: "Вже у вашій бібліотеці",
     openTranscript: "Відкрити транскрипт",
     share: "Поділитися",
   },
@@ -48,6 +56,7 @@ export default {
     error: "Не вдалося підготувати файл. Спробуйте ще раз.",
   },
   filters: {
+    clearOne: "Прибрати фільтр «{name}»",
     any: "Будь-які",
     sort: "Порядок",
     authors: "Автори",

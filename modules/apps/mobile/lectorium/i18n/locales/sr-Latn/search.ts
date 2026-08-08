@@ -9,13 +9,20 @@ export default {
   noResultsAction: "Izmeni filtere",
   lecturesTitle: "Predavanja",
   recommendedForYou: "Preporuke",
-  allLectures: "Sva predavanja",
   topicsSection: "Predavanja o raznim temama",
   topics: "Teme",
-  fullLibrary: {
-    title: "Pretraži biblioteku",
-    subtitle:
-      "Pretraži {count} predavanje | Pretraži {count} predavanja | Pretraži {count} predavanja",
+  readQuestion: "Pretraži",
+  clearQuery: "Obriši",
+  web: {
+    title: "Pronađeno na internetu",
+    add: "Dodaj u moju biblioteku",
+    empty: "Nema ničega u arhivama koje pretražujemo.",
+    unavailable: "Pretraga interneta trenutno nije dostupna.",
+    more: "Prikaži još",
+  },
+  library: {
+    title: "Pronađeno u vašoj biblioteci",
+    empty: "U vašoj biblioteci nema podudaranja.",
   },
   smartLibrary: {
     title: "Pametna biblioteka",
@@ -25,6 +32,7 @@ export default {
     addToPlaylist: "Dodaj na listu numera",
     downloadAgain: "Preuzmi ponovo",
     alreadyInPlaylist: "Već na listi numera",
+    alreadyInLibrary: "Već u vašoj biblioteci",
     openTranscript: "Otvori transkript",
     share: "Podeli",
   },
@@ -47,6 +55,7 @@ export default {
     error: "Nije moguće pripremiti datoteku. Pokušajte ponovo.",
   },
   filters: {
+    clearOne: "Ukloni filter: {name}",
     any: "Bilo koji",
     sort: "Redosled",
     authors: "Autori",

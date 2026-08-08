@@ -89,6 +89,15 @@ export interface CdnServer extends KitCdnServer {
    *  Optional so a `config.json` predating the ingest API stays valid. When
    *  absent the client falls back to the (retired) chat add-to-library path. */
   readonly orchestratorBaseUrl?: string
+  /** Base URL of the `discovery` service — the index of lectures published on
+   *  other archives. The client appends `/discovery/search` to it. Origin-only
+   *  and reached over the same Caddy edge as chat, on the single published
+   *  `/discovery/search` route; the rest of that service stays internal.
+   *
+   *  Optional so a `config.json` predating it stays valid. When absent the
+   *  composition root derives it from `chatBaseUrl` — same edge, same host —
+   *  exactly as it does for `shareTranscriptUrl`. */
+  readonly discoveryBaseUrl?: string
 }
 
 // sslip.io resolves <ip-dashed>.sslip.io → the literal IP without us
@@ -109,6 +118,7 @@ export const SERVERS: readonly CdnServer[] = [
     chatBaseUrl: HOST,
     profileBaseUrl: HOST,
     orchestratorBaseUrl: HOST,
+    discoveryBaseUrl: HOST,
   },
   {
     id: "russia",
@@ -128,6 +138,7 @@ export const SERVERS: readonly CdnServer[] = [
     chatBaseUrl: HOST_RU,
     profileBaseUrl: HOST_RU,
     orchestratorBaseUrl: HOST_RU,
+    discoveryBaseUrl: HOST_RU,
   },
   {
     // The former `global` origin — the AWS S3 bucket. Retired as the
@@ -145,5 +156,6 @@ export const SERVERS: readonly CdnServer[] = [
     chatBaseUrl: HOST,
     profileBaseUrl: HOST,
     orchestratorBaseUrl: HOST,
+    discoveryBaseUrl: HOST,
   },
 ]

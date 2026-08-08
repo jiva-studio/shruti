@@ -51,6 +51,7 @@ import { useHttpServerProber } from "@infra/servers/index.js"
 import { createHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatService.js"
 import { createHttpSyncClient } from "@infra/sync/http/syncClient.js"
 import { createHttpIngestClient } from "@infra/ingest/http/ingestClient.js"
+import { createHttpDiscoveryClient } from "@infra/discovery/http/discoveryClient.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
 import {
   useWebRemoteFilesStorage,
@@ -152,6 +153,20 @@ const ingestClient = createHttpIngestClient({
   request: withNetworkErrorContext((path, init) => orchestratorHttp.request(path, init)),
 })
 
+// Discovery search failover client. A published config.json predating the
+// field omits it — fall back to chatBaseUrl, since /discovery/search sits
+// behind the same Caddy as chat, the way shareTranscriptUrl does.
+const discoveryHttp = createFailoverClient({
+  getServers: () => getRegions(),
+  getPreferredId: () => useLectorium().activeServer.value.id,
+  pickBaseUrl: (s) => s.discoveryBaseUrl ?? s.chatBaseUrl ?? "",
+  onPromoteFallback: (id) => useLectorium().setActiveServerById(id),
+})
+const discoveryClient = createHttpDiscoveryClient({
+  getAccessToken: () => useLectorium().auth.getAccessToken(),
+  request: withNetworkErrorContext((path, init) => discoveryHttp.request(path, init)),
+})
+
 initLectorium({
   appConfig: config,
   persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
@@ -236,6 +251,7 @@ initLectorium({
   // /orchestrator/ingest/{id}) — the direct add/retry + live-status transport
   // the library store drives; nil-URL regions fall back to the chat path.
   ingestClient,
+  discoveryClient,
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)

@@ -144,6 +144,22 @@ import role-proxy.conf
             events 300
             window 1m
         }
+        # /discovery/search — the search field on the library tab, which
+        # queries as the user types. Its own zone because the catch-all below
+        # is sized for whole conversations and this is sized for keystrokes:
+        # one pause in typing is one request, so an ordinary minute of
+        # searching is tens of them, and counted against the chat cap a few
+        # people behind one CGNAT address would fence the lot. Typing costs an
+        # embedding and no model — the model runs only when the magnifier is
+        # tapped, which a person does deliberately and rarely.
+        zone discovery {
+            match {
+                path /discovery/search
+            }
+            key {client_ip}
+            events 300
+            window 1m
+        }
         # /chat/* root — main LLM cost surface. Loose DoS shield: this
         # cap is for catching obvious botnet-scale abuse from one IP,
         # not for governing legitimate user behaviour. The 200/h cap we
@@ -160,10 +176,11 @@ import role-proxy.conf
         zone chat {
             match {
                 # Negative match so this fires on the root catch-all but
-                # NOT on /auth/*, /share/*, /profile/* or /orchestrator/*.
+                # NOT on /auth/*, /share/*, /profile/*, /orchestrator/* or
+                # /discovery/search.
                 # Order matters: more specific zones above were already checked.
                 not {
-                    path /auth/* /share/* /profile/* /orchestrator/* /analytics/*
+                    path /auth/* /share/* /profile/* /orchestrator/* /analytics/* /discovery/search
                 }
             }
             key {client_ip}

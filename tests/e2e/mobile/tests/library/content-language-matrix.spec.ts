@@ -1,7 +1,15 @@
 import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { bootDeviceLocale } from "../../support/bootstrap.js"
-import { gotoTab, openLibrary, searchInput, trackRows, trackTitles, CYRILLIC } from "../../support/nav.js"
+import {
+  gotoTab,
+  openLibrary,
+  clearSearch,
+  searchInput,
+  trackRows,
+  trackTitles,
+  CYRILLIC,
+} from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 /**
@@ -56,7 +64,7 @@ for (const c of MATRIX) {
 
         await step(page, c.id, 1, async () => {
           // Filters: the sheet opens (scoped to the presented overlay).
-          await page.locator(".search-row-filter-button").click()
+          await page.locator(".filters-button").click()
           await expect(page.locator("ion-modal.filters-sheet.show-modal")).toBeVisible({ timeout: 10_000 })
           // Dismiss so the next step acts on the library, not the overlay.
           await page.keyboard.press("Escape")
@@ -65,17 +73,21 @@ for (const c of MATRIX) {
 
         await step(page, c.id, 2, async () => {
           // Search is wired to the derived result set: a no-match empties it,
-          // clearing restores it.
+          // and widening the query again restores it. (Emptying the box would
+          // leave search entirely and show the browsing landing.)
           await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
           await searchInput(page).fill("zzzqqxnomatch")
           await expect(trackRows(page)).toHaveCount(0, { timeout: 15_000 })
-          await searchInput(page).fill("")
+          await openLibrary(page)
           await expect(trackRows(page).first()).toBeVisible({ timeout: 15_000 })
         })
 
         await step(page, c.id, 3, async () => {
           // Topics: the landing tile grid surfaces topics for this locale.
+          // Clear first — the field kept its query, and while it has one the
+          // tab shows results rather than the landing.
           await gotoTab(page, "search")
+          await clearSearch(page)
           await expect(page.locator(".tile-grid > *").first()).toBeVisible({ timeout: 20_000 })
         })
       }

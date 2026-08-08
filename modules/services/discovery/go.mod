@@ -14,9 +14,7 @@ require (
 
 require (
 	github.com/JohannesKaufmann/dom v0.3.1 // indirect
-	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
-	github.com/dop251/goja v0.0.0-20260723142020-b4aef50fa347 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -27,6 +25,11 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 )
 
-require github.com/jiva-studio/lectorium/pipeline v0.0.0
+require (
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
+	github.com/dop251/goja v0.0.0-20260723142020-b4aef50fa347
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/jiva-studio/lectorium/pipeline v0.0.0
+)
 
 replace github.com/jiva-studio/lectorium/pipeline => ../../libs/pipeline

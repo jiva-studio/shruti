@@ -417,7 +417,7 @@
       },
       {
         "action": "Search a word taken from a lecture title.",
-        "expected": "The list narrows to lectures whose titles contain that word."
+        "expected": "The list re-queries to a different, non-empty set and the lecture the word came from is among the results. The index covers more than titles (references, locations, tags, dates), so a match need not be in the title."
       },
       {
         "action": "Search a query that matches nothing.",
@@ -447,12 +447,12 @@
         "expected": "The library list re-queries to a disjoint set of lectures (the list changes) and the active-filter badge stays highlighted."
       },
       {
-        "action": "Open the filters sheet and choose the \"Date (oldest first)\" sort.",
+        "action": "Open the filters sheet and choose the \"Date (newest first)\" sort.",
         "expected": "The sheet shows the chosen sort."
       },
       {
         "action": "Apply the new sort.",
-        "expected": "The list re-orders live — the visible order differs from the default."
+        "expected": "The list re-orders live — newest first is the reverse of the by-shloka order it was in, so the visible order differs."
       },
       {
         "action": "Open the filters sheet and tap Reset.",
@@ -2871,6 +2871,28 @@
         "action": "Relaunch the app.",
         "expected": "The app still opens directly on Home; onboarding is not shown (the completed flag was stamped on the first launch)."
       }
+    ]
+  },
+  "167": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Lectures found on other archives are offered in two shapes, and adding one is Pro-gated",
+    "description": "The library tab's search reaches beyond the local catalog to the archives we index. What comes back is rendered by the shape of the source material: a recording published as video shows its poster in a carousel, a file on a web server has none and reads as a row. Adding either one is a Pro capability, so a free account is sent to the paywall rather than starting a fetch it is not entitled to. Offline, with the search service stubbed.",
+    "preconditions": "Offline boot on a clean user db (free tier). The discovery search endpoint is stubbed with two hits — one YouTube address and one direct mp3.",
+    "steps": [
+      {
+        "action": "Type a query into the docked search field on the library tab.",
+        "expected": "A \"found on the internet\" section appears above the library results, holding a poster card in a carousel for the video-hosted lecture and a plain row for the file-hosted one."
+      },
+      {
+        "action": "Tap the add control on the poster card as a free user.",
+        "expected": "The paywall opens; no ingest is started."
+      }
+    ],
+    "tags": [
+      "search",
+      "pro",
+      "e2e"
     ]
   }
 }

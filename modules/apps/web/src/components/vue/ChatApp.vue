@@ -6,7 +6,8 @@ import ChatMessageActions from './ChatMessageActions.vue'
 import ChatDots from './icons/ChatDots.vue'
 // REAL reused component (decoupled: status label via prop, spinner via slot).
 import StatusPill from '@lib/ui/chat/StatusPill.vue'
-import ChatComposer from '@lib/ui/chat/ChatComposer.vue'
+import FloatingInput from '@lib/ui/input/FloatingInput.vue'
+import ChatSendButton from '@lib/ui/chat/ChatSendButton.vue'
 import { webLocale } from '../../lib/i18n'
 import { useChatStream, type Msg } from '../../composables/useChatStream'
 import { useWebAuth } from '../../composables/useWebAuth'
@@ -145,16 +146,25 @@ function statusLabelFor(m: Msg): string {
 
     <footer class="px-3 pb-4 pt-2">
       <p v-if="!capped && (srvLimit !== null || turns > 0)" class="mb-2 text-center text-xs text-medium">{{ L.left(left) }}</p>
-      <ChatComposer
+      <FloatingInput
         :sending="busy"
         :disabled="capped"
         :placeholder="L.placeholder"
-        :send-aria-label="L.send"
-        @send="send"
-        @cancel="stop"
+        @submit="send"
       >
-        <template #spinner><ChatDots /></template>
-      </ChatComposer>
+        <template #action="{ hasText, sending, disabled, submit }">
+          <ChatSendButton
+            :sending="sending"
+            :disabled="disabled"
+            :has-text="hasText"
+            :label="L.send"
+            @send="submit()"
+            @cancel="stop"
+          >
+            <template #spinner><ChatDots /></template>
+          </ChatSendButton>
+        </template>
+      </FloatingInput>
     </footer>
   </div>
 </template>

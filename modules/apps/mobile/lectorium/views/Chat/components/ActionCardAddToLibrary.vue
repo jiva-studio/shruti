@@ -1,79 +1,37 @@
 <template>
-  <article v-if="payload" class="add-card">
-    <div class="stage">
-      <img
-        v-if="payload.thumbnail"
-        class="cover"
-        :src="payload.thumbnail"
-        :alt="payload.title"
-        loading="lazy"
-      />
-      <div v-else class="cover cover--placeholder" aria-hidden="true">
-        <IconVinyl :size="40" />
-      </div>
-
-      <!-- Live ingest progress (shared badge: ring + stage/percent) while the
-           lecture ingests — takes over the corner control so the user watches it
-           advance without leaving chat. -->
-      <IngestProgressBadge
-        v-if="liveStatus?.kind === 'pending'"
-        class="stage-badge"
-        :percent="liveStatus.percent"
-        :label="liveStatus.label"
-      />
-      <button
-        v-else-if="liveStatus?.kind === 'failed' || state === 'error'"
-        class="add-btn add-btn--error"
-        :aria-label="$t('chat.actionRetry')"
-        @click="emit('confirm', actionId)"
-      >
-        <IconRefresh :size="18" />
-      </button>
-
-      <!-- Compact add control, top-right over the cover. -->
-      <button
-        v-else-if="state === 'pending' && !alreadyInLibrary"
-        class="add-btn"
-        :aria-label="$t('chat.actionAddToLibraryConfirm')"
-        @click="emit('confirm', actionId)"
-      >
-        <IconPlus :size="20" />
-      </button>
-      <span v-else-if="state === 'executing'" class="add-btn add-btn--busy" aria-hidden="true">
-        <IonSpinner name="crescent" class="spinner" />
-      </span>
-      <span
-        v-else
-        class="add-btn add-btn--done"
-        :aria-label="alreadyInLibrary ? $t('search.actions.alreadyInLibrary') : undefined"
-      >
-        <IconCheck :size="20" />
-      </span>
-
-      <div class="overlay">
-        <span class="title">{{ payload.title }}</span>
-        <span v-if="payload.author" class="author">{{ payload.author }}</span>
-      </div>
-    </div>
-  </article>
+  <AddableLectureCard
+    v-if="payload"
+    class="add-card"
+    :title="payload.title"
+    :subtitle="payload.author ?? ''"
+    :cover="payload.thumbnail"
+    :state="cardState"
+    :progress="liveStatus?.kind === 'pending' ? liveStatus : undefined"
+    :add-label="$t('chat.actionAddToLibraryConfirm')"
+    :retry-label="$t('chat.actionRetry')"
+    :done-label="alreadyInLibrary ? $t('search.actions.alreadyInLibrary') : ''"
+    @add="emit('confirm', actionId)"
+  />
 </template>
 
 <script setup lang="ts">
-import { IonSpinner } from "@ionic/vue"
-import { IconVinyl, IconPlus, IconCheck, IconRefresh } from "@tabler/icons-vue"
-import IngestProgressBadge from "@lectorium/components/IngestProgressBadge.vue"
+import { computed } from "vue"
+import AddableLectureCard, { type AddableState } from "@lectorium/components/AddableLectureCard.vue"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ActionState } from "@lectorium/stores/useChatStore.js"
 
 /**
  * Candidate card for an external lecture the chat found (personal library,
- * epic #1236). Laid out like the media (video) card: a 16:9 cover with the
- * title + author overlaid at the bottom and a compact add control in the
- * top-right corner. Tapping it runs the `add_to_library` action, which
- * PRO-gates and triggers ingest of the external lecture. Presentational — the
- * store owns the side effect.
+ * epic #1236). Tapping it runs the `add_to_library` action, which PRO-gates and
+ * triggers ingest of the external lecture.
+ *
+ * The picture is `AddableLectureCard`, shared with the search results, so a
+ * lecture found by asking and one found by searching are the same object. This
+ * is the adapter: it turns the chat's own vocabulary — the action lifecycle,
+ * the polled ingest status, "already in library" — into the four states the
+ * card knows. The store still owns every side effect.
  */
-defineProps<{
+const props = defineProps<{
   actionId: string
   payload?: Extract<ChatActionPayload, { kind: "add_to_library" }>
   state: ActionState
@@ -87,111 +45,24 @@ defineProps<{
 const emit = defineEmits<{
   (e: "confirm", actionId: string): void
 }>()
+
+// The live ingest status outranks the action lifecycle: the action is "done"
+// the moment the submit returns, while the lecture itself is still being
+// fetched, and the badge is the truer answer to "what is happening".
+const cardState = computed<AddableState>(() => {
+  if (props.liveStatus?.kind === "pending") return "pending"
+  if (props.liveStatus?.kind === "failed" || props.state === "error") return "failed"
+  if (props.state === "executing") return "busy"
+  if (props.state === "pending" && !props.alreadyInLibrary) return "addable"
+  return "ready"
+})
 </script>
 
 <style scoped>
+/* The card sits in the message flow, so the spacing is the bubble's business
+   and not the shared shell's. */
 .add-card {
-  display: block;
   margin: 10px 0;
   border-radius: 4px;
-  overflow: hidden;
-}
-
-/* 16:9 cover stage — same proportion as the video media card. */
-.stage {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  line-height: 0;
-  background: #000;
-}
-
-.cover {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.cover--placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  color: var(--ion-color-medium);
-}
-
-/* Compact circular add control, top-right (mirrors the media card's overlay
- * chrome — semi-transparent so it sits cleanly over any cover). */
-.add-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.add-btn--done {
-  background: var(--ion-color-success, #2dd36f);
-}
-
-.add-btn--busy,
-.add-btn--error {
-  cursor: default;
-}
-
-/* Shared ingest-progress badge in the same top-right corner as the add control. */
-.stage-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  max-width: calc(100% - 16px);
-}
-
-.spinner {
-  width: 18px;
-  height: 18px;
-  color: #fff;
-}
-
-/* Title + author over a bottom gradient, YouTube-poster style. */
-.overlay {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 28px 12px 10px;
-  line-height: 1.25;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0) 100%);
-}
-
-.title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.author {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.82);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 </style>

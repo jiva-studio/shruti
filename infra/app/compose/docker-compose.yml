@@ -1080,9 +1080,16 @@ services:
       # already uses for the same reason is the fallback, so there is one proxy
       # to keep working rather than two.
       LECTORIUM_DISCOVERY_PROXY: ${LECTORIUM_DISCOVERY_PROXY:-${LECTORIUM_YTDLP_PROXY:-}}
+      # The signer's public half (RS256, kid=v1) — the same file and the same
+      # name the orchestrator reads. /discovery/search is the one route Caddy
+      # publishes, and it REFUSES every request without this: the mount is not
+      # optional on a deployment that serves the app.
+      AUTH_JWT_PUBLIC_KEY_FILE: /secrets/public.pem
       PORT: "8089"
       ENV: ${LECTORIUM_ENV:-dev}
       SERVICE_VERSION: ${LECTORIUM_DISCOVERY_TAG:-latest}
+    volumes:
+      - ${LECTORIUM_JWT_KEYS_DIR:-/opt/lectorium/jwt}:/secrets:ro
     networks: [lectorium]
     depends_on:
       discovery-postgres: { condition: service_healthy }

@@ -86,13 +86,12 @@ The views (routes defined in `modules/apps/mobile/lectorium/router/index.ts`; th
 |---|---|
 | `views/Welcome/` | Bootstrap (CDN probe, DB download, scheme validation, migrations) — see [startup-flow](../architecture/startup-flow.md) |
 | `views/Home/` | Tab: active playlist + suggestions + subscription nag |
-| `views/Search/` | Tab: free-text search + filter chips |
+| `views/Search/` | Tab: the library. Browsing landing when the docked field is empty, two lanes of results (other archives, then the local catalog) when it is not |
 | `views/Chat/` | Tab: conversational search over the corpus (sessions, cite markers) |
 | `views/Notes/` | Tab: recent notes, search, inline audio player (`NotesInlinePlayer.vue`) |
 | `views/Settings/` | Tab: language, theme, server, sadhana, account, data, danger |
 | `views/Track/` | Track detail + player + transcript + notes (`/tabs/track/:trackId`) |
 | `views/Collection/` | Collection / collection-group / topic track listings (`CollectionView.vue`, `CollectionListView.vue`) |
-| `views/Tracks/` | Flat track list (`/tabs/search/tracks`) |
 | `views/Studio/` | Studio screen (pushed from Notes) |
 | `views/Subscription/` | Paywall / subscription feature carousel |
 

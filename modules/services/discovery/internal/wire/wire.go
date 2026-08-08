@@ -20,6 +20,7 @@ import (
 	"github.com/jiva-studio/lectorium/discovery/internal/application/search"
 	"github.com/jiva-studio/lectorium/discovery/internal/config"
 	"github.com/jiva-studio/lectorium/discovery/internal/handler"
+	"github.com/jiva-studio/lectorium/discovery/internal/infra/authjwt"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/embed"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/ytdlp"
@@ -115,6 +116,20 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		Repo:    repo,
 	}
 
+	// Admits callers to /discovery/search. A key that is set but unreadable is
+	// louder than one that is absent: somebody meant to configure this and the
+	// route will refuse either way, so say which it was.
+	var verifier *authjwt.Verifier
+	if cfg.AuthPublicKeyFile != "" {
+		v, verr := authjwt.NewFromFile(cfg.AuthPublicKeyFile)
+		if verr != nil {
+			slog.ErrorContext(ctx, "auth_key_unusable", "path", cfg.AuthPublicKeyFile, "err", verr)
+		}
+		verifier = v
+	} else {
+		slog.WarnContext(ctx, "auth_key_unset", "effect", "/discovery/search will refuse every request")
+	}
+
 	background := crawl.NewBackground(crawler)
 	deps := &Deps{
 		Pool:       pool,
@@ -129,6 +144,7 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 			Ask:              asker,
 			Metrics:          counters,
 			SchedulerEnabled: cfg.SchedulerEnabled,
+			Verifier:         verifier,
 		}),
 	}
 

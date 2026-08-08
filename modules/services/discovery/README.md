@@ -89,6 +89,20 @@ pointed at one speaker's Bhagavad-gita wants its own dozen. Preferring what is
 inside only orders the queue — once everything inside is up to date the rest is
 all that is left, and the crawl wanders off into the archive.
 
+## Who may ask
+
+`POST /discovery/search` is the only route published past the edge — the app's
+library tab calls it as the user types. It takes the same RS256 access token
+(`kid=v1`) every other service takes, read from the signer's public half at
+`AUTH_JWT_PUBLIC_KEY_FILE`.
+
+Without that key the route **refuses**, rather than answering unauthenticated.
+Everything else here — parsing a URL, adding an item, editing sources, starting
+a run — has no route in Caddy and is reached from inside the network, so the
+whole service used to be behind the network and needed no opinion about
+callers. One address on the internet is a different thing, and a deployment
+that has not finished configuring it should be closed, not open.
+
 ## Not crawling by accident
 
 Three separate things have to be true before anything is fetched on its own:

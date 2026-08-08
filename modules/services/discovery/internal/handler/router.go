@@ -14,6 +14,7 @@ import (
 	"github.com/jiva-studio/lectorium/discovery/internal/application/crawl"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/index"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/parse"
+	"github.com/jiva-studio/lectorium/discovery/internal/infra/authjwt"
 	"github.com/jiva-studio/lectorium/discovery/internal/metrics"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
 )
@@ -34,6 +35,9 @@ type RouterDeps struct {
 	Ask              *ask.Service
 	Metrics          *metrics.Counters
 	SchedulerEnabled bool
+	// Verifier admits callers to /discovery/search, the one route reachable
+	// from outside. Nil refuses it — see requireToken.
+	Verifier *authjwt.Verifier
 }
 
 // NewRouter wires:
@@ -69,7 +73,10 @@ func NewRouter(d RouterDeps) http.Handler {
 	r.Route("/discovery", func(r chi.Router) {
 		r.Post("/parse", parseHandler(d.Parse, d.Repo))
 		r.Post("/items", itemsHandler(d.Index))
-		r.Post("/search", askHandler(d.Ask))
+		// The only route published past the edge, so the only one that
+		// authenticates. Everything else here is reached from inside the
+		// network and has no route in Caddy at all.
+		r.With(requireToken(d.Verifier)).Post("/search", askHandler(d.Ask))
 		r.Get("/status", statusHandler(d.Repo, d.Metrics, d.SchedulerEnabled))
 
 		if d.Repo == nil {

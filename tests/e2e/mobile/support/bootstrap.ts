@@ -65,6 +65,46 @@ export async function interceptContent(page: Page): Promise<void> {
     })
   })
 
+  // The "found on the internet" lane. Offline it has no service to ask, and an
+  // unmocked cross-origin POST per keystroke would leave every library spec
+  // rendering an error strip. Two hits, deliberately one of each shape: a
+  // YouTube address (a poster is derivable, so it rides the carousel) and a
+  // plain mp3 on somebody's web server (no poster, so it reads as a row).
+  await page.route("**/discovery/search", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        query: "",
+        filter: {},
+        hits: [
+          {
+            item_id: 9001,
+            media_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            page_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            title: "A lecture published as video",
+            author: "Test Speaker",
+            language: "en",
+            recorded_on: "1974-04-09T00:00:00Z",
+            references: ["BG 4.20"],
+            score: 0.9,
+          },
+          {
+            item_id: 9002,
+            media_url: "https://archive.example/talks/0001.mp3",
+            page_url: "https://archive.example/talks/0001",
+            title: "A lecture published as a file",
+            author: "Test Speaker",
+            language: "en",
+            recorded_on: "1974-03-27T00:00:00Z",
+            references: [],
+            score: 0.8,
+          },
+        ],
+      }),
+    })
+  })
+
   // Serve one fixture transcript for every track, with its `trackId`/`language`
   // rewritten to match the requested URL so the reader doesn't reject it on a
   // mismatch. Keeps the transcript spec offline and independent of which queued

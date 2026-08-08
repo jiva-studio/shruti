@@ -9,12 +9,20 @@ export default {
   noResultsAction: "Alterar filtros",
   lecturesTitle: "Aulas",
   recommendedForYou: "Recomendações",
-  allLectures: "Todas as aulas",
   topicsSection: "Aulas sobre diversos temas",
   topics: "Temas",
-  fullLibrary: {
-    title: "Buscar na biblioteca",
-    subtitle: "Buscar em {count} aula | Buscar em {count} aulas",
+  readQuestion: "Buscar",
+  clearQuery: "Limpar",
+  web: {
+    title: "Encontrado na internet",
+    add: "Adicionar à minha biblioteca",
+    empty: "Não há nada nos arquivos que indexamos.",
+    unavailable: "A busca na internet não está disponível agora.",
+    more: "Mostrar mais",
+  },
+  library: {
+    title: "Encontrado na sua biblioteca",
+    empty: "Nada na sua biblioteca corresponde.",
   },
   smartLibrary: {
     title: "Biblioteca inteligente",
@@ -24,6 +32,7 @@ export default {
     addToPlaylist: "Adicionar à playlist",
     downloadAgain: "Baixar novamente",
     alreadyInPlaylist: "Já está na playlist",
+    alreadyInLibrary: "Já está na sua biblioteca",
     openTranscript: "Abrir transcrição",
     share: "Compartilhar",
   },
@@ -46,6 +55,7 @@ export default {
     error: "Não foi possível preparar o arquivo. Tente novamente.",
   },
   filters: {
+    clearOne: "Remover filtro: {name}",
     any: "Qualquer",
     sort: "Ordenar",
     authors: "Autores",
