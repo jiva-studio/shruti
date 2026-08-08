@@ -1,6 +1,8 @@
 package domain
 
 import (
+	_ "embed"
+	"encoding/json"
 	"regexp"
 	"strings"
 )
@@ -17,16 +19,59 @@ import (
 // Vaishnava, not archival. Where a name sits on a page is a source's business
 // and belongs in its script.
 
-// honorifics precede a name and are never part of it.
+// names.json is the vocabulary: the words that stand in front of a name, the
+// words that follow it, the forms of address and every spelling of each, the
+// organisations that precede a place, and the letters one alphabet becomes in
+// the other.
 //
-// Both alphabets, because one speaker is written in both: a Russian archive
-// files them in Cyrillic and an English one in Latin, and they are one person.
-var honorifics = []string{
-	"His Holiness", "His Grace", "Her Grace",
-	"Srila", "Sriman", "Srimati", "Sripad", "Sri", "Shri", "Dr",
-	"Его Святейшество", "Его Милость", "Её Милость", "Ее Милость",
-	"Шрила", "Шриман", "Шримати", "Шрипад", "Шри",
+// Data rather than code, for the reason the canon of scriptures is: a person
+// adding a spelling should not need a Go build. What stays in code is the
+// patterns — a regular expression is not something anybody edits by hand.
+//
+// Both alphabets throughout, because one speaker is written in both: a Russian
+// archive files them in Cyrillic and an English one in Latin, and they are one
+// person.
+//
+//go:embed names.json
+var namesJSON []byte
+
+// form is one way of addressing somebody, with every spelling the archives use
+// for it. Canonical, its Cyrillic twin and whether it marks a woman live
+// together here because three parallel tables of the same four entries can
+// disagree, and did not only because nobody had edited them yet.
+type Form struct {
+	Canonical string `json:"canonical"`
+	// Cyrillic is how the marker is written when the name is.
+	Cyrillic string `json:"cyrillic"`
+	// Feminine is the one thing in a form of address that distinguishes rather
+	// than decorates, so Key keeps it: without it "Govinda Prabhu" and "Govinda
+	// Dasi Mataji" fold together, and they are two people.
+	Feminine  bool     `json:"feminine"`
+	Spellings []string `json:"spellings"`
 }
+
+var vocabulary = func() struct {
+	Honorifics    []string          `json:"honorifics"`
+	Dropped       []string          `json:"dropped"`
+	Forms         []Form            `json:"forms"`
+	Organisations []string          `json:"organisations"`
+	Cyrillic      map[string]string `json:"cyrillic"`
+} {
+	var v struct {
+		Honorifics    []string          `json:"honorifics"`
+		Dropped       []string          `json:"dropped"`
+		Forms         []Form            `json:"forms"`
+		Organisations []string          `json:"organisations"`
+		Cyrillic      map[string]string `json:"cyrillic"`
+	}
+	if err := json.Unmarshal(namesJSON, &v); err != nil {
+		panic("domain: names.json: " + err.Error())
+	}
+	return v
+}()
+
+// honorifics precede a name and are never part of it.
+var honorifics = vocabulary.Honorifics
 
 // initials are the same honorifics written as letters, with or without the
 // stops and spaces an archive happens to use: HH, H.H., "H G".
@@ -34,36 +79,40 @@ var reInitials = regexp.MustCompile(`(?i)^\s*(?:h\s*\.?\s*[gh]|е\s*\.?\s*[смc
 
 // dropped follows a name and is how one addresses a person rather than how one
 // names them.
-var dropped = []string{
-	"Prabhuji", "Prabhu", "Prabh", "Pr", "P",
-	"Прабхуджи", "Прабху", "Прабх", "пр",
+var dropped = vocabulary.Dropped
+
+// Forms is the vocabulary of address, for anything that needs to check the
+// file is whole.
+func Forms() []Form { return append([]Form(nil), vocabulary.Forms...) }
+
+// CyrillicLetter is what a Russian letter becomes in the other alphabet, and
+// whether the table knows it at all.
+func CyrillicLetter(r string) (string, bool) {
+	to, ok := vocabulary.Cyrillic[r]
+	return to, ok
 }
 
 // canonical is the part of a name that stays, with every spelling the archives
 // use for it mapped to the one we write. "Sw" and "Maharaja" are a Swami; "dd"
-// and "Mataji" are a Devi Dasi.
-var canonical = map[string][]string{
-	"Swami": {
-		"Swami", "Swamiji", "Sw", "Maharaja", "Maharaj", "Mharaj",
-		"Свами Махарадж", "Свами Махараджа", "Свами", "Махарадж", "Махараджа",
-	},
-	"Goswami": {
-		"Goswami", "Gosvami", "Gsw",
-		"Госвами Махарадж", "Госвами Махараджа", "Госвами", "Госвамй",
-	},
-	"Das": {"Das", "Dasa", "Ds", "дас", "даса", "дасу"},
-	// Devi on its own is the same marker: "Mahamaya Devi" is a woman, and must
-	// meet "Mahamaya Devi Dasi".
-	"Devi Dasi": {
-		"Devi Dasi", "Devi Dasa", "Devi", "Dasi", "dd", "Mataji", "Mtj",
-		"деви даси", "деви даса", "деви", "даси", "матаджи", "д.д.", "дд",
-	},
-}
+// and "Mataji" are a Devi Dasi. "Devi" on its own is the same marker:
+// "Mahamaya Devi" is a woman and must meet "Mahamaya Devi Dasi".
+var canonical = func() map[string][]string {
+	out := make(map[string][]string, len(vocabulary.Forms))
+	for _, f := range vocabulary.Forms {
+		out[f.Canonical] = f.Spellings
+	}
+	return out
+}()
 
-// feminine marks a woman. It is the one thing in a form of address that
-// distinguishes rather than decorates, so Key keeps it: without it "Govinda
-// Prabhu" and "Govinda Dasi Mataji" fold together, and they are two people.
-var feminine = map[string]bool{"Devi Dasi": true}
+var feminine = func() map[string]bool {
+	out := map[string]bool{}
+	for _, f := range vocabulary.Forms {
+		if f.Feminine {
+			out[f.Canonical] = true
+		}
+	}
+	return out
+}()
 
 var (
 	reHonorific = alternation(honorifics, `^\s*(%s)\s*\.?[\s_]+`)
@@ -169,12 +218,15 @@ func Name(raw string) string {
 }
 
 // canonInCyrillic is how each marker is written when the name is.
-var canonInCyrillic = map[string]string{
-	"Swami":     "Свами",
-	"Goswami":   "Госвами",
-	"Das":       "дас",
-	"Devi Dasi": "деви даси",
-}
+var canonInCyrillic = func() map[string]string {
+	out := make(map[string]string, len(vocabulary.Forms))
+	for _, f := range vocabulary.Forms {
+		if f.Cyrillic != "" {
+			out[f.Canonical] = f.Cyrillic
+		}
+	}
+	return out
+}()
 
 func isCyrillic(s string) bool {
 	for _, r := range s {
@@ -221,13 +273,13 @@ func Key(raw string) string {
 //
 // Sound, not spelling — this feeds the same folding as the Latin rules below,
 // so ч becomes ch and then c, and the two routes end up in the same place.
-var cyrillic = strings.NewReplacer(
-	"а", "a", "б", "b", "в", "v", "г", "g", "д", "d", "е", "e", "ё", "e",
-	"ж", "j", "з", "z", "и", "i", "й", "i", "к", "k", "л", "l", "м", "m",
-	"н", "n", "о", "o", "п", "p", "р", "r", "с", "s", "т", "t", "у", "u",
-	"ф", "f", "х", "h", "ц", "c", "ч", "ch", "ш", "sh", "щ", "sh",
-	"ъ", "", "ы", "i", "ь", "", "э", "e", "ю", "yu", "я", "ya",
-)
+var cyrillic = func() *strings.Replacer {
+	pairs := make([]string, 0, len(vocabulary.Cyrillic)*2)
+	for from, to := range vocabulary.Cyrillic {
+		pairs = append(pairs, from, to)
+	}
+	return strings.NewReplacer(pairs...)
+}()
 
 // transliteration is where romanisations of the same sound differ: ch for c,
 // sh for s, ri for r, a trailing -a that comes and goes. Folding them lets
@@ -275,11 +327,7 @@ func collapseDoubles(s string) string {
 // organisations run in front of a place name without being part of it: an
 // archive writes "ISKCON Chennai" where the place is Chennai, the same way it
 // writes "HG Radha Gopinath Prabhu" where the person is Radha Gopinath.
-var organisations = []string{
-	"ISKCON", "ISCKON", "Iskcon",
-	"Hare Krishna Temple", "Hare Krishna Centre", "Hare Krishna Center",
-	"Sri Sri Radha", "Radha Krishna Temple", "Temple of",
-}
+var organisations = vocabulary.Organisations
 
 var reOrganisation = alternation(organisations, `^\s*(%s)[\s_,-]+`)
 

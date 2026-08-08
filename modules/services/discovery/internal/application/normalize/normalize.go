@@ -46,6 +46,10 @@ type Result struct {
 	Date      string   `json:"date,omitempty"` // YYYY-MM-DD
 	Language  string   `json:"language,omitempty"`
 	DurationS int      `json:"duration_s,omitempty"`
+	// CoverURL is the picture the archive published, where the script that read
+	// the page found one. A model never fills this: it is shown the words of a
+	// page, not its pictures.
+	CoverURL string `json:"cover_url,omitempty"`
 	// References is one entry per verse: a range in a filename is expanded
 	// before it gets here, the same way the corpus parser does it.
 	References []domain.Ref `json:"references,omitempty"`

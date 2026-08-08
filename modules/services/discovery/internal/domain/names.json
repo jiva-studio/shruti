@@ -1,0 +1,148 @@
+{
+  "honorifics": [
+    "His Holiness",
+    "His Grace",
+    "Her Grace",
+    "Srila",
+    "Sriman",
+    "Srimati",
+    "Sripad",
+    "Sri",
+    "Shri",
+    "Dr",
+    "Его Святейшество",
+    "Его Милость",
+    "Её Милость",
+    "Ее Милость",
+    "Шрила",
+    "Шриман",
+    "Шримати",
+    "Шрипад",
+    "Шри"
+  ],
+  "dropped": [
+    "Prabhuji",
+    "Prabhu",
+    "Prabh",
+    "Pr",
+    "P",
+    "Прабхуджи",
+    "Прабху",
+    "Прабх",
+    "пр"
+  ],
+  "forms": [
+    {
+      "canonical": "Swami",
+      "cyrillic": "Свами",
+      "feminine": false,
+      "spellings": [
+        "Swami",
+        "Swamiji",
+        "Sw",
+        "Maharaja",
+        "Maharaj",
+        "Mharaj",
+        "Свами Махарадж",
+        "Свами Махараджа",
+        "Свами",
+        "Махарадж",
+        "Махараджа"
+      ]
+    },
+    {
+      "canonical": "Goswami",
+      "cyrillic": "Госвами",
+      "feminine": false,
+      "spellings": [
+        "Goswami",
+        "Gosvami",
+        "Gsw",
+        "Госвами Махарадж",
+        "Госвами Махараджа",
+        "Госвами",
+        "Госвамй"
+      ]
+    },
+    {
+      "canonical": "Das",
+      "cyrillic": "дас",
+      "feminine": false,
+      "spellings": [
+        "Das",
+        "Dasa",
+        "Ds",
+        "дас",
+        "даса",
+        "дасу"
+      ]
+    },
+    {
+      "canonical": "Devi Dasi",
+      "cyrillic": "деви даси",
+      "feminine": true,
+      "spellings": [
+        "Devi Dasi",
+        "Devi Dasa",
+        "Devi",
+        "Dasi",
+        "dd",
+        "Mataji",
+        "Mtj",
+        "деви даси",
+        "деви даса",
+        "деви",
+        "даси",
+        "матаджи",
+        "д.д.",
+        "дд"
+      ]
+    }
+  ],
+  "organisations": [
+    "ISKCON",
+    "ISCKON",
+    "Iskcon",
+    "Hare Krishna Temple",
+    "Hare Krishna Centre",
+    "Hare Krishna Center",
+    "Sri Sri Radha",
+    "Radha Krishna Temple",
+    "Temple of"
+  ],
+  "cyrillic": {
+    "а": "a",
+    "б": "b",
+    "в": "v",
+    "г": "g",
+    "д": "d",
+    "е": "e",
+    "ё": "e",
+    "ж": "j",
+    "з": "z",
+    "и": "i",
+    "й": "i",
+    "к": "k",
+    "л": "l",
+    "м": "m",
+    "н": "n",
+    "о": "o",
+    "п": "p",
+    "р": "r",
+    "с": "s",
+    "т": "t",
+    "у": "u",
+    "ф": "f",
+    "х": "h",
+    "ц": "c",
+    "ч": "ch",
+    "ш": "sh",
+    "щ": "sh",
+    "ъ": "",
+    "ы": "i",
+    "ь": "",
+    "э": "e",
+    "ю": "yu",
+    "я": "ya"
+  }
+}

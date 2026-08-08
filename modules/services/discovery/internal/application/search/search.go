@@ -72,13 +72,17 @@ type Query struct {
 
 // Hit is one recording, with the piece of text that matched.
 type Hit struct {
-	ItemID     int64      `json:"item_id"`
-	MediaURL   string     `json:"media_url"`
-	PageURL    string     `json:"page_url,omitempty"`
-	Title      string     `json:"title,omitempty"`
-	Author     string     `json:"author,omitempty"`
-	Location   string     `json:"location,omitempty"`
-	Language   string     `json:"language,omitempty"`
+	ItemID   int64  `json:"item_id"`
+	MediaURL string `json:"media_url"`
+	PageURL  string `json:"page_url,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Author   string `json:"author,omitempty"`
+	Location string `json:"location,omitempty"`
+	Language string `json:"language,omitempty"`
+	// CoverURL is the picture the archive publishes, as the script that read
+	// the page said it. A caller shows it and needs to know nothing about which
+	// archives have pictures or how each builds an address for one.
+	CoverURL   string     `json:"cover_url,omitempty"`
 	RecordedOn *time.Time `json:"recorded_on,omitempty"`
 	References []string   `json:"references,omitempty"`
 	Source     string     `json:"source,omitempty"`
@@ -378,7 +382,7 @@ func (q Query) filtered() bool {
 
 const hitCols = `i.id, i.media_url, coalesce(p.url,''), coalesce(i.title,''),
 	coalesce(i.author,''), coalesce(i.location,''), coalesce(i.language,''),
-	i.recorded_on, ` + refsCol + `,
+	coalesce(i.cover_url,''), i.recorded_on, ` + refsCol + `,
 	coalesce(i.source_id,''), i.media_state,
 	coll.id, coll.title, coll.url, coll.ordinal, coll.of, c.text`
 
@@ -409,7 +413,7 @@ func scanHits(rows pgx.Rows) ([]Hit, error) {
 		var title, url *string
 		var ordinal, of *int
 		if err := rows.Scan(&h.ItemID, &h.MediaURL, &h.PageURL, &h.Title, &h.Author,
-			&h.Location, &h.Language, &h.RecordedOn, &h.References, &h.Source,
+			&h.Location, &h.Language, &h.CoverURL, &h.RecordedOn, &h.References, &h.Source,
 			&h.MediaState, &collID, &title, &url, &ordinal, &of,
 			&h.Chunk, &h.Score); err != nil {
 			return nil, err
@@ -565,7 +569,7 @@ func (s *Service) filterOnly(ctx context.Context, q Query) ([]Hit, error) {
 	sql := fmt.Sprintf(`
 		SELECT i.id, i.media_url, coalesce(p.url,''), coalesce(i.title,''),
 			coalesce(i.author,''), coalesce(i.location,''), coalesce(i.language,''),
-			i.recorded_on, `+refsCol+`,
+			coalesce(i.cover_url,''), i.recorded_on, `+refsCol+`,
 			coalesce(i.source_id,''), i.media_state,
 			coll.id, coll.title, coll.url, coll.ordinal, coll.of, '' AS text, 0::float8 AS score
 		FROM discovery.items i

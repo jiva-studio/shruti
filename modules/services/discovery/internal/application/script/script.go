@@ -69,6 +69,11 @@ type Fields struct {
 	// the canon. Objects rather than "BG 2.13" strings: a code with a space in
 	// it cannot survive being cut back apart on the first one.
 	References []domain.Ref `json:"references"`
+	// CoverURL is the picture the archive publishes for this recording. The
+	// script says it because the script is what knows: it holds the video's own
+	// id, where a reader downstream would be matching the shape of an address
+	// and guessing.
+	CoverURL string `json:"cover_url"`
 
 	// Complete is the script asserting it accounted for the whole of what the
 	// page said about this file — that the fields left empty are empty because
