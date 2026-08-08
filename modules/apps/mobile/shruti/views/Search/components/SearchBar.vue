@@ -87,14 +87,11 @@ const text = defineModel<string>({ required: true })
   position: fixed;
   left: 0;
   right: 0;
-  /* Clear of the tab bar, and of the player when it is up. The docker sets the
-     offset; same easing as the player's, so the two move together. */
-  bottom: var(--search-dock-bottom, calc(56px + var(--ion-safe-area-bottom, 0px)));
+  bottom: calc(56px + var(--ion-safe-area-bottom, 0px));
   padding: 8px 12px;
   background: transparent;
   pointer-events: none;
   z-index: 1000;
-  transition: bottom 0.5s ease-in-out;
 }
 
 /* The two discs share one cell, so one can shrink away exactly where the other
