@@ -14,16 +14,16 @@ export default {
   readQuestion: "Buscar",
   clearQuery: "Borrar",
   web: {
-    title: "Encontrado en internet",
+    title: "Internet",
     add: "Añadir a mi biblioteca",
     empty: "No hay nada en los archivos que indexamos.",
     unavailable: "La búsqueda en internet no está disponible ahora.",
     more: "Mostrar más",
   },
   library: {
-    title: "Encontrado en la biblioteca",
-    empty: "Nada en la biblioteca coincide.",
-    mine: "Encontrado en tu biblioteca",
+    title: "Biblioteca",
+    empty: "Prueba otras palabras o quita algún filtro.",
+    mine: "Biblioteca personal",
   },
   smartLibrary: {
     title: "Biblioteca inteligente",
