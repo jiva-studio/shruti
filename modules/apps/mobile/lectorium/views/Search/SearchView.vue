@@ -11,6 +11,7 @@
           :web="web"
           @open-filters="search.filtersOpen.value = true"
           @clear-filter="onClearFilter"
+          @see-all-web="openWebResults"
         />
       </div>
       <div class="bottom-spacer" aria-hidden="true" />
@@ -36,6 +37,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
+import { useRouter } from "vue-router"
 import { IonContent, IonPage } from "@ionic/vue"
 import { SafeAreaHeaderGradient } from "@ui/primitives/index.js"
 import { SearchFiltersSheet, clearSection } from "@ui/features/tracks/search/filters/index.js"
@@ -70,6 +72,7 @@ import SearchBar from "./components/SearchBar.vue"
  * as a sibling — the shape `ChatView` has — and that shell offers no footer.
  */
 const player = usePlayerStore()
+const router = useRouter()
 
 const search = useSearchController()
 const searching = computed(() => search.query.value.trim().length > 0)
@@ -79,6 +82,11 @@ const web = useWebSearch({
   filters: search.filters,
   enabled: searching,
 })
+
+/** Open the full set of internet results, carrying the query in the URL. */
+function openWebResults(): void {
+  void router.push({ name: "web-results", query: { q: search.query.value.trim() } })
+}
 
 /** Drop one section from the chips above the results. */
 function onClearFilter(key: string): void {
