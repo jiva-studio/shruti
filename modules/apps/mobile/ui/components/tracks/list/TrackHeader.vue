@@ -3,6 +3,7 @@
     <!-- The prominent top widget sits inline on the title row, exactly
          where the scripture reference chip always lived. Which field it
          shows (reference / date / nothing) is configurable. -->
+    <span v-if="position" class="position">{{ position }}</span>
     <template v-if="top">
       <span class="reference">{{ top.text }}</span>
       <span v-if="top.extra" class="reference extra">+{{ top.extra }}</span>
@@ -21,6 +22,8 @@ import {
 
 const props = defineProps<{
   title: string
+  /** Place in the collection being shown; omitted outside one. */
+  position?: number
   references?: readonly string[]
   tags?: readonly string[]
   date?: string
@@ -60,6 +63,22 @@ const top = computed<{ text: string; extra: number } | null>(() => {
 .title {
   text-overflow: ellipsis;
   overflow: hidden;
+}
+
+/* The same chip as the reference — same weight, size and stretch — so the two
+   read as one family when a row carries both. Only the width is pinned, to keep
+   single and double digits the same size. */
+.position {
+  flex: 0 0 auto;
+  min-width: 1.6em;
+  text-align: center;
+  background-color: var(--ion-color-light-shade);
+  font-weight: bold;
+  color: var(--ion-color-medium);
+  border-radius: 5px;
+  padding: 0px 5px;
+  font-size: 0.8em;
+  font-stretch: condensed;
 }
 
 .reference {

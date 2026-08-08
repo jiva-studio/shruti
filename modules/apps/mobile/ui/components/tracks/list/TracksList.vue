@@ -7,6 +7,7 @@
       <TrackListItem
         :track-id="row.id"
         :title="row.title"
+        :position="row.position"
         :references="row.references"
         :tags="row.tags"
         :author="row.author"

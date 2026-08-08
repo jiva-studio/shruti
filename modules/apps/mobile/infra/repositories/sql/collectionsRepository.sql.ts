@@ -44,6 +44,19 @@ export interface CollectionAuthor {
   readonly description: string
 }
 
+/**
+ * One collection a track belongs to, with the track's 1-based place in it.
+ * `total` is how many tracks the collection holds, so a lecture can say it is
+ * the third of eight without a second query.
+ */
+export interface TrackCollectionRow {
+  readonly id: string
+  readonly name: string
+  readonly cover: string
+  readonly position: number
+  readonly total: number
+}
+
 export interface ISqlCollectionRepository {
   /**
    * Featured collections for `locale` (carrying the `tag_featured` tag),
@@ -85,6 +98,13 @@ export interface ISqlCollectionRepository {
    * pile (overlapping circles) and the detail-sheet header.
    */
   getCollectionAuthors(collectionId: string, locale: string): Promise<readonly CollectionAuthor[]>
+
+  /**
+   * The collections one track belongs to, each with the track's place in it.
+   * Lets a lecture say which seminar it is part of, and which lecture of it
+   * this is. Empty when the track stands alone.
+   */
+  getCollectionsOfTrack(trackId: string, locale: string): Promise<readonly TrackCollectionRow[]>
 
   /** Named collection-groups for `locale`, ordered by `sort_order`. */
   listGroups(locale: string): Promise<readonly CollectionGroupRow[]>
@@ -231,6 +251,40 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
             WHERE language = ?
             ORDER BY sort_order ASC, id ASC`,
           [locale]
+        )
+      } catch (err) {
+        if (isMissingTable(err)) return []
+        throw err
+      }
+    },
+
+    async getCollectionsOfTrack(
+      trackId: string,
+      locale: string
+    ): Promise<readonly TrackCollectionRow[]> {
+      try {
+        return await contentDb.query<TrackCollectionRow>(
+          `SELECT c.id,
+                  c.name,
+                  COALESCE(c.cover, '') AS cover,
+                  (SELECT COUNT(*)
+                     FROM collection_tracks p
+                    WHERE p.collection_id = ct.collection_id
+                      AND p.collection_language = ct.collection_language
+                      AND (p.position < ct.position
+                           OR (p.position = ct.position AND p.track_id <= ct.track_id))
+                  ) AS position,
+                  (SELECT COUNT(*)
+                     FROM collection_tracks a
+                    WHERE a.collection_id = ct.collection_id
+                      AND a.collection_language = ct.collection_language
+                  ) AS total
+             FROM collection_tracks ct
+             JOIN collections c
+               ON c.id = ct.collection_id AND c.language = ct.collection_language
+            WHERE ct.track_id = ? AND ct.collection_language = ?
+            ORDER BY c.name ASC`,
+          [trackId, locale]
         )
       } catch (err) {
         if (isMissingTable(err)) return []

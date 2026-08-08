@@ -91,6 +91,7 @@ export default {
       "Hozzáadod a(z) {count} előadást a lejátszási listához? | Hozzáadod a(z) {count} előadást a lejátszási listához?",
     others: "Egyéb gyűjtemények",
     all: "Összes gyűjtemény",
+    partOf: "{total} előadásból a(z) {position}.",
     seeAll: "Összes megtekintése",
     seeAllNamed: "Összes megtekintése: {name}",
   },

@@ -91,6 +91,7 @@ export default {
       "Dodati {count} predavanje na listu numera? | Dodati {count} predavanja na listu numera? | Dodati {count} predavanja na listu numera?",
     others: "Druge kolekcije",
     all: "Sve kolekcije",
+    partOf: "Predavanje {position} od {total}",
     seeAll: "Prikaži sve",
     seeAllNamed: "Prikaži sve: {name}",
   },

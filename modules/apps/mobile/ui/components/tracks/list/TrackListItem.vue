@@ -6,6 +6,7 @@
       <TrackHeader
         class="info"
         :title="title"
+        :position="position"
         :references="references"
         :tags="tags"
         :date="date"
@@ -44,6 +45,8 @@ import type { TrackMetaConfig } from "./trackMetaFields.js"
 defineProps<{
   trackId: string
   title: string
+  /** Place in the collection being shown; omitted outside one. */
+  position?: number
   references: readonly string[]
   tags: readonly string[]
   author?: string

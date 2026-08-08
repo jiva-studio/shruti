@@ -90,6 +90,7 @@ export default {
     addConfirm: "Add {count} lecture to the playlist? | Add {count} lectures to the playlist?",
     others: "Other collections",
     all: "All collections",
+    partOf: "Lecture {position} of {total}",
     seeAll: "See all",
     seeAllNamed: "See all: {name}",
   },

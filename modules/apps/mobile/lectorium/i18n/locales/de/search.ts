@@ -91,6 +91,7 @@ export default {
       "{count} Vortrag zur Playlist hinzufügen? | {count} Vorträge zur Playlist hinzufügen?",
     others: "Weitere Sammlungen",
     all: "Alle Sammlungen",
+    partOf: "Vortrag {position} von {total}",
     seeAll: "Alle ansehen",
     seeAllNamed: "Alle ansehen: {name}",
   },
