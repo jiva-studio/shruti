@@ -21,8 +21,9 @@ export default {
     more: "Mostrar más",
   },
   library: {
-    title: "Encontrado en tu biblioteca",
-    empty: "Nada en tu biblioteca coincide.",
+    title: "Encontrado en la biblioteca",
+    empty: "Nada en la biblioteca coincide.",
+    mine: "Encontrado en tu biblioteca",
   },
   smartLibrary: {
     title: "Biblioteca inteligente",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "Por referencia",
   },
   collections: {
+    title: "Colecciones",
     addAll: "Añadir colección",
     trackCount: "Clases: {count}",
     addError: "No se pudo añadir la colección",

@@ -22,8 +22,9 @@ export default {
     more: "Mostra altri",
   },
   library: {
-    title: "Trovato nella tua biblioteca",
-    empty: "Nulla nella tua biblioteca corrisponde.",
+    title: "Trovato nella biblioteca",
+    empty: "Nulla nella biblioteca corrisponde.",
+    mine: "Trovato nella tua biblioteca",
   },
   smartLibrary: {
     title: "Biblioteca intelligente",
@@ -82,6 +83,7 @@ export default {
     sortByReference: "Per riferimento",
   },
   collections: {
+    title: "Raccolte",
     addAll: "Aggiungi raccolta",
     trackCount: "Lezioni: {count}",
     addError: "Impossibile aggiungere la raccolta",

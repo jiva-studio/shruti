@@ -21,8 +21,9 @@ export default {
     more: "Show more",
   },
   library: {
-    title: "Found in your library",
-    empty: "Nothing in your library matches.",
+    title: "Found in the library",
+    empty: "Nothing in the library matches.",
+    mine: "Found in your library",
   },
   smartLibrary: {
     title: "Smart library",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "By reference",
   },
   collections: {
+    title: "Collections",
     addAll: "Add collection",
     trackCount: "Lectures: {count}",
     addError: "Couldn’t add the collection",

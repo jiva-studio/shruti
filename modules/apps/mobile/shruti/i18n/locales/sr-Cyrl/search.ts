@@ -23,8 +23,9 @@ export default {
     more: "Прикажи још",
   },
   library: {
-    title: "Пронађено у вашој библиотеци",
-    empty: "У вашој библиотеци нема подударања.",
+    title: "Пронађено у библиотеци",
+    empty: "У библиотеци нема подударања.",
+    mine: "Пронађено у вашој библиотеци",
   },
   smartLibrary: {
     title: "Паметна библиотека",
@@ -83,6 +84,7 @@ export default {
     sortByReference: "По шлоки",
   },
   collections: {
+    title: "Колекције",
     addAll: "Додај колекцију",
     trackCount: "Предавања: {count}",
     addError: "Није могуће додати колекцију",

@@ -21,8 +21,9 @@ export default {
     more: "Pokaż więcej",
   },
   library: {
-    title: "Znalezione w twojej bibliotece",
-    empty: "Nic w twojej bibliotece nie pasuje.",
+    title: "Znalezione w bibliotece",
+    empty: "Nic w bibliotece nie pasuje.",
+    mine: "Znalezione w twojej bibliotece",
   },
   smartLibrary: {
     title: "Inteligentna biblioteka",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "Według wersetu",
   },
   collections: {
+    title: "Kolekcje",
     addAll: "Dodaj kolekcję",
     trackCount: "Wykłady: {count}",
     addError: "Nie udało się dodać kolekcji",

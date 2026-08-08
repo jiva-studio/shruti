@@ -51,6 +51,31 @@
       </template>
     </section>
 
+    <!-- ── Collections and topics ────────────────────────────────────────
+         One shelf: to somebody reading results they are the same offer, and
+         which table a set came from is our business. The topic carries its "#"
+         in its name, which is all that tells them apart. Same card the landing
+         uses. -->
+    <CarouselSection
+      v-if="grouping.items.value.length"
+      :title="$t('search.collections.title')"
+      :items="grouping.items.value"
+      @select="onOpenGrouping"
+    />
+
+    <!-- ── Found in the personal library ─────────────────────────────────
+         What the user added themselves. Its own shelf rather than mixed into
+         the catalog: these are their tracks, and one of them being here is a
+         different answer from the corpus holding something. -->
+    <section v-if="mine.length" class="lane">
+      <SectionHeader :title="$t('search.library.mine')" />
+      <div class="carousel">
+        <div v-for="item in mine" :key="item.id" class="carousel-cell">
+          <LibraryItemCard :item="item" @select="onOpenMine" @retry="onRetryMine" />
+        </div>
+      </div>
+    </section>
+
     <!-- ── Found in the library ──────────────────────────────────────────
          The lectures already on the phone. Local, so it answers instantly. -->
     <section class="lane">
@@ -78,19 +103,25 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue"
 import {
   IonInfiniteScroll,
   IonInfiniteScrollContent,
   IonSpinner,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
-import { SectionHeader } from "@ui/features/collections/index.js"
+import { SectionHeader, CarouselSection } from "@ui/features/collections/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import type { SearchControllerReturn } from "../SearchView.controller.js"
 import type { UseWebSearchReturn } from "../composables/useWebSearch.js"
+import type { GroupingHit, UseGroupingSearchReturn } from "../composables/useGroupingSearch.js"
 import ActiveFilterChips from "./ActiveFilterChips.vue"
 import WebLectureCard from "./WebLectureCard.vue"
+import LibraryItemCard from "@shruti/views/Library/components/LibraryItemCard.vue"
+import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { useOpenLibraryItem } from "@shruti/composables/useOpenLibraryItem.js"
+import { useRetryLibraryItem } from "@shruti/composables/useRetryLibraryItem.js"
 
 /**
  * What a search turned up, in two lanes: lectures on other archives, then the
@@ -109,6 +140,7 @@ import WebLectureCard from "./WebLectureCard.vue"
 const props = defineProps<{
   search: SearchControllerReturn
   web: UseWebSearchReturn
+  grouping: UseGroupingSearchReturn
 }>()
 
 // The filters are the page's to change, not this component's: it is handed a
@@ -119,7 +151,27 @@ const emit = defineEmits<{
   "clear-filter": [key: string]
   /** Open the full set of internet results on its own page. */
   "see-all-web": []
+  "open-grouping": [hit: GroupingHit]
 }>()
+
+// The user's own tracks whose title the query names. A handful of items, held
+// in memory already — the same walk the collections shelf does.
+const library = useLibraryStore()
+const onOpenMine = useOpenLibraryItem()
+const onRetryMine = useRetryLibraryItem()
+
+const mine = computed(() => {
+  const needle = props.search.query.value.trim().toLocaleLowerCase()
+  if (!needle) return []
+  return library.items
+    .filter((i) => (i.titleRaw ?? "").toLocaleLowerCase().includes(needle))
+    .slice(0, 12)
+})
+
+function onOpenGrouping(id: string): void {
+  const hit = props.grouping.items.value.find((i) => i.id === id)
+  if (hit) emit("open-grouping", hit)
+}
 
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   await props.search.loadMore()
