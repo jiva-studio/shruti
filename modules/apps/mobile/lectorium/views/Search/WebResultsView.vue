@@ -20,28 +20,26 @@
 
         <PageSticker v-if="sticker" :header="sticker.header" :message="sticker.message" />
 
-        <template v-else>
-          <!-- The grid that is coming, drawn empty — same tile, no content — so
-               the page has its shape before the archives answer. -->
-          <div v-if="web.isLoadingFirstPage.value" class="grid">
-            <TrackTile v-for="n in SKELETON_COUNT" :key="n" status="loading" />
-          </div>
+        <!-- The grid that is coming, drawn empty — same tile, no content — so
+             the page has its shape before the archives answer. -->
+        <div v-else-if="web.isLoadingFirstPage.value" class="grid">
+          <TrackTile v-for="n in SKELETON_COUNT" :key="n" status="loading" />
+        </div>
 
-          <div v-else class="grid">
-            <WebTrackCard v-for="hit in web.hits.value" :key="hit.item_id" :hit="hit" />
-          </div>
+        <div v-else class="grid">
+          <WebTrackCard v-for="hit in web.hits.value" :key="hit.item_id" :hit="hit" />
+        </div>
 
-          <IonButton
-            v-if="web.hasMore.value"
-            class="more"
-            fill="clear"
-            size="small"
-            :disabled="web.isLoading.value"
-            @click="web.loadMore()"
-          >
-            {{ $t("search.web.more") }}
-          </IonButton>
-        </template>
+        <IonButton
+          v-if="web.hasMore.value"
+          class="more"
+          fill="clear"
+          size="small"
+          :disabled="web.isLoading.value"
+          @click="web.loadMore()"
+        >
+          {{ $t("search.web.more") }}
+        </IonButton>
       </div>
 
       <DockSpacer />

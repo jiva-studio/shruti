@@ -27,7 +27,6 @@
     <SearchBar
       v-if="searchDock.visible.value"
       v-model="searchDock.text.value"
-      :style="{ '--search-dock-bottom': searchDockBottom }"
       :placeholder="$t('app.search')"
       :search-label="$t('search.readQuestion')"
       :clear-label="$t('search.clearQuery')"
@@ -142,6 +141,7 @@ const purchases = usePurchasesStore()
 const appLanguage = useAppLanguage()
 const dialog = useTranscriptDialogController(appLanguage)
 const { isKeyboardOpen } = useKeyboardVisibility()
+const searchDock = useSearchDock()
 // Hide the FloatingPlayer when:
 //  - the player has nothing to show (default),
 //  - the on-screen keyboard is visible — the floating chrome would
@@ -150,8 +150,8 @@ const { isKeyboardOpen } = useKeyboardVisibility()
 //  - the transcript dialog is open in preview mode (Search → Open
 //    transcript) — the player belongs to a different track and
 //    shouldn't react to taps on the preview surface,
-//  - on the chat tab the floating chrome would cover the sliding
-//    input bar; hide it for the duration of the chat view,
+//  - on the chat tab, and wherever the search field is docked, the
+//    floating chrome would cover the input bar; hide it there,
 //  - on the subscription page it would float over the paywall (the
 //    page replaced the old modal that used to cover it).
 const floatingPlayerHidden = computed<boolean>(() => {
@@ -161,17 +161,9 @@ const floatingPlayerHidden = computed<boolean>(() => {
   if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
   const routeName = currentRoute.value.name
   if (routeName === "chat" || routeName === "subscription") return true
+  if (searchDock.visible.value) return true
   return false
 })
-const searchDock = useSearchDock()
-// Above the player (58px tall, starting 56px up) only while it is on screen —
-// keyed to the same flag, so the field doesn't drop when the keyboard hides it.
-const searchDockBottom = computed(() =>
-  floatingPlayerHidden.value
-    ? "calc(56px + var(--ion-safe-area-bottom, 0px))"
-    : "calc(114px + var(--ion-safe-area-bottom, 0px))"
-)
-
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)
 const showPlayerProgress = computed(() => showPlayerProgressConfig.value)
 

@@ -25,10 +25,14 @@
         @more="emit('see-all-web')"
       />
 
+      <!-- What the service said about the request itself: a speaker it does not
+           know, a field the sentence overruled. Without these an empty lane
+           cannot tell "nothing matches" from "nothing could". -->
+      <p v-for="(m, i) in web.messages.value" :key="i" class="lane-note">{{ m.text }}</p>
+
       <!-- The shelf that is coming, drawn empty. A spinner here said "something
            is happening" and nothing about what; five grey tiles say how many
-           are on their way and where they will land, and the real ones replace
-           them in place without the lane changing height. -->
+           are on their way and where they will land. -->
       <div v-if="web.isLoadingFirstPage.value" class="carousel">
         <div v-for="n in SKELETON_COUNT" :key="n" class="carousel-cell">
           <TrackTile status="loading" />
@@ -39,22 +43,15 @@
         {{ $t("search.web.unavailable") }}
       </div>
 
-      <template v-else>
-        <!-- What the service said about the request itself: a speaker it does
-             not know, a field the sentence overruled. Without these an empty
-             lane cannot tell "nothing matches" from "nothing could". -->
-        <p v-for="(m, i) in web.messages.value" :key="i" class="lane-note">{{ m.text }}</p>
+      <div v-else-if="!web.hits.value.length" class="lane-state lane-state--muted">
+        {{ $t("search.web.empty") }}
+      </div>
 
-        <div v-if="web.hits.value.length" class="carousel">
-          <div v-for="hit in web.hits.value" :key="hit.item_id" class="carousel-cell">
-            <WebTrackCard :hit="hit" />
-          </div>
+      <div v-else class="carousel">
+        <div v-for="hit in web.hits.value" :key="hit.item_id" class="carousel-cell">
+          <WebTrackCard :hit="hit" />
         </div>
-
-        <div v-else class="lane-state lane-state--muted">
-          {{ $t("search.web.empty") }}
-        </div>
-      </template>
+      </div>
     </section>
 
     <!-- ── Collections and topics ────────────────────────────────────────
@@ -100,7 +97,7 @@
         <span class="no-results-message">{{ $t("search.library.empty") }}</span>
       </div>
       <template v-else>
-        <TracksList :rows="search.rows.value" @select="search.onSelect">
+        <TracksList flush :rows="search.rows.value" @select="search.onSelect">
           <template #state="{ state, progressPct }">
             <TrackStateIndicator :state="state" :progress="progressPct" />
           </template>
@@ -272,13 +269,5 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   flex: 0 0 auto;
   width: 140px;
   scroll-snap-align: start;
-}
-
-/* The section header owns the 6px gap below it; cancel each content type's
-   own intrinsic top so nothing adds to it. */
-:deep(ion-list) {
-  --padding-top: 0;
-  padding-top: 0;
-  margin-top: -7px;
 }
 </style>

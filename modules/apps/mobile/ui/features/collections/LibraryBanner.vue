@@ -70,6 +70,10 @@ const emit = defineEmits<{ (e: "click"): void }>()
      the cover tiles: same corner radius and the same soft shadow. */
   margin: 4px 16px 14px;
   padding: 14px;
+  /* Fill the row. A <button> is shrink-to-fit even when block-level, so
+     without this the card is as wide as its longest line. */
+  width: -webkit-fill-available;
+  width: stretch;
   border-radius: 4px;
   --banner-bg: color-mix(in srgb, var(--ion-color-primary) 7%, var(--ion-background-color));
   background: var(--banner-bg);
