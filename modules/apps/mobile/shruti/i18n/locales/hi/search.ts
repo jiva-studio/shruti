@@ -21,8 +21,9 @@ export default {
     more: "और दिखाएँ",
   },
   library: {
-    title: "आपकी लाइब्रेरी में मिला",
-    empty: "आपकी लाइब्रेरी में कुछ भी मेल नहीं खाता।",
+    title: "लाइब्रेरी में मिला",
+    empty: "लाइब्रेरी में कुछ भी मेल नहीं खाता।",
+    mine: "आपकी लाइब्रेरी में मिला",
   },
   smartLibrary: {
     title: "स्मार्ट लाइब्रेरी",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "संदर्भ अनुसार",
   },
   collections: {
+    title: "संग्रह",
     addAll: "संग्रह जोड़ें",
     trackCount: "प्रवचन: {count}",
     addError: "संग्रह जोड़ा नहीं जा सका",

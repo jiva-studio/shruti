@@ -22,8 +22,9 @@ export default {
     more: "Показать ещё",
   },
   library: {
-    title: "Найдено в вашей библиотеке",
-    empty: "В вашей библиотеке ничего не подошло.",
+    title: "Найдено в библиотеке",
+    empty: "В библиотеке ничего не подошло.",
+    mine: "Найдено в личной библиотеке",
   },
   smartLibrary: {
     title: "Умная библиотека",
@@ -82,6 +83,7 @@ export default {
     sortByReference: "По шлоке",
   },
   collections: {
+    title: "Коллекции",
     addAll: "Добавить коллекцию",
     trackCount: "Лекций: {count}",
     addError: "Не удалось добавить коллекцию",

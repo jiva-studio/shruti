@@ -11,10 +11,12 @@
     @keydown.enter.prevent="onTap"
     @keydown.space.prevent="onTap"
   >
-    <CachedImage v-if="cover" :url="cover" :alt="title" @loaded="loaded = true" />
-    <div v-else class="cover-placeholder" aria-hidden="true">
+    <!-- The disc is the floor, not an alternative: an address that turns out
+         not to be an image leaves it showing rather than a hole. -->
+    <div class="cover-placeholder" aria-hidden="true">
       <IconVinyl :size="28" />
     </div>
+    <CachedImage v-if="cover" :url="cover" @loaded="loaded = true" />
 
     <!-- One corner, whatever the tile currently is: fetching, broken, not ours
          yet, or simply ours. -->

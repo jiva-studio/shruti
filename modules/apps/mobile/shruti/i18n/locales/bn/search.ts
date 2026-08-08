@@ -22,8 +22,9 @@ export default {
     more: "আরও দেখুন",
   },
   library: {
-    title: "আপনার লাইব্রেরিতে পাওয়া গেছে",
-    empty: "আপনার লাইব্রেরিতে কিছু মেলেনি।",
+    title: "লাইব্রেরিতে পাওয়া গেছে",
+    empty: "লাইব্রেরিতে কিছু মেলেনি।",
+    mine: "আপনার লাইব্রেরিতে পাওয়া গেছে",
   },
   smartLibrary: {
     title: "স্মার্ট লাইব্রেরি",
@@ -82,6 +83,7 @@ export default {
     sortByReference: "শ্লোক অনুসারে",
   },
   collections: {
+    title: "সংগ্রহ",
     addAll: "সংগ্রহ যোগ করুন",
     trackCount: "লেকচার: {count}",
     addError: "সংগ্রহটি যোগ করা যায়নি",
