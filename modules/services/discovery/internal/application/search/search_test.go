@@ -270,3 +270,112 @@ func TestAScriptureIsAskedForByName(t *testing.T) {
 		t.Errorf("an unknown book returned %d hits", len(hits))
 	}
 }
+
+// A name is written in whichever alphabet the archive that published it used,
+// and a person asking does not know which. "Vatsala das" has to find "Ватсала
+// дас", and "Adi Gadadhara" has to find "Adi Gadadhar".
+//
+// The fold is a way to look somebody up, never a claim about who they are: it
+// drops what a form of address carries, so it can land on two people, and then
+// both come back.
+func TestANameIsFoundHoweverItWasWritten(t *testing.T) {
+	svc, repo, pool := testSearch(t)
+	ctx := context.Background()
+	link := func(media, name string) {
+		t.Helper()
+		id := add(t, repo, pool, media, "Лекция", name, "ru")
+		who, err := repo.ResolveAuthor(ctx, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.SetItemAuthors(ctx, id, []int64{who}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link("https://a.example/1.mp3", "Ватсала дас")
+	link("https://a.example/2.mp3", "Adi Gadadhar")
+	// The same man under both alphabets, as the corpus actually holds him.
+	link("https://a.example/3.mp3", "Прабхупада")
+	link("https://a.example/4.mp3", "Prabhupada")
+
+	for _, c := range []struct{ asked, want string }{
+		{"Ватсала дас", "Ватсала дас"},
+		{"Vatsala das", "Ватсала дас"},
+		{"vatsala", "Ватсала дас"},
+		{"Ватсала", "Ватсала дас"},
+		{"Adi Gadadhara", "Adi Gadadhar"},
+		{"Ади Гададхар", "Adi Gadadhar"},
+	} {
+		hits, err := svc.Search(ctx, search.Query{Authors: []string{c.asked}, Limit: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hits) != 1 || hits[0].Author != c.want {
+			t.Errorf("%q found %d hits %v, want the one by %s", c.asked, len(hits), titles(hits), c.want)
+		}
+	}
+
+	// One person spelled two ways is found whole, not by whichever spelling was
+	// looked up first. Asked in order, the exact tier wins and stops — and a
+	// Latin row of ten recordings hides a Cyrillic row of fifteen hundred.
+	for _, name := range []string{"Prabhupada", "Прабхупада"} {
+		hits, err := svc.Search(ctx, search.Query{Authors: []string{name}, Limit: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(hits) != 2 {
+			t.Errorf("%q found %d of the 2 recordings; both spellings are the same man", name, len(hits))
+		}
+	}
+
+	// And a name nobody has still finds nobody.
+	hits, err := svc.Search(ctx, search.Query{Authors: []string{"Иоанн Кронштадтский"}, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 0 {
+		t.Errorf("a stranger found %d hits", len(hits))
+	}
+}
+
+// A question shaped like a sentence used to find nothing at all. The `simple`
+// configuration asked for every word exactly as typed — "лекции о карме" wants
+// 'лекции' AND 'о' AND 'карме' — and no title carries a preposition or a case
+// ending, so the lane returned nothing and the fusion of two opinions had one.
+func TestASentenceFindsWhatItIsAbout(t *testing.T) {
+	svc, repo, pool := testSearch(t)
+	ctx := context.Background()
+	add(t, repo, pool, "https://a.example/1.mp3", "Карма и перерождение", "Радханатх Свами", "ru")
+	add(t, repo, pool, "https://a.example/2.mp3", "Смирение преданного", "Радханатх Свами", "ru")
+	add(t, repo, pool, "https://a.example/3.mp3", "The nature of karma", "Radhanath Swami", "en")
+
+	// The word as a person would write it in a sentence, inflected, with a
+	// preposition beside it.
+	hits, err := svc.Search(ctx, search.Query{Text: "лекции о карме", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) == 0 {
+		t.Fatal("a sentence about karma found nothing")
+	}
+	if hits[0].Title != "Карма и перерождение" {
+		t.Errorf("first hit is %q", hits[0].Title)
+	}
+
+	// English is stemmed as English, in the same corpus.
+	if hits, err = svc.Search(ctx, search.Query{Text: "lectures about karma", Limit: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) == 0 {
+		t.Error("an English sentence found nothing")
+	}
+
+	// And a sentence whose words are never all in one place still finds the
+	// part that exists, rather than nothing.
+	if hits, err = svc.Search(ctx, search.Query{Text: "карма и смирение вместе", Limit: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) < 2 {
+		t.Errorf("= %d hits; loosening should have found both talks", len(hits))
+	}
+}

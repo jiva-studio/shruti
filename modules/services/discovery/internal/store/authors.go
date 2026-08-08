@@ -43,14 +43,14 @@ func (r *Repo) ResolveAuthor(ctx context.Context, name string) (int64, error) {
 			RETURNING id
 		),
 		linked AS (
-			INSERT INTO discovery.author_keys (key, author_id)
-			SELECT $2, made.id FROM made
+			INSERT INTO discovery.author_keys (key, key_folded, author_id)
+			SELECT $2, $3, made.id FROM made
 			ON CONFLICT (key) DO NOTHING
 			RETURNING author_id
 		)
 		SELECT author_id FROM found
 		UNION ALL SELECT author_id FROM linked
-		LIMIT 1`, domain.Name(name), key).Scan(&id)
+		LIMIT 1`, domain.Name(name), key, domain.Fold(key)).Scan(&id)
 	// No row means nobody by that name, which is an answer. Anything else is the
 	// database failing, and reporting that as "no author" files the recording
 	// under nobody while the run reports success.
@@ -330,4 +330,42 @@ func (r *Repo) RelinkAuthors(ctx context.Context, batch int) (linked int, err er
 			return linked, nil
 		}
 	}
+}
+
+// RefoldAuthorKeys fills in the folded spelling of every key that has none.
+//
+// A repair rather than something that happens at boot: the fold lives in Go, so
+// the column cannot be filled by the migration that adds it, and a key written
+// before the column existed would otherwise never be findable by its other
+// alphabet.
+func (r *Repo) RefoldAuthorKeys(ctx context.Context) (int, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT key FROM discovery.author_keys WHERE key_folded IS NULL`)
+	if err != nil {
+		return 0, err
+	}
+	var keys []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		keys = append(keys, k)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	var done int
+	for _, k := range keys {
+		if _, err := r.pool.Exec(ctx,
+			`UPDATE discovery.author_keys SET key_folded = $2 WHERE key = $1`,
+			k, domain.Fold(k)); err != nil {
+			return done, err
+		}
+		done++
+	}
+	return done, nil
 }
