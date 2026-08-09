@@ -21,8 +21,19 @@ import { rowToListeningSession } from "./rowMappers.js"
 
 const newSessionId = createIdGenerator("ls")
 
+// Bound on `?` parameters in one statement. SQLite's own limit is 999 on
+// builds older than 3.32 (still shipped by some Android system libraries),
+// so keep a margin below it and chunk anything larger.
+const ID_CHUNK_SIZE = 500
+
 function nowSec(): number {
   return Math.floor(Date.now() / 1000)
+}
+
+function chunked<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size))
+  return chunks
 }
 
 export function createSqlListeningSessionRepository(db: IDatabase): IListeningSessionRepository {
@@ -161,20 +172,38 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       // This makes a replayed-then-rewound track in-progress again (no
       // partial-radial-yet-archive-eligible divergence) and resets the
       // auto-archive clock until the latest session crosses the threshold.
-      // We iterate per item to keep the SQL simple — itemIds is bounded by
-      // playlist page size, so it's cheap.
-      for (const itemId of itemIds) {
-        const dur = durations.get(itemId)
-        if (typeof dur !== "number" || dur <= 0) continue
-        const threshold = Math.max(0, dur - COMPLETION_THRESHOLD_SEC)
-        const rows = await db.query<{ ended_at: number; to_position: number }>(
-          `SELECT ended_at, to_position FROM listening_sessions
-            WHERE item_id = ?
-            ORDER BY ended_at DESC, id DESC
-            LIMIT 1`,
-          [itemId]
+      //
+      // One query per chunk of ids, never one per item: callers pass the
+      // whole active + archived union (playlist store, activity overview,
+      // auto-archive sweep), which has no page bound and grows with every
+      // item ever added. `NOT EXISTS` picks that single latest row per item
+      // with the same `ended_at`/`id` tiebreak the per-item read used, and
+      // rides the `(item_id, ended_at DESC)` index. The per-item duration
+      // threshold is applied in TS, so the SQL stays parameter-free beyond
+      // the ids.
+      const wanted = [...new Set(itemIds)].filter((id) => {
+        const dur = durations.get(id)
+        return typeof dur === "number" && dur > 0
+      })
+      for (const chunk of chunked(wanted, ID_CHUNK_SIZE)) {
+        const placeholders = chunk.map(() => "?").join(",")
+        const rows = await db.query<{ item_id: string; ended_at: number; to_position: number }>(
+          `SELECT s.item_id AS item_id, s.ended_at AS ended_at, s.to_position AS to_position
+             FROM listening_sessions s
+            WHERE s.item_id IN (${placeholders})
+              AND NOT EXISTS (
+                    SELECT 1 FROM listening_sessions t
+                     WHERE t.item_id = s.item_id
+                       AND (t.ended_at > s.ended_at
+                            OR (t.ended_at = s.ended_at AND t.id > s.id)))`,
+          [...chunk]
         )
-        if (rows[0] && rows[0].to_position >= threshold) result.set(itemId, rows[0].ended_at)
+        for (const row of rows) {
+          const dur = durations.get(row.item_id)
+          if (typeof dur !== "number" || dur <= 0) continue
+          const threshold = Math.max(0, dur - COMPLETION_THRESHOLD_SEC)
+          if (row.to_position >= threshold) result.set(row.item_id, row.ended_at)
+        }
       }
       return result
     },
