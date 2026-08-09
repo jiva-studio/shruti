@@ -1012,7 +1012,13 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
               startedAt: endedAt - 10,
               endedAt,
               fromPosition: 0,
-              toPosition: Math.floor(rnd() * 1200),
+              // Half random, half sitting exactly on a completion boundary
+              // (`>= duration - COMPLETION_THRESHOLD_SEC`) for the durations
+              // handed out below, so the comparison itself is exercised.
+              toPosition:
+                rnd() < 0.5
+                  ? Math.floor(rnd() * 1200)
+                  : pick([997, 998, 999, 1000, 1197, 1198, 1199, 0, 1]),
             })
           }
         }
