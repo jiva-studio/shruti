@@ -217,6 +217,12 @@ export const useDownloadStore = defineStore("downloads", () => {
     claim.count -= 1
     if (claim.count > 0) return
     pendingClaims.delete(trackId)
+    // Restore only a row still showing OUR claim. Anything else — a real
+    // outcome, or an entry a canceller DELETED from the map — wins. That
+    // second case is load-bearing: cancelling a retry drops the row's state
+    // entirely, and this guard is what stops the release putting the red X
+    // back on a row the user just asked us to drop. A canceller must
+    // therefore delete the entry, not write "idle" over it.
     if (states.value.get(trackId) !== "pending") return
     if (claim.previous === undefined) {
       const next = new Map(states.value)
@@ -225,6 +231,16 @@ export const useDownloadStore = defineStore("downloads", () => {
       return
     }
     setState(trackId, claim.previous)
+  }
+
+  /**
+   * `getState` for callers that must act on what a row IS, not on what it
+   * is currently showing: while a `pending` claim is held the raw state
+   * reads "pending", which would hide a `failed` row from the two retry
+   * entry points (the Home tap and the sheet's primary button).
+   */
+  function getEffectiveState(trackId: TrackId): DownloadState {
+    return effectiveState(trackId) ?? "idle"
   }
 
   function getProgress(trackId: TrackId): number {
@@ -417,8 +433,10 @@ export const useDownloadStore = defineStore("downloads", () => {
         await quota.ensureMeasured()
         const sizeBytes = quota.sizeOf(filesize)
         if (!quota.hasRoomFor(sizeBytes)) {
-          if (fresh()) markDeferred(trackId)
-          noticeBudgetFull()
+          if (fresh()) {
+            markDeferred(trackId)
+            noticeBudgetFull()
+          }
           return null
         }
         quota.reserve(trackId, sizeBytes)
@@ -492,8 +510,10 @@ export const useDownloadStore = defineStore("downloads", () => {
         // branch has already promoted it into `usedBytes`.
         useDownloadQuotaStore().settle(trackId, false)
         // Same for the synchronous claim: a throw before any outcome was
-        // recorded must not leave the row shimmering forever.
-        clearPending(trackId)
+        // recorded must not leave the row shimmering forever. Epoch-gated
+        // like the writes above — after a reset() our claim is already gone
+        // and the trackId may carry a NEW one, which is not ours to release.
+        if (fresh()) clearPending(trackId)
         // Only delete our own slot. After a reset() the map was
         // cleared and a newer task may already own this trackId.
         if (inFlight.get(trackId) === ownership.current) {
@@ -798,6 +818,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     progress,
     hydrationError,
     getState,
+    getEffectiveState,
     getProgress,
     hydrate,
     ensureDownloaded,

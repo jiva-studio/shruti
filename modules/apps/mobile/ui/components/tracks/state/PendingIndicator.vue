@@ -1,5 +1,5 @@
 <template>
-  <span class="pending" aria-hidden="true" />
+  <span class="pending" aria-hidden="true" data-testid="track-state" data-state="pending" />
 </template>
 
 <script lang="ts" setup>
@@ -8,6 +8,10 @@
  * "we heard you". Same 24×24 box as the icon and radial indicators so the
  * column doesn't jitter when the real state arrives, and the same slow
  * sweep the tile covers use while their art is on its way.
+ *
+ * Carries the same `track-state` testid as the icon indicator so a spec
+ * that waits for a settled state finds an element reporting "pending"
+ * rather than nothing at all while the claim is held.
  */
 </script>
 
