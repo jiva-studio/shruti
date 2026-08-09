@@ -3,6 +3,7 @@ import { useT, type Lang } from '../i18n/ui'
 import { collectionGroups } from '../lib/catalog'
 import SearchBanner from './SearchBanner.astro'
 import CollectionGroupSection from './CollectionGroupSection.astro'
+import CollectionTeaser from './CollectionTeaser.astro'
 import TopicTeaser from './TopicTeaser.astro'
 
 interface Props {
@@ -22,6 +23,8 @@ const t = useT(lang)
   </div>
 
   {collectionGroups.map((group) => <CollectionGroupSection group={group} lang={lang} />)}
+
+  <CollectionTeaser lang={lang} />
 
   <TopicTeaser lang={lang} />
 </div>

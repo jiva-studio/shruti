@@ -1,0 +1,34 @@
+---
+import type { CollectionIndexEntry } from '@lib/catalog/types.js'
+import { useT, type Lang } from '../i18n/ui'
+import { collections, lectureCountForLang, pickName } from '../lib/catalog'
+import CollectionCard from './CollectionCard.astro'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = useT(lang)
+const teaser = collections
+  .map((c) => ({ c, count: lectureCountForLang(c.trackIds, lang), name: pickName(c.names, lang) }))
+  .filter(({ count }) => count > 0)
+  .sort((a, b) => b.count - a.count)
+  .slice(0, 6)
+  .map(({ c }) => c as CollectionIndexEntry)
+---
+{teaser.length > 0 && (
+<section class="mt-16">
+  <div class="flex items-end justify-between gap-4">
+    <div class="max-w-2xl">
+      <h2 class="font-serif text-2xl font-semibold text-ink">{t('library.collectionsTitle')}</h2>
+      <p class="mt-2 text-sm text-medium">{t('library.collectionsLead')}</p>
+    </div>
+    <a href={`/${lang}/app/collections`} class="shrink-0 text-sm font-semibold text-saffron-shade">
+      {t('library.allCollections')} →
+    </a>
+  </div>
+  <div class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    {teaser.map((c) => <CollectionCard collection={c} lang={lang} />)}
+  </div>
+</section>
+)}

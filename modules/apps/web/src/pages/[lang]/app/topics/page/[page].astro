@@ -1,0 +1,35 @@
+---
+import BaseLayout from '../../../../../layouts/BaseLayout.astro'
+import WebApp from '../../../../../components/vue/WebApp.vue'
+import BrowseCatalog from '../../../../../components/BrowseCatalog.astro'
+import { useT, type Lang } from '../../../../../i18n/ui'
+import { UI_LOCALE_CODES } from '../../../../../i18n/locales.data.mjs'
+import { browseItems } from '../../../../../lib/catalog'
+import { totalPages } from '../../../../../lib/paginate'
+
+export function getStaticPaths() {
+  const out: { params: { lang: string; page: string }; props: { page: number } }[] = []
+  for (const lang of UI_LOCALE_CODES) {
+    const pages = totalPages(browseItems('topics', lang).length)
+    for (let p = 2; p <= pages; p++) {
+      out.push({ params: { lang, page: String(p) }, props: { page: p } })
+    }
+  }
+  return out
+}
+
+const lang = Astro.params.lang as Lang
+const { page } = Astro.props as { page: number }
+const t = useT(lang)
+---
+<BaseLayout
+  lang={lang}
+  path={`/app/topics/page/${page}`}
+  fullscreen
+  title={`${t('topics.title')} — ${t('hero.title')}`}
+  description={t('topics.lead')}
+>
+  <WebApp client:load lang={lang}>
+    <BrowseCatalog slot="left" lang={lang} kind="topics" page={page} />
+  </WebApp>
+</BaseLayout>

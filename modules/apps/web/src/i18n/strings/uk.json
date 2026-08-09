@@ -209,5 +209,14 @@
   "sub.errGeneric": "Не вдалося перейти до оплати. Спробуйте ще раз.",
   "sub.noteExtend": "Дні додаються до наявних — можна продовжувати заздалегідь.",
   "sub.noteSupport": "Проблеми з оплатою? Напишіть нам:",
-  "auth.getPro": "Придбати PRO"
+  "auth.getPro": "Придбати PRO",
+  "collections.title": "Добірки лекцій",
+  "collections.lead": "Курси та цикли лекцій — перегляньте всі добірки бібліотеки.",
+  "library.allCollections": "Усі добірки",
+  "library.collectionsTitle": "Добірки",
+  "library.collectionsLead": "Цикли та курси, згруповані за темами, подіями та писаннями.",
+  "browse.searchPlaceholder": "Пошук за назвою…",
+  "browse.noResults": "Нічого не знайдено",
+  "pagination.prev": "Назад",
+  "pagination.next": "Далі"
 }
