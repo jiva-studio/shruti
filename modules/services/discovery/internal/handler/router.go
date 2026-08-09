@@ -127,6 +127,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
+	// Hand the reason to the logger on the way past.
+	if sr, ok := w.(*statusRecorder); ok {
+		sr.errCode, sr.errMsg = code, msg
+	}
 	writeJSON(w, status, map[string]any{
 		"error": map[string]string{"code": code, "message": msg},
 	})

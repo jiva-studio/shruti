@@ -17,12 +17,20 @@ import (
 )
 
 // Input is one media file's raw material.
+//
+// The text around the file on the page is deliberately absent: a script reads
+// its own source and hands over what it read, labelled, rather than the page
+// being scraped blind. Page text also makes the hash worthless, since anything
+// on the page that counts or dates itself changes the input on every visit.
 type Input struct {
 	MediaURL     string            `json:"media_url"`
 	Filename     string            `json:"filename,omitempty"`
 	PathSegments []string          `json:"path_segments,omitempty"`
-	Context      string            `json:"context,omitempty"`
 	Tags         map[string]string `json:"tags,omitempty"`
+	// Material is what the source's own script saw and did not interpret. It is
+	// part of the input rather than a hint beside it, so that changing what a
+	// script hands over changes the hash and the recordings are read again.
+	Material []domain.Material `json:"material,omitempty"`
 }
 
 // Batch is the files found on one page, which share that page's context.
@@ -35,55 +43,35 @@ type Batch struct {
 	Items     []Input `json:"items"`
 }
 
-// Result is what the model said about one file, after validation.
+// Result is a reading of one file. Only what somebody worked out lives here;
+// what the archive printed travels beside it.
 type Result struct {
 	Title  string `json:"title,omitempty"`
 	Author string `json:"author,omitempty"`
 	// Authors is everyone who spoke, when more than one did. Author stays as
 	// the one written on the recording.
-	Authors   []string `json:"authors,omitempty"`
-	Location  string   `json:"location,omitempty"`
-	Date      string   `json:"date,omitempty"` // YYYY-MM-DD
-	Language  string   `json:"language,omitempty"`
-	DurationS int      `json:"duration_s,omitempty"`
-	// CoverURL is the picture the archive published, where the script that read
-	// the page found one. A model never fills this: it is shown the words of a
-	// page, not its pictures.
-	CoverURL string `json:"cover_url,omitempty"`
+	Authors  []string `json:"authors,omitempty"`
+	Location string   `json:"location,omitempty"`
+	Date     string   `json:"date,omitempty"` // YYYY-MM-DD
+	Language string   `json:"language,omitempty"`
 	// References is one entry per verse: a range in a filename is expanded
 	// before it gets here, the same way the corpus parser does it.
 	References []domain.Ref `json:"references,omitempty"`
 
-	// CollectionTitle is what this recording's own page called the cycle it
-	// belongs to. On archives with no page for the series it is the only route
-	// to the grouping at all.
-	CollectionTitle string `json:"collection_title,omitempty"`
-}
-
-// SeriesInput is a page that offered no audio, and the links it carries.
-type SeriesInput struct {
-	PageURL   string
-	PageTitle string
-	PageText  string
-	Links     []string
-}
-
-// Series is a page that turned out to present a cycle of recordings.
-type Series struct {
-	IsSeries    bool   `json:"is_series"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Author      string `json:"author"`
-	// Members are the links that are its parts, in the order the page gives
-	// them. They are page addresses, not recordings: the parts may not have
-	// been indexed yet.
-	Members []string `json:"members"`
+	// Unanswered says the model dropped this file from its reply, which is not
+	// the same as answering that it knows nothing. Stored as an answer, silence
+	// is stamped with the input hash and never asked about again. Only the
+	// reader of a reply can tell the two apart, so only it sets this.
+	Unanswered bool `json:"-"`
 }
 
 // Spend is what one call cost, as the provider reported it. Every reply
 // carries this and the service was throwing it away, so every statement about
 // what indexing costs has been arithmetic rather than a bill.
 type Spend struct {
+	// Kind is which question was asked, so that what indexing costs can be
+	// counted per kind of call rather than in one total.
+	Kind  string
 	Model string
 	Items int
 	// Reported says whether the provider sent any usage at all. Without it a
@@ -99,9 +87,6 @@ type Spend struct {
 // the pipeline can be tested without a key.
 type Normalizer interface {
 	Normalize(ctx context.Context, batch Batch) ([]Result, error)
-	// Series decides whether a page without audio presents a cycle of
-	// recordings, and which links are its parts. Nil means it does not.
-	Series(ctx context.Context, in SeriesInput) (*Series, error)
 	// PromptVersion changes whenever the prompt does, which invalidates every
 	// stored input hash without anyone having to clear a table.
 	PromptVersion() string
@@ -114,14 +99,16 @@ type Normalizer interface {
 // InputHash identifies one item's normalizer input. Storing it lets a recheck
 // of an unchanged page cost zero model calls; bumping the prompt version or
 // switching model changes the hash for everything at once.
+//
+// The page's own address and title are not in it: the model is not shown them,
+// and a listing whose title carries a counter marks every recording on it
+// unread again on every visit.
 func InputHash(batch Batch, i int, promptVersion, model string) string {
 	payload := struct {
-		PageURL       string `json:"page_url"`
-		PageTitle     string `json:"page_title"`
 		Item          Input  `json:"item"`
 		PromptVersion string `json:"prompt_version"`
 		Model         string `json:"model"`
-	}{batch.PageURL, batch.PageTitle, batch.Items[i], promptVersion, model}
+	}{batch.Items[i], promptVersion, model}
 
 	// Marshal of a struct with fixed field order is stable, and every nested
 	// value is either a string, a slice or a map that encoding/json sorts.
@@ -134,8 +121,8 @@ func InputHash(batch Batch, i int, promptVersion, model string) string {
 }
 
 // BatchFor turns an extraction into the normalizer's input. Every file on a
-// page goes into one batch because they share that page's context — which is
-// what makes normalization affordable at archive scale.
+// page goes into one batch because they share that page — which is what makes
+// normalization affordable at archive scale.
 func BatchFor(e *domain.Extraction) Batch {
 	batch := Batch{
 		PageURL:   e.URL,
@@ -147,7 +134,6 @@ func BatchFor(e *domain.Extraction) Batch {
 			MediaURL:     it.MediaURL,
 			Filename:     it.Filename,
 			PathSegments: it.PathSegments,
-			Context:      it.ContextText,
 			Tags:         it.Tags,
 		})
 	}

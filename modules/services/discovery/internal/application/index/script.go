@@ -33,7 +33,6 @@ func (s *Service) runScript(ctx context.Context, e *domain.Extraction, scriptID 
 			URL:      it.MediaURL,
 			Filename: it.Filename,
 			Path:     it.PathSegments,
-			Context:  it.ContextText,
 		}
 	}
 	out, err := s.Scripts.Run(ctx, scriptID, page, items)
@@ -44,30 +43,33 @@ func (s *Service) runScript(ctx context.Context, e *domain.Extraction, scriptID 
 	return out
 }
 
-// scriptResult is what a script said, in the shape the rest of the write path
-// already understands.
-func scriptResult(f script.Fields) normalize.Result {
-	r := normalize.Result{
-		Title:           strings.TrimSpace(f.Title),
-		Author:          domain.Name(f.Author),
-		Authors:         names(f),
-		Location:        domain.Place(f.Location),
-		Date:            f.Date,
-		Language:        f.Language,
+// printed is what the archive stated rather than what anybody read: a still, a
+// length, the cycle it filed the talk under. No model is shown these.
+type printed struct {
+	CollectionTitle string
+	DurationS       int
+	CoverURL        string
+}
+
+// scriptPrinted is the half of a script's answer nobody had to work out.
+func scriptPrinted(f script.Fields) printed {
+	return printed{
 		CollectionTitle: strings.TrimSpace(f.CollectionTitle),
 		DurationS:       f.DurationS,
 		CoverURL:        strings.TrimSpace(f.CoverURL),
 	}
-	for _, ref := range f.References {
-		// A script can only cite what the corpus can address. The model's
-		// answers are checked this way already; the script's were not, so a
-		// script naming a book we have no code for stored the name as if it
-		// were one.
-		if !domain.Addressable(ref.Source) {
-			continue
-		}
-		expanded, _ := domain.ExpandRefs(ref.Source, ref.Tokens)
-		r.References = append(r.References, expanded...)
+}
+
+// scriptResult is what a script read, in the shape the rest of the write path
+// already understands.
+func scriptResult(f script.Fields) normalize.Result {
+	r := normalize.Result{
+		Title:    strings.TrimSpace(f.Title),
+		Author:   domain.Name(f.Author),
+		Authors:  names(f),
+		Location: strings.TrimSpace(f.Location),
+		Date:     f.Date,
+		Language: f.Language,
 	}
 	return r
 }

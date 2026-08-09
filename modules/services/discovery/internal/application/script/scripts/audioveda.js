@@ -2,14 +2,20 @@
 //
 // This archive states what it holds, in schema.org: a JSON-LD block names the
 // talk, its speaker, its date, its length and the series it belongs to, and the
-// transcript is marked up with itemprop="transcript". Nothing has to be read out
-// of a filename, so there is nothing here to guess at and no vocabulary to keep.
+// transcript is marked up with itemprop="transcript". Nothing is read apart
+// here — which scripture the stated name cites is the corpus's own vocabulary,
+// applied by the engine.
 //
 // The mp3 address only appears to a signed-in reader; the metadata and the
 // transcript are public.
 
 function extract(page, items) {
   var meta = jsonLD(page.html || '');
+  // Nothing stated is not a recording with no name: the block is missing from
+  // an error page, a sign-in wall, or a template that moved. Entries returned
+  // here are read as what the archive says, so there are none.
+  if (!meta.name) return [];
+
   var text = transcript(page.html || '');
 
   return items.map(function (it) {
@@ -19,14 +25,10 @@ function extract(page, items) {
       author: meta.author || '',
       authors: meta.author ? [meta.author] : [],
       date: (meta.datePublished || '').slice(0, 10),
-      references: refs(meta.name || '').refs,
       duration_s: seconds(meta.duration),
       language: pageLanguage(page.html || ''),
       collection_title: meta.series || '',
       page_text: text,
-      // The site said all of it outright. What it did not say, it does not have.
-      complete: (meta.name || '') !== '' && (meta.author || '') !== '',
-      reasons: (meta.name && meta.author) ? [] : ['no-speaker'],
     };
   });
 }
