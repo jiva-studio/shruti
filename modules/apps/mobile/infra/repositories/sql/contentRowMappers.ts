@@ -48,7 +48,7 @@ function narrowVariantKind(raw: string | null): TrackVariantKind | null {
 
 // Audio kind is a display-preference field; an unexpected value must not crash
 // list hydration, so fall back to "original" rather than throwing.
-function narrowAudioKind(raw: string): TrackAudioKind {
+export function narrowAudioKind(raw: string): TrackAudioKind {
   return raw === "clean" ? "clean" : "original"
 }
 

@@ -180,6 +180,13 @@ export default {
     description: "Zachowaj rozmowy Ask Sadhu zsynchronizowane na wszystkich urządzeniach.",
   },
 
+  downloadLimit: {
+    title: "Limit pobierania",
+    unlimited: "Bez limitu",
+    usage: "{used} z {limit}",
+    usageUnlimited: "Pobrano {used}",
+  },
+
   smartLibrary: {
     title: "Inteligentna biblioteka",
     description: "Miej świeże wykłady pod ręką i porządkuj je po wysłuchaniu",

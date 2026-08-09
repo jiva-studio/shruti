@@ -179,6 +179,13 @@ export default {
     description: "Мова інтерфейсу",
   },
 
+  downloadLimit: {
+    title: "Ліміт завантажень",
+    unlimited: "Без обмеження",
+    usage: "{used} з {limit}",
+    usageUnlimited: "Завантажено {used}",
+  },
+
   smartLibrary: {
     title: "Розумна бібліотека",
     description: "Тримайте свіжі лекції напоготові й прибирайте після прослуховування",
