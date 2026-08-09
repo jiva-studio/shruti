@@ -130,13 +130,19 @@ export function createSqlTopicRepository(contentDb: IDatabase): ITopicRepository
                WHERE tv.track_id = tt.track_id AND tv.language IN (${languages
                  .map(() => "?")
                  .join(", ")}))`
+      // Cosine: weights are normalised per track, so a raw SUM over the shared
+      // topics scores a one-topic track a perfect 1.0. Squared to avoid sqrt(),
+      // which SQLite need not provide — for positive weights the order is the
+      // same.
       const rows = await contentDb.query<{ track_id: string }>(
         `SELECT tt.track_id
            FROM track_topics tt
           WHERE tt.topic_id IN (${topicPh}) AND tt.track_id != ?
             ${langClause}
           GROUP BY tt.track_id
-          ORDER BY SUM(tt.weight) DESC
+          ORDER BY (SUM(tt.weight) * SUM(tt.weight)) /
+                   (SELECT SUM(w.weight * w.weight)
+                      FROM track_topics w WHERE w.track_id = tt.track_id) DESC
           LIMIT ?`,
         [...topicIds, excludeTrackId, ...languages, limit]
       )
