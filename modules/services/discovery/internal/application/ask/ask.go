@@ -44,12 +44,14 @@ type Filter struct {
 	Tokens string `json:"tokens,omitempty"`
 	// Ref is a scripture reference as a person writes it — "BG 2.13". The
 	// corpus holds both halves separately.
-	Ref        string     `json:"ref,omitempty"`
-	Collection string     `json:"collection,omitempty"`
-	DateFrom   *time.Time `json:"date_from,omitempty"`
-	DateTo     *time.Time `json:"date_to,omitempty"`
-	Limit      int        `json:"limit,omitempty"`
-	Offset     int        `json:"offset,omitempty"`
+	Ref        string `json:"ref,omitempty"`
+	Collection string `json:"collection,omitempty"`
+	// DateFrom and DateTo are days — "2019-01-01" — because that is what an
+	// interface produces when a year or a month is ticked. See Date.
+	DateFrom *Date `json:"date_from,omitempty"`
+	DateTo   *Date `json:"date_to,omitempty"`
+	Limit    int   `json:"limit,omitempty"`
+	Offset   int   `json:"offset,omitempty"`
 }
 
 // Empty reports whether the filter narrows nothing, so a request carrying
@@ -58,7 +60,7 @@ type Filter struct {
 func (f Filter) Empty() bool {
 	return f.Text == "" && len(f.Authors) == 0 && len(f.Languages) == 0 &&
 		len(f.Sources) == 0 && f.Tokens == "" && f.Ref == "" &&
-		f.Collection == "" && f.DateFrom == nil && f.DateTo == nil
+		f.Collection == "" && !f.DateFrom.set() && !f.DateTo.set()
 }
 
 // Message is anything that happened to the question and is not a recording: a
@@ -388,10 +390,10 @@ func fold(given, read Filter, msgs []Message) (Filter, []Message) {
 	}
 	out.Ref = firstNonEmpty(read.Ref, given.Ref)
 	out.Collection = firstNonEmpty(read.Collection, given.Collection)
-	if read.DateFrom != nil {
+	if read.DateFrom.set() {
 		out.DateFrom = read.DateFrom
 	}
-	if read.DateTo != nil {
+	if read.DateTo.set() {
 		out.DateTo = read.DateTo
 	}
 	return out, msgs
@@ -406,8 +408,8 @@ func (f Filter) query() search.Query {
 		Sources:    f.Sources,
 		Tokens:     f.Tokens,
 		Collection: f.Collection,
-		DateFrom:   f.DateFrom,
-		DateTo:     f.DateTo,
+		DateFrom:   f.DateFrom.time(),
+		DateTo:     f.DateTo.time(),
 		Limit:      f.Limit,
 		Offset:     f.Offset,
 	}
@@ -434,9 +436,9 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-func dateText(t *time.Time) string {
-	if t == nil {
+func dateText(d *Date) string {
+	if !d.set() {
 		return ""
 	}
-	return t.Format("2006-01-02")
+	return d.Format(DateLayout)
 }
