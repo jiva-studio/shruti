@@ -65,9 +65,19 @@ const playlist = {
   archiveByTrackId: vi.fn().mockResolvedValue(undefined),
 }
 
+// The store exposes two accessors that are NOT interchangeable. While a
+// download claim is held, the stored state reads "pending", so `getState`
+// reports what the row is SHOWING — `useTrackUiStateMapper` needs that or
+// the shimmer disappears — while `getEffectiveState` looks through the
+// claim to what the row IS. Model both, so a test asserts against whichever
+// one the code path under test actually consults.
+let storedState = "idle"
+let pendingClaim = false
+
 const downloads = {
   hydrate: vi.fn().mockResolvedValue(undefined),
-  getState: vi.fn().mockReturnValue("idle"),
+  getState: vi.fn(() => (pendingClaim ? "pending" : storedState)),
+  getEffectiveState: vi.fn(() => storedState),
   ensureDownloaded: vi.fn().mockResolvedValue(null),
 }
 
@@ -77,12 +87,15 @@ describe("useHomeController.onSelect", () => {
   beforeEach(() => {
     toastError.mockClear()
     openTrack.mockReset()
+    downloads.ensureDownloaded.mockClear()
+    storedState = "idle"
+    pendingClaim = false
   })
 
   it("toasts playbackFailed when openTrack refuses the item", async () => {
-    // `openTrack` returning ok:false means the engine never accepted the
-    // item, so the native queue-drain toast can never fire for it — the
-    // Result is the only signal the row's tap went nowhere.
+    // A rejected `openTrack` and the native drain-event notice are exclusive
+    // per item (see `syncFromNative`), so the Result is the only signal the
+    // row's tap went nowhere.
     openTrack.mockResolvedValue({ ok: false, error: "engine-failed" })
 
     await useHomeController().onSelect(TRACK_ID)
@@ -111,12 +124,22 @@ describe("useHomeController.onSelect", () => {
 
   it("says nothing when a failed download is retried instead of played", async () => {
     // The retry branch returns before `openTrack`; a download failure has
-    // its own notice and must not also read as a playback failure.
-    downloads.getState.mockReturnValueOnce("failed")
+    // its own notice and must not also read as a playback failure. No claim
+    // is held, so both accessors agree and this holds either way.
+    storedState = "failed"
 
     await useHomeController().onSelect(TRACK_ID)
 
+    expect(downloads.ensureDownloaded).toHaveBeenCalledOnce()
     expect(openTrack).not.toHaveBeenCalled()
     expect(toastError).not.toHaveBeenCalled()
   })
+
+  // A masked row — stored state "failed" behind a held claim, so `getState`
+  // says "pending" while `getEffectiveState` says "failed" — must also take
+  // the retry branch. That case can't be asserted from this branch: the
+  // controller here reads `getState`, and `getEffectiveState` arrives with
+  // the pending-claim work. The mock above already models both accessors so
+  // the case is a few lines to add once the controller reads the effective
+  // one.
 })
