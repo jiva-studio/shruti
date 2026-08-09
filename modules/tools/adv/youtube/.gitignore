@@ -1,4 +1,6 @@
 .venv/
 client_secret*.json
-token.json
+# token.json* — the trailing glob covers the .bak copies left behind when a
+# token is replaced (wrong channel, re-auth); each one holds a live credential.
+token.json*
 *.mp4
