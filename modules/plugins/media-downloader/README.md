@@ -301,11 +301,12 @@ that is already in flight returns the existing task (idempotent).
 
 #### FailedEvent
 
-| Prop            | Type                 | Description                                                                              |
-| --------------- | -------------------- | ---------------------------------------------------------------------------------------- |
-| **`id`**        | <code>string</code>  |                                                                                          |
-| **`error`**     | <code>string</code>  |                                                                                          |
-| **`retryable`** | <code>boolean</code> | Whether the failure is recoverable on retry (network drop) vs terminal (404, disk full). |
+| Prop            | Type                     | Description                                                                                                                                                                                                                                                                                                                                                    |
+| --------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`id`**        | <code>string</code>      |                                                                                                                                                                                                                                                                                                                                                                |
+| **`error`**     | <code>string</code>      |                                                                                                                                                                                                                                                                                                                                                                |
+| **`retryable`** | <code>boolean</code>     | Whether the failure is recoverable on retry (network drop) vs terminal (404, disk full).                                                                                                                                                                                                                                                                       |
+| **`code`**      | <code>'cancelled'</code> | Set to `"cancelled"` when the transfer ended because it was cancelled (`cancel()`, or the platform aborting the task) rather than failing on its own. Every platform emits `failed` for a cancellation so a caller awaiting the transfer always settles; the code lets that caller tell a deliberate abort from a genuine error and skip the retry affordance. |
 
 
 ### Type Aliases

@@ -162,6 +162,33 @@ describe("downloadMedia", () => {
     expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "failed", null, "original")
   })
 
+  it("stops at the cancelled candidate instead of re-downloading from the next", async () => {
+    const upsert = vi
+      .fn<IMediaItemRepository["upsert"]>()
+      .mockImplementation(async (trackId, state, localPath) => ({
+        id: "mi-1" as MediaItemId,
+        trackId: trackId as TrackId,
+        state,
+        localPath,
+        createdAt: 1000,
+      }))
+    const repo = makeRepo({ upsert })
+    const cancelled = new Error("Download cancelled")
+    cancelled.name = "DownloadCancelledError"
+    const transfer = vi.fn<(url: string) => Promise<string>>().mockRejectedValue(cancelled)
+    const result = await downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("cancelled")
+    // The user asked us to stop — trying server B would fetch the very
+    // bytes the cancel was meant to save.
+    expect(transfer).toHaveBeenCalledTimes(1)
+    // The claimed "downloading" row is released, so a later tap can retry.
+    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "failed", null, "original")
+  })
+
   it("returns no-candidates when the candidate list is empty", async () => {
     const transfer = vi.fn<(url: string) => Promise<string>>()
     const repo = makeRepo()

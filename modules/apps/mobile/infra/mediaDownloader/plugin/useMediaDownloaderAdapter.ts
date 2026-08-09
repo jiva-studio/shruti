@@ -1,6 +1,10 @@
 import type { PluginListenerHandle } from "@capacitor/core"
 import { MediaDownloader, type DownloadDestination } from "@lectorium/plugin-media-downloader"
-import type { IMediaDownloader, ProgressCallback } from "@ports/app/index.js"
+import {
+  DownloadCancelledError,
+  type IMediaDownloader,
+  type ProgressCallback,
+} from "@ports/app/index.js"
 
 /**
  * `IMediaDownloader` over the `@lectorium/plugin-media-downloader` plugin.
@@ -78,6 +82,11 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
       handles.push(
         await MediaDownloader.addListener("failed", (e) => {
           if (e.id !== id) return
+          // Every platform reports a cancellation as `failed` + the
+          // `cancelled` code — that is what settles this promise when the
+          // user removes/archives a track mid-transfer. Reject with the
+          // typed error so callers can tell it from a genuine failure.
+          if (e.code === "cancelled") return onFailed(new DownloadCancelledError())
           onFailed(new Error(e.error || "Download failed"))
         })
       )

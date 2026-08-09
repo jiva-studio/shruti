@@ -78,6 +78,14 @@ export interface FailedEvent {
   error: string;
   /** Whether the failure is recoverable on retry (network drop) vs terminal (404, disk full). */
   retryable: boolean;
+  /**
+   * Set to `"cancelled"` when the transfer ended because it was cancelled
+   * (`cancel()`, or the platform aborting the task) rather than failing on
+   * its own. Every platform emits `failed` for a cancellation so a caller
+   * awaiting the transfer always settles; the code lets that caller tell a
+   * deliberate abort from a genuine error and skip the retry affordance.
+   */
+  code?: 'cancelled';
 }
 
 /**

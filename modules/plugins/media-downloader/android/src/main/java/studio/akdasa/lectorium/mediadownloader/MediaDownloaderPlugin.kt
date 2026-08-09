@@ -231,7 +231,20 @@ class MediaDownloaderPlugin : Plugin() {
             val live = WorkManager.getInstance(context).getWorkInfoByIdLiveData(workerId)
             val observer = Observer<WorkInfo?> { info ->
                 if (info == null) return@Observer
-                val entry = store.findByWorkerId(workerId) ?: return@Observer
+                val entry = store.findByWorkerId(workerId)
+                if (entry == null) {
+                    // `cancel()` drops the store entry synchronously, before
+                    // WorkManager delivers CANCELLED here — so this is the
+                    // path a user-initiated cancel actually takes. Returning
+                    // silently would strand the JS caller on a promise that
+                    // can never settle, so report the cancellation and stop
+                    // observing once the work reaches a terminal state.
+                    if (info.state.isFinished) {
+                        notifyCancelled(id)
+                        detach(workerId)
+                    }
+                    return@Observer
+                }
                 val task = taskJson(id, info, entry.localPath)
 
                 // Progress from setProgress() while the worker is running.
@@ -272,6 +285,7 @@ class MediaDownloaderPlugin : Plugin() {
                         detach(workerId)
                     }
                     WorkInfo.State.CANCELLED -> {
+                        notifyCancelled(id)
                         detach(workerId)
                     }
                     else -> { /* ENQUEUED, RUNNING, BLOCKED — keep observing */ }
@@ -283,6 +297,23 @@ class MediaDownloaderPlugin : Plugin() {
             // observeForever() is safe because we manage detach() ourselves.
             live.observeForever(observer)
         }
+    }
+
+    /**
+     * A cancellation is terminal for the JS caller as well: its promise
+     * resolves on `completed` and rejects on `failed`, so without an event
+     * here it would stay pending forever and never release the download
+     * slot. The `cancelled` code distinguishes a deliberate abort from a
+     * genuine failure, so the UI can skip the red "retry" affordance.
+     */
+    private fun notifyCancelled(id: String) {
+        val payload = JSObject().apply {
+            put("id", id)
+            put("error", "cancelled")
+            put("retryable", false)
+            put("code", "cancelled")
+        }
+        notifyListeners("failed", payload)
     }
 
     private fun detach(workerId: UUID) {
