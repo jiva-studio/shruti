@@ -2,8 +2,10 @@ package store_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -927,5 +929,83 @@ func TestNobodyMeansNobody(t *testing.T) {
 	}
 	if len(names) != 0 {
 		t.Errorf("still linked to %v", names)
+	}
+}
+
+// A stated archive stays stated through an ordinary edit: the kind decides
+// whether a model is asked at all.
+func TestAnEditDoesNotChangeWhatKindOfArchiveThisIs(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+
+	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"},
+		Kind: store.KindStated})
+	mustSource(t, r, &store.Source{ID: "a", SeedURLs: []string{"https://a.example/"}, Enabled: true})
+
+	got, err := r.Source(ctx, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Kind != store.KindStated {
+		t.Errorf("kind after an edit = %q", got.Kind)
+	}
+	if !got.Enabled {
+		t.Errorf("the edit itself did not take")
+	}
+
+	// An archive nobody classified is material: the guess that fails cheaply.
+	mustSource(t, r, &store.Source{ID: "b", SeedURLs: []string{"https://b.example/"}})
+	fresh, err := r.Source(ctx, "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Kind != store.KindMaterial {
+		t.Errorf("an unsaid kind = %q", fresh.Kind)
+	}
+}
+
+// What the archive printed — a length, a cycle, a still — is read by a script
+// and by nothing else, so a pass with no script behind it has no news about it.
+// What the model reads is not kept this way: an empty answer is an answer.
+func TestAPassWithNothingToSayLeavesThePrintedFactsAlone(t *testing.T) {
+	r, _ := testRepo(t)
+	ctx := context.Background()
+
+	mustSource(t, r, &store.Source{ID: "s", SeedURLs: []string{"https://s.example/"}})
+	sid := "s"
+	it := &store.Item{
+		MediaURL: "https://s.example/a.mp3", SourceID: &sid,
+		Title: "Славная смерть", Author: "Бхакти Вигьяна Госвами",
+		DurationS: 4245, CollectionTitle: "Цикл", CoverURL: "https://s.example/a.jpg",
+		Raw:    json.RawMessage(`{"filename":"a.mp3","path_segments":["2014"]}`),
+		Status: store.StatusNormalized,
+	}
+	if _, err := r.SaveItem(ctx, it); err != nil {
+		t.Fatal(err)
+	}
+	// The same recording seen again by a pass that had no script to read it.
+	if _, err := r.SaveItem(ctx, &store.Item{
+		MediaURL: "https://s.example/a.mp3", SourceID: &sid,
+		Title: "Славная смерть", Status: store.StatusNormalized,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := r.ItemByMediaURL(ctx, "https://s.example/a.mp3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DurationS != 4245 || got.CollectionTitle != "Цикл" || got.CoverURL == "" {
+		t.Errorf("printed facts lost: duration=%d collection=%q cover=%q",
+			got.DurationS, got.CollectionTitle, got.CoverURL)
+	}
+	// The material the model was shown outlives the pass too, or a prompt
+	// change can only be answered by asking the archive for the page again.
+	if !strings.Contains(string(got.Raw), "a.mp3") {
+		t.Errorf("raw = %s", got.Raw)
+	}
+	// An author the pass did not name is gone, because that is an answer.
+	if got.Author != "" {
+		t.Errorf("author = %q, want it cleared", got.Author)
 	}
 }

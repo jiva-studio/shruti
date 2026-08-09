@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -441,5 +442,34 @@ func TestARecordingCarriesItsCover(t *testing.T) {
 	}
 	if seen != 1 {
 		t.Errorf("the filtered path returned %d covers over %d hits", seen, len(only))
+	}
+}
+
+// A recording whose file the archive stopped offering is kept, so a person can
+// settle what became of it, and is not answered with: a hit is something to go
+// and listen to, and this one has a dead address under it.
+func TestAVanishedRecordingIsNotAnAnswer(t *testing.T) {
+	svc, repo, pool := testSearch(t)
+	ctx := context.Background()
+
+	add(t, repo, pool, "https://a.example/here.mp3", "Surrender in the Gita", "Radhanath Swami", "en")
+	gone := add(t, repo, pool, "https://a.example/gone.mp3", "Surrender in the Bhagavatam", "Radhanath Swami", "en")
+	if err := repo.MarkMediaVanished(ctx, gone, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Both lanes and the filter-only path share one WHERE, so all three are
+	// asked: text, and a filter with no text at all.
+	for _, q := range []search.Query{
+		{Text: "Surrender", Limit: 10},
+		{Languages: []string{"en"}, Limit: 10},
+	} {
+		hits, err := svc.Search(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := titles(hits); len(got) != 1 || got[0] != "Surrender in the Gita" {
+			t.Errorf("query %+v answered %v", q, got)
+		}
 	}
 }

@@ -98,19 +98,32 @@ func requestLogger(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(sr, r.WithContext(ctx))
 
-		slog.InfoContext(ctx, "http_request",
+		args := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", sr.status,
 			"dur_ms", time.Since(start).Milliseconds(),
 			"remote_ip", clientIP(r),
-		)
+		}
+		// A fault of ours is logged as one; a 4xx is ordinary traffic.
+		if sr.status >= http.StatusInternalServerError {
+			if sr.errCode != "" {
+				args = append(args, "code", sr.errCode, "err", sr.errMsg)
+			}
+			slog.ErrorContext(ctx, "http_request", args...)
+			return
+		}
+		slog.InfoContext(ctx, "http_request", args...)
 	})
 }
 
+// statusRecorder carries what the handler answered back out to the logger,
+// including why it failed: writeErr tells only the caller.
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status  int
+	errCode string
+	errMsg  string
 }
 
 func (s *statusRecorder) WriteHeader(code int) {

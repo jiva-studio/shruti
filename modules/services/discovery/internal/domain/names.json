@@ -18,7 +18,11 @@
     "Шриман",
     "Шримати",
     "Шрипад",
-    "Шри"
+    "Шри",
+    "Bhakta",
+    "Bhaktin",
+    "Бхакта",
+    "Бхактин"
   ],
   "dropped": [
     "Prabhuji",
@@ -30,6 +34,17 @@
     "Прабху",
     "Прабх",
     "пр"
+  ],
+  "organisations": [
+    "ISKCON",
+    "ISCKON",
+    "Iskcon",
+    "Hare Krishna Temple",
+    "Hare Krishna Centre",
+    "Hare Krishna Center",
+    "Sri Sri Radha",
+    "Radha Krishna Temple",
+    "Temple of"
   ],
   "forms": [
     {
@@ -98,17 +113,6 @@
         "дд"
       ]
     }
-  ],
-  "organisations": [
-    "ISKCON",
-    "ISCKON",
-    "Iskcon",
-    "Hare Krishna Temple",
-    "Hare Krishna Centre",
-    "Hare Krishna Center",
-    "Sri Sri Radha",
-    "Radha Krishna Temple",
-    "Temple of"
   ],
   "cyrillic": {
     "а": "a",

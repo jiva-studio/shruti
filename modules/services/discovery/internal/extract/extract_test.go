@@ -45,8 +45,8 @@ func parse(t *testing.T, body, contentType, pageURL string) *domain.Extraction {
 	return out
 }
 
-// A file listing must yield one record per file, each carrying the row it sits
-// in rather than its neighbours'.
+// A file listing must yield one record per file, each with its own filename
+// and directory chain.
 func TestFileListing(t *testing.T) {
 	out := parseFixture(t, "idt_listing.html")
 
@@ -57,37 +57,6 @@ func TestFileListing(t *testing.T) {
 		if it.Filename == "" || len(it.PathSegments) != 3 {
 			t.Errorf("%s: filename=%q segments=%v", it.MediaURL, it.Filename, it.PathSegments)
 		}
-		// The row a file sits in reads as its filename does, with the
-		// underscores spelled out.
-		spoken := strings.ReplaceAll(strings.TrimSuffix(it.Filename, ".mp3"), "_", " ")
-		if !strings.Contains(it.ContextText, spoken[:40]) {
-			t.Errorf("%s: context does not carry its own row\n  ctx=%.200q", it.Filename, it.ContextText)
-		}
-		if len(it.ContextText) > 2000 {
-			t.Errorf("%s: context of %d bytes swallowed the page", it.Filename, len(it.ContextText))
-		}
-	}
-}
-
-// A page carrying one recording is entirely about it, so the whole page travels
-// with it and the text is marked as the recording's own.
-func TestSingleRecordingTakesWholePage(t *testing.T) {
-	out := parse(t, `<html><head><title>A talk</title></head><body>
-		<h1>A talk</h1><p>Given in Vrindavan, 1972.</p>
-		<a href="/media/talk.mp3">download</a>
-		<p>On the nature of the soul.</p></body></html>`,
-		"text/html", "https://example.org/talks/1")
-
-	if len(out.Items) != 1 {
-		t.Fatalf("items = %d, want 1", len(out.Items))
-	}
-	it := out.Items[0]
-	if !strings.Contains(it.ContextText, "nature of the soul") ||
-		!strings.Contains(it.ContextText, "Vrindavan") {
-		t.Errorf("context missed text on the other side of the link: %q", it.ContextText)
-	}
-	if it.MediaURL != "https://example.org/media/talk.mp3" {
-		t.Errorf("media url = %q", it.MediaURL)
 	}
 }
 
@@ -113,12 +82,10 @@ func TestMarkupIndependence(t *testing.T) {
 			out.Items[1].MediaURL != "https://example.org/b.mp3" {
 			t.Fatalf("%s: urls = %q, %q", name, out.Items[0].MediaURL, out.Items[1].MediaURL)
 		}
-		if !strings.Contains(out.Items[0].ContextText, "First talk") {
-			t.Errorf("%s: item 0 context = %q", name, out.Items[0].ContextText)
-		}
-		if !strings.Contains(out.Items[1].ContextText, "Second talk") ||
-			strings.Contains(out.Items[1].ContextText, "First talk") {
-			t.Errorf("%s: item 1 context = %q", name, out.Items[1].ContextText)
+		// Whatever the markup, the words on the page come out as words.
+		if !strings.Contains(out.PageText, "First talk") ||
+			!strings.Contains(out.PageText, "Second talk") {
+			t.Errorf("%s: text = %q", name, out.PageText)
 		}
 	}
 }
@@ -221,10 +188,9 @@ func TestLimitsRespectCharacterBoundaries(t *testing.T) {
 	if len(out.Items) != 1 {
 		t.Fatalf("items = %d", len(out.Items))
 	}
-	for _, s := range []string{out.PageText, out.Items[0].ContextText} {
-		if !utf8.ValidString(s) {
-			t.Errorf("cut produced invalid UTF-8 at byte %d of %d", firstBadByte(s), len(s))
-		}
+	if !utf8.ValidString(out.PageText) {
+		t.Errorf("cut produced invalid UTF-8 at byte %d of %d",
+			firstBadByte(out.PageText), len(out.PageText))
 	}
 }
 

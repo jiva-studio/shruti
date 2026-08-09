@@ -38,15 +38,28 @@ func TestExpandRefs(t *testing.T) {
 	}
 }
 
-// A range nobody could have lectured on collapses to its first verse: the
-// recording stays findable without dragging in sixty citations nobody made.
-func TestExpandRefsCollapsesAnImplausibleRange(t *testing.T) {
+// A range nobody could have lectured on is dropped. Its first verse is not the
+// passage the talk was about, and storing it puts a citation nobody made in the
+// column an exact match searches.
+func TestExpandRefsDropsAnImplausibleRange(t *testing.T) {
 	refs, note := domain.ExpandRefs("BG", "1.18-78")
-	if len(refs) != 1 || refs[0].Tokens != "1.18" {
-		t.Errorf("refs = %+v, want just BG 1.18", refs)
+	if len(refs) != 0 {
+		t.Errorf("refs = %+v, want none", refs)
 	}
 	if note == "" {
-		t.Error("collapsing must be reported, not silent")
+		t.Error("dropping must be reported, not silent")
+	}
+}
+
+// A dash read as a range across a level gives coordinates the book has no room
+// for: a canto.chapter.verse source has no verse "3.10".
+func TestExpandRefsDropsACoordinateOfTheWrongDepth(t *testing.T) {
+	refs, note := domain.ExpandRefs("SB", "3.10-12")
+	if len(refs) != 0 {
+		t.Errorf("refs = %+v, want none", refs)
+	}
+	if note == "" {
+		t.Error("dropping must be reported, not silent")
 	}
 }
 

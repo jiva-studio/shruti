@@ -378,7 +378,7 @@ func TestSeveralSourcesShareOneScript(t *testing.T) {
 	for _, id := range []string{"channel-one", "channel-two"} {
 		if err := repo.SaveSource(ctx, &store.Source{
 			ID: id, SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
-			Script: "audioveda",
+			Script: "audioveda", Kind: store.KindStated,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -430,6 +430,7 @@ func TestASourceNamedAfterItsScriptStillWorks(t *testing.T) {
 	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 	if err := repo.SaveSource(ctx, &store.Source{
 		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
+		Kind: store.KindStated,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -451,5 +452,297 @@ func TestASourceNamedAfterItsScriptStillWorks(t *testing.T) {
 	items, _ := repo.ItemsByPage(ctx, p.ID)
 	if len(items) != 1 || items[0].Title != "Лекция" {
 		t.Errorf("= %+v", items)
+	}
+}
+
+// A model asked about a batch of files sometimes answers about all but one.
+// Silence is not an answer: stored as one it is stamped with the input hash,
+// which stops the next visit asking again.
+type forgetfulNormalizer struct{ normalize.Stub }
+
+func (forgetfulNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]normalize.Result, error) {
+	out := make([]normalize.Result, len(b.Items))
+	for i := range out {
+		out[i] = normalize.Result{Unanswered: true}
+	}
+	return out, nil
+}
+
+func TestAFileTheModelPassedOverIsAskedAgain(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+
+	svc := &index.Service{
+		Fetcher:    &pageFetcher{body: talk},
+		Normalizer: forgetfulNormalizer{},
+		Repo:       repo,
+		Now:        func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://a.example/talk", "", false); err != nil {
+		t.Fatal(err)
+	}
+	page, err := repo.PageByURL(ctx, "https://a.example/talk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := repo.ItemsByPage(ctx, page.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("%d items", len(items))
+	}
+	if got := items[0].NormInputSHA256; got != "" {
+		t.Errorf("an unanswered file was stamped %q and will never be asked again", got)
+	}
+}
+
+// A model is asked what a recording is called. It is not asked how long the
+// recording runs and it is not shown a picture, so taking its answer as the
+// whole record erases what the archive published.
+type titleOnlyNormalizer struct{ normalize.Stub }
+
+func (titleOnlyNormalizer) Normalize(_ context.Context, b normalize.Batch) ([]normalize.Result, error) {
+	out := make([]normalize.Result, len(b.Items))
+	for i := range out {
+		out[i] = normalize.Result{Title: "Уроки Рама-лилы", Authors: []string{"Сарвагья дас"}}
+	}
+	return out, nil
+}
+
+func TestWhatTheArchivePrintedSurvivesTheModel(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	if err := repo.SaveSource(ctx, &store.Source{
+		ID: "yt-test", SeedURLs: []string{"https://www.youtube.com/@x"}, Enabled: true,
+		Script: "youtube", Kind: store.KindMaterial,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner, err := script.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const doc = `{"id":"abc123",` +
+		`"title":"Е.М. Сарвагья прабху. ШБ 9.10.12. Уроки Рама-лилы. 4.01.2025. Хампи",` +
+		`"channel":"Гаура СПб","duration":4245,"upload_date":"20250104"}`
+	svc := &index.Service{
+		Fetcher: &pageFetcher{body: doc}, Normalizer: titleOnlyNormalizer{},
+		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://www.youtube.com/watch?v=abc123", "yt-test", false); err != nil {
+		t.Fatal(err)
+	}
+	p, err := repo.PageByURL(ctx, "https://www.youtube.com/watch?v=abc123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := repo.ItemsByPage(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("%d recordings", len(items))
+	}
+	if items[0].Title != "Уроки Рама-лилы" {
+		t.Errorf("the model was not believed about the title: %q", items[0].Title)
+	}
+	if items[0].DurationS != 4245 {
+		t.Errorf("duration = %d, want 4245", items[0].DurationS)
+	}
+	if items[0].CoverURL != "https://i.ytimg.com/vi/abc123/mqdefault.jpg" {
+		t.Errorf("cover = %q", items[0].CoverURL)
+	}
+}
+
+// A stated archive names its talk and no model reads that name, so the
+// scripture it cites is folded out of the stated title by the engine.
+func TestAStatedTitleKeepsItsReferences(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	if err := repo.SaveSource(ctx, &store.Source{
+		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
+		Kind: store.KindStated,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner, err := script.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const page = `<html lang="ru"><body>
+		<script type="application/ld+json">{"name":"ШБ 6.12.2-7 - Славная смерть Вритрасуры","author":{"name":"Бхакти Вигьяна Госвами"},"datePublished":"2019-03-04"}</script>
+		<a href="/audio/x.mp3">слушать</a></body></html>`
+	svc := &index.Service{
+		Fetcher: &pageFetcher{body: page}, Normalizer: normalize.Stub{},
+		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+	}
+	if _, err := svc.Item(ctx, "https://audioveda.ru/audios/1", "audioveda", false); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := repo.PageByURL(ctx, "https://audioveda.ru/audios/1")
+	items, err := repo.ItemsByPage(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("%d recordings", len(items))
+	}
+	refs, err := repo.ItemRefs(ctx, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 6 || refs[0].Source != "SB" || refs[0].Tokens != "6.12.2" {
+		t.Errorf("references = %+v, want SB 6.12.2 … 6.12.7", refs)
+	}
+}
+
+// A stated archive is believed without a model, so nothing downstream checks
+// it. A page that comes back without the block it states its facts in has been
+// read for nothing, and storing that both blanks the recording and seals it —
+// the hash of a stated file does not change when the page recovers.
+func TestAStatedPageServedWithoutItsFactsChangesNothing(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	if err := repo.SaveSource(ctx, &store.Source{
+		ID: "audioveda", SeedURLs: []string{"https://audioveda.ru/"}, Enabled: true,
+		Kind: store.KindStated,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner, err := script.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const stated = `<html lang="ru"><body>
+		<script type="application/ld+json">{"name":"Славная смерть Вритрасуры","author":{"name":"Бхакти Вигьяна Госвами"},"datePublished":"2019-03-04","duration":"PT1H10M45S"}</script>
+		<a href="/audio/x.mp3">слушать</a></body></html>`
+	const silent = `<html lang="ru"><body>
+		<a href="/audio/x.mp3">слушать</a></body></html>`
+
+	fetcher := &pageFetcher{body: stated}
+	svc := &index.Service{
+		Fetcher: fetcher, Normalizer: normalize.Stub{},
+		Repo: repo, Scripts: runner, Now: func() time.Time { return now },
+	}
+	const url = "https://audioveda.ru/audios/1"
+	if _, err := svc.Item(ctx, url, "audioveda", false); err != nil {
+		t.Fatal(err)
+	}
+	before, err := repo.ItemByMediaURL(ctx, "https://audioveda.ru/audio/x.mp3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before == nil || before.Title == "" {
+		t.Fatalf("nothing was stated to begin with: %+v", before)
+	}
+
+	// force, because that is what the first pass after any change to how a
+	// source is read looks like: every file is offered to be read again.
+	fetcher.body = silent
+	if _, err := svc.Item(ctx, url, "audioveda", true); err != nil {
+		t.Fatal(err)
+	}
+	after, err := repo.ItemByMediaURL(ctx, "https://audioveda.ru/audio/x.mp3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Title != before.Title || after.Author != before.Author {
+		t.Errorf("a page that stated nothing overwrote the record: %q by %q, was %q by %q",
+			after.Title, after.Author, before.Title, before.Author)
+	}
+	if after.DurationS != before.DurationS {
+		t.Errorf("duration = %d, was %d", after.DurationS, before.DurationS)
+	}
+
+	// And it recovers: the archive serves the block again and the record is
+	// still the one it names.
+	fetcher.body = stated
+	if _, err := svc.Item(ctx, url, "audioveda", true); err != nil {
+		t.Fatal(err)
+	}
+	back, err := repo.ItemByMediaURL(ctx, "https://audioveda.ru/audio/x.mp3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Title != before.Title {
+		t.Errorf("title after the archive recovered = %q", back.Title)
+	}
+}
+
+// A page that offers nothing where it offered recordings is far more often a
+// lapsed session than an emptied page, and marking on it costs every recording
+// there at once — which, since a vanished recording is not answered with, is a
+// whole archive's place in search.
+func TestAPageThatSuddenlyOffersNothingBuriesNobody(t *testing.T) {
+	repo := testRepo(t)
+	ctx := context.Background()
+	now := time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
+	if err := repo.SaveSource(ctx, &store.Source{
+		ID: "s", SeedURLs: []string{"https://s.example/"}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const listing = `<html><body>
+		<a href="/audio/one.mp3">one</a>
+		<a href="/audio/two.mp3">two</a></body></html>`
+	// The same page as it looks to a reader who is not signed in.
+	const signedOut = `<html><body><p>Please sign in to listen.</p></body></html>`
+
+	fetcher := &pageFetcher{body: listing}
+	svc := &index.Service{
+		Fetcher: fetcher, Normalizer: normalize.Stub{},
+		Repo: repo, Scripts: nil, Now: func() time.Time { return now },
+	}
+	const url = "https://s.example/lectures"
+	if _, err := svc.Item(ctx, url, "s", false); err != nil {
+		t.Fatal(err)
+	}
+	p, err := repo.PageByURL(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items, err := repo.ItemsByPage(ctx, p.ID); err != nil || len(items) != 2 {
+		t.Fatalf("%d recordings to begin with (%v)", len(items), err)
+	}
+
+	fetcher.body = signedOut
+	if _, err := svc.Item(ctx, url, "s", false); err != nil {
+		t.Fatal(err)
+	}
+	items, err := repo.ItemsByPage(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.MediaState != store.MediaPresent {
+			t.Errorf("%s was buried on one bad visit: %s", it.MediaURL, it.MediaState)
+		}
+	}
+
+	// One recording genuinely leaving the page is still noticed.
+	fetcher.body = `<html><body><a href="/audio/one.mp3">one</a></body></html>`
+	if _, err := svc.Item(ctx, url, "s", false); err != nil {
+		t.Fatal(err)
+	}
+	items, err = repo.ItemsByPage(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vanished int
+	for _, it := range items {
+		if it.MediaState == store.MediaVanished {
+			vanished++
+			if it.MediaURL != "https://s.example/audio/two.mp3" {
+				t.Errorf("the wrong one went: %s", it.MediaURL)
+			}
+		}
+	}
+	if vanished != 1 {
+		t.Errorf("%d vanished, want the one that left", vanished)
 	}
 }

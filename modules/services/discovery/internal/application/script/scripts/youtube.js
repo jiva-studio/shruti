@@ -16,36 +16,55 @@ function extract(page, items) {
   // own, so the schedule can revisit one video without re-reading the channel.
   if (doc._type === 'playlist' || doc.entries) return [];
 
-  // The reader hands over the tracks worth keeping, published first. It has
-  // already refused to pass off a machine translation as the original, so the
-  // first is the talk in the language it was given in, and any others are
-  // separate work the uploader published rather than copies of it.
+  // The reader hands over every track worth keeping: what the uploader
+  // published, in whatever languages they published it, and failing that the
+  // one machine track it can vouch for as the original.
   var tracks = doc._captions || [];
   var texts = [];
+  // Which language was spoken, and only where something says so. A published
+  // track is a language somebody offered — a Russian talk with English
+  // subtitles offers "en" — and the reader hands them over in alphabetical
+  // order, so no position among them means anything. The machine track is
+  // different: the reader picks it by the site's own mark for the original.
+  var spoken = '';
   for (var i = 0; i < tracks.length; i++) {
     var words = captions(tracks[i].json3);
     if (words) texts.push({ lang: tracks[i].lang, text: words });
+    if (tracks[i].origin === 'auto' && !spoken) spoken = baseLang(tracks[i].lang);
   }
-  var spoken = tracks.length ? tracks[0].lang : '';
+
+  var label = (doc.title || '').trim();
+  var channel = (doc.channel || doc.uploader || '').trim();
+  var posted = uploadDate(doc.upload_date || '');
+
+  // What the uploader typed, handed over whole rather than passed off as a
+  // title. It is a line like "Е.М. Сарвагья прабху. ШБ 9.10.12. Уроки
+  // Рама-лилы. 4.01.2025. Хампи" — a speaker, a passage, a name, a date and a
+  // place written into one box, and none of it is the title on its own.
+  var material = [];
+  if (label) material.push({ label: 'video title', text: label });
+  if (channel) material.push({ label: 'published on the channel', text: channel });
+  // When the talk was posted, which is when it was given only where the name
+  // says nothing else. A channel filming its own class posts it within days; a
+  // channel putting an archive online posts it decades late. Which of the two
+  // this is can be read off the name, so the reading is the model's.
+  if (posted) material.push({ label: 'published on', text: posted });
 
   return items.map(function (it) {
     return {
       url: it.url,
-      title: (doc.title || '').trim(),
-      // Whoever uploaded it wrote the speaker into the title, because a channel
-      // name is not one: a temple's channel carries forty people, and even one
-      // teacher's own carries guests — there are lectures by two other swamis
-      // sitting among the owner's on one of these. Taking the channel name
-      // filed all of them under whoever the channel belongs to.
-      //
-      // A title that names nobody yields nothing, which leaves the question to
-      // the source's own setting, or to the model.
-      author: speaker(doc.title || ''),
+      // Deliberately empty, along with the speaker and the passage. All three
+      // live in that one line, the script has no way to take it apart, and
+      // whatever it did parse out of it would be thrown away anyway: a
+      // recording that goes to the model comes back replaced entire.
+      title: '',
+      author: '',
       authors: [],
-      date: uploadDate(doc.upload_date || ''),
-      // What the title cites. The archive states nothing about scripture, so
-      // the title is the only place a coordinate can be.
-      references: refs(doc.title || '').refs,
+      // Kept as well as handed over, so that a file the model passed over
+      // still carries a date rather than none.
+      date: posted,
+      references: [],
+      material: material,
       // The still, built from the id this very document is keyed by. mqdefault
       // and not one of the larger ones: it is the only size that exists for
       // every video and the only one that is not letterboxed, and a picture
@@ -56,10 +75,6 @@ function extract(page, items) {
       // site says about the recording. Never guessed from the text.
       language: spoken || baseLang(doc.language || ''),
       texts: texts,
-      // The site stated its own metadata. What it did not state, it does not
-      // have, and a model reading the same JSON would only be guessing.
-      complete: (doc.title || '') !== '' && (doc.channel || doc.uploader || '') !== '',
-      reasons: (doc.title && (doc.channel || doc.uploader)) ? [] : ['no-speaker'],
     };
   });
 }

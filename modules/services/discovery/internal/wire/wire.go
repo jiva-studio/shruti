@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -83,7 +84,11 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 		}
 	}
 	fetcher := buildFetcher(cfg)
-	normalizer := buildNormalizer(ctx, cfg)
+	normalizer, err := buildNormalizer(ctx, cfg)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
 	embedder := buildEmbedder(ctx, cfg)
 
 	// Sources may carry their own extraction script. One that will not compile
@@ -161,11 +166,12 @@ func Build(ctx context.Context, cfg *config.Config) (*Deps, error) {
 
 // BuildParse assembles the single-URL dry run. It needs no database, so the CLI
 // can use it too.
-func BuildParse(ctx context.Context, cfg *config.Config) *parse.Service {
-	return &parse.Service{
-		Fetcher:    buildFetcher(cfg),
-		Normalizer: buildNormalizer(ctx, cfg),
+func BuildParse(ctx context.Context, cfg *config.Config) (*parse.Service, error) {
+	normalizer, err := buildNormalizer(ctx, cfg)
+	if err != nil {
+		return nil, err
 	}
+	return &parse.Service{Fetcher: buildFetcher(cfg), Normalizer: normalizer}, nil
 }
 
 func buildFetcher(cfg *config.Config) *fetch.Client {
@@ -182,13 +188,21 @@ func buildFetcher(cfg *config.Config) *fetch.Client {
 	})
 }
 
-// buildNormalizer returns the live normalizer when a model is configured and
-// the stub otherwise. Without a key the service still fetches, extracts and
-// stores raw records — it just cannot say what any of them mean.
-func buildNormalizer(ctx context.Context, cfg *config.Config) normalize.Normalizer {
+// buildNormalizer returns the model, refusing to serve without one outside dev.
+//
+// The stand-in reads a title off the filename and names a version of its own,
+// which supersedes every stored answer and replaces it with what the stand-in
+// made up. An empty key is one absent environment variable away.
+func buildNormalizer(ctx context.Context, cfg *config.Config) (normalize.Normalizer, error) {
+	stub := func(reason string, args ...any) (normalize.Normalizer, error) {
+		if cfg.Env != "dev" {
+			return nil, fmt.Errorf("normalizer unavailable in %s: %s", cfg.Env, reason)
+		}
+		slog.WarnContext(ctx, "normalizer_stubbed", args...)
+		return normalize.Stub{}, nil
+	}
 	if ok, missing := cfg.NormalizerReady(); !ok {
-		slog.WarnContext(ctx, "normalizer_stubbed", "missing", missing)
-		return normalize.Stub{}
+		return stub(strings.Join(missing, ", "), "missing", missing)
 	}
 	llm, err := normalize.NewLLM(normalize.LLMOptions{
 		Endpoint: cfg.LLMBaseURL,
@@ -196,10 +210,9 @@ func buildNormalizer(ctx context.Context, cfg *config.Config) normalize.Normaliz
 		Model:    cfg.LLMModel,
 	})
 	if err != nil {
-		slog.WarnContext(ctx, "normalizer_stubbed", "err", err.Error())
-		return normalize.Stub{}
+		return stub(err.Error(), "err", err.Error())
 	}
-	return llm
+	return llm, nil
 }
 
 // buildQueryReader returns nil when no model is configured, and nil is a
@@ -233,4 +246,15 @@ func buildEmbedder(ctx context.Context, cfg *config.Config) *embed.Client {
 		return nil
 	}
 	return client
+}
+
+// Rechunker is an index service with only what re-cutting stored prose needs:
+// the database and an embedder. It takes no crawl lock and opens no fetcher,
+// because nothing is fetched.
+func Rechunker(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *index.Service {
+	svc := &index.Service{Repo: store.NewRepo(pool)}
+	if e := buildEmbedder(ctx, cfg); e != nil {
+		svc.Embedder = e
+	}
+	return svc
 }

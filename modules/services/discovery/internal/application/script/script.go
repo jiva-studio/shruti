@@ -6,9 +6,9 @@
 // engine must not do. A script per source says where its facts are, and the
 // engine stays ignorant of every site.
 //
-// What a script fills is taken as given. What it leaves empty falls through to
-// the model, so a half-written script is still worth having, and a complete one
-// removes the model call entirely.
+// What a script does with what it finds is decided by the source's kind, not
+// per file: a stated archive publishes its own facts and fills the fields, a
+// material one hands over what it saw and the model reads all of it.
 package script
 
 import (
@@ -47,7 +47,6 @@ type Item struct {
 	URL      string   `json:"url"`
 	Filename string   `json:"filename"`
 	Path     []string `json:"path"`
-	Context  string   `json:"context"`
 }
 
 // Fields is what a script says about one file. Every field is optional; an
@@ -65,22 +64,11 @@ type Fields struct {
 	CollectionTitle string   `json:"collection_title"`
 	// DurationS is how long the recording runs, where the archive says so.
 	DurationS int `json:"duration_s"`
-	// References are the scripture passages the line cites, already folded to
-	// the canon. Objects rather than "BG 2.13" strings: a code with a space in
-	// it cannot survive being cut back apart on the first one.
-	References []domain.Ref `json:"references"`
 	// CoverURL is the picture the archive publishes for this recording. The
 	// script says it because the script is what knows: it holds the video's own
 	// id, where a reader downstream would be matching the shape of an address
 	// and guessing.
 	CoverURL string `json:"cover_url"`
-
-	// Complete is the script asserting it accounted for the whole of what the
-	// page said about this file — that the fields left empty are empty because
-	// the archive did not state them, not because nobody looked. Only then can
-	// the model be skipped: an empty title otherwise means "unknown", and
-	// unknown is exactly what a model is for.
-	Complete bool `json:"complete"`
 
 	// PageText is prose the archive published about this recording, in Markdown.
 	// A search key, never a transcript of ours.
@@ -96,13 +84,10 @@ type Fields struct {
 	// A script fills one of these or the other, never both.
 	Texts []Text `json:"texts"`
 
-	// Reasons is everything that stopped the script, when it stopped. A set,
-	// not a choice: a line can lack a speaker and carry an unreadable date and
-	// leave words unaccounted for at once, and a fix for one will not move it.
-	//
-	// Without this, "the model was called 142 times" cannot be turned into
-	// "and here is what for", nor into a list of what to fix next.
-	Reasons []string `json:"reasons"`
+	// Material is what the script saw and left uninterpreted, for the model to
+	// read: a video's own title, the words a listing wrote beside a link, the
+	// person an archive files a whole directory under.
+	Material []domain.Material `json:"material,omitempty"`
 }
 
 // Text is words the archive published, and the language it published them in.
@@ -226,23 +211,6 @@ func (r *Runner) start(ctx context.Context, sourceID string) (*goja.Runtime, cha
 		return nil, nil, err
 	}
 	if err := vm.Set("pageLanguage", Language); err != nil {
-		return nil, nil, err
-	}
-	// Who is speaking, out of a line the archive wrote. What a Vaishnava name
-	// looks like is knowledge about this corpus and not about any site, so it
-	// lives in domain; the script only says which line to look at.
-	if err := vm.Set("speaker", domain.Speaker); err != nil {
-		return nil, nil, err
-	}
-	// Which scripture a line cites, and the line with the citation taken out.
-	// Both halves are needed by one script and one half by the others, so the
-	// binding always returns both and a caller ignores what it does not want.
-	//
-	// The canon of scripture names lives in domain for the same reason a
-	// Vaishnava name does: it is knowledge about this corpus, not about a site.
-	// Handing the table to the script instead would move that judgement into
-	// JavaScript once per script, where \b has the same defect it has in Go.
-	if err := vm.Set("refs", readRefs); err != nil {
 		return nil, nil, err
 	}
 

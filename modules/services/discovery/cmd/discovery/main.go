@@ -31,6 +31,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -40,7 +41,6 @@ import (
 	"time"
 
 	"github.com/jiva-studio/lectorium/discovery/internal/config"
-	"github.com/jiva-studio/lectorium/discovery/internal/domain"
 	"github.com/jiva-studio/lectorium/discovery/internal/infra/fetch"
 	logpkg "github.com/jiva-studio/lectorium/discovery/internal/logging"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
@@ -60,12 +60,8 @@ func main() {
 		os.Exit(runMigrate())
 	case "parse":
 		os.Exit(runParse(os.Args[2:]))
-	case "relink-authors":
-		os.Exit(runRelink())
-	case "read-refs":
-		os.Exit(runReadRefs(os.Args[2:]))
-	case "refold-authors":
-		os.Exit(runRefold())
+	case "recompute":
+		os.Exit(runRecompute(os.Args[2:]))
 	case "serve":
 		runServe()
 	default:
@@ -89,7 +85,12 @@ func runParse(args []string) int {
 
 	// No database here, so no source and no credentials with it. For a page
 	// behind an account, POST /discovery/parse with a "source" instead.
-	layers, err := wire.BuildParse(ctx, cfg).URL(ctx, args[0], fetch.Request{})
+	parser, err := wire.BuildParse(ctx, cfg)
+	if err != nil {
+		slog.ErrorContext(ctx, "parse_failed", "err", err.Error())
+		return 1
+	}
+	layers, err := parser.URL(ctx, args[0], fetch.Request{})
 	if err != nil {
 		slog.ErrorContext(ctx, "parse_failed", "url", args[0], "err", err.Error())
 		return 1
@@ -99,41 +100,6 @@ func runParse(args []string) int {
 	if err := enc.Encode(layers); err != nil {
 		return 1
 	}
-	return 0
-}
-
-// runRelink attaches recordings we already hold to the person they name.
-//
-// It exists because a correction to how a name is read does not reach what is
-// already stored: a recording is linked when its page is read, and a page is
-// only read again when the site changed, the prompt changed or the source's
-// script changed. A fix in Go changes none of those.
-//
-// A subcommand rather than something that happens at boot. It is a repair, and
-// a repair is a decision somebody makes.
-func runRelink() int {
-	cfg := config.Load()
-	if err := cfg.RequireDatabase(); err != nil {
-		slog.Error("config load failed", "err", err)
-		return 2
-	}
-	logpkg.Setup("lectorium-discovery", cfg.Env, cfg.ServiceVersion)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-	pool, err := store.Connect(ctx, cfg.DatabaseURL)
-	if err != nil {
-		slog.ErrorContext(ctx, "db_connect_failed", "err", err.Error())
-		return 1
-	}
-	defer pool.Close()
-
-	linked, err := store.NewRepo(pool).RelinkAuthors(ctx, 500)
-	if err != nil {
-		slog.ErrorContext(ctx, "relink_failed", "linked", linked, "err", err.Error())
-		return 1
-	}
-	slog.InfoContext(ctx, "relink_done", "linked", linked)
 	return 0
 }
 
@@ -285,26 +251,21 @@ func selfHealthz() int {
 	return 0
 }
 
-// runReadRefs reads the citations out of the titles already stored.
+// runRecompute redoes one stage over what is already stored.
 //
-// A repair rather than a crawl: the titles are here, and for the archives whose
-// scripts answer completely nothing else will ever produce these references —
-// their recordings are never shown to a model, and a script edit does not reach
-// a recording already stored.
+// A correction in Go reaches nothing already written: a recording is settled
+// when its page is read, and a page is read again only when the site, the
+// prompt or the script changed. This is how a fix travels, and it is one place
+// rather than a subcommand per repair.
 //
-// It writes nothing without --apply, and it never writes an empty set. A
-// recording that already carries a reference is not touched at all: something
-// that saw more than a title put it there.
-func runReadRefs(args []string) int {
-	apply := false
-	for _, a := range args {
-		switch a {
-		case "--apply":
-			apply = true
-		default:
-			slog.Error("usage: discovery read-refs [--apply]")
-			return 2
-		}
+// Nothing is written without --apply.
+func runRecompute(args []string) int {
+	fs := flag.NewFlagSet("recompute", flag.ContinueOnError)
+	stage := fs.String("stage", "", "author-keys | authors | chunks | pages | normalize")
+	source := fs.String("source", "", "limit to one source id")
+	apply := fs.Bool("apply", false, "write; without it nothing is changed")
+	if err := fs.Parse(args); err != nil {
+		return 2
 	}
 
 	cfg := config.Load()
@@ -314,7 +275,7 @@ func runReadRefs(args []string) int {
 	}
 	logpkg.Setup("lectorium-discovery", cfg.Env, cfg.ServiceVersion)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
 	pool, err := store.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -324,101 +285,50 @@ func runReadRefs(args []string) int {
 	defer pool.Close()
 	repo := store.NewRepo(pool)
 
-	if apply {
-		rows, took, err := repo.SnapshotItemRefs(ctx)
+	if !*apply {
+		slog.InfoContext(ctx, "recompute_dry_run", "stage", *stage, "source", *source,
+			"note", "nothing written; pass --apply")
+		return 0
+	}
+
+	var done int64
+	switch *stage {
+	case "author-keys":
+		n, err := repo.RefoldAuthorKeys(ctx)
+		done = int64(n)
 		if err != nil {
-			slog.ErrorContext(ctx, "snapshot_failed", "err", err.Error())
+			slog.ErrorContext(ctx, "recompute_failed", "stage", *stage, "err", err.Error())
 			return 1
 		}
-		slog.InfoContext(ctx, "snapshot", "table", "discovery.item_refs_before_read",
-			"rows", rows, "taken_now", took)
-	}
-
-	var (
-		after     int64
-		scanned   int
-		cited     int
-		written   int
-		collapsed int
-		perSource = map[string]int{}
-	)
-	for {
-		batch, err := repo.UnreadTitles(ctx, after, 500)
+	case "authors":
+		n, err := repo.RelinkAuthors(ctx, 500)
+		done = int64(n)
 		if err != nil {
-			slog.ErrorContext(ctx, "read_failed", "after", after, "err", err.Error())
+			slog.ErrorContext(ctx, "recompute_failed", "stage", *stage, "err", err.Error())
 			return 1
 		}
-		if len(batch) == 0 {
-			break
+	case "chunks":
+		n, err := wire.Rechunker(ctx, cfg, pool).Rechunk(ctx, *source, 200)
+		done = int64(n)
+		if err != nil {
+			slog.ErrorContext(ctx, "recompute_failed", "stage", *stage, "err", err.Error())
+			return 1
 		}
-		for _, it := range batch {
-			after = it.ID
-			scanned++
-
-			var expanded []domain.Ref
-			for _, ref := range domain.Refs(it.Title) {
-				refs, note := domain.ExpandRefs(ref.Source, ref.Tokens)
-				if note != "" {
-					// A range too wide to believe keeps only where it starts,
-					// and that is the one mistake this pass can make without
-					// leaving a trace. So it leaves one.
-					collapsed++
-					slog.InfoContext(ctx, "range_collapsed", "item", it.ID, "note", note, "title", it.Title)
-				}
-				expanded = append(expanded, refs...)
-			}
-			if len(expanded) == 0 {
-				continue
-			}
-			cited++
-			perSource[it.SourceID]++
-			if !apply {
-				continue
-			}
-			if err := repo.ReplaceItemRefs(ctx, it.ID, expanded, store.OriginRead); err != nil {
-				slog.ErrorContext(ctx, "write_failed", "item", it.ID, "err", err.Error())
-				return 1
-			}
-			written += len(expanded)
+	case "pages":
+		if done, err = repo.ClearScriptVersion(ctx, *source); err != nil {
+			slog.ErrorContext(ctx, "recompute_failed", "stage", *stage, "err", err.Error())
+			return 1
 		}
-	}
-
-	slog.InfoContext(ctx, "read_refs_done", "apply", apply, "scanned", scanned,
-		"recordings_cited", cited, "refs_written", written, "ranges_collapsed", collapsed)
-	for source, n := range perSource {
-		slog.InfoContext(ctx, "read_refs_source", "source", source, "recordings", n)
-	}
-	return 0
-}
-
-// runRefold fills in the folded spelling of every stored key.
-//
-// The fold lives in Go, so the migration that adds the column cannot fill it,
-// and a key written before the column existed would never be findable by its
-// other alphabet. Running it twice is harmless: it only touches rows that have
-// no fold yet.
-func runRefold() int {
-	cfg := config.Load()
-	if err := cfg.RequireDatabase(); err != nil {
-		slog.Error("config load failed", "err", err)
+	case "normalize":
+		if done, err = repo.ClearNormHashes(ctx, *source); err != nil {
+			slog.ErrorContext(ctx, "recompute_failed", "stage", *stage, "err", err.Error())
+			return 1
+		}
+	default:
+		slog.Error("unknown stage", "stage", *stage,
+			"known", "author-keys, authors, chunks, pages, normalize")
 		return 2
 	}
-	logpkg.Setup("lectorium-discovery", cfg.Env, cfg.ServiceVersion)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
-	pool, err := store.Connect(ctx, cfg.DatabaseURL)
-	if err != nil {
-		slog.ErrorContext(ctx, "db_connect_failed", "err", err.Error())
-		return 1
-	}
-	defer pool.Close()
-
-	done, err := store.NewRepo(pool).RefoldAuthorKeys(ctx)
-	if err != nil {
-		slog.ErrorContext(ctx, "refold_failed", "folded", done, "err", err.Error())
-		return 1
-	}
-	slog.InfoContext(ctx, "refold_done", "folded", done)
+	slog.InfoContext(ctx, "recompute_done", "stage", *stage, "source", *source, "rows", done)
 	return 0
 }
