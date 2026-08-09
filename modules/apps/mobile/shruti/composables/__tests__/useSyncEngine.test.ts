@@ -184,18 +184,26 @@ describe("useSyncEngine — cursor-ownership reset", () => {
   let setPullCursor: ReturnType<typeof vi.fn>
   let setAckedSeq: ReturnType<typeof vi.fn>
   let setPushedOutboxId: ReturnType<typeof vi.fn>
+  /** Where the watermark already sits when the guard runs. */
+  let pushedOutboxId: number
 
   beforeEach(() => {
     setPullCursor = vi.fn(async () => {})
     setAckedSeq = vi.fn(async () => {})
     setPushedOutboxId = vi.fn(async () => {})
+    pushedOutboxId = 0
     // Swap in a syncState that records the reset writes and a unit-of-work that
     // actually invokes its callback (the default mocks are opaque `{}`).
     // The outbox holds 7 rows journaled by whoever owned the device before.
     ;(ctx.shruti as { repositories: () => unknown }).repositories = () => ({
       syncBackfill: {},
       syncOutbox: { latestId: async () => 7 },
-      syncState: { setPullCursor, setAckedSeq, setPushedOutboxId },
+      syncState: {
+        setPullCursor,
+        setAckedSeq,
+        setPushedOutboxId,
+        getPushedOutboxId: async () => pushedOutboxId,
+      },
       syncApply: {},
       unitOfWork: { run: (fn: () => unknown) => fn() },
       libraryItems: { listAll: async () => [] },
@@ -317,6 +325,22 @@ describe("useSyncEngine — cursor-ownership reset", () => {
     // The late reset lands, and the cycle it precedes drains as anon-2.
     expect(setPushedOutboxId).toHaveBeenCalledWith(7)
     expect(ctx.runSync.mock.calls[1]![0]).toMatchObject({ ownerId: "anon-2" })
+    app.unmount()
+  })
+
+  it("never rewinds the watermark to a shorter journal", async () => {
+    // A pruned or restored user.db has a tail below the current mark. Writing
+    // it would un-retire the previous account's unowned rows — #1497 again.
+    pushedOutboxId = 50
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+
+    expect(setPullCursor).toHaveBeenCalledWith(0)
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
     app.unmount()
   })
 
