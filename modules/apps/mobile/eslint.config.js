@@ -56,17 +56,18 @@ export default defineConfigWithVueTs(
       "vue/enforce-style-attribute": ["error", { allow: ["scoped", "module"] }],
     },
   },
-  // Allowlist: these components own an <ion-modal>/<ion-header> that Ionic
-  // teleports to the app root, out of reach of the scope attribute, so their
-  // host-level overrides must stay global. The exemption is per FILE, not per
-  // rule, so it does not certify the contents: TrackSheet.vue still carries a
-  // bare, unanchored `ion-footer` rule that leaks app-wide (tracked in #1484).
-  // Anchor every selector to the component's own modal/page class — that is the
-  // bar for adding a file here, and the bar for taking one back off.
+  // Allowlist: both files own an <ion-modal> that Ionic teleports to the app
+  // root, where the scope attribute never follows, so their host-level
+  // overrides have to be global. That is the only accepted reason — a routed
+  // page keeps its markup in its own template and gets no exemption.
+  //
+  // The exemption is per FILE, not per rule, so it certifies nothing about the
+  // contents: TrackSheet.vue still carries a bare, unanchored `ion-footer` rule
+  // that leaks app-wide (#1534). Anchoring every selector to the component's
+  // own modal class is the bar for adding a file here — and for removing one.
   {
     files: [
       "lectorium/components/TrackSheet.vue",
-      "lectorium/views/Subscription/SubscriptionView.vue",
       "lectorium/views/Chat/components/ChatSessionList.vue",
     ],
     rules: {
