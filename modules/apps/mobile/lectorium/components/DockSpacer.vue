@@ -4,21 +4,15 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
-import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useSearchDock } from "@lectorium/composables/useSearchDock.js"
 
 /**
- * The room the chrome docked at the bottom takes out of a scroller: the search
- * field where it is docked, the mini player everywhere else. Never both — the
- * player is hidden wherever the field is, the way it is on chat.
+ * The room the docked search field takes out of a scroller. Only the field:
+ * the floating player lives on Home, and Home does not use this.
  */
-const player = usePlayerStore()
 const dock = useSearchDock()
 
-const height = computed(() => {
-  if (dock.visible.value) return "60px"
-  return player.open ? "var(--kit-page-reserved-space, 0px)" : "0px"
-})
+const height = computed(() => (dock.visible.value ? "60px" : "0px"))
 </script>
 
 <style scoped>

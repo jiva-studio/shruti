@@ -8,5 +8,6 @@ export default {
   dictionariesUnavailable: "A nevek betöltése sikertelen — egyes címkék hiányozhatnak.",
   playbackFailed:
     "Nem sikerült lejátszani ezt az előadást. Ellenőrizd a kapcsolatot, és próbáld újra.",
-  downloadStorageFull: "Elérted a tárhelykorlátot. Törölj meghallgatott előadásokat, vagy növeld a korlátot a beállításokban.",
+  downloadStorageFull:
+    "Elérted a tárhelykorlátot. Törölj meghallgatott előadásokat, vagy növeld a korlátot a beállításokban.",
 }
