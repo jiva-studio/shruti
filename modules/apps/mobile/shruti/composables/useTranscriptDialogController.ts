@@ -1,4 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
+import { useI18n } from "vue-i18n"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type { Note } from "@lib/domain/note.js"
@@ -83,6 +84,7 @@ export function useTranscriptDialogController(
   preferredLanguage: MaybeRefOrGetter<LanguageCode> = "en"
 ): TranscriptDialogState {
   const app = useShruti()
+  const { t } = useI18n()
   const transcriptStore = useTranscriptStore()
   const library = useLibraryStore()
   // Languages currently being translated on demand (drives the ghost chip's
@@ -527,7 +529,9 @@ export function useTranscriptDialogController(
       itemId: playlist.getEntryByTrackId(track.id)?.item.id,
       resumeFromMs: ms,
     })
-    if (!result.ok) loader.error.value = `Could not start playback: ${result.error}`
+    // Both refusals ("no-audio-available", "engine-failed") land here, and
+    // both mean the same thing to the reader: this lecture didn't start.
+    if (!result.ok) loader.error.value = t("errors.playbackFailed")
   }
 
   // Selection lifecycle. The two events are mutually exclusive — opening

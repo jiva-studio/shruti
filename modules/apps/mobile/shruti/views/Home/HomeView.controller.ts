@@ -107,12 +107,16 @@ export function useHomeController(): HomeControllerReturn {
     const author = entry.track.authorId
       ? (dictionaries.authorsById.get(entry.track.authorId) ?? null)
       : null
-    await player.openTrack({
+    // A refused open (no audible variant, engine rejected the item) leaves
+    // the row looking tapped and nothing playing — the native error toast
+    // only covers items the engine already accepted, so say it here.
+    const result = await player.openTrack({
       track: entry.track,
       preferredLanguage: appLanguage.value,
       author,
       itemId: entry.item.id,
     })
+    if (!result.ok) void toast.error(t("errors.playbackFailed"))
   }
 
   async function onRemove(trackId: string): Promise<void> {
