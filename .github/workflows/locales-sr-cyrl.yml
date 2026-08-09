@@ -1,0 +1,62 @@
+name: Mobile / sr-Cyrl locale
+
+# `sr-Cyrl/` is generated from the hand-authored `sr-Latn/` bundle, so the
+# two can silently diverge: someone edits sr-Cyrl directly, or edits
+# sr-Latn and forgets to regenerate. Either way the next person to run the
+# generator ships that drift inside an unrelated change. This job re-runs
+# the generator and fails if it produced anything, which keeps sr-Cyrl a
+# pure function of sr-Latn + the tool.
+
+on:
+  pull_request:
+    paths:
+      - modules/apps/mobile/lectorium/i18n/locales/sr-Latn/**
+      - modules/apps/mobile/lectorium/i18n/locales/sr-Cyrl/**
+      - modules/apps/mobile/package.json
+      - modules/tools/sr-transliterate/**
+      - .github/workflows/locales-sr-cyrl.yml
+  push:
+    branches: [main]
+    paths:
+      - modules/apps/mobile/lectorium/i18n/locales/sr-Latn/**
+      - modules/apps/mobile/lectorium/i18n/locales/sr-Cyrl/**
+      - modules/apps/mobile/package.json
+      - modules/tools/sr-transliterate/**
+      - .github/workflows/locales-sr-cyrl.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: locales-sr-cyrl-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  idempotent:
+    name: generator is a no-op
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
+
+      # The generator formats its output with the app's own prettier, so
+      # the mobile deps have to be present. The in-repo capacitor plugins
+      # stay unbuilt — nothing here compiles the app.
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+
+      - name: regenerate sr-Cyrl and assert no drift
+        run: cd modules/apps/mobile && npm run locales:sr-cyrl:check
+
+      - name: show drift
+        if: failure()
+        run: |
+          echo "sr-Cyrl/ is out of sync with sr-Latn/."
+          echo "Fix: edit sr-Latn/ (never sr-Cyrl/ by hand), then run"
+          echo "  cd modules/apps/mobile && npm run locales:sr-cyrl"
+          echo "and commit the regenerated files."
