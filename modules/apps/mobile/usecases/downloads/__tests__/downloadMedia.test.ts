@@ -48,6 +48,13 @@ function makeRepo(overrides: Partial<IMediaItemRepository> = {}): IMediaItemRepo
   }
 }
 
+/** What the adapter throws when the native transfer was cancelled. */
+function cancellation(): Error {
+  const e = new Error("Download cancelled")
+  e.name = "DownloadCancelledError"
+  return e
+}
+
 const existingItem = (state: MediaItemState, localPath: string | null = null): MediaItem => ({
   id: "mi-1" as MediaItemId,
   trackId: "t-1" as TrackId,
@@ -163,19 +170,15 @@ describe("downloadMedia", () => {
   })
 
   it("stops at the cancelled candidate instead of re-downloading from the next", async () => {
-    const upsert = vi
-      .fn<IMediaItemRepository["upsert"]>()
-      .mockImplementation(async (trackId, state, localPath) => ({
-        id: "mi-1" as MediaItemId,
-        trackId: trackId as TrackId,
-        state,
-        localPath,
-        createdAt: 1000,
-      }))
-    const repo = makeRepo({ upsert })
-    const cancelled = new Error("Download cancelled")
-    cancelled.name = "DownloadCancelledError"
-    const transfer = vi.fn<(url: string) => Promise<string>>().mockRejectedValue(cancelled)
+    const deleteById = vi.fn<IMediaItemRepository["deleteById"]>()
+    // Nothing on disk when we claim the slot; afterwards the read sees the
+    // "downloading" row this call itself claimed.
+    const getByTrack = vi
+      .fn<IMediaItemRepository["getByTrack"]>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(existingItem("downloading"))
+    const repo = makeRepo({ getByTrack, deleteById })
+    const transfer = vi.fn<(url: string) => Promise<string>>().mockRejectedValue(cancellation())
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
       { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
@@ -186,7 +189,34 @@ describe("downloadMedia", () => {
     // bytes the cancel was meant to save.
     expect(transfer).toHaveBeenCalledTimes(1)
     // The claimed "downloading" row is released, so a later tap can retry.
-    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "failed", null, "original")
+    expect(deleteById).toHaveBeenCalledWith("mi-1")
+  })
+
+  it("leaves no row behind when the cancel came from a remove that already deleted it", async () => {
+    const deleteById = vi.fn<IMediaItemRepository["deleteById"]>()
+    const upsert = vi
+      .fn<IMediaItemRepository["upsert"]>()
+      .mockImplementation(async (trackId, state, localPath) => ({
+        id: "mi-1" as MediaItemId,
+        trackId: trackId as TrackId,
+        state,
+        localPath,
+        createdAt: 1000,
+      }))
+    // `remove()` deletes the track's rows while the cancellation is in
+    // flight, so the post-cancel read finds nothing.
+    const repo = makeRepo({ getByTrack: async () => null, deleteById, upsert })
+    const transfer = vi.fn<(url: string) => Promise<string>>().mockRejectedValue(cancellation())
+    const result = await downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("cancelled")
+    expect(deleteById).not.toHaveBeenCalled()
+    // Only the initial claim — nothing writes the row back after the delete.
+    expect(upsert).toHaveBeenCalledTimes(1)
+    expect(upsert).toHaveBeenCalledWith("t-1", "downloading", null, "original")
   })
 
   it("returns no-candidates when the candidate list is empty", async () => {
