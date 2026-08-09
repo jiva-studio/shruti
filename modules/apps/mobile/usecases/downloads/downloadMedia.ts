@@ -1,4 +1,4 @@
-import type { TrackId } from "@lib/domain/core.js"
+import type { MediaItemId, TrackId } from "@lib/domain/core.js"
 import type { MediaAudioKind, MediaItem } from "@lib/domain/mediaItem.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
@@ -103,15 +103,20 @@ export async function downloadMedia(
   // taps on the same track race here; the unit-of-work serialises them,
   // so the loser sees state="downloading" and bows out with
   // "already-in-progress" instead of starting a parallel transfer.
-  type Claim = { kind: "busy" } | { kind: "cached"; mediaItem: MediaItem } | { kind: "claimed" }
+  type Claim =
+    | { kind: "busy" }
+    | { kind: "cached"; mediaItem: MediaItem }
+    | { kind: "claimed"; id: MediaItemId }
   const claim = await deps.unitOfWork.run<Claim>(async () => {
     const existing = await deps.mediaItems.getByTrack(input.trackId, kind)
     if (existing?.state === "downloading") return { kind: "busy" }
     if (existing?.state === "ready" && existing.localPath) {
       return { kind: "cached", mediaItem: existing }
     }
-    await deps.mediaItems.upsert(input.trackId, "downloading", null, kind)
-    return { kind: "claimed" }
+    // Keep the row id: it identifies OUR claim, so a later release can tell
+    // it from a row a newer task claimed after a wipe.
+    const claimed = await deps.mediaItems.upsert(input.trackId, "downloading", null, kind)
+    return { kind: "claimed", id: claimed.id }
   })
 
   if (claim.kind === "busy") return err("already-in-progress")
@@ -147,13 +152,13 @@ export async function downloadMedia(
         // Drop the row we claimed rather than demoting it to "failed": the
         // cancel usually comes from a remove that deletes the track's rows
         // anyway, and an upsert racing behind that delete would resurrect
-        // it as litter. Deleting also releases the "downloading" claim so a
-        // later tap can start over. Re-read first: if the row is already
-        // gone (or no longer ours) there is nothing to release, and we must
-        // not touch the OTHER kind's row.
+        // it as litter. Deleting releases the "downloading" claim so a
+        // later tap can start over — but only OUR claim: if the row was
+        // deleted and re-claimed meanwhile (a wipe, then a newer task), its
+        // id differs and deleting it would strip that task's guard.
         try {
-          const claimed = await deps.mediaItems.getByTrack(input.trackId, kind)
-          if (claimed?.state === "downloading") await deps.mediaItems.deleteById(claimed.id)
+          const current = await deps.mediaItems.getByTrack(input.trackId, kind)
+          if (current?.id === claim.id) await deps.mediaItems.deleteById(claim.id)
         } catch {
           /* swallow — best-effort release of the claimed row */
         }
