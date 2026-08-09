@@ -178,36 +178,37 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       // auto-archive sweep), which has no page bound and grows with every
       // item ever added.
       //
-      // The join picks each item's latest `ended_at` off the
-      // `(item_id, ended_at DESC)` index, seeks back into that group, and
-      // resolves same-second ties with `MAX(id)` — the SQL-side equivalent
-      // of the per-item `ORDER BY ended_at DESC, id DESC LIMIT 1`, so the
-      // tiebreak keeps SQLite's collation instead of JS string ordering.
-      // Every step is an index seek and stays flat in sessions-per-item.
-      // The obvious `NOT EXISTS (… t.ended_at > s.ended_at OR (… t.id >
-      // s.id))` formulation is NOT flat: the OR defeats the range seek and
-      // rescans a whole item per row, which measured ~6× SLOWER than the
-      // per-item loop at 200 sessions/item. Sessions are never pruned, so
-      // that count only grows.
+      // The ids ride in as a `VALUES` list and drive the per-item read
+      // VERBATIM — same `ORDER BY ended_at DESC, id DESC LIMIT 1`, so the
+      // tiebreak keeps SQLite's collation instead of JS string ordering and
+      // the plan per item is the same index seek the loop did. That makes
+      // cost flat in sessions-per-item, which matters because sessions are
+      // never pruned (migration 016 leaves finished storm rows in place),
+      // so that count only grows.
       //
-      // Correctness leans on `ended_at INTEGER NOT NULL` (migration 005):
-      // a NULL there would drop out of `MAX()` and lose the item.
+      // Two tempting formulations are NOT flat, both measurably slower than
+      // the per-item loop once sessions pile up:
+      //   - `NOT EXISTS (… t.ended_at > s.ended_at OR (… t.id > s.id))` —
+      //     the OR defeats the range seek, so each of an item's rows
+      //     rescans the whole item (quadratic).
+      //   - joining against a `GROUP BY item_id` + `MAX(ended_at)` subquery
+      //     — SQLite's min/max index shortcut does not apply under GROUP BY,
+      //     so it walks every index entry of every group (linear).
       const wanted = [...new Set(itemIds)].filter((id) => {
         const dur = durations.get(id)
         return typeof dur === "number" && dur > 0
       })
       for (const chunk of chunked(wanted, ID_CHUNK_SIZE)) {
-        const placeholders = chunk.map(() => "?").join(",")
+        const values = chunk.map(() => "(?)").join(",")
         const rows = await db.query<{ item_id: string; ended_at: number; to_position: number }>(
-          `SELECT s.item_id AS item_id, s.ended_at AS ended_at, s.to_position AS to_position
-             FROM listening_sessions s
-             JOIN (SELECT item_id, MAX(ended_at) AS mx
-                     FROM listening_sessions
-                    WHERE item_id IN (${placeholders})
-                    GROUP BY item_id) m
-               ON m.item_id = s.item_id AND s.ended_at = m.mx
-            WHERE s.id = (SELECT MAX(t.id) FROM listening_sessions t
-                           WHERE t.item_id = s.item_id AND t.ended_at = s.ended_at)`,
+          `WITH ids(item_id) AS (VALUES ${values})
+           SELECT s.item_id AS item_id, s.ended_at AS ended_at, s.to_position AS to_position
+             FROM ids
+             JOIN listening_sessions s
+               ON s.id = (SELECT t.id FROM listening_sessions t
+                           WHERE t.item_id = ids.item_id
+                           ORDER BY t.ended_at DESC, t.id DESC
+                           LIMIT 1)`,
           [...chunk]
         )
         for (const row of rows) {
