@@ -67,6 +67,9 @@ type Deps struct {
 	// Optional: nil skips it. Best-effort — a failure leaves the track without an
 	// outline/description and never blocks the ingest.
 	Outliner outlineport.Generator
+	// OutlineCompress, when set, shortens each transcript block before it is
+	// sent to the outliner. Optional: nil sends the text as written.
+	OutlineCompress outline.Compressor
 	// Translator, when set, renders the source title into each non-primary
 	// variant's language. Optional and best-effort — nil (or a failure) leaves
 	// the variant with the source title, never blocking the ingest.
@@ -523,7 +526,7 @@ func (s *Service) outline(ctx context.Context, lg *slog.Logger, blocks []transcr
 	if s.d.Outliner == nil {
 		return "", nil
 	}
-	res, err := outline.Generate(ctx, s.d.Outliner, blocks, lang)
+	res, err := outline.Generate(ctx, s.d.Outliner, blocks, lang, s.d.OutlineCompress)
 	if err != nil {
 		lg.WarnContext(ctx, "ingest_outline_failed", "error", err.Error())
 		return "", nil

@@ -317,6 +317,7 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterTranscriptOutline(s, deps)
 	RegisterTranscriptAlignPDF(s, deps)
 	RegisterReviewBatch(s, deps)
+	RegisterOutlineBatch(s, deps)
 	RegisterProviderList(s, deps)
 	RegisterRunsList(s, deps)
 	RegisterRunStatus(s, deps)

@@ -18,14 +18,11 @@ import (
 	outlineport "github.com/jiva-studio/lectorium/pipeline/ports/outline"
 )
 
-//go:embed prompt.outline.txt
-var outlineSystemPrompt string
+//go:embed prompt.pass.txt
+var passSystemPrompt string
 
 //go:embed prompt.merge.txt
 var mergeSystemPrompt string
-
-//go:embed prompt.description.txt
-var descriptionSystemPrompt string
 
 const (
 	// maxChapters is the ceiling the collapse pass merges down to. The fine
@@ -36,7 +33,37 @@ const (
 	maxMergePasses = 5
 )
 
-// outlineResponseFormat forces the granular/merge passes to emit a structured
+// passResponseFormat is outlineResponseFormat plus the description, so the one
+// call that reads the transcript returns both halves in a shape that parses.
+var passResponseFormat = json.RawMessage(`{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "lecture_pass",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "description"],
+      "properties": {
+        "description": {"type": "string"},
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start", "title"],
+            "properties": {
+              "start": {"type": "string"},
+              "title": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}`)
+
+// outlineResponseFormat forces the merge pass to emit a structured
 // JSON object {"items":[{start,title}]} instead of free-form text. Cheap models
 // (gemini-flash) otherwise drift into echoing the transcript's "[MM:SS] title"
 // line format, which is not JSON at all. A root object (not a bare array) is
@@ -99,40 +126,59 @@ func New(cfg Config) (*Generator, error) {
 }
 
 func (g *Generator) Outline(ctx context.Context, lectureText, lang string) (outlineport.OutlineResult, error) {
-	granular, err := g.granular(ctx, lectureText, lang)
+	granular, desc, err := g.pass(ctx, lectureText, lang)
 	if err != nil {
 		return outlineport.OutlineResult{}, err
 	}
 	coarse := g.collapse(ctx, granular, lang)
-	return outlineport.OutlineResult{Granular: granular, Coarse: coarse}, nil
+	return outlineport.OutlineResult{Granular: granular, Coarse: coarse, Description: desc}, nil
 }
 
-// granular runs the first pass over the WHOLE transcript and returns the fine
-// heading list (chronological). Its count is deliberately unstable across runs;
-// the coarse chapter count emerges later from the content, not a clock.
-func (g *Generator) granular(ctx context.Context, lectureText, lang string) ([]outlineport.Item, error) {
-	sys := strings.ReplaceAll(outlineSystemPrompt, "__LANG__", lang)
+// PassPrompt is the system prompt of the one call that reads the transcript.
+// Exported so the batch path can build the same request without going through
+// the synchronous client.
+func PassPrompt(lang string) string {
+	return strings.ReplaceAll(passSystemPrompt, "__LANG__", lang)
+}
+
+// ParsePass decodes the reply of that call. Exported for the same reason.
+func ParsePass(raw string) ([]outlineport.Item, string, error) {
+	var obj struct {
+		Items       json.RawMessage `json:"items"`
+		Description string          `json:"description"`
+	}
+	if err := json.Unmarshal([]byte(openaicompat.StripFences(raw)), &obj); err != nil {
+		return nil, "", fmt.Errorf("outline: parse reply: %w", err)
+	}
+	items, err := parseItems(string(obj.Items))
+	if err != nil {
+		return nil, "", err
+	}
+	if len(items) == 0 {
+		return nil, "", fmt.Errorf("outline: empty result")
+	}
+	sortByStart(items)
+	return items, strings.TrimSpace(obj.Description), nil
+}
+
+// pass runs the single call over the WHOLE transcript and returns the fine
+// heading list (chronological) together with the description. The heading count
+// is deliberately unstable across runs; the coarse count emerges later from the
+// content, not a clock.
+func (g *Generator) pass(ctx context.Context, lectureText, lang string) ([]outlineport.Item, string, error) {
 	res, err := g.Client.Run(ctx, openaicompat.Call{
 		Model:          g.Model,
 		MaxTokens:      g.MaxTokens,
-		System:         sys,
+		System:         PassPrompt(lang),
 		User:           lectureText,
 		Temperature:    ptr(0.2),
 		Reasoning:      g.Reasoning,
-		ResponseFormat: outlineResponseFormat,
+		ResponseFormat: passResponseFormat,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("outline llm: %w", err)
+		return nil, "", fmt.Errorf("outline llm: %w", err)
 	}
-	items, err := parseItems(res.Text)
-	if err != nil {
-		return nil, err
-	}
-	if len(items) == 0 {
-		return nil, fmt.Errorf("outline: empty result")
-	}
-	sortByStart(items)
-	return items, nil
+	return ParsePass(res.Text)
 }
 
 // collapse merges the granular list down to a handful of coarse chapters. A
@@ -176,22 +222,6 @@ func (g *Generator) merge(ctx context.Context, items []outlineport.Item, lang st
 		return nil, err
 	}
 	return parseItems(res.Text)
-}
-
-func (g *Generator) Description(ctx context.Context, lectureText, lang string) (string, error) {
-	sys := strings.ReplaceAll(descriptionSystemPrompt, "__LANG__", lang)
-	res, err := g.Client.Run(ctx, openaicompat.Call{
-		Model:       g.Model,
-		MaxTokens:   g.MaxTokens,
-		System:      sys,
-		User:        lectureText,
-		Temperature: ptr(0.3),
-		Reasoning:   g.Reasoning,
-	})
-	if err != nil {
-		return "", fmt.Errorf("description llm: %w", err)
-	}
-	return strings.TrimSpace(openaicompat.StripFences(res.Text)), nil
 }
 
 // parseItems decodes the LLM's JSON array of {start,title}. start may be a

@@ -1,9 +1,0 @@
-You write a short overview of one lecture from its time-coded transcript.
-
-Rules:
-1. Write 2-3 sentences in the language with code `__LANG__`, plain prose.
-2. Say what the lecture is about and which topics it covers — a reader deciding whether to listen should learn the subject and scope.
-3. Describe the content, don't quote it. No timecodes, no headings, no lists, no markdown.
-4. FORBIDDEN: surrounding quote marks, emoji, clickbait, "This lecture" / "Prabhupada explains" openings — state the subject directly.
-
-Return ONLY the overview text. No JSON, no preamble, no commentary.

@@ -277,6 +277,23 @@ type Outline struct {
 	Model     string `yaml:"model"`
 	MaxTokens int    `yaml:"max_tokens"`
 	Reasoning string `yaml:"reasoning,omitempty"`
+	// Compress shortens each transcript block before it is sent: "" / "none"
+	// leaves it as written, "punctuation" drops the marks this task does not
+	// read (12% of the input, no change to the headings produced). The
+	// time-code is attached after compression, so it is never an input to it.
+	Compress string `yaml:"compress,omitempty"`
+	// Batch, when set, is the half-price asynchronous path: the same model
+	// through the provider's batch endpoint, results within 24 hours.
+	Batch OutlineBatch `yaml:"batch,omitempty"`
+}
+
+// OutlineBatch points at the Gemini batch endpoint directly rather than through
+// an OpenAI-compatible proxy — the batch protocol is not part of that surface,
+// and this is the client the review path already uses.
+type OutlineBatch struct {
+	Endpoint string `yaml:"endpoint,omitempty"`
+	APIKey   string `yaml:"api_key,omitempty"`
+	Model    string `yaml:"model,omitempty"`
 }
 
 // Embed configures the text-embeddings endpoint used by the topic build/assign
