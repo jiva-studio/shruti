@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -21,13 +22,6 @@ var systemPrompt string
 
 //go:embed prompts/user.txt
 var userPrompt string
-
-//go:embed prompts/series.txt
-var seriesPrompt string
-
-// maxSeriesLinks bounds what one series call is shown. A page carrying more
-// links than this is a catalogue, and the answer we want from it is "no".
-const maxSeriesLinks = 200
 
 // promptVersion is derived from the prompt text, so editing a prompt
 // invalidates every stored input hash on its own — there is no version number
@@ -114,17 +108,44 @@ func (l *LLM) Normalize(ctx context.Context, batch Batch) ([]Result, error) {
 	out := make([]Result, 0, len(batch.Items))
 	for start := 0; start < len(batch.Items); start += maxBatch {
 		end := min(start+maxBatch, len(batch.Items))
-		part, err := l.normalizeOne(ctx, Batch{
-			PageURL:   batch.PageURL,
-			PageTitle: batch.PageTitle,
-			Items:     batch.Items[start:end],
-		})
+		part, err := l.ask(ctx, batch, batch.Items[start:end])
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, part...)
 	}
 	return out, nil
+}
+
+// errTruncated is a reply that ran out of room before it finished.
+var errTruncated = errors.New("normalize: reply was cut off")
+
+// ask reads one group of files, halving the group when the reply comes back cut
+// off. Asking again for the same group would not help: the same files make the
+// same request, which runs out of room in the same place.
+func (l *LLM) ask(ctx context.Context, batch Batch, items []Input) ([]Result, error) {
+	part, err := l.normalizeOne(ctx, Batch{
+		PageURL: batch.PageURL, PageTitle: batch.PageTitle, Items: items,
+	})
+	if !errors.Is(err, errTruncated) {
+		return part, err
+	}
+	if len(items) == 1 {
+		// One file whose answer alone does not fit is a file we cannot read.
+		// It is left unread rather than left blocking its page.
+		slog.WarnContext(ctx, "normalize_reply_too_long", "media_url", items[0].MediaURL)
+		return []Result{{Unanswered: true}}, nil
+	}
+	mid := len(items) / 2
+	left, err := l.ask(ctx, batch, items[:mid])
+	if err != nil {
+		return nil, err
+	}
+	right, err := l.ask(ctx, batch, items[mid:])
+	if err != nil {
+		return nil, err
+	}
+	return append(left, right...), nil
 }
 
 // promptItem is what the model is shown. The address itself is left out: the
@@ -135,8 +156,8 @@ type promptItem struct {
 	N            int               `json:"n"`
 	Filename     string            `json:"filename,omitempty"`
 	PathSegments []string          `json:"path_segments,omitempty"`
-	Context      string            `json:"context,omitempty"`
 	Tags         map[string]string `json:"tags,omitempty"`
+	Material     []domain.Material `json:"material,omitempty"`
 }
 
 // reply is the model's answer. The index comes back so an answer can be matched
@@ -150,12 +171,10 @@ type reply struct {
 		Location   string   `json:"location"`
 		Date       string   `json:"date"`
 		Language   string   `json:"language"`
-		DurationS  int      `json:"duration_s"`
 		References []struct {
 			Source string `json:"source"`
 			Tokens string `json:"tokens"`
 		} `json:"references"`
-		CollectionTitle string `json:"collection_title"`
 	} `json:"items"`
 }
 
@@ -166,8 +185,8 @@ func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
 			N:            i,
 			Filename:     in.Filename,
 			PathSegments: in.PathSegments,
-			Context:      in.Context,
 			Tags:         in.Tags,
+			Material:     in.Material,
 		}
 	}
 	files, err := json.MarshalIndent(shown, "", "  ")
@@ -176,7 +195,6 @@ func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
 	}
 	user := strings.NewReplacer(
 		"__KNOWN_SOURCES__", l.sourceList,
-		"__PAGE__", pageLine(batch),
 		"__FILES__", string(files),
 	).Replace(userPrompt)
 
@@ -189,12 +207,17 @@ func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
 		Reasoning: openaicompat.ReasoningOff,
 	}, &got)
 	l.record(Spend{
-		Model: l.model, Items: len(batch.Items),
+		Kind: "normalize", Model: l.model, Items: len(batch.Items),
 		// A call always spends input tokens, so none reported means the
 		// provider sent no usage rather than that the call was free.
 		Reported: res.TokensIn > 0,
 		TokensIn: res.TokensIn, TokensOut: res.TokensOut, CostUSD: res.CostUSD,
 	})
+	// Checked before the parse error, because a reply cut off mid-array fails
+	// to parse and asking for it again would fail identically.
+	if res.FinishReason == "length" {
+		return nil, errTruncated
+	}
 	if err != nil {
 		return nil, fmt.Errorf("normalize: %w", err)
 	}
@@ -203,114 +226,49 @@ func (l *LLM) normalizeOne(ctx context.Context, batch Batch) ([]Result, error) {
 	for i, item := range got.Items {
 		byIndex[item.N] = i
 	}
+	// The numbers are the only thing tying an answer to a file. A reply that did
+	// not echo the ones it was given -- one that numbers from one moves every
+	// answer onto the file before it -- is not an answer about these files, so
+	// none of it is kept and the next visit asks again.
+	if !echoesItsNumbers(byIndex, len(got.Items), len(batch.Items)) {
+		slog.WarnContext(ctx, "normalize_numbering_off",
+			"page_url", batch.PageURL, "asked", len(batch.Items), "answered", len(got.Items))
+		unread := make([]Result, len(batch.Items))
+		for i := range unread {
+			unread[i] = Result{Unanswered: true}
+		}
+		return unread, nil
+	}
 
 	results := make([]Result, len(batch.Items))
 	for i, in := range batch.Items {
 		j, ok := byIndex[i]
 		if !ok {
 			slog.WarnContext(ctx, "normalize_no_answer", "media_url", in.MediaURL)
+			results[i] = Result{Unanswered: true}
 			continue
 		}
 		a := got.Items[j]
 		r := Result{
-			Title:     strings.TrimSpace(a.Title),
-			Author:    firstName(a.Authors),
-			Authors:   trimAll(a.Authors),
-			Location:  strings.TrimSpace(a.Location),
-			Date:      strings.TrimSpace(a.Date),
-			Language:  strings.TrimSpace(a.Language),
-			DurationS: a.DurationS,
-
-			CollectionTitle: strings.TrimSpace(a.CollectionTitle),
+			Title:    strings.TrimSpace(a.Title),
+			Author:   firstName(a.Authors),
+			Authors:  trimAll(a.Authors),
+			Location: strings.TrimSpace(a.Location),
+			Date:     strings.TrimSpace(a.Date),
+			Language: strings.TrimSpace(a.Language),
 		}
-		// The model states what the filename says; a range becomes one entry
-		// per verse here rather than in the prompt, where it would be sixty
-		// lines of output the model could miscount.
+		// A range becomes one entry per verse in Validate, once the book it
+		// names is known to exist — not here, where a book we cannot address
+		// would be fanned out to fifty rows before anything checked it.
 		for _, ref := range a.References {
-			refs, note := domain.ExpandRefs(ref.Source, ref.Tokens)
-			if note != "" {
-				slog.WarnContext(ctx, "normalize_range_collapsed",
-					"media_url", in.MediaURL, "reason", note)
-			}
-			r.References = append(r.References, refs...)
+			r.References = append(r.References, domain.Ref{Source: ref.Source, Tokens: ref.Tokens})
 		}
-		Validate(&r, l.knownSources, l.now())
+		for _, note := range Validate(&r, l.knownSources, l.now()) {
+			slog.WarnContext(ctx, "normalize_ref_dropped", "media_url", in.MediaURL, "reason", note)
+		}
 		results[i] = r
 	}
 	return results, nil
-}
-
-func pageLine(b Batch) string {
-	switch {
-	case b.PageURL == "" && b.PageTitle == "":
-		return "(none)"
-	case b.PageTitle == "":
-		return b.PageURL
-	default:
-		return b.PageURL + " — " + b.PageTitle
-	}
-}
-
-// Series asks once whether a page without audio presents a cycle.
-//
-// It is one call per candidate page, not per recording, which is what makes it
-// affordable: an archive has thousands of talks and a handful of courses.
-func (l *LLM) Series(ctx context.Context, in SeriesInput) (*Series, error) {
-	if len(in.Links) == 0 || len(in.Links) > maxSeriesLinks {
-		return nil, nil
-	}
-	links, err := json.MarshalIndent(in.Links, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	user := "PAGE: " + in.PageURL + "\nTITLE: " + in.PageTitle +
-		"\n\nTEXT:\n" + truncateRunes(in.PageText, seriesTextLimit) +
-		"\n\nLINKS:\n" + string(links)
-
-	var got Series
-	if _, err := l.client.RunJSON(ctx, openaicompat.Call{
-		Model:     l.model,
-		MaxTokens: l.maxTokens,
-		System:    seriesPrompt,
-		User:      user,
-		Reasoning: openaicompat.ReasoningOff,
-	}, &got); err != nil {
-		return nil, fmt.Errorf("series: %w", err)
-	}
-	if !got.IsSeries || strings.TrimSpace(got.Title) == "" {
-		return nil, nil
-	}
-	got.Title = strings.TrimSpace(got.Title)
-
-	// Only links we actually showed it can be members; anything else is
-	// invention and would point membership at a page nobody visited.
-	shown := make(map[string]bool, len(in.Links))
-	for _, l := range in.Links {
-		shown[l] = true
-	}
-	members := got.Members[:0]
-	for _, m := range got.Members {
-		if shown[m] {
-			members = append(members, m)
-		}
-	}
-	got.Members = members
-	if len(got.Members) == 0 {
-		return nil, nil
-	}
-	return &got, nil
-}
-
-// seriesTextLimit is how much of the page the series question needs. Its
-// identity is at the top; the rest is the list we pass separately.
-const seriesTextLimit = 4000
-
-func truncateRunes(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return string(r[:max])
 }
 
 // firstName is the speaker written on the recording, for the many places that
@@ -332,4 +290,20 @@ func trimAll(names []string) []string {
 		}
 	}
 	return out
+}
+
+// echoesItsNumbers reports whether a reply accounted for every file it was
+// given, once each, under the number it was given. Duplicates, gaps, extras and
+// numbers outside the batch all mean the same thing: which answer belongs to
+// which file is no longer known.
+func echoesItsNumbers(byIndex map[int]int, answered, asked int) bool {
+	if answered != asked || len(byIndex) != asked {
+		return false
+	}
+	for i := range asked {
+		if _, ok := byIndex[i]; !ok {
+			return false
+		}
+	}
+	return true
 }

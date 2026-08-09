@@ -30,11 +30,6 @@ type Item struct {
 	Path         string   `json:"path,omitempty"`
 	PathSegments []string `json:"path_segments,omitempty"`
 
-	// ContextText is the text around the place this media URL appeared. On a
-	// page carrying one recording it is the whole page; on a listing it is the
-	// neighbourhood of that one link.
-	ContextText string `json:"context_text,omitempty"`
-
 	// Tags are what the file itself says about the recording, read from its ID3
 	// or equivalent container metadata.
 	Tags map[string]string `json:"tags,omitempty"`
@@ -54,6 +49,19 @@ type Item struct {
 	References []Ref `json:"references,omitempty"`
 
 	Ordinal int `json:"ordinal,omitempty"`
+}
+
+// Material is something a script read off a page and deliberately did not
+// interpret: words the archive itself wrote beside a recording, handed on for
+// the model to read.
+//
+// Labelled, because what a line *is* matters as much as what it says. A
+// downloader's own label is not a title, and a model shown only the words will
+// hand it straight back as one — which is how six thousand recordings came to
+// be called "Chicago" and "Punjabi".
+type Material struct {
+	Label string `json:"label"`
+	Text  string `json:"text"`
 }
 
 // Ref is a scripture reference in the corpus's own shape: a source code plus a
@@ -80,28 +88,41 @@ func (r Ref) Label() string { return strings.TrimSpace(r.Source + " " + r.Tokens
 // canon of chapter lengths this service does not carry.
 const maxRangeSpan = 50
 
-// ExpandRefs turns what a filename says into one Ref per verse.
+// ExpandRefs turns what a name says into one Ref per verse.
 //
 // A talk on "БГ 02.23-24" is two references, not one verse numbered 23-24 —
 // the same rule the corpus parser applies, so both sides agree on what a
 // reference is.
 //
-// A range too wide to believe collapses to where it starts, and the second
-// return value says so. The recording stays findable by that one verse instead
-// of either vanishing or dragging in hundreds nobody cited.
+// A coordinate that does not fit its book's token scheme is dropped rather
+// than stored: "SB 3.10-12" read as a range gives two-level coordinates, and a
+// canto.chapter.verse book has no such verse for any of them to match. So is a
+// range too wide to believe — the first verse of a misread coordinate is not
+// the passage the talk was about.
 func ExpandRefs(source, tokens string) ([]Ref, string) {
 	source = strings.ToUpper(strings.TrimSpace(source))
 	if source == "" {
 		return nil, ""
 	}
+	depth := 0
+	if src, ok := SourceByCode(source); ok {
+		depth = src.Depth()
+	}
 	expanded := expandRange(normalizeTokens(tokens))
 	if len(expanded) > maxRangeSpan {
-		return []Ref{{Source: source, Tokens: expanded[0]}},
-			fmt.Sprintf("%s %s reads as %d verses; kept only %s",
-				source, tokens, len(expanded), expanded[0])
+		return nil, fmt.Sprintf("%s %s reads as %d verses and was dropped",
+			source, tokens, len(expanded))
 	}
 	out := make([]Ref, 0, len(expanded))
 	for _, t := range expanded {
+		// Only a reading that produced several verses is checked against the
+		// book's token scheme. One that produced a single token is whatever the
+		// source wrote, down to a bare canto, and is stored as written; several
+		// of the wrong depth mean the dash was a coordinate misread as a range.
+		if len(expanded) > 1 && depth > 0 && len(strings.Split(t, ".")) != depth {
+			return nil, fmt.Sprintf("%s %s reads as %q, which is not a %d-part coordinate",
+				source, tokens, t, depth)
+		}
 		out = append(out, Ref{Source: source, Tokens: t})
 	}
 	return out, ""

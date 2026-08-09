@@ -16,6 +16,7 @@ import (
 
 	"github.com/jiva-studio/shruti/discovery/internal/domain"
 	"github.com/jiva-studio/shruti/discovery/internal/pgvector"
+	"github.com/jiva-studio/shruti/discovery/internal/store"
 )
 
 // Embedder turns the query into a vector.
@@ -91,10 +92,8 @@ type Hit struct {
 	Chunk      string         `json:"chunk,omitempty"`
 	Score      float64        `json:"score"`
 
-	// MediaState says what the last visit saw of the file: "present", or
-	// "vanished" when the address stopped appearing on its page. A vanished
-	// recording is still worth returning — knowing a talk exists is not
-	// nothing.
+	// MediaState says what the last visit saw of the file. Search answers only
+	// with what is still offered.
 	MediaState string `json:"media_state,omitempty"`
 }
 
@@ -317,7 +316,9 @@ func (s *Service) Search(ctx context.Context, q Query) ([]Hit, error) {
 // filters builds the WHERE shared by both lanes, and reports how selective it
 // is expected to be.
 func (s *Service) filters(q Query, args []any) ([]string, []any) {
-	var where []string
+	// A recording the archive stopped offering is not an answer. The row stays,
+	// with the date it went missing, for a person to settle.
+	where := []string{"i.media_state <> '" + store.MediaVanished + "'"}
 	add := func(clause string, value any) {
 		args = append(args, value)
 		where = append(where, fmt.Sprintf(clause, len(args)))

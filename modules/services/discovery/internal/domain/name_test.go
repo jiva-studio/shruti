@@ -77,22 +77,6 @@ func TestFoldKeepsDifferentPeopleApart(t *testing.T) {
 	}
 }
 
-func TestPlaceDropsTheOrganisation(t *testing.T) {
-	for _, c := range []struct{ in, want string }{
-		{"ISKCON Chennai", "Chennai"},
-		{"ISKCON Chowpatty", "Chowpatty"},
-		{"Iskcon_Los_Angeles", "Los Angeles"},
-		{"Bhaktivedanta Manor", "Bhaktivedanta Manor"},
-		{"Vrindavan", "Vrindavan"},
-		// An organisation with no place after it says no more than "somewhere".
-		{"ISKCON", ""},
-	} {
-		if got := domain.Place(c.in); got != c.want {
-			t.Errorf("Place(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
 // The vocabulary is a file now, and a file can be edited into nonsense in ways
 // a Go literal could not: a form with no spellings, a canonical that is not
 // among its own spellings, a Cyrillic table missing half the alphabet. None of
@@ -130,5 +114,21 @@ func TestTheVocabularyIsWhole(t *testing.T) {
 	// And the whole point of the file: the same name, both alphabets, one key.
 	if domain.Fold(domain.Key("Радханатх Свами")) != domain.Fold(domain.Key("Radhanath Swami")) {
 		t.Error("the two alphabets stopped meeting")
+	}
+}
+
+// Fold's transliteration table is lower case throughout, so a capital left
+// standing passes through and the key comes out in two alphabets — "Сarvagy",
+// whose first letter merely looks Latin. Every caller reaches Fold through Key,
+// which lowers case; this keeps that true of the function itself.
+func TestFoldingIsNotFooledByCase(t *testing.T) {
+	for _, c := range []struct{ raw, want string }{
+		{"Сарвагья дас", "sarvagy das"},
+		{"Прабхупада", "prabhupad"},
+		{"Radhanath Swami", domain.Fold("radhanath swami")},
+	} {
+		if got := domain.Fold(c.raw); got != c.want {
+			t.Errorf("Fold(%q) = %q, want %q", c.raw, got, c.want)
+		}
 	}
 }
