@@ -203,6 +203,13 @@ export default {
     description: "Keep your Ask Sadhu conversations in sync across your devices.",
   },
 
+  downloadLimit: {
+    title: "Download limit",
+    unlimited: "No limit",
+    usage: "{used} of {limit}",
+    usageUnlimited: "{used} downloaded",
+  },
+
   smartLibrary: {
     title: "Smart library",
     description: "Keep fresh lectures ready and clean up after listening",

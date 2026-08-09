@@ -203,6 +203,13 @@ export default {
     description: "Синхронизируйте беседы с Ask Sadhu между всеми вашими устройствами.",
   },
 
+  downloadLimit: {
+    title: "Лимит загрузок",
+    unlimited: "Без ограничения",
+    usage: "{used} из {limit}",
+    usageUnlimited: "Загружено {used}",
+  },
+
   smartLibrary: {
     title: "Умная библиотека",
     description: "Свежие лекции под рукой и автоочистка прослушанного",

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import type { IDatabase } from "@ports/app/index.js"
-import type { LanguageCode } from "@lib/domain/core.js"
+import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import {
   buildFtsQuery,
   createSqlTrackRepository,
@@ -886,5 +886,72 @@ describe("tracksRepository.sql — count", () => {
     ])
     const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
     expect(await repo.count()).toBe(1)
+  })
+})
+
+describe("tracksRepository.sql — getAudioSizesBytes", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "en" as LanguageCode
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+  })
+
+  async function addAudio(
+    trackId: string,
+    language: string,
+    kind: string,
+    filesize: number | null
+  ): Promise<void> {
+    await db.execute(
+      `INSERT INTO track_audio (track_id, language, kind, path, filesize, duration)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [trackId, language, kind, `audio/${trackId}.${kind}.mp3`, filesize, 1000]
+    )
+  }
+
+  it("sizes the denoised version, which is the one actually downloaded", async () => {
+    await addAudio("t1", "en", "original", 40_000_000)
+    await addAudio("t1", "en", "clean", 33_000_000)
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect((await repo.getAudioSizesBytes(["t1" as TrackId])).get("t1" as TrackId)).toBe(33_000_000)
+  })
+
+  it("falls back to the original when there is no clean version", async () => {
+    await addAudio("t2", "en", "original", 41_000_000)
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect((await repo.getAudioSizesBytes(["t2" as TrackId])).get("t2" as TrackId)).toBe(41_000_000)
+  })
+
+  it("keeps the largest language variant when a track has audio in several", async () => {
+    await addAudio("t3", "en", "original", 20_000_000)
+    await addAudio("t3", "ru", "original", 25_000_000)
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect((await repo.getAudioSizesBytes(["t3" as TrackId])).get("t3" as TrackId)).toBe(25_000_000)
+  })
+
+  it("omits tracks with no size on record so the caller can estimate", async () => {
+    await addAudio("t4", "en", "original", null)
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const sizes = await repo.getAudioSizesBytes(["t4" as TrackId, "missing" as TrackId])
+    expect(sizes.has("t4" as TrackId)).toBe(false)
+    expect(sizes.has("missing" as TrackId)).toBe(false)
+  })
+
+  it("batches past SQLite's bound-parameter ceiling", async () => {
+    const ids: TrackId[] = []
+    for (let i = 0; i < 1200; i++) {
+      const id = `bulk${i}`
+      ids.push(id as TrackId)
+      await addAudio(id, "en", "original", 1_000)
+    }
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect((await repo.getAudioSizesBytes(ids)).size).toBe(1200)
+  })
+
+  it("returns an empty map for no input", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect((await repo.getAudioSizesBytes([])).size).toBe(0)
   })
 })
