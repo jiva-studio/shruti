@@ -154,18 +154,6 @@ ion-tab-button.chat-tab-button.tab-selected :deep(.app-icon-wrap) {
   /* Ниже ion-tab-bar и FloatingPlayer (~999), выше контента страницы. */
   z-index: 9;
 }
-</style>
-
-<style>
-.badge {
-  width: 8px;
-  height: 8px;
-  position: absolute;
-  background-color: var(--ion-color-danger);
-  border-radius: 8px;
-  top: 12%;
-  right: 33%;
-}
 
 /* While a background share job runs, the bookmark icon is replaced by
  * a centered spinner of the same visual weight as the icon. Sized to
