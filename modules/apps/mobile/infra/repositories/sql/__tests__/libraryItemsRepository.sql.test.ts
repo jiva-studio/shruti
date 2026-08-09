@@ -30,7 +30,8 @@ async function applySchema(db: IDatabase): Promise<void> {
   await db.execute(`CREATE TABLE outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT, collection TEXT NOT NULL, doc_id TEXT NOT NULL,
     op TEXT NOT NULL, data TEXT, hlc TEXT NOT NULL, base_hlc TEXT,
-    created_at INTEGER NOT NULL, sent INTEGER NOT NULL DEFAULT 0
+    created_at INTEGER NOT NULL, sent INTEGER NOT NULL DEFAULT 0,
+    owner_id TEXT
   )`)
   await db.execute(`CREATE TABLE sync_doc_hlc (
     collection TEXT NOT NULL, doc_id TEXT NOT NULL, server_hlc TEXT NOT NULL,
