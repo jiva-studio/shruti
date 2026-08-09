@@ -1,5 +1,5 @@
 export default {
-  downloadFailed: "A letöltés nem sikerült. Ellenőrizd az internetkapcsolatot és a VPN-t.",
+  downloadFailed: "A letöltés nem sikerült. Ellenőrizd az internetkapcsolatot, és próbáld újra.",
   filtersNotSaved: "Nem sikerült menteni a szűrőt. A következő indításkor visszaáll.",
   downloadsCacheUnavailable:
     "Nem sikerült beolvasni a letöltések listáját. A gyorsítótárazott fájlok továbbra is a lemezen vannak.",
