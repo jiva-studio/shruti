@@ -7,6 +7,7 @@ export default {
   languageListUnavailable: "Nije moguće učitati jezike — prikazujemo kratku listu.",
   dictionariesUnavailable: "Nije moguće učitati nazive — neke oznake možda nedostaju.",
   playbackFailed: "Nije moguće reprodukovati ovo predavanje. Proverite vezu i pokušajte ponovo.",
+  noAudioForLecture: "Ovo predavanje nema audio.",
   downloadStorageFull:
     "Dostignut je limit memorije. Uklonite preslušana predavanja ili povećajte limit u podešavanjima.",
 }
