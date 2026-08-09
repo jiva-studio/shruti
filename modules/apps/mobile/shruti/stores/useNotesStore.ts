@@ -1,7 +1,8 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
+import { useDebounceFn } from "@vueuse/core"
 import { deleteNote, type DeleteNoteError } from "@usecases/notes/deleteNote.js"
-import { searchNotes } from "@usecases/notes/searchNotes.js"
+import { filterNotes, SEARCH_CORPUS_CAP } from "@usecases/notes/searchNotes.js"
 import { updateNote, type UpdateNoteError } from "@usecases/notes/updateNote.js"
 import type { NoteId } from "@lib/domain/core.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
@@ -10,9 +11,18 @@ import { useShruti } from "@shruti/shruti.js"
 import { requestSync } from "@shruti/services/syncEvents.js"
 
 /**
+ * Keystroke debounce for the notes search field. Same 200 ms the track
+ * search lane uses (`useSearchQuery`), so both fields feel identical.
+ */
+const SEARCH_DEBOUNCE_MS = 200
+
+/**
  * Reactive cache of notes. NotesView reads `filtered` and `isLoading`;
  * the bookmark flow, deletions, and refresh all go through the store so
  * the list re-renders without NotesView owning its own fetch logic.
+ *
+ * `all` holds the searchable corpus, loaded once per `refresh()`. Search
+ * then filters that in memory instead of re-reading SQLite per keystroke.
  */
 export const useNotesStore = defineStore("notes", () => {
   const app = useShruti()
@@ -27,8 +37,8 @@ export const useNotesStore = defineStore("notes", () => {
     isLoading.value = true
     error.value = null
     try {
-      all.value = await app.repositories().notes.listRecent(500)
-      await applyFilter()
+      all.value = await app.repositories().notes.listRecent(SEARCH_CORPUS_CAP)
+      applyFilter()
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load notes"
       all.value = []
@@ -38,13 +48,25 @@ export const useNotesStore = defineStore("notes", () => {
     }
   }
 
-  async function applyFilter(): Promise<void> {
-    filtered.value = await searchNotes({ query: query.value }, { notes: app.repositories().notes })
+  function applyFilter(): void {
+    filtered.value = filterNotes(all.value, query.value)
   }
+
+  // Reads `query` at fire time, never at schedule time, so a timer left over
+  // from an earlier keystroke recomputes against the latest text — no stale
+  // result can land on top of a newer one, and no cancellation is needed.
+  const applyFilterDebounced = useDebounceFn(applyFilter, SEARCH_DEBOUNCE_MS)
 
   async function setQuery(next: string): Promise<void> {
     query.value = next
-    await applyFilter()
+    // Clearing the field snaps back to the full list immediately — waiting
+    // 200 ms to show notes the user already had is the one delay that reads
+    // as a bug rather than as typing.
+    if (!next.trim()) {
+      applyFilter()
+      return
+    }
+    await applyFilterDebounced()
   }
 
   async function remove(id: NoteId): Promise<Result<void, DeleteNoteError>> {
