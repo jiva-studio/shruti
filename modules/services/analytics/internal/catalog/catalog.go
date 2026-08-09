@@ -174,15 +174,17 @@ func (p *Provider) computeForVersion(ctx context.Context, version string) (Total
 	).Scan(&count); err != nil {
 		return Totals{}, fmt.Errorf("count tracks: %w", err)
 	}
-	// One duration per lecture (the longest language variant) so multi-language
-	// tracks aren't multiplied; hidden lectures excluded.
+	// One duration per lecture (the longest audio row) so multi-language tracks
+	// aren't multiplied; hidden lectures excluded. Duration lives in track_audio;
+	// track_variants.audio_duration is a legacy column that new ingests no longer
+	// populate, which had frozen this total at ~3200h.
 	if err := db.QueryRowContext(ctx,
 		`SELECT COALESCE(SUM(d), 0) FROM (
-		    SELECT MAX(tv.audio_duration) AS d
-		    FROM track_variants tv
-		    JOIN tracks t ON t.id = tv.track_id
+		    SELECT MAX(ta.duration) AS d
+		    FROM track_audio ta
+		    JOIN tracks t ON t.id = ta.track_id
 		    WHERE t.hidden = 0
-		    GROUP BY tv.track_id
+		    GROUP BY ta.track_id
 		)`,
 	).Scan(&durationMs); err != nil {
 		return Totals{}, fmt.Errorf("sum duration: %w", err)
