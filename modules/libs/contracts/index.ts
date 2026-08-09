@@ -112,3 +112,4 @@ export type {
   DiscoverySearchResponse,
   IDiscoveryClient,
 } from "./discovery/discoveryClient.js"
+export { trackName } from "./discovery/trackName.js"
