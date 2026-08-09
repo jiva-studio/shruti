@@ -20,12 +20,9 @@
         <span class="user-text">{{ message.content }}</span>
       </template>
       <template v-else-if="failedKind">
-        <InlineNotice
-          :kind="noticeKind"
-          :title="noticeTitle || undefined"
-          :body="noticeBody"
-          :cta="noticeCta"
-        />
+        <!-- Mounted only for a failed bubble — that `v-if` is what keeps the
+             countdown/connectivity/quota machinery off every other bubble. -->
+        <ChatFailureNotice :message="message" :is-last="isLast" @retry="$emit('retry', $event)" />
       </template>
       <template v-else>
         <!-- Render whatever prose has streamed so far. -->
@@ -75,7 +72,7 @@ import type { ChatMessage } from "@shruti/stores/useChatStore.js"
 import ChatMessageActions from "./ChatMessageActions.vue"
 import ChatTokenRenderer from "./ChatTokenRenderer.vue"
 import StatusPill from "@lib/ui/chat/StatusPill.vue"
-import InlineNotice from "@ui/shared/InlineNotice.vue"
+import ChatFailureNotice from "./ChatFailureNotice.vue"
 import CitationCardContainer from "./CitationCardContainer.vue"
 import ChatChips from "./ChatChips.vue"
 import { useChatExportMarkdown } from "../composables/useChatExportMarkdown.js"
@@ -142,21 +139,16 @@ const { exportMarkdown } = useChatExportMarkdown(
   () => appLanguage.value
 )
 
-const {
-  failedKind,
-  errorSuffix,
-  truncatedRetryVisible,
-  canRetry,
-  noticeKind,
-  noticeTitle,
-  noticeBody,
-  noticeCta,
-  onRetry,
-} = useChatMessageStatus({
-  message: () => props.message,
-  isLast: () => props.isLast,
-  onRequestRetry: (id) => emit("retry", id),
-})
+const { failedKind, errorSuffixKey, truncatedRetryVisible, canRetry, onRetry } =
+  useChatMessageStatus({
+    message: () => props.message,
+    isLast: () => props.isLast,
+    onRequestRetry: (id) => emit("retry", id),
+  })
+
+// Resolved here rather than in the composable so every bubble reuses the
+// `t` it already holds instead of taking its own i18n hookup.
+const errorSuffix = computed<string>(() => (errorSuffixKey.value ? t(errorSuffixKey.value) : ""))
 
 const showActions = computed<boolean>(
   // Retry now lives in the actions row — keep the row visible whenever
