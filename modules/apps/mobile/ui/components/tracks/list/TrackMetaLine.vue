@@ -27,7 +27,6 @@ import {
 const props = defineProps<{
   references?: readonly string[]
   tags?: readonly string[]
-  author?: string
   location?: string
   date?: string
   /** Pre-formatted audio length (e.g. "47:12") — the app layer owns the
@@ -80,9 +79,8 @@ const segments = computed<Segment[]>(() => {
     if (seg) out.push(seg)
   }
   // Guaranteed minimum: every track has an audio length, so when none of
-  // the chosen fields resolved for this track (e.g. a recording with no
-  // reference / location / date and the author turned off) fall back to
-  // the duration so the line is never blank.
+  // the chosen fields resolved for this track fall back to the duration
+  // so the line is never blank.
   if (out.length === 0 && props.duration) {
     out.push({ key: "duration", kind: "text", text: props.duration, extra: 0 })
   }
@@ -91,37 +89,24 @@ const segments = computed<Segment[]>(() => {
 </script>
 
 <style scoped>
+/* One run of inline text rather than a flex row: a flex line can only be cut
+   off at the edge, while a text line ends in an ellipsis. The fixed line
+   height keeps a row with a reference exactly as tall as one without. */
 .details {
-  display: flex;
-  align-items: center;
-  gap: 5px;
   min-width: 0;
-  overflow: hidden;
-}
-
-.text {
-  /* Each metadata chunk (author / location / date / …) stays intact — never
-     shrink or ellipsize an individual block. `flex: 0 0 auto` keeps every
-     segment at its natural width; the line as a whole is clipped by the
-     parent's `overflow: hidden` if it runs past the row edge. */
-  flex: 0 0 auto;
+  line-height: 1.4;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sep {
-  flex: 0 0 auto;
+  margin: 0 4px;
   opacity: 0.5;
 }
 
 .reference {
-  flex: 0 0 auto;
-  background-color: var(--ion-color-light-shade);
-  font-weight: bold;
-  color: var(--ion-color-medium);
-  border-radius: 5px;
-  padding: 0px 5px;
-  font-size: 0.8em;
-  font-stretch: condensed;
+  white-space: nowrap;
 }
 
 .reference.extra {
