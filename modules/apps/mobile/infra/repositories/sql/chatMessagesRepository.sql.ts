@@ -1,13 +1,15 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { ChatActionState, ChatMessage } from "@lib/domain/chatMessage.js"
 import { parseMeta, wrapMeta } from "@lib/domain/chat/messageMeta.js"
+import type { ParsedMeta } from "@lib/domain/chat/messageMeta.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type {
   ChatFeedbackState,
   CreateChatMessageInput,
   IChatMessageRepository,
 } from "@lib/domain/ports/chatMessageRepository.js"
-import { mutate, queryMany, runInTransaction } from "@kit/persistence"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import { mutate, queryMany } from "@kit/persistence"
 
 interface ChatMessageRow {
   readonly id: string
@@ -50,7 +52,37 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
   return msg
 }
 
-export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepository {
+export function createSqlChatMessageRepository(
+  db: IDatabase,
+  unitOfWork: IUnitOfWork
+): IChatMessageRepository {
+  /**
+   * Read-modify-write of the `meta` envelope: re-serialises the whole blob
+   * with `patch` applied, so a concurrent update (a streaming turn writing
+   * actionStates while a `/questions` round-trip writes followups) can't
+   * clobber the other's field.
+   *
+   * Goes through the injected unit of work rather than reaching for
+   * `runInTransaction` itself, so the transaction boundary is the composition
+   * root's to choose. It must be given an ISOLATING one (`createSqlUnitOfWork`
+   * — what `createSqlAppRepositories` wires) and NOT the shared reentrant
+   * instance: that one's depth counter is not bound to the execution context,
+   * so while any unrelated top-level `run` is in flight this write would be
+   * misread as nested, spliced into that foreign transaction and lost with it
+   * on rollback. See the wiring note in `index.ts` and #1493.
+   */
+  async function rewriteMeta(id: ChatMessageId, patch: Partial<ParsedMeta>): Promise<void> {
+    await unitOfWork.run(async () => {
+      const rows = await db.query<{ meta: string | null }>(
+        "SELECT meta FROM chat_messages WHERE id = ?",
+        [id]
+      )
+      if (rows.length === 0) return
+      const next = wrapMeta({ ...parseMeta(rows[0].meta), ...patch })
+      await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
+    })
+  }
+
   return {
     async listBySession(sessionId: ChatSessionId): Promise<readonly ChatMessage[]> {
       // Visibility gate now lives on the proactive sidecar
@@ -124,95 +156,20 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
     },
 
     async updateFollowups(id: ChatMessageId, followups: readonly string[]): Promise<void> {
-      // Read-modify-write the `meta` envelope, same pattern as
-      // `updateActionStates`. Used to persist server-generated
-      // Ask-Sadhu chips onto a focus message after `/questions`.
-      // Transactional so a concurrent meta update (a streaming turn writing
-      // actionStates while this runs) can't clobber the other's field.
-      await runInTransaction(db, async () => {
-        const rows = await db.query<{ meta: string | null }>(
-          "SELECT meta FROM chat_messages WHERE id = ?",
-          [id]
-        )
-        if (rows.length === 0) return
-        const current = parseMeta(rows[0].meta)
-        const next = wrapMeta({
-          actions: current.actions,
-          outlines: current.outlines,
-          media: current.media,
-          verses: current.verses,
-          cites: current.cites,
-          chapters: current.chapters,
-          commentaries: current.commentaries,
-          actionStates: current.actionStates,
-          followups,
-          error: current.error,
-          aliases: current.aliases,
-          attributes: current.attributes,
-          focus: current.focus,
-          feedback: current.feedback,
-        })
-        await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
-      })
+      // Persists the server-generated Ask-Sadhu chips onto a focus message
+      // after `/questions`.
+      await rewriteMeta(id, { followups })
     },
 
     async updateActionStates(
       id: ChatMessageId,
       actionStates: Record<string, ChatActionState>
     ): Promise<void> {
-      await runInTransaction(db, async () => {
-        const rows = await db.query<{ meta: string | null }>(
-          "SELECT meta FROM chat_messages WHERE id = ?",
-          [id]
-        )
-        if (rows.length === 0) return
-        const current = parseMeta(rows[0].meta)
-        const next = wrapMeta({
-          actions: current.actions,
-          outlines: current.outlines,
-          media: current.media,
-          verses: current.verses,
-          cites: current.cites,
-          chapters: current.chapters,
-          commentaries: current.commentaries,
-          actionStates,
-          followups: current.followups,
-          error: current.error,
-          aliases: current.aliases,
-          attributes: current.attributes,
-          focus: current.focus,
-          feedback: current.feedback,
-        })
-        await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
-      })
+      await rewriteMeta(id, { actionStates })
     },
 
     async updateFeedback(id: ChatMessageId, feedback: ChatFeedbackState): Promise<void> {
-      await runInTransaction(db, async () => {
-        const rows = await db.query<{ meta: string | null }>(
-          "SELECT meta FROM chat_messages WHERE id = ?",
-          [id]
-        )
-        if (rows.length === 0) return
-        const current = parseMeta(rows[0].meta)
-        const next = wrapMeta({
-          actions: current.actions,
-          outlines: current.outlines,
-          media: current.media,
-          verses: current.verses,
-          cites: current.cites,
-          chapters: current.chapters,
-          commentaries: current.commentaries,
-          actionStates: current.actionStates,
-          followups: current.followups,
-          error: current.error,
-          aliases: current.aliases,
-          attributes: current.attributes,
-          focus: current.focus,
-          feedback,
-        })
-        await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
-      })
+      await rewriteMeta(id, { feedback })
     },
 
     async delete(id: ChatMessageId): Promise<void> {
