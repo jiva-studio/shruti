@@ -3,7 +3,7 @@
     <IonButton class="close-button" fill="clear" :aria-label="t('app.close')" @click="onDismiss">
       <IconX slot="icon-only" :size="16" />
     </IonButton>
-    <div class="sheet-header">
+    <div ref="headerRef" class="sheet-header">
       <div class="sheet-heading">
         <h2 class="sheet-title">{{ title }}</h2>
         <p v-if="author" class="author">{{ author }}</p>
@@ -16,7 +16,7 @@
         </p>
       </div>
     </div>
-    <IonContent ref="contentRef">
+    <IonContent ref="contentRef" :style="contentInsets">
       <div class="sheet-body">
         <button
           v-for="c in partOf"
@@ -46,7 +46,7 @@
     </IonContent>
 
     <IonFooter class="ion-no-border">
-      <div class="sheet-actions">
+      <div ref="footerRef" class="sheet-actions">
         <IonButton v-if="isLibraryItem" fill="clear" class="act remove-btn" @click="onRemove">
           <IconTrash slot="start" :size="18" />
           {{ t("library.remove") }}
@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { computed, onUnmounted, ref, watch, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
 import { IonButton, IonContent, IonFooter, IonModal } from "@ionic/vue"
@@ -132,6 +132,40 @@ async function onRemove(): Promise<void> {
 }
 
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
+
+// Both bars float over the scroll, so the content has to reserve their height
+// itself. Measured rather than assumed: the title runs to one, two or three
+// lines, and the footer grows a third button for a library item.
+const headerRef = ref<HTMLElement | null>(null)
+const footerRef = ref<HTMLElement | null>(null)
+const headerHeight = ref(0)
+const footerHeight = ref(0)
+
+const contentInsets = computed(() => ({
+  "--padding-top": `${headerHeight.value}px`,
+  "--padding-bottom": `${footerHeight.value}px`,
+}))
+
+useResizeObserver(headerRef, (h) => (headerHeight.value = h))
+useResizeObserver(footerRef, (h) => (footerHeight.value = h))
+
+/** Track one element's height for as long as it is mounted. */
+function useResizeObserver(el: Ref<HTMLElement | null>, onHeight: (h: number) => void): void {
+  let observer: ResizeObserver | null = null
+  watch(
+    el,
+    (node) => {
+      observer?.disconnect()
+      observer = null
+      if (!node) return
+      observer = new ResizeObserver(() => onHeight(node.offsetHeight))
+      observer.observe(node)
+      onHeight(node.offsetHeight)
+    },
+    { immediate: true }
+  )
+  onUnmounted(() => observer?.disconnect())
+}
 
 // Opening a similar lecture swaps content in the same sheet — reset scroll so
 // the user starts at the top of the new lecture rather than mid-page.
@@ -249,9 +283,33 @@ function onDismiss(): void {
 </script>
 
 <style scoped>
+/* Header and footer float over the scroll, the way the tab bar does: the text
+   passes beneath them and fades out rather than stopping at a hard edge. Both
+   are laid over the content, so the content reserves their height as padding
+   (measured, since the title runs to two or three lines) and the bars
+   themselves stay transparent to taps except on their own controls. */
 .sheet-header {
-  padding: 14px 16px 10px;
-  background: var(--ion-background-color, #fff);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 14px 16px 28px;
+  pointer-events: none;
+  /* Opaque under the whole heading, fading only across the padding strip
+     below it. A percentage stop would start the fade under the text itself and
+     let the scrolling body show through it. */
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--lectorium-fade-bg-rgb), 1) 0,
+    rgba(var(--lectorium-fade-bg-rgb), 1) calc(100% - 28px),
+    rgba(var(--lectorium-fade-bg-rgb), 0.85) calc(100% - 14px),
+    rgba(var(--lectorium-fade-bg-rgb), 0) 100%
+  );
+}
+
+.sheet-header > * {
+  pointer-events: auto;
 }
 
 .description {
@@ -328,7 +386,9 @@ function onDismiss(): void {
   position: absolute;
   top: 14px;
   right: 14px;
-  z-index: 10;
+  /* Above the header, which became a positioned layer of its own and would
+     otherwise paint over this button — it comes first in the markup. */
+  z-index: 11;
   width: 26px;
   height: 26px;
   min-height: 26px;
@@ -401,13 +461,20 @@ function onDismiss(): void {
   padding: 0 0.4em;
 }
 
+/* The mirror of the header: the list runs under the buttons and fades into
+   them, so the hard rule that used to cap the scroll is gone. */
 .sheet-actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 16px calc(10px + var(--ion-safe-area-bottom, 0px));
-  background: var(--ion-background-color, #fff);
-  border-top: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.08));
+  padding: 28px 16px calc(10px + var(--ion-safe-area-bottom, 0px));
+  background: linear-gradient(
+    to top,
+    rgba(var(--lectorium-fade-bg-rgb), 1) 0%,
+    rgba(var(--lectorium-fade-bg-rgb), 0.98) 60%,
+    rgba(var(--lectorium-fade-bg-rgb), 0.6) 85%,
+    rgba(var(--lectorium-fade-bg-rgb), 0) 100%
+  );
 }
 
 /* Quiet destructive action in the same button stack — a user-added lecture can
@@ -454,5 +521,21 @@ ion-modal.track-sheet {
   --height: 92%;
   --border-radius: 16px 16px 0 0;
   align-items: flex-end;
+}
+
+/* Ionic gives the footer a row of its own below the content; overlaying it is
+   what lets the list run underneath and fade out. */
+ion-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: transparent;
+  pointer-events: none;
+}
+
+ion-footer .sheet-actions > * {
+  pointer-events: auto;
 }
 </style>

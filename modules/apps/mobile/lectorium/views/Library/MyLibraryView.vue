@@ -26,7 +26,7 @@
         <span class="empty-message">{{ $t("library.myLibrary.emptyMessage") }}</span>
       </div>
 
-      <div v-if="shown.length" class="grid">
+      <div v-else-if="shown.length" class="grid">
         <LibraryItemCard
           v-for="item in shown"
           :key="item.id"
