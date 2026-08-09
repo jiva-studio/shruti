@@ -14,15 +14,16 @@ export default {
   readQuestion: "Keresés",
   clearQuery: "Törlés",
   web: {
-    title: "Az interneten találtuk",
+    title: "Internet",
     add: "Hozzáadás a könyvtáramhoz",
     empty: "Nincs semmi az általunk feldolgozott archívumokban.",
     unavailable: "Az internetes keresés most nem érhető el.",
     more: "Több megjelenítése",
   },
   library: {
-    title: "A könyvtáradban találtuk",
-    empty: "A könyvtáradban nincs találat.",
+    title: "Könyvtár",
+    empty: "Próbáld más szavakkal, vagy vegyél le egy szűrőt.",
+    mine: "Saját könyvtár",
   },
   smartLibrary: {
     title: "Okos könyvtár",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "Hivatkozás szerint",
   },
   collections: {
+    title: "Gyűjtemények",
     addAll: "Gyűjtemény hozzáadása",
     trackCount: "Előadások: {count}",
     addError: "Nem sikerült hozzáadni a gyűjteményt",

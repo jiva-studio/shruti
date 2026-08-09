@@ -14,15 +14,16 @@ export default {
   readQuestion: "Search",
   clearQuery: "Clear",
   web: {
-    title: "Found on the internet",
+    title: "Internet",
     add: "Add to my library",
     empty: "Nothing on the archives we index.",
     unavailable: "Couldn't reach the internet search right now.",
     more: "Show more",
   },
   library: {
-    title: "Found in your library",
-    empty: "Nothing in your library matches.",
+    title: "Library",
+    empty: "Try another wording, or clear a filter or two.",
+    mine: "Personal library",
   },
   smartLibrary: {
     title: "Smart library",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "By reference",
   },
   collections: {
+    title: "Collections",
     addAll: "Add collection",
     trackCount: "Lectures: {count}",
     addError: "Couldn’t add the collection",

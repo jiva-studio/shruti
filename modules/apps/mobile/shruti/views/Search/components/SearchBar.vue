@@ -2,19 +2,20 @@
   <div class="search-bar">
     <div class="search-row">
       <FloatingInput v-model="text" :placeholder="placeholder" :compose-aria-label="placeholder">
-        <!-- Search's control. Empty, the magnifier is a label: it says what the
-             field is for and does nothing. With text it becomes a cross and
-             empties the field. Same button, same place, same colour — only the
-             glyph crosses over. -->
+        <!-- Two buttons in one place, not one button with two glyphs. Empty,
+             the magnifier is a label: it says what the field is for and does
+             nothing. With text, that button shrinks away and the cross grows in
+             to take it — the whole disc animates, which is what makes it read
+             as one control becoming another rather than an icon swapping. -->
         <template #action="{ hasText, clear }">
-          <FloatingInputButton
-            :label="hasText ? clearLabel : searchLabel"
-            @click="hasText ? clear() : undefined"
-          >
-            <span class="glyphs">
+          <span class="buttons">
+            <FloatingInputButton
+              class="stacked"
+              :visible="!hasText"
+              :label="searchLabel"
+              @click="undefined"
+            >
               <svg
-                class="glyph"
-                :class="{ shown: !hasText }"
                 viewBox="0 0 24 24"
                 width="20"
                 height="20"
@@ -27,9 +28,14 @@
                 <circle cx="11" cy="11" r="7" />
                 <path d="M20 20l-3.5-3.5" />
               </svg>
+            </FloatingInputButton>
+            <FloatingInputButton
+              class="stacked"
+              :visible="hasText"
+              :label="clearLabel"
+              @click="clear()"
+            >
               <svg
-                class="glyph"
-                :class="{ shown: hasText }"
                 viewBox="0 0 24 24"
                 width="20"
                 height="20"
@@ -41,8 +47,8 @@
               >
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
-            </span>
-          </FloatingInputButton>
+            </FloatingInputButton>
+          </span>
         </template>
       </FloatingInput>
     </div>
@@ -59,7 +65,8 @@ import FloatingInputButton from "@lib/ui/input/FloatingInputButton.vue"
  * and the results grow upward away from it.
  *
  * Bound live, because the surface searches as the text changes. There is no
- * submit: the magnifier is an indicator, not an action.
+ * submit: the magnifier is an indicator, and once there is text it gives its
+ * place to the button that empties the field.
  *
  * `.search-row` is deliberate — it is the class the e2e helpers locate the
  * field by, and it was the class on the field this replaces.
@@ -87,25 +94,16 @@ const text = defineModel<string>({ required: true })
   z-index: 10;
 }
 
-/* The two glyphs share one cell so neither moves as they trade places. */
-.glyphs {
+/* The two discs share one cell, so one can shrink away exactly where the other
+   grows in and nothing shifts. */
+.buttons {
   position: relative;
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 36px;
+  height: 36px;
 }
 
-.glyph {
+.stacked {
   grid-area: 1 / 1;
-  opacity: 0;
-  transform: scale(0.6) rotate(-45deg);
-  transition:
-    opacity 140ms ease-out,
-    transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.glyph.shown {
-  opacity: 1;
-  transform: none;
 }
 </style>
