@@ -16,14 +16,22 @@ import { useTranscriptPrefetch } from "./downloads/useTranscriptPrefetch.js"
  * `pending` — the tap has been accepted but nothing is known yet: the
  * cache probe, the budget measurement and the play plan all still have to
  * resolve. Claimed synchronously so the row answers on the very next
- * frame; every real outcome below overwrites it, and `clearPending`
- * removes it if the caller bails first.
+ * frame; every real outcome below overwrites it, and `clearPending` puts
+ * the row back the way it was if the caller bails first.
  *
  * `deferred` — queued for offline use but held back because the storage
  * budget is spent. It is not a failure and not in flight: the track waits
  * in the FIFO until an eviction frees room (see `resumeDeferred`).
  */
 export type DownloadState = "idle" | "pending" | "downloading" | "deferred" | "completed" | "failed"
+
+/**
+ * Who asked for this download. `"user"` is a tap the user is waiting on (a
+ * play, a retry, "download again"); `"queue"` is the prefetch FIFO working
+ * through a playlist on its own. Only the notice rate-limit reads it — the
+ * user's own request is never suppressed by the queue's.
+ */
+export type DownloadOrigin = "user" | "queue"
 
 /**
  * Per-track media download state. The source of truth is the user DB
@@ -76,11 +84,16 @@ export const useDownloadStore = defineStore("downloads", () => {
   // not N times in a row.
   let lastBudgetNoticeAt = 0
   const BUDGET_NOTICE_COOLDOWN_MS = 60_000
-  // Same rate-limit for the "couldn't download" notice: in airplane mode a
-  // draining queue fails every job in a row, and the user needs to be told
-  // once, not once per lecture.
+  // Same rate-limit for the "couldn't download" notice, but for QUEUE-origin
+  // failures only (see `noticeDownloadFailed`): in airplane mode a draining
+  // queue fails every job in a row, and the user needs to be told once, not
+  // once per lecture.
   let lastFailureNoticeAt = 0
   const FAILURE_NOTICE_COOLDOWN_MS = 60_000
+  // Live `pending` claims: how many callers are waiting on this row, and the
+  // state the first of them replaced. Kept out of `states` so releasing a
+  // claim can restore the row instead of blanking it.
+  const pendingClaims = new Map<TrackId, { count: number; previous: DownloadState | undefined }>()
   // Coalesce concurrent hydrate() calls (Home + Search + Settings all call it
   // defensively on mount) and back off after a failure, so a hard-failing DB
   // doesn't re-run failStaleDownloads() (a write) + listReady() on every screen
@@ -132,51 +145,82 @@ export const useDownloadStore = defineStore("downloads", () => {
    * Tell the user a download did not happen. Deliberately NOT fired for a
    * skipped-on-budget download: that one is intentional, the lecture still
    * plays from the stream, and `noticeBudgetFull` says the accurate thing.
+   *
+   * `origin` decides whether the rate-limit applies. A background queue
+   * failing every job in airplane mode must be told once, but it must not
+   * be able to swallow the answer to something the user just tapped — so
+   * the cooldown suppresses queue notices only, and an explicit request is
+   * always answered.
    */
-  function noticeDownloadFailed(): void {
+  function noticeDownloadFailed(origin: DownloadOrigin): void {
     const now = Date.now()
-    if (now - lastFailureNoticeAt < FAILURE_NOTICE_COOLDOWN_MS) return
+    if (origin === "queue" && now - lastFailureNoticeAt < FAILURE_NOTICE_COOLDOWN_MS) return
     lastFailureNoticeAt = now
     void toast.error(t("errors.downloadFailed"))
   }
 
+  /**
+   * What a row really is underneath a `pending` claim: the state the claim
+   * replaced, which `clearPending` will put back. Callers that must not
+   * overwrite a terminal state have to read THIS, not the raw map — a
+   * claimed row reads "pending" while still being a failed one.
+   */
+  function effectiveState(trackId: TrackId): DownloadState | undefined {
+    const current = states.value.get(trackId)
+    if (current !== "pending") return current
+    return pendingClaims.get(trackId)?.previous
+  }
+
   /** Paint a track as "waiting for space" without touching a terminal state. */
   function markDeferred(trackId: TrackId): void {
-    const current = states.value.get(trackId)
+    const current = effectiveState(trackId)
     if (current === "completed" || current === "failed") return
     setState(trackId, "deferred")
   }
 
   /**
-   * Synchronously acknowledge a tap before anything is known about it.
-   * Terminal states are preserved (a downloaded row must not rewind, and a
-   * failed one keeps the retry affordance), and a live transfer keeps its
-   * progress radial rather than falling back to an indeterminate shimmer.
-   * A `deferred` row may be claimed — it is re-derived by the next gate.
+   * Synchronously acknowledge a tap before anything is known about it —
+   * including a tap on a FAILED row, whose retry has just as far to travel
+   * before it paints anything. The claim remembers what it replaced, so
+   * releasing it restores that state rather than blanking the row.
+   *
+   * Not claimed over a finished download (it must not rewind to a shimmer)
+   * or a live transfer (it keeps its progress radial). Claims nest: two
+   * opens racing the same row each hold one, and the row stays claimed
+   * until the last of them lets go.
    */
   function markPending(trackId: TrackId): void {
-    const current = states.value.get(trackId)
-    if (
-      current === "completed" ||
-      current === "failed" ||
-      current === "downloading" ||
-      current === "pending"
-    ) {
+    const claim = pendingClaims.get(trackId)
+    if (claim) {
+      claim.count += 1
       return
     }
+    const current = states.value.get(trackId)
+    if (current === "completed" || current === "downloading" || current === "pending") return
+    pendingClaims.set(trackId, { count: 1, previous: current })
     setState(trackId, "pending")
   }
 
   /**
-   * Drop a `pending` claim that never turned into anything — an aborted
-   * open, a stale generation, a throw. A no-op once a real outcome has
-   * replaced it, so it can be called unconditionally from a `finally`.
+   * Release a `pending` claim. The last one out restores whatever the claim
+   * replaced — unless a real outcome has since been recorded, which wins.
+   * Balanced against `markPending`, so it is safe to call unconditionally
+   * from a `finally`: a claim that was never granted releases nothing.
    */
   function clearPending(trackId: TrackId): void {
+    const claim = pendingClaims.get(trackId)
+    if (!claim) return
+    claim.count -= 1
+    if (claim.count > 0) return
+    pendingClaims.delete(trackId)
     if (states.value.get(trackId) !== "pending") return
-    const next = new Map(states.value)
-    next.delete(trackId)
-    states.value = next
+    if (claim.previous === undefined) {
+      const next = new Map(states.value)
+      next.delete(trackId)
+      states.value = next
+      return
+    }
+    setState(trackId, claim.previous)
   }
 
   function getProgress(trackId: TrackId): number {
@@ -254,11 +298,15 @@ export const useDownloadStore = defineStore("downloads", () => {
    * unexpected throw — is a real failure and says so. The budget case is
    * excluded on purpose: the skip is deliberate and the lecture still
    * plays, so a connectivity message there would be misinformation.
+   *
+   * `origin` defaults to `"user"`: everything except the prefetch FIFO is
+   * someone waiting on a tap.
    */
   async function ensureDownloaded(
     trackId: TrackId,
     path: string,
-    filesize?: number | null
+    filesize?: number | null,
+    origin: DownloadOrigin = "user"
   ): Promise<string | null> {
     const existing = inFlight.get(trackId)
     if (existing) return existing
@@ -270,13 +318,18 @@ export const useDownloadStore = defineStore("downloads", () => {
     // failure), which would flip the row to "completed" with zero
     // network bytes. So treat the cache as empty AND proactively
     // delete the native-side mapping for this URL before re-trying.
-    const isRetryAfterFailure = states.value.get(trackId) === "failed"
+    //
+    // Read through any `pending` claim an outer caller (`openTrack`) already
+    // placed on the row: the raw state would read "pending" and quietly skip
+    // the whole retry path.
+    const isRetryAfterFailure = effectiveState(trackId) === "failed"
 
     // Answer the tap NOW — before the first await. Everything below (the
-    // native cache probe, `ensureMeasured`, the transfer itself) can take
-    // anything from a frame to minutes, and without this claim the row sits
-    // motionless the whole time. Read `isRetryAfterFailure` above first: it
-    // is derived from the state this call is about to overwrite.
+    // native cache probe, an unmeasured `ensureMeasured`'s SQLite round
+    // trip, the transfer itself) can take anything from a frame to minutes,
+    // and without this claim the row sits motionless the whole time. That
+    // includes a retry, which paints over its own red X: `isRetryAfterFailure`
+    // is captured above, off the state this claim replaces.
     markPending(trackId)
 
     const taskEpoch = storeEpoch
@@ -305,6 +358,16 @@ export const useDownloadStore = defineStore("downloads", () => {
             if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
             return cached
           }
+          // The native cache says the file is NOT there, so a DB row still
+          // claiming "ready" is stale and is repaired here — before any gate
+          // below can decide not to download. Leaving it would keep the row
+          // in `listReady()`: a phantom "downloaded" badge on Home, and its
+          // bytes still charged to `usedBytes` by `quota.refresh()`, which
+          // makes the budget refuse the next track that little bit sooner.
+          await app
+            .repositories()
+            .mediaItems.upsert(trackId, "failed", null)
+            .catch(() => {})
         }
         // Offline guard: a transfer kicked off with no connectivity (airplane
         // mode) otherwise enqueues a native job that waits indefinitely for the
@@ -313,8 +376,10 @@ export const useDownloadStore = defineStore("downloads", () => {
         // fast instead so the failed state (and the sheet's "Download again"
         // button) show up immediately.
         if (typeof navigator !== "undefined" && navigator.onLine === false) {
-          if (fresh()) setState(trackId, "failed")
-          noticeDownloadFailed()
+          if (fresh()) {
+            setState(trackId, "failed")
+            noticeDownloadFailed(origin)
+          }
           return null
         }
         // Budget gate. Everything above this line either served a cache hit
@@ -323,10 +388,10 @@ export const useDownloadStore = defineStore("downloads", () => {
         // in-flight reservations too, so a draining queue can't overshoot
         // the cap in the window before `usedBytes` catches up.
         //
-        // It runs BEFORE the "downloading" paint and before the DB write
-        // below: a track the budget refuses must never flash a spinner it
-        // isn't going to earn, and must not have its media row demoted for
-        // a transfer that never starts.
+        // It runs BEFORE the "downloading" paint: a track the budget refuses
+        // must never flash a spinner it isn't going to earn. (The stale-row
+        // repair above is deliberately NOT behind it — that one is a fix for
+        // the DB, owed whether or not this transfer happens.)
         const quota = useDownloadQuotaStore()
         await quota.ensureMeasured()
         const sizeBytes = quota.sizeOf(filesize)
@@ -346,18 +411,18 @@ export const useDownloadStore = defineStore("downloads", () => {
           // failed download; without this delete, a follow-up probe
           // would hand back a localUrl pointing at nothing.
           await app.mediaDownloader.delete(probeUrl).catch(() => {})
+          // Demote any stale "ready" DB row before invoking `downloadMedia`.
+          // The use case's cached branch trusts the DB (`state === "ready" &&
+          // localPath`) without verifying the file is still on disk — so a row
+          // left "ready" from a prior session whose file the OS later evicted
+          // (iOS /Caches sweep, user-initiated clear) would short-circuit the
+          // retry and return success WITHOUT moving any bytes. The user sees
+          // the row flip off-failed but no download happens.
+          await app
+            .repositories()
+            .mediaItems.upsert(trackId, "failed", null)
+            .catch(() => {})
         }
-        // Demote any stale "ready" DB row before invoking `downloadMedia`.
-        // The use case's cached branch trusts the DB (`state === "ready" &&
-        // localPath`) without verifying the file is still on disk — so a row
-        // left "ready" from a prior session whose file the OS later evicted
-        // (iOS /Caches sweep, user-initiated clear) would short-circuit the
-        // transfer and return success WITHOUT moving any bytes. The user sees
-        // the row flip off-failed but no download happens.
-        await app
-          .repositories()
-          .mediaItems.upsert(trackId, "failed", null)
-          .catch(() => {})
         const result = await downloadMedia(
           { trackId, path, candidates: fallback.candidates() },
           {
@@ -388,13 +453,17 @@ export const useDownloadStore = defineStore("downloads", () => {
           if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
           return result.value.mediaItem.localPath
         }
-        if (fresh()) setState(trackId, "failed")
-        noticeDownloadFailed()
+        if (fresh()) {
+          setState(trackId, "failed")
+          noticeDownloadFailed(origin)
+        }
         return null
       } catch (err) {
         console.error(`[downloads] failed for ${trackId}:`, err)
-        if (fresh()) setState(trackId, "failed")
-        noticeDownloadFailed()
+        if (fresh()) {
+          setState(trackId, "failed")
+          noticeDownloadFailed(origin)
+        }
         return null
       } finally {
         // Release any reservation this task still holds — a cache hit, an
@@ -456,7 +525,7 @@ export const useDownloadStore = defineStore("downloads", () => {
             queuedTrackIds.delete(job.trackId)
             markStartingDownload(job.trackId)
             try {
-              await ensureDownloaded(job.trackId, job.path, job.sizeBytes)
+              await ensureDownloaded(job.trackId, job.path, job.sizeBytes, "queue")
             } catch {
               // ensureDownloaded already records "failed"; don't break the queue.
             }
@@ -494,7 +563,7 @@ export const useDownloadStore = defineStore("downloads", () => {
   function prefetch(trackId: TrackId, path: string, filesize?: number | null): void {
     if (queuedTrackIds.has(trackId)) return
     if (inFlight.has(trackId)) return
-    const current = states.value.get(trackId)
+    const current = effectiveState(trackId)
     if (current === "completed") return
     const quota = useDownloadQuotaStore()
     const sizeBytes = quota.sizeOf(filesize)
@@ -518,7 +587,7 @@ export const useDownloadStore = defineStore("downloads", () => {
    * track doesn't visually rewind to "downloading".
    */
   function markStartingDownload(trackId: TrackId): void {
-    const current = states.value.get(trackId)
+    const current = effectiveState(trackId)
     // Preserve a terminal state. "completed" must not visually rewind to
     // "downloading" on re-add; "failed" must survive so a follow-up
     // `ensureDownloaded` takes the retry path (which runs the iOS
@@ -681,6 +750,7 @@ export const useDownloadStore = defineStore("downloads", () => {
       void app.mediaDownloader.cancel(url).catch(() => {})
     }
     inFlightUrls.clear()
+    pendingClaims.clear()
     states.value = new Map()
     progress.value = new Map()
     hydrationError.value = null

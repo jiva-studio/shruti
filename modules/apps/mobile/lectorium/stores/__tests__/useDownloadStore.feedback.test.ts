@@ -144,6 +144,24 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(store.getState(TRACK)).toBe("completed")
   })
 
+  it("answers a retry tap on a failed row, over its own red X", async () => {
+    downloadMedia.mockResolvedValue({ ok: false, error: "all-candidates-failed" })
+    const store = useDownloadStore()
+    await store.ensureDownloaded(TRACK, PATH)
+    expect(store.getState(TRACK)).toBe("failed")
+
+    // The retry goes through `ensureMeasured` and a native delete before it
+    // can paint "downloading" — the shimmer is what covers that stretch.
+    const retry = store.ensureDownloaded(TRACK, PATH)
+    expect(store.getState(TRACK)).toBe("pending")
+
+    await retry
+    // Still a retry underneath: the phantom-cache cleanup must not be
+    // skipped just because the row now reads "pending".
+    expect(deleteFile).toHaveBeenCalledWith(`https://cdn.test/${PATH}`)
+    expect(store.getState(TRACK)).toBe("failed")
+  })
+
   it("never paints `downloading` for a track the storage budget refuses", async () => {
     hasRoom = false
     const store = useDownloadStore()
@@ -154,20 +172,62 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(url).toBeNull()
     expect(seen).toEqual(["pending", "deferred"])
     expect(seen).not.toContain("downloading")
-    // Nothing was written to disk or to the media row on the way to the gate.
-    expect(upsert).not.toHaveBeenCalled()
     expect(downloadMedia).not.toHaveBeenCalled()
     expect(reserve).not.toHaveBeenCalled()
   })
 
-  it("clears `pending` when the transfer throws", async () => {
+  it("repairs a stale `ready` media row even when the budget refuses the transfer", async () => {
+    // The cache probe came back empty, so the file is gone and any DB row
+    // still claiming "ready" is a lie — one that would keep charging the
+    // budget and painting a phantom "downloaded" badge. The gate must not
+    // skip that repair.
+    hasRoom = false
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+
+    expect(upsert).toHaveBeenCalledWith(TRACK, "failed", null)
+  })
+
+  it("restores the state a claim replaced when it is released unresolved", async () => {
+    downloadMedia.mockResolvedValue({ ok: false, error: "all-candidates-failed" })
+    const store = useDownloadStore()
+    await store.ensureDownloaded(TRACK, PATH)
+    expect(store.getState(TRACK)).toBe("failed")
+
+    // An `openTrack` that claims the row and then bails (stale generation,
+    // rejected play plan) must not cost the row its retry affordance.
+    store.markPending(TRACK)
+    expect(store.getState(TRACK)).toBe("pending")
+    store.clearPending(TRACK)
+    expect(store.getState(TRACK)).toBe("failed")
+  })
+
+  it("holds the claim until the LAST caller releases it", () => {
+    const store = useDownloadStore()
+
+    // Two taps on the same (undisabled) Search row.
+    store.markPending(TRACK)
+    store.markPending(TRACK)
+    store.clearPending(TRACK)
+    expect(store.getState(TRACK)).toBe("pending")
+
+    store.clearPending(TRACK)
+    expect(store.getState(TRACK)).toBe("idle")
+  })
+
+  it("releases its own claim, so the next tap can claim the row again", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     downloadMedia.mockRejectedValue(new Error("boom"))
     const store = useDownloadStore()
 
     await store.ensureDownloaded(TRACK, PATH)
-
     expect(store.getState(TRACK)).toBe("failed")
+
+    // A claim leaked by the task's `finally` would silently swallow this
+    // one — the row would stay on its red X with no answer to the tap.
+    store.markPending(TRACK)
+    expect(store.getState(TRACK)).toBe("pending")
   })
 
   it("leaves no `pending` behind on any exit path", async () => {
@@ -188,25 +248,14 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(store.getState("track-3")).toBe("deferred")
   })
 
-  it("clearPending drops a claim that never resolved, and spares a real state", () => {
+  it("does not rewind a finished download or a live transfer to `pending`", () => {
     const store = useDownloadStore()
 
-    store.markPending(TRACK)
-    expect(store.getState(TRACK)).toBe("pending")
-    store.clearPending(TRACK)
-    expect(store.getState(TRACK)).toBe("idle")
-
     store.markStartingDownload(TRACK)
-    store.clearPending(TRACK)
+    store.markPending(TRACK)
     expect(store.getState(TRACK)).toBe("downloading")
-  })
-
-  it("preserves a terminal state instead of rewinding it to `pending`", () => {
-    const store = useDownloadStore()
-
-    store.markPending(TRACK)
-    store.markStartingDownload(TRACK)
-    store.markPending(TRACK)
+    // The refused claim releases nothing.
+    store.clearPending(TRACK)
     expect(store.getState(TRACK)).toBe("downloading")
   })
 
@@ -253,6 +302,48 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
 
     expect(toastError).toHaveBeenCalledWith("errors.downloadStorageFull")
     expect(toastError).not.toHaveBeenCalledWith("errors.downloadFailed")
+  })
+
+  it("rate-limits a draining queue to one notice", async () => {
+    online(false)
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH, null, "queue")
+    await store.ensureDownloaded("track-2", "public/audio/track-2.mp3", null, "queue")
+
+    expect(toastError).toHaveBeenCalledTimes(1)
+  })
+
+  it("never lets the queue's cooldown swallow the answer to a user's tap", async () => {
+    online(false)
+    const store = useDownloadStore()
+
+    // A prefetch queue failing at launch arms the cooldown...
+    await store.ensureDownloaded(TRACK, PATH, null, "queue")
+    expect(toastError).toHaveBeenCalledTimes(1)
+
+    // ...and the lecture the user taps a moment later is still answered.
+    await store.ensureDownloaded("track-2", "public/audio/track-2.mp3")
+    expect(toastError).toHaveBeenCalledTimes(2)
+  })
+
+  it("says nothing after a data wipe cancelled the task", async () => {
+    let releaseTransfer: (value: unknown) => void = () => {}
+    downloadMedia.mockReturnValue(
+      new Promise((resolve) => {
+        releaseTransfer = resolve
+      })
+    )
+    const store = useDownloadStore()
+
+    const task = store.ensureDownloaded(TRACK, PATH)
+    await Promise.resolve()
+    store.reset()
+    releaseTransfer({ ok: false, error: "all-candidates-failed" })
+    await task
+
+    expect(toastError).not.toHaveBeenCalled()
+    expect(store.getState(TRACK)).toBe("idle")
   })
 
   it("stays quiet on success", async () => {
