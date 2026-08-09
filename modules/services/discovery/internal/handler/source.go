@@ -31,6 +31,11 @@ type sourceIn struct {
 	// the source's own id. Several sources may name one script — fourteen
 	// YouTube channels are fourteen sources and one youtube.js.
 	Script string `json:"script"`
+	// Kind is what this archive says about itself: "material" when it states
+	// nothing a machine can read and the model must read everything, "stated"
+	// when it publishes its own facts and no model is called. Empty is
+	// material, which is the half that fails cheaply.
+	Kind string `json:"kind"`
 	// AuthorOverride is who this source's recordings are by, winning over
 	// whatever the page says. Leave it empty for an archive of many speakers,
 	// and for a channel that carries guests.
@@ -53,6 +58,7 @@ func (in sourceIn) source() store.Source {
 		RecheckMinS:    in.RecheckMinS,
 		RecheckMaxS:    in.RecheckMaxS,
 		Script:         in.Script,
+		Kind:           in.Kind,
 		AuthorOverride: in.AuthorOverride,
 		AuthHeaders:    in.AuthHeaders,
 	}
@@ -74,6 +80,8 @@ type sourceOut struct {
 	// Script is the extraction script that reads this source; empty means its
 	// own id.
 	Script string `json:"script,omitempty"`
+	// Kind is "material" or "stated" — see sourceIn.
+	Kind string `json:"kind,omitempty"`
 	// AuthorOverride is who this source's recordings are by. Empty means the
 	// page decides.
 	AuthorOverride string `json:"author_override,omitempty"`
@@ -95,6 +103,7 @@ func sourceFrom(s store.Source) sourceOut {
 		RecheckMinS:    s.RecheckMinS,
 		RecheckMaxS:    s.RecheckMaxS,
 		Script:         s.Script,
+		Kind:           s.Kind,
 		AuthorOverride: s.AuthorOverride,
 		HasCredentials: s.HasCredentials,
 	}

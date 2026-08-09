@@ -9,15 +9,27 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Source is a place to look. It is a seed URL and politeness settings — there
-// is nothing here describing how the site is built, because nothing needs to
-// know.
+// The two kinds of archive, and there is nothing between them.
+const (
+	// KindMaterial — the archive states nothing machine-readable. Whatever a
+	// script collects is handed over labelled and the model reads all of it.
+	KindMaterial = "material"
+	// KindStated — the archive publishes its own facts, so they are taken as
+	// given and no model is called.
+	KindStated = "stated"
+)
+
+// Source is a place to look. It is a seed URL, politeness settings and what the
+// site says about itself — there is nothing here describing how the site is
+// built, because nothing needs to know.
 type Source struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title,omitempty"`
-	SeedURLs     []string `json:"seed_urls"`
-	Enabled      bool     `json:"enabled"`
-	CrawlDelayMS int      `json:"crawl_delay_ms"`
+	ID       string   `json:"id"`
+	Title    string   `json:"title,omitempty"`
+	SeedURLs []string `json:"seed_urls"`
+	Enabled  bool     `json:"enabled"`
+	// Kind is KindMaterial or KindStated. Empty reads as material.
+	Kind         string `json:"kind,omitempty"`
+	CrawlDelayMS int    `json:"crawl_delay_ms"`
 	// CrawlWorkers is how many of this source's pages may be in flight at once.
 	CrawlWorkers int `json:"crawl_workers"`
 	// Fetcher names the reader this source needs. Empty is an ordinary request.
@@ -98,8 +110,8 @@ func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
 		}
 	}
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO discovery.sources (id, title, seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher, recheck_min_s, recheck_max_s, author_override, script)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,nullif($12,''),nullif($13,''))
+		INSERT INTO discovery.sources (id, title, seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher, recheck_min_s, recheck_max_s, author_override, script, kind)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,nullif($12,''),nullif($13,''),coalesce(nullif($14,''),'material'))
 		ON CONFLICT (id) DO UPDATE SET
 			title = EXCLUDED.title, seed_urls = EXCLUDED.seed_urls,
 			enabled = EXCLUDED.enabled, crawl_delay_ms = EXCLUDED.crawl_delay_ms,
@@ -107,13 +119,17 @@ func (r *Repo) SaveSource(ctx context.Context, s *Source) error {
 			max_depth = EXCLUDED.max_depth,
 			recheck_min_s = EXCLUDED.recheck_min_s, recheck_max_s = EXCLUDED.recheck_max_s,
 			author_override = EXCLUDED.author_override, script = EXCLUDED.script,
+			-- An unsaid kind leaves the stored one alone: it decides whether a
+			-- model is asked at all, and an edit that meant to toggle enabled
+			-- must not send a whole archive through one.
+			kind = coalesce(nullif($14,''), discovery.sources.kind),
 			-- Empty headers leave the stored ones alone, so an ordinary edit
 			-- does not silently sign the source out.
 			fetcher = EXCLUDED.fetcher, auth_headers = CASE WHEN EXCLUDED.auth_headers = '{}'::jsonb
 				THEN discovery.sources.auth_headers ELSE EXCLUDED.auth_headers END,
 			updated_at = now()`,
 		s.ID, s.Title, s.SeedURLs, s.Enabled, s.CrawlDelayMS, s.CrawlWorkers, s.MaxDepth, headers, s.Fetcher,
-		s.RecheckMinS, s.RecheckMaxS, s.AuthorOverride, s.Script)
+		s.RecheckMinS, s.RecheckMaxS, s.AuthorOverride, s.Script, s.Kind)
 	return err
 }
 
@@ -122,10 +138,10 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 	var headers []byte
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth, auth_headers, fetcher,
-		       recheck_min_s, recheck_max_s, coalesce(author_override,''), coalesce(script,'')
+		       recheck_min_s, recheck_max_s, coalesce(author_override,''), coalesce(script,''), coalesce(kind,'material')
 		FROM discovery.sources WHERE id = $1`, id,
 	).Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth, &headers, &s.Fetcher,
-		&s.RecheckMinS, &s.RecheckMaxS, &s.AuthorOverride, &s.Script)
+		&s.RecheckMinS, &s.RecheckMaxS, &s.AuthorOverride, &s.Script, &s.Kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -142,7 +158,7 @@ func (r *Repo) Source(ctx context.Context, id string) (*Source, error) {
 func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, coalesce(title,''), seed_urls, enabled, crawl_delay_ms, crawl_workers, max_depth,
-		       recheck_min_s, recheck_max_s, coalesce(author_override,''), coalesce(script,''),
+		       recheck_min_s, recheck_max_s, coalesce(author_override,''), coalesce(script,''), coalesce(kind,'material'),
 		       coalesce(auth_headers, '{}'::jsonb) <> '{}'::jsonb
 		FROM discovery.sources ORDER BY id`)
 	if err != nil {
@@ -154,7 +170,7 @@ func (r *Repo) Sources(ctx context.Context) ([]Source, error) {
 	for rows.Next() {
 		var s Source
 		if err := rows.Scan(&s.ID, &s.Title, &s.SeedURLs, &s.Enabled, &s.CrawlDelayMS, &s.CrawlWorkers, &s.MaxDepth,
-			&s.RecheckMinS, &s.RecheckMaxS, &s.AuthorOverride, &s.Script, &s.HasCredentials); err != nil {
+			&s.RecheckMinS, &s.RecheckMaxS, &s.AuthorOverride, &s.Script, &s.Kind, &s.HasCredentials); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
