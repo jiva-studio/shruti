@@ -2,6 +2,7 @@ import type { IDatabase } from "@ports/app/index.js"
 import type {
   IOutboxRepository,
   OutboxEntry,
+  OutboxScope,
   NewOutboxEntry,
 } from "@lib/domain/ports/outboxRepository.js"
 import type { SyncOp } from "@lib/domain"
@@ -15,8 +16,16 @@ import type { OutboxRow } from "@lib/persistence/user"
  * the engine wraps every mutation in the shared reentrant unit-of-work, so the
  * one enclosing transaction commits and persists once. Never opens its own
  * transaction.
+ *
+ * `getOwnerId` resolves the account journaling right now (023 migration); it
+ * is read per append, not captured, because the identity changes under a live
+ * repository bundle. Omitted ⇒ rows are written unowned, which leaves them to
+ * the watermark exactly as they were before the column existed.
  */
-export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
+export function createSqlOutboxRepository(
+  db: IDatabase,
+  getOwnerId?: () => string | null
+): IOutboxRepository {
   function toEntry(row: OutboxRow): OutboxEntry {
     return {
       id: row.id,
@@ -30,12 +39,17 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
   }
 
   return {
-    async listPending(limit?: number, afterId = 0): Promise<readonly OutboxEntry[]> {
-      const sql = "SELECT * FROM outbox WHERE sent = 0 AND id > ? ORDER BY id ASC"
+    async listPending(limit?: number, scope?: OutboxScope): Promise<readonly OutboxEntry[]> {
+      // `owner_id = NULL` is never true, so an absent ownerId degrades to the
+      // watermark-only rule the unowned rows already follow.
+      const sql = `SELECT * FROM outbox
+                    WHERE sent = 0 AND (owner_id = ? OR (owner_id IS NULL AND id > ?))
+                    ORDER BY id ASC`
+      const params = [scope?.ownerId ?? null, scope?.afterId ?? 0]
       const rows =
         limit === undefined
-          ? await db.query<OutboxRow>(sql, [afterId])
-          : await db.query<OutboxRow>(`${sql} LIMIT ?`, [afterId, limit])
+          ? await db.query<OutboxRow>(sql, params)
+          : await db.query<OutboxRow>(`${sql} LIMIT ?`, [...params, limit])
       return rows.map(toEntry)
     },
 
@@ -47,8 +61,9 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
 
     async append(entry: NewOutboxEntry): Promise<void> {
       await db.execute(
-        `INSERT INTO outbox (collection, doc_id, op, data, hlc, base_hlc, created_at, sent)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+        `INSERT INTO outbox
+           (collection, doc_id, op, data, hlc, base_hlc, created_at, sent, owner_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         [
           entry.collection,
           entry.docId,
@@ -57,6 +72,7 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
           entry.hlc,
           entry.baseHlc,
           Date.now(),
+          getOwnerId?.() ?? null,
         ]
       )
     },
