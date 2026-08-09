@@ -40,6 +40,9 @@ const LOCALES = Object.keys(BUNDLES) as (keyof typeof BUNDLES)[]
  * surfaces (offline, every CDN candidate exhausted, an unexpected throw).
  * A locale missing it would fall back to English mid-sentence, so the whole
  * shipped set is asserted rather than a sample.
+ *
+ * The strings themselves are hand-authored per locale and are NOT asserted
+ * word for word — only the properties that make the notice usable.
  */
 describe("errors locale bundles", () => {
   it("covers all fourteen shipped locales", () => {
@@ -70,14 +73,14 @@ describe("errors locale bundles", () => {
     }
   })
 
-  it("names the VPN in every locale", () => {
-    // The reason the string was reworded: in the regions most of the corpus
-    // is listened in, a dead CDN is usually a VPN that is on (or off). The
-    // acronym stays Latin everywhere, including sr-Cyrl — which is
-    // transliterated by a generator that has to be told to leave it alone.
-    for (const locale of LOCALES) {
-      expect(BUNDLES[locale].downloadFailed, locale).toContain("VPN")
-    }
+  it("keeps the VPN hint in Russian", () => {
+    // Russia is where the CDN is blocked, so `ru` is the one locale where a
+    // failed download is commonly a VPN that is off — a regional hint the
+    // translation carries on its own. It is easy to lose in a sweep that
+    // "harmonises" the fourteen strings, so it is pinned here. It is
+    // deliberately NOT asserted elsewhere: in the other locales the VPN is
+    // noise, and "try again" is the actionable half.
+    expect(ru.downloadFailed).toContain("VPN")
   })
 
   it("keeps the storage-budget notice distinct from the failure notice", () => {

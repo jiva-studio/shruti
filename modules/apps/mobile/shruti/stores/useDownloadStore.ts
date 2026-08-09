@@ -66,6 +66,10 @@ export const useDownloadStore = defineStore("downloads", () => {
   // transfer (the downloader cancels by url → pathname id). Cleared when
   // the task settles.
   const inFlightUrls = new Map<TrackId, string>()
+  // Who is waiting on each in-flight task, boxed so a caller that JOINS a
+  // running transfer can upgrade it (see `ensureDownloaded`). Only the
+  // failure notice's rate-limit reads it.
+  const inFlightOrigins = new Map<TrackId, { current: DownloadOrigin }>()
   // Bounded FIFO for prefetch-style enqueues. Without this, restoring
   // many tracks at once fires `ensureDownloaded` in a tight loop and
   // the native plugin's WorkManager (Android) / URLSession (iOS) drops
@@ -309,7 +313,19 @@ export const useDownloadStore = defineStore("downloads", () => {
     origin: DownloadOrigin = "user"
   ): Promise<string | null> {
     const existing = inFlight.get(trackId)
-    if (existing) return existing
+    if (existing) {
+      // Joining a transfer the prefetch queue already started. The user is
+      // now waiting on it too, so promote it out of the queue's rate-limit —
+      // otherwise "add a playlist, then tap one of its lectures" is exactly
+      // the case whose failure notice gets swallowed as background noise.
+      // Only ever upwards: a queue job joining a user's transfer changes
+      // nothing.
+      if (origin === "user") {
+        const claimed = inFlightOrigins.get(trackId)
+        if (claimed) claimed.current = "user"
+      }
+      return existing
+    }
 
     // A "failed" in-memory state means the previous attempt did NOT
     // produce a usable file. The iOS plugin's `resolveLocalUrl` can
@@ -331,6 +347,11 @@ export const useDownloadStore = defineStore("downloads", () => {
     // includes a retry, which paints over its own red X: `isRetryAfterFailure`
     // is captured above, off the state this claim replaces.
     markPending(trackId)
+
+    // Boxed so a later caller joining this task can upgrade it; the notice
+    // below reads it at failure time, not at call time.
+    const claimedOrigin = { current: origin }
+    inFlightOrigins.set(trackId, claimedOrigin)
 
     const taskEpoch = storeEpoch
     const fresh = (): boolean => taskEpoch === storeEpoch
@@ -378,7 +399,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         if (typeof navigator !== "undefined" && navigator.onLine === false) {
           if (fresh()) {
             setState(trackId, "failed")
-            noticeDownloadFailed(origin)
+            noticeDownloadFailed(claimedOrigin.current)
           }
           return null
         }
@@ -455,14 +476,14 @@ export const useDownloadStore = defineStore("downloads", () => {
         }
         if (fresh()) {
           setState(trackId, "failed")
-          noticeDownloadFailed(origin)
+          noticeDownloadFailed(claimedOrigin.current)
         }
         return null
       } catch (err) {
         console.error(`[downloads] failed for ${trackId}:`, err)
         if (fresh()) {
           setState(trackId, "failed")
-          noticeDownloadFailed(origin)
+          noticeDownloadFailed(claimedOrigin.current)
         }
         return null
       } finally {
@@ -478,6 +499,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         if (inFlight.get(trackId) === ownership.current) {
           inFlight.delete(trackId)
           inFlightUrls.delete(trackId)
+          inFlightOrigins.delete(trackId)
         }
       }
     })()
@@ -750,6 +772,7 @@ export const useDownloadStore = defineStore("downloads", () => {
       void app.mediaDownloader.cancel(url).catch(() => {})
     }
     inFlightUrls.clear()
+    inFlightOrigins.clear()
     pendingClaims.clear()
     states.value = new Map()
     progress.value = new Map()

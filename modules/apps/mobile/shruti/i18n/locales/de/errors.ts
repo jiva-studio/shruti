@@ -1,5 +1,5 @@
 export default {
-  downloadFailed: "Download fehlgeschlagen. Prüfe deine Internetverbindung und dein VPN.",
+  downloadFailed: "Download fehlgeschlagen. Prüfe deine Internetverbindung und versuche es erneut.",
   filtersNotSaved:
     "Der Filter konnte nicht gespeichert werden. Beim nächsten Start wird er zurückgesetzt.",
   downloadsCacheUnavailable:

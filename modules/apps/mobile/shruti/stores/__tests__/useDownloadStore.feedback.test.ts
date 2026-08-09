@@ -327,6 +327,54 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(toastError).toHaveBeenCalledTimes(2)
   })
 
+  it("answers a tap that joins a transfer the queue had already started", async () => {
+    // "Add a playlist, prefetch starts, tap one of those lectures" — the tap
+    // shares the running task, so its answer must not be filed under the
+    // queue's rate-limit.
+    downloadMedia.mockResolvedValue({ ok: false, error: "all-candidates-failed" })
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded("track-2", "public/audio/track-2.mp3", null, "queue")
+    expect(toastError).toHaveBeenCalledTimes(1)
+
+    let releaseProbe: (value: string | null) => void = () => {}
+    resolveLocalUrl.mockReturnValue(
+      new Promise<string | null>((resolve) => {
+        releaseProbe = resolve
+      })
+    )
+    const queued = store.ensureDownloaded(TRACK, PATH, null, "queue")
+    const tapped = store.ensureDownloaded(TRACK, PATH)
+
+    releaseProbe(null)
+    expect(await tapped).toBeNull()
+    await queued
+    // One shared transfer, not two — the tap joined rather than restarted.
+    expect(downloadMedia).toHaveBeenCalledTimes(2)
+    expect(toastError).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not downgrade a user transfer a queue job joins", async () => {
+    downloadMedia.mockResolvedValue({ ok: false, error: "all-candidates-failed" })
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded("track-2", "public/audio/track-2.mp3", null, "queue")
+
+    let releaseProbe: (value: string | null) => void = () => {}
+    resolveLocalUrl.mockReturnValue(
+      new Promise<string | null>((resolve) => {
+        releaseProbe = resolve
+      })
+    )
+    const tapped = store.ensureDownloaded(TRACK, PATH)
+    const joined = store.ensureDownloaded(TRACK, PATH, null, "queue")
+
+    releaseProbe(null)
+    await tapped
+    await joined
+    expect(toastError).toHaveBeenCalledTimes(2)
+  })
+
   it("says nothing after a data wipe cancelled the task", async () => {
     let releaseTransfer: (value: unknown) => void = () => {}
     downloadMedia.mockReturnValue(

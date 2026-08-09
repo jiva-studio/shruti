@@ -1,5 +1,5 @@
 export default {
-  downloadFailed: "Échec du téléchargement. Vérifiez votre connexion internet et votre VPN.",
+  downloadFailed: "Échec du téléchargement. Vérifiez votre connexion internet et réessayez.",
   filtersNotSaved:
     "Impossible d'enregistrer le filtre. Il sera réinitialisé au prochain lancement.",
   downloadsCacheUnavailable:
