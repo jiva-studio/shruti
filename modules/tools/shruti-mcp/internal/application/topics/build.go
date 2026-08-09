@@ -36,6 +36,10 @@ type BuildUseCase struct {
 	Namer ClusterNamer
 	Dict  DictMinter
 	Vocab VocabWriter
+	// Vectors (optional) caches the heading embeddings. Embedding the corpus is
+	// what a build spends its time and money on; clustering the result is
+	// minutes. Without the cache every rebuild pays for it again.
+	Vectors HeadingVectorStore
 
 	// K is the target number of canonical topics. Iters/Seed control the
 	// clustering. MaxDistance is the cosine-distance assignment cutoff stored in
@@ -56,7 +60,61 @@ type BuildUseCase struct {
 type BuildResult struct {
 	Topics         int `json:"topics"`
 	UniqueHeadings int `json:"uniqueHeadings"`
+	Embedded       int `json:"embedded"`  // headings this build paid for; the rest came from the cache
 	Artifacts      int `json:"artifacts"` // granular files read
+}
+
+// vectorsFor returns one embedding per title, reusing the cache and embedding
+// only what is missing. A cache from another model is dropped whole rather than
+// merged: vectors from two spaces cluster into plausible nonsense, silently.
+func (uc BuildUseCase) vectorsFor(ctx context.Context, titles []string) ([][]float32, int, error) {
+	cached := map[string][]float32{}
+	if uc.Vectors != nil {
+		have, err := uc.Vectors.ReadHeadingVectors()
+		switch {
+		case err == nil && have.Model == uc.Embed.Model() && have.Dim == uc.Embed.Dim():
+			for i, t := range have.Titles {
+				if i < len(have.Vectors) {
+					cached[t] = have.Vectors[i]
+				}
+			}
+		case err != nil && !errors.Is(err, os.ErrNotExist):
+			return nil, 0, fmt.Errorf("read heading vectors: %w", err)
+		}
+	}
+
+	missing := make([]string, 0, len(titles))
+	for _, t := range titles {
+		if _, ok := cached[t]; !ok {
+			missing = append(missing, t)
+		}
+	}
+	if len(missing) > 0 {
+		fresh, err := uc.Embed.Embed(ctx, missing)
+		if err != nil {
+			return nil, 0, fmt.Errorf("embed headings: %w", err)
+		}
+		if len(fresh) != len(missing) {
+			return nil, 0, fmt.Errorf("embed headings: asked for %d vectors, got %d", len(missing), len(fresh))
+		}
+		for i, t := range missing {
+			cached[t] = fresh[i]
+		}
+	}
+
+	out := make([][]float32, len(titles))
+	for i, t := range titles {
+		out[i] = cached[t]
+	}
+	if uc.Vectors != nil {
+		err := uc.Vectors.WriteHeadingVectors(ctx, domaintopics.HeadingVectors{
+			Model: uc.Embed.Model(), Dim: uc.Embed.Dim(), Titles: titles, Vectors: out,
+		})
+		if err != nil {
+			return nil, 0, fmt.Errorf("write heading vectors: %w", err)
+		}
+	}
+	return out, len(missing), nil
 }
 
 func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
@@ -108,9 +166,9 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 	}
 	sort.Strings(languages)
 
-	vecs, err := uc.Embed.Embed(ctx, titles)
+	vecs, embedded, err := uc.vectorsFor(ctx, titles)
 	if err != nil {
-		return BuildResult{}, fmt.Errorf("embed headings: %w", err)
+		return BuildResult{}, err
 	}
 	norm := normalizeAll(vecs)
 	res := kmeansCosine(norm, uc.K, uc.Iters, uc.Seed)
@@ -174,7 +232,7 @@ func (uc BuildUseCase) Run(ctx context.Context) (BuildResult, error) {
 	if err := uc.Vocab.WriteVocabulary(ctx, voc); err != nil {
 		return BuildResult{}, fmt.Errorf("write vocabulary: %w", err)
 	}
-	return BuildResult{Topics: k, UniqueHeadings: len(titles), Artifacts: read}, nil
+	return BuildResult{Topics: k, UniqueHeadings: len(titles), Embedded: embedded, Artifacts: read}, nil
 }
 
 // nameClusterWithRetry calls the namer up to `attempts` times, retrying on a

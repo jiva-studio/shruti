@@ -19,6 +19,24 @@ type AssignUseCase struct {
 	Catalog  CatalogWriter
 	// Langs are the languages whose granular outline is tried (e.g. ru, en).
 	Langs []string
+	// TopK caps how many topics a track carries and Floor drops the ones that
+	// barely register. Zero leaves the package defaults in place.
+	TopK  int
+	Floor float64
+}
+
+func (uc AssignUseCase) topK() int {
+	if uc.TopK > 0 {
+		return uc.TopK
+	}
+	return defaultTopK
+}
+
+func (uc AssignUseCase) floor() float64 {
+	if uc.Floor > 0 {
+		return uc.Floor
+	}
+	return defaultFloor
 }
 
 type AssignResult struct {
@@ -84,7 +102,7 @@ func (uc AssignUseCase) Run(ctx context.Context, id track.Id) (AssignResult, err
 		return AssignResult{TrackID: string(id), Skipped: true}, nil
 	}
 
-	final := topKFloorRenorm(merged, defaultTopK, defaultFloor)
+	final := topKFloorRenorm(merged, uc.topK(), uc.floor())
 	if err := uc.Catalog.SetTrackTopics(ctx, string(id), final); err != nil {
 		return AssignResult{}, fmt.Errorf("write track topics: %w", err)
 	}

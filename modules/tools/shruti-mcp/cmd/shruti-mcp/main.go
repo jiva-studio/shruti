@@ -655,11 +655,12 @@ func main() {
 				Namer:       topicNamer,
 				Dict:        dictCRUDUC,
 				Vocab:       topicCentroids,
-				K:           150,
-				Iters:       25,
-				Seed:        42,
-				MaxDistance: 0.45,
-				Samples:     12,
+				Vectors:     topicCentroids,
+				K:           cfg.Topics.K,
+				Iters:       cfg.Topics.Iters,
+				Seed:        cfg.Topics.Seed,
+				MaxDistance: cfg.Topics.MaxDistance,
+				Samples:     cfg.Topics.Samples,
 			}
 			topicsDeps.Assign = topicsapp.AssignUseCase{
 				Embed:    embedClient,
@@ -667,6 +668,8 @@ func main() {
 				Vocab:    topicCentroids,
 				Catalog:  sqlitecatalog.NewLazy(currentDBPath),
 				Langs:    []string{"ru", "en"},
+				TopK:     cfg.Topics.TopK,
+				Floor:    cfg.Topics.Floor,
 			}
 		}
 	}
