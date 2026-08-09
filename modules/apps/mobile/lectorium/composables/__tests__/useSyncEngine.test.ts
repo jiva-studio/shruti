@@ -268,6 +268,58 @@ describe("useSyncEngine — cursor-ownership reset", () => {
     app.unmount()
   })
 
+  it("scopes the drain to the account that owns the device now", async () => {
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+
+    expect(ctx.runSync.mock.calls[0]![0]).toMatchObject({ ownerId: "anon-2" })
+    app.unmount()
+  })
+
+  it("still scopes the drain when the identity changes mid-cycle", async () => {
+    // A cycle for user-1 is in flight when the account is deleted, so the
+    // watch-triggered sync is swallowed by the single-flight guard and the
+    // owner reset does not run until a later cycle — by which point anon-2 has
+    // journaled rows of its own. `ownerId` is what keeps those rows pushable;
+    // the watermark, stamped late at the journal's tail, cannot be trusted.
+    prefs.set("sync.cursorOwner", "user-1")
+    let releaseCycle: () => void = () => {}
+    ctx.runSync = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          releaseCycle = () => resolve({ skipped: false, pulled: 0, pushed: 0, conflicts: 0 })
+        })
+    )
+
+    const app = mountEngine()
+    await flush()
+    ctx.auth!.userId = "user-1"
+    ctx.auth!.signedIn = true
+    await flush()
+    expect(ctx.runSync).toHaveBeenCalledTimes(1)
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
+
+    // Account deleted mid-cycle: the new identity's sync trigger is dropped.
+    ctx.auth!.userId = "anon-2"
+    ctx.auth!.signedIn = false
+    await flush()
+    expect(ctx.runSync).toHaveBeenCalledTimes(1)
+
+    releaseCycle()
+    await flush()
+    ctx.resumeCb?.({ isActive: true })
+    await flush()
+
+    // The late reset lands, and the cycle it precedes drains as anon-2.
+    expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    expect(ctx.runSync.mock.calls[1]![0]).toMatchObject({ ownerId: "anon-2" })
+    app.unmount()
+  })
+
   it("stamps the watermark once per switch, not on every later cycle", async () => {
     prefs.set("sync.cursorOwner", "user-1")
     const app = mountEngine()

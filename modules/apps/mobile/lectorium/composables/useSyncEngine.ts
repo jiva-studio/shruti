@@ -131,10 +131,17 @@ export function useSyncEngine(): void {
    * history (apply is an idempotent LWW no-op on rows it already has).
    *
    * The push side moves the OTHER way: `pushed_outbox_id` is raised to the
-   * outbox's tail id, retiring every row journaled so far. Those rows are the
-   * previous owner's notes and chat messages — a local wipe / account deletion
-   * leaves un-pushed ones behind, and without this they would upload under the
-   * new anonymous identity (#1497). It is never rewound.
+   * outbox's tail, retiring the rows journaled before the stamp existed. Those
+   * are the previous owner's notes and chat messages — a local wipe / account
+   * deletion leaves un-pushed ones behind (#1497). It is never rewound.
+   *
+   * This guard runs on the engine's next cycle, which can be long after the
+   * identity actually changed (a cycle already in flight swallows the trigger;
+   * a region without `profileBaseUrl` disables the engine entirely) — by then
+   * the NEW account may have journaled rows of its own. That is why the
+   * watermark is a fallback and not the mechanism: every row written since the
+   * 023 migration carries its `owner_id`, so push filters on ownership and a
+   * late watermark cannot retire a row the current account wrote.
    *
    * Runs once per account per process (guarded by an in-memory echo + a
    * persisted `sync.cursorOwner` marker) and only when enabled.
@@ -158,17 +165,18 @@ export function useSyncEngine(): void {
       return
     }
     const { syncOutbox, syncState, unitOfWork } = repos
-    if (!syncOutbox || !syncState) return
+    if (!syncState) return
 
     try {
       // A first-ever owner (stored === null) owns everything journaled so far
       // (the pre-marker upgrade path), so neither side is touched; recording
       // ownership is what makes a later switch detectable.
       if (stored !== null) {
+        const outboxTail = syncOutbox ? await syncOutbox.latestId() : null
         await unitOfWork.run(async () => {
           await syncState.setPullCursor(0)
           await syncState.setAckedSeq(0)
-          await syncState.setPushedOutboxId(await syncOutbox.latestId())
+          if (outboxTail !== null) await syncState.setPushedOutboxId(outboxTail)
         })
       }
       await app.preferences.set(CURSOR_OWNER_KEY, userId).catch(() => undefined)
@@ -248,6 +256,9 @@ export function useSyncEngine(): void {
         syncState,
         apply: syncApply,
         unitOfWork,
+        // Read after the guard: it may have just switched identities, and the
+        // drain must belong to the account that owns the device now.
+        ownerId: auth.userId,
         refreshStores,
       })
     } catch (err) {

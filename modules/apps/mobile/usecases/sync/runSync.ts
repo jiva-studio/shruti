@@ -17,6 +17,11 @@ export interface RunSyncDeps {
   readonly syncState: ISyncStateRepository
   readonly apply: ISyncApplyRepository
   readonly unitOfWork: IUnitOfWork
+  /**
+   * The account this cycle runs for. Push reads only the rows it journaled,
+   * so a previous owner's un-pushed changes stay local (#1497).
+   */
+  readonly ownerId?: string | null
   /** Page size for pull (optional; clamped downstream). */
   readonly limit?: number
   /**
@@ -65,6 +70,7 @@ export async function runSync(deps: RunSyncDeps): Promise<RunSyncResult> {
     apply: deps.apply,
     syncState: deps.syncState,
     unitOfWork: deps.unitOfWork,
+    ownerId: deps.ownerId,
   })
 
   const changed = new Set<string>([...pull.changedCollections, ...push.changedCollections])

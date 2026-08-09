@@ -39,6 +39,24 @@ export interface NewOutboxEntry {
 }
 
 /**
+ * Which pending rows a push may read. Both arms answer the same question —
+ * "was this row journaled by the account pushing now?" — from opposite ends:
+ * `ownerId` matches rows stamped with the account (023 migration), `afterId`
+ * covers the unstamped ones, which are the current owner's only while the
+ * watermark still sits where their pushes left it.
+ */
+export interface OutboxScope {
+  /** The account draining the outbox. Rows stamped with a different owner are
+   *  never returned — that is what keeps a deleted account's changes off the
+   *  identity that replaces it, whenever the engine notices the switch. */
+  readonly ownerId?: string | null
+  /** The watermark (`sync_state.pushed_outbox_id`, 0 when omitted). Unstamped
+   *  rows at or below it are retired: either pushed, or predating an identity
+   *  change, which jumps the watermark to the journal's tail. */
+  readonly afterId?: number
+}
+
+/**
  * Read/write port over the local `outbox` journal (013 migration), consumed
  * by the sync engine's push path. Reads pending (unsent) changes, marks them
  * acknowledged once the server applies them, and appends re-merged changes.
@@ -49,15 +67,11 @@ export interface NewOutboxEntry {
  */
 export interface IOutboxRepository {
   /**
-   * Pending (`sent = 0`) changes in insertion (`id`) order, oldest first.
-   * `limit` bounds the batch so a push stays within the edge's body cap.
-   *
-   * `afterId` is the outbox watermark (`sync_state.pushed_outbox_id`, 0 when
-   * omitted): rows at or below it are never returned. On an identity change
-   * the engine raises it to {@link latestId}, so changes journaled under a
-   * previous account are not re-pushed under the new one.
+   * Pending (`sent = 0`) changes in insertion (`id`) order, oldest first,
+   * narrowed to the rows {@link OutboxScope} says the caller owns. `limit`
+   * bounds the batch so a push stays within the edge's body cap.
    */
-  listPending(limit?: number, afterId?: number): Promise<readonly OutboxEntry[]>
+  listPending(limit?: number, scope?: OutboxScope): Promise<readonly OutboxEntry[]>
 
   /** Mark the given outbox rows acknowledged (`sent = 1`). Idempotent. */
   markSent(ids: readonly number[]): Promise<void>
@@ -74,7 +88,9 @@ export interface IOutboxRepository {
   /**
    * The highest `id` ever journaled (sent or not), `0` when the outbox is
    * empty. Stamped as the watermark when the owning identity changes, which
-   * retires every row journaled so far.
+   * retires the unstamped rows journaled so far. Owned rows are unaffected —
+   * the engine may notice the switch long after the new account started
+   * writing, and those writes must survive it.
    */
   latestId(): Promise<number>
 }

@@ -126,6 +126,14 @@ export interface CreateSqlAppRepositoriesDeps {
    */
   readonly getDeviceId?: () => Promise<string>
   /**
+   * Resolves the account that owns the device right now (the auth session's
+   * `userId`, `null` while anonymous bootstrap is still resolving). Stamped on
+   * every journaled row so push can scope the outbox to its own account —
+   * without it a deleted account's un-pushed changes upload under the identity
+   * that replaces it (#1497). Omit to journal rows unowned.
+   */
+  readonly getOwnerId?: () => string | null
+  /**
    * Device-local "Sync chats" gate (default ON). Gates chat journaling only —
    * when it returns `false` no `chat_sessions` / `chat_messages` change is
    * journaled. Omit to leave chat sync on; it never affects the non-chat
@@ -164,6 +172,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
         userDb: deps.userDb,
         unitOfWork,
         getDeviceId: deps.getDeviceId,
+        getOwnerId: deps.getOwnerId,
         isChatSyncEnabled: deps.isChatSyncEnabled,
       })
     : baseSynced
@@ -175,7 +184,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
   const getDeviceId = deps.getDeviceId
   const syncRepos = getDeviceId
     ? {
-        syncOutbox: createSqlOutboxRepository(deps.userDb),
+        syncOutbox: createSqlOutboxRepository(deps.userDb, deps.getOwnerId),
         syncState: createSqlSyncStateRepository(deps.userDb, getDeviceId),
         syncApply: createSqlSyncApplyRepository(deps.userDb),
         syncBackfill: createSqlSyncBackfillRepository(deps.userDb, deps.isChatSyncEnabled),

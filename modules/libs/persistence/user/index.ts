@@ -144,13 +144,19 @@ export interface OutboxRow {
   readonly created_at: number
   /** 0 = pending, 1 = acknowledged by the server. */
   readonly sent: number
+  /** The account that journaled the row (023 migration); NULL for rows written
+   *  before the column existed or before an identity was resolved. Push reads
+   *  only the current account's rows, so a deleted account's un-pushed changes
+   *  never upload under the identity that replaces it. */
+  readonly owner_id: string | null
 }
 
 /**
  * Per-device sync bookkeeping (013 migration). One row per device id. Tracks
  * the pull cursor (`pull_cursor`, highest applied `global_seq`), the cursor
- * acknowledged back to the server for compaction (`acked_seq`), and the
- * highest local `outbox.id` confirmed pushed (`pushed_outbox_id`).
+ * acknowledged back to the server for compaction (`acked_seq`), and
+ * `pushed_outbox_id` — the watermark below which unowned outbox rows are
+ * retired, either because they were pushed or because the identity changed.
  */
 export interface SyncStateRow {
   readonly device_id: string

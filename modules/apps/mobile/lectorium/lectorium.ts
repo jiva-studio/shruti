@@ -387,6 +387,10 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
         getActiveLanguage: () => appLanguage.value,
         // Turns on the sync-journal decorator + the engine repositories.
         getDeviceId: seed.getDeviceId,
+        // Read straight off the auth port, not the store: the port is the
+        // source the store mirrors, so a row journaled during an account
+        // switch is stamped with the identity that is actually in effect.
+        getOwnerId: () => seed.auth.getSession()?.userId ?? null,
         isChatSyncEnabled: () => syncChatsEnabled.value,
       })
       return cachedRepos
