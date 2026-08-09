@@ -96,7 +96,10 @@ export function useHomeController(): HomeControllerReturn {
     // (which is what `openTrack` would do via `localUrl ?? remoteUrl`
     // fallback). `ensureDownloaded` already does the cache probe first,
     // so it's equivalent to "check files, then download if missing".
-    if (downloads.getState(trackId) === "failed") {
+    // Read through any in-flight `pending` claim: a claimed row reads
+    // "pending" while still being the failed one that needs a retry, and
+    // falling through here would stream from the CDN instead.
+    if (downloads.getEffectiveState(trackId) === "failed") {
       const variant = entry.track.variants.find((v) => v.audio)
       if (variant?.audio) {
         void downloads.ensureDownloaded(trackId, variant.audio.path)
