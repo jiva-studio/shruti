@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jiva-studio/lectorium/discovery/internal/application/ask"
 	"github.com/jiva-studio/lectorium/discovery/internal/application/crawl"
 	"github.com/jiva-studio/lectorium/discovery/internal/metrics"
 	"github.com/jiva-studio/lectorium/discovery/internal/store"
@@ -273,17 +272,6 @@ func intParam(r *http.Request, name string, def int) int {
 		return v
 	}
 	return def
-}
-
-// dateParam reads a day out of the query string with the rule the body uses,
-// so the two ways into this service cannot disagree about what a date is.
-func dateParam(s string) *time.Time {
-	d, err := ask.ParseDate(s)
-	if err != nil || d.IsZero() {
-		return nil
-	}
-	t := d.Time
-	return &t
 }
 
 func authorsHandler(repo *store.Repo) http.HandlerFunc {

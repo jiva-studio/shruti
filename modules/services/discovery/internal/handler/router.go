@@ -54,7 +54,6 @@ type RouterDeps struct {
 //	GET  /discovery/queue              what is waiting for a recheck
 //	GET  /discovery/pages/empty        visits that found no file
 //	GET  /discovery/collections        cycles, and which parts we have
-//	GET  /discovery/search             free text plus filters
 //	POST /discovery/search             a question in words; answers with the filter it read
 //	GET  /discovery/status             what this process has done, and what is waiting
 func NewRouter(d RouterDeps) http.Handler {
