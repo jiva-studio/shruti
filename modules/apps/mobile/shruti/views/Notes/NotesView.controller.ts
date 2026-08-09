@@ -144,7 +144,10 @@ export function useNotesController(): NotesControllerReturn {
   }
 
   const rows = computed<readonly UiNoteRow[]>(() => {
-    const q = store.query.trim()
+    // `appliedQuery`, not `query`: the live query runs ahead of `filtered` by
+    // the search debounce, and marking the previous result set against the
+    // newer text drops or adds `<mark>`s for those 200 ms.
+    const q = store.appliedQuery.trim()
     const wrap = q.length >= MATCH_HIGHLIGHT_MIN_LENGTH
 
     return store.filtered.map((n) => {

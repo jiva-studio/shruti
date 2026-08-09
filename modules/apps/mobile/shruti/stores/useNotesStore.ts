@@ -30,6 +30,13 @@ export const useNotesStore = defineStore("notes", () => {
   const all = ref<readonly Note[]>([])
   const filtered = ref<readonly Note[]>([])
   const query = ref<string>("")
+  /**
+   * The query `filtered` was actually computed from. Lags `query` by the
+   * debounce. Anything describing the CURRENT results — search highlighting,
+   * "nothing found" copy — must read this, or it renders the new query
+   * against the old result set for 200 ms.
+   */
+  const appliedQuery = ref<string>("")
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
 
@@ -49,6 +56,7 @@ export const useNotesStore = defineStore("notes", () => {
   }
 
   function applyFilter(): void {
+    appliedQuery.value = query.value
     filtered.value = filterNotes(all.value, query.value)
   }
 
@@ -95,5 +103,16 @@ export const useNotesStore = defineStore("notes", () => {
     return result
   }
 
-  return { all, filtered, query, isLoading, error, refresh, setQuery, remove, update }
+  return {
+    all,
+    filtered,
+    query,
+    appliedQuery,
+    isLoading,
+    error,
+    refresh,
+    setQuery,
+    remove,
+    update,
+  }
 })
