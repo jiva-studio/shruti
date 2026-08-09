@@ -12,11 +12,11 @@
         :date="date"
         :config="config"
       />
+      <p v-if="author" class="author">{{ author }}</p>
       <TrackMetaLine
         class="details"
         :references="references"
         :tags="tags"
-        :author="author"
         :location="location"
         :date="date"
         :duration="duration"
@@ -64,8 +64,24 @@ defineEmits<{ select: [trackId: string] }>()
 <style scoped>
 .track,
 .info,
+.author,
 .details {
   transition: all 1s ease;
+}
+
+/* One line box for all three, so the gaps between them are equal. */
+.info,
+.author,
+.details {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.author {
+  color: var(--ion-color-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Tighter rows; the divider between rows is a list-level <RowDivider>. */
