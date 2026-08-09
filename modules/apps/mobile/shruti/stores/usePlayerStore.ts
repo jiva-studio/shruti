@@ -407,8 +407,8 @@ export const usePlayerStore = defineStore("player", () => {
     if (stale()) return { ok: true, value: undefined }
 
     // Over the storage budget this returns null and playback falls through
-    // to the streaming URL below — a lecture the user taps always plays,
-    // it just may not be kept offline.
+    // to the streaming URL below — the lecture still plays, it just isn't
+    // kept offline.
     const localUrl = await useDownloadStore().ensureDownloaded(
       cmd.trackId,
       cmd.audio.path,
