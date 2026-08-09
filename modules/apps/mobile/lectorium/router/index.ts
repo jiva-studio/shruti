@@ -86,6 +86,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@lectorium/views/Collection/CollectionListView.vue"),
       },
       {
+        // The full set of what the archives turned up for a search — where the
+        // "see all" on the library tab's internet shelf lands. The query rides
+        // in `?q=`, so the page is a real address.
+        path: "search/web",
+        name: "web-results",
+        component: () => import("@lectorium/views/Search/WebResultsView.vue"),
+      },
+      {
         // Personal library (epic #1236) — user-added lectures, NOT the corpus.
         // Named `my-library` to avoid colliding with the library-language /
         // landing "library" surfaces.
