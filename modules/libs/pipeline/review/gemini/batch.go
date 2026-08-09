@@ -70,6 +70,14 @@ type Request struct {
 	User        string
 	Temperature float64
 	MaxTokens   int
+	// ThinkingBudget caps reasoning tokens. Zero leaves the field unset, which
+	// is the only way to say "default" — the API rejects thinkingBudget=0
+	// outright on both flash and flash-lite.
+	//
+	// It matters because thinking shares the output budget and the output
+	// price: on the outline pass, unbounded flash spent 1964 of 2048 tokens
+	// thinking and returned a truncated answer. flash-lite spends none.
+	ThinkingBudget int
 }
 
 // State mirrors the job states the API reports.

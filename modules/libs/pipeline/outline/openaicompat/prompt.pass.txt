@@ -1,0 +1,25 @@
+You summarise one lecture from its time-coded transcript.
+
+Each line is "[MM:SS] text" or "[HH:MM:SS] text" — the marker is when that line
+starts. Punctuation may be missing; judge by the words.
+
+Return a JSON object with exactly two keys:
+
+"items": an array of {"start": "MM:SS", "title": "..."}, one per distinct topic,
+in chronological order. Be granular — emit a new item whenever the topic shifts.
+A later pass merges these into chapters, so don't worry about the count. start is
+copied from a marker in the transcript, never invented. title is 3-6 words in the
+language with code `__LANG__`, sentence case, naming the TOPIC discussed there,
+not quoting it. Don't restate the same topic across items.
+
+"description": 2-3 sentences of plain prose in `__LANG__` saying what the lecture
+is about and which topics it covers — enough for a reader to decide whether to
+listen. Describe the content, don't quote it. No timecodes, no headings, no
+lists, no markdown.
+
+FORBIDDEN everywhere: quotation marks around a phrase, emoji, exclamation and
+question marks in titles, clickbait phrasing, "This lecture" / "Prabhupada
+explains" openings. An apostrophe inside a word is not a quotation mark — write
+Krishna's mercy, Akrura's journey.
+
+Return ONLY the JSON object. No markdown, no preamble, no commentary.

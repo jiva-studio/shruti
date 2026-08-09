@@ -83,6 +83,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/filemeta"
 	openaicompatmeta "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/openaicompat"
 	fsoutline "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/outline/fs"
+	geminioutlinebatch "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/outlinebatch/gemini"
 	sqlitepending "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/pending/sqlite"
 	reviewreg "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review"
 	throttledreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/throttled"
@@ -106,6 +107,7 @@ import (
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/worker"
 	glossary "github.com/jiva-studio/shruti/pipeline/glossary"
+	pipelineoutline "github.com/jiva-studio/shruti/pipeline/outline"
 	openaicompatoutline "github.com/jiva-studio/shruti/pipeline/outline/openaicompat"
 	glossaryport "github.com/jiva-studio/shruti/pipeline/ports/glossary"
 	outlineport "github.com/jiva-studio/shruti/pipeline/ports/outline"
@@ -573,6 +575,27 @@ func main() {
 		}
 		outlineGen = g
 	}
+	outlineCompress, ok := pipelineoutline.CompressorByName(cfg.Outline.Compress)
+	if !ok {
+		log.Fatalf("outline.compress: unknown mode %q (none | punctuation)", cfg.Outline.Compress)
+	}
+
+	// Half-price outline path. Configured separately from the synchronous one
+	// because the batch protocol is Gemini's own, not part of the
+	// OpenAI-compatible surface the sync client speaks.
+	var outlineBatcher outlineuc.Batcher
+	if cfg.Outline.Batch.APIKey != "" {
+		b, err := geminioutlinebatch.New(geminioutlinebatch.Config{
+			Endpoint: cfg.Outline.Batch.Endpoint,
+			APIKey:   cfg.Outline.Batch.APIKey,
+			Model:    cfg.Outline.Batch.Model,
+		})
+		if err != nil {
+			log.Fatalf("outline batch: %v", err)
+		}
+		outlineBatcher = b
+		log.Printf("[outline] batch path enabled: %s", cfg.Outline.Batch.Model)
+	}
 
 	// FuzzyIndex prefilters dict candidates for the LLM resolver via
 	// trigram-overlap matching against the live catalog. Replaces the
@@ -843,6 +866,10 @@ func main() {
 			LLM:         outlineGen,
 			Catalog:     sqlitecatalog.NewLazy(currentDBPath),
 			Granular:    outlineArtifacts,
+			Compress:    outlineCompress,
+			Batch:       outlineBatcher,
+			BatchJobs:   outlineuc.NewBatchStore(cfg.Out),
+			MaxTokens:   cfg.Outline.MaxTokens,
 		},
 		RefreshTitle: titleuc.UseCase{
 			Registry:    registry,

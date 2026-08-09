@@ -13,9 +13,9 @@ import (
 	"fmt"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 	pipelineoutline "github.com/jiva-studio/shruti/pipeline/outline"
 	outlineport "github.com/jiva-studio/shruti/pipeline/ports/outline"
-	transcriptport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
 )
 
 // CatalogWriter is the slice of the catalog the outline use case writes: a
@@ -42,6 +42,15 @@ type UseCase struct {
 	// Granular (optional) receives the fine pre-collapse headings as a private
 	// artifact. nil = skip.
 	Granular GranularStore
+	// Compress (optional) shortens each block before it is sent. nil = as
+	// written.
+	Compress pipelineoutline.Compressor
+	// Batch + BatchJobs enable the half-price asynchronous path. Both nil =
+	// synchronous only.
+	Batch     Batcher
+	BatchJobs *BatchStore
+	// MaxTokens caps one batch reply; 0 leaves it to the provider.
+	MaxTokens int
 }
 
 // Entry is one stored outline heading: title + [start,end) span in ms. Mirrors
@@ -63,30 +72,36 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 		return Result{}, fmt.Errorf("read reviewed transcript: %w", err)
 	}
 
-	gen, err := pipelineoutline.Generate(ctx, uc.LLM, rev.Blocks, language)
+	gen, err := pipelineoutline.Generate(ctx, uc.LLM, rev.Blocks, language, uc.Compress)
 	if err != nil {
 		return Result{}, err
 	}
 
-	// Persist the granular pass as a private offline artifact BEFORE the catalog
-	// write, so a granular-write failure surfaces as a clean re-runnable per-track
-	// failure rather than leaving a published outline without its topic precursor.
+	if err := uc.write(ctx, id, language, gen); err != nil {
+		return Result{}, err
+	}
+	return Result{TrackId: string(id), Language: language, Outline: gen.Coarse, Description: gen.Description}, nil
+}
+
+// write persists one generation. The granular pass goes down BEFORE the catalog
+// write, so a granular-write failure surfaces as a clean re-runnable per-track
+// failure rather than leaving a published outline without its topic precursor.
+func (uc UseCase) write(ctx context.Context, id track.Id, language string, gen pipelineoutline.Result) error {
 	if uc.Granular != nil {
 		granularJSON, err := json.Marshal(gen.Granular)
 		if err != nil {
-			return Result{}, fmt.Errorf("marshal granular outline: %w", err)
+			return fmt.Errorf("marshal granular outline: %w", err)
 		}
 		if err := uc.Granular.WriteGranularOutline(ctx, id, language, granularJSON); err != nil {
-			return Result{}, fmt.Errorf("write granular outline: %w", err)
+			return fmt.Errorf("write granular outline: %w", err)
 		}
 	}
-
 	outlineJSON, err := json.Marshal(gen.Coarse)
 	if err != nil {
-		return Result{}, fmt.Errorf("marshal outline: %w", err)
+		return fmt.Errorf("marshal outline: %w", err)
 	}
 	if err := uc.Catalog.SetVariantOutline(ctx, string(id), language, string(outlineJSON), gen.Description); err != nil {
-		return Result{}, fmt.Errorf("write outline: %w", err)
+		return fmt.Errorf("write outline: %w", err)
 	}
-	return Result{TrackId: string(id), Language: language, Outline: gen.Coarse, Description: gen.Description}, nil
+	return nil
 }
