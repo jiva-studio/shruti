@@ -1,9 +1,9 @@
 <template>
   <IonModal :is-open="open" class="track-sheet" @did-dismiss="onDismiss">
-    <IonButton class="close-button" fill="clear" :aria-label="t('app.close')" @click="onDismiss">
-      <IconX slot="icon-only" :size="16" />
-    </IonButton>
     <div ref="headerRef" class="sheet-header">
+      <IonButton class="close-button" fill="clear" :aria-label="t('app.close')" @click="onDismiss">
+        <IconX slot="icon-only" :size="16" />
+      </IonButton>
       <div class="sheet-heading">
         <h2 class="sheet-title">{{ title }}</h2>
         <p v-if="author" class="author">{{ author }}</p>
@@ -18,6 +18,7 @@
     </div>
     <IonContent ref="contentRef" :style="contentInsets">
       <div class="sheet-body">
+        <TopicChips :names="topicNames" />
         <button
           v-for="c in partOf"
           :key="c.id"
@@ -38,22 +39,30 @@
           </span>
           <IconChevronRight class="part-of-chevron" :size="18" />
         </button>
-        <TopicChips :names="topicNames" />
         <p v-if="description" class="description">{{ description }}</p>
-        <LectureOutline v-if="chapters.length" :chapters="chapters" />
+        <LectureOutline v-if="chapters.length" :chapters="chapters" granularity="minute" />
       </div>
       <SimilarTracksRow v-if="track" :track="track" />
     </IonContent>
 
     <IonFooter class="ion-no-border">
       <div ref="footerRef" class="sheet-actions">
-        <IonButton v-if="isLibraryItem" fill="clear" class="act remove-btn" @click="onRemove">
-          <IconTrash slot="start" :size="18" />
-          {{ t("library.remove") }}
+        <IonButton
+          v-if="isLibraryItem"
+          fill="clear"
+          class="act icon-act remove-btn"
+          :aria-label="t('library.remove')"
+          @click="onRemove"
+        >
+          <IconTrash slot="icon-only" :size="18" />
         </IonButton>
-        <IonButton fill="clear" class="act share-btn" @click="onShare">
-          <IconShare slot="start" :size="18" />
-          {{ t("search.actions.share") }}
+        <IonButton
+          fill="clear"
+          class="act icon-act share-btn"
+          :aria-label="t('search.actions.share')"
+          @click="onShare"
+        >
+          <IconShare slot="icon-only" :size="18" />
         </IonButton>
         <IonButton
           class="act add-btn"
@@ -294,7 +303,7 @@ function onDismiss(): void {
   left: 0;
   right: 0;
   z-index: 10;
-  padding: 14px 16px 28px;
+  padding: 14px 16px 12px;
   pointer-events: none;
   /* Opaque under the whole heading, fading only across the padding strip
      below it. A percentage stop would start the fade under the text itself and
@@ -302,8 +311,8 @@ function onDismiss(): void {
   background: linear-gradient(
     to bottom,
     rgba(var(--shruti-fade-bg-rgb), 1) 0,
-    rgba(var(--shruti-fade-bg-rgb), 1) calc(100% - 28px),
-    rgba(var(--shruti-fade-bg-rgb), 0.85) calc(100% - 14px),
+    rgba(var(--shruti-fade-bg-rgb), 1) calc(100% - 12px),
+    rgba(var(--shruti-fade-bg-rgb), 0.85) calc(100% - 6px),
     rgba(var(--shruti-fade-bg-rgb), 0) 100%
   );
 }
@@ -382,12 +391,12 @@ function onDismiss(): void {
   min-width: 0;
 }
 
+/* Inset from the header's own box, so the distance from the top and from the
+   side is the same number and not two boxes' paddings added together. */
 .close-button {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  /* Above the header, which became a positioned layer of its own and would
-     otherwise paint over this button — it comes first in the markup. */
+  top: 16px;
+  right: 8px;
   z-index: 11;
   width: 26px;
   height: 26px;
@@ -465,7 +474,7 @@ function onDismiss(): void {
    them, so the hard rule that used to cap the scroll is gone. */
 .sheet-actions {
   display: flex;
-  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
   padding: 28px 16px calc(10px + var(--ion-safe-area-bottom, 0px));
   background: linear-gradient(
@@ -494,6 +503,18 @@ function onDismiss(): void {
   --box-shadow: none;
 }
 
+/* The two secondary actions are squares on the left; the primary one takes
+   whatever is left of the row. */
+.icon-act {
+  flex: 0 0 auto;
+  width: 48px;
+}
+
+.add-btn {
+  flex: 1;
+  min-width: 0;
+}
+
 .act [slot="start"] {
   position: absolute;
   left: 9px;
@@ -505,7 +526,7 @@ function onDismiss(): void {
 .share-btn {
   position: relative;
   /* Soft, light secondary button (no heavy outline) — sits quieter than the
-     solid "add to playlist" primary action below it. */
+     solid "add to playlist" primary action beside it. */
   --background: var(--ion-color-step-100, rgba(0, 0, 0, 0.05));
   --background-hover: var(--ion-color-step-150, rgba(0, 0, 0, 0.08));
   --color: var(--ion-color-medium, #777);
