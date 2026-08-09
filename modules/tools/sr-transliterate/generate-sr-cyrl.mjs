@@ -32,6 +32,7 @@ const PROTECTED = [
   "PDF",
   "CDN",
   "SSE",
+  "VPN",
   "AI",
   "BG",
 ]

@@ -1,5 +1,5 @@
 export default {
-  downloadFailed: "Download non riuscito. Controlla la connessione a internet e riprova.",
+  downloadFailed: "Download non riuscito. Controlla la connessione a internet e la VPN.",
   filtersNotSaved: "Impossibile salvare il filtro. Verrà reimpostato al prossimo avvio.",
   downloadsCacheUnavailable:
     "Impossibile leggere l'indice dei download. I file in cache sono ancora sul dispositivo.",

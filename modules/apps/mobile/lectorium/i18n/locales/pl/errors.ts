@@ -1,6 +1,5 @@
 export default {
-  downloadFailed:
-    "Pobieranie nie powiodło się. Sprawdź połączenie z internetem i spróbuj ponownie.",
+  downloadFailed: "Nie udało się pobrać. Sprawdź połączenie z internetem i VPN.",
   filtersNotSaved:
     "Nie udało się zapisać filtra. Zostanie zresetowany przy następnym uruchomieniu.",
   downloadsCacheUnavailable:
