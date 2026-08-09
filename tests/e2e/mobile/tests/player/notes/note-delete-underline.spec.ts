@@ -20,8 +20,8 @@ test(
 
     await step(page, 6, 0, async () => {
       await gotoTab(page, "notes")
-      await expect(page.locator("ion-item.note").first()).toBeVisible({ timeout: 20_000 })
-      before = await page.locator("ion-item.note").count()
+      await expect(page.locator(".note[role=button]").first()).toBeVisible({ timeout: 20_000 })
+      before = await page.locator(".note[role=button]").count()
 
       // Open the transcript and create a note from a selection.
       await gotoTab(page, "home")
@@ -60,7 +60,7 @@ test(
       await expect(dialog).toBeHidden({ timeout: 10_000 })
       await gotoTab(page, "notes")
       await expect
-        .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
+        .poll(() => page.locator(".note[role=button]").count(), { timeout: 15_000 })
         .toBe(before)
     })
   }
