@@ -29,6 +29,46 @@ import { requireFixtures } from "./test.js"
 /* ---------------------- network interception ----------------------- */
 
 /**
+ * Loopback origin every mocked region points at. Nothing listens on it, so a
+ * call the suite forgot to mock dies instantly with ERR_CONNECTION_REFUSED
+ * instead of reaching a real backend. The port sits in lectorium's reserved
+ * 11xxx band and is deliberately unassigned (11097 = the e2e dev server,
+ * 11080/11081 = the local stack, 11099 = the screenshot pipeline).
+ */
+export const SINK_ORIGIN = "http://127.0.0.1:11098"
+
+/**
+ * The `regions` block the mocked `config.json` publishes.
+ *
+ * Without it `lectorium/services/startup.ts` bails on `if (!config.regions)
+ * return` and the app keeps its compiled-in `SERVERS` list — whose `global`
+ * region is the PRODUCTION origin. Auth, chat, profile, orchestrator and
+ * discovery then all resolved to prod, and every spec that reached the network
+ * minted a real anonymous account (829 `POST /auth/anonymous` in one full run).
+ *
+ * A single region is enough: `applyRemoteRegions` keeps the active server when
+ * its id survives the swap, so reusing `global` avoids a pointless region flip.
+ * The shape must satisfy `regionsRegistry.isValidRegion` — every field below is
+ * load-bearing, and the optional ones are supplied so nothing gets derived from
+ * a stale default.
+ */
+const SINK_REGIONS = [
+  {
+    id: "global",
+    name: "Global",
+    urlTemplate: `${SINK_ORIGIN}/{path}`,
+    shareAudioUrl: `${SINK_ORIGIN}/share/audio/excerpts`,
+    shareVideoUrl: `${SINK_ORIGIN}/share/video/reels`,
+    shareTranscriptUrl: `${SINK_ORIGIN}/share/transcripts`,
+    authBaseUrl: `${SINK_ORIGIN}/auth`,
+    chatBaseUrl: SINK_ORIGIN,
+    profileBaseUrl: SINK_ORIGIN,
+    orchestratorBaseUrl: SINK_ORIGIN,
+    discoveryBaseUrl: SINK_ORIGIN,
+  },
+]
+
+/**
  * Intercept the only calls Welcome needs to come up offline + deterministically:
  *  - **​/public/config.json        → a fake manifest pinned to our content.db.
  *  - **​/public/db/lectorium.*.db   → bytes from fixtures/content.db.
@@ -45,6 +85,9 @@ export async function interceptContent(page: Page): Promise<void> {
     // Kill the proactive scheduler so it can't drop a "Sadhu has a new message"
     // banner over the home screen mid-test.
     proactive: { master_enabled: false },
+    // Re-point every per-region service at the dead loopback origin, so nothing
+    // the suite misses can land on production.
+    regions: SINK_REGIONS,
   })
   await page.route("**/public/config.json", (route) => {
     route.fulfill({ status: 200, contentType: "application/json", body: fakeConfig })
