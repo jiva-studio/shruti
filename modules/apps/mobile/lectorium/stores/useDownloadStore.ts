@@ -293,11 +293,12 @@ export const useDownloadStore = defineStore("downloads", () => {
         // or cost nothing; from here on we'd be writing megabytes to disk,
         // so the user's storage limit gets a say. `hasRoomFor` counts
         // in-flight reservations too, so a draining queue can't overshoot
-        // the cap in the window before `usedBytes` catches up.
+        // the cap in the window before `usedBytes` catches up — except this
+        // track's own, which the drain may already have reserved for us.
         const quota = useDownloadQuotaStore()
         await quota.ensureMeasured()
         const sizeBytes = quota.sizeOf(filesize)
-        if (!quota.hasRoomFor(sizeBytes)) {
+        if (!quota.hasRoomFor(sizeBytes, trackId)) {
           if (fresh()) markDeferred(trackId)
           noticeBudgetFull()
           return null
