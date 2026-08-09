@@ -119,6 +119,8 @@ func TestRestylePassesTheCurrentCover(t *testing.T) {
 	}
 }
 
+// Restyle on an entity that has no art yet must still produce a cover rather
+// than fail — that is the case for the collections missing one entirely.
 func TestRestyleWithoutAnExistingCoverStillDraws(t *testing.T) {
 	uc, img, store, _ := newUseCase(t, nil)
 	key, err := uc.Generate(context.Background(), "pack_2", "ru", "", Restyle())
