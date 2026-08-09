@@ -311,3 +311,161 @@ describe("pushLocal — owner scoping", () => {
     expect(gateway.pushRequests[0]!.changes.map((c) => c.doc_id)).toEqual(["note-1", "note-2"])
   })
 })
+
+describe("pushLocal — identity changing mid-drain", () => {
+  const note = (n: number) => ({
+    collection: "notes",
+    docId: `note-${n}`,
+    op: "upsert" as const,
+    data: { id: `note-${n}`, text: `n${n}` },
+    hlc: hlc(1000 + n),
+    baseHlc: null,
+  })
+
+  it("stamps a conflict re-merge with the drain's owner, not whoever is here now", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+
+    outbox.owner = "user-1"
+    outbox.seed([note(1)])
+    apply.setServerHlc("notes", "note-1", hlc(500))
+
+    // The push round-trips; the account is deleted while it is in flight, so
+    // by the time the re-merge is journaled the device belongs to anon-2.
+    gateway.pushHandler = (req, i): PushResponse => {
+      outbox.owner = "anon-2"
+      return i === 0
+        ? {
+            applied: [],
+            conflicts: [
+              {
+                collection: "notes",
+                doc_id: "note-1",
+                master: {
+                  collection: "notes",
+                  doc_id: "note-1",
+                  op: "upsert",
+                  data: { id: "note-1", text: "server" },
+                  hlc: hlc(2000),
+                },
+              },
+            ],
+          }
+        : {
+            applied: req.changes.map((c) => ({ collection: c.collection, doc_id: c.doc_id })),
+            conflicts: [],
+          }
+    }
+
+    await pushLocal({ ...deps(gateway, outbox, apply, state), ownerId: "user-1" })
+
+    // The merged document is still user-1's — it must never become anon-2's.
+    const remerged = outbox.rows.filter((r) => r.hlc !== hlc(1001))
+    expect(remerged).toHaveLength(1)
+    expect(remerged[0]!.owner).toBe("user-1")
+  })
+
+  it("stops draining when the live identity moves mid-cycle", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+
+    outbox.owner = "user-1"
+    outbox.seed([note(1)])
+    let live = "user-1"
+    // Round 1 conflicts, which would normally drive a second round; the
+    // anonymous bootstrap lands in between.
+    gateway.pushHandler = (req, i): PushResponse => {
+      if (i === 0) {
+        live = "anon-2"
+        return {
+          applied: [],
+          conflicts: [
+            {
+              collection: "notes",
+              doc_id: "note-1",
+              master: {
+                collection: "notes",
+                doc_id: "note-1",
+                op: "upsert",
+                data: { id: "note-1", text: "server" },
+                hlc: hlc(2000),
+              },
+            },
+          ],
+        }
+      }
+      return {
+        applied: req.changes.map((c) => ({ collection: c.collection, doc_id: c.doc_id })),
+        conflicts: [],
+      }
+    }
+
+    await pushLocal({
+      ...deps(gateway, outbox, apply, state),
+      ownerId: "user-1",
+      getLiveOwnerId: () => live,
+    })
+
+    // One POST only: the re-merge stays journaled for the next cycle rather
+    // than going out under anon-2's bearer token.
+    expect(gateway.pushRequests).toHaveLength(1)
+    expect(outbox.rows.some((r) => !r.sent && r.owner === "user-1")).toBe(true)
+  })
+
+  it("does not start a drain that no longer belongs to the live identity", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+
+    outbox.owner = "user-1"
+    outbox.seed([note(1)])
+
+    const result = await pushLocal({
+      ...deps(gateway, outbox, apply, state),
+      ownerId: "user-1",
+      getLiveOwnerId: () => "anon-2",
+    })
+
+    expect(result.pushed).toBe(0)
+    expect(gateway.pushRequests).toHaveLength(0)
+  })
+})
+
+describe("pushLocal — watermark write-back", () => {
+  it("keeps a watermark raised during the push instead of the pre-network value", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+
+    outbox.seed([
+      {
+        collection: "notes",
+        docId: "note-1",
+        op: "upsert",
+        data: { id: "note-1", text: "hi" },
+        hlc: hlc(1000),
+        baseHlc: null,
+      },
+    ])
+    // The owner guard stamps a tail watermark while the POST is in flight.
+    gateway.pushHandler = (req): PushResponse => {
+      state.pushedOutboxId = 99
+      return {
+        applied: req.changes.map((c) => ({ collection: c.collection, doc_id: c.doc_id })),
+        conflicts: [],
+      }
+    }
+
+    await pushLocal(deps(gateway, outbox, apply, state))
+
+    // Writing back the round's own maxSentId (1) would rewind past 99 and
+    // un-retire every row the guard just retired.
+    expect(state.pushedOutboxId).toBe(99)
+  })
+})
