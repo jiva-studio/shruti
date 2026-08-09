@@ -82,20 +82,35 @@ export function useNotesController(): NotesControllerReturn {
    * a one-shot full load — no per-row fetch needed.
    */
   const tracksById = ref<ReadonlyMap<TrackId, Track>>(new Map())
+  /**
+   * Track ids the current `tracksById` was built for, including ids the
+   * content DB had no row for. Filtering only ever narrows the id set, so
+   * this lets a query change skip the content-DB roundtrip entirely.
+   */
+  let cachedTrackIds: ReadonlySet<TrackId> = new Set()
 
   const query = computed(() => store.query)
   const isEmpty = computed(() => !store.isLoading && store.all.length === 0)
 
-  async function refreshTracks(): Promise<void> {
+  /**
+   * Loads the Track entities behind the filtered notes. Pass `force` when
+   * the underlying data may have moved (view entry, after a refresh); the
+   * filter-driven path relies on the id cache above to stay quiet.
+   */
+  async function refreshTracks(force = false): Promise<void> {
     const ids = Array.from(new Set(store.filtered.map((n) => n.trackId as TrackId)))
     if (ids.length === 0) {
       tracksById.value = new Map()
+      cachedTrackIds = new Set()
       return
     }
+    if (!force && ids.every((id) => cachedTrackIds.has(id))) return
     try {
       tracksById.value = await app.repositories().tracks.getByIds(ids)
+      cachedTrackIds = new Set(ids)
     } catch {
       tracksById.value = new Map()
+      cachedTrackIds = new Set()
     }
   }
 
@@ -461,7 +476,7 @@ export function useNotesController(): NotesControllerReturn {
     // paint already has them.
     await dictionaries.ensureLoaded()
     await store.refresh()
-    await refreshTracks()
+    await refreshTracks(true)
   })
 
   // Ionic Tabs не размонтируют вкладку — `onMounted` стреляет один раз.
@@ -470,7 +485,7 @@ export function useNotesController(): NotesControllerReturn {
   // store.refresh() идемпотентна, словари уже закешированы.
   onIonViewWillEnter(async () => {
     await store.refresh()
-    await refreshTracks()
+    await refreshTracks(true)
   })
 
   watch(
