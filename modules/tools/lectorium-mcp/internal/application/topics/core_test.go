@@ -138,3 +138,18 @@ func TestMergeMaxUnions(t *testing.T) {
 		t.Fatalf("merge-max wrong: %v", merged)
 	}
 }
+
+func TestAssignTopKFallsBackToDefault(t *testing.T) {
+	if got := (AssignUseCase{}).topK(); got != defaultTopK {
+		t.Fatalf("unset TopK should fall back to %d, got %d", defaultTopK, got)
+	}
+	if got := (AssignUseCase{}).floor(); got != defaultFloor {
+		t.Fatalf("unset Floor should fall back to %v, got %v", defaultFloor, got)
+	}
+	if got := (AssignUseCase{TopK: 12, Floor: 0.05}).topK(); got != 12 {
+		t.Fatalf("configured TopK ignored, got %d", got)
+	}
+	if got := (AssignUseCase{TopK: 12, Floor: 0.05}).floor(); got != 0.05 {
+		t.Fatalf("configured Floor ignored, got %v", got)
+	}
+}
