@@ -15,7 +15,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import TrackTile from "@lectorium/components/TrackTile.vue"
-import type { DiscoveryHit } from "@lib/contracts"
+import { trackName, type DiscoveryHit } from "@lib/contracts"
 import { useWebLectureAdd } from "../composables/useWebLectureAdd.js"
 
 /**
@@ -34,7 +34,7 @@ const props = defineProps<{ hit: DiscoveryHit }>()
 
 const add = useWebLectureAdd(() => props.hit)
 
-const title = computed(() => props.hit.title || props.hit.media_url)
+const title = computed(() => trackName(props.hit))
 
 const subtitle = computed(() =>
   [props.hit.author, props.hit.recorded_on?.slice(0, 10)].filter(Boolean).join(" · ")

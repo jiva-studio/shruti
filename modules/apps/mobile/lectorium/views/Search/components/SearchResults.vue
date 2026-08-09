@@ -41,7 +41,7 @@
 
         <div v-if="web.hits.value.length" class="carousel">
           <div v-for="hit in web.hits.value" :key="hit.item_id" class="carousel-cell">
-            <WebLectureCard :hit="hit" />
+            <WebTrackCard :hit="hit" />
           </div>
         </div>
 
@@ -117,7 +117,7 @@ import type { SearchControllerReturn } from "../SearchView.controller.js"
 import type { UseWebSearchReturn } from "../composables/useWebSearch.js"
 import type { GroupingHit, UseGroupingSearchReturn } from "../composables/useGroupingSearch.js"
 import ActiveFilterChips from "./ActiveFilterChips.vue"
-import WebLectureCard from "./WebLectureCard.vue"
+import WebTrackCard from "./WebTrackCard.vue"
 import LibraryItemCard from "@lectorium/views/Library/components/LibraryItemCard.vue"
 import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
 import { useOpenLibraryItem } from "@lectorium/composables/useOpenLibraryItem.js"

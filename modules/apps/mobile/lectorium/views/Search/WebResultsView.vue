@@ -26,7 +26,7 @@
         <p v-for="(m, i) in web.messages.value" :key="i" class="note">{{ m.text }}</p>
 
         <div v-if="web.hits.value.length" class="grid">
-          <WebLectureCard v-for="hit in web.hits.value" :key="hit.item_id" :hit="hit" />
+          <WebTrackCard v-for="hit in web.hits.value" :key="hit.item_id" :hit="hit" />
         </div>
 
         <div v-else class="state state--muted">{{ $t("search.web.empty") }}</div>
@@ -64,7 +64,7 @@ import { IconArrowLeft } from "@tabler/icons-vue"
 import { FlatHeader } from "@ui/primitives/index.js"
 import { useSearchFiltersBinding } from "./composables/useSearchFiltersBinding.js"
 import { useWebSearch } from "./composables/useWebSearch.js"
-import WebLectureCard from "./components/WebLectureCard.vue"
+import WebTrackCard from "./components/WebTrackCard.vue"
 
 /**
  * Everything the archives turned up for one search, as a page.
