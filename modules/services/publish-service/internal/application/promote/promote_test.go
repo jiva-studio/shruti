@@ -3,6 +3,8 @@ package promote
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jiva-studio/lectorium/publish/internal/pending"
@@ -28,17 +30,27 @@ func (f *fakeReconciler) PromoteMatching(_ context.Context, ids []string, topic 
 	return f.promoted, nil
 }
 
-type fakeCatalog struct{ ids []string }
+type fakeCatalog struct {
+	ids []string
+	err error
+}
 
-func (f *fakeCatalog) PublishedTrackIDs(context.Context) ([]string, error) { return f.ids, nil }
+func (f *fakeCatalog) PublishedTrackIDs(context.Context) ([]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.ids, nil
+}
 
 type fakeUploader struct {
 	key   string
 	bytes []byte
+	puts  int
 }
 
 func (f *fakeUploader) Put(_ context.Context, key string, body []byte, _ string) error {
 	f.key, f.bytes = key, body
+	f.puts++
 	return nil
 }
 
@@ -74,5 +86,47 @@ func TestRunOnce(t *testing.T) {
 	}
 	if up.key != "public/db/pending.db" || len(up.bytes) == 0 {
 		t.Errorf("pending.db not uploaded: key=%q bytes=%d", up.key, len(up.bytes))
+	}
+}
+
+// A cycle that promotes nothing still reaches rebuildPending and uploads the
+// review artifact. This is the shape every production tick has had: the catalog
+// read used to fail first, so pending.db was never published at all.
+func TestRunOnceRebuildsPendingWithoutPromotions(t *testing.T) {
+	rec := &fakeReconciler{}
+	up := &fakeUploader{}
+	rows := func(context.Context) ([]pending.Row, error) {
+		return []pending.Row{{TrackID: "t9", OwnerID: "o9"}}, nil
+	}
+	p := New(Deps{
+		Repo: rec, Catalog: &fakeCatalog{ids: []string{"t1"}}, Blob: up, Rows: rows,
+		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
+	})
+	if err := p.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if up.puts != 1 || up.key != "public/db/pending.db" || len(up.bytes) == 0 {
+		t.Errorf("pending.db not uploaded: puts=%d key=%q bytes=%d", up.puts, up.key, len(up.bytes))
+	}
+}
+
+// A failing catalog read aborts the cycle before rebuildPending — the exact
+// path that kept pending.db missing while the catalog key did not exist.
+func TestRunOnceCatalogFailureSkipsRebuild(t *testing.T) {
+	up := &fakeUploader{}
+	rows := func(context.Context) ([]pending.Row, error) {
+		return nil, errors.New("rows must not be queried")
+	}
+	p := New(Deps{
+		Repo: &fakeReconciler{}, Catalog: &fakeCatalog{err: errors.New("status 404")},
+		Blob: up, Rows: rows,
+		PublishedStream: "track.published", PendingKey: "public/db/pending.db",
+	})
+	err := p.RunOnce(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "read catalog") {
+		t.Fatalf("err = %v, want a read-catalog failure", err)
+	}
+	if up.puts != 0 {
+		t.Errorf("pending.db uploaded despite a catalog failure (puts=%d)", up.puts)
 	}
 }
