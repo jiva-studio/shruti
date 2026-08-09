@@ -14,12 +14,12 @@ const t = useT(lang)
 ---
 <BaseLayout
   lang={lang}
-  path="/app/topics"
+  path="/app/collections"
   fullscreen
-  title={`${t('topics.title')} — ${t('hero.title')}`}
-  description={t('topics.lead')}
+  title={`${t('collections.title')} — ${t('hero.title')}`}
+  description={t('collections.lead')}
 >
   <WebApp client:load lang={lang}>
-    <BrowseCatalog slot="left" lang={lang} kind="topics" page={1} />
+    <BrowseCatalog slot="left" lang={lang} kind="collections" page={1} />
   </WebApp>
 </BaseLayout>

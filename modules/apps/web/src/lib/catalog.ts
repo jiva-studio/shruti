@@ -11,7 +11,8 @@ import type {
 } from '@lib/catalog/types.js'
 
 import { contentLangFor } from '../i18n/locales'
-export { pickName } from './lectureDisplay'
+import { pickName } from './lectureDisplay'
+export { pickName }
 
 export const lectures = lecturesIndex as unknown as LectureIndexEntry[]
 export const topics = topicsIndex as unknown as TopicIndexEntry[]
@@ -49,6 +50,37 @@ export function topicForId(id: string): TopicIndexEntry | undefined {
 
 export function collectionForId(id: string): CollectionIndexEntry | undefined {
   return collectionsById[id]
+}
+
+export type BrowseKind = 'collections' | 'topics'
+
+export interface BrowseItem<E> {
+  entry: E
+  slug: string
+  name: string
+  count: number
+  cover: string | null
+}
+
+/** The full, localized, alphabetically-sorted list backing a browse index
+ *  page — collections or topics that have at least one lecture in `lang`'s
+ *  content language. Single source for both the paginated grids and their
+ *  getStaticPaths page counts, so the two never drift. */
+export function browseItems(
+  kind: BrowseKind,
+  lang: string,
+): BrowseItem<CollectionIndexEntry | TopicIndexEntry>[] {
+  const src: (CollectionIndexEntry | TopicIndexEntry)[] = kind === 'collections' ? collections : topics
+  return src
+    .map((entry) => ({
+      entry,
+      slug: entry.slug,
+      name: pickName(entry.names, lang),
+      count: lectureCountForLang(entry.trackIds, lang),
+      cover: entry.cover ?? null,
+    }))
+    .filter((x) => x.count > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, contentLangFor(lang)))
 }
 
 export function shortSlug(slug: string): string {

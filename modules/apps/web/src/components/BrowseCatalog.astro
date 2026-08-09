@@ -1,0 +1,66 @@
+---
+import { browseItems, type BrowseKind } from '../lib/catalog'
+import { pageSlice } from '../lib/paginate'
+import { useT, type Lang } from '../i18n/ui'
+import { contentLangFor } from '../i18n/locales'
+import type { CollectionIndexEntry, TopicIndexEntry } from '@lib/catalog/types.js'
+import CollectionCard from './CollectionCard.astro'
+import TopicCard from './TopicCard.astro'
+import Pagination from './Pagination.astro'
+import BrowseSearch from './vue/BrowseSearch.vue'
+
+interface Props {
+  lang: Lang
+  kind: BrowseKind
+  page: number
+}
+const { lang, kind, page } = Astro.props
+const t = useT(lang)
+
+const all = browseItems(kind, lang)
+const { items, page: cur, totalPages } = pageSlice(all, page)
+
+const title = kind === 'collections' ? t('collections.title') : t('topics.title')
+const lead = kind === 'collections' ? t('collections.lead') : t('topics.lead')
+const base = `/${lang}/app/${kind}`
+const detailBase = `/${contentLangFor(lang)}/app/${kind === 'collections' ? 'library' : 'topics'}/`
+
+// Full localized list for the client search island — light (name + count +
+// cover), so typing filters across every page, not just the current slice.
+const searchList = all.map((x) => ({ slug: x.slug, name: x.name, count: x.count, cover: x.cover }))
+
+const gridClass =
+  kind === 'collections'
+    ? 'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3'
+    : 'grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4'
+---
+<div class="mx-auto max-w-6xl px-5 py-12">
+  <header class="max-w-2xl">
+    <h1 class="font-serif text-3xl font-bold text-ink sm:text-4xl">{title}</h1>
+    <p class="mt-3 text-medium">{lead}</p>
+  </header>
+
+  <div class="mt-8">
+    <BrowseSearch
+      client:load
+      items={searchList}
+      hrefBase={detailBase}
+      lecturesWord={t('common.lecturesN')}
+      placeholder={t('browse.searchPlaceholder')}
+      noResults={t('browse.noResults')}
+    >
+      <div class={`mt-8 ${gridClass}`}>
+        {kind === 'collections'
+          ? items.map((x) => <CollectionCard collection={x.entry as CollectionIndexEntry} lang={lang} />)
+          : items.map((x) => <TopicCard topic={x.entry as TopicIndexEntry} lang={lang} count={x.count} />)}
+      </div>
+      <Pagination
+        page={cur}
+        totalPages={totalPages}
+        base={base}
+        prevLabel={t('pagination.prev')}
+        nextLabel={t('pagination.next')}
+      />
+    </BrowseSearch>
+  </div>
+</div>
