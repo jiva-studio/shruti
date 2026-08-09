@@ -176,7 +176,12 @@ export function useSyncEngine(): void {
         await unitOfWork.run(async () => {
           await syncState.setPullCursor(0)
           await syncState.setAckedSeq(0)
-          if (outboxTail !== null) await syncState.setPushedOutboxId(outboxTail)
+          if (outboxTail === null) return
+          // Clamp: `setPushedOutboxId` is a bare column write, and a tail
+          // BELOW the current mark (a pruned or restored journal) would rewind
+          // it and un-retire the previous account's unowned rows.
+          const prev = await syncState.getPushedOutboxId()
+          if (outboxTail > prev) await syncState.setPushedOutboxId(outboxTail)
         })
       }
       await app.preferences.set(CURSOR_OWNER_KEY, userId).catch(() => undefined)
@@ -225,6 +230,7 @@ export function useSyncEngine(): void {
         outbox: syncOutbox,
         syncState,
         unitOfWork,
+        ownerId: userId,
       })
       await app.preferences.set(markerKey, "1").catch(() => undefined)
       backfilledUserId = userId
@@ -259,6 +265,10 @@ export function useSyncEngine(): void {
         // Read after the guard: it may have just switched identities, and the
         // drain must belong to the account that owns the device now.
         ownerId: auth.userId,
+        // …and re-read live between rounds: a cycle outlives the identity it
+        // started under, while the transport authenticates with whatever token
+        // is current.
+        getLiveOwnerId: () => auth.userId,
         refreshStores,
       })
     } catch (err) {

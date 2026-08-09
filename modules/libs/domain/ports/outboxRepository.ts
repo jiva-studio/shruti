@@ -36,6 +36,14 @@ export interface NewOutboxEntry {
   readonly data: unknown | null
   readonly hlc: string
   readonly baseHlc: string | null
+  /**
+   * The account to attribute the row to. Set it whenever the row belongs to a
+   * specific identity rather than to "now" — a conflict re-merge is the
+   * previous push's document and must stay with the account that wrote it,
+   * even if the device changed hands during the round-trip. Omitted ⇒ the
+   * adapter stamps whoever owns the device at insert time.
+   */
+  readonly ownerId?: string | null
 }
 
 /**

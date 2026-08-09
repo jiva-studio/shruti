@@ -72,7 +72,9 @@ export function createSqlOutboxRepository(
           entry.hlc,
           entry.baseHlc,
           Date.now(),
-          getOwnerId?.() ?? null,
+          // An explicit owner wins: the caller knows whose row this is, the
+          // provider only knows who is here now.
+          entry.ownerId !== undefined ? entry.ownerId : (getOwnerId?.() ?? null),
         ]
       )
     },

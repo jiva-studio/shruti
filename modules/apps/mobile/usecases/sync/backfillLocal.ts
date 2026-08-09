@@ -13,6 +13,12 @@ export interface BackfillLocalDeps {
   readonly syncState: ISyncStateRepository
   /** Reentrant unit-of-work — enumeration + enqueue run in one transaction. */
   readonly unitOfWork: IUnitOfWork
+  /**
+   * The account whose pre-sync rows these are. Stamped explicitly rather than
+   * left to the adapter's live provider, so an identity flip mid-pass cannot
+   * hand this account's history to the next one (#1497).
+   */
+  readonly ownerId?: string | null
 }
 
 export interface BackfillLocalResult {
@@ -68,6 +74,7 @@ export async function backfillLocal(deps: BackfillLocalDeps): Promise<BackfillLo
         // "" ⇒ new doc. push recomputes the real base from `sync_doc_hlc`
         // (absent here), so this simply records "no server ancestor yet".
         baseHlc: "",
+        ownerId: deps.ownerId ?? null,
       })
       collections.add(c.collection)
     }

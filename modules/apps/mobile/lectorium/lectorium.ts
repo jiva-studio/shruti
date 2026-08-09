@@ -30,6 +30,7 @@ import type {
   IDiscoveryClient,
 } from "@lib/contracts"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
+import { createOwnerIdProvider } from "./syncOwner.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useSyncChatsEnabled } from "@lectorium/composables/useSyncChats.js"
 import { useStoragePublicUrl } from "@kit/infra"
@@ -257,6 +258,10 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
   const databases: Lectorium["databases"] = { content: null, user: null }
   let cachedRepos: AppRepositories | null = null
 
+  // Owner of every journaled row. Lives out here, not inside `repositories()`,
+  // so the last-seen identity survives a repository rebuild.
+  const getOwnerId = createOwnerIdProvider(() => seed.auth.getSession()?.userId ?? null)
+
   // `useStoragePublicUrl` is the canonical adapter — a thin
   // `{path}`-substitution function. We feed it a getter closure so
   // the resolver always sees the latest CDN template after
@@ -387,10 +392,12 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
         getActiveLanguage: () => appLanguage.value,
         // Turns on the sync-journal decorator + the engine repositories.
         getDeviceId: seed.getDeviceId,
-        // Read straight off the auth port, not the store: the port is the
-        // source the store mirrors, so a row journaled during an account
-        // switch is stamped with the identity that is actually in effect.
-        getOwnerId: () => seed.auth.getSession()?.userId ?? null,
+        // Read off the auth port, not the store: the port is the source the
+        // store mirrors, so a row journaled during an account switch is
+        // stamped with the identity actually in effect. Sticky across the
+        // session-less window `signOut` / `deleteAccount` open — see
+        // createOwnerIdProvider.
+        getOwnerId,
         isChatSyncEnabled: () => syncChatsEnabled.value,
       })
       return cachedRepos
