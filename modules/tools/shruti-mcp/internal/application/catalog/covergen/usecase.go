@@ -45,13 +45,28 @@ type UseCase struct {
 // Enabled reports whether cover generation is wired (API key + uploader present).
 func (uc UseCase) Enabled() bool { return uc.Images != nil && uc.Uploader != nil }
 
+// Option tunes one Generate call.
+type Option func(*options)
+
+type options struct{ restyle bool }
+
+// Restyle makes the model redraw the entity's current cover instead of
+// inventing a subject: the existing image goes in with the prompt, so what it
+// depicts survives while the palette and the resolution become the house
+// style's. A no-op when the entity has no cover yet.
+func Restyle() Option { return func(o *options) { o.restyle = true } }
+
 // Generate produces and stores a cover for the entity. `language` selects which
 // locale's name/description seed the prompt (caller's Repo owns the fallback);
 // `extra` is an optional caller-supplied prompt fragment. Returns the stored S3
 // key.
-func (uc UseCase) Generate(ctx context.Context, id, language, extra string) (string, error) {
+func (uc UseCase) Generate(ctx context.Context, id, language, extra string, opts ...Option) (string, error) {
 	if !uc.Enabled() {
 		return "", fmt.Errorf("image generation is not configured (set images.api_key)")
+	}
+	var o options
+	for _, fn := range opts {
+		fn(&o)
 	}
 	s, ok, err := uc.Repo.CoverSubject(ctx, id, language)
 	if err != nil {
@@ -61,8 +76,23 @@ func (uc UseCase) Generate(ctx context.Context, id, language, extra string) (str
 		return "", fmt.Errorf("%s/%s not found", uc.Prefix, id)
 	}
 
+	var refs []imagegen.Reference
+	if o.restyle {
+		key := fmt.Sprintf("%s/%s/cover.jpg", uc.Prefix, id)
+		body, found, err := uc.Uploader.Get(ctx, key)
+		if err != nil {
+			return "", fmt.Errorf("read current cover %s: %w", key, err)
+		}
+		if found {
+			refs = append(refs, imagegen.Reference{Data: body, ContentType: "image/jpeg"})
+		}
+	}
+
 	prompt := buildPrompt(s.Name, s.Desc, extra, uc.Style)
-	raw, _, err := uc.Images.Generate(ctx, prompt)
+	if len(refs) > 0 {
+		prompt = restylePreamble + " " + prompt
+	}
+	raw, _, err := uc.Images.Generate(ctx, prompt, refs...)
 	if err != nil {
 		return "", err
 	}
@@ -80,6 +110,13 @@ func (uc UseCase) Generate(ctx context.Context, id, language, extra string) (str
 	}
 	return key, nil
 }
+
+// restylePreamble tells the model the attached image is the subject to repaint,
+// not a sample of the wanted style — without it a reference is as likely to be
+// copied as reinterpreted.
+const restylePreamble = "Repaint the attached image in the style described below. " +
+	"Keep its subject, composition and what it depicts; change only the rendering, " +
+	"palette and finish. Output a single square image at full resolution."
 
 func buildPrompt(name, desc, extra, style string) string {
 	parts := make([]string, 0, 4)

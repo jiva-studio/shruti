@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/covergen"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 )
 
@@ -31,7 +32,7 @@ type TopicCoverLister interface {
 // satisfies this (kept as an interface so the batch is unit-testable).
 type CoverGenerator interface {
 	Enabled() bool
-	Generate(ctx context.Context, id, language, extra string) (string, error)
+	Generate(ctx context.Context, id, language, extra string, opts ...covergen.Option) (string, error)
 }
 
 // CoverBuildUseCase generates covers for every topic as one batch: list topics,

@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/imagegen"
 )
 
 type Config struct {
@@ -41,15 +43,28 @@ func New(cfg Config) (*Client, error) {
 	return &Client{cfg: cfg, http: &http.Client{Timeout: 120 * time.Second}}, nil
 }
 
-func (c *Client) Generate(ctx context.Context, prompt string) ([]byte, string, error) {
+func (c *Client) Generate(ctx context.Context, prompt string, refs ...imagegen.Reference) ([]byte, string, error) {
+	content := []any{map[string]any{"type": "text", "text": prompt}}
+	for _, r := range refs {
+		if len(r.Data) == 0 {
+			continue
+		}
+		ct := r.ContentType
+		if ct == "" {
+			ct = "image/jpeg"
+		}
+		content = append(content, map[string]any{
+			"type": "image_url",
+			"image_url": map[string]any{
+				"url": "data:" + ct + ";base64," + base64.StdEncoding.EncodeToString(r.Data),
+			},
+		})
+	}
 	reqBody, _ := json.Marshal(map[string]any{
 		"model":      c.cfg.Model,
 		"modalities": []string{"image", "text"},
 		"messages": []any{
-			map[string]any{
-				"role":    "user",
-				"content": []any{map[string]any{"type": "text", "text": prompt}},
-			},
+			map[string]any{"role": "user", "content": content},
 		},
 	})
 
