@@ -144,10 +144,18 @@ export async function downloadMedia(
       // the next candidate would re-download the very bytes the user just
       // asked us to stop. Give up on the whole attempt instead.
       if (isCancellation(e)) {
+        // Drop the row we claimed rather than demoting it to "failed": the
+        // cancel usually comes from a remove that deletes the track's rows
+        // anyway, and an upsert racing behind that delete would resurrect
+        // it as litter. Deleting also releases the "downloading" claim so a
+        // later tap can start over. Re-read first: if the row is already
+        // gone (or no longer ours) there is nothing to release, and we must
+        // not touch the OTHER kind's row.
         try {
-          await deps.mediaItems.upsert(input.trackId, "failed", null, kind)
+          const claimed = await deps.mediaItems.getByTrack(input.trackId, kind)
+          if (claimed?.state === "downloading") await deps.mediaItems.deleteById(claimed.id)
         } catch {
-          /* swallow — the row is claimed "downloading"; best-effort release */
+          /* swallow — best-effort release of the claimed row */
         }
         return err("cancelled")
       }
