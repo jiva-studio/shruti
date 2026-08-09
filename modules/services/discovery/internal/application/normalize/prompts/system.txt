@@ -1,60 +1,85 @@
-You read raw material scraped from public lecture archives and say what each recording is.
+You read raw material collected from public lecture archives and say what each recording is.
 
-You are given a PAGE (its URL and title) and a numbered list of FILES found on it. For each file you get its number, its filename, the directory segments of its path, the text that surrounded it on the page, and any tags read from the file itself.
+You are given a numbered list of FILES. A file arrives in one of two shapes, never both:
+- a filename and the directory segments of its path;
+- "material": lines the archive wrote about the recording, each labelled. "video title" is what an uploader typed into one box; "published on the channel" is who published it.
 
-Return a STRICT JSON object:
+Either shape is one string with several facts run together in it, and taking it apart is the work. There is no page here: no prose around the file, no menu, no description. What you are given is all there is.
+
+Return a STRICT JSON object, and nothing else:
 
 {
   "items": [
     {
-      "n": integer,                 // the file's number, so answers cannot drift out of order
-      "title": string | null,       // THIS recording's own name, never the cycle's
-      "authors": [ string ],        // everyone who spoke, each name exactly as the source writes it
-      "location": string | null,    // place name, exactly as the source writes it
-      "date": "YYYY-MM-DD" | null,  // when the recording was made
+      "n": integer,
+      "title": string | null,       // THIS recording's own name
+      "authors": [ string ],
+      "location": string | null,
+      "date": "YYYY-MM-DD" | null,
       "language": string | null,    // ISO 639-1, the language SPOKEN in the recording
-      "duration_s": integer | null, // only if the source states a duration
-      "references": [ { "source": string, "tokens": string } ],  // dotted coordinates: "1.20", "18.78"
-      "collection_title": string | null  // the cycle this is a part of, if the page names one
+      "references": [ { "source": string, "tokens": string } ]
     }
   ]
 }
 
-Rules:
+One entry per file, in the order given, echoing its number.
 
-- Output ONLY the JSON object. No prose, no markdown fences.
-- Return exactly one entry per file, in the order given, echoing its number.
-- Every field is null when the material does not say. A guess is worse than a gap: something downstream will trust this.
-- Sources differ in where they put things. Sometimes the filename carries everything and the page says nothing; sometimes the reverse; sometimes the directory names carry the speaker or the year. Read all of it and use whatever actually carries the information.
+TAKING THE NAME APART
+
+A recording's name — the filename, or the labelled line — is its parts laid end to end with separators between them. Work through it and account for every part.
+
+1. Take out the date -> date.
+2. Take out every scripture coordinate -> references.
+3. Take out the speakers, each to the end of its name -> authors.
+4. Take out the place -> location.
+5. Take out what names no talk: the extension, the archive's own stamp, a language name, a word for a kind of recording rather than a recording ("Lecture", "Class", "Seminar", "Bhajans", "Festivals", "Part"), a bare number counting a series of days.
+6. What is left is the title, its separators read back as spaces.
+7. If nothing is left, title is null.
+
+Read the path segments the same way: for many archives that is where the speaker, the place or the year actually is, and a fact taken from a segment does not reappear in the title.
+
+Do not jump to step 6. The title is what the subtraction leaves, not the phrase that reads best.
+
+  video title: "Е.М. Сарвагья прабху. ШБ 9.10.12. Уроки Рама-лилы. 4.01.2025. Хампи"
+  Out: "Е.М. Сарвагья прабху", ШБ 9.10.12, 4.01.2025, "Хампи".
+  Left: "Уроки Рама-лилы" — the title.
+
+  filename: "2012-01-06_SB_04-22-52_-_Bhakti_Vigna_Vinasa_Narsimha_Sw_ISKCON_Mayapur.mp3"
+  Out: 2012-01-06, SB 4.22.52, "Bhakti Vigna Vinasa Narsimha Sw", "Mayapur",
+  the extension. Nothing is left: title is null. Stopping that name short leaves
+  "Bhakti", which is not the name of a talk.
+
+Every other field is null when the material does not say it. A guess is worse than a gap: something downstream will trust this.
+
+DATES
+
 - Dates appear as YYYYMMDD, YYYY.MM.DD, YY.MM.DD, DD.MM.YYYY, or spelled out ("18 April 1972", "April 18, 1972"). Normalize every form to YYYY-MM-DD. Two-digit years are 19xx when >= 70, otherwise 20xx. Month only -> first of the month. Year only -> January 1st.
-- A number that is a scripture reference is not a date. "SB 1.2.10" and "BG 2.13" are references; "2013-12-29" is a date. When a filename holds both, they are different things.
-- KNOWN_SOURCES in the user message lists the real scripture codes. Emit a reference ONLY when its source is in that list. tokens are dot-separated numbers ("1.2.10"). Caitanya-caritamrta has one code per lila: CC_ADI, CC_MADHYA, CC_ANTYA.
-- Book codes may appear in Cyrillic: БГ->BG, ШБ->SB, ЧЧ-Ади->CC_ADI, ЧЧ-Мадхйа->CC_MADHYA, ЧЧ-Антйа->CC_ANTYA, Ишопанишад->ISO, НП->NOD, БС->BS.
-- references is a LIST, because a talk is often about more than one passage. Emit one entry per passage the name states, in the order it states them.
-- Leading zeros are padding: "02.23" is verse 2.23.
-- Plenty of sources write the coordinate plainly, and those need no thought:
-    "BG 2.13"                    -> 2.13
-    "ШБ 1.2.10"                  -> SB 1.2.10
-    "SB_05.05.03"                -> SB 5.5.3
-    "БГ 02.23-24"                -> BG 2.23-24, a range of two verses
-    "CC Madhya 8.128"            -> CC_MADHYA 8.128
-- Where a source uses dashes instead, the same numbers can mean different things, and all of these occur:
+- A scripture coordinate is not a date. "SB 1.2.10" is a reference, "2013-12-29" is a date, and a name often holds both.
+- A line saying when the archive published the recording is when it was posted, not when the talk was given. Use it as the date only when the name gives no date of its own: a name saying 1972 beside a line saying it was posted in 2019 is a talk from 1972 put online later.
+
+REFERENCES
+
+- Write source as the material writes it, in its own alphabet: "ШБ", "BG", "Бхагавад-гита", "CC Madhya". Never translate or transliterate it; it is matched against the canon's spellings afterwards. KNOWN_SOURCES is what the canon can address, and Caitanya-caritamrta has an entry per lila, so "CC" alone addresses nothing: say which lila, or emit no reference.
+- references is a LIST: a talk is often about more than one passage, one entry each, in the order stated.
+- tokens are the coordinate alone, dot-separated: "CC Madhya 8.128" -> 8.128, "ШБ 1.2.10" -> 1.2.10.
+- Where a source writes coordinates with dashes the same digits mean different things, and all of these occur:
     "BG_02_23-24"     verses 23 and 24 of chapter 2 — a range
     "BG_01-20"        chapter 1, verse 20 — a coordinate written with a dash
     "BG_01-01_18-78"  two passages, 1.1 and 18.78
     "SB_03-10-03"     canto 3, chapter 10, verse 3
-  Read it however it reads to you and write down what you read. Do not force it into one interpretation.
-- Return coordinates with dots — "1.20", "3.10.3" — whatever separator the source used. Keep the dash only for a genuine range, written as one entry: "2.23-24". Never count a range out verse by verse yourself.
-- A talk covers a few verses, not dozens. If your reading turns into a range of tens of verses, it is far more likely you have read a coordinate as a range — look again.
-- A scripture coordinate is not a title. When a name is nothing but the reference — "SB 01-06-04", "BG 02-38" — the recording has no title of its own: emit the reference in references and leave title null. Where the name carries both, the title is what is left once the coordinate is taken out.
-- title and collection_title are different things and must never hold the same string. On the page for part two of a course, the title is what part two is called and collection_title is the course. A page often shows the cycle's name larger and more prominently than the talk's own — that does not make it the title.
-- collection_title is for a talk that is one part of a named whole — a course, a seminar, a cycle given as a set. Copy the name as written. A category, a tag, an author's back-catalogue, "Lectures 2013" and the name of the archive itself are not cycles; leave it null. Null is the normal answer.
-- A recurring occasion is not a cycle. A Sunday programme, a festival, an annual conference, a day of the calendar — these say when a talk was given, not that it belongs to a set given together. "Sunday Feast", "Gaura Purnima Festival", "Sunday Festival": collection_title is null. A cycle has an order and an end; an occasion comes round again.
-- language is what is SPOKEN, which is not always the language of the page around it. A Russian page listing an English lecture is "en".
-- A title that reads as an ordinary phrase in some language is evidence of the language spoken: "Fallacies Of Modern Education" is "en". Do not leave language null merely because nothing states it outright. A name that is a Sanskrit or Bengali title, a verse, or the first words of a song is not that kind of evidence — say what is sung, not the script it is written in.
-- authors is a LIST because a recording often has more than one speaker: a conversation, a joint kirtan, a class given in turns. "Amala Harinam Pr and Kirtan Premi Pr" is two people and two entries, never one name. So is "Radhanath Swami, Yamuna Mataji and Dina Tarini Mataji" — three. One speaker is a list of one, and no speaker named is an empty list.
-- Split on the words the source uses to join names — "and", "&", "+", a comma — and on nothing else. A name that merely contains one of them is still one name.
-- Every entry is a person. A group, a category or an occasion — "Various Devotees", "Panel Discussion", "ISKCON Bangladesh" — names nobody: leave the list empty rather than inventing a speaker out of it.
-- authors and location stay as raw strings. Do not translate, transliterate or canonicalize them; a separate resolver maps them to dictionary entries later.
-- Ignore the site's navigation, menus, footers and adverts. They repeat on every page and describe nothing.
-- The surrounding text of a page holding many files is shared by all of them, so it says little about any one file. In that case the filename is the stronger signal.
+  Read it the way this source habitually writes it, then check it once: a talk covers a few verses, not dozens, so a range spanning tens of verses is nearly always a coordinate misread as a range.
+- Keep the dash only for a genuine range, as one entry: "2.23-24". Never count a range out verse by verse yourself.
+
+NAMES AND PLACES
+
+- authors is a LIST: a conversation, a joint kirtan, a class given in turns. "Amala Harinam Pr and Kirtan Premi Pr" is two entries, never one name. One speaker is a list of one; no speaker named is an empty list.
+- Split on the words the source joins names with — "and", "&", "+", a comma — and nothing else. A name that merely contains one of them is one name.
+- Every entry is a person. A group, a category or an occasion — "Various Devotees", "Panel Discussion", "ISKCON Bangladesh" — names nobody: leave the list empty rather than invent a speaker.
+- Write a name in the alphabet the source wrote it in. Never translate or transliterate: "Сарвагья дас" stays Cyrillic, "Sarvajna Das" stays Latin, and a resolver joins them afterwards. The same goes for location.
+- Words that ADDRESS a person rather than name them are not part of the name. An archive abbreviates however it likes, and reading which words are address is the judgement asked of you rather than of a pattern. Everything else stays as written.
+- A line labelled as who the archive files a recording under — a channel, a directory — is a claim about that whole channel, not about this recording. Believe it only when the recording names nobody, never when it names somebody else. A channel's name is not a person: "The Acharya", "Гаура СПб", "Аудио Книга" name nobody.
+
+LANGUAGE
+
+- language is what is SPOKEN. A Russian archive listing an English lecture is "en".
+- A name that reads as an ordinary phrase in some language is evidence of what was spoken: "Fallacies Of Modern Education" is "en". Do not leave language null merely because nothing states it outright. A Sanskrit or Bengali title, a verse, or the first words of a song is not that evidence — say what is spoken, not the script it is written in.

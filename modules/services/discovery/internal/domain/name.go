@@ -21,7 +21,7 @@ import (
 
 // names.json is the vocabulary: the words that stand in front of a name, the
 // words that follow it, the forms of address and every spelling of each, the
-// organisations that precede a place, and the letters one alphabet becomes in
+// and the letters one alphabet becomes in
 // the other.
 //
 // Data rather than code, for the reason the canon of scriptures is: a person
@@ -53,15 +53,15 @@ type Form struct {
 var vocabulary = func() struct {
 	Honorifics    []string          `json:"honorifics"`
 	Dropped       []string          `json:"dropped"`
-	Forms         []Form            `json:"forms"`
 	Organisations []string          `json:"organisations"`
+	Forms         []Form            `json:"forms"`
 	Cyrillic      map[string]string `json:"cyrillic"`
 } {
 	var v struct {
 		Honorifics    []string          `json:"honorifics"`
 		Dropped       []string          `json:"dropped"`
-		Forms         []Form            `json:"forms"`
 		Organisations []string          `json:"organisations"`
+		Forms         []Form            `json:"forms"`
 		Cyrillic      map[string]string `json:"cyrillic"`
 	}
 	if err := json.Unmarshal(namesJSON, &v); err != nil {
@@ -75,6 +75,11 @@ var honorifics = vocabulary.Honorifics
 
 // initials are the same honorifics written as letters, with or without the
 // stops and spaces an archive happens to use: HH, H.H., "H G".
+//
+// This list does not grow. Every spelling it does not know — "Е.С." run into
+// the name without a space, an abbreviation nobody has met yet — is a reader's
+// problem, not a pattern's, and belongs to whoever reads the line. What stays
+// here is the second pass over a name already read.
 var reInitials = regexp.MustCompile(`(?i)^\s*(?:h\s*\.?\s*[gh]|е\s*\.?\s*[смc])\s*\.?[\s_]+`)
 
 // dropped follows a name and is how one addresses a person rather than how one
@@ -298,8 +303,13 @@ var transliteration = []struct {
 // Fold reduces a Key further, to the sound rather than the spelling, so that
 // romanisations of one name meet. It is coarser again than Key and is meant for
 // proposing that two people are one, not for asserting it.
+// Its transliteration table is written in lower case, and a capital left
+// standing does not fail — it passes through, so "Сарвагья" folds to "Сarvagy",
+// a key in two alphabets whose first letter merely looks Latin and matches
+// nobody, ever. Every caller reaches here through Key, which lowers case; this
+// makes that a property of the function rather than of its callers.
 func Fold(key string) string {
-	s := cyrillic.Replace(key)
+	s := cyrillic.Replace(strings.ToLower(key))
 	for _, r := range transliteration {
 		s = r.from.ReplaceAllString(s, r.to)
 	}

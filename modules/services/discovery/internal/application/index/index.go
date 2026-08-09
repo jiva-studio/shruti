@@ -82,12 +82,13 @@ type Report struct {
 	// ItemsFromScript is how many files the source's own script accounted for
 	// in full, and which therefore cost no model call.
 	ItemsFromScript int `json:"items_from_script,omitempty"`
-	// AskedWhy counts, by reason, the files the script handed to the model.
-	AskedWhy      map[string]int `json:"asked_why,omitempty"`
-	MediaVanished int            `json:"media_vanished,omitempty"`
-	Collection    string         `json:"collection,omitempty"`
-	Links         []string       `json:"-"`
-	NextCheckAt   time.Time      `json:"next_check_at"`
+	// ItemsDeferred is how many files this visit stored without reading, having
+	// read as many as one visit may. Non-zero leaves the page unread so it is
+	// visited again.
+	ItemsDeferred int       `json:"items_deferred,omitempty"`
+	MediaVanished int       `json:"media_vanished,omitempty"`
+	Links         []string  `json:"-"`
+	NextCheckAt   time.Time `json:"next_check_at"`
 }
 
 // Item fetches one URL and stores everything it yielded.
@@ -122,9 +123,7 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	// answers however still its bytes are, and a conditional request is
 	// answered 304 before there is a body to read — so the page is recorded as
 	// unchanged and its validators are never refreshed. It never catches up.
-	// audioveda serves an ETag on 14,534 of its 14,586 pages, so editing its
-	// script had no effect there at all.
-	if page != nil && !force && s.readWithCurrentTools(page, scriptOf(src, sourceID)) {
+	if page != nil && !force && s.readWithCurrentTools(page, src, scriptOf(src, sourceID)) {
 		req.ETag, req.LastModified = page.ETag, page.LastModified
 	}
 
@@ -197,7 +196,7 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	unchanged := page != nil &&
 		page.BodySHA256 == resp.BodySHA256 &&
 		page.ItemSetSHA256 == itemSet &&
-		s.readWithCurrentTools(page, scriptID)
+		s.readWithCurrentTools(page, src, scriptID)
 	if unchanged && !force {
 		s.Metrics.Page(true, 0, 0, 0)
 		return report, s.recordUnchanged(ctx, page, src, report, now)
@@ -216,8 +215,12 @@ func (s *Service) Item(ctx context.Context, rawURL, sourceID string, force bool)
 	// Only now may the page say it has been read. Until this write lands, its
 	// validators are whatever the last complete pass left, so the next visit
 	// finds them stale and does the work again.
-	if err := s.Repo.MarkPageIndexed(ctx, pageID, resp.BodySHA256, itemSet,
-		s.promptVersion(), s.scriptVersion(scriptID)); err != nil {
+	// A page with files still unread is not a read page. Leaving its validators
+	// alone is what brings the crawl back to it.
+	if report.ItemsDeferred > 0 {
+		slog.InfoContext(ctx, "page_partly_read", "url", resp.URL, "deferred", report.ItemsDeferred)
+	} else if err := s.Repo.MarkPageIndexed(ctx, pageID, resp.BodySHA256, itemSet,
+		s.promptVersion(src), s.scriptVersion(scriptID)); err != nil {
 		return nil, err
 	}
 	s.recordSpend(ctx, sourceID)
@@ -234,7 +237,11 @@ func (s *Service) recordSpend(ctx context.Context, sourceID string) {
 		return
 	}
 	for _, sp := range s.Normalizer.Spent() {
-		row := store.Spend{SourceID: sourceID, Kind: "normalize", Model: sp.Model, Items: sp.Items}
+		kind := sp.Kind
+		if kind == "" {
+			kind = "normalize"
+		}
+		row := store.Spend{SourceID: sourceID, Kind: kind, Model: sp.Model, Items: sp.Items}
 		if sp.Reported {
 			in, out, cost := sp.TokensIn, sp.TokensOut, sp.CostUSD
 			row.TokensIn, row.TokensOut, row.CostUSD = &in, &out, &cost
@@ -245,10 +252,6 @@ func (s *Service) recordSpend(ctx context.Context, sourceID string) {
 		}
 	}
 }
-
-// minSeriesParts is the fewest recordings a cycle can be made of. One is not a
-// series; it is a page with a recording on it.
-const minSeriesParts = 2
 
 // fetchable drops the addresses robots.txt puts out of bounds.
 //
@@ -271,104 +274,18 @@ func (s *Service) fetchable(ctx context.Context, links []string) []string {
 	return out
 }
 
-// storeSeries records what a page pointed at, and asks whether a page that
-// offered no audio presents a cycle. Links are kept for every page: they are
-// what a cycle is decided from later, and how the crawl walks through a page it
-// is not due to fetch.
+// storePageLinks records what a page pointed at, which is how the crawl walks
+// through a page it is not due to fetch.
 //
-// The question itself is only put when at least two of those links reach
-// recordings we already have. Most pages on any site carry no audio: menus,
-// sections, sign-in pages, the account pages of whoever we are signed in as.
-// Asking each of them costs a model call to be told that a menu is a menu, and
-// at archive scale that is the whole bill. A page whose links reach nothing we
-// know is not a cycle, and the counter remembers what it reached when we last
-// asked, so a menu is never asked twice and a page whose parts have since been
-// found is asked again.
-func (s *Service) storeSeries(ctx context.Context, pageID int64, links []string,
-	mediaFound int, pageTitle, pageText, sourceID string, report *Report) error {
-
+// No model is asked whether a page of links is a cycle of recordings. Deciding
+// a talk belongs to a set is a judgement, and an archive that states its own
+// grouping makes it unnecessary. Where a source says nothing, we say nothing.
+func (s *Service) storePageLinks(ctx context.Context, pageID int64, links []string) error {
 	links = s.fetchable(ctx, links)
-	if len(links) > 0 {
-		if err := s.Repo.ReplacePageLinks(ctx, pageID, links); err != nil {
-			return err
-		}
-	} else {
-		var err error
-		if links, err = s.Repo.PageLinks(ctx, pageID); err != nil {
-			return err
-		}
-	}
-	if mediaFound > 0 {
+	if len(links) == 0 {
 		return nil
 	}
-	if s.Normalizer == nil || len(links) == 0 {
-		return nil
-	}
-
-	page, err := s.Repo.PageByID(ctx, pageID)
-	if err != nil {
-		return err
-	}
-	// Everything below reads the page. A row that has gone — deleted while the
-	// visit was in flight — is not worth failing the page for, but it is not
-	// something to walk into either.
-	if page == nil {
-		return nil
-	}
-
-	// A cycle this page already defines absorbs any that its parts built by
-	// name in the meantime. That is a join, not a judgement, so it does not
-	// wait on asking the model anything — a duplicate appearing later would
-	// otherwise sit there until the page happened to be asked again.
-	if defined, err := s.Repo.CollectionByURL(ctx, sourceID, page.URL); err != nil {
-		return err
-	} else if defined != nil {
-		if err := s.Repo.AbsorbByTitle(ctx, defined.ID, sourceID, defined.Title, defined.Author); err != nil {
-			return err
-		}
-	}
-
-	known, err := s.Repo.KnownMediaLinks(ctx, links)
-	if err != nil {
-		return err
-	}
-	if known < minSeriesParts || known <= page.SeriesLinksSeen {
-		return nil
-	}
-	if err := s.Repo.SetSeriesLinksSeen(ctx, pageID, known); err != nil {
-		return err
-	}
-
-	series, err := s.Normalizer.Series(ctx, normalize.SeriesInput{
-		PageURL:   page.URL,
-		PageTitle: pageTitle,
-		PageText:  pageText,
-		Links:     links,
-	})
-	if err != nil || series == nil {
-		return err
-	}
-
-	collection := &store.Collection{
-		SourceID:    sourceID,
-		URL:         page.URL,
-		Title:       series.Title,
-		Description: series.Description,
-		Author:      series.Author,
-	}
-	if err := s.Repo.SaveCollection(ctx, collection); err != nil {
-		return err
-	}
-	if err := s.Repo.ReplaceMembers(ctx, collection.ID, series.Members); err != nil {
-		return err
-	}
-	// Parts indexed before this page named the cycle themselves and were kept
-	// under that name. Same cycle, so fold it in rather than leaving two.
-	if err := s.Repo.AbsorbByTitle(ctx, collection.ID, sourceID, collection.Title, collection.Author); err != nil {
-		return err
-	}
-	report.Collection = collection.Title
-	return nil
+	return s.Repo.ReplacePageLinks(ctx, pageID, links)
 }
 
 // markVanished notes the files this page used to offer and does not any more.
@@ -383,6 +300,15 @@ func (s *Service) markVanished(ctx context.Context, e *domain.Extraction, pageID
 	prior, err := s.Repo.ItemsByPage(ctx, pageID)
 	if err != nil {
 		return err
+	}
+	// A page that offered recordings and now offers none is far more often a
+	// lapsed session or an error served with a 200 than an emptied page, and
+	// believing it costs every recording on that page at once. Nothing is marked
+	// on it; their media_seen_at stops moving instead, which is what finding
+	// genuinely withdrawn recordings goes by.
+	if len(e.Items) == 0 && len(prior) > 0 {
+		slog.WarnContext(ctx, "page_offered_nothing", "page_id", pageID, "known", len(prior))
+		return nil
 	}
 	found := make(map[string]bool, len(e.Items))
 	for _, it := range e.Items {
@@ -442,8 +368,8 @@ func scriptOf(src *store.Source, sourceID string) string {
 // here, editing a script changed nothing that had already been stored.
 // readWithCurrentTools reports whether this page was last read with the prompt
 // and the script we would read it with now.
-func (s *Service) readWithCurrentTools(page *store.Page, scriptID string) bool {
-	return page.NormPromptVersion == s.promptVersion() &&
+func (s *Service) readWithCurrentTools(page *store.Page, src *store.Source, scriptID string) bool {
+	return page.NormPromptVersion == s.promptVersion(src) &&
 		page.ScriptVersion == s.scriptVersion(scriptID)
 }
 
@@ -451,8 +377,17 @@ func (s *Service) scriptVersion(sourceID string) string {
 	return s.Scripts.Version(sourceID)
 }
 
-func (s *Service) promptVersion() string {
-	if s.Normalizer == nil {
+// stated reports whether this archive publishes its own facts, so no model is
+// asked about it.
+func stated(src *store.Source) bool {
+	return src != nil && src.Kind == store.KindStated
+}
+
+// promptVersion is the prompt this page would be read with now, empty where no
+// prompt is involved. It is a fetch validator, and a prompt cannot change what
+// a server sends — so a stated source must not carry one.
+func (s *Service) promptVersion(src *store.Source) string {
+	if s.Normalizer == nil || stated(src) {
 		return ""
 	}
 	return s.Normalizer.PromptVersion()
@@ -478,7 +413,6 @@ func (s *Service) savePage(ctx context.Context, page *store.Page, resp *fetch.Re
 		LastModified:         resp.LastModified,
 		HTTPStatus:           resp.Status,
 		LastFetchedAt:        &now,
-		LastChangedAt:        &now,
 		ConsecutiveUnchanged: 0,
 		NextCheckAt:          &next,
 		MediaFound:           mediaFound,
@@ -511,13 +445,10 @@ func (s *Service) recordUnchanged(ctx context.Context, page *store.Page, src *st
 	page.NextCheckAt = &next
 	page.Error = ""
 	report.NextCheckAt = next
-	if _, err := s.Repo.SavePage(ctx, page); err != nil {
-		return err
-	}
-	// An unchanged visit has no body to quote from; the links it left behind
-	// are enough for the question, and the question is only reached at all
-	// once its parts have been found.
-	return s.storeSeries(ctx, page.ID, nil, page.MediaFound, "", "", sourceIDOf(page), report)
+	// Nothing else to do: an unchanged page points where it pointed last time,
+	// and its links are already stored.
+	_, err := s.Repo.SavePage(ctx, page)
+	return err
 }
 
 // recheckBounds is how often this source wants its pages read again. A source
@@ -587,7 +518,7 @@ func (s *Service) record(ctx context.Context, e *domain.Extraction, pageID int64
 	if err := s.markVanished(ctx, e, pageID, now, report); err != nil {
 		return err
 	}
-	return s.storeSeries(ctx, pageID, e.Links, len(e.Items), e.PageTitle, e.PageText, sourceID, report)
+	return s.storePageLinks(ctx, pageID, e.Links)
 }
 
 // storeItems writes every file the page offered, normalizing and embedding
@@ -600,8 +531,22 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 	}
 	fromScript := s.runScript(ctx, e, scriptID, body)
 	batch := normalize.BatchFor(e)
+	// What the archive printed, for every file: never the model's to answer.
+	archived := make([]printed, len(e.Items))
+	// Before the hash, not after: the material is part of what the model is
+	// shown, so a script that starts handing over a video's title must make
+	// every recording on that source unread again.
+	for i := range batch.Items {
+		if f, ok := fromScript[batch.Items[i].MediaURL]; ok {
+			batch.Items[i].Material = f.Material
+			archived[i] = scriptPrinted(f)
+		}
+	}
+	// A stated source names no prompt and no model, so it needs neither one
+	// configured to be read.
+	byScript := stated(src)
 	version, model := "", ""
-	if s.Normalizer != nil {
+	if s.Normalizer != nil && !byScript {
 		version, model = s.Normalizer.PromptVersion(), s.Normalizer.Model()
 	}
 
@@ -614,7 +559,7 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 			return err
 		}
 		existing[i] = prior
-		if s.Normalizer == nil {
+		if s.Normalizer == nil && !byScript {
 			continue
 		}
 		hashes[i] = normalize.InputHash(batch, i, version, model)
@@ -623,43 +568,46 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		}
 	}
 
+	// One listing can offer thousands of files, and reading them all in one
+	// visit is hundreds of calls end to end inside the timeout that bounds a
+	// single page. What is over the limit is stored unread; the page is left
+	// unread too, further down, so the next visit carries on from here.
+	if len(todo) > maxItemsPerVisit {
+		report.ItemsDeferred = len(todo) - maxItemsPerVisit
+		todo = todo[:maxItemsPerVisit]
+	}
+
 	results := make([]normalize.Result, len(e.Items))
-	// What the script settled is settled. A file it accounted for in full is
-	// dropped from the model's work: the call is the cost, and there is nothing
-	// left to ask about.
 	var pending []chunkWork
 	// fresh are the files this pass has an answer for, from whichever side.
-	// Both count: a file the script settled is as freshly known as one the
-	// model just read, and treating only the model's as fresh would store the
-	// script's work nowhere.
 	fresh := map[int]bool{}
-	// settled are the files no model was asked about.
-	settled := map[int]bool{}
-	// reasons record what stopped the script on the rest.
-	reasons := map[int][]string{}
 	// texts are the prose an archive published about a recording — one entry per
 	// language, because a source that writes its own subtitles writes them in
 	// every language it has a translator for.
 	texts := map[int][]script.Text{}
-	var ask []int
 	for _, i := range todo {
 		f, ok := fromScript[e.Items[i].MediaURL]
 		if !ok {
-			ask = append(ask, i)
 			continue
 		}
-		results[i] = scriptResult(f)
+		r := scriptResult(f)
+		// An entry is not an answer: a stated archive whose script read nothing
+		// has not named this recording. Silence taken for an answer is stored as
+		// the recording's own and stamped with a hash, which stops it being
+		// asked about again.
+		if byScript && r.Title == "" && r.Author == "" {
+			continue
+		}
+		results[i] = r
 		texts[i] = f.Words()
-		fresh[i] = true
-		if f.Complete {
-			settled[i] = true
+		if byScript {
+			fresh[i] = true
 			report.ItemsFromScript++
-			continue
 		}
-		reasons[i] = f.Reasons
-		ask = append(ask, i)
 	}
-	todo = ask
+	if byScript {
+		todo = nil
+	}
 	if len(todo) > 0 {
 		sub := normalize.Batch{PageURL: batch.PageURL, PageTitle: batch.PageTitle}
 		for _, i := range todo {
@@ -673,27 +621,37 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 			return fmt.Errorf("normalizer returned %d results for %d files", len(got), len(todo))
 		}
 		for n, i := range todo {
-			// The model's answer wins outright. A recording reaches it only
-			// because the script declared it could not read the line, and a
-			// parse its own author calls unreliable is not something to keep
-			// half of: keeping it stored "Glories of Srimati rani" over the
-			// model's correct reading.
-			results[i] = got[n]
+			// A file the model passed over keeps whatever the script read and
+			// loses its hash, so the next visit asks again. Silence written in
+			// its place would be stored as the recording's own answer and
+			// stamped with the input hash, which stops it being asked again.
+			if got[n].Unanswered {
+				hashes[i] = ""
+				continue
+			}
+			// The model reads; the script collects. The one thing a material
+			// script states rather than reads is the language of the words it
+			// found, and a caption track naming its own language beats a
+			// reading of a sentence.
+			r := got[n]
+			if lang := results[i].Language; lang != "" {
+				r.Language = lang
+			}
+			if r.Date == "" {
+				r.Date = results[i].Date
+			}
+			results[i] = r
+			fresh[i] = true
+			report.ItemsNormalized++
 		}
-		report.ItemsNormalized = len(todo)
-	}
-
-	for _, i := range todo {
-		fresh[i] = true
 	}
 
 	for i, extracted := range e.Items {
-		item, err := s.buildItem(extracted, existing[i], results[i], hashes[i],
-			fresh[i], settled[i], pageID, sourceID, src, version, model, now)
+		item, err := s.buildItem(extracted, existing[i], results[i], archived[i], hashes[i],
+			fresh[i], byScript, pageID, sourceID, src, version, model, now)
 		if err != nil {
 			return err
 		}
-		item.NormReasons = reasons[i]
 		isNew, err := s.Repo.SaveItem(ctx, item)
 		if err != nil {
 			return err
@@ -717,7 +675,7 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		if err := s.Repo.ReplaceItemRefs(ctx, item.ID, item.References, store.OriginCrawl); err != nil {
 			return err
 		}
-		if err := s.linkCollection(ctx, item, e.URL, sourceID); err != nil {
+		if err := s.linkCollection(ctx, item, sourceID); err != nil {
 			return err
 		}
 		if isNew {
@@ -727,8 +685,13 @@ func (s *Service) storeItems(ctx context.Context, e *domain.Extraction, pageID i
 		if !fresh[i] && !force {
 			continue
 		}
-		if err := s.Repo.ReplaceItemTexts(ctx, item.ID, store.ChunkPageText, itemTexts(texts[i])); err != nil {
-			return err
+		// Prose is only replaced by prose somebody read. A script that failed
+		// returns nothing for every file on the page at once, and storing that
+		// empties the transcript and the chunks cut from it.
+		if _, read := texts[i]; read || !s.hasScript(scriptID) {
+			if err := s.Repo.ReplaceItemTexts(ctx, item.ID, store.ChunkPageText, itemTexts(texts[i])); err != nil {
+				return err
+			}
 		}
 		pending = append(pending, chunkWork{item: item, extracted: extracted, texts: texts[i]})
 	}
@@ -761,22 +724,14 @@ func itemTexts(texts []script.Text) []store.ItemText {
 	return out
 }
 
-// linkCollection joins a recording to its cycle from whichever side is
-// available.
+// linkCollection joins a recording to the cycle its own source named.
 //
-// A series page indexed earlier is waiting with this page's address and no
-// recording against it; fill that in. Where no page lists the membership at
-// all, the name the recording's own page gave the cycle is the only handle
-// there is, so a collection is kept under that name.
-func (s *Service) linkCollection(ctx context.Context, item *store.Item, pageURL, sourceID string) error {
-	if err := s.Repo.ResolvePendingMembers(ctx, pageURL, item.ID); err != nil {
-		return err
-	}
+// The name comes from the archive's own words about that recording, rather
+// than from anybody deciding that a set of links looks like a course.
+func (s *Service) linkCollection(ctx context.Context, item *store.Item, sourceID string) error {
 	if item.CollectionTitle == "" {
 		return nil
 	}
-	// A series page places its parts exactly. Only fall back to the name when
-	// nothing has placed this one.
 	placed, err := s.Repo.ItemHasCollection(ctx, item.ID)
 	if err != nil || placed {
 		return err
@@ -805,7 +760,7 @@ func (s *Service) linkCollection(ctx context.Context, item *store.Item, pageURL,
 const scriptSource = "script"
 
 func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result normalize.Result,
-	hash string, normalized, byScript bool, pageID int64, sourceID string, src *store.Source,
+	archived printed, hash string, normalized, byScript bool, pageID int64, sourceID string, src *store.Source,
 	version, model string, seenAt time.Time) (*store.Item, error) {
 
 	raw, err := json.Marshal(extracted)
@@ -829,7 +784,7 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 
 	switch {
 	case normalized:
-		item.CollectionTitle = result.CollectionTitle
+		item.CollectionTitle = archived.CollectionTitle
 		item.Title = result.Title
 		// The same settling the script path does. Without it a speaker read by
 		// the model is stored as "HH Radhanath Swami" and one read by a script
@@ -841,14 +796,20 @@ func (s *Service) buildItem(extracted domain.Item, prior *store.Item, result nor
 		if len(item.Authors) == 0 && item.Author != "" {
 			item.Authors = []string{item.Author}
 		}
-		// The model writes a location the way the page did — "ISKCON Chennai" —
-		// and the organisation is no more part of the place than a form of
-		// address is part of a name.
 		item.Location = domain.Place(result.Location)
-		item.Language, item.DurationS = result.Language, result.DurationS
-		item.CoverURL = result.CoverURL
+		item.Language, item.DurationS = result.Language, archived.DurationS
+		item.CoverURL = archived.CoverURL
 		item.RecordedOn = parseDate(result.Date)
 		item.References = result.References
+		// A stated archive names its talk and no model reads that name, so which
+		// scripture it cites is settled here — the same corpus vocabulary that
+		// settles a stated author's spelling.
+		if byScript && len(item.References) == 0 {
+			for _, c := range domain.Cites(item.Title) {
+				expanded, _ := domain.ExpandRefs(c.Ref.Source, c.Ref.Tokens)
+				item.References = append(item.References, expanded...)
+			}
+		}
 		item.NormInputSHA256, item.NormPromptVersion, item.NormModel = hash, version, model
 		if byScript {
 			// Nothing was asked of a model, so nothing names one. Recording the
@@ -1033,3 +994,56 @@ func itemSetHash(e *domain.Extraction) string {
 	sum := sha256.Sum256([]byte(strings.Join(urls, "\n")))
 	return hex.EncodeToString(sum[:])
 }
+
+// Rechunk cuts the prose already stored into chunks again and embeds what is
+// new, without fetching anything or calling a model.
+//
+// It is what makes changing the cut a local decision: the text is in the
+// database, and the embedding cache is keyed by the text, so only pieces that
+// actually changed are bought.
+func (s *Service) Rechunk(ctx context.Context, sourceID string, batch int) (int, error) {
+	if batch <= 0 {
+		batch = 200
+	}
+	var after int64
+	var total int
+	for {
+		items, err := s.Repo.ItemsAfter(ctx, sourceID, after, batch)
+		if err != nil {
+			return total, err
+		}
+		if len(items) == 0 {
+			return total, nil
+		}
+		work := make([]chunkWork, 0, len(items))
+		for i := range items {
+			item := &items[i]
+			after = item.ID
+			texts, err := s.Repo.ItemTexts(ctx, item.ID, store.ChunkPageText)
+			if err != nil {
+				return total, err
+			}
+			said := make([]script.Text, 0, len(texts))
+			for _, t := range texts {
+				said = append(said, script.Text{Lang: t.Lang, Text: t.Text})
+			}
+			work = append(work, chunkWork{item: item, texts: said})
+		}
+		n, err := s.indexChunks(ctx, work, sourceID)
+		if err != nil {
+			return total, err
+		}
+		total += n
+	}
+}
+
+// hasScript reports whether this source is read by one, which is what makes a
+// missing answer meaningful rather than expected.
+func (s *Service) hasScript(scriptID string) bool {
+	return s.Scripts != nil && s.Scripts.Has(scriptID)
+}
+
+// maxItemsPerVisit is how many files one visit to a page may read. Five calls
+// at the batch size, which leaves the rest of a page's timeout to the
+// embedding and the writes.
+const maxItemsPerVisit = 200

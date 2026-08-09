@@ -37,8 +37,9 @@ type Item struct {
 	SourceID *string
 	PageID   *int64
 
-	// Raw is everything extraction found, kept so a prompt change can be
-	// replayed without refetching the page.
+	// Raw is everything extraction found, which is what the normalizer is shown.
+	// Kept so a recording can be read again with a new prompt out of our own
+	// rows rather than by fetching its page again.
 	Raw json.RawMessage
 
 	Title  string
@@ -62,9 +63,6 @@ type Item struct {
 	NormInputSHA256   string
 	NormPromptVersion string
 	NormModel         string
-	// NormReasons is everything that stopped the source's script, for the
-	// recordings a model had to read instead.
-	NormReasons []string
 
 	Status      string
 	FirstSeenAt time.Time
@@ -164,39 +162,42 @@ func (r *Repo) ItemsByPage(ctx context.Context, pageID int64) ([]Item, error) {
 // media_url is the natural key: the same lecture on two archives stays two
 // rows, because provenance has to survive.
 func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
-	if it.Raw == nil {
-		it.Raw = json.RawMessage(`{}`)
-	}
 	if it.Status == "" {
 		it.Status = StatusDiscovered
 	}
 	if it.MediaState == "" {
 		it.MediaState = MediaPresent
 	}
+	if len(it.Raw) == 0 {
+		it.Raw = json.RawMessage(`{}`)
+	}
 	err = r.pool.QueryRow(ctx, `
 		INSERT INTO discovery.items
 			(media_url, source_id, page_id, raw, title, author, location, recorded_on,
 			 language, duration_s, collection_title, author_key, cover_url,
 			 media_state, media_seen_at, media_missing_since,
-			 norm_input_sha256, norm_prompt_version, norm_model, norm_reasons, status)
-		VALUES ($1,$2,$3,$4,nullif($5,''),nullif($6,''),nullif($7,''),$8,
-			 nullif($9,''),nullif($10,0),nullif($11,''),nullif($18,''),nullif($20,''),
-			 $12,$13,NULL,
-			 nullif($14,''),nullif($15,''),nullif($16,''),$19,$17)
+			 norm_input_sha256, norm_prompt_version, norm_model, status)
+		VALUES ($1,$2,$3,$19,nullif($4,''),nullif($5,''),nullif($6,''),$7,
+			 nullif($8,''),nullif($9,0),nullif($10,''),nullif($17,''),nullif($18,''),
+			 $11,$12,NULL,
+			 nullif($13,''),nullif($14,''),nullif($15,''),$16)
 		ON CONFLICT (media_url) DO UPDATE SET
 			source_id           = coalesce(EXCLUDED.source_id, discovery.items.source_id),
 			page_id             = coalesce(EXCLUDED.page_id, discovery.items.page_id),
-			raw                 = EXCLUDED.raw,
+			raw                 = CASE WHEN EXCLUDED.raw = '{}'::jsonb
+				THEN discovery.items.raw ELSE EXCLUDED.raw END,
 			title               = EXCLUDED.title,
 			author              = EXCLUDED.author,
 			location            = EXCLUDED.location,
 			recorded_on         = EXCLUDED.recorded_on,
 			language            = EXCLUDED.language,
-			duration_s          = EXCLUDED.duration_s,
-			collection_title    = EXCLUDED.collection_title,
 			author_key          = EXCLUDED.author_key,
-			-- Kept when a visit did not bring one, so a picture we already have
-			-- is not lost to a page that failed to state it again.
+			-- The three below are what the archive printed, and only a script
+			-- reads them, so a pass with no script behind it has no news about
+			-- them. The fields above are read by the model, where an empty
+			-- answer is an answer.
+			duration_s          = coalesce(EXCLUDED.duration_s, discovery.items.duration_s),
+			collection_title    = coalesce(EXCLUDED.collection_title, discovery.items.collection_title),
 			cover_url           = coalesce(EXCLUDED.cover_url, discovery.items.cover_url),
 			-- Seeing the file again clears the fact that it was ever missing.
 			media_state         = EXCLUDED.media_state,
@@ -205,15 +206,14 @@ func (r *Repo) SaveItem(ctx context.Context, it *Item) (isNew bool, err error) {
 			norm_input_sha256   = EXCLUDED.norm_input_sha256,
 			norm_prompt_version = EXCLUDED.norm_prompt_version,
 			norm_model          = EXCLUDED.norm_model,
-			norm_reasons        = EXCLUDED.norm_reasons,
 			status              = EXCLUDED.status,
 			last_seen_at        = now()
 		RETURNING id, (xmax = 0)`,
-		it.MediaURL, it.SourceID, it.PageID, it.Raw, it.Title, it.Author, it.Location, it.RecordedOn,
+		it.MediaURL, it.SourceID, it.PageID, it.Title, it.Author, it.Location, it.RecordedOn,
 		it.Language, it.DurationS, it.CollectionTitle,
 		it.MediaState, it.MediaSeenAt,
 		it.NormInputSHA256, it.NormPromptVersion, it.NormModel, it.Status,
-		domain.Key(it.Author), it.NormReasons, it.CoverURL,
+		domain.Key(it.Author), it.CoverURL, it.Raw,
 	).Scan(&it.ID, &isNew)
 	return isNew, err
 }
@@ -504,42 +504,27 @@ func vector(v []float32) any {
 	return pgvector.Literal(v)
 }
 
-// OriginCrawl and OriginRead name the two things that write a reference: an
-// ordinary visit to the page, and the repair pass that reads the titles we
-// already hold.
-const (
-	OriginCrawl = "crawl"
-	OriginRead  = "read-refs"
-)
+// OriginCrawl names what wrote a reference: an ordinary visit to the page.
+const OriginCrawl = "crawl"
 
-// TitleToRead is a recording whose title has not been read for citations.
-type TitleToRead struct {
-	ID       int64
-	SourceID string
-	Title    string
-}
-
-// UnreadTitles hands over recordings that carry no reference at all, oldest
-// first. A recording that already has one is left alone: it was put there by
-// something that saw more than a title, and a title is all this sees.
-func (r *Repo) UnreadTitles(ctx context.Context, afterID int64, limit int) ([]TitleToRead, error) {
+// ItemTexts is the prose stored for one recording, one entry per language.
+//
+// The table was written and never read, so the promise it was added on — that
+// cutting a transcript differently is a local decision rather than a reason to
+// crawl a site again — could not be kept.
+func (r *Repo) ItemTexts(ctx context.Context, itemID int64, kind string) ([]ItemText, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT i.id, coalesce(i.source_id,''), coalesce(i.title,'')
-		FROM discovery.items i
-		WHERE i.id > $1
-		  AND coalesce(i.title,'') <> ''
-		  AND NOT EXISTS (SELECT 1 FROM discovery.item_refs r WHERE r.item_id = i.id)
-		ORDER BY i.id
-		LIMIT $2`, afterID, limit)
+		SELECT lang, text FROM discovery.item_texts
+		WHERE item_id = $1 AND kind = $2 ORDER BY lang`, itemID, kind)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []TitleToRead
+	var out []ItemText
 	for rows.Next() {
-		var t TitleToRead
-		if err := rows.Scan(&t.ID, &t.SourceID, &t.Title); err != nil {
+		var t ItemText
+		if err := rows.Scan(&t.Lang, &t.Text); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -547,26 +532,34 @@ func (r *Repo) UnreadTitles(ctx context.Context, afterID int64, limit int) ([]Ti
 	return out, rows.Err()
 }
 
-// SnapshotItemRefs copies the reference table aside, once, before anything
-// rewrites it. It reports how many rows the copy holds, and does nothing at all
-// if a copy is already there — a second snapshot taken after the damage is
-// worse than none, because it looks like a way back.
-func (r *Repo) SnapshotItemRefs(ctx context.Context) (int64, bool, error) {
-	var exists bool
-	if err := r.pool.QueryRow(ctx, `SELECT to_regclass('discovery.item_refs_before_read') IS NOT NULL`).
-		Scan(&exists); err != nil {
-		return 0, false, err
+// ItemsAfter walks recordings by id, optionally within one source, so a repair
+// can cross a corpus without holding it in memory.
+func (r *Repo) ItemsAfter(ctx context.Context, sourceID string, afterID int64, limit int) ([]Item, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+itemCols+` FROM discovery.items
+		WHERE id > $1 AND ($2 = '' OR source_id = $2)
+		ORDER BY id LIMIT $3`, afterID, sourceID, limit)
+	if err != nil {
+		return nil, err
 	}
-	if !exists {
-		if _, err := r.pool.Exec(ctx, `
-			CREATE TABLE discovery.item_refs_before_read AS
-			SELECT * FROM discovery.item_refs`); err != nil {
-			return 0, false, err
+	defer rows.Close()
+
+	var out []Item
+	for rows.Next() {
+		it, err := scanItem(rows)
+		if err != nil {
+			return nil, err
 		}
+		out = append(out, *it)
 	}
-	var n int64
-	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM discovery.item_refs_before_read`).Scan(&n); err != nil {
-		return 0, false, err
-	}
-	return n, !exists, nil
+	return out, rows.Err()
+}
+
+// ClearNormHashes drops the stored normalizer-input hash for a selection, so the
+// next visit asks about those recordings again.
+func (r *Repo) ClearNormHashes(ctx context.Context, sourceID string) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE discovery.items SET norm_input_sha256 = NULL
+		WHERE ($1 = '' OR source_id = $1) AND norm_input_sha256 IS NOT NULL`, sourceID)
+	return tag.RowsAffected(), err
 }

@@ -129,34 +129,3 @@ func TestATabIsNotARecording(t *testing.T) {
 // even one teacher's own carries guests: taking the channel name filed four
 // hundred and one of Srila Prabhupada's lectures under "The Acharya", and would
 // have filed Sivarama Swami's under whoever hosted him.
-func TestTheSpeakerComesFromTheTitleNotTheChannel(t *testing.T) {
-	r, err := script.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct{ title, channel, want string }{
-		{"Е.М. Сарвагья прабху. ШБ 6.16.44", "Goswami", "Сарвагья"},
-		{"Е С Шиварама Свами ванапрастха в 50", "Ананда Вардхана Свами", "Шиварама Свами"},
-		{"The Only Way | SB 2.9.1 | Tokyo | Srila Prabhupada", "The Acharya", "Prabhupada"},
-		// Nobody named: nothing, so the source's own setting or the model has
-		// the question.
-		{"2012. Вриндаван парикрама.", "Локанатха Свами", ""},
-	} {
-		raw, _ := json.Marshal(map[string]any{
-			"id": "vid", "title": c.title, "channel": c.channel, "uploader": c.channel,
-		})
-		got, err := r.Run(context.Background(), "youtube",
-			script.Page{URL: "https://www.youtube.com/watch?v=vid", HTML: string(raw)},
-			[]script.Item{{URL: "https://www.youtube.com/watch?v=vid"}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		f := got["https://www.youtube.com/watch?v=vid"]
-		if f.Author != c.want {
-			t.Errorf("%q on channel %q -> author %q, want %q", c.title, c.channel, f.Author, c.want)
-		}
-		if f.Author == c.channel && c.channel != c.want {
-			t.Errorf("the channel name became the author: %q", f.Author)
-		}
-	}
-}

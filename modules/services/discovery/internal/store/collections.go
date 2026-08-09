@@ -55,29 +55,6 @@ func (r *Repo) SaveCollection(ctx context.Context, c *Collection) error {
 	).Scan(&c.ID)
 }
 
-// CollectionByURL finds the cycle a page presents.
-func (r *Repo) CollectionByURL(ctx context.Context, sourceID, url string) (*Collection, error) {
-	var c Collection
-	err := r.pool.QueryRow(ctx, `
-		SELECT c.id, coalesce(c.source_id,''), coalesce(c.url,''), c.title,
-		       coalesce(c.description,''), coalesce(c.author,''), `+memberCount+`
-		FROM discovery.collections c
-		WHERE c.source_id IS NOT DISTINCT FROM nullif($1,'') AND c.url = $2`,
-		sourceID, url,
-	).Scan(&c.ID, &c.SourceID, &c.URL, &c.Title, &c.Description, &c.Author, &c.MemberCount)
-	// "No such cycle" is an answer this is asked for on every listing page. A
-	// database failure is not that answer, and returning it as one reads as
-	// "this page presents no cycle we know" — so duplicates are never absorbed
-	// and the run still reports success.
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
 // CollectionByTitle finds a cycle reconstructed from what its parts call it.
 // The speaker is part of the identity, by key rather than by spelling: two
 // lecturers can give courses of the same name.
@@ -102,34 +79,6 @@ func (r *Repo) CollectionByTitle(ctx context.Context, sourceID, title, author st
 	return &c, nil
 }
 
-// ReplaceMembers records the parts a series page listed, in its order.
-//
-// They are stored as page addresses because the parts may not have been
-// indexed yet; item_id is filled in whenever they are.
-func (r *Repo) ReplaceMembers(ctx context.Context, collectionID int64, pageURLs []string) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	if _, err := tx.Exec(ctx,
-		`DELETE FROM discovery.collection_members WHERE collection_id = $1`, collectionID); err != nil {
-		return err
-	}
-	for i, u := range pageURLs {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO discovery.collection_members (collection_id, ordinal, page_url, item_id)
-			VALUES ($1, $2, $3, (SELECT i.id FROM discovery.items i
-			                     JOIN discovery.pages p ON p.id = i.page_id
-			                     WHERE p.url = $3 ORDER BY i.id LIMIT 1))`,
-			collectionID, i, u); err != nil {
-			return err
-		}
-	}
-	return tx.Commit(ctx)
-}
-
 // AddMember attaches one recording to a cycle at the end, used when the part
 // names its series and no page lists the membership.
 func (r *Repo) AddMember(ctx context.Context, collectionID, itemID int64) error {
@@ -139,73 +88,6 @@ func (r *Repo) AddMember(ctx context.Context, collectionID, itemID int64) error 
 		FROM discovery.collection_members WHERE collection_id = $1
 		ON CONFLICT DO NOTHING`, collectionID, itemID)
 	return err
-}
-
-// ResolvePendingMembers fills in the recordings for a page whose series was
-// indexed before it was. This is the half of the join that cannot happen at
-// read time, because whichever side arrives first has to wait for the other.
-func (r *Repo) ResolvePendingMembers(ctx context.Context, pageURL string, itemID int64) error {
-	_, err := r.pool.Exec(ctx, `
-		UPDATE discovery.collection_members
-		SET item_id = $2
-		WHERE page_url = $1 AND item_id IS NULL`, pageURL, itemID)
-	return err
-}
-
-// AbsorbByTitle folds a cycle reconstructed from its parts' own words into the
-// one a series page defines.
-//
-// Both are the same cycle: the parts named it before we had read the page that
-// presents it. The page is the better record — it has the order and the full
-// membership — so it takes over, keeping any part the page did not list rather
-// than dropping it.
-//
-// Name and speaker must both match. On one archive the only near-collision in
-// forty-three cycles was "Секреты гармонии" against "Секреты гармонии в семье"
-// — two courses by two different lecturers, which merging on the name alone
-// would have destroyed.
-func (r *Repo) AbsorbByTitle(ctx context.Context, into int64, sourceID, title, author string) error {
-	// Without a speaker on both sides there is nothing to tell two courses of
-	// the same name apart, and folding them would be a guess.
-	if author == "" {
-		return nil
-	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	var from int64
-	err = tx.QueryRow(ctx, `
-		SELECT id FROM discovery.collections
-		WHERE source_id IS NOT DISTINCT FROM nullif($1,'')
-		  AND title = $2
-		  AND author_key IS NOT DISTINCT FROM nullif($3,'')
-		  AND url IS NULL`,
-		sourceID, title, domain.Key(author)).Scan(&from)
-	if err != nil {
-		return nil
-	}
-
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO discovery.collection_members (collection_id, ordinal, page_url, item_id)
-		SELECT $1,
-		       (SELECT coalesce(max(ordinal), -1) FROM discovery.collection_members WHERE collection_id = $1)
-		           + row_number() OVER (ORDER BY m.ordinal),
-		       m.page_url, m.item_id
-		FROM discovery.collection_members m
-		WHERE m.collection_id = $2
-		  AND m.item_id IS NOT NULL
-		  AND NOT EXISTS (SELECT 1 FROM discovery.collection_members k
-		                  WHERE k.collection_id = $1 AND k.item_id = m.item_id)`,
-		into, from); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `DELETE FROM discovery.collections WHERE id = $1`, from); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
 }
 
 // ItemHasCollection reports whether a recording already belongs to a cycle.
@@ -358,31 +240,6 @@ func (r *Repo) UnvisitedLinks(ctx context.Context, sourceID string, limit int) (
 		out = append(out, u)
 	}
 	return out, rows.Err()
-}
-
-// KnownMediaLinks counts how many of these addresses are pages we have already
-// found a recording on.
-//
-// This is the whole gate on the cycle question: a cycle is made of recordings,
-// so a page that reaches none cannot be one, and asking would be spending a
-// model call to be told that a menu is a menu.
-func (r *Repo) KnownMediaLinks(ctx context.Context, urls []string) (int, error) {
-	if len(urls) == 0 {
-		return 0, nil
-	}
-	var n int
-	err := r.pool.QueryRow(ctx, `
-		SELECT count(DISTINCT p.id)
-		FROM discovery.pages p
-		WHERE p.url = ANY($1) AND p.media_found > 0`, urls).Scan(&n)
-	return n, err
-}
-
-// SetSeriesLinksSeen remembers what the cycle question was asked about.
-func (r *Repo) SetSeriesLinksSeen(ctx context.Context, pageID int64, n int) error {
-	_, err := r.pool.Exec(ctx,
-		`UPDATE discovery.pages SET series_links_seen = $2 WHERE id = $1`, pageID, n)
-	return err
 }
 
 // PageLinks reads back what a page pointed at, for a visit that had no body to
