@@ -13,18 +13,26 @@
 // untouched, but we additionally skip over `{...}` spans to be safe).
 
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "node:fs"
+import { createRequire } from "node:module"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
 import { srLatinToCyrillic } from "./srLatinToCyrillic.mjs"
 
 // Latin brand names, product SKUs and code-like tokens that must stay in
-// Latin script (matching how ru/ keeps them verbatim). Longest first so
-// "Shruti Pro" wins over "Shruti". Matched as exact
-// substrings inside a string-literal body.
+// Latin script, matching how the hand-authored ru/ bundle keeps them
+// verbatim ("Слушай Садху Pro", "беседы с Ask Sadhu"). Matched
+// case-sensitively on whole-word boundaries — a bare substring match
+// would turn "Prošlo" into "Proшло" — and sorted longest first so
+// "Shruti Pro" wins over "Shruti".
+//
+// Only product/feature names belong here. A bare "Sadhu" is a name in
+// running text, which ru/ and sr-Cyrl both render in Cyrillic ("Садху"),
+// as they do "Studio" → "Студио".
 const PROTECTED = [
   "Shruti Pro",
   "Shruti",
+  "Ask Sadhu",
   "Shruti",
   "Google",
   "Apple",
@@ -32,9 +40,15 @@ const PROTECTED = [
   "PDF",
   "CDN",
   "SSE",
+  "Pro",
   "AI",
   "BG",
-]
+].sort((a, b) => b.length - a.length)
+
+// A protected token only counts when it is not glued to a neighbouring
+// word character — Serbian gajica letters, ASCII letters and digits.
+const WORD_CHAR = /[0-9A-Za-zČĆĐŠŽčćđšž]/
+const isWordChar = (ch) => ch !== undefined && WORD_CHAR.test(ch)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const LOCALES_DIR = join(__dirname, "../../apps/mobile/shruti/i18n/locales")
@@ -67,12 +81,12 @@ function transliterateLiteral(body) {
       }
     }
     for (const token of PROTECTED) {
-      if (body.startsWith(token, i)) {
-        flush()
-        out += token
-        i += token.length
-        continue outer
-      }
+      if (!body.startsWith(token, i)) continue
+      if (isWordChar(body[i - 1]) || isWordChar(body[i + token.length])) continue
+      flush()
+      out += token
+      i += token.length
+      continue outer
     }
     run += body[i]
     i += 1
@@ -162,31 +176,43 @@ const AUTOGEN_HEADER =
   "// AUTO-GENERATED from ../sr-Latn by modules/tools/sr-transliterate/generate-sr-cyrl.mjs\n" +
   "// Do not edit by hand — re-run the generator instead.\n"
 
+// Transliteration shifts a few line lengths (digraphs like nj→њ shorten
+// a line by one char), so the output is re-formatted with the mobile
+// app's own prettier. That step is mandatory, not best-effort: unwrapped
+// lines get silently reflowed by the next run that does have prettier,
+// which is drift disguised as someone else's diff. Resolve it up front —
+// through the package, not the `.bin` shim, so any cwd works — and bail
+// before writing anything.
+const MOBILE = join(LOCALES_DIR, "../../..")
+let prettierBin
+try {
+  prettierBin = createRequire(join(MOBILE, "package.json")).resolve("prettier/bin/prettier.cjs")
+} catch {
+  console.error(
+    `prettier is not installed under ${MOBILE}. Run \`npm ci\` there, then re-run this generator.`,
+  )
+  process.exit(1)
+}
+
 mkdirSync(DST, { recursive: true })
 
 const files = readdirSync(SRC).filter((f) => f.endsWith(".ts"))
-let count = 0
+const written = []
 for (const file of files) {
   const src = readFileSync(join(SRC, file), "utf8")
   const out = AUTOGEN_HEADER + transliterateSource(src)
   writeFileSync(join(DST, file), out)
-  count += 1
+  written.push(join(DST, file))
 }
 
-// Transliteration shifts a few line lengths (digraphs like nj→њ shorten
-// a line by one char), so re-format the generated files with the mobile
-// app's own prettier to keep the bundle lint-clean and stable on re-run.
-const MOBILE = join(LOCALES_DIR, "../../..")
-const prettierBin = join(MOBILE, "node_modules/.bin/prettier")
-const fmt = spawnSync(prettierBin, ["--write", join(DST, "*.ts")], {
-  cwd: MOBILE,
-  stdio: "inherit",
-  shell: false,
-})
+const fmt = spawnSync(
+  process.execPath,
+  [prettierBin, "--log-level", "warn", "--write", ...written],
+  { cwd: MOBILE, stdio: "inherit" },
+)
 if (fmt.status !== 0) {
-  console.warn(
-    "prettier formatting of sr-Cyrl failed (is it installed?); files written unformatted.",
-  )
+  console.error("prettier failed to format sr-Cyrl; the generated bundle is unformatted.")
+  process.exit(fmt.status ?? 1)
 }
 
-console.log(`Generated ${count} sr-Cyrl file(s) from sr-Latn.`)
+console.log(`Generated ${written.length} sr-Cyrl file(s) from sr-Latn.`)
