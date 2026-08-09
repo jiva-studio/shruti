@@ -162,6 +162,50 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(store.getState(TRACK)).toBe("failed")
   })
 
+  it("still takes the retry path when an outer caller claimed the row first", async () => {
+    // `openTrack` claims the row before calling in, so the raw state reads
+    // "pending" by the time `isRetryAfterFailure` is derived. Reading it
+    // raw would silently skip the iOS phantom-cache cleanup.
+    downloadMedia.mockResolvedValue({ ok: false, error: "all-candidates-failed" })
+    const store = useDownloadStore()
+    await store.ensureDownloaded(TRACK, PATH)
+    expect(store.getState(TRACK)).toBe("failed")
+
+    store.markPending(TRACK)
+    await store.ensureDownloaded(TRACK, PATH)
+
+    expect(deleteFile).toHaveBeenCalledWith(`https://cdn.test/${PATH}`)
+  })
+
+  it("shows the retry entry points the failed row under a claim", async () => {
+    downloadMedia.mockResolvedValue({ ok: false, error: "all-candidates-failed" })
+    const store = useDownloadStore()
+    await store.ensureDownloaded(TRACK, PATH)
+
+    store.markPending(TRACK)
+    // What the row renders...
+    expect(store.getState(TRACK)).toBe("pending")
+    // ...and what the Home tap / sheet button must act on.
+    expect(store.getEffectiveState(TRACK)).toBe("failed")
+  })
+
+  it("does not restore a claim over a row whose state was cleared meanwhile", async () => {
+    // Cancelling a download DELETES the row's state. The claim must not put
+    // the red X back on a row the user just asked us to drop — the guard in
+    // `clearPending` depends on the canceller deleting rather than writing
+    // "idle", so pin that contract here.
+    downloadMedia.mockResolvedValue({ ok: false, error: "all-candidates-failed" })
+    const store = useDownloadStore()
+    await store.ensureDownloaded(TRACK, PATH)
+    expect(store.getState(TRACK)).toBe("failed")
+
+    store.markPending(TRACK)
+    await store.remove(TRACK, `https://cdn.test/${PATH}`)
+    store.clearPending(TRACK)
+
+    expect(store.getState(TRACK)).toBe("idle")
+  })
+
   it("never paints `downloading` for a track the storage budget refuses", async () => {
     hasRoom = false
     const store = useDownloadStore()
@@ -227,6 +271,30 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     // A claim leaked by the task's `finally` would silently swallow this
     // one — the row would stay on its red X with no answer to the tap.
     store.markPending(TRACK)
+    expect(store.getState(TRACK)).toBe("pending")
+  })
+
+  it("does not release a claim created after a data wipe", async () => {
+    let releaseProbe: (value: string | null) => void = () => {}
+    resolveLocalUrl.mockReturnValue(
+      new Promise<string | null>((resolve) => {
+        releaseProbe = resolve
+      })
+    )
+    const store = useDownloadStore()
+    const stale = store.ensureDownloaded(TRACK, PATH)
+
+    // "Clear user data" mid-download drops every claim...
+    store.reset()
+    // ...and a fresh open claims the same row while the old task settles.
+    store.markPending(TRACK)
+    expect(store.getState(TRACK)).toBe("pending")
+
+    releaseProbe(null)
+    await stale
+
+    // The cancelled task's `finally` released a claim that was never its
+    // own — the new download would lose its shimmer while genuinely running.
     expect(store.getState(TRACK)).toBe("pending")
   })
 
@@ -388,6 +456,25 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     await Promise.resolve()
     store.reset()
     releaseTransfer({ ok: false, error: "all-candidates-failed" })
+    await task
+
+    expect(toastError).not.toHaveBeenCalled()
+    expect(store.getState(TRACK)).toBe("idle")
+  })
+
+  it("says nothing about storage after a data wipe cancelled the task", async () => {
+    hasRoom = false
+    let releaseProbe: (value: string | null) => void = () => {}
+    resolveLocalUrl.mockReturnValue(
+      new Promise<string | null>((resolve) => {
+        releaseProbe = resolve
+      })
+    )
+    const store = useDownloadStore()
+
+    const task = store.ensureDownloaded(TRACK, PATH)
+    store.reset()
+    releaseProbe(null)
     await task
 
     expect(toastError).not.toHaveBeenCalled()
