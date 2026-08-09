@@ -58,9 +58,11 @@ export default defineConfigWithVueTs(
   },
   // Allowlist: these components own an <ion-modal>/<ion-header> that Ionic
   // teleports to the app root, out of reach of the scope attribute, so their
-  // host-level overrides must stay global. Every selector in those blocks is
-  // anchored to the component's own modal/page class — add a file here only
-  // with the same anchoring.
+  // host-level overrides must stay global. The exemption is per FILE, not per
+  // rule, so it does not certify the contents: TrackSheet.vue still carries a
+  // bare, unanchored `ion-footer` rule that leaks app-wide (tracked in #1484).
+  // Anchor every selector to the component's own modal/page class — that is the
+  // bar for adding a file here, and the bar for taking one back off.
   {
     files: [
       "shruti/components/TrackSheet.vue",
