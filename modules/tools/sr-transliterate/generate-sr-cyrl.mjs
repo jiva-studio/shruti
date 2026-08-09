@@ -206,7 +206,20 @@ try {
 
 mkdirSync(DST, { recursive: true })
 
+// An empty sr-Latn/ is never a real instruction to empty sr-Cyrl/ — it
+// means a truncated tree (sparse checkout, partial clone, a checkout
+// caught mid-flight), and the prune below would take the whole bundle
+// with it. A missing directory is already safe: readdirSync throws
+// ENOENT here, before anything is written or deleted.
 const files = readdirSync(SRC).filter((f) => f.endsWith(".ts"))
+if (files.length === 0) {
+  console.error(
+    `${SRC} has no .ts files. Refusing to run: that would prune every generated\n` +
+      "file in sr-Cyrl/. Check out the full locale tree and try again.",
+  )
+  process.exit(1)
+}
+
 const written = []
 for (const file of files) {
   const src = readFileSync(join(SRC, file), "utf8")
@@ -218,10 +231,17 @@ for (const file of files) {
 // Drop outputs whose sr-Latn counterpart is gone, so a removed namespace
 // can't leave a tracked orphan behind — the idempotence check compares
 // against git, and an orphan is invisible to it once committed.
+//
+// Name every casualty. An untracked sr-Cyrl/*.ts that someone added by
+// hand is deleted here and git can't bring it back, so a bare count
+// would be the only trace it ever existed. (On a case-insensitive
+// filesystem a case-only rename also prunes the file just written; the
+// name shows up here and prettier then fails on the missing path.)
 let pruned = 0
 for (const file of readdirSync(DST).filter((f) => f.endsWith(".ts"))) {
   if (files.includes(file)) continue
   rmSync(join(DST, file))
+  console.log(`  pruned ${file} — no sr-Latn/${file} to generate it from`)
   pruned += 1
 }
 
