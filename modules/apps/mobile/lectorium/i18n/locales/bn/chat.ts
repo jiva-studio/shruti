@@ -219,6 +219,7 @@ export default {
 
   noteSaved: "নোট সংরক্ষিত হয়েছে",
   noteSaving: "নোট সংরক্ষণ করা হচ্ছে…",
+  actionNoteError: "নোট সংরক্ষণ করা যায়নি।",
 
   actionPdfKind: "লেকচারের ট্রান্সক্রিপ্ট",
   actionPdfShare: "শেয়ার করুন",
