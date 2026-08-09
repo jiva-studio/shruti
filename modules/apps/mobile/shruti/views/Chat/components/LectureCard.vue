@@ -50,11 +50,14 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
+import { formatTrackDate } from "@shruti/composables/formatTrackDate.js"
+import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
 import { useToast } from "@kit/composables"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 
 const props = defineProps<{ trackId: string }>()
 const { t } = useI18n()
+const formatDuration = useDurationFormatter()
 const appLanguage = useAppLanguage()
 const libraryLanguages = useLibraryLanguages()
 const { addToPlaylist } = useAddToPlaylist()
@@ -110,18 +113,14 @@ const locationName = computed(() =>
 
 const dateLabel = computed(() => {
   if (!track.value) return ""
-  return track.value.date ?? ""
+  return formatTrackDate(track.value.date ?? "", appLanguage.value)
 })
 
 const durationLabel = computed(() => {
   if (!track.value) return ""
   const ms = maxAudioDurationMs(track.value)
   if (ms <= 0) return ""
-  const totalSeconds = Math.round(ms / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  if (hours > 0) return `${hours}h ${minutes}m`
-  return `${minutes}m`
+  return formatDuration(Math.round(ms / 1000))
 })
 
 const metaLine = computed<string>(() => {
