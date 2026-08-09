@@ -142,14 +142,12 @@ func (r reply) filter() Filter {
 	return f
 }
 
-func date(s string) *time.Time {
-	s = strings.TrimSpace(s)
-	if s == "" {
+// date is what the model wrote, if it wrote a day. Anything else is nothing
+// rather than a guess.
+func date(s string) *Date {
+	d, err := ParseDate(s)
+	if err != nil || !d.set() {
 		return nil
 	}
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return nil
-	}
-	return &t
+	return &d
 }

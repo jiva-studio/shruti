@@ -17,12 +17,12 @@ import (
 
 var now = time.Date(2026, time.August, 7, 12, 0, 0, 0, time.UTC)
 
-func day(s string) *time.Time {
-	t, err := time.Parse("2006-01-02", s)
+func day(s string) *ask.Date {
+	d, err := ask.ParseDate(s)
 	if err != nil {
 		panic(err)
 	}
-	return &t
+	return &d
 }
 
 // reader answers with a fixed filter, and records what it was asked.
