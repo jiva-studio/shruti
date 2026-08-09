@@ -975,5 +975,66 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
       expect(result.get("pi-1199" as PlaylistItemId)).toBe(900)
       expect(result.get("pi-0" as PlaylistItemId)).toBeNull()
     })
+
+    it("stays byte-for-byte equivalent to the per-item read under randomized input", async () => {
+      // Seeded so a failure is reproducible. Covers ended_at ties, duplicate
+      // and unknown ids, empty input, missing/zero/negative durations and
+      // mixed lexical id shapes (the tiebreak compares ids as text).
+      let seed = 0x5eed
+      const rnd = (): number => {
+        seed = (seed + 0x6d2b79f5) | 0
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+      }
+      const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]
+      const idShapes = ["pi-{n}", "PI_{n}", "item.{n}", "{n}", "z{n}z", "pi-00{n}"]
+
+      const repo = createSqlListeningSessionRepository(db)
+      for (let trial = 0; trial < 150; trial++) {
+        await db.execute("DELETE FROM listening_sessions")
+        const itemCount = Math.floor(rnd() * 8)
+        const pool: PlaylistItemId[] = []
+        for (let i = 0; i < itemCount; i++) {
+          pool.push(pick(idShapes).replace("{n}", String(i)) as PlaylistItemId)
+        }
+        let rowSeq = 0
+        for (const itemId of pool) {
+          const sessions = Math.floor(rnd() * 5)
+          for (let s = 0; s < sessions; s++) {
+            // A 3-value ended_at range makes same-second ties common; the
+            // session id shape varies so ordering is not just numeric.
+            const endedAt = 100 + Math.floor(rnd() * 3)
+            const idShape = pick(["ls-{n}", "ls-0{n}", "LS{n}", "{n}"])
+            await rawInsert(db, {
+              id: idShape.replace("{n}", String(rowSeq++)),
+              itemId,
+              startedAt: endedAt - 10,
+              endedAt,
+              fromPosition: 0,
+              toPosition: Math.floor(rnd() * 1200),
+            })
+          }
+        }
+        // Ask about a shuffled bag: some pool ids twice, some never inserted.
+        const asked: PlaylistItemId[] = []
+        for (const itemId of pool) {
+          if (rnd() < 0.85) asked.push(itemId)
+          if (rnd() < 0.2) asked.push(itemId)
+        }
+        if (rnd() < 0.5) asked.push(`ghost-${trial}` as PlaylistItemId)
+        const durations = new Map<PlaylistItemId, number>()
+        for (const itemId of asked) {
+          const d = pick([1000, 1000, 1200, 1, 0, -5])
+          if (rnd() < 0.85) durations.set(itemId, d)
+        }
+
+        const batched = await repo.getCompletedAtForItems(asked, durations)
+        const expected = await perItemCompletedAt(db, asked, durations)
+        // Key order matters: callers iterate the map to build sets.
+        expect([...batched.keys()]).toEqual([...expected.keys()])
+        expect([...batched.values()]).toEqual([...expected.values()])
+      }
+    })
   })
 })
