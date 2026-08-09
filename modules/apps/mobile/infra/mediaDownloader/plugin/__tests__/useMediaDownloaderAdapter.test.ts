@@ -78,6 +78,20 @@ describe("useMediaDownloaderAdapter — terminal events", () => {
     expect(listeners).toHaveLength(0)
   })
 
+  it("settles a transfer whose file was removed mid-flight as a cancellation", async () => {
+    const downloader = useMediaDownloaderAdapter({ cacheDir: "shruti" })
+    const pending = downloader.download(URL_A)
+    await vi.waitFor(() => expect(downloadMock).toHaveBeenCalledOnce())
+
+    // `deleteFile()` dropped the bookkeeping while the transfer finished:
+    // deliberate local action, so it must NOT read as a CDN fault (which
+    // would rotate to the next server for bytes the user just deleted).
+    emit("failed", { id: ID_A, error: "download was removed", retryable: false, code: "removed" })
+
+    await expect(pending).rejects.toBeInstanceOf(DownloadCancelledError)
+    expect(listeners).toHaveLength(0)
+  })
+
   it("rejects a genuine failure with the reported error, not a cancellation", async () => {
     const downloader = useMediaDownloaderAdapter({ cacheDir: "shruti" })
     const pending = downloader.download(URL_A)

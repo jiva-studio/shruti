@@ -1,11 +1,13 @@
 import type { ProgressCallback } from "./persistence.js"
 
 /**
- * Thrown by `IMediaDownloader.download` when the transfer ended because it
- * was cancelled — `cancel()` from the app (the user removed/archived the
- * track, a data wipe) or the platform aborting the task — rather than
- * failing on its own. It is normal control flow, not a fault: callers must
- * settle quietly instead of painting a failed row with a retry affordance.
+ * Thrown by `IMediaDownloader.download` when the transfer was ended by a
+ * local decision rather than failing on its own: `cancel()` from the app
+ * (the user removed/archived the track, a data wipe), the platform aborting
+ * the task, or the file being deleted while the transfer was finishing. It
+ * is normal control flow, not a fault: callers must settle quietly instead
+ * of painting a failed row with a retry affordance — and must not retry it
+ * against another server, since nothing was lost in transit.
  *
  * Layer-pure use cases can't import this port, so they recognise it by
  * `name` (see `downloadMedia`); keep the two in sync.

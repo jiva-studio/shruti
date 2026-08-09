@@ -79,13 +79,17 @@ export interface FailedEvent {
   /** Whether the failure is recoverable on retry (network drop) vs terminal (404, disk full). */
   retryable: boolean;
   /**
-   * Set to `"cancelled"` when the transfer ended because it was cancelled
-   * (`cancel()`, or the platform aborting the task) rather than failing on
-   * its own. Every platform emits `failed` for a cancellation so a caller
-   * awaiting the transfer always settles; the code lets that caller tell a
-   * deliberate abort from a genuine error and skip the retry affordance.
+   * Set when the transfer ended for a local reason rather than failing on
+   * its own — `"cancelled"` for `cancel()` (or the platform aborting the
+   * task), `"removed"` when it finished after `deleteFile()` had already
+   * dropped its bookkeeping, leaving no file to hand back.
+   *
+   * Every platform emits `failed` in these cases so a caller awaiting the
+   * transfer always settles. The code lets that caller tell a deliberate
+   * local abort from a genuine error: neither is worth a retry affordance,
+   * and neither should be retried against another server.
    */
-  code?: 'cancelled';
+  code?: 'cancelled' | 'removed';
 }
 
 /**
