@@ -43,6 +43,35 @@ export default defineConfigWithVueTs(
     },
   },
 
+  /* ---- Style isolation ---- */
+
+  // An unscoped <style> in a screen or a shared component is global CSS: its
+  // selectors match every element in the app, and generic class names ("badge",
+  // "card") silently override unrelated components (#1481). Screens and
+  // components must keep their CSS scoped; the allowlist below carves out the
+  // handful of blocks that have to be global.
+  {
+    files: ["shruti/views/**/*.vue", "shruti/components/**/*.vue"],
+    rules: {
+      "vue/enforce-style-attribute": ["error", { allow: ["scoped", "module"] }],
+    },
+  },
+  // Allowlist: these components own an <ion-modal>/<ion-header> that Ionic
+  // teleports to the app root, out of reach of the scope attribute, so their
+  // host-level overrides must stay global. Every selector in those blocks is
+  // anchored to the component's own modal/page class — add a file here only
+  // with the same anchoring.
+  {
+    files: [
+      "shruti/components/TrackSheet.vue",
+      "shruti/views/Subscription/SubscriptionView.vue",
+      "shruti/views/Chat/components/ChatSessionList.vue",
+    ],
+    rules: {
+      "vue/enforce-style-attribute": ["error", { allow: ["scoped", "module", "plain"] }],
+    },
+  },
+
   /* ---- Layer boundary rules ---- */
 
   // Contracts (shared kernel / published language): pure wire types,
