@@ -4,5 +4,5 @@ export default {
   title: "Предавање",
   play: "Слушај",
   loading: "Учитавање предавања…",
-  language: "Језик",
+  language: "Језик предавања",
 }

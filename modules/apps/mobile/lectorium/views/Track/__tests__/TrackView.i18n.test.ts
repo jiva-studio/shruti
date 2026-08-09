@@ -81,6 +81,9 @@ describe("TrackView i18n", () => {
     }
   })
 
+  // Catches placeholder bundles copy-pasted from en/. Every key this view uses
+  // is ordinary prose, so none of them legitimately matches English. A future
+  // key that does — a brand name, a bare unit — has to be exempted here.
   it.each(LOCALES.filter((l) => l !== "en"))("translates the keys in %s", async (locale) => {
     for (const key of translationKeys(template)) {
       expect(await resolveKey(locale, key), `${locale} copies the English ${key}`).not.toBe(

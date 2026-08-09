@@ -2,5 +2,5 @@ export default {
   title: "লেকচার",
   play: "শুনুন",
   loading: "লেকচার লোড হচ্ছে…",
-  language: "ভাষা",
+  language: "লেকচারের ভাষা",
 }
