@@ -13,18 +13,12 @@
           @open-filters="search.filtersOpen.value = true"
           @clear-filter="onClearFilter"
           @see-all-web="openWebResults"
+          @see-all-mine="openMyLibrary"
           @open-grouping="openGrouping"
         />
       </div>
-      <div class="bottom-spacer" aria-hidden="true" />
+      <DockSpacer />
     </IonContent>
-
-    <SearchBar
-      v-model="search.query.value"
-      :placeholder="$t('app.search')"
-      :search-label="$t('search.readQuestion')"
-      :clear-label="$t('search.clearQuery')"
-    />
 
     <SearchFiltersSheet
       v-model:filters="search.filters.value"
@@ -43,13 +37,12 @@ import { useRouter } from "vue-router"
 import { IonContent, IonPage } from "@ionic/vue"
 import { SafeAreaHeaderGradient } from "@ui/primitives/index.js"
 import { SearchFiltersSheet, clearSection } from "@ui/features/tracks/search/filters/index.js"
-import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useSearchController } from "./SearchView.controller.js"
 import { useWebSearch } from "./composables/useWebSearch.js"
 import { useGroupingSearch, type GroupingHit } from "./composables/useGroupingSearch.js"
 import SearchLanding from "./components/SearchLanding.vue"
 import SearchResults from "./components/SearchResults.vue"
-import SearchBar from "./components/SearchBar.vue"
+import DockSpacer from "@shruti/components/DockSpacer.vue"
 
 /**
  * The library tab: one page that browses when there is nothing in the field
@@ -71,10 +64,9 @@ import SearchBar from "./components/SearchBar.vue"
  * level down they would be torn down and rebuilt every time the field emptied,
  * reloading dictionaries on the next keystroke.
  *
- * This page does not use `AppPage`. It needs the bar docked below the scroller
- * as a sibling — the shape `ChatView` has — and that shell offers no footer.
+ * The field is docked at the root (`App.vue`), next to the player; this page
+ * only keeps the space clear for it at the bottom.
  */
-const player = usePlayerStore()
 const router = useRouter()
 
 const search = useSearchController()
@@ -104,6 +96,14 @@ function openWebResults(): void {
   void router.push({ name: "web-results", query: { q: search.query.value.trim() } })
 }
 
+/**
+ * Open the personal library narrowed to this query — the page that already
+ * lists those items, not a second one built for search.
+ */
+function openMyLibrary(): void {
+  void router.push({ name: "my-library", query: { q: search.query.value.trim() } })
+}
+
 /** Drop one section from the chips above the results. */
 function onClearFilter(key: string): void {
   search.filters.value = clearSection(search.filters.value, key)
@@ -120,19 +120,6 @@ ion-content {
   flex-direction: column;
   min-height: 100%;
   padding-top: 8px;
-}
-
-/*
- * Keeps the last row clear of what floats over it.
- *
- * The bar floats rather than taking its own space — the same shape the chat
- * uses — so the scroller has to be told to stop short of it. The player floats
- * higher still, and only while it is up: typing hides it (App.vue drops it
- * whenever the keyboard is open) and the reserved space would be a hole at the
- * end of the list.
- */
-.bottom-spacer {
-  height: v-bind("player.open ? 'calc(60px + var(--kit-page-reserved-space, 0px))' : '60px'");
 }
 
 @media (min-width: 768px) {

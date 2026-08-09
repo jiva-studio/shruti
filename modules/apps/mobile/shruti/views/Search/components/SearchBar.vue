@@ -81,17 +81,17 @@ const text = defineModel<string>({ required: true })
 </script>
 
 <style scoped>
-/* Floats over the content, the way the chat bar does, so the scroller keeps
-   the full height and nothing reflows when the keyboard arrives. */
+/* Docked at the root, over the page stack: above the floating player (999),
+   below Ionic's overlays (~1001). */
 .search-bar {
-  position: absolute;
+  position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: calc(56px + var(--ion-safe-area-bottom, 0px));
   padding: 8px 12px;
   background: transparent;
   pointer-events: none;
-  z-index: 10;
+  z-index: 1000;
 }
 
 /* The two discs share one cell, so one can shrink away exactly where the other

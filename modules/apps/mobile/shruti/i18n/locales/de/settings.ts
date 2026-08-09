@@ -181,6 +181,13 @@ export default {
     description: "Halte deine Ask-Sadhu-Unterhaltungen auf all deinen Geräten synchron.",
   },
 
+  downloadLimit: {
+    title: "Download-Limit",
+    unlimited: "Ohne Limit",
+    usage: "{used} von {limit}",
+    usageUnlimited: "{used} geladen",
+  },
+
   smartLibrary: {
     title: "Intelligente Bibliothek",
     description: "Frische Vorträge bereithalten und nach dem Hören aufräumen",

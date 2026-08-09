@@ -4,6 +4,7 @@
       <TrackListItem
         :track-id="row.id"
         :title="row.title"
+        :position="row.position"
         :author="row.author"
         :location="row.location"
         :references="row.references"

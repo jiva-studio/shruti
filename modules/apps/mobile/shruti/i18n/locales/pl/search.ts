@@ -16,6 +16,7 @@ export default {
   web: {
     title: "Internet",
     add: "Dodaj do mojej biblioteki",
+    prompt: "Wpisz zapytanie, aby wyszukać.",
     empty: "Nie ma nic w archiwach, które przeglądamy.",
     unavailable: "Wyszukiwanie w internecie jest teraz niedostępne.",
     more: "Pokaż więcej",
@@ -90,6 +91,7 @@ export default {
       "Dodać {count} wykład do playlisty? | Dodać {count} wykłady do playlisty? | Dodać {count} wykładów do playlisty?",
     others: "Inne kolekcje",
     all: "Wszystkie kolekcje",
+    partOf: "Wykład {position} z {total}",
     seeAll: "Zobacz wszystkie",
     seeAllNamed: "Zobacz wszystkie: {name}",
   },

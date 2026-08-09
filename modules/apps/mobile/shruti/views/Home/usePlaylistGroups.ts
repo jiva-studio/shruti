@@ -35,6 +35,11 @@ export function usePlaylistGroups(
   const { t } = useI18n()
   // `${locale}:${collectionId}` → display name (or null when unresolved).
   const names = ref<Map<string, string | null>>(new Map())
+  // `${locale}:${collectionId}` → trackId → 1-based place in the collection.
+  // Taken from the catalog, not from the queue: a group here is a run of
+  // consecutive queue rows, so counting them would renumber the rest the moment
+  // one is removed, and would disagree with the collection page.
+  const orders = ref<Map<string, ReadonlyMap<string, number>>>(new Map())
 
   // trackId → source collectionId, from the active playlist items. A track is
   // unique in the active playlist, so this mapping is unambiguous.
@@ -70,6 +75,7 @@ export function usePlaylistGroups(
   async function loadNames(ids: readonly string[], loc: string): Promise<void> {
     const repos = app.repositories()
     const next = new Map(names.value)
+    const nextOrders = new Map(orders.value)
     let changed = false
     await Promise.all(
       ids.map(async (id) => {
@@ -77,13 +83,18 @@ export function usePlaylistGroups(
         if (next.has(key)) return
         try {
           next.set(key, await repos.collections.getCollectionName(id, loc))
+          const ids = await repos.collections.getCollectionTrackIds(id, loc)
+          nextOrders.set(key, new Map(ids.map((tid, i) => [tid, i + 1])))
         } catch {
           next.set(key, null)
         }
         changed = true
       })
     )
-    if (changed) names.value = next
+    if (changed) {
+      names.value = next
+      orders.value = nextOrders
+    }
   }
 
   watch(
@@ -115,7 +126,11 @@ export function usePlaylistGroups(
         while (j + 1 < rs.length && colOf(rs[j + 1].id)?.id === here.id) j++
       }
       if (here && j > i) {
-        const groupRows = rs.slice(i, j + 1)
+        const place = orders.value.get(`${loc}:${here.id}`)
+        const groupRows = rs.slice(i, j + 1).map((row) => {
+          const n = place?.get(row.id)
+          return n ? { ...row, position: n } : row
+        })
         out.push({
           kind: "group",
           id: here.id,

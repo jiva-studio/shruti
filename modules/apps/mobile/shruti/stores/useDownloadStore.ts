@@ -1,5 +1,5 @@
 import { defineStore } from "pinia"
-import { ref } from "vue"
+import { ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useToast } from "@kit/composables"
 import { downloadMedia } from "@usecases/downloads/downloadMedia.js"
@@ -8,10 +8,16 @@ import { removeDownloadedTranscripts } from "@usecases/downloads/removeDownloade
 import type { TrackId } from "@lib/domain/core.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { useShruti } from "@shruti/shruti.js"
+import { useDownloadQuotaStore } from "./useDownloadQuotaStore.js"
 import { useServerFallback } from "./downloads/useServerFallback.js"
 import { useTranscriptPrefetch } from "./downloads/useTranscriptPrefetch.js"
 
-export type DownloadState = "idle" | "downloading" | "completed" | "failed"
+/**
+ * `deferred` — queued for offline use but held back because the storage
+ * budget is spent. It is not a failure and not in flight: the track waits
+ * in the FIFO until an eviction frees room (see `resumeDeferred`).
+ */
+export type DownloadState = "idle" | "downloading" | "deferred" | "completed" | "failed"
 
 /**
  * Per-track media download state. The source of truth is the user DB
@@ -54,10 +60,16 @@ export const useDownloadStore = defineStore("downloads", () => {
   // — `prefetch` is the parallel-spam entry point and is the one we
   // serialize.
   const PREFETCH_CONCURRENCY = 1
-  const prefetchQueue: Array<{ trackId: TrackId; path: string }> = []
+  const prefetchQueue: Array<{ trackId: TrackId; path: string; sizeBytes: number }> = []
   const queuedTrackIds = new Set<TrackId>()
   let queueDraining = false
   let hydrated = false
+  // Rate-limit for the "storage budget is full" notice. A draining queue
+  // hits the same wall once per remaining job, and the playback path hits
+  // it on every tap of a deferred row — the user needs to be told once,
+  // not N times in a row.
+  let lastBudgetNoticeAt = 0
+  const BUDGET_NOTICE_COOLDOWN_MS = 60_000
   // Coalesce concurrent hydrate() calls (Home + Search + Settings all call it
   // defensively on mount) and back off after a failure, so a hard-failing DB
   // doesn't re-run failStaleDownloads() (a write) + listReady() on every screen
@@ -92,6 +104,26 @@ export const useDownloadStore = defineStore("downloads", () => {
     return states.value.get(trackId) ?? "idle"
   }
 
+  /**
+   * Tell the user why a lecture stays grey / didn't save offline, and what
+   * to do about it — free space by removing listened lectures, or raise
+   * the limit in Settings. Suppressed for a minute after the last notice
+   * so a full queue doesn't turn into a toast storm.
+   */
+  function noticeBudgetFull(): void {
+    const now = Date.now()
+    if (now - lastBudgetNoticeAt < BUDGET_NOTICE_COOLDOWN_MS) return
+    lastBudgetNoticeAt = now
+    void toast.error(t("errors.downloadStorageFull"))
+  }
+
+  /** Paint a track as "waiting for space" without touching a terminal state. */
+  function markDeferred(trackId: TrackId): void {
+    const current = states.value.get(trackId)
+    if (current === "completed" || current === "failed") return
+    setState(trackId, "deferred")
+  }
+
   function getProgress(trackId: TrackId): number {
     return progress.value.get(trackId) ?? 0
   }
@@ -119,6 +151,9 @@ export const useDownloadStore = defineStore("downloads", () => {
         const next = new Map<TrackId, DownloadState>()
         for (const item of ready) next.set(item.trackId, "completed")
         states.value = next
+        // Size what's already on disk before anything can be queued, so the
+        // first budget decision of the session isn't made against a zero.
+        await useDownloadQuotaStore().refresh()
         hydrated = true
         hydrationError.value = null
         lastHydrateFailAt = 0
@@ -150,8 +185,21 @@ export const useDownloadStore = defineStore("downloads", () => {
    * is also fetched in the background. The audio result isn't gated on
    * the transcript leg — opening a downloaded track for playback must
    * not wait on a 50KB JSON file behind a kilobyte-counter spinner.
+   *
+   * `filesize` is the catalog's byte size for the audio being fetched; it
+   * funds the storage budget. Pass it whenever the caller already holds
+   * the `TrackAudio` — omitting it makes the budget fall back to a corpus
+   * average, which is a worse estimate but never a free pass.
+   *
+   * A cache hit is always served, but starting a NEW transfer requires
+   * budget: over the limit this returns `null` (playback then streams
+   * from the CDN instead) and tells the user why.
    */
-  async function ensureDownloaded(trackId: TrackId, path: string): Promise<string | null> {
+  async function ensureDownloaded(
+    trackId: TrackId,
+    path: string,
+    filesize?: number | null
+  ): Promise<string | null> {
     const existing = inFlight.get(trackId)
     if (existing) return existing
 
@@ -241,6 +289,20 @@ export const useDownloadStore = defineStore("downloads", () => {
           if (fresh()) setState(trackId, "failed")
           return null
         }
+        // Budget gate. Everything above this line either served a cache hit
+        // or cost nothing; from here on we'd be writing megabytes to disk,
+        // so the user's storage limit gets a say. `hasRoomFor` counts
+        // in-flight reservations too, so a draining queue can't overshoot
+        // the cap in the window before `usedBytes` catches up.
+        const quota = useDownloadQuotaStore()
+        await quota.ensureMeasured()
+        const sizeBytes = quota.sizeOf(filesize)
+        if (!quota.hasRoomFor(sizeBytes)) {
+          if (fresh()) markDeferred(trackId)
+          noticeBudgetFull()
+          return null
+        }
+        quota.reserve(trackId, sizeBytes)
         const result = await downloadMedia(
           { trackId, path, candidates: fallback.candidates() },
           {
@@ -256,6 +318,8 @@ export const useDownloadStore = defineStore("downloads", () => {
           }
         )
         if (result.ok) {
+          // Bytes are on disk — turn the reservation into real usage.
+          quota.settle(trackId, true)
           if (fresh()) setState(trackId, "completed")
           // Promote the working CDN if it differs from the active
           // server when the download started. The activeServer watcher
@@ -276,6 +340,10 @@ export const useDownloadStore = defineStore("downloads", () => {
         if (fresh()) setState(trackId, "failed")
         return null
       } finally {
+        // Release any reservation this task still holds — a cache hit, an
+        // early return, or a throw all land here. No-op once the success
+        // branch has already promoted it into `usedBytes`.
+        useDownloadQuotaStore().settle(trackId, false)
         // Only delete our own slot. After a reset() the map was
         // cleared and a newer task may already own this trackId.
         if (inFlight.get(trackId) === ownership.current) {
@@ -290,17 +358,45 @@ export const useDownloadStore = defineStore("downloads", () => {
     return task
   }
 
+  /**
+   * Walk the FIFO, stopping at the first job the storage budget can't
+   * fund. Deferred jobs STAY in the queue in order — `resumeDeferred()`
+   * simply drains again once an eviction frees room, so a 100-track
+   * playlist downloads as far as the budget allows and then continues on
+   * its own as the user finishes and clears lectures.
+   */
   async function drainPrefetchQueue(): Promise<void> {
     if (queueDraining) return
     queueDraining = true
     try {
+      const quota = useDownloadQuotaStore()
+      // Never budget against an unmeasured zero — on a cold start that
+      // would let the whole queue through before the first refresh lands.
+      await quota.ensureMeasured()
       while (prefetchQueue.length > 0) {
-        const batch = prefetchQueue.splice(0, PREFETCH_CONCURRENCY)
+        const batch: Array<{ trackId: TrackId; path: string; sizeBytes: number }> = []
+        while (batch.length < PREFETCH_CONCURRENCY && prefetchQueue.length > 0) {
+          const head = prefetchQueue[0]!
+          if (!quota.hasRoomFor(head.sizeBytes)) break
+          // Reserve up front so a multi-job batch is measured against the
+          // budget as a whole, not job-by-job against a stale total.
+          quota.reserve(head.trackId, head.sizeBytes)
+          prefetchQueue.shift()
+          batch.push(head)
+        }
+        if (batch.length === 0) {
+          // Budget spent. Paint the whole waiting tail as deferred (grey,
+          // no spinner) and tell the user once what to do about it.
+          for (const job of prefetchQueue) markDeferred(job.trackId)
+          noticeBudgetFull()
+          return
+        }
         await Promise.allSettled(
           batch.map(async (job) => {
             queuedTrackIds.delete(job.trackId)
+            markStartingDownload(job.trackId)
             try {
-              await ensureDownloaded(job.trackId, job.path)
+              await ensureDownloaded(job.trackId, job.path, job.sizeBytes)
             } catch {
               // ensureDownloaded already records "failed"; don't break the queue.
             }
@@ -313,6 +409,15 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   /**
+   * Re-drain the FIFO after something freed storage (an archived lecture
+   * evicted, the limit raised). No-op when nothing is waiting.
+   */
+  function resumeDeferred(): void {
+    if (prefetchQueue.length === 0) return
+    void drainPrefetchQueue()
+  }
+
+  /**
    * Fire-and-forget enqueue for "add to playlist" / data-restore flows.
    * Replaces a previous unbounded parallel dispatch that caused every
    * download past the first to fail when the native plugin's transfer
@@ -322,16 +427,23 @@ export const useDownloadStore = defineStore("downloads", () => {
    * Marks the row as `downloading` immediately on enqueue (unless it
    * was already `failed` — leave that state intact so `ensureDownloaded`
    * still picks the retry path) so the dim treatment doesn't flicker
-   * between `idle` and `downloading` while the FIFO is draining.
+   * between `idle` and `downloading` while the FIFO is draining. Over
+   * budget it enqueues as `deferred` instead: no spinner for a transfer
+   * that isn't going to start.
    */
-  function prefetch(trackId: TrackId, path: string): void {
+  function prefetch(trackId: TrackId, path: string, filesize?: number | null): void {
     if (queuedTrackIds.has(trackId)) return
     if (inFlight.has(trackId)) return
     const current = states.value.get(trackId)
     if (current === "completed") return
+    const quota = useDownloadQuotaStore()
+    const sizeBytes = quota.sizeOf(filesize)
     queuedTrackIds.add(trackId)
-    prefetchQueue.push({ trackId, path })
-    if (current !== "failed") markStartingDownload(trackId)
+    prefetchQueue.push({ trackId, path, sizeBytes })
+    if (current !== "failed") {
+      if (quota.hasRoomFor(sizeBytes)) markStartingDownload(trackId)
+      else markDeferred(trackId)
+    }
     void drainPrefetchQueue()
   }
 
@@ -429,6 +541,32 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   /**
+   * Free the disk a track's cached audio holds and hand its share of the
+   * budget back, then let the waiting queue continue. Resolves the remote
+   * URL itself so callers (archive, auto-archive sweep) only need a
+   * track id.
+   *
+   * A no-op unless the track is actually cached — archiving a lecture
+   * that was never downloaded must not credit the budget for bytes that
+   * were never spent. Returns whether anything was evicted.
+   */
+  async function evict(trackId: TrackId): Promise<boolean> {
+    if (states.value.get(trackId) !== "completed") return false
+    const repos = app.repositories()
+    const track = await repos.tracks.getById(trackId)
+    const audio = track?.variants.find((v) => v.audio)?.audio
+    if (!audio) return false
+    // The downloader keys deleted files by URL pathname, so the currently
+    // active CDN resolves the same local file even if the bytes arrived
+    // from a different one.
+    await remove(trackId, buildServerUrl(app.activeServer.value, audio.path))
+    const quota = useDownloadQuotaStore()
+    quota.forget(trackId, quota.sizeOf(audio.filesize))
+    resumeDeferred()
+    return true
+  }
+
+  /**
    * Drop a track from the prefetch FIFO before its turn starts. Called
    * by `playlist.archive` so archiving a track that the auto-download
    * loop (or "add to playlist") has just queued does not waste bandwidth
@@ -450,9 +588,11 @@ export const useDownloadStore = defineStore("downloads", () => {
     const idx = prefetchQueue.findIndex((j) => j.trackId === trackId)
     if (idx >= 0) prefetchQueue.splice(idx, 1)
     queuedTrackIds.delete(trackId)
-    // Roll back the optimistic "downloading" paint applied at enqueue
-    // time, but only if the track hasn't started transferring yet.
-    if (!inFlight.has(trackId) && states.value.get(trackId) === "downloading") {
+    // Roll back the optimistic paint applied at enqueue time — "downloading"
+    // when the budget had room, "deferred" when it didn't — but only if the
+    // track hasn't started transferring yet.
+    const painted = states.value.get(trackId)
+    if (!inFlight.has(trackId) && (painted === "downloading" || painted === "deferred")) {
       const nextStates = new Map(states.value)
       nextStates.delete(trackId)
       states.value = nextStates
@@ -487,9 +627,18 @@ export const useDownloadStore = defineStore("downloads", () => {
     inFlight.clear()
     prefetchQueue.length = 0
     queuedTrackIds.clear()
+    useDownloadQuotaStore().reset()
     hydrated = false
     lastHydrateFailAt = 0
   }
+
+  // Raising the limit must let the waiting tail through without requiring
+  // the user to re-add anything; lowering it just means the next job
+  // doesn't fit, which the drain loop discovers on its own.
+  watch(
+    () => useDownloadQuotaStore().limitBytes,
+    () => resumeDeferred()
+  )
 
   return {
     states,
@@ -500,10 +649,12 @@ export const useDownloadStore = defineStore("downloads", () => {
     hydrate,
     ensureDownloaded,
     prefetch,
+    resumeDeferred,
     cancelPrefetch,
     markStartingDownload,
     clearStartingDownload,
     remove,
+    evict,
     reset,
   }
 })

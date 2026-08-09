@@ -16,6 +16,7 @@ export default {
   web: {
     title: "Internet",
     add: "Add to my library",
+    prompt: "Type a query to search.",
     empty: "Nothing on the archives we index.",
     unavailable: "Couldn't reach the internet search right now.",
     more: "Show more",
@@ -89,6 +90,7 @@ export default {
     addConfirm: "Add {count} lecture to the playlist? | Add {count} lectures to the playlist?",
     others: "Other collections",
     all: "All collections",
+    partOf: "Lecture {position} of {total}",
     seeAll: "See all",
     seeAllNamed: "See all: {name}",
   },

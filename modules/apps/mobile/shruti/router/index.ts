@@ -92,6 +92,9 @@ const routes: RouteRecordRaw[] = [
         path: "search/web",
         name: "web-results",
         component: () => import("@shruti/views/Search/WebResultsView.vue"),
+        props: (route) => ({
+          initialQuery: typeof route.query.q === "string" ? route.query.q : "",
+        }),
       },
       {
         // Personal library (epic #1236) — user-added lectures, NOT the corpus.
@@ -99,7 +102,12 @@ const routes: RouteRecordRaw[] = [
         // landing "library" surfaces.
         path: "search/my-library",
         name: "my-library",
+        // `?q=` narrows the same page to what a search matched, so the search
+        // surface needs no second list of its own.
         component: () => import("@shruti/views/Library/MyLibraryView.vue"),
+        props: (route) => ({
+          initialQuery: typeof route.query.q === "string" ? route.query.q : "",
+        }),
       },
       {
         // Single route for both Note-edit and Citation modes. Entry

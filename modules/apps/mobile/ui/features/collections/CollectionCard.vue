@@ -102,11 +102,16 @@ const loaded = ref(false)
      a line of its own, so ordinary names are untouched. */
   overflow-wrap: break-word;
   word-break: keep-all;
-  /* Two-line clamp so long names don't overrun the tile. */
+  /* Two-line clamp so long names don't overrun the tile. The clamp alone only
+     puts the ellipsis in — a third line is still laid out and paints past the
+     bottom edge, which is what "Духовная практика и… преданность" was doing.
+     Capping the height to exactly two line boxes plus the padding leaves it
+     nowhere to go. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  max-height: calc(2 * 1.25em + 18px + 8px);
 }
 
 .collection-card.is-loaded .scrim {
