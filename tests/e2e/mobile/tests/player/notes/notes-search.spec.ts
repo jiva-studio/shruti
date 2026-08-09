@@ -37,7 +37,7 @@ test(
     await step(page, 4, 0, async () => {
       await gotoTab(page, "notes")
 
-      const notes = page.locator("ion-item.note")
+      const notes = page.locator(".note[role=button]")
       await expect(notes.first()).toBeVisible({ timeout: 20_000 })
       total = await notes.count()
       expect(total).toBeGreaterThan(0)
@@ -53,19 +53,19 @@ test(
       // Filtered list: at least one match, never more than the full set, and a
       // visible `<mark>` proving the highlighter ran (length >= 4 → wrap).
       await expect
-        .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
+        .poll(() => page.locator(".note[role=button]").count(), { timeout: 15_000 })
         .toBeGreaterThan(0)
-      const filtered = await page.locator("ion-item.note").count()
+      const filtered = await page.locator(".note[role=button]").count()
       expect(filtered).toBeGreaterThanOrEqual(1)
       expect(filtered).toBeLessThanOrEqual(total)
-      await expect(page.locator("ion-item.note mark").first()).toBeVisible({ timeout: 10_000 })
+      await expect(page.locator(".note[role=button] mark").first()).toBeVisible({ timeout: 10_000 })
     })
 
     await step(page, 4, 1, async () => {
       // Clearing the box restores the full list.
       await input.fill("")
       await expect
-        .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
+        .poll(() => page.locator(".note[role=button]").count(), { timeout: 15_000 })
         .toBe(total)
     })
   }

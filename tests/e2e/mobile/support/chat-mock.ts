@@ -101,10 +101,20 @@ export async function mockChatStream(page: Page, frames: string[]): Promise<void
   )
 }
 
+/**
+ * The composer's send/stop control. It is the only button in the input bar, so
+ * ask for it by role rather than by the round shell's own class — that class is
+ * `FloatingInputButton`'s (`.action`), shared with the search field, and has
+ * already been renamed once under the specs.
+ */
+export function sendButton(page: Page) {
+  return page.locator(".chat-inputbar").getByRole("button")
+}
+
 /** Type a question into the chat composer and send it. */
 export async function askChat(page: Page, text: string): Promise<void> {
   const input = page.locator(".chat-inputbar textarea")
   await input.waitFor({ state: "visible", timeout: 20_000 })
   await input.fill(text)
-  await page.locator(".chat-inputbar .send").click()
+  await sendButton(page).click()
 }

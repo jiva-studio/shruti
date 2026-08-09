@@ -26,9 +26,9 @@ test(qase(2, caseTitle(2)), { tag: ["@offline", "@transcript"] }, async ({ page 
     // transition and is dropped, stranding us on Notes. The before+1 check
     // below then genuinely proves THIS test created a note (not seeded noise).
     await expect(
-      page.locator("ion-item.note").first().or(page.locator(".page-sticker").filter({ hasText: /note/i }))
+      page.locator(".note[role=button]").first().or(page.locator(".page-sticker").filter({ hasText: /note/i }))
     ).toBeVisible({ timeout: 20_000 })
-    before = await page.locator("ion-item.note").count()
+    before = await page.locator(".note[role=button]").count()
 
     // Open a transcript: play a queued track, then tap the player to reveal it.
     await gotoTab(page, "home")
@@ -55,6 +55,6 @@ test(qase(2, caseTitle(2)), { tag: ["@offline", "@transcript"] }, async ({ page 
 
     // It shows up in the Notes tab.
     await gotoTab(page, "notes")
-    await expect.poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 }).toBe(before + 1)
+    await expect.poll(() => page.locator(".note[role=button]").count(), { timeout: 15_000 }).toBe(before + 1)
   })
 })

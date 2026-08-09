@@ -1,6 +1,7 @@
 import { type Page } from "@playwright/test"
 import { requireFixtures } from "./test.js"
 import { preseedOnboardingDone } from "./bootstrap.js"
+import { sendButton } from "./chat-mock.js"
 
 /**
  * Boot for @live tests. Unlike the offline `boot()`, this intercepts NOTHING:
@@ -25,7 +26,7 @@ export async function askChat(page: Page, text: string): Promise<void> {
   const input = page.locator(".chat-inputbar textarea")
   await input.waitFor({ state: "visible", timeout: 20_000 })
   await input.fill(text)
-  await page.locator(".chat-inputbar .send").click()
+  await sendButton(page).click()
 }
 
 /** The latest assistant bubble. */
