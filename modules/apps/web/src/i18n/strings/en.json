@@ -242,5 +242,14 @@
   "sub.errGeneric": "Could not start checkout. Please try again.",
   "sub.noteExtend": "Days are added to your remaining time — you can renew early.",
   "sub.noteSupport": "Payment issues? Contact us:",
-  "auth.getPro": "Get PRO"
+  "auth.getPro": "Get PRO",
+  "collections.title": "Lecture collections",
+  "collections.lead": "Curated series and courses — browse every collection in the library.",
+  "library.allCollections": "All collections",
+  "library.collectionsTitle": "Collections",
+  "library.collectionsLead": "Series and courses grouped by theme, occasion and scripture.",
+  "browse.searchPlaceholder": "Search by name…",
+  "browse.noResults": "Nothing found",
+  "pagination.prev": "Previous",
+  "pagination.next": "Next"
 }

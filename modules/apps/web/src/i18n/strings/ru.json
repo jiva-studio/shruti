@@ -242,5 +242,14 @@
   "sub.errGeneric": "Не удалось перейти к оплате. Попробуйте ещё раз.",
   "sub.noteExtend": "Дни добавляются к уже имеющимся — можно продлевать заранее.",
   "sub.noteSupport": "Проблемы с оплатой? Напишите нам:",
-  "auth.getPro": "Приобрести PRO"
+  "auth.getPro": "Приобрести PRO",
+  "collections.title": "Подборки лекций",
+  "collections.lead": "Курсы и циклы лекций — просмотрите все подборки библиотеки.",
+  "library.allCollections": "Все подборки",
+  "library.collectionsTitle": "Подборки",
+  "library.collectionsLead": "Циклы и курсы, сгруппированные по темам, событиям и писаниям.",
+  "browse.searchPlaceholder": "Поиск по названию…",
+  "browse.noResults": "Ничего не найдено",
+  "pagination.prev": "Назад",
+  "pagination.next": "Вперёд"
 }

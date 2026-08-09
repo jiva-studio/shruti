@@ -1,0 +1,58 @@
+---
+import { pageHref } from '../lib/paginate'
+
+interface Props {
+  page: number
+  totalPages: number
+  base: string
+  prevLabel: string
+  nextLabel: string
+}
+const { page, totalPages, base, prevLabel, nextLabel } = Astro.props
+
+// A compact window of page numbers around the current page, with the first and
+// last always shown and gaps marked by an ellipsis.
+function windowPages(cur: number, total: number): (number | '…')[] {
+  const set = new Set<number>([1, total, cur, cur - 1, cur + 1])
+  const nums = [...set].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b)
+  const out: (number | '…')[] = []
+  let prev = 0
+  for (const n of nums) {
+    if (n - prev > 1) out.push('…')
+    out.push(n)
+    prev = n
+  }
+  return out
+}
+const nums = windowPages(page, totalPages)
+const linkBase = 'inline-flex h-10 min-w-10 items-center justify-center rounded-lg border px-3 text-sm font-semibold transition'
+---
+{totalPages > 1 && (
+  <nav data-browse-pagination class="mt-10 flex flex-wrap items-center justify-center gap-2" aria-label="Pagination">
+    {page > 1 ? (
+      <a href={pageHref(base, page - 1)} rel="prev" class={`${linkBase} border-line text-ink hover:border-saffron/50`}>
+        ← {prevLabel}
+      </a>
+    ) : (
+      <span class={`${linkBase} border-line/60 text-medium/50`} aria-disabled="true">← {prevLabel}</span>
+    )}
+
+    {nums.map((n) =>
+      n === '…' ? (
+        <span class="px-1 text-medium">…</span>
+      ) : n === page ? (
+        <span aria-current="page" class={`${linkBase} border-saffron bg-saffron/10 text-saffron-shade`}>{n}</span>
+      ) : (
+        <a href={pageHref(base, n)} class={`${linkBase} border-line text-ink hover:border-saffron/50`}>{n}</a>
+      ),
+    )}
+
+    {page < totalPages ? (
+      <a href={pageHref(base, page + 1)} rel="next" class={`${linkBase} border-line text-ink hover:border-saffron/50`}>
+        {nextLabel} →
+      </a>
+    ) : (
+      <span class={`${linkBase} border-line/60 text-medium/50`} aria-disabled="true">{nextLabel} →</span>
+    )}
+  </nav>
+)}

@@ -209,5 +209,14 @@
   "sub.errGeneric": "Nije moguće započeti plaćanje. Pokušajte ponovo.",
   "sub.noteExtend": "Dani se dodaju na preostalo vreme — možete obnoviti unapred.",
   "sub.noteSupport": "Problemi sa plaćanjem? Pišite nam:",
-  "auth.getPro": "Nabavi PRO"
+  "auth.getPro": "Nabavi PRO",
+  "collections.title": "Zbirke predavanja",
+  "collections.lead": "Kursevi i ciklusi predavanja — pregledajte sve zbirke u biblioteci.",
+  "library.allCollections": "Sve zbirke",
+  "library.collectionsTitle": "Zbirke",
+  "library.collectionsLead": "Ciklusi i kursevi grupisani po temi, prilici i spisu.",
+  "browse.searchPlaceholder": "Pretraga po nazivu…",
+  "browse.noResults": "Ništa nije pronađeno",
+  "pagination.prev": "Nazad",
+  "pagination.next": "Dalje"
 }

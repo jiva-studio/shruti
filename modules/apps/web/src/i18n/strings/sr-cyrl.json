@@ -209,5 +209,14 @@
   "sub.errGeneric": "Није могуће започети плаћање. Покушајте поново.",
   "sub.noteExtend": "Дани се додају на преостало време — можете обновити унапред.",
   "sub.noteSupport": "Проблеми са плаћањем? Пишите нам:",
-  "auth.getPro": "Набави PRO"
+  "auth.getPro": "Набави PRO",
+  "collections.title": "Збирке предавања",
+  "collections.lead": "Курсеви и циклуси предавања — прегледајте све збирке у библиотеци.",
+  "library.allCollections": "Све збирке",
+  "library.collectionsTitle": "Збирке",
+  "library.collectionsLead": "Циклуси и курсеви груписани по теми, прилици и спису.",
+  "browse.searchPlaceholder": "Претрага по називу…",
+  "browse.noResults": "Ништа није пронађено",
+  "pagination.prev": "Назад",
+  "pagination.next": "Даље"
 }
