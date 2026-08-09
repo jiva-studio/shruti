@@ -21,9 +21,9 @@ import { rowToListeningSession } from "./rowMappers.js"
 
 const newSessionId = createIdGenerator("ls")
 
-// Bound on `?` parameters in one statement. SQLite's own limit is 999 on
-// builds older than 3.32 (still shipped by some Android system libraries),
-// so keep a margin below it and chunk anything larger.
+// Bound on `?` parameters in one statement. The bundled builds we actually
+// ship (sql.js, the SQLite inside @capacitor-community/sqlite v8) allow
+// 32766, but the pre-3.32 limit of 999 is cheap to stay under, so chunk.
 const ID_CHUNK_SIZE = 500
 
 function nowSec(): number {
@@ -176,11 +176,22 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       // One query per chunk of ids, never one per item: callers pass the
       // whole active + archived union (playlist store, activity overview,
       // auto-archive sweep), which has no page bound and grows with every
-      // item ever added. `NOT EXISTS` picks that single latest row per item
-      // with the same `ended_at`/`id` tiebreak the per-item read used, and
-      // rides the `(item_id, ended_at DESC)` index. The per-item duration
-      // threshold is applied in TS, so the SQL stays parameter-free beyond
-      // the ids.
+      // item ever added.
+      //
+      // The join picks each item's latest `ended_at` off the
+      // `(item_id, ended_at DESC)` index, seeks back into that group, and
+      // resolves same-second ties with `MAX(id)` — the SQL-side equivalent
+      // of the per-item `ORDER BY ended_at DESC, id DESC LIMIT 1`, so the
+      // tiebreak keeps SQLite's collation instead of JS string ordering.
+      // Every step is an index seek and stays flat in sessions-per-item.
+      // The obvious `NOT EXISTS (… t.ended_at > s.ended_at OR (… t.id >
+      // s.id))` formulation is NOT flat: the OR defeats the range seek and
+      // rescans a whole item per row, which measured ~6× SLOWER than the
+      // per-item loop at 200 sessions/item. Sessions are never pruned, so
+      // that count only grows.
+      //
+      // Correctness leans on `ended_at INTEGER NOT NULL` (migration 005):
+      // a NULL there would drop out of `MAX()` and lose the item.
       const wanted = [...new Set(itemIds)].filter((id) => {
         const dur = durations.get(id)
         return typeof dur === "number" && dur > 0
@@ -190,12 +201,13 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
         const rows = await db.query<{ item_id: string; ended_at: number; to_position: number }>(
           `SELECT s.item_id AS item_id, s.ended_at AS ended_at, s.to_position AS to_position
              FROM listening_sessions s
-            WHERE s.item_id IN (${placeholders})
-              AND NOT EXISTS (
-                    SELECT 1 FROM listening_sessions t
-                     WHERE t.item_id = s.item_id
-                       AND (t.ended_at > s.ended_at
-                            OR (t.ended_at = s.ended_at AND t.id > s.id)))`,
+             JOIN (SELECT item_id, MAX(ended_at) AS mx
+                     FROM listening_sessions
+                    WHERE item_id IN (${placeholders})
+                    GROUP BY item_id) m
+               ON m.item_id = s.item_id AND s.ended_at = m.mx
+            WHERE s.id = (SELECT MAX(t.id) FROM listening_sessions t
+                           WHERE t.item_id = s.item_id AND t.ended_at = s.ended_at)`,
           [...chunk]
         )
         for (const row of rows) {
