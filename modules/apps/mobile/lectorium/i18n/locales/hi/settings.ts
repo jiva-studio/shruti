@@ -178,6 +178,13 @@ export default {
     description: "अपनी Ask Sadhu बातचीत को अपने सभी डिवाइस पर सिंक रखें।",
   },
 
+  downloadLimit: {
+    title: "डाउनलोड सीमा",
+    unlimited: "कोई सीमा नहीं",
+    usage: "{limit} में से {used}",
+    usageUnlimited: "{used} डाउनलोड किया गया",
+  },
+
   smartLibrary: {
     title: "स्मार्ट लाइब्रेरी",
     description: "ताज़ा प्रवचन तैयार रखें और सुनने के बाद सफ़ाई करें",

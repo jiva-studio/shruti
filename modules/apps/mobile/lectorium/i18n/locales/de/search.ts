@@ -16,6 +16,7 @@ export default {
   web: {
     title: "Internet",
     add: "Zu meiner Bibliothek hinzufügen",
+    prompt: "Gib einen Suchbegriff ein.",
     empty: "In den erfassten Archiven ist nichts zu finden.",
     unavailable: "Die Internetsuche ist gerade nicht erreichbar.",
     more: "Mehr anzeigen",
@@ -90,6 +91,7 @@ export default {
       "{count} Vortrag zur Playlist hinzufügen? | {count} Vorträge zur Playlist hinzufügen?",
     others: "Weitere Sammlungen",
     all: "Alle Sammlungen",
+    partOf: "Vortrag {position} von {total}",
     seeAll: "Alle ansehen",
     seeAllNamed: "Alle ansehen: {name}",
   },

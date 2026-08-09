@@ -20,6 +20,7 @@ import type { CdnServer } from "@lib/domain/servers.js"
 import { getRegions } from "@lectorium/services/regionsRegistry.js"
 import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
 import { useContentLanguageList } from "./composables/useContentLanguageList.js"
+import { useDownloadQuotaStore } from "@lectorium/stores/useDownloadQuotaStore.js"
 import { useSearchFiltersStore } from "@lectorium/stores/useSearchFiltersStore.js"
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
 import {
@@ -62,6 +63,9 @@ export interface SettingsControllerReturn {
   notificationsEnabled: Ref<boolean>
   notificationsTime: Ref<[number, number] | undefined>
   autoDownloadTargetSeconds: Ref<number>
+  /* Offline-storage budget, in bytes (0 = unlimited) + what it holds today */
+  downloadLimitBytes: Ref<number>
+  downloadUsedBytes: ComputedRef<number>
   smartLibrary: UseSmartLibraryBindingReturn
   /* Library content languages (the global lecture-language filter SSOT) */
   libraryLanguages: ComputedRef<string[]>
@@ -124,6 +128,18 @@ export function useSettingsController(): SettingsControllerReturn {
     [9, 0]
   )
   const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
+  // Re-measure on entry: lectures may have been downloaded or auto-archived
+  // since the store last refreshed, and a stale "of 8 GB" figure is the one
+  // number on this screen the user checks BEFORE changing the setting.
+  const quota = useDownloadQuotaStore()
+  void quota.refresh()
+  const downloadLimitBytes = computed<number>({
+    get: () => quota.limitBytes,
+    set: (value) => {
+      quota.limitBytes = value
+    },
+  })
+  const downloadUsedBytes = computed(() => quota.usedBytes)
   const subscription = useSubscriptionBinding()
   const isSubscribedRef = computed(() => subscription.isSubscribed)
   const smartLibrary = useSmartLibraryBinding(
@@ -194,6 +210,8 @@ export function useSettingsController(): SettingsControllerReturn {
     notificationsEnabled,
     notificationsTime,
     autoDownloadTargetSeconds,
+    downloadLimitBytes,
+    downloadUsedBytes,
     smartLibrary,
     libraryLanguages,
     contentLanguageItems,

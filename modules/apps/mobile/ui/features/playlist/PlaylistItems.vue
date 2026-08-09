@@ -22,6 +22,10 @@
           <RadialIndicator slot="end" :value="groupProgress(item.rows)" color="medium" />
         </template>
       </TrackListItem>
+      <!-- Rows carry their place in the source collection, resolved from the
+           catalog by usePlaylistGroups. Not counted here on purpose: a group is
+           a run of consecutive queue rows, so counting them would renumber the
+           rest as soon as one is removed. -->
       <template v-for="row in item.rows" :key="row.id">
         <RowDivider />
         <PlaylistRow :row="row" @click="emit('click', $event)" @delete="emit('delete', $event)" />
@@ -61,12 +65,9 @@ const emit = defineEmits<{
 // Stable empty arrays for the header's (unused) reference/tag chip props.
 const EMPTY: readonly string[] = []
 
-// A collection group header always shows its author as the subtitle, regardless
-// of the user's track-metadata settings — it's the only meta a group has.
-const GROUP_HEADER_META: TrackMetaConfig = {
-  top: null,
-  bottom: [{ field: "author", enabled: true }],
-}
+// A group has no metadata of its own beyond its author, and the author is a
+// line of the row now — so the configurable line is empty.
+const GROUP_HEADER_META: TrackMetaConfig = { top: null, bottom: [] }
 
 /**
  * Overall listening progress (0–100) across a group's lectures: a completed

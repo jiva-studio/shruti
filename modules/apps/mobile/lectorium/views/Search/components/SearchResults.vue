@@ -25,30 +25,33 @@
         @more="emit('see-all-web')"
       />
 
-      <div v-if="web.isLoadingFirstPage.value" class="lane-state">
-        <IonSpinner name="dots" />
+      <!-- What the service said about the request itself: a speaker it does not
+           know, a field the sentence overruled. Without these an empty lane
+           cannot tell "nothing matches" from "nothing could". -->
+      <p v-for="(m, i) in web.messages.value" :key="i" class="lane-note">{{ m.text }}</p>
+
+      <!-- The shelf that is coming, drawn empty. A spinner here said "something
+           is happening" and nothing about what; five grey tiles say how many
+           are on their way and where they will land. -->
+      <div v-if="web.isLoadingFirstPage.value" class="carousel">
+        <div v-for="n in SKELETON_COUNT" :key="n" class="carousel-cell">
+          <TrackTile status="loading" />
+        </div>
       </div>
 
       <div v-else-if="web.error.value" class="lane-state lane-state--muted">
         {{ $t("search.web.unavailable") }}
       </div>
 
-      <template v-else>
-        <!-- What the service said about the request itself: a speaker it does
-             not know, a field the sentence overruled. Without these an empty
-             lane cannot tell "nothing matches" from "nothing could". -->
-        <p v-for="(m, i) in web.messages.value" :key="i" class="lane-note">{{ m.text }}</p>
+      <div v-else-if="!web.hits.value.length" class="lane-state lane-state--muted">
+        {{ $t("search.web.empty") }}
+      </div>
 
-        <div v-if="web.hits.value.length" class="carousel">
-          <div v-for="hit in web.hits.value" :key="hit.item_id" class="carousel-cell">
-            <WebTrackCard :hit="hit" />
-          </div>
+      <div v-else class="carousel">
+        <div v-for="hit in web.hits.value" :key="hit.item_id" class="carousel-cell">
+          <WebTrackCard :hit="hit" />
         </div>
-
-        <div v-else class="lane-state lane-state--muted">
-          {{ $t("search.web.empty") }}
-        </div>
-      </template>
+      </div>
     </section>
 
     <!-- ── Collections and topics ────────────────────────────────────────
@@ -68,7 +71,12 @@
          the catalog: these are their tracks, and one of them being here is a
          different answer from the corpus holding something. -->
     <section v-if="mine.length" class="lane">
-      <SectionHeader :title="$t('search.library.mine')" />
+      <SectionHeader
+        :title="$t('search.library.mine')"
+        see-all
+        :see-all-label="$t('search.collections.seeAllNamed', { name: $t('search.library.mine') })"
+        @more="emit('see-all-mine')"
+      />
       <div class="carousel">
         <div v-for="item in mine" :key="item.id" class="carousel-cell">
           <LibraryItemCard :item="item" @select="onOpenMine" @retry="onRetryMine" />
@@ -89,7 +97,7 @@
         <span class="no-results-message">{{ $t("search.library.empty") }}</span>
       </div>
       <template v-else>
-        <TracksList :rows="search.rows.value" @select="search.onSelect">
+        <TracksList flush :rows="search.rows.value" @select="search.onSelect">
           <template #state="{ state, progressPct }">
             <TrackStateIndicator :state="state" :progress="progressPct" />
           </template>
@@ -107,7 +115,6 @@ import { computed } from "vue"
 import {
   IonInfiniteScroll,
   IonInfiniteScrollContent,
-  IonSpinner,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
 import { SectionHeader, CarouselSection } from "@ui/features/collections/index.js"
@@ -118,6 +125,7 @@ import type { UseWebSearchReturn } from "../composables/useWebSearch.js"
 import type { GroupingHit, UseGroupingSearchReturn } from "../composables/useGroupingSearch.js"
 import ActiveFilterChips from "./ActiveFilterChips.vue"
 import WebTrackCard from "./WebTrackCard.vue"
+import TrackTile from "@lectorium/components/TrackTile.vue"
 import LibraryItemCard from "@lectorium/views/Library/components/LibraryItemCard.vue"
 import { useLibraryStore } from "@lectorium/stores/useLibraryStore.js"
 import { useOpenLibraryItem } from "@lectorium/composables/useOpenLibraryItem.js"
@@ -137,6 +145,9 @@ import { useRetryLibraryItem } from "@lectorium/composables/useRetryLibraryItem.
  * field does not tear down the controller and re-run its dictionary load on
  * the next keystroke.
  */
+/** Placeholder tiles while the archives answer — about a screenful of shelf. */
+const SKELETON_COUNT = 5
+
 const props = defineProps<{
   search: SearchControllerReturn
   web: UseWebSearchReturn
@@ -151,6 +162,8 @@ const emit = defineEmits<{
   "clear-filter": [key: string]
   /** Open the full set of internet results on its own page. */
   "see-all-web": []
+  /** Open the personal library, narrowed to this query. */
+  "see-all-mine": []
   "open-grouping": [hit: GroupingHit]
 }>()
 
@@ -229,14 +242,16 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   line-height: 1.35;
 }
 
-/* Same horizontal shelf as the collection carousels: 16px side insets and
-   scroll padding so the first and last card get an edge gutter. */
+/* The collection carousel's shelf, to the pixel — same gap, same 16px side
+   insets and scroll padding. Two shelves of squares one above the other with
+   12px between the tiles on one and 14px on the other reads as two sizes even
+   when the tiles match. */
 .carousel {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  padding: 0 16px 12px;
+  padding: 0 16px 14px;
   scroll-padding-inline: 16px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -246,17 +261,13 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   display: none;
 }
 
+/* One size for every shelf on this page. A collection tile, a track from the
+   internet and a track from the personal library are three shelves of squares
+   stacked on top of each other, and three widths read as a mistake — so this
+   matches `CollectionCard`'s 140px rather than inventing a fourth. */
 .carousel-cell {
   flex: 0 0 auto;
-  width: 132px;
+  width: 140px;
   scroll-snap-align: start;
-}
-
-/* The section header owns the 6px gap below it; cancel each content type's
-   own intrinsic top so nothing adds to it. */
-:deep(ion-list) {
-  --padding-top: 0;
-  padding-top: 0;
-  margin-top: -7px;
 }
 </style>

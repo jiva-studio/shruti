@@ -8,4 +8,6 @@ export default {
   dictionariesUnavailable: "No se pudieron cargar los nombres — algunas etiquetas pueden faltar.",
   playbackFailed:
     "No se pudo reproducir esta conferencia. Verifica tu conexión e inténtalo de nuevo.",
+  downloadStorageFull:
+    "Límite de almacenamiento alcanzado. Elimina las conferencias escuchadas o aumenta el límite en Ajustes.",
 }

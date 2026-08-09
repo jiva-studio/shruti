@@ -69,6 +69,10 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
   const hits = ref<readonly DiscoveryHit[]>([])
   const messages = ref<readonly DiscoveryMessage[]>([])
   const isLoading = ref<boolean>(false)
+  // A search is owed but the debounce has not let it start yet. Counted as
+  // loading: for those 400ms nothing is in flight and nothing has been found,
+  // and a surface reading only `isLoading` reports "nothing found" mid-word.
+  const pending = ref<boolean>(false)
   const error = ref<string | null>(null)
   const offset = ref<number>(0)
   const exhausted = ref<boolean>(true)
@@ -82,7 +86,9 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
   // resolved it. Paging reuses it so page two continues page one.
   let resolved: DiscoveryFilter | null = null
 
-  const isLoadingFirstPage = computed(() => isLoading.value && hits.value.length === 0)
+  const isLoadingFirstPage = computed(
+    () => (isLoading.value || pending.value) && hits.value.length === 0
+  )
   const hasMore = computed(() => !exhausted.value && offset.value < MAX_OFFSET)
 
   /**
@@ -168,23 +174,36 @@ export function useWebSearch(options: UseWebSearchOptions): UseWebSearchReturn {
     offset.value = 0
     exhausted.value = true
     isLoading.value = false
+    pending.value = false
   }
 
-  const debounced = useDebounceFn(() => fetchPage(0), TYPING_DEBOUNCE_MS)
+  const debounced = useDebounceFn(() => {
+    pending.value = false
+    return fetchPage(0)
+  }, TYPING_DEBOUNCE_MS)
 
-  watch([options.query, options.enabled], () => {
-    if (!options.enabled.value || !options.query.value.trim()) {
-      reset()
-      return
-    }
-    void debounced()
-  })
+  watch(
+    [options.query, options.enabled],
+    () => {
+      if (!options.enabled.value || !options.query.value.trim()) {
+        reset()
+        return
+      }
+      pending.value = true
+      void debounced()
+    },
+    // A page opened with words already in the field searches for them; nothing
+    // else is going to ask on its behalf.
+    { immediate: true }
+  )
 
-  // A filter change is one gesture, not a stream of them — run it at once.
+  // A filter change is one gesture, not a stream of them — run it at once,
+  // unless a search is already owed: that one reads the filters when it goes.
   watch(
     options.filters,
     () => {
       if (!options.enabled.value || !options.query.value.trim()) return
+      if (pending.value) return
       void fetchPage(0)
     },
     { deep: true }

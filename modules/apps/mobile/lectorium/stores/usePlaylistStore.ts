@@ -198,6 +198,12 @@ export const usePlaylistStore = defineStore("playlist", () => {
     if (result.ok || result.error === "already-archived") {
       requestSync()
       await refresh()
+      // Archiving is the only way a lecture leaves the queue, so it's also
+      // the only moment its audio stops being worth keeping. Reclaiming it
+      // here is what lets a budget-capped queue keep downloading as the
+      // user works through it. Best-effort: a failed delete just leaves the
+      // file for the next pass.
+      if (entry) void useDownloadStore().evict(entry.item.trackId)
     }
     return result
   }

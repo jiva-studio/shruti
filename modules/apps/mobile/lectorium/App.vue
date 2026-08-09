@@ -21,6 +21,16 @@
       @skip-back="onSkipBack"
       @skip-forward="onSkipForward"
     />
+    <!-- The library tab's search field: root chrome beside the player, so it
+         stays over the pages the tab pushes onto itself and keeps editing
+         whichever of them is on top. -->
+    <SearchBar
+      v-if="searchDock.visible.value"
+      v-model="searchDock.text.value"
+      :placeholder="$t('app.search')"
+      :search-label="$t('search.readQuestion')"
+      :clear-label="$t('search.clearQuery')"
+    />
     <TranscriptDialog
       ref="transcriptDialogRef"
       v-model:open="dialog.isOpen.value"
@@ -80,6 +90,8 @@ import { createAssetFailover } from "@lectorium/services/withAssetRegionFailover
 import { useTrackMetadataFields } from "@lectorium/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
+import SearchBar from "@lectorium/views/Search/components/SearchBar.vue"
+import { useSearchDock } from "@lectorium/composables/useSearchDock.js"
 import TrackSheet from "@lectorium/components/TrackSheet.vue"
 import EmailSignInModal from "@lectorium/components/EmailSignInModal.vue"
 import type { SelectionActionEvent } from "@lectorium/composables/transcript/useTranscriptSelectionActions.js"
@@ -129,26 +141,21 @@ const purchases = usePurchasesStore()
 const appLanguage = useAppLanguage()
 const dialog = useTranscriptDialogController(appLanguage)
 const { isKeyboardOpen } = useKeyboardVisibility()
-// Hide the FloatingPlayer when:
-//  - the player has nothing to show (default),
-//  - the on-screen keyboard is visible — the floating chrome would
-//    overlap the input or accessory area while typing,
-//  - an ActionSheet is up — keeps the bottom buttons reachable,
-//  - the transcript dialog is open in preview mode (Search → Open
-//    transcript) — the player belongs to a different track and
-//    shouldn't react to taps on the preview surface,
-//  - on the chat tab the floating chrome would cover the sliding
-//    input bar; hide it for the duration of the chat view,
-//  - on the subscription page it would float over the paywall (the
-//    page replaced the old modal that used to cover it).
+const searchDock = useSearchDock()
+// The FloatingPlayer belongs to Home and nowhere else. Every other screen has
+// something of its own in that band — a composer, a search field, a paywall,
+// a footer — and the list of exceptions was longer than the rule.
+//
+// Three cases override the route: nothing to show, the keyboard or an
+// ActionSheet is up (the chrome would sit on the controls), and the transcript
+// reader, where the player is the sticked bar the reader is built around — but
+// only while it mirrors the track being read, not a preview of another one.
 const floatingPlayerHidden = computed<boolean>(() => {
   if (!player.open) return true
   if (isKeyboardOpen.value) return true
   if (overlays.actionSheetOpen) return true
-  if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
-  const routeName = currentRoute.value.name
-  if (routeName === "chat" || routeName === "subscription") return true
-  return false
+  if (transcriptStore.open) return !dialog.mirrorsActivePlayer.value
+  return currentRoute.value.name !== "home"
 })
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)
 const showPlayerProgress = computed(() => showPlayerProgressConfig.value)

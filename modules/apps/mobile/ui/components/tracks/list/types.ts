@@ -32,6 +32,12 @@ export interface UiTrackRow {
    * "downloading" → download %, "playing"/"queued" → playback %, otherwise unused.
    */
   readonly progressPct: number
+  /**
+   * 1-based place in the set the row is being shown as part of — a lecture
+   * inside a collection. Absent everywhere else: a search hit or a topic
+   * listing has no running order to state.
+   */
+  readonly position?: number
   readonly disabled: boolean
   /**
    * Visual dim only — applies opacity but does NOT block taps. Used so a

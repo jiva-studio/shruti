@@ -16,6 +16,7 @@ export default {
   web: {
     title: "Internet",
     add: "Hozzáadás a könyvtáramhoz",
+    prompt: "Írj be egy keresőkifejezést.",
     empty: "Nincs semmi az általunk feldolgozott archívumokban.",
     unavailable: "Az internetes keresés most nem érhető el.",
     more: "Több megjelenítése",
@@ -90,6 +91,7 @@ export default {
       "Hozzáadod a(z) {count} előadást a lejátszási listához? | Hozzáadod a(z) {count} előadást a lejátszási listához?",
     others: "Egyéb gyűjtemények",
     all: "Összes gyűjtemény",
+    partOf: "{total} előadásból a(z) {position}.",
     seeAll: "Összes megtekintése",
     seeAllNamed: "Összes megtekintése: {name}",
   },

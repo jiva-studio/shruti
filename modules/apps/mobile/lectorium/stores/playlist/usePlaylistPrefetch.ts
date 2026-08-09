@@ -47,7 +47,7 @@ export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
       const track = await repos.tracks.getById(trackId)
       const variant = track?.variants.find((v) => v.audio) ?? null
       if (variant?.audio) {
-        useDownloadStore().prefetch(trackId, variant.audio.path)
+        useDownloadStore().prefetch(trackId, variant.audio.path, variant.audio.filesize)
       } else {
         // No audio to download. `add()` optimistically set "downloading"
         // before this resolved; without clearing it the row spins forever
@@ -75,7 +75,7 @@ export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
     for (const { track } of entries) {
       const variant = track.variants.find((v) => v.audio)
       if (variant?.audio) {
-        downloads.prefetch(track.id, variant.audio.path)
+        downloads.prefetch(track.id, variant.audio.path, variant.audio.filesize)
       }
       trackIds.push(track.id)
     }

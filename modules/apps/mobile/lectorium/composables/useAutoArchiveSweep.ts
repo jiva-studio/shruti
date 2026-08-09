@@ -4,6 +4,7 @@ import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
+import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 
@@ -47,6 +48,8 @@ export interface AutoArchiveSweepDeps {
     durations: ReadonlyMap<PlaylistItemId, number>
   ) => Promise<ReadonlyMap<PlaylistItemId, number | null>>
   archive: (itemId: PlaylistItemId) => Promise<unknown>
+  /** Reclaim the archived lecture's cached audio. Best-effort. */
+  evict: (trackId: TrackId) => Promise<unknown>
   now: () => number
 }
 
@@ -78,16 +81,22 @@ export async function runAutoArchiveSweep(
     if (ms > 0) durations.set(it.id, Math.floor(ms / 1000))
   }
 
-  const itemIds = items.map((i) => i.id)
-  const completedAtSec = await deps.getCompletedAt(itemIds, durations)
+  const completedAtSec = await deps.getCompletedAt(
+    items.map((i) => i.id),
+    durations
+  )
   const now = deps.now()
   const archived: PlaylistItemId[] = []
-  for (const id of itemIds) {
-    const sec = completedAtSec.get(id)
+  for (const item of items) {
+    const sec = completedAtSec.get(item.id)
     if (sec === null || sec === undefined) continue
     if (now - sec * 1000 >= delayMs) {
-      await deps.archive(id)
-      archived.push(id)
+      await deps.archive(item.id)
+      archived.push(item.id)
+      // The lecture is done and out of the queue — its audio is dead
+      // weight, and giving the bytes back is what unblocks the storage
+      // budget for whatever is still waiting to download.
+      await deps.evict(item.trackId)
     }
   }
   return archived
@@ -144,6 +153,7 @@ export function useAutoArchiveSweep(): {
             { itemId },
             { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
           ),
+        evict: (trackId) => useDownloadStore().evict(trackId),
         now: () => Date.now(),
       })
       if (archived.length > 0) {

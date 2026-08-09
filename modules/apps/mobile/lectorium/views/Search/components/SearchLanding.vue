@@ -11,7 +11,7 @@
       <div class="page-top" aria-hidden="true" />
       <template v-if="recommendedRows.length">
         <SectionHeader :title="$t('search.recommendedForYou')" />
-        <TracksList :rows="recommendedRows" @select="onSelectTrack">
+        <TracksList flush :rows="recommendedRows" @select="onSelectTrack">
           <template #state="{ state, progressPct }">
             <TrackStateIndicator :state="state" :progress="progressPct" />
           </template>
@@ -68,7 +68,7 @@
           :see-all-label="$t('search.collections.seeAllNamed', { name: s.name })"
           @more="onSelectTopic(s.topicId)"
         />
-        <TracksList :rows="s.rows" @select="onSelectTrack">
+        <TracksList flush :rows="s.rows" @select="onSelectTrack">
           <template #state="{ state, progressPct }">
             <TrackStateIndicator :state="state" :progress="progressPct" />
           </template>
@@ -89,7 +89,7 @@
 
       <template v-if="previewLectures.length">
         <SectionHeader :title="$t('search.lecturesTitle')" />
-        <TracksList :rows="previewLectures" @select="onSelectTrack">
+        <TracksList flush :rows="previewLectures" @select="onSelectTrack">
           <template #state="{ state, progressPct }">
             <TrackStateIndicator :state="state" :progress="progressPct" />
           </template>
@@ -266,15 +266,6 @@ function openAllCollections(): void {
   align-items: center;
   justify-content: center;
   min-height: 60vh;
-}
-
-/* Every section's content sits the same 6px below its SectionHeader: the
-   header owns the gap (its 6px bottom padding) and each content type's own
-   intrinsic top is cancelled so nothing adds to it. */
-:deep(ion-list) {
-  --padding-top: 0;
-  padding-top: 0;
-  margin-top: -7px; /* cancel the first track row's 7px label margin */
 }
 
 .flush-list {

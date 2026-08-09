@@ -406,7 +406,14 @@ export const usePlayerStore = defineStore("player", () => {
     )
     if (stale()) return { ok: true, value: undefined }
 
-    const localUrl = await useDownloadStore().ensureDownloaded(cmd.trackId, cmd.audio.path)
+    // Over the storage budget this returns null and playback falls through
+    // to the streaming URL below — a lecture the user taps always plays,
+    // it just may not be kept offline.
+    const localUrl = await useDownloadStore().ensureDownloaded(
+      cmd.trackId,
+      cmd.audio.path,
+      cmd.audio.filesize
+    )
     if (stale()) return { ok: true, value: undefined }
     const url = localUrl ?? app.storagePublicUrl.get(cmd.audio.path)
 

@@ -17,8 +17,11 @@
     />
 
     <SettingsLibraryGroup
+      v-model:download-limit-bytes="downloadLimitBytes"
       :language-items="contentLanguageItems"
       :selected="libraryLanguages"
+      :download-limit-presets="DOWNLOAD_LIMIT_PRESETS"
+      :download-used-bytes="downloadUsedBytes"
       @update:selected="setLibraryLanguages"
     />
 
@@ -139,6 +142,7 @@ import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { privacyPolicyUrl } from "@lectorium/i18n/index.js"
+import { DOWNLOAD_LIMIT_PRESETS } from "@lectorium/stores/useDownloadQuotaStore.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
@@ -178,6 +182,8 @@ const {
   notificationsEnabled,
   notificationsTime,
   autoDownloadTargetSeconds,
+  downloadLimitBytes,
+  downloadUsedBytes,
   smartLibrary,
   libraryLanguages,
   contentLanguageItems,
