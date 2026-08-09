@@ -3,6 +3,7 @@ import type { IDatabase } from "@ports/app/index.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
 import { createReentrantUnitOfWork } from "../reentrantUnitOfWork.sql.js"
+import { createSqlUnitOfWork } from "../unitOfWork.sql.js"
 import { createSqlChatSessionRepository } from "../chatSessionsRepository.sql.js"
 import { createSqlChatMessageRepository } from "../chatMessagesRepository.sql.js"
 import { createSqlProactiveStateRepository } from "../proactiveStateRepository.sql.js"
@@ -81,7 +82,7 @@ describe("chat sync journaling", () => {
         listeningSessions: {} as never,
         libraryMemberships: {} as never,
         chatSessions: createSqlChatSessionRepository(db),
-        chatMessages: createSqlChatMessageRepository(db),
+        chatMessages: createSqlChatMessageRepository(db, createSqlUnitOfWork(db)),
       },
       {
         userDb: db,
