@@ -279,6 +279,27 @@ describe("chat sync journaling", () => {
     expect(tombstones.every((r) => r.data === null)).toBe(true)
   })
 
+  it("records ONE tombstone for a whole-conversation delete, not one per message", async () => {
+    // The order `useChatStore.deleteSession` uses: session first, so its
+    // tombstone's server-side cascade covers the messages.
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    for (const id of ["m1", "m2", "m3"]) {
+      await repos.chatMessages.create({
+        id: id as ChatMessageId,
+        sessionId: sid,
+        role: "user",
+        content: id,
+        createdAt: 1,
+      })
+    }
+    await repos.chatSessions.delete(sid)
+    await repos.chatMessages.deleteBySession(sid)
+
+    const deletes = (await outboxRows(db)).filter((r) => r.op === "delete")
+    expect(deletes.map((r) => [r.collection, r.doc_id])).toEqual([["chat_sessions", "s1"]])
+  })
+
   it("tombstones a message known only through sync_doc_hlc on deleteBySession", async () => {
     // A message pulled from the server (or already pushed and compacted) has
     // no outbox row — the UNION branch of the id lookup is what finds it.
@@ -392,8 +413,8 @@ describe("chat sync journaling", () => {
         playlistItems: {} as never,
         listeningSessions: { __probe: probe } as never,
         libraryMemberships: {} as never,
-        chatSessions: { ...createSqlChatSessionRepository(db), __probe: probe } as never,
-        chatMessages: { ...createSqlChatMessageRepository(db), __probe: probe } as never,
+        chatSessions: { __probe: probe } as never,
+        chatMessages: { __probe: probe } as never,
       },
       { userDb: db, unitOfWork: createReentrantUnitOfWork(db), getDeviceId: async () => "dev-A" }
     )

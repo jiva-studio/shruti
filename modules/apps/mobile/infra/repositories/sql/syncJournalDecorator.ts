@@ -355,21 +355,36 @@ export function withSyncJournaling(
     })
   }
 
+  /** True while the parent session row is still there. `deleteBySession` reads
+   *  it to tell "clear this conversation's messages" (parent kept — the
+   *  messages need their own tombstones) from the whole-conversation delete
+   *  (parent already removed in this transaction — its tombstone cascades). */
+  async function sessionRowExists(sessionId: string): Promise<boolean> {
+    const rows = await userDb.query<{ one: number }>(
+      "SELECT 1 AS one FROM chat_sessions WHERE id = ? LIMIT 1",
+      [sessionId]
+    )
+    return rows.length > 0
+  }
+
   /** Ids of a session's messages that have entered sync — read BEFORE the rows
    *  are gone so `deleteBySession` can tombstone each of them.
    *
-   *  One statement, not a `wasJournaled` probe per message: `outbox` carries
-   *  only `idx_outbox_pending (sent, id)`, so a per-message probe would full
-   *  scan an ever-growing, never-compacted table N times inside the delete's
-   *  transaction. The non-correlated `IN` subquery lets SQLite scan `outbox`
-   *  once (and range-seek `sync_doc_hlc` on its PK) into one ephemeral index. */
+   *  One statement, and deliberately CORRELATED. Both arms are covering-index
+   *  seeks per message — `idx_outbox_collection_doc (collection, doc_id)` and
+   *  `sync_doc_hlc`'s `PRIMARY KEY (collection, doc_id)` — so the cost is
+   *  O(messages in the session), flat in the size of the journal. The
+   *  uncorrelated `id IN (… UNION …)` form reads better but materialises every
+   *  journaled chat doc_id into a temp b-tree first, making the delete O(whole
+   *  outbox) on a table that is append-only and never compacted. */
   async function journaledMessageIds(sessionId: string): Promise<string[]> {
     const rows = await userDb.query<{ id: string }>(
-      `SELECT id FROM chat_messages
-        WHERE session_id = ?
-          AND id IN (SELECT doc_id FROM outbox WHERE collection = ?
-                     UNION
-                     SELECT doc_id FROM sync_doc_hlc WHERE collection = ?)`,
+      `SELECT m.id FROM chat_messages m
+        WHERE m.session_id = ?
+          AND (EXISTS (SELECT 1 FROM outbox o
+                        WHERE o.collection = ? AND o.doc_id = m.id)
+            OR EXISTS (SELECT 1 FROM sync_doc_hlc s
+                        WHERE s.collection = ? AND s.doc_id = m.id))`,
       [sessionId, CHAT_MESSAGES, CHAT_MESSAGES]
     )
     return rows.map((row) => row.id)
@@ -425,11 +440,21 @@ export function withSyncJournaling(
 
     deleteBySession: (sessionId) =>
       unitOfWork.run(async () => {
-        // The cascade companion of `chatSessions.delete`. The session tombstone
-        // cascades on the server too, so these rows are usually redundant —
-        // but `deleteBySession` is reachable on its own, and a delete of an
-        // already-cascaded doc is a no-op under LWW.
-        const ids = isChatSyncEnabled() ? await journaledMessageIds(sessionId) : []
+        // Tombstone each synced message ONLY when the parent session survives.
+        //
+        // Whole-conversation delete (`useChatStore.deleteSession`) removes the
+        // session first, in this same transaction: its tombstone already
+        // cascades to the messages server-side, so N per-message tombstones
+        // would be pure duplication written forever into a journal that is
+        // never compacted. A gone parent is also the only case where skipping
+        // is safe — a session that was never journaled has no journaled
+        // messages either (`create` journals the parent first), so nothing is
+        // left stranded on the server.
+        //
+        // Called on its own (the parent kept), this is the only signal the
+        // messages are gone, so every synced one gets its tombstone.
+        const orphaned = isChatSyncEnabled() && (await sessionRowExists(sessionId))
+        const ids = orphaned ? await journaledMessageIds(sessionId) : []
         await base.chatMessages.deleteBySession(sessionId)
         for (const id of ids) await journal(CHAT_MESSAGES, id, "delete", null)
       }),

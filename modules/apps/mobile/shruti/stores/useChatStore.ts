@@ -1645,11 +1645,17 @@ export const useChatStore = defineStore("chat", () => {
 
   async function deleteSession(id: string): Promise<void> {
     const repos = chatRepos()
-    // One transaction so a failure can't delete the messages but leave the
-    // session row behind as a "zombie" empty conversation in history.
+    // One transaction so a failure can't delete one half and leave the other —
+    // a "zombie" empty conversation in history, or orphan messages.
+    //
+    // Session first: its sync tombstone cascades to the messages server-side,
+    // so the journal records one delete for the conversation instead of one
+    // per message (the decorator skips per-message tombstones exactly when the
+    // parent is already gone). The message sweep still runs — the FK cascade
+    // that would have covered it is best-effort on the native adapter.
     await app.repositories().unitOfWork.run(async () => {
-      await repos.messages.deleteBySession(id as ChatSessionId)
       await repos.sessions.delete(id as ChatSessionId)
+      await repos.messages.deleteBySession(id as ChatSessionId)
     })
     sessions.value = sessions.value.filter((s) => s.id !== id)
     if (activeSessionId.value === id) {
