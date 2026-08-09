@@ -1,5 +1,5 @@
 export default {
-  downloadFailed: "Preuzimanje nije uspelo. Proverite internet vezu i pokušajte ponovo.",
+  downloadFailed: "Preuzimanje nije uspelo. Proverite internet vezu i VPN.",
   filtersNotSaved: "Nije moguće sačuvati filter. Biće poništen pri sledećem pokretanju.",
   downloadsCacheUnavailable:
     "Nije moguće pročitati indeks preuzimanja. Keširane datoteke su i dalje na disku.",
