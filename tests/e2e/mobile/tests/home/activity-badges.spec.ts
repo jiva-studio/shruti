@@ -10,10 +10,16 @@ test(qase(12, caseTitle(12)), { tag: ["@offline", "@home"] }, async ({ page }) =
     // The seeded listening history drives the activity tracker: the heatmap, a
     // completed-lectures count and a total-time-listened badge. (The current-streak
     // badge is deliberately NOT asserted — it only shows when the user listened on
-    // consecutive days ENDING TODAY, which a fixed-date fixture can never satisfy as
-    // real time moves on; these badges are cumulative and so stay deterministic.)
+    // consecutive days ENDING TODAY, so it holds on the day the fixtures were
+    // generated and lapses the day after; these two are cumulative and so stay
+    // true however old the fixture is.)
     await expect(page.locator(".activity-card")).toBeVisible({ timeout: 20_000 })
-    await expect(page.locator(".kit-badge.completed-badge")).toBeVisible()
-    await expect(page.locator(".kit-badge", { hasText: /\d+\s*[hmdчмд]/i }).first()).toBeVisible()
+    // Both badges are addressed by their `title` — the accessible label each one
+    // already carries — rather than by a per-badge class. There is no longer a
+    // `.completed-badge`: the three stats went through one `ActivityStatBadge`
+    // and their classes with them. The titles are the English fixture's, which
+    // is the locale `boot()` comes up in.
+    await expect(page.getByTitle("Lectures finished")).toBeVisible()
+    await expect(page.getByTitle("Total time listened")).toBeVisible()
   })
 })

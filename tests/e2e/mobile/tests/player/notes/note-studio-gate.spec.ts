@@ -16,7 +16,7 @@ test(
       await gotoTab(page, "notes")
 
       // Open a seeded note's action sheet → Share → Share video (Studio).
-      await page.locator("ion-item.note").first().click()
+      await page.locator(".note[role=button]").first().click()
       await page.getByRole("button", { name: /^share$/i }).first().click()
     })
 

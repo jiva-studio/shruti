@@ -10,7 +10,7 @@ test(
   async ({ page }) => {
     await boot(page)
 
-    const notes = page.locator("ion-item.note")
+    const notes = page.locator(".note[role=button]")
     const sheet = page.locator("ion-action-sheet")
     const deleteButton = sheet.locator("button.action-sheet-destructive")
 
