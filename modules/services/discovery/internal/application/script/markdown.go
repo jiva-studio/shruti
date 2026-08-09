@@ -3,8 +3,6 @@ package script
 import (
 	"strings"
 
-	"github.com/jiva-studio/shruti/discovery/internal/domain"
-
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -199,29 +197,4 @@ func Language(fragment string) string {
 	}
 	walk(doc)
 	return found
-}
-
-// refsResult is what the refs() binding hands back: what the line cites, and
-// the line with those citations replaced by the caller's marker.
-type refsResult struct {
-	Refs []domain.Ref `json:"refs"`
-	Rest string       `json:"rest"`
-}
-
-// readRefs is the refs() binding. gap is what stands where a citation was; a
-// script that only wants the references passes nothing and gets them removed.
-func readRefs(text, gap string) refsResult {
-	cites := domain.Cites(text)
-	out := refsResult{Refs: make([]domain.Ref, 0, len(cites))}
-	var rest strings.Builder
-	last := 0
-	for _, c := range cites {
-		out.Refs = append(out.Refs, c.Ref)
-		rest.WriteString(text[last:c.Start])
-		rest.WriteString(gap)
-		last = c.End
-	}
-	rest.WriteString(text[last:])
-	out.Rest = rest.String()
-	return out
 }

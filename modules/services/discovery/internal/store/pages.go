@@ -32,7 +32,6 @@ type Page struct {
 	HTTPStatus           int
 	Error                string
 	LastFetchedAt        *time.Time
-	LastChangedAt        *time.Time
 	ConsecutiveUnchanged int
 	// ConsecutiveFailures backs off a page that keeps failing, the same way
 	// ConsecutiveUnchanged backs off one that keeps not changing.
@@ -42,10 +41,6 @@ type Page struct {
 	// worth keeping: it is how you find the pages we visited and came away from
 	// empty-handed.
 	MediaFound int
-	// SeriesLinksSeen is how many of this page's links reached a recording we
-	// had, the last time we asked whether it presents a cycle. It keeps the
-	// question from being re-asked when nothing has changed.
-	SeriesLinksSeen int
 	// NormPromptVersion is the prompt this page's files were last read with.
 	// A newer prompt means the stored answers are stale even when the page is
 	// byte-identical.
@@ -58,16 +53,16 @@ type Page struct {
 
 const pageCols = `id, source_id, url, coalesce(etag,''), coalesce(last_modified,''),
 	coalesce(body_sha256,''), coalesce(item_set_sha256,''), coalesce(http_status,0),
-	coalesce(error,''), last_fetched_at, last_changed_at, consecutive_unchanged,
+	coalesce(error,''), last_fetched_at, consecutive_unchanged,
 	consecutive_failures, next_check_at,
-	coalesce(norm_prompt_version,''), coalesce(script_version,''), media_found, series_links_seen`
+	coalesce(norm_prompt_version,''), coalesce(script_version,''), media_found`
 
 func scanPage(row pgx.Row) (*Page, error) {
 	var p Page
 	err := row.Scan(&p.ID, &p.SourceID, &p.URL, &p.ETag, &p.LastModified,
 		&p.BodySHA256, &p.ItemSetSHA256, &p.HTTPStatus, &p.Error,
-		&p.LastFetchedAt, &p.LastChangedAt, &p.ConsecutiveUnchanged, &p.ConsecutiveFailures, &p.NextCheckAt,
-		&p.NormPromptVersion, &p.ScriptVersion, &p.MediaFound, &p.SeriesLinksSeen)
+		&p.LastFetchedAt, &p.ConsecutiveUnchanged, &p.ConsecutiveFailures, &p.NextCheckAt,
+		&p.NormPromptVersion, &p.ScriptVersion, &p.MediaFound)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -94,11 +89,11 @@ func (r *Repo) SavePage(ctx context.Context, p *Page) (int64, error) {
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO discovery.pages
 			(source_id, url, etag, last_modified, body_sha256, item_set_sha256,
-			 http_status, error, last_fetched_at, last_changed_at,
+			 http_status, error, last_fetched_at,
 			 consecutive_unchanged, consecutive_failures, next_check_at,
 			 norm_prompt_version, media_found, url_key)
 		VALUES ($1,$2,nullif($3,''),nullif($4,''),nullif($5,''),nullif($6,''),
-			 $7,nullif($8,''),$9,$10,$11,$12,$13,nullif($14,''),$15,$16)
+			 $7,nullif($8,''),$9,$10,$11,$12,nullif($13,''),$14,$15)
 		ON CONFLICT (url) DO UPDATE SET
 			source_id             = coalesce(EXCLUDED.source_id, discovery.pages.source_id),
 			etag                  = EXCLUDED.etag,
@@ -108,7 +103,6 @@ func (r *Repo) SavePage(ctx context.Context, p *Page) (int64, error) {
 			http_status           = EXCLUDED.http_status,
 			error                 = EXCLUDED.error,
 			last_fetched_at       = EXCLUDED.last_fetched_at,
-			last_changed_at       = coalesce(EXCLUDED.last_changed_at, discovery.pages.last_changed_at),
 			consecutive_unchanged = EXCLUDED.consecutive_unchanged,
 			consecutive_failures  = EXCLUDED.consecutive_failures,
 			next_check_at         = EXCLUDED.next_check_at,
@@ -116,7 +110,7 @@ func (r *Repo) SavePage(ctx context.Context, p *Page) (int64, error) {
 			media_found           = EXCLUDED.media_found
 		RETURNING id`,
 		p.SourceID, p.URL, p.ETag, p.LastModified, p.BodySHA256, p.ItemSetSHA256,
-		p.HTTPStatus, p.Error, p.LastFetchedAt, p.LastChangedAt,
+		p.HTTPStatus, p.Error, p.LastFetchedAt,
 		p.ConsecutiveUnchanged, p.ConsecutiveFailures, p.NextCheckAt, p.NormPromptVersion, p.MediaFound,
 		domain.URLKey(p.URL),
 	).Scan(&id)
@@ -433,4 +427,13 @@ func (r *Repo) NotDueURLs(ctx context.Context, sourceID string, now time.Time) (
 		out[u] = true
 	}
 	return out, rows.Err()
+}
+
+// ClearScriptVersion forgets which script last read a selection of pages, so the
+// next visit reads them again with the current one.
+func (r *Repo) ClearScriptVersion(ctx context.Context, sourceID string) (int64, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE discovery.pages SET script_version = NULL
+		WHERE ($1 = '' OR source_id = $1) AND script_version IS NOT NULL`, sourceID)
+	return tag.RowsAffected(), err
 }

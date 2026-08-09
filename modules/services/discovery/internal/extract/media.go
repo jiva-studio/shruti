@@ -56,72 +56,20 @@ func extOf(raw string) string {
 	return strings.ToLower(p[i:])
 }
 
-const (
-	// contextWindow is how much text follows a media URL into its record.
-	contextWindow = 1500
-	// contextLeadIn is how much of the text before it comes along, for sources
-	// that print the label ahead of the link.
-	contextLeadIn = 200
-	// wholePageMax bounds the text kept when a page carries a single recording
-	// and the whole page is therefore about it.
-	wholePageMax = 40000
-)
-
 // itemsFromMarks turns each media URL found on a page into a record carrying
-// its filename, its directory chain and the text around where it appeared.
+// its filename and its directory chain.
 //
-// Neighbouring media URLs bound each other's window, so on a listing every
-// recording gets its own row instead of its neighbours'.
+// The text around where the URL appeared is not carried: what a page says about
+// a recording is read by the source's own script and handed over labelled.
 func itemsFromMarks(marks []mark, pageText, pageURL string) []domain.Item {
 	items := make([]domain.Item, 0, len(marks))
 	for i, m := range marks {
 		it := FromPath(m.url)
 		it.PageURL = pageURL
 		it.Ordinal = i + 1
-		if len(marks) == 1 {
-			it.ContextText = truncate(pageText, wholePageMax)
-		} else {
-			prev, next := 0, len(pageText)
-			if i > 0 {
-				prev = marks[i-1].offset
-			}
-			if i+1 < len(marks) {
-				next = marks[i+1].offset
-			}
-			it.ContextText = window(pageText, prev, m.offset, next)
-		}
 		items = append(items, it)
 	}
 	return items
-}
-
-// window cuts the text belonging to one media URL, snapped to whitespace so
-// words are not split.
-func window(text string, prev, offset, next int) string {
-	if text == "" {
-		return ""
-	}
-	lo := clamp(offset-contextLeadIn, prev, len(text))
-	hi := clamp(min(offset+contextWindow, next), lo, len(text))
-	if lo > 0 {
-		if i := strings.IndexAny(text[lo:hi], " \n"); i >= 0 {
-			lo += i + 1
-		} else {
-			lo = runeStart(text, lo)
-		}
-	}
-	if hi < len(text) {
-		if i := strings.LastIndexAny(text[lo:hi], " \n"); i >= 0 {
-			hi = lo + i
-		} else {
-			hi = runeStart(text, hi)
-		}
-	}
-	return strings.TrimSpace(text[lo:hi])
-}
-
-func clamp(v, lo, hi int) int {
-	return min(max(v, lo), hi)
 }
 
 func truncate(s string, max int) string {

@@ -94,6 +94,15 @@ func saveSourceHandler(repo *store.Repo) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_request", "id and seed_urls are required")
 			return
 		}
+		// A typo here reads the archive the wrong way round, and the wrong way
+		// stores empty answers and seals them.
+		switch in.Kind {
+		case "", store.KindMaterial, store.KindStated:
+		default:
+			writeErr(w, http.StatusBadRequest, "bad_request",
+				`kind must be "material" or "stated"`)
+			return
+		}
 		src := in.source()
 		if err := repo.SaveSource(r.Context(), &src); err != nil {
 			writeErr(w, http.StatusInternalServerError, "save_failed", err.Error())

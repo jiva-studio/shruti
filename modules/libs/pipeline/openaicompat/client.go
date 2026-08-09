@@ -84,7 +84,11 @@ type Call struct {
 // Result carries the assistant text plus per-call accounting that the
 // caller can store in chunk_NNNN.json::models[] or hand to a billing log.
 type Result struct {
-	Text            string
+	Text string
+	// FinishReason is why the model stopped: "stop" when it finished, "length"
+	// when it ran out of room. A reply cut off mid-JSON fails to parse, and the
+	// parse error alone does not say whether asking again would help.
+	FinishReason    string
 	ModelID         string
 	Endpoint        string
 	TokensIn        int64
@@ -271,6 +275,7 @@ func (c *Client) Run(ctx context.Context, call Call) (Result, error) {
 
 	return Result{
 		Text:            cb.Choices[0].Message.Content,
+		FinishReason:    cb.Choices[0].FinishReason,
 		ModelID:         call.Model,
 		Endpoint:        c.Endpoint,
 		TokensIn:        cb.Usage.PromptTokens,

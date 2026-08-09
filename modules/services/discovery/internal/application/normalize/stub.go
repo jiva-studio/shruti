@@ -15,10 +15,6 @@ import (
 // says nothing else, which is honestly all you can know without interpretation.
 type Stub struct{}
 
-// Series never sees one: deciding that a page is a cycle is a reading, and the
-// stub reads nothing.
-func (Stub) Series(context.Context, SeriesInput) (*Series, error) { return nil, nil }
-
 func (Stub) PromptVersion() string { return "stub" }
 func (Stub) Model() string         { return "stub" }
 
