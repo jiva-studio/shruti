@@ -15,22 +15,22 @@ type Item struct {
 	StartMs int64
 }
 
-// OutlineResult carries both passes of one generation in a single LLM round:
-// the granular fine-grained heading list (the raw first pass) and the coarse
-// chapters it was collapsed to. Coarse is what a catalog publishes; Granular
-// feeds the offline topic-vocabulary pipeline. Both are chronological.
+// OutlineResult carries one generation: the granular fine-grained heading list
+// (the raw first pass), the coarse chapters it was collapsed to, and the short
+// description. Coarse is what a catalog publishes; Granular feeds the offline
+// topic-vocabulary pipeline. Both are chronological.
 type OutlineResult struct {
-	Granular []Item
-	Coarse   []Item
+	Granular    []Item
+	Coarse      []Item
+	Description string
 }
 
-// Generator turns a time-coded lecture transcript into a short outline and a
-// description. Implementations are OpenAI-compatible (Gemini via OpenRouter).
+// Generator turns a time-coded lecture transcript into an outline and a
+// description. Implementations are OpenAI-compatible (Gemini).
+//
+// Headings and description come back from ONE call on purpose. They used to be
+// two, and since each was handed the whole transcript, the lecture was paid for
+// twice — half the bill for this step bought nothing.
 type Generator interface {
-	// Outline returns both the granular and the collapsed coarse chapter
-	// headings for the whole lecture, produced in one LLM round.
 	Outline(ctx context.Context, lectureText, lang string) (OutlineResult, error)
-	// Description returns a short plain-text overview of the lecture in the
-	// given language.
-	Description(ctx context.Context, lectureText, lang string) (string, error)
 }

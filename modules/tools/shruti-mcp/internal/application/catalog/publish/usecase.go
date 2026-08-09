@@ -116,6 +116,11 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	if _, err := os.Stat(currentDB); err != nil {
 		return Result{}, fmt.Errorf("current.db missing — refresh first: %w", err)
 	}
+	// The file is about to be read as bytes, so whatever is still in the
+	// write-ahead log has to be folded in first.
+	if err := checkpointWAL(ctx, currentDB); err != nil {
+		return Result{}, err
+	}
 
 	// Config sections (regions + proactive) live in the local config.json,
 	// edited by catalog.config.regions.* / catalog.proactive.*. A full

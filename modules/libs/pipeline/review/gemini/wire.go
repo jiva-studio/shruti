@@ -121,12 +121,16 @@ type wireItemRequest struct {
 	GenerationConfig  wireGenerateCfg `json:"generationConfig"`
 }
 
-// GenerationConfig deliberately has no thinkingConfig: gemini-flash-lite
-// rejects thinkingBudget=0 outright, and measured on real review chunks it
-// spends no thinking tokens anyway.
+// ThinkingConfig is sent only when a budget is asked for: thinkingBudget=0 is
+// rejected by both flash and flash-lite, so "no field" is how default is said.
 type wireGenerateCfg struct {
-	Temperature     float64 `json:"temperature"`
-	MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
+	Temperature     float64          `json:"temperature"`
+	MaxOutputTokens int              `json:"maxOutputTokens,omitempty"`
+	ThinkingConfig  *wireThinkingCfg `json:"thinkingConfig,omitempty"`
+}
+
+type wireThinkingCfg struct {
+	ThinkingBudget int `json:"thinkingBudget"`
 }
 
 func buildItem(r Request) wireItem {
@@ -139,6 +143,7 @@ func buildItem(r Request) wireItem {
 			GenerationConfig: wireGenerateCfg{
 				Temperature:     r.Temperature,
 				MaxOutputTokens: r.MaxTokens,
+				ThinkingConfig:  thinkingCfg(r.ThinkingBudget),
 			},
 		},
 	}
@@ -147,4 +152,11 @@ func buildItem(r Request) wireItem {
 	}
 	item.Metadata.Key = r.Key
 	return item
+}
+
+func thinkingCfg(budget int) *wireThinkingCfg {
+	if budget <= 0 {
+		return nil
+	}
+	return &wireThinkingCfg{ThinkingBudget: budget}
 }

@@ -46,8 +46,9 @@ func Generate(
 	gen outlineport.Generator,
 	blocks []transcript.Block,
 	language string,
+	compress Compressor,
 ) (Result, error) {
-	lectureText, duration := lectureFromBlocks(blocks)
+	lectureText, _, _ := LectureText(blocks, compress)
 	if strings.TrimSpace(lectureText) == "" {
 		return Result{}, fmt.Errorf("outline: no transcript text")
 	}
@@ -56,49 +57,81 @@ func Generate(
 	if err != nil {
 		return Result{}, err
 	}
-	desc, err := gen.Description(ctx, lectureText, language)
-	if err != nil {
-		return Result{}, err
-	}
+	return Assemble(blocks, compress, res.Granular, res.Coarse, res.Description), nil
+}
+
+// LectureText renders the transcript the model reads: one line per non-empty
+// block, compressed text with its time-code in front. Also returns the lecture
+// duration and the block starts, which the assembly step needs.
+//
+// Exported because the batch path builds the same request without going through
+// a Generator — the input has to be byte-identical either way.
+func LectureText(blocks []transcript.Block, compress Compressor) (string, int64, []int64) {
+	return lectureFromBlocks(blocks, compress)
+}
+
+// Assemble turns the model's headings into the stored result: starts snapped to
+// real block boundaries, ends derived, coarse chapters thinned.
+//
+// The batch path passes the same list as granular and coarse: it cannot run the
+// merge round trip, so the coarse list is collapsed locally — which is what the
+// synchronous path falls back to when its merge fails.
+func Assemble(
+	blocks []transcript.Block,
+	compress Compressor,
+	granular, coarse []outlineport.Item,
+	description string,
+) Result {
+	_, duration, starts := lectureFromBlocks(blocks, compress)
 	return Result{
 		// The coarse chapters are the ones rendered as headings, so thin them: a
 		// short lecture must not sprout a heading every couple of sentences.
-		Coarse:      thinChapters(buildEntries(res.Coarse, duration), duration),
-		Granular:    buildEntries(res.Granular, duration),
-		Description: desc,
-	}, nil
+		Coarse:      thinChapters(buildEntries(coarse, duration, starts), duration),
+		Granular:    buildEntries(granular, duration, starts),
+		Description: description,
+	}
 }
 
+// Chapter spacing decides how many chapters a lecture gets. There used to be a
+// hard ceiling of eight on top, applied by dropping every k-th heading until the
+// list fit: it made every lecture come out at exactly eight regardless of
+// length, and the headings it dropped were chosen by position rather than by
+// being minor.
+//
+// The gap scales with the lecture because one fixed value cannot serve both
+// ends: three minutes gives a two-hour talk ten chapters and a nine-minute one
+// two, having thrown away half of what it had to say.
 const (
-	// minChapterGapMs is the smallest spacing between two coarse chapter
-	// headings — a heading closer than this to the previous one is dropped, so a
-	// 3-minute lecture gets a handful of chapters, not one per sentence.
+	maxChapterGapMs = 180_000
 	minChapterGapMs = 60_000
-	// maxCoarseChapters caps the coarse outline; more than this is downsampled
-	// evenly. Keeps even a multi-hour lecture to a scannable table of contents.
-	maxCoarseChapters = 8
+	// chapterGapDivisor targets roughly this many chapters before the clamps
+	// take over.
+	chapterGapDivisor = 8
 )
 
-// thinChapters enforces a minimum time gap between coarse chapters and caps the
-// count, re-deriving each kept chapter's [start,end) span. The first chapter is
-// always kept.
+func chapterGapMs(duration int64) int64 {
+	gap := duration / chapterGapDivisor
+	if gap > maxChapterGapMs {
+		return maxChapterGapMs
+	}
+	if gap < minChapterGapMs {
+		return minChapterGapMs
+	}
+	return gap
+}
+
+// thinChapters enforces a minimum time gap between coarse chapters, re-deriving
+// each kept chapter's [start,end) span. The first chapter is always kept.
 func thinChapters(entries []Entry, duration int64) []Entry {
 	if len(entries) <= 1 {
 		return entries
 	}
+	gap := chapterGapMs(duration)
 	kept := []Entry{entries[0]}
 	for _, e := range entries[1:] {
-		if e.Start-kept[len(kept)-1].Start >= minChapterGapMs {
+		if e.Start-kept[len(kept)-1].Start >= gap {
 			kept = append(kept, e)
 		}
-	}
-	if len(kept) > maxCoarseChapters {
-		sampled := make([]Entry, 0, maxCoarseChapters)
-		step := float64(len(kept)) / float64(maxCoarseChapters)
-		for i := 0; i < maxCoarseChapters; i++ {
-			sampled = append(sampled, kept[int(float64(i)*step)])
-		}
-		kept = sampled
 	}
 	for i := range kept {
 		if i+1 < len(kept) {
@@ -115,21 +148,45 @@ func thinChapters(entries []Entry, duration int64) []Entry {
 
 // lectureFromBlocks renders the reviewed transcript as time-coded lines
 // ("[HH:MM:SS] text"), one per non-empty block, and returns the lecture
-// duration (the latest block end) for clamping/end-derivation.
-func lectureFromBlocks(blocks []transcript.Block) (string, int64) {
+// duration (the latest block end) for clamping/end-derivation plus the block
+// starts, which are the only timecodes a heading may legitimately carry.
+//
+// Compression runs on the text and the marker is written after it, so the
+// marker is never an input to the compressor.
+func lectureFromBlocks(blocks []transcript.Block, c Compressor) (string, int64, []int64) {
 	var b strings.Builder
 	var duration int64
+	starts := make([]int64, 0, len(blocks))
 	for _, blk := range blocks {
 		if end := blk.EndMs(); end > duration {
 			duration = end
 		}
 		text := strings.TrimSpace(blockText(blk))
+		if c != nil {
+			text = strings.TrimSpace(c.Compress(text))
+		}
 		if text == "" {
 			continue
 		}
+		starts = append(starts, blk.StartMs())
 		fmt.Fprintf(&b, "[%s] %s\n", fmtTS(blk.StartMs()), text)
 	}
-	return b.String(), duration
+	return b.String(), duration, starts
+}
+
+// snapToBlock moves a heading start onto the nearest block boundary at or
+// before it. The model occasionally reports a timecode that appears nowhere in
+// the transcript — measured at one heading in 65 — and an invented start puts a
+// chapter in the middle of a sentence.
+func snapToBlock(ms int64, starts []int64) int64 {
+	if len(starts) == 0 {
+		return ms
+	}
+	i := sort.Search(len(starts), func(i int) bool { return starts[i] > ms })
+	if i == 0 {
+		return starts[0]
+	}
+	return starts[i-1]
 }
 
 func blockText(b transcript.Block) string {
@@ -148,7 +205,7 @@ func blockText(b transcript.Block) string {
 // buildEntries cleans the LLM headings (clamp to [0,duration], strictly
 // increasing starts, drop empties/dupes) and derives each heading's end as the
 // next heading's start — the last one runs to the lecture duration.
-func buildEntries(items []outlineport.Item, duration int64) []Entry {
+func buildEntries(items []outlineport.Item, duration int64, starts []int64) []Entry {
 	sort.SliceStable(items, func(i, j int) bool { return items[i].StartMs < items[j].StartMs })
 
 	cleaned := make([]outlineport.Item, 0, len(items))
@@ -158,7 +215,7 @@ func buildEntries(items []outlineport.Item, duration int64) []Entry {
 		if title == "" {
 			continue
 		}
-		start := it.StartMs
+		start := snapToBlock(it.StartMs, starts)
 		if start < 0 {
 			start = 0
 		}
