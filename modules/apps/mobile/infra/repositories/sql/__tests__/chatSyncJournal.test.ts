@@ -279,6 +279,33 @@ describe("chat sync journaling", () => {
     expect(tombstones.every((r) => r.data === null)).toBe(true)
   })
 
+  it("tombstones a message known only through sync_doc_hlc on deleteBySession", async () => {
+    // A message pulled from the server (or already pushed and compacted) has
+    // no outbox row — the UNION branch of the id lookup is what finds it.
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    chatSyncEnabled = false
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "user",
+      content: "q",
+      createdAt: 1,
+    })
+    chatSyncEnabled = true
+    await db.execute("INSERT INTO sync_doc_hlc (collection, doc_id, server_hlc) VALUES (?, ?, ?)", [
+      "chat_messages",
+      "m1",
+      "1-0-srv",
+    ])
+    await repos.chatMessages.deleteBySession(sid)
+
+    const rows = await outboxRows(db)
+    expect(rows.map((r) => [r.collection, r.doc_id, r.op])).toEqual([
+      ["chat_messages", "m1", "delete"],
+    ])
+  })
+
   it("emits no message tombstones when the Sync chats toggle is off", async () => {
     const sid = "s1" as ChatSessionId
     await repos.chatSessions.create({ id: sid, title: null })
