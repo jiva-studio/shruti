@@ -141,3 +141,49 @@ describe("topicsRepository — library-language filtering", () => {
     ])
   })
 })
+
+describe("topicsRepository — similarity is cosine, not raw overlap", () => {
+  let db: IDatabase
+  let repo: ReturnType<typeof createSqlTopicRepository>
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applySchema(db)
+    for (const id of ["seed", "narrow", "broad"]) {
+      await db.execute(`INSERT INTO tracks (id, hidden) VALUES (?, 0)`, [id])
+      await db.execute(`INSERT INTO track_variants (track_id, language) VALUES (?, 'en')`, [id])
+    }
+    const rows: [string, string, number][] = [
+      ["seed", "T1", 0.5],
+      ["seed", "T2", 0.5],
+      ["narrow", "T1", 1.0], // one topic, all of its weight
+      ["broad", "T1", 0.3], // shares both seed topics, plus ground of its own
+      ["broad", "T2", 0.3],
+      ["broad", "T3", 0.4],
+    ]
+    for (const [t, topic, w] of rows) {
+      await db.execute(`INSERT INTO track_topics (track_id, topic_id, weight) VALUES (?, ?, ?)`, [
+        t,
+        topic,
+        w,
+      ])
+    }
+    repo = createSqlTopicRepository(db)
+  })
+
+  it("ranks a track sharing both seed topics above one that is all of a single topic", async () => {
+    // SUM(weight) would score narrow 1.0 against broad 0.6 and invert this.
+    expect(
+      await repo.similarTrackIds(["T1", "T2"] as TopicId[], "seed" as TrackId, [], 10)
+    ).toEqual(["broad", "narrow"])
+  })
+
+  it("still prefers a narrow track when it is squarely on the one seed topic", async () => {
+    // The correction must not simply punish short tracks: with T1 alone as the
+    // seed, the track that is entirely about T1 is the better neighbour.
+    expect(await repo.similarTrackIds(["T1"] as TopicId[], "seed" as TrackId, [], 10)).toEqual([
+      "narrow",
+      "broad",
+    ])
+  })
+})
