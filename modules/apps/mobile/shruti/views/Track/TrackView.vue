@@ -5,7 +5,7 @@
         <IonButtons slot="start">
           <IonBackButton default-href="/tabs/home" />
         </IonButtons>
-        <IonTitle>Track</IonTitle>
+        <IonTitle>{{ $t("track.title") }}</IonTitle>
       </IonToolbar>
     </IonHeader>
 
@@ -27,10 +27,11 @@
           @click="track.onPlay"
         >
           <IconPlayerPlayFilled slot="start" :size="20" style="margin-inline-end: 8px" />
-          {{ $t("app.ok") }}
+          {{ $t("track.play") }}
         </IonButton>
 
         <TrackLanguageSelector
+          :label="$t('track.language')"
           :languages="track.availableLanguages.value"
           :value="track.selectedLanguage.value"
           @update:value="track.onLanguageChange"
@@ -38,7 +39,7 @@
       </template>
 
       <IonText v-else color="medium">
-        <p>Loading track…</p>
+        <p>{{ $t("track.loading") }}</p>
       </IonText>
     </IonContent>
   </IonPage>
