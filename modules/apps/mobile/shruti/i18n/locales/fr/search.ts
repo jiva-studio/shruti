@@ -17,6 +17,7 @@ export default {
   web: {
     title: "Internet",
     add: "Ajouter à ma bibliothèque",
+    prompt: "Saisissez une requête pour lancer la recherche.",
     empty: "Rien dans les archives que nous indexons.",
     unavailable: "La recherche sur Internet est indisponible pour le moment.",
     more: "Afficher plus",
@@ -91,6 +92,7 @@ export default {
       "Ajouter {count} conférence à la playlist ? | Ajouter {count} conférences à la playlist ?",
     others: "Autres collections",
     all: "Toutes les collections",
+    partOf: "Cours {position} sur {total}",
     seeAll: "Tout voir",
     seeAllNamed: "Tout voir : {name}",
   },

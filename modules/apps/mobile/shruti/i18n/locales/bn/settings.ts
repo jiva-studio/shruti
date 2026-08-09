@@ -179,6 +179,13 @@ export default {
     description: "আপনার Ask Sadhu কথোপকথন আপনার সব ডিভাইসে সিঙ্ক রাখুন।",
   },
 
+  downloadLimit: {
+    title: "ডাউনলোড সীমা",
+    unlimited: "কোনো সীমা নেই",
+    usage: "{limit}-এর মধ্যে {used}",
+    usageUnlimited: "{used} ডাউনলোড হয়েছে",
+  },
+
   smartLibrary: {
     title: "স্মার্ট লাইব্রেরি",
     description: "নতুন লেকচার প্রস্তুত রাখুন এবং শোনার পরে পরিষ্কার করুন",

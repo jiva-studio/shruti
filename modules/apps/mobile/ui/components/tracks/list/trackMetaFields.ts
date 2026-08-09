@@ -5,16 +5,13 @@ import type { ComputedRef, InjectionKey, Ref } from "vue"
  * (Pro) lays them out across two slots — a prominent inline widget on
  * the title row and the reorderable line below it; everyone else gets
  * {@link DEFAULT_TRACK_META_CONFIG}.
+ *
+ * The author is not among them: it has a line of its own and is always
+ * shown.
  */
-export type TrackMetaFieldKey = "reference" | "author" | "location" | "date" | "duration"
+export type TrackMetaFieldKey = "reference" | "location" | "date" | "duration"
 
-export const TRACK_META_FIELD_KEYS = [
-  "reference",
-  "author",
-  "location",
-  "date",
-  "duration",
-] as const
+export const TRACK_META_FIELD_KEYS = ["reference", "location", "date", "duration"] as const
 
 /**
  * Fields eligible for the prominent top widget. Only the two short,
@@ -43,18 +40,16 @@ export interface TrackMetaConfig {
 }
 
 /**
- * Default layout = the scripture reference as the inline title chip
- * (where it always sat) and date · location · duration on the line
- * below. Author and the bottom-line reference are off by default.
+ * Default layout = three lines. The title on its own, the author under
+ * it, then reference · date · duration · location.
  */
 export const DEFAULT_TRACK_META_CONFIG: TrackMetaConfig = {
-  top: "reference",
+  top: null,
   bottom: [
     { field: "reference", enabled: true },
-    { field: "author", enabled: false },
     { field: "date", enabled: true },
-    { field: "location", enabled: true },
     { field: "duration", enabled: true },
+    { field: "location", enabled: true },
   ],
 }
 

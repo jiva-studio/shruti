@@ -9,4 +9,6 @@ export default {
     "Não foi possível carregar os nomes — alguns rótulos podem estar ausentes.",
   playbackFailed:
     "Não foi possível reproduzir esta palestra. Verifique sua conexão e tente novamente.",
+  downloadStorageFull:
+    "Limite de armazenamento atingido. Remova as palestras já ouvidas ou aumente o limite nas configurações.",
 }

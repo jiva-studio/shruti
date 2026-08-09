@@ -80,5 +80,18 @@ export function createCompositeTrackRepository(
       )
       return map
     },
+
+    async getAudioSizesBytes(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>> {
+      const map = new Map(await corpus.getAudioSizesBytes(trackIds))
+      await Promise.all(
+        trackIds
+          .filter((id) => !map.has(id))
+          .map(async (id) => {
+            const size = (await library.getTrackByTrackId(id))?.variants[0]?.audio?.filesize
+            if (typeof size === "number" && size > 0) map.set(id, size)
+          })
+      )
+      return map
+    },
   }
 }

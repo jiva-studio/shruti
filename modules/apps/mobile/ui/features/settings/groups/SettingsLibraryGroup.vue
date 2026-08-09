@@ -8,10 +8,17 @@
     :selected="selected"
     @update:selected="emit('update:selected', $event)"
   />
+
+  <DownloadLimitSettingsItem
+    v-model:limit-bytes="downloadLimitBytes"
+    :presets="downloadLimitPresets"
+    :used-bytes="downloadUsedBytes"
+  />
 </template>
 
 <script setup lang="ts">
 import { IonLabel, IonListHeader } from "@ionic/vue"
+import DownloadLimitSettingsItem from "../DownloadLimitSettingsItem.vue"
 import LibraryLanguageSettingsItem from "../LibraryLanguageSettingsItem.vue"
 
 interface SelectorItem {
@@ -24,7 +31,11 @@ interface SelectorItem {
 defineProps<{
   languageItems: SelectorItem[]
   selected: string[]
+  downloadLimitPresets: readonly number[]
+  downloadUsedBytes: number
 }>()
+
+const downloadLimitBytes = defineModel<number>("downloadLimitBytes", { required: true })
 
 const emit = defineEmits<{ "update:selected": [string[]] }>()
 </script>

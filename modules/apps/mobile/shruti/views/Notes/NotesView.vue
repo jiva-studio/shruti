@@ -44,7 +44,7 @@
         to="search"
       />
 
-      <div v-if="player.open" class="bottom-reserve" />
+      <DockSpacer />
     </IonContent>
 
     <!-- Action Sheet for note actions -->
@@ -64,13 +64,12 @@ import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { NotesList } from "@ui/features/notes/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
-import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useNotesController } from "./NotesView.controller.js"
 import NotesInlinePlayer from "./NotesInlinePlayer.vue"
+import DockSpacer from "@shruti/components/DockSpacer.vue"
 
 const { shareAudioService, activeServer } = useShruti()
-const player = usePlayerStore()
 const { rows, isEmpty, query, isActionSheetOpen, actionSheetButtons, onQuery, onNoteClicked } =
   useNotesController()
 const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
@@ -89,10 +88,5 @@ ion-toolbar {
 }
 .page-search {
   --search-gutter: 16px;
-}
-
-.bottom-reserve {
-  width: 100%;
-  height: var(--kit-page-reserved-space, 0px);
 }
 </style>

@@ -103,6 +103,10 @@ const adding = ref(false)
 const loading = ref(false)
 
 const coverUrl = computed(() => (coverKey.value ? resolveAssetUrl(coverKey.value) : undefined))
+// Rows are NOT numbered here. The place-in-the-collection badge belongs to the
+// Home queue, where a seminar's lectures sit interleaved with everything else
+// and the number is the only thing telling you where you are in it. On this
+// page the running order is already the list order, so the badge added noise.
 const rows = mapper.mapRows(() => tracks.value, { context: "discovery" })
 
 const HERO_HEIGHT = 240
