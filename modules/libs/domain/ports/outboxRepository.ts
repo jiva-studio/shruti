@@ -51,8 +51,13 @@ export interface IOutboxRepository {
   /**
    * Pending (`sent = 0`) changes in insertion (`id`) order, oldest first.
    * `limit` bounds the batch so a push stays within the edge's body cap.
+   *
+   * `afterId` is the outbox watermark (`sync_state.pushed_outbox_id`, 0 when
+   * omitted): rows at or below it are never returned. On an identity change
+   * the engine raises it to {@link latestId}, so changes journaled under a
+   * previous account are not re-pushed under the new one.
    */
-  listPending(limit?: number): Promise<readonly OutboxEntry[]>
+  listPending(limit?: number, afterId?: number): Promise<readonly OutboxEntry[]>
 
   /** Mark the given outbox rows acknowledged (`sent = 1`). Idempotent. */
   markSent(ids: readonly number[]): Promise<void>
@@ -65,4 +70,11 @@ export interface IOutboxRepository {
    * Seeds the next monotonic HLC when the engine stamps a re-merged change.
    */
   latestHlc(): Promise<string | null>
+
+  /**
+   * The highest `id` ever journaled (sent or not), `0` when the outbox is
+   * empty. Stamped as the watermark when the owning identity changes, which
+   * retires every row journaled so far.
+   */
+  latestId(): Promise<number>
 }

@@ -183,16 +183,19 @@ describe("useSyncEngine — first-sync backfill", () => {
 describe("useSyncEngine — cursor-ownership reset", () => {
   let setPullCursor: ReturnType<typeof vi.fn>
   let setAckedSeq: ReturnType<typeof vi.fn>
+  let setPushedOutboxId: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     setPullCursor = vi.fn(async () => {})
     setAckedSeq = vi.fn(async () => {})
+    setPushedOutboxId = vi.fn(async () => {})
     // Swap in a syncState that records the reset writes and a unit-of-work that
     // actually invokes its callback (the default mocks are opaque `{}`).
+    // The outbox holds 7 rows journaled by whoever owned the device before.
     ;(ctx.shruti as { repositories: () => unknown }).repositories = () => ({
       syncBackfill: {},
-      syncOutbox: {},
-      syncState: { setPullCursor, setAckedSeq },
+      syncOutbox: { latestId: async () => 7 },
+      syncState: { setPullCursor, setAckedSeq, setPushedOutboxId },
       syncApply: {},
       unitOfWork: { run: (fn: () => unknown) => fn() },
       libraryItems: { listAll: async () => [] },
@@ -230,6 +233,7 @@ describe("useSyncEngine — cursor-ownership reset", () => {
 
     expect(setPullCursor).not.toHaveBeenCalled()
     expect(setAckedSeq).not.toHaveBeenCalled()
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
     app.unmount()
   })
 
@@ -242,7 +246,40 @@ describe("useSyncEngine — cursor-ownership reset", () => {
     await flush()
 
     expect(setPullCursor).not.toHaveBeenCalled()
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
     expect(prefs.get("sync.cursorOwner")).toBe("user-1")
+    app.unmount()
+  })
+
+  it("retires the previous owner's outbox rows before the new identity pushes", async () => {
+    // Account deleted with un-pushed rows still journaled; the wipe leaves them
+    // behind and the device drops to a fresh anonymous identity (#1497).
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+
+    expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    expect(setPushedOutboxId.mock.invocationCallOrder[0]).toBeLessThan(
+      ctx.runSync.mock.invocationCallOrder[0]
+    )
+    app.unmount()
+  })
+
+  it("stamps the watermark once per switch, not on every later cycle", async () => {
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+    ctx.resumeCb?.({ isActive: true })
+    await flush()
+
+    expect(setPushedOutboxId).toHaveBeenCalledTimes(1)
+    expect(ctx.runSync).toHaveBeenCalledTimes(2)
     app.unmount()
   })
 })

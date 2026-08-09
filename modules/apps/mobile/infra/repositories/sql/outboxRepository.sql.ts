@@ -30,14 +30,12 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
   }
 
   return {
-    async listPending(limit?: number): Promise<readonly OutboxEntry[]> {
+    async listPending(limit?: number, afterId = 0): Promise<readonly OutboxEntry[]> {
+      const sql = "SELECT * FROM outbox WHERE sent = 0 AND id > ? ORDER BY id ASC"
       const rows =
         limit === undefined
-          ? await db.query<OutboxRow>("SELECT * FROM outbox WHERE sent = 0 ORDER BY id ASC")
-          : await db.query<OutboxRow>(
-              "SELECT * FROM outbox WHERE sent = 0 ORDER BY id ASC LIMIT ?",
-              [limit]
-            )
+          ? await db.query<OutboxRow>(sql, [afterId])
+          : await db.query<OutboxRow>(`${sql} LIMIT ?`, [afterId, limit])
       return rows.map(toEntry)
     },
 
@@ -68,6 +66,11 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
         "SELECT hlc FROM outbox ORDER BY id DESC LIMIT 1"
       )
       return rows.length > 0 ? rows[0]!.hlc : null
+    },
+
+    async latestId(): Promise<number> {
+      const rows = await db.query<{ id: number }>("SELECT id FROM outbox ORDER BY id DESC LIMIT 1")
+      return rows.length > 0 ? Number(rows[0]!.id) : 0
     },
   }
 }

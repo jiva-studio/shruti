@@ -25,7 +25,8 @@ const BACKFILL_MARKER_PREFIX = "sync.backfilled."
  *  position in the server's GLOBAL change log scoped to ONE user's view — after
  *  a sign-out + sign-in as a different account (the DB is not wiped on
  *  sign-out) it would skip the new user's earlier changes. When the owner
- *  differs we reset the cursor so the new identity re-pulls from 0. */
+ *  differs we reset the cursor so the new identity re-pulls from 0 — and
+ *  retire the outbox rows the previous owner journaled. */
 const CURSOR_OWNER_KEY = "sync.cursorOwner"
 
 /**
@@ -129,10 +130,14 @@ export function useSyncEngine(): void {
    * reset `pull_cursor`/`acked_seq` to 0 so the new identity re-pulls its whole
    * history (apply is an idempotent LWW no-op on rows it already has).
    *
-   * `pushed_outbox_id` is deliberately NOT reset: it gates the device-local
-   * outbox and rewinding it would re-push the previous owner's rows under the
-   * new account. Runs once per account per process (guarded by an in-memory
-   * echo + a persisted `sync.cursorOwner` marker) and only when enabled.
+   * The push side moves the OTHER way: `pushed_outbox_id` is raised to the
+   * outbox's tail id, retiring every row journaled so far. Those rows are the
+   * previous owner's notes and chat messages — a local wipe / account deletion
+   * leaves un-pushed ones behind, and without this they would upload under the
+   * new anonymous identity (#1497). It is never rewound.
+   *
+   * Runs once per account per process (guarded by an in-memory echo + a
+   * persisted `sync.cursorOwner` marker) and only when enabled.
    */
   async function maybeResetCursorForOwner(): Promise<void> {
     if (!isEnabled()) return
@@ -152,16 +157,18 @@ export function useSyncEngine(): void {
     } catch {
       return
     }
-    const { syncState, unitOfWork } = repos
-    if (!syncState) return
+    const { syncOutbox, syncState, unitOfWork } = repos
+    if (!syncOutbox || !syncState) return
 
     try {
-      // A first-ever owner (stored === null) resets a cursor that is already 0
-      // — harmless; it just records ownership so a later switch is detected.
+      // A first-ever owner (stored === null) owns everything journaled so far
+      // (the pre-marker upgrade path), so neither side is touched; recording
+      // ownership is what makes a later switch detectable.
       if (stored !== null) {
         await unitOfWork.run(async () => {
           await syncState.setPullCursor(0)
           await syncState.setAckedSeq(0)
+          await syncState.setPushedOutboxId(await syncOutbox.latestId())
         })
       }
       await app.preferences.set(CURSOR_OWNER_KEY, userId).catch(() => undefined)

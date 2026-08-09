@@ -144,3 +144,89 @@ describe("pushLocal — idempotent no-op", () => {
     expect(gateway.pushRequests).toHaveLength(0)
   })
 })
+
+describe("pushLocal — outbox watermark", () => {
+  /** One `notes` upsert, so a batch reads as N distinct docs. */
+  const note = (n: number) => ({
+    collection: "notes",
+    docId: `note-${n}`,
+    op: "upsert" as const,
+    data: { id: `note-${n}`, text: `n${n}` },
+    hlc: hlc(1000 + n),
+    baseHlc: null,
+  })
+
+  const applyAll = (gateway: FakeSyncClient) => {
+    gateway.pushHandler = (req): PushResponse => ({
+      applied: req.changes.map((c) => ({ collection: c.collection, doc_id: c.doc_id })),
+      conflicts: [],
+    })
+  }
+
+  it("skips rows retired by the watermark and pushes only what came after", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+    applyAll(gateway)
+
+    // Rows 1-2 were journaled by the previous identity; the owner guard raised
+    // the watermark past them. Row 3 belongs to the account signed in now.
+    outbox.seed([note(1), note(2)])
+    state.pushedOutboxId = await outbox.latestId()
+    outbox.seed([note(3)])
+
+    const result = await pushLocal(deps(gateway, outbox, apply, state))
+
+    expect(result.pushed).toBe(1)
+    expect(gateway.pushRequests).toHaveLength(1)
+    expect(gateway.pushRequests[0]!.changes.map((c) => c.doc_id)).toEqual(["note-3"])
+    // The retired rows stay unsent and unseen — nothing re-reads them.
+    expect(outbox.rows.filter((r) => !r.sent).map((r) => r.docId)).toEqual(["note-1", "note-2"])
+    expect(state.pushedOutboxId).toBe(3)
+  })
+
+  it("pushes nothing when every row predates the watermark", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+    applyAll(gateway)
+
+    outbox.seed([note(1), note(2)])
+    state.pushedOutboxId = await outbox.latestId()
+
+    const result = await pushLocal(deps(gateway, outbox, apply, state))
+
+    expect(result.pushed).toBe(0)
+    expect(gateway.pushRequests).toHaveLength(0)
+  })
+
+  it("holds the watermark below a row the server left unhandled", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+
+    outbox.seed([note(1), note(2), note(3)])
+    // The server acknowledges everything except note-2.
+    gateway.pushHandler = (req): PushResponse => ({
+      applied: req.changes
+        .filter((c) => c.doc_id !== "note-2")
+        .map((c) => ({ collection: c.collection, doc_id: c.doc_id })),
+      conflicts: [],
+    })
+
+    await pushLocal(deps(gateway, outbox, apply, state))
+
+    // Advancing to 3 would retire note-2 unpushed; it must stay retryable.
+    expect(state.pushedOutboxId).toBe(1)
+    expect(outbox.rows.filter((r) => !r.sent).map((r) => r.docId)).toEqual(["note-2"])
+
+    applyAll(gateway)
+    const retry = await pushLocal(deps(gateway, outbox, apply, state))
+
+    expect(retry.pushed).toBe(1)
+    expect(gateway.pushRequests[1]!.changes.map((c) => c.doc_id)).toEqual(["note-2"])
+  })
+})
