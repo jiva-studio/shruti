@@ -1,14 +1,4 @@
 import type { Note } from "@lib/domain/note.js"
-import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
-
-export interface SearchNotesInput {
-  readonly query: string
-  readonly limit?: number
-}
-
-export interface SearchNotesDeps {
-  readonly notes: INoteRepository
-}
 
 // A query has to scan the whole corpus before truncating, otherwise a
 // match older than `limit` newest notes is never found. The note corpus
@@ -41,22 +31,4 @@ export function filterNotes(
     if (matches.length === limit) break
   }
   return matches
-}
-
-/**
- * Repository-backed variant of {@link filterNotes} for callers that don't
- * already hold the corpus. An empty query returns the recent list
- * unfiltered, which is what the Notes view shows by default.
- *
- * Prefer {@link filterNotes} on a hot path (the search field): this one
- * pulls the whole corpus out of SQLite on every call.
- */
-export async function searchNotes(
-  input: SearchNotesInput,
-  deps: SearchNotesDeps
-): Promise<readonly Note[]> {
-  const limit = input.limit ?? DEFAULT_SEARCH_LIMIT
-  if (!input.query.trim()) return deps.notes.listRecent(limit)
-  const all = await deps.notes.listRecent(SEARCH_CORPUS_CAP)
-  return filterNotes(all, input.query, limit)
 }

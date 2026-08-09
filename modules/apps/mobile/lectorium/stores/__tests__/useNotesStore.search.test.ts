@@ -83,6 +83,21 @@ describe("useNotesStore search", () => {
     expect(store.filtered.map((n) => n.id)).toEqual(["1"])
   })
 
+  it("does not advertise the new query against the old result set", async () => {
+    const store = useNotesStore()
+    await store.refresh()
+
+    void store.setQuery("need")
+    // The field is already showing "need", but `filtered` is still the
+    // unfiltered list — highlighting must key off the applied query, not the
+    // live one, or the previous rows get marked against the newer text.
+    expect(store.query).toBe("need")
+    expect(store.appliedQuery).toBe("")
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(store.appliedQuery).toBe("need")
+  })
+
   it("keeps the case-insensitive match semantics, Cyrillic included", async () => {
     const store = useNotesStore()
     await store.refresh()
@@ -119,5 +134,26 @@ describe("useNotesStore search", () => {
     await vi.advanceTimersByTimeAsync(500)
 
     expect(store.filtered.map((n) => n.id)).toEqual(["old"])
+  })
+
+  it("keeps a hit past the 500th note addressable — `all` and `filtered` agree", async () => {
+    // The old store loaded `all` from listRecent(500) while search scanned the
+    // full corpus, so a hit beyond the 500 newest rendered and was tappable
+    // but resolved to null in the view's `currentNote()` — share and delete
+    // silently no-opped on it. Needs >500 filler to reproduce.
+    const many = [
+      ...Array.from({ length: 600 }, (_, i) => mk(`f${i}`, `filler ${i}`)),
+      mk("old", "needle in a very old note"),
+    ]
+    listRecent.mockImplementation(async (limit: number) => many.slice(0, limit))
+
+    const store = useNotesStore()
+    await store.refresh()
+    void store.setQuery("needle")
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(store.filtered.map((n) => n.id)).toEqual(["old"])
+    const hit = store.filtered[0]!
+    expect(store.all.find((n) => n.id === hit.id)).toBeDefined()
   })
 })
