@@ -107,12 +107,14 @@ describe("useTranscriptDialogController.onChapterSeek — preview mode", () => {
     expect(loaderError.value).not.toContain("engine-failed")
   })
 
-  it("uses the same message for a track with no audible variant", async () => {
+  it("uses the permanent message for a transcript-only lecture", async () => {
+    // Chapter rows render off the outline with no audio gate, so this is
+    // reachable — and retrying can never make audio appear.
     openTrack.mockResolvedValue({ ok: false, error: "no-audio-available" })
 
     await useTranscriptDialogController().onChapterSeek(12000)
 
-    expect(loaderError.value).toBe("translated:errors.playbackFailed")
+    expect(loaderError.value).toBe("translated:errors.noAudioForLecture")
   })
 
   it("leaves the banner clear when playback starts", async () => {

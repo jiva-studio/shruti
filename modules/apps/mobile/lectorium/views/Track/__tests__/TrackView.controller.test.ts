@@ -105,7 +105,7 @@ describe("useTrackController playback reporting", () => {
     await settle()
 
     expect(openTrack).toHaveBeenCalledWith(expect.objectContaining({ resumeFromMs: 12000 }))
-    expect(toastError).toHaveBeenCalledWith("errors.playbackFailed")
+    expect(toastError).toHaveBeenCalledWith("errors.noAudioForLecture")
   })
 
   it("says nothing when the deep-link auto-open succeeds", async () => {

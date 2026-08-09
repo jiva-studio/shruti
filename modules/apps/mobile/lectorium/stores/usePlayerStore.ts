@@ -261,6 +261,10 @@ export const usePlayerStore = defineStore("player", () => {
       // item, but a single track / the last item just stops with nothing told
       // to the user — the player would sit silently "not playing". Surface it.
       // Events are ack'd above, so each error is seen exactly once (no spam).
+      // This never doubles up with the refusal the `openTrack` call sites
+      // report: `open()` is itself a queue of length one, but neither it nor
+      // `setQueue` awaits readiness, so a bad URL / 404 cannot reject the JS
+      // call — it can only arrive here. Per item the two are exclusive.
       if (s.events.some((e) => e.reason === "error")) {
         void toast.error(t("errors.playbackFailed"))
       }
