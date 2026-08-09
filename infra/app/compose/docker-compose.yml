@@ -965,7 +965,7 @@ services:
 
   # publish-service: the PROMOTION plane of personal-library. Consumes
   # track.ready (from the orchestrator) into its own publish.tracks; a ticker
-  # reconciles the corpus current.db catalog, emits track.published, and rebuilds
+  # reconciles the published corpus catalog, emits track.published, and rebuilds
   # the admin pending.db review artifact on S3. Single Go binary; `serve` applies
   # embedded migrations on boot (advisory-locked, like orchestrator/profile).
   # Talks ONLY to publish-postgres + the redis-streams broker + S3. Origin only.
@@ -998,14 +998,16 @@ services:
       S3_ENDPOINT: ${SHRUTI_S3_ENDPOINT_URL:-}
       S3_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       S3_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      # Corpus catalog current.db is READ-ONLY here: it is fetched to learn which
-      # track ids are already live in the public corpus, so this service can
-      # promote its own matching rows. It is never written back — the only blob
-      # this service PUTs is pending.db. (current.db is owned by the published-
-      # corpus build; a writer here would corrupt the catalog every app pulls.)
-      # URL takes precedence; the S3 key is the fallback fetch source.
-      CORPUS_CATALOG_URL: ${SHRUTI_MEDIA_BASE_URL:-https://cdn.shruti.local}/public/db/current.db
-      CORPUS_CATALOG_S3_KEY: public/db/current.db
+      # The corpus catalog is READ-ONLY here: it is fetched to learn which track
+      # ids are already live in the public corpus, so this service can promote
+      # its own matching rows. It is never written back — the only blob this
+      # service PUTs is pending.db. (The catalog is owned by the published-corpus
+      # build; a writer here would corrupt the catalog every app pulls.)
+      # There is no fixed catalog filename: the live version is resolved from
+      # ${MEDIA_BASE_URL}/public/config.json (databases[].version) on every tick
+      # and fetched as public/db/shruti.{version}.db. Unset MEDIA_BASE_URL
+      # reads the same two objects through the blob backend above.
+      MEDIA_BASE_URL: ${SHRUTI_MEDIA_BASE_URL:-https://cdn.shruti.local}
       PENDING_S3_KEY: public/db/pending.db
       PORT: "8087"
       ENV: ${SHRUTI_ENV:-dev}
