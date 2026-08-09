@@ -11,6 +11,10 @@ type Uploader interface {
 	Put(ctx context.Context, key, contentType string, body io.Reader, size int64) error
 	GetJSON(ctx context.Context, key string, out any) (found bool, err error)
 
+	// Get reads an object whole. found=false with err=nil when the key isn't
+	// there. For assets small enough to hold in memory — cover art, avatars.
+	Get(ctx context.Context, key string) (data []byte, found bool, err error)
+
 	// Head probes for an existing object. exists=false with err=nil when the
 	// key isn't there. Used by incremental publish to skip files that already
 	// match in size; etag is the bare ETag value (quotes stripped) for

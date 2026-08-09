@@ -122,6 +122,30 @@ func (u *Uploader) Head(ctx context.Context, key string) (int64, string, bool, e
 	return 0, "", false, nil
 }
 
+func (u *Uploader) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.objURL(key), nil)
+	if err != nil {
+		return nil, false, err
+	}
+	req.Header.Set("AccessKey", u.target.AccessKey)
+	resp, err := u.client.Do(req)
+	if err != nil {
+		return nil, false, err
+	}
+	defer drainClose(resp.Body)
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, false, fmt.Errorf("bunny get %s: %s", key, resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false, err
+	}
+	return body, true, nil
+}
+
 func (u *Uploader) GetJSON(ctx context.Context, key string, out any) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.objURL(key), nil)
 	if err != nil {

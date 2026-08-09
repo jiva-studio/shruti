@@ -429,10 +429,11 @@ func registerCollectionTagsRemove(s *server.MCPServer, deps CollectionCRUDDeps) 
 func registerCollectionCoverGenerate(s *server.MCPServer, deps CollectionCRUDDeps) {
 	kind := "collection.cover.generate"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Generate (or regenerate) the collection's cover image from its name/description via the configured image model, upload it to S3 (public/collections/<id>/cover.jpg), and set the cover key on every locale. Pass extra_prompt to steer the art."),
+		mcp.WithDescription("Generate (or regenerate) the collection's cover image from its name/description via the configured image model, upload it to S3 (public/collections/<id>/cover.jpg), and set the cover key on every locale. Pass extra_prompt to steer the art, restyle=true to repaint the existing cover instead of drawing a new subject."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Description("Locale whose name/description seed the prompt (en fallback).")),
 		mcp.WithString("extra_prompt", mcp.Description("Optional extra prompt fragment appended to steer the generation.")),
+		mcp.WithBoolean("restyle", mcp.Description("Feed the current cover to the model and repaint it in the house style, keeping its subject. No-op when there is no cover yet.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("id")
@@ -443,7 +444,11 @@ func registerCollectionCoverGenerate(s *server.MCPServer, deps CollectionCRUDDep
 			return envelope.Err(kind, envelope.CodeInvalidArgument,
 				"image generation is not configured (set images.api_key)", nil), nil
 		}
-		key, err := deps.Cover.Generate(ctx, id, req.GetString("language", ""), req.GetString("extra_prompt", ""))
+		var opts []covergen.Option
+		if req.GetBool("restyle", false) {
+			opts = append(opts, covergen.Restyle())
+		}
+		key, err := deps.Cover.Generate(ctx, id, req.GetString("language", ""), req.GetString("extra_prompt", ""), opts...)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}

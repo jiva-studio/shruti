@@ -32,6 +32,10 @@ func (f *fakeUploader) Put(_ context.Context, key, _ string, body io.Reader, _ i
 	f.objects[key] = data
 	return nil
 }
+func (f *fakeUploader) Get(_ context.Context, key string) ([]byte, bool, error) {
+	data, ok := f.objects[key]
+	return data, ok, nil
+}
 func (f *fakeUploader) GetJSON(_ context.Context, key string, out any) (bool, error) {
 	data, ok := f.objects[key]
 	if !ok {

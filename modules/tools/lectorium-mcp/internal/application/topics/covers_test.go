@@ -3,6 +3,7 @@ package topics
 import (
 	"context"
 	"fmt"
+	"github.com/jiva-studio/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/covergen"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,7 +34,7 @@ func newFakeCoverGen() *fakeCoverGen {
 
 func (g *fakeCoverGen) Enabled() bool { return !g.disabled }
 
-func (g *fakeCoverGen) Generate(_ context.Context, id, _, _ string) (string, error) {
+func (g *fakeCoverGen) Generate(_ context.Context, id, _, _ string, _ ...covergen.Option) (string, error) {
 	g.mu.Lock()
 	g.calls[id]++
 	n := g.calls[id]

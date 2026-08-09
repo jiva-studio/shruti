@@ -135,4 +135,28 @@ func (u *Uploader) GetJSON(ctx context.Context, key string, out any) (bool, erro
 	return true, nil
 }
 
+func (u *Uploader) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	resp, err := u.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(u.target.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		var nsk *types.NoSuchKey
+		if errors.As(err, &nsk) {
+			return nil, false, nil
+		}
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchKey" {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false, err
+	}
+	return body, true, nil
+}
+
 var _ s3port.Uploader = (*Uploader)(nil)
