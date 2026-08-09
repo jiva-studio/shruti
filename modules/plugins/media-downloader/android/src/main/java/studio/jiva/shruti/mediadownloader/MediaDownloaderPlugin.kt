@@ -233,15 +233,21 @@ class MediaDownloaderPlugin : Plugin() {
                 if (info == null) return@Observer
                 val entry = store.findByWorkerId(workerId)
                 if (entry == null) {
-                    // `cancel()` drops the store entry synchronously, before
-                    // WorkManager delivers CANCELLED here — so this is the
-                    // path a user-initiated cancel actually takes. Returning
-                    // silently would strand the JS caller on a promise that
-                    // can never settle, so report the cancellation and stop
-                    // observing once the work reaches a terminal state.
-                    if (info.state.isFinished) {
-                        notifyCancelled(id)
-                        detach(workerId)
+                    // No entry points at this worker. Whether that means
+                    // "cancelled" or "superseded by a re-kicked download"
+                    // decides whether we may emit at all — see
+                    // `orphanedWorkAction`.
+                    when (orphanedWorkAction(store.get(id)?.workerId, workerId, info.state)) {
+                        OrphanedWorkAction.WAIT -> Unit
+                        OrphanedWorkAction.DETACH -> detach(workerId)
+                        OrphanedWorkAction.REPORT_CANCELLED -> {
+                            notifyCancelled(id)
+                            detach(workerId)
+                        }
+                        OrphanedWorkAction.REPORT_REMOVED -> {
+                            notifyRemoved(id)
+                            detach(workerId)
+                        }
                     }
                     return@Observer
                 }
@@ -312,6 +318,21 @@ class MediaDownloaderPlugin : Plugin() {
             put("error", "cancelled")
             put("retryable", false)
             put("code", "cancelled")
+        }
+        notifyListeners("failed", payload)
+    }
+
+    /**
+     * The work reached a terminal state after `deleteFile()` dropped its
+     * bookkeeping, so there is no local file to hand back even if the bytes
+     * did land. Terminal for the caller — but a plain failure, not a
+     * cancellation.
+     */
+    private fun notifyRemoved(id: String) {
+        val payload = JSObject().apply {
+            put("id", id)
+            put("error", "download was removed")
+            put("retryable", false)
         }
         notifyListeners("failed", payload)
     }
