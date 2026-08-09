@@ -13,6 +13,9 @@ on:
       - modules/apps/mobile/lectorium/i18n/locales/sr-Latn/**
       - modules/apps/mobile/lectorium/i18n/locales/sr-Cyrl/**
       - modules/apps/mobile/package.json
+      # The output is prettier-formatted, so a print-width change reflows
+      # the whole bundle — that is drift too.
+      - modules/apps/mobile/.prettierrc.json
       - modules/tools/sr-transliterate/**
       - .github/workflows/locales-sr-cyrl.yml
   push:
@@ -21,6 +24,9 @@ on:
       - modules/apps/mobile/lectorium/i18n/locales/sr-Latn/**
       - modules/apps/mobile/lectorium/i18n/locales/sr-Cyrl/**
       - modules/apps/mobile/package.json
+      # The output is prettier-formatted, so a print-width change reflows
+      # the whole bundle — that is drift too.
+      - modules/apps/mobile/.prettierrc.json
       - modules/tools/sr-transliterate/**
       - .github/workflows/locales-sr-cyrl.yml
   workflow_dispatch:

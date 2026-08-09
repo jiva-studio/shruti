@@ -12,7 +12,7 @@
 // byte-for-byte (placeholders contain only ASCII, which the map leaves
 // untouched, but we additionally skip over `{...}` spans to be safe).
 
-import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "node:fs"
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, rmSync } from "node:fs"
 import { createRequire } from "node:module"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -20,15 +20,17 @@ import { spawnSync } from "node:child_process"
 import { srLatinToCyrillic } from "./srLatinToCyrillic.mjs"
 
 // Latin brand names, product SKUs and code-like tokens that must stay in
-// Latin script, matching how the hand-authored ru/ bundle keeps them
-// verbatim ("Слушай Садху Pro", "беседы с Ask Sadhu"). Matched
-// case-sensitively on whole-word boundaries — a bare substring match
-// would turn "Prošlo" into "Proшло" — and sorted longest first so
+// Latin script, the way the hand-authored ru/ bundle writes them
+// ("Слушай Садху Pro", "беседы с Ask Sadhu"). Sorted longest first so
 // "Shruti Pro" wins over "Shruti".
 //
 // Only product/feature names belong here. A bare "Sadhu" is a name in
 // running text, which ru/ and sr-Cyrl both render in Cyrillic ("Садху"),
-// as they do "Studio" → "Студио".
+// as they do "Studio" → "Студио". "Ask Sadhu" is on the list because
+// settings.syncChats.description quotes the brand verbatim in en/ and
+// ru/ alike; the nav label at settings.sections.chat is localized
+// ("Pitaj Sadhua") and stays that way — this list decides script, never
+// wording.
 const PROTECTED = [
   "Shruti Pro",
   "Shruti",
@@ -45,8 +47,16 @@ const PROTECTED = [
   "BG",
 ].sort((a, b) => b.length - a.length)
 
-// A protected token only counts when it is not glued to a neighbouring
-// word character — Serbian gajica letters, ASCII letters and digits.
+// Tokens match case-sensitively and only on whole-word boundaries. The
+// boundary is what makes short entries safe to list at all: matched as a
+// bare substring, "Pro" would rewrite "Prošlo" → "Proшло", "Proverite" →
+// "Proверите", "Program" → "Proграм".
+//
+// The trade-off is that a token glued to a suffix is no longer protected
+// — a hypothetical "PDFovi" transliterates whole, to "ПДФови". No such
+// form exists in sr-Latn (declensions are written "PDF-ovi", where the
+// hyphen keeps the boundary), and that is the better default: silently
+// splitting a Serbian word is worse than transliterating one.
 const WORD_CHAR = /[0-9A-Za-zČĆĐŠŽčćđšž]/
 const isWordChar = (ch) => ch !== undefined && WORD_CHAR.test(ch)
 
@@ -205,6 +215,16 @@ for (const file of files) {
   written.push(join(DST, file))
 }
 
+// Drop outputs whose sr-Latn counterpart is gone, so a removed namespace
+// can't leave a tracked orphan behind — the idempotence check compares
+// against git, and an orphan is invisible to it once committed.
+let pruned = 0
+for (const file of readdirSync(DST).filter((f) => f.endsWith(".ts"))) {
+  if (files.includes(file)) continue
+  rmSync(join(DST, file))
+  pruned += 1
+}
+
 const fmt = spawnSync(
   process.execPath,
   [prettierBin, "--log-level", "warn", "--write", ...written],
@@ -215,4 +235,7 @@ if (fmt.status !== 0) {
   process.exit(fmt.status ?? 1)
 }
 
-console.log(`Generated ${written.length} sr-Cyrl file(s) from sr-Latn.`)
+console.log(
+  `Generated ${written.length} sr-Cyrl file(s) from sr-Latn` +
+    (pruned ? `, pruned ${pruned} orphan(s).` : "."),
+)
