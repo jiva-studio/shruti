@@ -216,6 +216,7 @@ export default {
 
   noteSaved: "Заметка сохранена",
   noteSaving: "Сохраняю заметку…",
+  actionNoteError: "Не удалось сохранить заметку.",
 
   // Action cards — share PDF
   actionPdfKind: "Транскрипт лекции",

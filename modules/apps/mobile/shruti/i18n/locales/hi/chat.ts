@@ -219,6 +219,7 @@ export default {
 
   noteSaved: "नोट सहेजा गया",
   noteSaving: "नोट सहेज रहा हूँ…",
+  actionNoteError: "नोट सहेजा नहीं जा सका।",
 
   actionPdfKind: "प्रवचन की प्रतिलिपि",
   actionPdfShare: "साझा करें",
