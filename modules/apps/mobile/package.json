@@ -15,7 +15,7 @@
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
     "locales:sr-cyrl": "node ../../tools/sr-transliterate/generate-sr-cyrl.mjs",
-    "locales:sr-cyrl:check": "npm run locales:sr-cyrl && drift=$(git status --porcelain -- lectorium/i18n/locales/sr-Cyrl) && test -z \"$drift\" || { echo \"$drift\"; git --no-pager diff -- lectorium/i18n/locales/sr-Cyrl; exit 1; }",
+    "locales:sr-cyrl:check": "npm run locales:sr-cyrl && { drift=$(git status --porcelain -- lectorium/i18n/locales/sr-Cyrl); test -z \"$drift\" || { echo \"$drift\"; git --no-pager diff -- lectorium/i18n/locales/sr-Cyrl; exit 1; }; }",
     "assets:generate": "npx --yes @capacitor/assets generate"
   },
   "dependencies": {
