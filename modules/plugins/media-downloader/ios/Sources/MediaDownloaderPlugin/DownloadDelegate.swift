@@ -30,6 +30,16 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         idByTaskIdentifier[taskIdentifier]
     }
 
+    /**
+     * Stop a task from speaking for its id. Used when `download()` replaces
+     * a stale task under the same id — an unbound task's events are dropped
+     * by the guards below, so the replacement can't be settled by its
+     * predecessor's cancellation.
+     */
+    func unbind(taskIdentifier: Int) {
+        idByTaskIdentifier.removeValue(forKey: taskIdentifier)
+    }
+
     // ── URLSessionDownloadDelegate ────────────────────────────────────────
 
     func urlSession(
