@@ -320,6 +320,7 @@ func main() {
 			publishTargets = append(publishTargets, ya)
 		}
 	}
+	var bunnyTarget s3port.Uploader
 	if cfg.S3.Bunny.Zone != "" {
 		bny, err := bunnys3.New(bunnys3.Target{
 			Name:      "bunny",
@@ -331,6 +332,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "[s3:bunny] init failed: %v\n", err)
 		} else {
 			publishTargets = append(publishTargets, bny)
+			bunnyTarget = bny
 		}
 	}
 
@@ -716,11 +718,10 @@ func main() {
 		OutDir:      cfg.Out,
 	}
 
-	// One AWS uploader shared by the asset-writing tools (collection covers,
-	// author avatars). Built whenever a bucket is configured, independent of
-	// the image-generation API key.
-	var assetUploader s3port.Uploader
-	if cfg.S3.AWS.Bucket != "" {
+	// Uploader for the asset-writing tools: collection and topic covers, author
+	// avatars. Bunny, or AWS when a bucket is configured.
+	assetUploader := bunnyTarget
+	if assetUploader == nil && cfg.S3.AWS.Bucket != "" {
 		up, err := awss3.New(ctx, awss3.Target{
 			Name:            "aws",
 			Bucket:          cfg.S3.AWS.Bucket,
