@@ -314,9 +314,9 @@ grep -rn 'from "@' usecases/ | grep -vE '@lib/domain|@lib/contracts|@kit|@usecas
 grep -rn '@lib/persistence/' infra/ | grep -v 'repositories/sql'
 ```
 
-ESLint's `no-restricted-imports` enforces the same rules at lint time — see
-`eslint.config.js` in the mobile app. The layer-boundary rule blocks key on
-these paths: `submodules/domain/**`, `submodules/contracts/**`,
+ESLint's `no-restricted-imports` enforces **most** of these rules at lint time
+— see `eslint.config.js` in the mobile app. The layer-boundary rule blocks key
+on these paths: `submodules/domain/**`, `submodules/contracts/**`,
 `submodules/persistence-*/**`, `usecases/**` (the application layer),
 `ports/**`, `infra/**`, and per-sub-layer
 `ui/{primitives,icons,components,features}/**`. Each UI sub-layer has its own
@@ -325,6 +325,14 @@ noting: infra may import the in-house `@shruti/plugin-*` packages (the
 Capacitor plugins share the `@shruti` npm scope). Note `@kit/*` is *not*
 restricted by these rules — it is the shared kernel/toolkit and may be
 imported by every layer.
+
+**Known gap: `@lib/ui` is unenforced.** The shared UI package
+(`modules/libs/ui/`, symlinked into the app as `submodules/ui/` and aliased
+`@lib/ui`) has **no** rule block in `eslint.config.js` — the UI rules key on
+`ui/**`, which does not match it. So the "UI must not import domain — use
+mirror types" rule does not apply there, and `@lib/ui` does in fact import
+`@lib/domain` directly. Treat the grep checks above as the real boundary check
+for that package until the config gains a `submodules/ui/**` block (#1509).
 
 ## Error-Handling Policy
 
