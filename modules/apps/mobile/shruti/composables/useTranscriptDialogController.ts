@@ -23,6 +23,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useTranscriptSystemBars } from "@shruti/composables/useTranscriptSystemBars.js"
+import { playbackErrorKey } from "@shruti/utils/playbackErrorKey.js"
 import { useTranscriptHydration } from "./transcript/useTranscriptHydration.js"
 import { useTranscriptLoader } from "./transcript/useTranscriptLoader.js"
 import { useTranscriptSelectionActions } from "./transcript/useTranscriptSelectionActions.js"
@@ -529,9 +530,10 @@ export function useTranscriptDialogController(
       itemId: playlist.getEntryByTrackId(track.id)?.item.id,
       resumeFromMs: ms,
     })
-    // Both refusals ("no-audio-available", "engine-failed") land here, and
-    // both mean the same thing to the reader: this lecture didn't start.
-    if (!result.ok) loader.error.value = t("errors.playbackFailed")
+    // Chapter rows render off the outline alone, with no audio gate, so a
+    // transcript-only lecture reaches this with "no-audio-available" —
+    // permanent, and told apart from the retryable engine failure.
+    if (!result.ok) loader.error.value = t(playbackErrorKey(result.error))
   }
 
   // Selection lifecycle. The two events are mutually exclusive — opening

@@ -8,6 +8,7 @@ export default {
   languageListUnavailable: "Impossible de charger les langues — liste réduite affichée.",
   dictionariesUnavailable: "Impossible de charger les noms — certaines étiquettes peuvent manquer.",
   playbackFailed: "Impossible de lire ce cours. Vérifiez votre connexion et réessayez.",
+  noAudioForLecture: "Ce cours n'a pas d'audio.",
   downloadStorageFull:
     "Limite de stockage atteinte. Supprimez les cours écoutés ou augmentez la limite dans les réglages.",
 }

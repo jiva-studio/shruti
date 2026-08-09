@@ -13,6 +13,7 @@ import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/service
 import { resolveTrackAuthorName } from "@lib/domain/services/trackAuthor.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { playbackErrorKey } from "@shruti/utils/playbackErrorKey.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                    Types                                   */
@@ -121,10 +122,14 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   }
 
   /**
-   * Open the loaded track and report a refusal. `openTrack` returning
-   * `ok: false` means the engine never accepted the item, so the native
-   * queue-drain toast will never fire for it — this is the only place the
-   * user can be told playback didn't start.
+   * Open the loaded track and report a refusal. A rejected `openTrack` and
+   * the native drain-event notice are mutually exclusive per item (see
+   * `syncFromNative`), so this is the only place the user can be told
+   * playback didn't start.
+   *
+   * `hasAudio` is the same predicate `playTrack` falls back on, so the
+   * `v-if`-gated Play button can only ever produce `engine-failed`. The
+   * `?resumeFromMs=` deep link has no such gate and can hit either.
    */
   async function startPlayback(resumeFromMs?: number): Promise<void> {
     if (!track.value) return
@@ -140,7 +145,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
       itemId: entry?.item.id,
       resumeFromMs,
     })
-    if (!result.ok) void toast.error(t("errors.playbackFailed"))
+    if (!result.ok) void toast.error(t(playbackErrorKey(result.error)))
   }
 
   async function onPlay(): Promise<void> {

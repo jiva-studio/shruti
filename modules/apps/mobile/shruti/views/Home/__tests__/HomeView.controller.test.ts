@@ -91,12 +91,14 @@ describe("useHomeController.onSelect", () => {
     expect(toastError).toHaveBeenCalledWith("errors.playbackFailed")
   })
 
-  it("uses the same message for a track with no audible variant", async () => {
+  it("uses the permanent message for a queued track with no audible variant", async () => {
+    // Nothing gates a playlist entry on having audio, and "check your
+    // connection and try again" is a loop the user can never win here.
     openTrack.mockResolvedValue({ ok: false, error: "no-audio-available" })
 
     await useHomeController().onSelect(TRACK_ID)
 
-    expect(toastError).toHaveBeenCalledWith("errors.playbackFailed")
+    expect(toastError).toHaveBeenCalledWith("errors.noAudioForLecture")
   })
 
   it("says nothing when playback starts", async () => {

@@ -7,6 +7,7 @@ export default {
   languageListUnavailable: "Impossibile caricare le lingue — mostro un elenco ridotto.",
   dictionariesUnavailable: "Impossibile caricare i nomi — alcune etichette potrebbero mancare.",
   playbackFailed: "Impossibile riprodurre questa lezione. Controlla la connessione e riprova.",
+  noAudioForLecture: "Questa lezione non ha audio.",
   downloadStorageFull:
     "Limite di spazio raggiunto. Rimuovi le lezioni ascoltate o aumenta il limite nelle impostazioni.",
 }

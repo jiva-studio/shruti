@@ -11,6 +11,7 @@ export default {
     "Namen konnten nicht geladen werden — einige Bezeichnungen fehlen möglicherweise.",
   playbackFailed:
     "Diese Vorlesung konnte nicht abgespielt werden. Prüfe deine Verbindung und versuche es erneut.",
+  noAudioForLecture: "Diese Vorlesung hat kein Audio.",
   downloadStorageFull:
     "Speichergrenze erreicht. Entferne gehörte Vorträge oder erhöhe das Limit in den Einstellungen.",
 }
