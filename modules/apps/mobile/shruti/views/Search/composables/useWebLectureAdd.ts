@@ -1,7 +1,7 @@
 import { computed, type ComputedRef } from "vue"
-import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import { useLibraryStore } from "@shruti/stores/useLibraryStore.js"
+import { useIngestStatusFor } from "@shruti/composables/useIngestStatusFor.js"
 import type { DiscoveryHit } from "@lib/contracts"
 
 /** What the add control on a web result is currently offering. */
@@ -33,26 +33,21 @@ export interface UseWebLectureAddReturn {
 export function useWebLectureAdd(hit: () => DiscoveryHit): UseWebLectureAddReturn {
   const app = useShruti()
   const library = useLibraryStore()
-  const { t, te } = useI18n()
+  const ingestStatusFor = useIngestStatusFor()
 
-  const item = computed(() => library.findBySource(hit().media_url))
+  // The same rule the chat card uses, and for the same reason: a just-submitted
+  // row is found by its job id and by nothing else yet.
+  const status = computed(() => ingestStatusFor(hit().media_url))
 
   const state = computed<WebAddState>(() => {
-    const status = item.value?.status
-    if (!status) return "addable"
-    if (status === "failed") return "failed"
-    if (status === "ready") return "ready"
-    return "pending"
+    const live = status.value
+    if (live?.kind === "pending") return "pending"
+    if (live?.kind === "failed") return "failed"
+    return library.hasSource(hit().media_url) ? "ready" : "addable"
   })
 
-  const percent = computed(() => (item.value ? library.livePercents.get(item.value.id) : undefined))
-
-  const stageLabel = computed(() => {
-    if (!item.value) return ""
-    const stage = library.liveStages.get(item.value.id)
-    const key = stage ? `library.status.stages.${stage}` : ""
-    return key && te(key) ? t(key) : t("library.status.processing")
-  })
+  const percent = computed(() => status.value?.percent)
+  const stageLabel = computed(() => status.value?.label ?? "")
 
   async function add(): Promise<void> {
     void app.haptics.impact("light")

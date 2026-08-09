@@ -92,10 +92,15 @@ const loaded = ref(false)
      (legible on the light tile); when the cover + scrim appear it switches to
      warm cream (fixed tone, doesn't invert) so it stays legible over the image. */
   color: var(--ion-text-color);
-  /* Wrap only between whole words — never mid-word. keep-all also stops the
-     default break AFTER a hyphen, which otherwise splits the hyphenated terms
-     this content is full of ("Бхагавад-гита", "Шримад-Бхагаватам"). */
-  overflow-wrap: normal;
+  /* Wrap between whole words. keep-all also stops the default break AFTER a
+     hyphen, which otherwise splits the hyphenated terms this content is full of
+     ("Бхагавад-гита", "Шримад-Бхагаватам").
+
+     break-word is the escape hatch: a single word too long for the tile —
+     "Материалистичная" — has nowhere to wrap and would otherwise run off the
+     edge and be cut mid-letter. It only ever applies when a word cannot fit on
+     a line of its own, so ordinary names are untouched. */
+  overflow-wrap: break-word;
   word-break: keep-all;
   /* Two-line clamp so long names don't overrun the tile. */
   display: -webkit-box;

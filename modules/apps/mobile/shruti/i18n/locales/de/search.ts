@@ -14,15 +14,16 @@ export default {
   readQuestion: "Suchen",
   clearQuery: "Löschen",
   web: {
-    title: "Im Internet gefunden",
+    title: "Internet",
     add: "Zu meiner Bibliothek hinzufügen",
     empty: "In den erfassten Archiven ist nichts zu finden.",
     unavailable: "Die Internetsuche ist gerade nicht erreichbar.",
     more: "Mehr anzeigen",
   },
   library: {
-    title: "In deiner Bibliothek gefunden",
-    empty: "In deiner Bibliothek passt nichts dazu.",
+    title: "Bibliothek",
+    empty: "Versuch es mit anderen Worten oder nimm einen Filter weg.",
+    mine: "Eigene Bibliothek",
   },
   smartLibrary: {
     title: "Intelligente Bibliothek",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "Nach Quellenangabe",
   },
   collections: {
+    title: "Sammlungen",
     addAll: "Sammlung hinzufügen",
     trackCount: "Vorträge: {count}",
     addError: "Sammlung konnte nicht hinzugefügt werden",

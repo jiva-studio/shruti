@@ -70,6 +70,9 @@ export interface DiscoveryHit {
   readonly author?: string
   readonly location?: string
   readonly language?: string
+  /** The picture the archive publishes for this recording, ready to show — the
+   *  service works it out, nothing is derived from the media address here. */
+  readonly cover_url?: string
   readonly recorded_on?: string
   readonly references?: readonly string[]
   readonly source?: string

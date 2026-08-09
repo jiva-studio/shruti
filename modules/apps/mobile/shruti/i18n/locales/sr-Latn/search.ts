@@ -14,15 +14,16 @@ export default {
   readQuestion: "Pretraži",
   clearQuery: "Obriši",
   web: {
-    title: "Pronađeno na internetu",
+    title: "Internet",
     add: "Dodaj u moju biblioteku",
     empty: "Nema ničega u arhivama koje pretražujemo.",
     unavailable: "Pretraga interneta trenutno nije dostupna.",
     more: "Prikaži još",
   },
   library: {
-    title: "Pronađeno u vašoj biblioteci",
-    empty: "U vašoj biblioteci nema podudaranja.",
+    title: "Biblioteka",
+    empty: "Probajte druge reči ili uklonite neki filter.",
+    mine: "Lična biblioteka",
   },
   smartLibrary: {
     title: "Pametna biblioteka",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "Po šloki",
   },
   collections: {
+    title: "Kolekcije",
     addAll: "Dodaj kolekciju",
     trackCount: "Predavanja: {count}",
     addError: "Nije moguće dodati kolekciju",

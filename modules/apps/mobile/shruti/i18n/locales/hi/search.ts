@@ -14,15 +14,16 @@ export default {
   readQuestion: "खोजें",
   clearQuery: "साफ़ करें",
   web: {
-    title: "इंटरनेट पर मिला",
+    title: "इंटरनेट",
     add: "मेरी लाइब्रेरी में जोड़ें",
     empty: "हम जिन संग्रहों को देखते हैं, उनमें कुछ नहीं है।",
     unavailable: "इंटरनेट खोज अभी उपलब्ध नहीं है।",
     more: "और दिखाएँ",
   },
   library: {
-    title: "आपकी लाइब्रेरी में मिला",
-    empty: "आपकी लाइब्रेरी में कुछ भी मेल नहीं खाता।",
+    title: "लाइब्रेरी",
+    empty: "दूसरे शब्द आज़माएँ या कोई फ़िल्टर हटाएँ।",
+    mine: "निजी लाइब्रेरी",
   },
   smartLibrary: {
     title: "स्मार्ट लाइब्रेरी",
@@ -81,6 +82,7 @@ export default {
     sortByReference: "संदर्भ अनुसार",
   },
   collections: {
+    title: "संग्रह",
     addAll: "संग्रह जोड़ें",
     trackCount: "प्रवचन: {count}",
     addError: "संग्रह जोड़ा नहीं जा सका",
