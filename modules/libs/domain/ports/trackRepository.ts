@@ -120,4 +120,18 @@ export interface ITrackRepository {
    * treats absent as "unknown").
    */
   getDurationsMs(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>>
+
+  /**
+   * Batch fetch the byte size of the audio the app would actually
+   * download per track — the preferred version (`clean` over `original`,
+   * same rule as {@link pickPlayableAudio}) read from `track_audio`.
+   * Backs the offline-storage budget. Tracks with no size on record are
+   * absent from the map (caller treats absent as "unknown" and applies
+   * its own estimate).
+   *
+   * Must NOT be served from the legacy `track_variants.audio_filesize`
+   * column: it mirrors the ORIGINAL file, so for every track that has a
+   * denoised version it reports a size we never download.
+   */
+  getAudioSizesBytes(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>>
 }

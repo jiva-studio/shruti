@@ -178,6 +178,13 @@ export default {
     description: "Jezik interfejsa",
   },
 
+  downloadLimit: {
+    title: "Ograničenje preuzimanja",
+    unlimited: "Bez ograničenja",
+    usage: "{used} od {limit}",
+    usageUnlimited: "Preuzeto {used}",
+  },
+
   smartLibrary: {
     title: "Pametna biblioteka",
     description: "Držite sveža predavanja spremna i čistite ih posle slušanja",

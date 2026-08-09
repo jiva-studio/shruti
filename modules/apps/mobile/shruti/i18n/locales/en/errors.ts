@@ -6,4 +6,5 @@ export default {
   languageListUnavailable: "Couldn't load languages — showing a short list.",
   dictionariesUnavailable: "Couldn’t load names — some labels may be missing.",
   playbackFailed: "Couldn’t play this lecture. Check your connection and try again.",
+  downloadStorageFull: "Storage limit reached. Remove listened lectures or raise the limit in Settings.",
 }

@@ -182,6 +182,13 @@ export default {
     description: "Gardez vos conversations Ask Sadhu synchronisées sur tous vos appareils.",
   },
 
+  downloadLimit: {
+    title: "Limite de téléchargement",
+    unlimited: "Sans limite",
+    usage: "{used} sur {limit}",
+    usageUnlimited: "{used} téléchargés",
+  },
+
   smartLibrary: {
     title: "Bibliothèque intelligente",
     description: "Garder de nouvelles conférences prêtes et faire le ménage après l'écoute",

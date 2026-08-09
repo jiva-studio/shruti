@@ -7,6 +7,7 @@ import type {
   TrackSearchQuery,
 } from "@lib/domain/ports/trackRepository.js"
 import type { Track } from "@lib/domain/track.js"
+import { pickPlayableAudio, type TrackAudio } from "@lib/domain/trackVariant.js"
 import type {
   TrackAudioRow,
   TrackReferenceRow,
@@ -15,7 +16,15 @@ import type {
   TrackTopicRow,
   TrackVariantRow,
 } from "@lib/persistence/main"
-import { rowToTrack } from "./contentRowMappers.js"
+import { narrowAudioKind, rowToTrack } from "./contentRowMappers.js"
+
+/**
+ * Ids per `IN (...)` batch when sizing the offline cache. That id list is
+ * "every downloaded track", which can outgrow SQLite's bound-parameter
+ * ceiling (999 on older builds) — the other queries here are page-bounded
+ * and don't need this.
+ */
+const SIZE_QUERY_CHUNK = 500
 
 /* -------------------------------------------------------------------------- */
 /*                          FTS query construction                            */
@@ -637,6 +646,51 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       )
       for (const r of rows) {
         if (r.duration !== null) out.set(r.track_id as TrackId, Number(r.duration))
+      }
+      return out
+    },
+
+    async getAudioSizesBytes(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>> {
+      const out = new Map<TrackId, number>()
+      if (trackIds.length === 0) return out
+      // Sizes come from `track_audio`, never from the legacy
+      // `track_variants.audio_filesize` — that column carries the ORIGINAL
+      // file's size and is stale for every track that has a denoised
+      // version, which is exactly the version the app downloads.
+      const rows: TrackAudioRow[] = []
+      for (let i = 0; i < trackIds.length; i += SIZE_QUERY_CHUNK) {
+        const chunk = trackIds.slice(i, i + SIZE_QUERY_CHUNK)
+        const placeholders = chunk.map(() => "?").join(",")
+        rows.push(
+          ...(await contentDb.query<TrackAudioRow>(
+            `SELECT * FROM track_audio WHERE track_id IN (${placeholders})`,
+            [...chunk]
+          ))
+        )
+      }
+
+      // Fold per (track, language) so `pickPlayableAudio` sees the same
+      // candidate set the download path does, then keep the largest across
+      // languages — a track with audio in several languages caches whichever
+      // the user opened, and over-counting is the safe direction for a budget.
+      const byTrackLanguage = new Map<string, TrackAudio[]>()
+      for (const r of rows) {
+        const key = `${r.track_id} ${r.language}`
+        const bucket = byTrackLanguage.get(key)
+        const audio: TrackAudio = {
+          path: r.path,
+          filesize: r.filesize,
+          duration: r.duration ?? null,
+          kind: narrowAudioKind(r.kind),
+        }
+        if (bucket) bucket.push(audio)
+        else byTrackLanguage.set(key, [audio])
+      }
+      for (const [key, audios] of byTrackLanguage) {
+        const size = pickPlayableAudio(audios)?.filesize
+        if (size === null || size === undefined || size <= 0) continue
+        const trackId = key.slice(0, key.indexOf(" ")) as TrackId
+        out.set(trackId, Math.max(out.get(trackId) ?? 0, Number(size)))
       }
       return out
     },

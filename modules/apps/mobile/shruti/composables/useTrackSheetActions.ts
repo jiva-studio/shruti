@@ -62,7 +62,11 @@ export function useTrackSheetActions(track: Ref<Track | null>) {
     // `ensureDownloaded` takes the retry path off the "failed" state.
     const audioVariant = track.value?.variants.find((v) => v.audio)
     if (audioVariant?.audio) {
-      void downloads.ensureDownloaded(id as TrackId, audioVariant.audio.path)
+      void downloads.ensureDownloaded(
+        id as TrackId,
+        audioVariant.audio.path,
+        audioVariant.audio.filesize
+      )
     }
     sheet.close()
   }
