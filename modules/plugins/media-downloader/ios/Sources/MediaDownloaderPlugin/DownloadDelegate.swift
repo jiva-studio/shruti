@@ -120,6 +120,18 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
                     "contentLength": 0,
                 ]
             ])
+            // A cancellation is terminal for the JS caller too: its promise
+            // resolves on `completed` and rejects on `failed`, so without a
+            // terminal event it stays pending forever and never releases the
+            // download slot. The `cancelled` code tells a deliberate abort
+            // apart from a genuine failure, so the UI can skip the retry
+            // affordance.
+            plugin?.emit(event: "failed", data: [
+                "id": id,
+                "error": "cancelled",
+                "retryable": false,
+                "code": "cancelled",
+            ])
             return
         }
         let retryable = [NSURLErrorTimedOut, NSURLErrorNetworkConnectionLost,
