@@ -53,7 +53,12 @@ import {
  *   user-initiated message are ever journaled — a proactive-only session
  *   stays out of sync.
  * - `clearAll` is the local data-wipe path (delete account / reset) — it is not
- *   journaled; the wipe clears the outbox itself.
+ *   journaled, because a wipe is meant to be device-local, not a command to
+ *   erase the account's data everywhere. NOTE: that only holds once the wipe
+ *   also drops the sync state. Today `wipeLocalUserData` touches neither
+ *   `outbox` nor `sync_doc_hlc` (#1496), so on the same-identity wipe path the
+ *   stale upserts stay pending and the next pull re-materialises the wiped
+ *   chat. Clearing the sync tables belongs to that fix, not to the decorator.
  * - Every decorated repository is built as an EXPLICIT member-by-member
  *   mapping, never `{ ...base.x, … }`. A spread satisfies the port
  *   structurally, so a mutating method left un-intercepted compiles silently
@@ -298,7 +303,8 @@ export function withSyncJournaling(
     //   user-initiated message (see `ensureSessionJournaled`); a
     //   proactive-only session must never be pushed.
     // - `touch` — bumps `updated_at` for local list ordering only.
-    // - `clearAll` — the local data-wipe path; the wipe clears the outbox.
+    // - `clearAll` — the local data-wipe path, deliberately device-local (see
+    //   the file header, and #1496 for the sync state the wipe still leaves).
     create: (input) => base.chatSessions.create(input),
     touch: (id, updatedAtMs) => base.chatSessions.touch(id, updatedAtMs),
     clearAll: () => base.chatSessions.clearAll(),
@@ -350,17 +356,23 @@ export function withSyncJournaling(
   }
 
   /** Ids of a session's messages that have entered sync — read BEFORE the rows
-   *  are gone so `deleteBySession` can tombstone each of them. */
+   *  are gone so `deleteBySession` can tombstone each of them.
+   *
+   *  One statement, not a `wasJournaled` probe per message: `outbox` carries
+   *  only `idx_outbox_pending (sent, id)`, so a per-message probe would full
+   *  scan an ever-growing, never-compacted table N times inside the delete's
+   *  transaction. The non-correlated `IN` subquery lets SQLite scan `outbox`
+   *  once (and range-seek `sync_doc_hlc` on its PK) into one ephemeral index. */
   async function journaledMessageIds(sessionId: string): Promise<string[]> {
     const rows = await userDb.query<{ id: string }>(
-      "SELECT id FROM chat_messages WHERE session_id = ?",
-      [sessionId]
+      `SELECT id FROM chat_messages
+        WHERE session_id = ?
+          AND id IN (SELECT doc_id FROM outbox WHERE collection = ?
+                     UNION
+                     SELECT doc_id FROM sync_doc_hlc WHERE collection = ?)`,
+      [sessionId, CHAT_MESSAGES, CHAT_MESSAGES]
     )
-    const ids: string[] = []
-    for (const row of rows) {
-      if (await wasJournaled(CHAT_MESSAGES, row.id)) ids.push(row.id)
-    }
-    return ids
+    return rows.map((row) => row.id)
   }
 
   const chatMessages: IChatMessageRepository = {
@@ -369,8 +381,10 @@ export function withSyncJournaling(
     // Not journaled, deliberately:
     // - `updateFeedback` — device-local UI state for the 👍/👎 control; the
     //   feedback itself travels over `/chat/feedback`, not through sync.
-    // - `clearAll` — the local data-wipe path (delete account / reset); the
-    //   wipe clears the outbox itself, so tombstones would be pointless.
+    // - `clearAll` — the local data-wipe path (delete account / reset), which
+    //   is device-local by design: it must not tombstone the account's chat on
+    //   every other device. Reconciling the sync tables the wipe leaves behind
+    //   is #1496's job (see the file header).
     updateFeedback: (id, feedback) => base.chatMessages.updateFeedback(id, feedback),
     clearAll: () => base.chatMessages.clearAll(),
 
