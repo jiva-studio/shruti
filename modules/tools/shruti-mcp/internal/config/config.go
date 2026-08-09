@@ -37,6 +37,25 @@ type Config struct {
 	Outline    Outline    `yaml:"outline"`
 	Embed      Embed      `yaml:"embed"`
 	Images     Images     `yaml:"images"`
+	Topics     Topics     `yaml:"topics"`
+}
+
+// Topics configures the offline topic recommender: how the vocabulary is
+// clustered (topics.build) and how many topics a track ends up carrying
+// (track.topics.assign). Every field defaults, so an absent section keeps the
+// behaviour these numbers used to be hardcoded to.
+//
+// TopK is the one worth setting per corpus: it caps a track's topics, so once
+// outlines are granular enough to clear the cutoff more than TopK times, the
+// cap decides a track's topics rather than the similarity does.
+type Topics struct {
+	K           int     `yaml:"k,omitempty"`            // clusters to build
+	Iters       int     `yaml:"iters,omitempty"`        // k-means iterations
+	Seed        int64   `yaml:"seed,omitempty"`         // clustering seed
+	MaxDistance float64 `yaml:"max_distance,omitempty"` // cosine-distance cutoff for a heading
+	Samples     int     `yaml:"samples,omitempty"`      // headings shown to the namer
+	TopK        int     `yaml:"top_k,omitempty"`        // topics kept per track
+	Floor       float64 `yaml:"floor,omitempty"`        // weight below which a topic is dropped
 }
 
 // Images configures collection-cover generation via an OpenRouter-compatible
@@ -414,6 +433,27 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Images.Style == "" {
 		c.Images.Style = "Devotional illustration in the Gaudiya Vaishnava (Hare Krishna / ISKCON) tradition. Warm palette of saffron, cream and soft gold; gentle painterly digital art; serene and uplifting; soft golden-hour light. Full-bleed square 1:1 composition that COMPLETELY fills the frame edge to edge — absolutely no white border, no frame, no margin, no rounded corners, no vignette, no passe-partout. Absolutely no text, words or letters. Every Vaishnava person wears authentic Gaudiya Vaishnava tilaka: two thin vertical pale clay-yellow (gopi-chandana) lines painted on the forehead that come together at the bridge of the nose forming a narrow U/V shape, with a small tulasi-leaf mark at the base on the nose — never horizontal Shaivite lines, never a single dot. Devotees wear dhoti or sari. Avoid Buddhist and generic new-age imagery — no Buddha, no buddhist temples."
+	}
+	if c.Topics.K == 0 {
+		c.Topics.K = 150
+	}
+	if c.Topics.Iters == 0 {
+		c.Topics.Iters = 25
+	}
+	if c.Topics.Seed == 0 {
+		c.Topics.Seed = 42
+	}
+	if c.Topics.MaxDistance == 0 {
+		c.Topics.MaxDistance = 0.45
+	}
+	if c.Topics.Samples == 0 {
+		c.Topics.Samples = 12
+	}
+	if c.Topics.TopK == 0 {
+		c.Topics.TopK = 8
+	}
+	if c.Topics.Floor == 0 {
+		c.Topics.Floor = 0.03
 	}
 	if c.FFmpeg.Bin == "" {
 		c.FFmpeg.Bin = "ffmpeg"

@@ -49,6 +49,13 @@ type ClusterNamer interface {
 	NameCluster(ctx context.Context, sampleTitles, languages []string) (domaintopics.Names, error)
 }
 
+// HeadingVectorStore keeps every distinct heading with its embedding between
+// builds. Read returns an os.ErrNotExist-wrapped error when nothing is cached.
+type HeadingVectorStore interface {
+	ReadHeadingVectors() (domaintopics.HeadingVectors, error)
+	WriteHeadingVectors(ctx context.Context, v domaintopics.HeadingVectors) error
+}
+
 // VocabReader / VocabWriter persist the centroid vocabulary artifact.
 type VocabReader interface {
 	ReadVocabulary() (domaintopics.Vocabulary, error)
