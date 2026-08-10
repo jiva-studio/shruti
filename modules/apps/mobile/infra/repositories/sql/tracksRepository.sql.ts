@@ -131,11 +131,26 @@ function splitQueryPieces(raw: string): QueryPiece[] {
   return out
 }
 
+/**
+ * Fold a string into the form the catalog indexes: NFC, lower case, and
+ * Cyrillic `ё` → `е`. The catalog writer folds identically
+ * (`lectorium-mcp/internal/infra/catalog/sqlite/searchfold.go`), so either
+ * spelling of a word finds either spelling in the index.
+ */
+function foldSearchText(raw: string): string {
+  return raw.normalize("NFC").toLowerCase().replace(/ё/gu, "е")
+}
+
+/**
+ * Split a folded string into index tokens. Token characters are letters
+ * and digits of any script — the classes `unicode61` itself tokenises on
+ * — so Ukrainian `і ї є ґ` and Serbian `ј љ њ ћ ђ џ` survive instead of
+ * being deleted by an `a-z`/`а-я` deny-list. Tokens stay alphanumeric,
+ * so no FTS operator or quote can leak into the MATCH expression.
+ */
 function sanitizeTokens(raw: string): string[] {
-  return raw
-    .toLowerCase()
-    .split(/[\s.,;:!?()\-"'`[\]{}<>|/\\]+/)
-    .map((t) => t.replace(/[^a-zа-я0-9]/gi, ""))
+  return foldSearchText(raw)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter((t) => t.length > 0)
 }
 
@@ -503,6 +518,11 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       // Ordering by shloka needs a subquery the scored path has no column for,
       // so this hands the whole job to SQL exactly as `list()` does, with FTS
       // membership as one more condition.
+      //
+      // No SCORE_CAP on the membership subquery: capping there hands the
+      // ORDER BY an arbitrary FTS-docid slice of the matches, so page 1 of
+      // a broad query ("бг*", 1637 matches) started at the oldest of the
+      // first 500 rows the index happened to yield, not at the oldest match.
       if (query.sortBy) {
         const sort = sortOrderClause(query.sortBy, getActiveLanguage())
         const rows = await contentDb.query<TrackRow>(
@@ -510,12 +530,11 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
            WHERE t.id IN (
                    SELECT track_id FROM tracks_search
                    WHERE tracks_search MATCH ? AND kind = 'combined'
-                   LIMIT ?
                  )
              AND t.hidden = 0${filterSql}
            ${sort.clause}
            LIMIT ? OFFSET ?`,
-          [fts, SCORE_CAP, ...filterParts.params, ...sort.params, limit, offset]
+          [fts, ...filterParts.params, ...sort.params, limit, offset]
         )
         return hydrate(contentDb, rows)
       }

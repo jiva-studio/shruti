@@ -25,6 +25,7 @@ export default {
     title: "Library",
     empty: "Try another wording, or clear a filter or two.",
     mine: "Personal library",
+    failed: "Couldn't search the library right now. Try again.",
   },
   smartLibrary: {
     title: "Smart library",
