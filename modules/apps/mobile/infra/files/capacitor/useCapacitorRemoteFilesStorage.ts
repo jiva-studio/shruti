@@ -17,16 +17,23 @@ import type { IRemoteFilesStorage } from "@ports/app/index.js"
  * `Directory.Cache` here (the previous behaviour) let the OS reclaim
  * saved transcripts under storage pressure without an uninstall (#51).
  *
- * `clearAll()` uses `Filesystem.rmdir` against the same Data directory
- * because the plugin's API is intentionally per-file (`deleteFile(url)`);
- * blowing the whole offline store is a filesystem operation, not a
- * downloader concern.
+ * `clearAll()` walks `cacheDir` with `Filesystem` directly because the
+ * plugin's API is intentionally per-file (`deleteFile(url)`); blowing the
+ * offline store is a filesystem operation, not a downloader concern. It
+ * clears cache and only cache — `keep` names the subdirectories that survive,
+ * which is how the content database (a ~54 MB download that lives under the
+ * same root) stops being collateral damage of "Clear cache" (#1630).
  */
 export function useCapacitorRemoteFilesStorage({
   cacheDir,
+  keep = [],
 }: {
   cacheDir: string
+  /** Top-level entries under `cacheDir` that `clearAll()` must not delete. */
+  keep?: readonly string[]
 }): IRemoteFilesStorage {
+  const keepNames = new Set(keep)
+
   function destinationFor(url: string): DownloadDestination {
     const path = new URL(url).pathname.replace(/^\//, "")
     const lastSlash = path.lastIndexOf("/")
@@ -182,13 +189,27 @@ export function useCapacitorRemoteFilesStorage({
     },
 
     async clearAll(): Promise<void> {
-      // Per-file deletion via the plugin would require an enumeration API
-      // we don't expose; rmdir directly is simpler and matches what we did
-      // before the migration.
-      try {
-        await Filesystem.rmdir({ path: cacheDir, directory: Directory.Data, recursive: true })
-      } catch {
-        // Directory doesn't exist or already cleared.
+      // Per-file deletion via the plugin would require an enumeration API we
+      // don't expose, so go through Filesystem. One level of readdir is enough:
+      // everything below a non-kept entry goes with the recursive rmdir. A
+      // readdir failure means the root is absent or already cleared.
+      const entries = await Filesystem.readdir({ path: cacheDir, directory: Directory.Data })
+        .then((r) => r.files)
+        .catch(() => null)
+      if (!entries) return
+
+      for (const entry of entries) {
+        if (keepNames.has(entry.name)) continue
+        const path = `${cacheDir}/${entry.name}`
+        try {
+          if (entry.type === "directory") {
+            await Filesystem.rmdir({ path, directory: Directory.Data, recursive: true })
+          } else {
+            await Filesystem.deleteFile({ path, directory: Directory.Data })
+          }
+        } catch {
+          // Already gone or locked — the rest of the sweep still runs.
+        }
       }
     },
   }
