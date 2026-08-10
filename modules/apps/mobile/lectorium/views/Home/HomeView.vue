@@ -49,6 +49,7 @@
       </template>
       <PlaylistSection
         :items="playlistItems"
+        :playback="playback"
         :empty-header="$t('home.playlistIsEmpty')"
         :empty-message="emptyMessage"
         :empty-image="emptyImage"
@@ -78,7 +79,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { onIonViewWillEnter } from "@ionic/vue"
+import { onIonViewDidLeave, onIonViewWillEnter } from "@ionic/vue"
 import {
   IonText,
   IonInfiniteScroll,
@@ -100,6 +101,7 @@ import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { useCollectionLanguage } from "@lectorium/composables/useCollectionLanguage.js"
+import { usePlaybackRowProgress } from "@lectorium/composables/usePlaybackRowProgress.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useDurationFormatter } from "@lectorium/composables/useDurationFormatter.js"
 import { useCollections } from "@lectorium/composables/useCollections.js"
@@ -246,9 +248,22 @@ function onDismissSubscriptionNag(): void {
   subscriptionNagDismissedAt.value = Date.now()
 }
 
+// Ionic hides but never unmounts a tab page, so Home keeps rendering while the
+// user is on Search or Chat. `onScreen` gates the live playback overlay: off
+// the tab it stops reading the position entirely, so a playing lecture does no
+// per-tick work here at all (issue #1504). The rows themselves are already
+// position-free, so nothing else on this page ticks.
+const onScreen = ref(true)
+const playback = usePlaybackRowProgress(onScreen)
+
 onIonViewWillEnter(() => {
+  onScreen.value = true
   void reloadHeatmap()
   void refreshNotificationPermission()
+})
+
+onIonViewDidLeave(() => {
+  onScreen.value = false
 })
 
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {

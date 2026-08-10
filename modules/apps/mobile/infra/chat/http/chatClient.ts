@@ -384,6 +384,53 @@ export interface StreamChatRequestInit {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Give up on an SSE socket that hasn't delivered a single byte for this long.
+ *
+ * The chat service pings every 15s (`ping=15` on its `EventSourceResponse`),
+ * and those keepalive comment frames count as bytes even though the parser
+ * drops them — so on a healthy connection the gap between reads is 15s at
+ * worst, whatever the model is doing. Three missed heartbeats is the shortest
+ * window a late ping or a slow radio can't trip; anything longer just keeps
+ * the spinner up. A half-open socket (NAT dropped the flow, radio changed)
+ * never delivers `done` and never errors, so without this the read below waits
+ * forever on a connection that is already dead.
+ */
+export const SSE_STALL_TIMEOUT_MS = 45_000
+
+/** A read that outlived {@link SSE_STALL_TIMEOUT_MS}. Named so the stream's
+ *  catch can't mistake it for the caller's abort. */
+class SseStallError extends Error {
+  readonly kind = "sse_stall"
+  constructor(timeoutMs: number) {
+    super(`SSE stalled: no data for ${timeoutMs}ms`)
+    this.name = "SseStallError"
+  }
+}
+
+/**
+ * One `reader.read()` under a stall deadline. The timer is armed per read and
+ * cleared on every resolution, so ANY byte — a delta, a keepalive comment —
+ * restarts the window: that is the last-byte clock, without having to thread
+ * one through the parser.
+ */
+async function readWithStallTimeout<T>(
+  reader: { read: () => Promise<T> },
+  timeoutMs: number
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new SseStallError(timeoutMs)), timeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * Stream a chat reply from the backend. Yields typed SSE events in the
  * order they arrive; consumers should treat `done` / `error` as
  * terminal and stop iterating after the first one of either.
@@ -591,7 +638,7 @@ export async function* streamChat(
   let sawTerminal = false
   try {
     while (true) {
-      const { done, value } = await reader.read()
+      const { done, value } = await readWithStallTimeout(reader, SSE_STALL_TIMEOUT_MS)
       if (done) break
       buffer += decoder.decode(value, { stream: true })
 
@@ -614,6 +661,10 @@ export async function* streamChat(
     }
   } catch (err) {
     if ((err as { name?: string })?.name === "AbortError") return
+    // A stall lands here too, and deliberately keeps `code: "stream"`: that is
+    // the code the store reads as a resumable drop (`useChatStore`), so the
+    // turn keeps its thinking placeholder and recovers the buffered answer
+    // through the resume poll instead of showing a failed bubble.
     yield {
       type: "error",
       code: "stream",
