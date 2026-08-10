@@ -38,7 +38,7 @@
  * never composed on-device.
  */
 import { computed } from "vue"
-import type { ChatChapterBody } from "@lib/domain/chatMessage.js"
+import type { UiChatChapterBody } from "./types.js"
 import ScriptureChip from "./ScriptureChip.vue"
 import ScriptureBlock from "./ScriptureBlock.vue"
 
@@ -47,7 +47,7 @@ const props = defineProps<{
   regionToken: string
   caption?: string
   /** Chapter region from the message's `chapters` map; absent ⇒ chip. */
-  body?: ChatChapterBody
+  body?: UiChatChapterBody
 }>()
 
 const body = computed(() => props.body ?? null)

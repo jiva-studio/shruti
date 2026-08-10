@@ -160,6 +160,10 @@ One subdirectory per feature surface. Sibling features **never import each other
 | `features/tracks/` | `TrackLanguageSelector` + `search/filters/` chips and `icons/` (authors, sources, languages, locations, dates, topics, tags, sort) |
 | `features/transcript/` | Transcript viewer (`TranscriptText`, `TranscriptBlockRenderer`, sentence/verse blocks, selection popover + actions, dialog + header, status, language/text selectors, `Timestamp`) |
 
+## The other UI library — `@lib/ui`
+
+`ui/**` is app-local. A second, **cross-app** component library lives at `modules/libs/ui/` (aliased `@lib/ui`, symlinked into the app as `submodules/ui/`) and is rendered by both this app and the Astro web site — the chat answer cards, the transcript view, the floating input, the audio player bar. It sits *below* `ui/**`: `ui/primitives/` re-exports its `HighlightText` and `ui/features/transcript/` uses its `renderInlineMarkdown`, so it must never import `@ui/*` back. It has its own ESLint block and its own mirror types — see [Shared UI library](lib-ui.md).
+
 ## UI mirror types
 
 A component under `ui/*` **cannot import from `@lib/domain`** — UI must not know the domain. When a widget needs a type that already exists in the domain (e.g. `Track` to render a row), it declares a **structurally identical mirror** in a local `types.ts` (e.g. `UiTrackRow` in `ui/components/tracks/list/types.ts`).
