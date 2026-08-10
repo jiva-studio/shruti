@@ -200,9 +200,11 @@ describe("useDownloadStore prefetch budget gate", () => {
     expect(store.getState("t2" as TrackId)).toBe("deferred")
   })
 
-  it("keeps a draining queue to a single notice now the cooldown is gone", async () => {
-    // What replaced the 60s suppression is "one notice on screen at a time",
-    // so a queue that hits the wall twice in a row still says it once.
+  it("says nothing at all when the draining queue hits the wall", async () => {
+    // A notice belongs to an interaction. The queue hitting a limit it was
+    // always going to hit is not news — and a library already at the cap was
+    // getting this toast on every single launch (#1578). The rows carry the
+    // state instead.
     mocks.limitBytes.value = 100 * MB
     seedUsed(90 * MB)
 
@@ -213,7 +215,8 @@ describe("useDownloadStore prefetch budget gate", () => {
     await settleQueue()
 
     expect(mocks.downloadMedia).not.toHaveBeenCalled()
-    expect(mocks.toastError).toHaveBeenCalledTimes(1)
+    expect(mocks.toastError).not.toHaveBeenCalled()
     expect(mocks.toastAction).not.toHaveBeenCalled()
+    expect(store.getState("t1" as TrackId)).toBe("deferred")
   })
 })

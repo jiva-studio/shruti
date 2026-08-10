@@ -68,6 +68,18 @@ export const useDownloadStore = defineStore("downloads", () => {
   // cancelling with any of them stops every candidate. Cleared when the
   // task settles.
   const inFlightUrls = new Map<TrackId, string>()
+  /**
+   * One per running task, so a cancel that arrives BEFORE the native transfer
+   * is registered still stops the task.
+   *
+   * `inFlightUrls` is set at the top of the task, but nothing exists natively
+   * until `transfer()` runs — several awaits later (the cache probe, the stale
+   * -row repair, `ensureMeasured`, the budget gate). A cancel landing in that
+   * window used to issue a native cancel for a url the plugin had never heard
+   * of and change nothing: the download proceeded and re-created the file the
+   * archive had just deleted.
+   */
+  const inFlightAborts = new Map<TrackId, AbortController>()
   // Who is waiting on each in-flight task, boxed so a caller that JOINS a
   // running transfer can upgrade it (see `ensureDownloaded`). Only the
   // failure notice's rate-limit reads it.
@@ -157,27 +169,21 @@ export const useDownloadStore = defineStore("downloads", () => {
    * to do about it — free space by removing listened lectures, or raise the
    * limit in Settings.
    *
-   * `downloadAnyway` turns the notice into an actionable one: a button that,
-   * pressed inside the 20s window, lets THIS one track through. It is passed
-   * only where a specific track is being waited on by the user; the prefetch
-   * FIFO's wall gets the plain notice, because a background queue must not be
-   * handed a way past a limit the user set.
+   * A budget notice belongs to an interaction — hence `downloadAnyway` is
+   * required. The user tapped something and deserves to know why it did not
+   * happen, plus a way past the limit for that one lecture. A background queue
+   * hitting a wall it was always going to hit is not news: the rows already
+   * show `deferred`, which is the honest, silent signal, and a toast about a
+   * decision nobody made fired on every launch (#1578).
    *
    * At most one budget notice is on screen at a time — a second one would be
    * an unreadable stack, and the button on the first would no longer refer to
    * what the user is looking at.
    */
-  function noticeBudgetFull(downloadAnyway?: () => void): void {
+  function noticeBudgetFull(downloadAnyway: () => void): void {
     if (budgetNoticeVisible) return
     budgetNoticeVisible = true
     const message = t("errors.downloadStorageFull")
-    if (!downloadAnyway) {
-      void toast.error(message, { durationMs: BUDGET_NOTICE_DURATION_MS })
-      setTimeout(() => {
-        budgetNoticeVisible = false
-      }, BUDGET_NOTICE_DURATION_MS)
-      return
-    }
     void (async () => {
       try {
         const outcome = await toast.action(message, {
@@ -423,6 +429,11 @@ export const useDownloadStore = defineStore("downloads", () => {
 
     const taskEpoch = storeEpoch
     const fresh = (): boolean => taskEpoch === storeEpoch
+    // Created before the first await so a cancel arriving at any point in the
+    // pre-transfer phase has something to abort.
+    const aborter = new AbortController()
+    inFlightAborts.set(trackId, aborter)
+    const cancelled = (): boolean => aborter.signal.aborted
     // Token used so the task's finally only clears the inFlight slot
     // if it is still the one we put there — reset() may have wiped
     // and a newer task may already own this trackId.
@@ -439,6 +450,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         inFlightUrls.set(trackId, probeUrl)
         if (!isRetryAfterFailure) {
           const cached = await app.mediaDownloader.resolveLocalUrl(probeUrl)
+          if (cancelled()) return null
           if (cached) {
             if (fresh()) setState(trackId, "completed")
             // Even when audio is already on disk, make sure transcripts
@@ -484,6 +496,9 @@ export const useDownloadStore = defineStore("downloads", () => {
         // the DB, owed whether or not this transfer happens.)
         const quota = useDownloadQuotaStore()
         await quota.ensureMeasured()
+        // Last gate before bytes start moving: an archive or remove that
+        // landed while the budget was being measured must not be overtaken.
+        if (cancelled()) return null
         const sizeBytes = quota.sizeOf(filesize)
         // A "Download anyway" press grants this track exactly one pass, and
         // this is where it is spent — deleted whether or not the budget would
@@ -494,14 +509,15 @@ export const useDownloadStore = defineStore("downloads", () => {
         if (!exempt && !quota.hasRoomFor(sizeBytes, trackId)) {
           if (fresh()) {
             markDeferred(trackId)
-            noticeBudgetFull(
-              claimedOrigin.current === "user"
-                ? () => {
-                    budgetExceptions.add(trackId)
-                    void ensureDownloaded(trackId, path, filesize, "user")
-                  }
-                : undefined
-            )
+            // Only a request the user is waiting on gets a notice, and it
+            // always carries the way past. The queue's own refusals are told
+            // by the row's `deferred` state and nothing else.
+            if (claimedOrigin.current === "user") {
+              noticeBudgetFull(() => {
+                budgetExceptions.add(trackId)
+                void ensureDownloaded(trackId, path, filesize, "user")
+              })
+            }
           }
           return null
         }
@@ -604,6 +620,7 @@ export const useDownloadStore = defineStore("downloads", () => {
           inFlightUrls.delete(trackId)
           inFlightOrigins.delete(trackId)
         }
+        if (inFlightAborts.get(trackId) === aborter) inFlightAborts.delete(trackId)
       }
     })()
 
@@ -639,12 +656,11 @@ export const useDownloadStore = defineStore("downloads", () => {
           batch.push(head)
         }
         if (batch.length === 0) {
-          // Budget spent. Paint the whole waiting tail as deferred (grey, no
-          // spinner) and say what to do about it — once, and without an
-          // override button: nobody is waiting on a particular one of these,
-          // and letting the FIFO past the limit is what the limit is for.
+          // Budget spent. Paint the whole waiting tail as deferred and say
+          // nothing: nobody is waiting on a particular one of these, the rows
+          // now carry the state themselves, and a notice here fired on every
+          // launch of a library already at the cap (#1578).
           for (const job of prefetchQueue) markDeferred(job.trackId)
-          noticeBudgetFull()
           return
         }
         await Promise.allSettled(
@@ -746,6 +762,10 @@ export const useDownloadStore = defineStore("downloads", () => {
    * re-cancel.
    */
   function cancelInFlight(trackId: TrackId): void {
+    // Abort first and unconditionally: the task may not have reached the
+    // native call yet, in which case there is no url to cancel and this is
+    // the only thing that stops it.
+    inFlightAborts.get(trackId)?.abort()
     const url = inFlightUrls.get(trackId)
     if (!url) return
     inFlightUrls.delete(trackId)
@@ -854,13 +874,14 @@ export const useDownloadStore = defineStore("downloads", () => {
   function reset(): void {
     // Bump the epoch so any still-running download task started before
     // this call cannot write into the freshly-emptied maps when it
-    // resolves later. We can't abort the platform transfer mid-flight
-    // (the downloader port has no AbortSignal yet), so we cancel
-    // logically: the task still resolves but its setState/setProgress
+    // resolves later: the task still resolves but its setState/setProgress
     // calls become no-ops.
     storeEpoch += 1
-    // Abort in-flight native transfers so a wipe/clear-cache doesn't leave
-    // workers running that re-create files into the just-emptied cache.
+    // Abort in-flight transfers so a wipe/clear-cache doesn't leave workers
+    // running that re-create files into the just-emptied cache — natively for
+    // the ones that got that far, and by signal for the ones that did not.
+    for (const aborter of inFlightAborts.values()) aborter.abort()
+    inFlightAborts.clear()
     for (const url of inFlightUrls.values()) {
       void app.mediaDownloader.cancel(url).catch(() => {})
     }

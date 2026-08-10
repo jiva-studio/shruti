@@ -81,6 +81,10 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     if (downloadState === "pending") return "pending"
     if (downloadState === "downloading") return "downloading"
     if (downloadState === "failed") return "failed"
+    // The budget refused to keep this one offline. Without its own state it
+    // fell through to "added" and read as saved — a grey row the user takes
+    // for downloaded, which then does not play in airplane mode.
+    if (downloadState === "deferred") return "deferred"
 
     const entry = playlist.getEntryByTrackId(trackId)
     if (entry && playlist.getCompletedAt(entry.item.id) != null) return "completed"
@@ -108,6 +112,10 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     if (downloadState === "pending") return "pending"
     if (downloadState === "downloading") return "downloading"
     if (downloadState === "failed") return "failed"
+    // The budget refused to keep this one offline. Without its own state it
+    // fell through to "added" and read as saved — a grey row the user takes
+    // for downloaded, which then does not play in airplane mode.
+    if (downloadState === "deferred") return "deferred"
     // Currently-playing track → "playing", which folds to added/completed here.
     if (player.trackId === trackId) {
       return playlist.hasCompletedTrack(trackId) ? "completed" : "added"
