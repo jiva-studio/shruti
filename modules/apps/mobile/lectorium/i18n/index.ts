@@ -14,6 +14,7 @@ import enSearch from "./locales/en/search.js"
 import enSettings from "./locales/en/settings.js"
 import enShare from "./locales/en/share.js"
 import enStudio from "./locales/en/studio.js"
+import enTrack from "./locales/en/track.js"
 import enTranscript from "./locales/en/transcript.js"
 import enWelcome from "./locales/en/welcome.js"
 import enOnboarding from "./locales/en/onboarding.js"
@@ -32,6 +33,7 @@ import ruSearch from "./locales/ru/search.js"
 import ruSettings from "./locales/ru/settings.js"
 import ruShare from "./locales/ru/share.js"
 import ruStudio from "./locales/ru/studio.js"
+import ruTrack from "./locales/ru/track.js"
 import ruTranscript from "./locales/ru/transcript.js"
 import ruWelcome from "./locales/ru/welcome.js"
 import ruOnboarding from "./locales/ru/onboarding.js"
@@ -50,6 +52,7 @@ import ukSearch from "./locales/uk/search.js"
 import ukSettings from "./locales/uk/settings.js"
 import ukShare from "./locales/uk/share.js"
 import ukStudio from "./locales/uk/studio.js"
+import ukTrack from "./locales/uk/track.js"
 import ukTranscript from "./locales/uk/transcript.js"
 import ukWelcome from "./locales/uk/welcome.js"
 import ukOnboarding from "./locales/uk/onboarding.js"
@@ -68,6 +71,7 @@ import srLatnSearch from "./locales/sr-Latn/search.js"
 import srLatnSettings from "./locales/sr-Latn/settings.js"
 import srLatnShare from "./locales/sr-Latn/share.js"
 import srLatnStudio from "./locales/sr-Latn/studio.js"
+import srLatnTrack from "./locales/sr-Latn/track.js"
 import srLatnTranscript from "./locales/sr-Latn/transcript.js"
 import srLatnWelcome from "./locales/sr-Latn/welcome.js"
 import srLatnOnboarding from "./locales/sr-Latn/onboarding.js"
@@ -86,6 +90,7 @@ import srCyrlSearch from "./locales/sr-Cyrl/search.js"
 import srCyrlSettings from "./locales/sr-Cyrl/settings.js"
 import srCyrlShare from "./locales/sr-Cyrl/share.js"
 import srCyrlStudio from "./locales/sr-Cyrl/studio.js"
+import srCyrlTrack from "./locales/sr-Cyrl/track.js"
 import srCyrlTranscript from "./locales/sr-Cyrl/transcript.js"
 import srCyrlWelcome from "./locales/sr-Cyrl/welcome.js"
 import srCyrlOnboarding from "./locales/sr-Cyrl/onboarding.js"
@@ -104,6 +109,7 @@ import esSearch from "./locales/es/search.js"
 import esSettings from "./locales/es/settings.js"
 import esShare from "./locales/es/share.js"
 import esStudio from "./locales/es/studio.js"
+import esTrack from "./locales/es/track.js"
 import esTranscript from "./locales/es/transcript.js"
 import esWelcome from "./locales/es/welcome.js"
 import esOnboarding from "./locales/es/onboarding.js"
@@ -122,6 +128,7 @@ import ptSearch from "./locales/pt/search.js"
 import ptSettings from "./locales/pt/settings.js"
 import ptShare from "./locales/pt/share.js"
 import ptStudio from "./locales/pt/studio.js"
+import ptTrack from "./locales/pt/track.js"
 import ptTranscript from "./locales/pt/transcript.js"
 import ptWelcome from "./locales/pt/welcome.js"
 import ptOnboarding from "./locales/pt/onboarding.js"
@@ -140,6 +147,7 @@ import itSearch from "./locales/it/search.js"
 import itSettings from "./locales/it/settings.js"
 import itShare from "./locales/it/share.js"
 import itStudio from "./locales/it/studio.js"
+import itTrack from "./locales/it/track.js"
 import itTranscript from "./locales/it/transcript.js"
 import itWelcome from "./locales/it/welcome.js"
 import itOnboarding from "./locales/it/onboarding.js"
@@ -158,6 +166,7 @@ import deSearch from "./locales/de/search.js"
 import deSettings from "./locales/de/settings.js"
 import deShare from "./locales/de/share.js"
 import deStudio from "./locales/de/studio.js"
+import deTrack from "./locales/de/track.js"
 import deTranscript from "./locales/de/transcript.js"
 import deWelcome from "./locales/de/welcome.js"
 import deOnboarding from "./locales/de/onboarding.js"
@@ -176,6 +185,7 @@ import frSearch from "./locales/fr/search.js"
 import frSettings from "./locales/fr/settings.js"
 import frShare from "./locales/fr/share.js"
 import frStudio from "./locales/fr/studio.js"
+import frTrack from "./locales/fr/track.js"
 import frTranscript from "./locales/fr/transcript.js"
 import frWelcome from "./locales/fr/welcome.js"
 import frOnboarding from "./locales/fr/onboarding.js"
@@ -194,6 +204,7 @@ import plSearch from "./locales/pl/search.js"
 import plSettings from "./locales/pl/settings.js"
 import plShare from "./locales/pl/share.js"
 import plStudio from "./locales/pl/studio.js"
+import plTrack from "./locales/pl/track.js"
 import plTranscript from "./locales/pl/transcript.js"
 import plWelcome from "./locales/pl/welcome.js"
 import plOnboarding from "./locales/pl/onboarding.js"
@@ -212,6 +223,7 @@ import huSearch from "./locales/hu/search.js"
 import huSettings from "./locales/hu/settings.js"
 import huShare from "./locales/hu/share.js"
 import huStudio from "./locales/hu/studio.js"
+import huTrack from "./locales/hu/track.js"
 import huTranscript from "./locales/hu/transcript.js"
 import huWelcome from "./locales/hu/welcome.js"
 import huOnboarding from "./locales/hu/onboarding.js"
@@ -230,6 +242,7 @@ import hiSearch from "./locales/hi/search.js"
 import hiSettings from "./locales/hi/settings.js"
 import hiShare from "./locales/hi/share.js"
 import hiStudio from "./locales/hi/studio.js"
+import hiTrack from "./locales/hi/track.js"
 import hiTranscript from "./locales/hi/transcript.js"
 import hiWelcome from "./locales/hi/welcome.js"
 import hiOnboarding from "./locales/hi/onboarding.js"
@@ -248,6 +261,7 @@ import bnSearch from "./locales/bn/search.js"
 import bnSettings from "./locales/bn/settings.js"
 import bnShare from "./locales/bn/share.js"
 import bnStudio from "./locales/bn/studio.js"
+import bnTrack from "./locales/bn/track.js"
 import bnTranscript from "./locales/bn/transcript.js"
 import bnWelcome from "./locales/bn/welcome.js"
 import bnOnboarding from "./locales/bn/onboarding.js"
@@ -302,6 +316,7 @@ const en = {
   settings: enSettings,
   share: enShare,
   studio: enStudio,
+  track: enTrack,
   transcript: enTranscript,
   welcome: enWelcome,
   onboarding: enOnboarding,
@@ -322,6 +337,7 @@ const ru = {
   settings: ruSettings,
   share: ruShare,
   studio: ruStudio,
+  track: ruTrack,
   transcript: ruTranscript,
   welcome: ruWelcome,
   onboarding: ruOnboarding,
@@ -342,6 +358,7 @@ const uk = {
   settings: ukSettings,
   share: ukShare,
   studio: ukStudio,
+  track: ukTrack,
   transcript: ukTranscript,
   welcome: ukWelcome,
   onboarding: ukOnboarding,
@@ -362,6 +379,7 @@ const srLatn = {
   settings: srLatnSettings,
   share: srLatnShare,
   studio: srLatnStudio,
+  track: srLatnTrack,
   transcript: srLatnTranscript,
   welcome: srLatnWelcome,
   onboarding: srLatnOnboarding,
@@ -382,6 +400,7 @@ const srCyrl = {
   settings: srCyrlSettings,
   share: srCyrlShare,
   studio: srCyrlStudio,
+  track: srCyrlTrack,
   transcript: srCyrlTranscript,
   welcome: srCyrlWelcome,
   onboarding: srCyrlOnboarding,
@@ -402,6 +421,7 @@ const es = {
   settings: esSettings,
   share: esShare,
   studio: esStudio,
+  track: esTrack,
   transcript: esTranscript,
   welcome: esWelcome,
   onboarding: esOnboarding,
@@ -422,6 +442,7 @@ const pt = {
   settings: ptSettings,
   share: ptShare,
   studio: ptStudio,
+  track: ptTrack,
   transcript: ptTranscript,
   welcome: ptWelcome,
   onboarding: ptOnboarding,
@@ -442,6 +463,7 @@ const it = {
   settings: itSettings,
   share: itShare,
   studio: itStudio,
+  track: itTrack,
   transcript: itTranscript,
   welcome: itWelcome,
   onboarding: itOnboarding,
@@ -462,6 +484,7 @@ const de = {
   settings: deSettings,
   share: deShare,
   studio: deStudio,
+  track: deTrack,
   transcript: deTranscript,
   welcome: deWelcome,
   onboarding: deOnboarding,
@@ -482,6 +505,7 @@ const fr = {
   settings: frSettings,
   share: frShare,
   studio: frStudio,
+  track: frTrack,
   transcript: frTranscript,
   welcome: frWelcome,
   onboarding: frOnboarding,
@@ -502,6 +526,7 @@ const pl = {
   settings: plSettings,
   share: plShare,
   studio: plStudio,
+  track: plTrack,
   transcript: plTranscript,
   welcome: plWelcome,
   onboarding: plOnboarding,
@@ -522,6 +547,7 @@ const hu = {
   settings: huSettings,
   share: huShare,
   studio: huStudio,
+  track: huTrack,
   transcript: huTranscript,
   welcome: huWelcome,
   onboarding: huOnboarding,
@@ -542,6 +568,7 @@ const hi = {
   settings: hiSettings,
   share: hiShare,
   studio: hiStudio,
+  track: hiTrack,
   transcript: hiTranscript,
   welcome: hiWelcome,
   onboarding: hiOnboarding,
@@ -562,6 +589,7 @@ const bn = {
   settings: bnSettings,
   share: bnShare,
   studio: bnStudio,
+  track: bnTrack,
   transcript: bnTranscript,
   welcome: bnWelcome,
   onboarding: bnOnboarding,
