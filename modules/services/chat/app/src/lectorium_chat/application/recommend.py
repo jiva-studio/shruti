@@ -95,8 +95,9 @@ async def recommend_tracks(
     # `now` and a track's `last_played_at` are known; the client already
     # sends a recent slice, so tracks with no timestamp are kept.
     now = user_context.now
+    tz = user_context.tz
     window_start = (
-        as_aware(now) - timedelta(days=history_window_days)
+        as_aware(now, tz) - timedelta(days=history_window_days)
         if now is not None
         else None
     )
@@ -105,7 +106,7 @@ async def recommend_tracks(
         if (
             window_start is not None
             and t.last_played_at is not None
-            and as_aware(t.last_played_at) < window_start
+            and as_aware(t.last_played_at, tz) < window_start
         ):
             continue
         seconds_by_track[t.track_id] = _listened_seconds(t)

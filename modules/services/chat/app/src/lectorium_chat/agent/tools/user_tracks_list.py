@@ -56,8 +56,8 @@ async def user_tracks_list(
     if user_context is None:
         return ok_or_no_ctx([], False)
     try:
-        since_dt = parse_iso(since, field="since")
-        until_dt = parse_iso(until, field="until")
+        since_dt = parse_iso(since, field="since", tz=user_context.tz)
+        until_dt = parse_iso(until, field="until", tz=user_context.tz)
     except ValueError as exc:
         return {"error": "bad_argument", "hint": str(exc)}
     rows = user_context.tracks_in_window(
@@ -92,7 +92,7 @@ def _nothing_here(user_context: UserContext) -> dict[str, Any] | list[Any]:
     played = [t for t in user_context.recent_tracks if t.last_played_at is not None]
     if not played:
         return []
-    newest = max(played, key=lambda t: as_aware(t.last_played_at))
+    newest = max(played, key=lambda t: as_aware(t.last_played_at, user_context.tz))
     return {
         "tracks": [],
         "history_exists": True,
