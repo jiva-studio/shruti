@@ -53,7 +53,6 @@ from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.application.cache_helpers import TTL_30D, cached_llm_json
 from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Message
-from shruti_chat.indexer.library.repo import fetch_media, fetch_verse_body
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.research.pipeline import reduce_locale_to_content_lang
 from shruti_chat.observability.logging import bind_node_role, get_logger

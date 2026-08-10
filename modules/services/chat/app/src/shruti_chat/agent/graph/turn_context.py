@@ -146,11 +146,11 @@ class TurnContext:
     action_tools: ToolMap = field(default_factory=dict)
     help_tools: ToolMap = field(default_factory=dict)
 
-    # ── Library DB path ─────────────────────────────────────────────────
-    # Path to local library.db SQLite (for verse body lookups in the
-    # research worker). Typed as Any to avoid pulling pathlib here when
-    # most callers pass an Optional[Path].
-    library_db_path: Any | None = None
+    # ── Library reads ───────────────────────────────────────────────────
+    # `LibraryRepository` over the published library.db snapshot (verse
+    # bodies, purports, chapter titles, document bodies, media rows).
+    # Typed as Any so a test can pass a stub without importing the port.
+    library_repo: Any | None = None
 
     # ── Research pipeline collaborators ─────────────────────────────────
     # New code-driven research path (research/pipeline.py:run_research)

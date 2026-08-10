@@ -22,6 +22,7 @@ from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 from shruti_chat.domain.ports.embedder import EmbedderPort
 from shruti_chat.domain.ports.kv_cache import KVCache
+from shruti_chat.domain.ports.library_repository import LibraryRepository
 from shruti_chat.domain.ports.llm_provider import LLMPort
 from shruti_chat.domain.ports.idempotency_store import IdempotencyStore
 from shruti_chat.domain.ports.turn_store import TurnStore
@@ -56,6 +57,10 @@ class AppDeps:
     chat_graph: Any  # langgraph.pregel.Pregel — kept as Any to avoid import here
     # Cross-encoder reranker. None when no provider is configured / the
     # API key is missing → the research pipeline degrades to cosine.
+    # Reads of the published library.db snapshot (verse bodies, purports,
+    # chapter titles, document bodies, media rows). Optional so a test can
+    # build deps without a snapshot on disk — a turn degrades to chips.
+    library_repo: LibraryRepository | None = None
     reranker: RerankerPort | None = None
     # Citation translator (opt-in `translate_citations`). Always built —
     # the per-turn flag, not its presence, gates whether it runs.

@@ -187,7 +187,7 @@ async def observe_turn(
             catalog_tools=_wrap_tools_for_capture(base_ctx.catalog_tools, buf),
             action_tools=_wrap_tools_for_capture(base_ctx.action_tools, buf),
             help_tools=_wrap_tools_for_capture(base_ctx.help_tools, buf),
-            library_db_path=base_ctx.library_db_path,
+            library_repo=base_ctx.library_repo,
         )
         state: dict[str, Any] = {
             "history": history or [],
