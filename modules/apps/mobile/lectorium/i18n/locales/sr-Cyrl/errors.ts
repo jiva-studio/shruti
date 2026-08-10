@@ -12,4 +12,5 @@ export default {
   noAudioForLecture: "Ово предавање нема аудио.",
   downloadStorageFull:
     "Достигнут је лимит меморије. Уклоните преслушана предавања или повећајте лимит у подешавањима.",
+  downloadStorageFullAction: "Ипак преузми",
 }
