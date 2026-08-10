@@ -400,6 +400,94 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     expect(await repo.getTotalListenedSeconds()).toBe(2400)
   })
 
+  it("does not mark a rewound-then-skipped lecture completed", async () => {
+    // #1662. Heard almost to the end, rewound to 1:00 (journalJump closes that
+    // row near the end), one more minute, then ⏭ on the lock screen. The
+    // clamp may only shrink the journal row from the left — pushed past where
+    // the run ended it would leave `to_position` at the earlier high-water,
+    // and completion is read off the LATEST session, so the sweep would
+    // archive the lecture and delete audio the user had just rewound into.
+    // One run: the queue started 2399 s of audio ago, so both live rows below
+    // close inside its window. The lecture is 2400 s and the completion
+    // threshold is 2 s, so that first row alone reads as finished.
+    const heardToEndAt = 1_784_000_000_000
+    const runStart = heardToEndAt - 2_399_000
+    await liveSession(2399, heardToEndAt)
+
+    // Rewound to 1:00, one more minute — the latest session is now [60, 121],
+    // which is what makes the lecture correctly in-progress again.
+    vi.setSystemTime(heardToEndAt + 61_000)
+    const rewound = await repo.start({ itemId: "pi-1" as never, position: 60 })
+    await repo.finish(rewound, { position: 121 })
+
+    // The drain runs when the app next foregrounds, so the journal row is
+    // stamped strictly after the rewind row — otherwise the two tie on
+    // `ended_at` and "the latest session" turns on an id tiebreak.
+    const skippedAt = heardToEndAt + 61_000
+    vi.setSystemTime(skippedAt + 30_000)
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({
+        seq: 1,
+        reason: "skip-next",
+        fromPositionMs: 0,
+        finishedAtMs: 121_000,
+        at: skippedAt,
+        fromAt: runStart,
+      }),
+    ])
+
+    // The journal row must not claim the run reached the end.
+    const [journaled] = await db.query<{ from_position: number; to_position: number }>(
+      "SELECT from_position, to_position FROM listening_sessions WHERE source_key IS NOT NULL"
+    )
+    expect(journaled!.to_position).toBe(121)
+    // …and it must never store a negative interval either.
+    expect(journaled!.to_position).toBeGreaterThanOrEqual(journaled!.from_position)
+
+    // Which is what keeps the lecture out of the sweep: completion reads the
+    // latest session, and 121 s of a 2400 s lecture is not finished.
+    const completed = await repo.getCompletedAtForItems(
+      ["pi-1" as never],
+      new Map([["pi-1" as never, 2400]])
+    )
+    expect(completed.get("pi-1" as never)).toBeNull()
+  })
+
+  it("does not mark it completed when a pause puts the run's reach beyond the audio span", async () => {
+    // Where #1662 and #1656 meet. Same rewind-then-skip, but paused half an
+    // hour before the rewind. The OLD estimated window reached back only the
+    // 121 s of audio this run played, so it never saw the near-the-end row and
+    // the defect stayed hidden; the exact `fromAt` window covers the whole run
+    // and does see it. Stamping the start therefore makes #1662 fire in cases
+    // that used to be out of reach — the cap is what keeps that safe.
+    const heardToEndAt = 1_784_000_000_000
+    const runStart = heardToEndAt - 2_399_000
+    await liveSession(2399, heardToEndAt)
+
+    const rewoundAt = heardToEndAt + 1_800_000 + 61_000
+    vi.setSystemTime(rewoundAt)
+    const rewound = await repo.start({ itemId: "pi-1" as never, position: 60 })
+    await repo.finish(rewound, { position: 121 })
+
+    vi.setSystemTime(rewoundAt + 30_000)
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({
+        seq: 1,
+        reason: "skip-next",
+        fromPositionMs: 0,
+        finishedAtMs: 121_000,
+        at: rewoundAt,
+        fromAt: runStart,
+      }),
+    ])
+
+    const completed = await repo.getCompletedAtForItems(
+      ["pi-1" as never],
+      new Map([["pi-1" as never, 2400]])
+    )
+    expect(completed.get("pi-1" as never)).toBeNull()
+  })
+
   it("credits in full a lecture re-listened entirely in the background weeks later", async () => {
     // Heard end to end three weeks ago — the item's all-time mark is the whole
     // 40 minutes. Clamping on position would put this run's `from` at 2400 and
