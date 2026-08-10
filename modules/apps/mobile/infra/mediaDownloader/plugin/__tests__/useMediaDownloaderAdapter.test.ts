@@ -173,6 +173,54 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
     await Promise.all([a, b])
   })
 
+  it("keeps two candidates on ONE host apart instead of superseding", async () => {
+    // Regions are separated by host, and two of them can share one (a region
+    // renamed, the dev region mirroring global). Reusing the id is how the
+    // native side is told "same download": it cancels whatever holds that id
+    // and re-enqueues — dropping a candidate that may already be writing to
+    // the shared destination, whose partial the supersede path then unlinks
+    // (#1603). Two live attempts therefore need two ids.
+    const downloader = useMediaDownloaderAdapter({ cacheDir: "lectorium" })
+    const first = downloader.download(URL_A)
+    const second = downloader.download(URL_A)
+    await vi.waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(2))
+
+    const ids = downloadMock.mock.calls.map(([o]) => (o as { id: string }).id)
+    expect(ids[0]).toBe(ID_A)
+    expect(new Set(ids).size).toBe(2)
+    // Still the same file: only the task id may differ.
+    expect(ids[1]!.startsWith(`${FILE_KEY}#`)).toBe(true)
+
+    emit("completed", { id: ids[0], localUrl: "file:///data/original.mp3", bytesDownloaded: 1 })
+    emit("completed", { id: ids[1], localUrl: "file:///data/original.mp3", bytesDownloaded: 1 })
+    await Promise.all([first, second])
+
+    // And the id is released, so a later attempt reuses the plain one.
+    const third = downloader.download(URL_A)
+    await vi.waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(3))
+    expect((downloadMock.mock.calls[2]![0] as { id: string }).id).toBe(ID_A)
+    emit("completed", { id: ID_A, localUrl: "file:///data/original.mp3", bytesDownloaded: 1 })
+    await third
+  })
+
+  it("aborts only the same-host candidate that was aborted", async () => {
+    const downloader = useMediaDownloaderAdapter({ cacheDir: "lectorium" })
+    const controller = new AbortController()
+    const staying = downloader.download(URL_A)
+    const leaving = downloader.download(URL_A, undefined, controller.signal)
+    await vi.waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(2))
+    const secondId = (downloadMock.mock.calls[1]![0] as { id: string }).id
+
+    controller.abort()
+
+    await expect(leaving).rejects.toMatchObject({ reason: "superseded" })
+    expect(cancelMock).toHaveBeenCalledWith({ id: secondId, deletePartial: false })
+    expect(cancelMock).not.toHaveBeenCalledWith({ id: ID_A, deletePartial: false })
+
+    emit("completed", { id: ID_A, localUrl: "file:///data/original.mp3", bytesDownloaded: 1 })
+    await expect(staying).resolves.toBe("file:///data/original.mp3")
+  })
+
   it("aborting a candidate rejects it as superseded and keeps the partial", async () => {
     const downloader = useMediaDownloaderAdapter({ cacheDir: "lectorium" })
     const controller = new AbortController()
