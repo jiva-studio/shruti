@@ -41,6 +41,7 @@ class ScriptedLLM:
     ) -> AsyncIterator[CompletionChunk]:
         self.seen_calls.append(
             {
+                "messages": [dict(m) for m in messages],
                 "messages_count": len(messages),
                 "tools_count": len(tools or []),
                 "tool_choice": tool_choice,
@@ -283,12 +284,24 @@ async def test_unknown_tool_returns_error_dict() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("payload", ["[]", "null", '"hi"', "3", '["a","b"]'])
-async def test_non_object_tool_args_do_not_kill_the_turn(payload: str) -> None:
-    """The model streams `arguments` that parse to something other than
-    an object — the payload it tends to emit for a call it means to make
-    with no arguments. That must be coerced to `{}` and the loop must
-    keep running, not die with AttributeError/TypeError."""
+@pytest.mark.parametrize(
+    ("payload", "received"),
+    [
+        ("[]", "array"),
+        ('["a","b"]', "array"),
+        ("null", "null"),
+        ('"hi"', "string"),
+        ("3", "number"),
+    ],
+)
+async def test_non_object_tool_args_return_an_error(
+    payload: str, received: str
+) -> None:
+    """The model streams `arguments` that parse to something other than an
+    object. The loop must keep running (no AttributeError/TypeError) AND
+    must not invent arguments: a tool with no required parameters would
+    happily answer `{}` with results nobody asked for. Error it, and let
+    the model retry with real arguments."""
     seen: list[dict[str, Any]] = []
 
     async def search_x(**kwargs: Any) -> dict[str, Any]:
@@ -313,8 +326,17 @@ async def test_non_object_tool_args_do_not_kill_the_turn(payload: str) -> None:
         aliases=TurnAliasMap(),
         system_prompt="sys",
     )
-    assert seen == [{}]
-    assert result.tool_results == [{"ok": True}]
+    assert seen == []
+    assert result.tool_results == [
+        {"error": f"tool args must be a JSON object, got {received}"}
+    ]
+    # The assistant turn echoed back into history must still carry an
+    # object — `AIMessage(tool_calls=...)` validates `args` as one, so a
+    # raw `[]` there would kill the very turn we just kept alive.
+    echoed = [
+        m for m in llm.seen_calls[-1]["messages"] if m.get("tool_calls")
+    ]
+    assert [tc["args"] for m in echoed for tc in m["tool_calls"]] == [{}]
 
 
 @pytest.mark.asyncio

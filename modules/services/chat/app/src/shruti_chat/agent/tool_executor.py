@@ -30,6 +30,45 @@ log = get_logger(__name__)
 # transparently on empty result sets.
 _LANG_DEFAULT_TOOLS = frozenset({"chunks_search", "tracks_list"})
 
+_JSON_TYPE_NAMES: dict[type, str] = {
+    dict: "object",
+    list: "array",
+    str: "string",
+    bool: "boolean",
+    int: "number",
+    float: "number",
+    type(None): "null",
+}
+
+
+def json_type_name(value: Any) -> str:
+    """JSON-vocabulary name for a parsed value, for error messages."""
+    return _JSON_TYPE_NAMES.get(type(value), type(value).__name__)
+
+
+def parse_tool_args(
+    arguments_json: str, *, tool: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Parse a streamed `arguments` string into kwargs, or `(None, error)`.
+
+    Anything that is not a JSON object is an error the model has to fix,
+    never a coercion to `{}`. Coercing is unsafe: for a tool whose
+    parameters are all optional (`list_tracks`) empty kwargs is a VALID
+    call, so the model would get an unfiltered catalog page it never asked
+    for and cite it. Both branches log — the malformed-argument rate is
+    otherwise invisible, since the coerced args are what got logged.
+    """
+    try:
+        args = json.loads(arguments_json or "{}")
+    except json.JSONDecodeError as exc:
+        log.warning("tool_args_malformed", tool=tool, error=str(exc))
+        return None, f"bad JSON in tool args: {exc}"
+    if not isinstance(args, dict):
+        received = json_type_name(args)
+        log.warning("tool_args_not_an_object", tool=tool, received_type=received)
+        return None, f"tool args must be a JSON object, got {received}"
+    return args, None
+
 
 @dataclass
 class ToolCallSpec:
@@ -58,15 +97,11 @@ async def execute_tool_call(
     lang: str,
     request_id: str | None = None,
 ) -> ToolExecution:
-    try:
-        args = json.loads(call.arguments_json or "{}")
-    except json.JSONDecodeError:
-        args = {}
-    # A model may stream `arguments` that parse to a non-object
-    # (`null`, `[]`, a bare string/number) — most often for a call it
-    # means to make with no arguments. Treat that as "no arguments".
-    if not isinstance(args, dict):
-        args = {}
+    exec_ = ToolExecution()
+    args, args_error = parse_tool_args(call.arguments_json, tool=call.name)
+    if args is None:
+        exec_.result = {"error": args_error}
+        return exec_
 
     # Reasoning for the default: a Russian-language UI session asking
     # «что Прабхупада говорил про X» almost always wants RU material if
@@ -75,7 +110,6 @@ async def execute_tool_call(
     if call.name in _LANG_DEFAULT_TOOLS and "lang" not in args:
         args["lang"] = lang
 
-    exec_ = ToolExecution()
     fn = tools.get(call.name)
     if fn is None:
         exec_.result = {"error": f"unknown tool {call.name!r}"}
