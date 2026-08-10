@@ -242,9 +242,21 @@ THIN_THESIS_MIN_STRONG_NOTES = 2
 # 30 more chunks would just shift the noise problem one level down.
 AUGMENT_FRESH_TOP_K = 10
 
-# Stage 2 ANN total budget, enforced by `asyncio.wait_for` around the fresh
-# fan-out in `augment_thin_theses` — avoids a runaway on a thin thesis if
-# pgvector hangs. On expiry every thin thesis degrades to `fetch_failed`.
+# Stage 2 ANN budget, enforced by `asyncio.wait_for` around EACH thin thesis's
+# fresh fetch in `augment_thin_theses` — avoids a runaway if pgvector hangs.
+# Per-thesis, not fan-out-wide, so one slow shard only costs its own thesis;
+# the theses that answered keep their fresh chunks. On expiry that thesis
+# degrades to `fetch_failed` and keeps Stage 1's picks.
+#
+# NOT measured in production — no augment timing existed until now. Sized by
+# shape: one thin thesis costs a `filter_track_ids` lookup, two concurrent
+# pgvector ANN queries and an author-name resolve — the same single-round DB
+# work as TIMEOUT_FETCH_REFS_S / TIMEOUT_COMMENTARY_EXPAND_S (5.0), plus a
+# second of head-room because it runs on a cold-ish cache after retrieval is
+# over. Explicitly NOT sized like TIMEOUT_FANOUT_S (30.0), which covers the
+# whole multi-round fan-out (MAX_FANOUT_ROUNDS × sub-queries × kinds, embed and
+# rerank included). `augment_summary` now logs `fetch_ms` per thesis and
+# `fetch_ms_max` for the turn; set this from their p95 once turns accumulate.
 TIMEOUT_AUGMENT_S = 6.0
 
 
