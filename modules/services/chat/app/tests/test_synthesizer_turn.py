@@ -434,7 +434,7 @@ async def test_history_flows_into_synth_messages() -> None:
     chip markers get folded back to integer ref form via each turn's
     persisted aliases payload."""
     aliases = TurnAliasMap()
-    n = aliases.alias_chunk("track_PRIOR", 100, 200)
+    aliases.alias_chunk("track_PRIOR", 100, 200)
     serialized = aliases.serialize()
 
     history = [

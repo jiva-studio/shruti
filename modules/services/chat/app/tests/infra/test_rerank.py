@@ -7,7 +7,6 @@ the parsed response without a network call.
 
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 from typing import Any
 
