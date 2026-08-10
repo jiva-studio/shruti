@@ -2899,28 +2899,6 @@
       "e2e"
     ]
   },
-  "168": {
-    "suite_id": 2,
-    "automation": 2,
-    "title": "A failed boot-locale chunk still launches a usable app",
-    "description": "Offline, Russian device. The lazily-imported UI-language chunk for the boot locale (bundles/ru.ts) is aborted, as it would be by a 404 after a web deploy rotated chunk hashes or by a dropped radio. Startup awaits that chunk before mounting, so the rejection used to abort the mount entirely and dismiss the splash onto a blank WebView (issue #1605). Asserts the app still mounts, reaches Home and is navigable, rendering the resident English fallback. English devices are immune (en is statically bundled), which is why this never shows up in local testing.",
-    "preconditions": "Offline boot with locale=ru, clean user DB, onboarding already completed; every request for the ru locale chunk is aborted.",
-    "steps": [
-      {
-        "action": "Launch the app on a Russian device while the ru locale chunk fails to load.",
-        "expected": "The app mounts anyway: URL /tabs/home with the bottom tab bar visible — not a blank WebView."
-      },
-      {
-        "action": "Navigate to the Settings tab.",
-        "expected": "The screen renders and the interface-language row is readable (English fallback copy, not raw translation keys)."
-      }
-    ],
-    "tags": [
-      "home",
-      "free",
-      "e2e"
-    ]
-  },
   "169": {
     "suite_id": 16,
     "automation": 2,
@@ -2961,6 +2939,28 @@
     ],
     "tags": [
       "settings",
+      "free",
+      "e2e"
+    ]
+  },
+  "173": {
+    "suite_id": 2,
+    "automation": 2,
+    "title": "A failed boot-locale chunk still launches a usable app",
+    "description": "Offline, Russian device. The lazily-imported UI-language chunk for the boot locale (bundles/ru.ts) is aborted, as it would be by a 404 after a web deploy rotated chunk hashes or by a dropped radio. Startup awaits that chunk before mounting, so the rejection used to abort the mount entirely and dismiss the splash onto a blank WebView (issue #1605). Asserts the app still mounts, reaches Home and is navigable, rendering the resident English fallback. English devices are immune (en is statically bundled), which is why this never shows up in local testing.",
+    "preconditions": "Offline boot with locale=ru, clean user DB, onboarding already completed; every request for the ru locale chunk is aborted.",
+    "steps": [
+      {
+        "action": "Launch the app on a Russian device while the ru locale chunk fails to load.",
+        "expected": "The app mounts anyway: URL /tabs/home with the bottom tab bar visible — not a blank WebView."
+      },
+      {
+        "action": "Navigate to the Settings tab.",
+        "expected": "The screen renders and the interface-language row is readable (English fallback copy, not raw translation keys)."
+      }
+    ],
+    "tags": [
+      "home",
       "free",
       "e2e"
     ]
