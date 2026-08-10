@@ -6,7 +6,8 @@ import java.util.UUID
 
 /**
  * Per-download metadata that lives outside WorkManager's own data:
- *  - the source URL (so resolveLocalUrl(url) can find an id)
+ *  - the file key (the caller's name for the file, so a saved file is still
+ *    found after the active CDN changes) and the source URL it came from
  *  - the absolute on-disk path of the eventual file
  *  - the Worker UUID (so we can address WorkManager APIs by id-string)
  *
@@ -25,6 +26,14 @@ internal class DownloadStore(context: Context) {
     data class Entry(
         val id: String,
         val workerId: UUID,
+        /**
+         * What names the file, independent of the host it was fetched from.
+         * Several CDNs serve the same file and which one is active changes
+         * under the app, so an entry indexed by its URL became unfindable the
+         * moment the region did — and the caller read that miss as "the
+         * download is gone".
+         */
+        val fileKey: String,
         val url: String,
         val localPath: String,
     )
@@ -32,6 +41,7 @@ internal class DownloadStore(context: Context) {
     fun put(entry: Entry) {
         val json = JSONObject().apply {
             put("workerId", entry.workerId.toString())
+            put("fileKey", entry.fileKey)
             put("url", entry.url)
             put("localPath", entry.localPath)
         }
@@ -43,11 +53,11 @@ internal class DownloadStore(context: Context) {
         return parse(id, raw)
     }
 
-    fun findByUrl(url: String): Entry? {
+    fun findByFileKey(fileKey: String): Entry? {
         for ((key, raw) in prefs.all) {
             if (raw !is String) continue
             val entry = parse(key, raw) ?: continue
-            if (entry.url == url) return entry
+            if (entry.fileKey == fileKey) return entry
         }
         return null
     }
@@ -80,6 +90,12 @@ internal class DownloadStore(context: Context) {
             Entry(
                 id = id,
                 workerId = UUID.fromString(json.getString("workerId")),
+                // Entries written before the key existed are addressed by the
+                // path of their URL, which is what the key is — so an upgrade
+                // keeps finding files downloaded by the previous build.
+                fileKey = json.optString("fileKey").ifEmpty {
+                    android.net.Uri.parse(json.getString("url")).path.orEmpty()
+                },
                 url = json.getString("url"),
                 localPath = json.getString("localPath"),
             )

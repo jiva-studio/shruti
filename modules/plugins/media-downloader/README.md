@@ -133,14 +133,22 @@ Used at app start to rebuild UI state after a kill/relaunch.
 ### resolveLocalUrl(...)
 
 ```typescript
-resolveLocalUrl(options: { url: string; }) => Promise<{ localUrl: string | null; }>
+resolveLocalUrl(options: { fileKey: string; }) => Promise<{ localUrl: string | null; }>
 ```
 
-Resolve a previously-downloaded URL to a local URI, or `null` if not cached.
+Resolve a previously-downloaded file to a local URI, or `null` if it is
+not cached.
 
-| Param         | Type                          |
-| ------------- | ----------------------------- |
-| **`options`** | <code>{ url: string; }</code> |
+Addressed by {@link <a href="#downloadoptions">DownloadOptions.fileKey</a>}, never by the URL it came
+from: the same file is reachable at several hosts, and which one is
+active changes under the app — a CDN promotion, a probe, a hedged
+download that a different region won. Looking it up by address made a
+saved lecture invisible the moment the host changed, and the caller then
+treated the miss as a lost download.
+
+| Param         | Type                              |
+| ------------- | --------------------------------- |
+| **`options`** | <code>{ fileKey: string; }</code> |
 
 **Returns:** <code>Promise&lt;{ localUrl: string | null; }&gt;</code>
 
@@ -150,14 +158,15 @@ Resolve a previously-downloaded URL to a local URI, or `null` if not cached.
 ### deleteFile(...)
 
 ```typescript
-deleteFile(options: { url: string; }) => Promise<void>
+deleteFile(options: { fileKey: string; }) => Promise<void>
 ```
 
-Delete a cached file by its source URL. No-op if it doesn't exist.
+Delete a cached file by its {@link <a href="#downloadoptions">DownloadOptions.fileKey</a>}. No-op if it
+doesn't exist.
 
-| Param         | Type                          |
-| ------------- | ----------------------------- |
-| **`options`** | <code>{ url: string; }</code> |
+| Param         | Type                              |
+| ------------- | --------------------------------- |
+| **`options`** | <code>{ fileKey: string; }</code> |
 
 --------------------
 
@@ -257,13 +266,14 @@ Options for `download()`. The `id` is app-chosen and is the addressing
 key for `getTask` / `cancel` / events. Calling `download()` with an `id`
 that is already in flight returns the existing task (idempotent).
 
-| Prop              | Type                                                                | Description                                     |
-| ----------------- | ------------------------------------------------------------------- | ----------------------------------------------- |
-| **`id`**          | <code>string</code>                                                 |                                                 |
-| **`url`**         | <code>string</code>                                                 |                                                 |
-| **`destination`** | <code><a href="#downloaddestination">DownloadDestination</a></code> |                                                 |
-| **`headers`**     | <code><a href="#record">Record</a>&lt;string, string&gt;</code>     | Extra HTTP request headers (auth tokens, etc.). |
-| **`network`**     | <code>'any' \| 'wifi-only'</code>                                   | Restrict the network type. Default `"any"`.     |
+| Prop              | Type                                                                | Description                                                                                                                                                                                                                                                                           |
+| ----------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`id`**          | <code>string</code>                                                 |                                                                                                                                                                                                                                                                                       |
+| **`url`**         | <code>string</code>                                                 |                                                                                                                                                                                                                                                                                       |
+| **`fileKey`**     | <code>string</code>                                                 | What names the FILE, independent of where it was fetched from — several hosts serve the same file, and `id` deliberately differs per host so candidates can race. This is what `resolveLocalUrl` / `deleteFile` are addressed by, and what the platform must index its entries under. |
+| **`destination`** | <code><a href="#downloaddestination">DownloadDestination</a></code> |                                                                                                                                                                                                                                                                                       |
+| **`headers`**     | <code><a href="#record">Record</a>&lt;string, string&gt;</code>     | Extra HTTP request headers (auth tokens, etc.).                                                                                                                                                                                                                                       |
+| **`network`**     | <code>'any' \| 'wifi-only'</code>                                   | Restrict the network type. Default `"any"`.                                                                                                                                                                                                                                           |
 
 
 #### PluginListenerHandle

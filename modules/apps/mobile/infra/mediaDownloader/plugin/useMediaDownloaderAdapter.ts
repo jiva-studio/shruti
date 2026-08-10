@@ -167,6 +167,7 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
         } else {
           await MediaDownloader.download({
             id,
+            fileKey,
             url,
             destination,
           })
@@ -180,7 +181,7 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
     },
 
     async delete(url: string): Promise<void> {
-      await MediaDownloader.deleteFile({ url })
+      await MediaDownloader.deleteFile({ fileKey: fileKeyFor(url) })
     },
 
     /**
@@ -213,7 +214,10 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
     },
 
     async resolveLocalUrl(url: string): Promise<string | null> {
-      const { localUrl } = await MediaDownloader.resolveLocalUrl({ url })
+      // By the file's own name, not by where it was fetched from: the active
+      // CDN changes under us (a promotion, a probe, a hedge won elsewhere) and
+      // the file does not move when it does.
+      const { localUrl } = await MediaDownloader.resolveLocalUrl({ fileKey: fileKeyFor(url) })
       return localUrl
     },
   }

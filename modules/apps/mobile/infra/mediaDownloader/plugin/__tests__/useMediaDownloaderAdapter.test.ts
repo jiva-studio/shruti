@@ -22,12 +22,18 @@ const downloadMock = vi.fn(async ({ id }: { id: string }) => ({
   contentLength: 0,
 }))
 const cancelMock = vi.fn(async (o: { id: string; deletePartial?: boolean }) => void o)
+const resolveLocalUrlMock = vi.fn(async (_o: { fileKey: string }) => ({
+  localUrl: null as string | null,
+}))
+const deleteFileMock = vi.fn(async (_o: { fileKey: string }) => undefined)
 const listTasksMock = vi.fn(async () => ({ tasks: [] as { id: string }[] }))
 
 vi.mock("@shruti/plugin-media-downloader", () => ({
   MediaDownloader: {
     download: (o: never) => downloadMock(o),
     cancel: (o: never) => cancelMock(o),
+    resolveLocalUrl: (o: never) => resolveLocalUrlMock(o),
+    deleteFile: (o: never) => deleteFileMock(o),
     listTasks: () => listTasksMock(),
     addListener: vi.fn(async (event: string, fn: Listener) => {
       const entry = { event, fn }
@@ -43,6 +49,7 @@ vi.mock("@shruti/plugin-media-downloader", () => ({
 }))
 
 import { useMediaDownloaderAdapter } from "../useMediaDownloaderAdapter.js"
+
 
 const URL_A = "https://cdn.example.com/public/tracks/t-1/audio/original.mp3"
 const URL_B = "https://other.example.com/public/tracks/t-1/audio/original.mp3"
@@ -180,6 +187,44 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
     })
     // `deletePartial` must stay false — the winner is writing that very file.
     expect(cancelMock).toHaveBeenCalledWith({ id: ID_B, deletePartial: false })
+  })
+
+  it("asks for a saved file by something the CDN cannot change", async () => {
+    // The scenario a region flip produces, with no network involved: the file
+    // was saved while one CDN was active, and is looked up while another is.
+    // Both addresses name the SAME file — only the host differs, and the
+    // on-disk destination deliberately ignores the host.
+    //
+    // This is currently RED against the native contract and green against the
+    // web one, which is the actual defect (#1602): `DownloadStore.findByUrl`
+    // compares the whole URL string, while the web implementation keys by
+    // `URL.pathname`. Two implementations of one contract disagreeing is why
+    // no browser test can speak for a device here. The lookup argument must
+    // therefore carry the file'"'"'s identity, not an address that a promotion,
+    // a probe or a hedge can change under it.
+    const downloader = useMediaDownloaderAdapter({ cacheDir: "shruti" })
+
+    await downloader.resolveLocalUrl(URL_A)
+    await downloader.resolveLocalUrl(URL_B)
+
+    // The argument itself must be identical — reducing both to a path before
+    // comparing would erase exactly the difference this is about, and the
+    // assertion would hold no matter what the adapter passed down.
+    expect(resolveLocalUrlMock.mock.calls[0]![0]).toEqual({ fileKey: FILE_KEY })
+    expect(resolveLocalUrlMock.mock.calls[1]![0]).toEqual({ fileKey: FILE_KEY })
+  })
+
+  it("deletes a saved file by that same identity", async () => {
+    // Same rule on the way out: a delete issued while a different CDN is
+    // active must still name the file that is on disk, or the row goes and
+    // the bytes stay.
+    const downloader = useMediaDownloaderAdapter({ cacheDir: "shruti" })
+
+    await downloader.delete(URL_A)
+    await downloader.delete(URL_B)
+
+    expect(deleteFileMock.mock.calls[0]![0]).toEqual({ fileKey: FILE_KEY })
+    expect(deleteFileMock.mock.calls[1]![0]).toEqual({ fileKey: FILE_KEY })
   })
 
   it("the winner still resolves while a dropped rival never settles natively", async () => {
