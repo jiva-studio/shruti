@@ -283,6 +283,102 @@ async def test_unknown_tool_returns_error_dict() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payload", ["[]", "null", '"hi"', "3", '["a","b"]'])
+async def test_non_object_tool_args_do_not_kill_the_turn(payload: str) -> None:
+    """The model streams `arguments` that parse to something other than
+    an object — the payload it tends to emit for a call it means to make
+    with no arguments. That must be coerced to `{}` and the loop must
+    keep running, not die with AttributeError/TypeError."""
+    seen: list[dict[str, Any]] = []
+
+    async def search_x(**kwargs: Any) -> dict[str, Any]:
+        seen.append(kwargs)
+        return {"ok": True}
+
+    llm = ScriptedLLM(
+        script=[
+            [
+                _tool_call_chunk(idx=0, tc_id="c1", name="search_x", args=payload),
+                _finish_chunk(),
+            ],
+            [_finish_chunk()],
+        ],
+    )
+    result = await run_react_loop(
+        "x",
+        extracted_args={},
+        llm=llm,
+        tools={"search_x": search_x},
+        tool_schemas=_FAKE_SCHEMAS,
+        aliases=TurnAliasMap(),
+        system_prompt="sys",
+    )
+    assert seen == [{}]
+    assert result.tool_results == [{"ok": True}]
+
+
+@pytest.mark.asyncio
+async def test_malformed_tool_args_return_error_dict() -> None:
+    """Unparseable JSON is a recoverable tool error, not a dead turn."""
+
+    async def search_x(**kwargs: Any) -> dict[str, Any]:
+        return {"ok": True}
+
+    llm = ScriptedLLM(
+        script=[
+            [
+                _tool_call_chunk(
+                    idx=0, tc_id="c1", name="search_x", args="{not json at all"
+                ),
+                _finish_chunk(),
+            ],
+            [_finish_chunk()],
+        ],
+    )
+    result = await run_react_loop(
+        "x",
+        extracted_args={},
+        llm=llm,
+        tools={"search_x": search_x},
+        tool_schemas=_FAKE_SCHEMAS,
+        aliases=TurnAliasMap(),
+        system_prompt="sys",
+    )
+    assert "bad JSON in tool args" in result.tool_results[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_wrong_tool_kwargs_return_bad_args_error() -> None:
+    """Well-formed object args the tool's signature rejects surface as
+    `{error: "bad args: ..."}` so the LLM can retry with the right ones."""
+
+    async def search_x(*, q: str) -> dict[str, Any]:
+        return {"q": q}
+
+    llm = ScriptedLLM(
+        script=[
+            [
+                _tool_call_chunk(
+                    idx=0, tc_id="c1", name="search_x", args='{"nope": 1}'
+                ),
+                _finish_chunk(),
+            ],
+            [_finish_chunk()],
+        ],
+    )
+    result = await run_react_loop(
+        "x",
+        extracted_args={},
+        llm=llm,
+        tools={"search_x": search_x},
+        tool_schemas=_FAKE_SCHEMAS,
+        aliases=TurnAliasMap(),
+        system_prompt="sys",
+    )
+    assert result.tool_results[0]["error"].startswith("bad args: ")
+
+
+@pytest.mark.asyncio
 async def test_tool_raising_returns_error_dict() -> None:
     """Tool throws → dispatcher catches and returns error result, LLM
     can react in its next turn without crashing the whole turn."""
