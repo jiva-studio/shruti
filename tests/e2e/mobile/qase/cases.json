@@ -2898,5 +2898,58 @@
       "pro",
       "e2e"
     ]
+  },
+  "171": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Clear cache keeps the content database",
+    "description": "Offline. \"Clear cache\" is a cache reset, not a data wipe: the content catalog is not cache, and re-fetching it costs ~54 MB and takes the app offline meanwhile (#1630). A route counter over the catalog URL sees the cold-start download and must see nothing after the clear — the restarted app opens, searches the same corpus and still names the same content database from the local copy.",
+    "preconditions": "Offline boot on a clean user DB; the catalog is served from the fixture route and downloaded once on the cold start. The Debug section is reachable via the build-info unlocker.",
+    "steps": [
+      {
+        "action": "Search the library and note how many lectures are listed, then open Settings and note the content-database line under the build info.",
+        "expected": "Lectures are listed and the build info names the content database the app resolved; the catalog was downloaded exactly once, on the cold start."
+      },
+      {
+        "action": "Unlock the Debug section from the build-info line and tap Clear cache.",
+        "expected": "The action runs and the Settings page stays usable."
+      },
+      {
+        "action": "Restart the app, then open Settings and search the library again.",
+        "expected": "The app opens on Home, the build info still names the same content database and the same lectures are listed — with no further request for the content database."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "smoke",
+      "e2e"
+    ]
+  },
+  "172": {
+    "suite_id": 10,
+    "automation": 2,
+    "title": "Clear cache removes downloaded audio",
+    "description": "Offline. The other half of #1630: what \"Clear cache\" is for still goes. A downloaded lecture's audio is dropped, the Settings storage figure falls to zero and stays there across a restart, and with the network gone the app goes back to the network for the very file it had cached — the row falls to the failed state instead of still claiming the lecture is on the device.",
+    "preconditions": "Offline boot on a clean user DB; audio served from the silent fixture through a gate the test can close. The Debug section is reachable via the build-info unlocker.",
+    "steps": [
+      {
+        "action": "Add the first library lecture, wait for the download to land, then open Settings.",
+        "expected": "The row shows added/completed and the download-limit row reports a non-zero amount of storage in use."
+      },
+      {
+        "action": "Unlock the Debug section and tap Clear cache.",
+        "expected": "Storage in use falls to 0 MB."
+      },
+      {
+        "action": "Kill the network, restart the app and play the lecture from the Home queue.",
+        "expected": "Storage in use is still 0 MB, the app re-requests the audio file it had cached, and the row falls to the failed state rather than claiming the lecture is available offline."
+      }
+    ],
+    "tags": [
+      "downloads",
+      "free",
+      "e2e"
+    ]
   }
 }
