@@ -186,6 +186,7 @@ export default {
   appLanguage: {
     title: "Язык",
     description: "Язык интерфейса",
+    loadFailedToast: "Не удалось загрузить этот язык. Попробуйте ещё раз.",
   },
 
   chatLanguage: {

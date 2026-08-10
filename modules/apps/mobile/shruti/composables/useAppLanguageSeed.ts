@@ -1,8 +1,7 @@
 import { type Ref } from "vue"
 import { detectDeviceLocaleAsync } from "@shruti/i18n/index.js"
+import { APP_LANGUAGE_KEY as KEY } from "@shruti/composables/useAppLanguage.js"
 import { useShruti } from "@shruti/shruti.js"
-
-const KEY = "settings.appLanguage"
 
 /**
  * Seed `settings.appLanguage` from the **native** device locale on first

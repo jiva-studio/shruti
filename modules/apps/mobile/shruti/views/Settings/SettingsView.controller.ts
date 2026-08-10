@@ -5,6 +5,7 @@ import {
   AUTO_ARCHIVE_DELAY_KEY,
   type AutoArchiveDelay,
 } from "@shruti/composables/useAutoArchiveSweep.js"
+import { useToast } from "@kit/composables"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import {
   useChatLanguage,
@@ -12,6 +13,7 @@ import {
 } from "@shruti/composables/useChatLanguage.js"
 import { useSyncChatsEnabled } from "@shruti/composables/useSyncChats.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useAppLanguageControl } from "@shruti/composables/useAppLanguageControl.js"
 import { useAutoPlayNext } from "@shruti/composables/useAutoPlayNext.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import type { TrackMetaConfig } from "@ui/components/tracks/list/index.js"
@@ -45,6 +47,8 @@ export interface SettingsControllerReturn {
   contentDbFile: ComputedRef<string | null>
   dbNumber: ComputedRef<string | null>
   /* Config v-models (backed by IPreferences via useConfig) */
+  /** UI language. Writes go through `useAppLanguageControl`, so the setting
+   *  moves only once the picked locale's chunk is live. */
   appLanguage: Ref<string>
   /** Chat answer language; empty ⇒ follow appLanguage at the read site. */
   chatLanguage: Ref<string>
@@ -87,6 +91,7 @@ export interface SettingsControllerReturn {
 export function useSettingsController(): SettingsControllerReturn {
   const app = useShruti()
   const { t } = useI18n()
+  const toast = useToast()
 
   const version = __APP_VERSION__
   // Append the short commit hash so the version line reveals which commit a
@@ -107,6 +112,11 @@ export function useSettingsController(): SettingsControllerReturn {
 
   /* Config v-models */
   const appLanguage = useAppLanguage()
+  // The picker binds to the deferred control, not the raw setting — see
+  // useAppLanguageControl for why the write has to wait for the chunk.
+  const appLanguageModel = useAppLanguageControl(appLanguage, () => {
+    void toast.error(t("settings.appLanguage.loadFailedToast"))
+  })
   const chatLanguage = useChatLanguage()
   const chatTranslateCitations = useChatTranslateCitations()
   const syncChats = useSyncChatsEnabled()
@@ -194,7 +204,7 @@ export function useSettingsController(): SettingsControllerReturn {
     activeServer,
     contentDbFile,
     dbNumber,
-    appLanguage,
+    appLanguage: appLanguageModel,
     chatLanguage,
     chatTranslateCitations,
     syncChats,
