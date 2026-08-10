@@ -15,12 +15,18 @@ struct QueueTransition: Codable {
     let startedItemId: String?
     let reason: String   // "auto" | "skip-next" | "skip-prev" | "error"
     let at: Double       // epoch ms
+    /// Epoch ms when listening on this item began — the `fromPosition`
+    /// counterpart, giving JS the run's real wall-clock span. **Optional on
+    /// purpose**: a journal file written before this field existed decodes with
+    /// it nil, whereas a non-optional would throw and take the whole pending
+    /// journal down with it.
+    let fromAt: Double?
     let seq: Int
 
     /// Capacitor JSObject-friendly dictionary. `startedItemId` is encoded
     /// as `NSNull` when nil so the JS side sees an explicit `null`.
     func toDictionary() -> [String: Any] {
-        return [
+        var dict: [String: Any] = [
             "finishedItemId": finishedItemId,
             "fromPosition": fromPosition,
             "finishedAt": finishedAt,
@@ -30,6 +36,11 @@ struct QueueTransition: Codable {
             "at": at,
             "seq": seq
         ]
+        // Omitted rather than nulled when unstamped, so JS takes the estimate.
+        if let fromAt = fromAt {
+            dict["fromAt"] = fromAt
+        }
+        return dict
     }
 }
 

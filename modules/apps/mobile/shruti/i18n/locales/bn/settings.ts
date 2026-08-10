@@ -162,6 +162,7 @@ export default {
   appLanguage: {
     title: "ভাষা",
     description: "ইন্টারফেসের ভাষা",
+    loadFailedToast: "এই ভাষাটি লোড করা যায়নি। আবার চেষ্টা করুন।",
   },
 
   chatLanguage: {
@@ -211,6 +212,7 @@ export default {
       "10h": "১০ ঘণ্টা",
     },
     archive: {
+      off: "কখনও নয়",
       immediate: "তৎক্ষণাৎ",
       _8h: "৮ ঘণ্টা পরে",
       _1d: "১ দিন পরে",

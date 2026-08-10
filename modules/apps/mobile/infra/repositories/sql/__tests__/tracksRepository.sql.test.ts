@@ -4,6 +4,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import {
   buildFtsQuery,
   createSqlTrackRepository,
+  foldSearchText,
   normalizeBlob,
   scoreMatchinfo,
 } from "../tracksRepository.sql.js"
@@ -129,6 +130,24 @@ interface FixtureTrack {
 
 const sortRefFromGroup = (g: FixtureRefGroup): string => `${g.sourceId}_${g.tokens}`
 
+/**
+ * Rewrite every indexed row through the fold the catalog writer applies
+ * (`searchfold.go`, and the `008_fold_fts_marks` migration for rows already
+ * on disk). The writer leaves case to `unicode61`, which folds it anyway, so
+ * the query-side fold stands in for it and the two halves cannot drift.
+ */
+async function foldSearchRows(db: IDatabase): Promise<void> {
+  const rows = await db.query<{ rid: number; content: string }>(
+    `SELECT rowid AS rid, content FROM tracks_search`
+  )
+  for (const row of rows) {
+    const folded = foldSearchText(row.content)
+    if (folded !== row.content) {
+      await db.execute(`UPDATE tracks_search SET content = ? WHERE rowid = ?`, [folded, row.rid])
+    }
+  }
+}
+
 async function seedFixture(
   db: IDatabase,
   sources: FixtureSource[],
@@ -188,8 +207,8 @@ async function seedFixture(
   }
   // Populate the FTS index exactly the way the catalog writer does
   // (modules/tools/shruti-mcp/internal/infra/catalog/sqlite/write.go
-  // rebuildTrackSearchRows). The `combined` kind is what `search()`
-  // filters on.
+  // rebuildTrackSearchRows, searchfold.go). The `combined` kind is what
+  // `search()` filters on; `foldSearchRows()` below is the writer's folding.
   await db.execute(
     `INSERT INTO tracks_search(content, track_id, kind)
        SELECT title, track_id, 'title' FROM track_variants`
@@ -239,6 +258,7 @@ async function seedFixture(
        'combined'
      FROM tracks t`
   )
+  await foldSearchRows(db)
 }
 
 /**
@@ -549,6 +569,192 @@ describe("tracksRepository.sql — search", () => {
   })
 })
 
+describe("tracksRepository.sql — non-ASCII Cyrillic", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "ru" as LanguageCode
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    await seedFixture(
+      db,
+      [{ id: "bg", en: { full: "Bhagavad-gita", short: "BG" } }],
+      [
+        {
+          id: "t-yo",
+          date: "1974-11-01",
+          titles: { ru: "Кришна пришёл как имя" },
+          references: [],
+        },
+        {
+          id: "t-uk",
+          date: "1975-01-01",
+          titles: { uk: "Ґанді і світ їжі" },
+          references: [],
+        },
+        {
+          id: "t-sr",
+          date: "1976-01-01",
+          titles: { "sr-Cyrl": "Ђурђевдан у Њујорку" },
+          references: [],
+        },
+      ]
+    )
+  })
+
+  // #1629: `ё` (U+0451) sits outside the old `а-я` class, so it was deleted
+  // from the query — "Кришна пришёл" was sent as `кришна* пришл*` and found
+  // nothing. Both spellings must now reach the track.
+  it.each(["Кришна пришёл", "Кришна пришел"])("finds a ё title for query %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-yo"])
+  })
+
+  it.each(["світ", "їжі", "Ґанді"])("keeps Ukrainian %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-uk"])
+  })
+
+  it.each(["Ђурђевдан", "Њујорку"])("keeps Serbian %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-sr"])
+  })
+})
+
+/**
+ * #1661, both directions. `unicode61 "remove_diacritics=2"` keeps a marked
+ * word whole and deletes the mark, so an accented query has to reach a plain
+ * indexed title *and* a plain query has to reach a title that carries one —
+ * the shipped catalog holds both (14 titles spell `й` decomposed, so
+ * "Настройка на джапу" was reachable only as "настроика").
+ */
+describe("tracksRepository.sql — combining marks", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "ru" as LanguageCode
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    await seedFixture(
+      db,
+      [],
+      [
+        {
+          id: "t-plain",
+          date: "1974-11-01",
+          titles: { ru: "Кришна и Арджуна" },
+          references: [],
+        },
+        {
+          // `й` as и + U+0306, the way the real catalog spells these.
+          id: "t-marked",
+          date: "1975-01-01",
+          titles: { ru: "Настройка на джапу".normalize("NFD") },
+          references: [],
+        },
+        {
+          id: "t-latin",
+          date: "1976-01-01",
+          titles: { en: "Bhagavad-gītā as it is" },
+          references: [],
+        },
+        {
+          id: "t-deva",
+          date: "1977-01-01",
+          titles: { hi: "कृष्ण की महिमा" },
+          references: [],
+        },
+      ]
+    )
+  })
+
+  it.each(["Кри́шна", "Кришна"])("finds a plain title for marked query %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-plain"])
+  })
+
+  it.each(["Настройка", "Настро́йка"])("finds a marked title for query %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-marked"])
+  })
+
+  it.each(["Bhagavad-gītā", "bhagavad gita"])("finds a Latin title for %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-latin"])
+  })
+
+  // Matras used to split the query into single consonants (`क* ष* ण*`),
+  // which is a prefix match on almost any Devanagari title. Query and index
+  // now agree on one token per word.
+  it("finds a Devanagari title as one word", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text: "कृष्ण" })
+    expect(results.map((t) => t.id)).toEqual(["t-deva"])
+  })
+})
+
+describe("tracksRepository.sql — sorted search window", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "ru" as LanguageCode
+  // Past SCORE_CAP (500), which used to clip the match set *before* the sort.
+  const TRACK_COUNT = 520
+  const oldest = `${2100 - (TRACK_COUNT - 1)}-01-01`
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    // Dates run backwards through insertion order, so the oldest track is the
+    // last one FTS yields — invisible to a sort that only sees the first 500.
+    await seedFixture(
+      db,
+      [],
+      Array.from({ length: TRACK_COUNT }, (_, i) => ({
+        id: `t-${String(i).padStart(4, "0")}`,
+        date: `${2100 - i}-01-01`,
+        titles: { ru: `Лекция ${i}` },
+        references: [],
+      }))
+    )
+  })
+
+  it("sorts the whole match set, not the first SCORE_CAP rows", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text: "лекция", sortBy: "byDateAsc", limit: 1 })
+    expect(results[0]?.date).toBe(oldest)
+  })
+
+  it("pages past SCORE_CAP", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({
+      text: "лекция",
+      sortBy: "byDateAsc",
+      limit: 50,
+      offset: 500,
+    })
+    expect(results).toHaveLength(TRACK_COUNT - 500)
+  })
+
+  // The cap is back, one order of magnitude up and on the other side of the
+  // sort: pages stay contiguous in the asked-for order instead of being cut
+  // from whatever slice FTS yielded first.
+  it("pages contiguously in the sorted order", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const paged: (string | null)[] = []
+    for (let offset = 0; offset < TRACK_COUNT; offset += 50) {
+      const page = await repo.search({ text: "лекция", sortBy: "byDateAsc", limit: 50, offset })
+      paged.push(...page.map((t) => t.date))
+    }
+    const expected = Array.from({ length: TRACK_COUNT }, (_, i) => `${2100 - i}-01-01`).sort()
+    expect(paged).toEqual(expected)
+  })
+})
+
 describe("tracksRepository.sql — buildFtsQuery", () => {
   it("promotes a multi-component reference to a phrase, leaves the word prefix", () => {
     expect(buildFtsQuery("bg 2.13")).toBe(`bg* "2 13"`)
@@ -583,6 +789,44 @@ describe("tracksRepository.sql — buildFtsQuery", () => {
   it("returns an empty string for whitespace-only input", () => {
     expect(buildFtsQuery("   ")).toBe("")
     expect(buildFtsQuery("")).toBe("")
+  })
+
+  it("folds ё to е instead of deleting it", () => {
+    expect(buildFtsQuery("Кришна пришёл всё учёные")).toBe("кришна* пришел* все* ученые*")
+  })
+
+  it("keeps Cyrillic letters outside а-я", () => {
+    expect(buildFtsQuery("Ґанді і світ")).toBe("ґанді* і* світ*")
+    expect(buildFtsQuery("Ђурђевдан Њујорк")).toBe("ђурђевдан* њујорк*")
+  })
+
+  // The deny-list erased Devanagari and Bengali outright, so `search()` bailed
+  // on an empty expression. Matras are marks, so they leave with the rest of
+  // the marks and the word stays one token — the writer folds it the same way
+  // (`unicode61` would otherwise split it into single consonants).
+  it("keeps scripts the deny-list used to erase whole", () => {
+    expect(buildFtsQuery("कृष्ण")).toBe("कषण*")
+    expect(buildFtsQuery("কৃষ্ণ")).toBe("কষণ*")
+  })
+
+  // #1661: `\p{M}` is not a separator. A stress accent, or the mark
+  // `İ`.toLowerCase() manufactures, used to cut the word in two and every
+  // token is AND-ed, so `шна*` could never meet the indexed term `кришна`.
+  it("strips a combining mark instead of splitting the word on it", () => {
+    expect(buildFtsQuery("Кри́шна")).toBe("кришна*")
+    expect(buildFtsQuery("бхагава́д-ги́та")).toBe("бхагавад* гита*")
+    expect(buildFtsQuery("İSKCON")).toBe("iskcon*")
+  })
+
+  // What `unicode61 "remove_diacritics=2"` does to the indexed side.
+  it("drops Latin diacritics the index drops", () => {
+    expect(buildFtsQuery("Bhagavad-gītā")).toBe("bhagavad* gita*")
+  })
+
+  // ...but only where the index drops them: `unicode61` leaves precomposed
+  // Cyrillic alone, so folding `й` to `и` here would miss every title.
+  it("keeps precomposed Cyrillic the index keeps", () => {
+    expect(buildFtsQuery("Настройка їжа Ґанді")).toBe("настройка* їжа* ґанді*")
   })
 })
 

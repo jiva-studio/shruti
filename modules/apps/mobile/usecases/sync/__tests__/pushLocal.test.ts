@@ -62,6 +62,37 @@ describe("pushLocal — base_hlc reconciliation", () => {
     expect(await apply.lastServerHlc("playlist_items", "track-1")).toBe(hlc(1001))
     expect(state.pushedOutboxId).toBe(2)
   })
+
+  it("keeps an explicit empty base even when the doc has a recorded master", async () => {
+    // A row the anonymous handover re-opened (#1627), or a backfilled one, whose
+    // doc got a master from the pull earlier in the SAME cycle. Taking that
+    // master as the base would fast-forward the server past its own version;
+    // an empty base asks for the conflict instead.
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+
+    apply.setServerHlc("notes", "note-1", hlc(9000))
+    outbox.seed([
+      {
+        collection: "notes",
+        docId: "note-1",
+        op: "upsert",
+        data: { id: "note-1", text: "from the anonymous period" },
+        hlc: hlc(1000),
+        baseHlc: "",
+      },
+    ])
+    gateway.pushHandler = (req): PushResponse => ({
+      applied: req.changes.map((c) => ({ collection: c.collection, doc_id: c.doc_id })),
+      conflicts: [],
+    })
+
+    await pushLocal(deps(gateway, outbox, apply, state))
+
+    expect(gateway.pushRequests[0]!.changes[0]!.base_hlc).toBe("")
+  })
 })
 
 describe("pushLocal — conflict re-merge", () => {
@@ -228,6 +259,25 @@ describe("pushLocal — outbox watermark", () => {
 
     expect(retry.pushed).toBe(1)
     expect(gateway.pushRequests[1]!.changes.map((c) => c.doc_id)).toEqual(["note-2"])
+  })
+
+  it("keeps draining past a full, conflict-free batch", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+    applyAll(gateway)
+
+    // A backfill enqueues more than one PUSH_BATCH (200). Stopping on the
+    // first conflict-free round would cap the cycle at 200 rows and leave the
+    // rest waiting on the 3-minute idle cadence (#1597).
+    outbox.seed(Array.from({ length: 250 }, (_, i) => note(i + 1)))
+
+    const result = await pushLocal(deps(gateway, outbox, apply, state))
+
+    expect(result.pushed).toBe(250)
+    expect(gateway.pushRequests).toHaveLength(2)
+    expect(outbox.rows.every((r) => r.sent)).toBe(true)
   })
 })
 

@@ -33,8 +33,10 @@ import "./theme/misc.css"
 import App from "./App.vue"
 import router from "./router/index.js"
 import { bootLocaleReady, i18n } from "./i18n/index.js"
+import { applyStoredAppLanguage } from "./composables/useAppLanguage.js"
 import { initShruti } from "./shruti.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
+import { DATABASES_DIR } from "./services/contentDatabase.js"
 import { findRegion, getRegions, hydrateRegions } from "@shruti/services/regionsRegistry.js"
 import { readPreferredServerId } from "@shruti/services/preferredServer.js"
 import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
@@ -201,7 +203,9 @@ initShruti({
   persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
   databaseFetcher: isNative ? useDatabaseToFsFetcher() : useDatabaseToIndexedDbFetcher(),
   filesStorage: isNative
-    ? useCapacitorRemoteFilesStorage({ cacheDir: "shruti" })
+    ? // `databases/` holds the content catalog and the user DB, not cache —
+      // see `resetContentDatabase` for the path that is allowed to drop it.
+      useCapacitorRemoteFilesStorage({ cacheDir: "shruti", keep: [DATABASES_DIR] })
     : useWebRemoteFilesStorage({ cacheName: "shruti" }),
   preferences,
   // Capacitor plugin selects native vs its own web fallback automatically.
@@ -298,6 +302,24 @@ if (import.meta.env.VITE_DEBUG_API === "true") {
   })
 }
 
+// A hashed chunk that 404s after a web deploy, or dies on a flaky radio, lands
+// here before it lands in the importer's own `.catch`. Every dynamic import the
+// app makes has a fallback, so acknowledge the event (preventDefault stops Vite
+// re-throwing it at the window) and just record it.
+window.addEventListener("vite:preloadError", (event) => {
+  event.preventDefault()
+  reportError("preload", (event as Event & { payload?: unknown }).payload ?? event)
+})
+
+// Mounting is the one step that must happen exactly once, whatever else fails —
+// the native splash dismisses onto whatever is (or isn't) in the WebView.
+let mounted = false
+function mountApp(): void {
+  if (mounted) return
+  mounted = true
+  app.mount("#app")
+}
+
 // Headless startup, all before the first paint — there is NO loading screen.
 // 1) Hydrate the region list from the last-persisted (downloaded) config so the
 //    first CDN probe targets the latest regions, not the bundled seed.
@@ -306,6 +328,13 @@ if (import.meta.env.VITE_DEBUG_API === "true") {
 // 3) Choose the initial route: first launch → onboarding, otherwise Home.
 // The OS-native splash covers this brief, invisible work.
 async function start(): Promise<void> {
+  // i18n boots on the DEVICE locale, which is not necessarily the one the user
+  // picked in Settings. Kick the stored choice's chunk off first thing so it
+  // downloads alongside everything below, and await it before the mount — the
+  // first paint is then in the chosen language rather than flashing the device
+  // one and swapping the whole screen a moment later (issue #1606).
+  const uiLanguageReady = applyStoredAppLanguage(preferences)
+
   await hydrateRegions(preferences).catch((e) => {
     console.warn("[shruti] region hydration failed; using bundled defaults", e)
   })
@@ -350,10 +379,11 @@ async function start(): Promise<void> {
 
   // The boot locale's message chunk was requested when i18n's module first
   // evaluated, so by now it has been downloading alongside everything above.
-  // Awaiting it here means the first paint is already in the device language
-  // instead of flashing the English fallback.
-  await bootLocaleReady
-  app.mount("#app")
+  // Awaiting it here means the first paint is already in the right language
+  // instead of flashing the English fallback. Neither promise can reject —
+  // a locale that fails to load leaves the app in `en` and mounts anyway.
+  await Promise.all([bootLocaleReady, uiLanguageReady])
+  mountApp()
 
   // Fire-and-forget post-mount work. Failures must not block startup.
   void usePurchasesStore()
@@ -367,4 +397,10 @@ async function start(): Promise<void> {
     .catch((e) => console.warn("library landing preload failed", e))
 }
 
-void start()
+// Nothing in `start()` is allowed to cost the user the app. Whatever blew up,
+// mount anyway: a degraded Home beats the blank WebView a bare `void start()`
+// left behind when an await rejected (issue #1605).
+void start().catch((e) => {
+  reportError("startup", e)
+  mountApp()
+})

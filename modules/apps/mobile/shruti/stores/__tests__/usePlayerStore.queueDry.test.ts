@@ -31,6 +31,7 @@ const audioPlayer = {
   setPlaybackRate: vi.fn(async () => {}),
   setProgressInterval: vi.fn(async () => {}),
   onProgress: vi.fn(() => () => {}),
+  onPositionJump: vi.fn(() => () => {}),
   setQueue: vi.fn(async () => {}),
   appendToQueue: vi.fn(async () => {}),
   getQueueState: vi.fn(async () => ({ ...queueState })),

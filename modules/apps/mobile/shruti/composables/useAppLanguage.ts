@@ -1,6 +1,22 @@
 import { type Ref } from "vue"
 import { useConfig } from "@shruti/composables/useConfig.js"
-import { detectLocale } from "@shruti/i18n/index.js"
+import {
+  currentLocale,
+  detectLocale,
+  setLocale,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from "@shruti/i18n/index.js"
+
+/** Preferences key the UI-language setting is persisted under. */
+export const APP_LANGUAGE_KEY = "settings.appLanguage"
+
+/** The subset of the preferences port these helpers need. `main.ts` reaches
+ *  for them before the composition root's config binder exists. */
+interface PreferencesLike {
+  get(key: string): Promise<string | null>
+  set(key: string, value: string): Promise<void>
+}
 
 /**
  * The app-wide UI language setting (`settings.appLanguage`). One
@@ -13,5 +29,43 @@ import { detectLocale } from "@shruti/i18n/index.js"
  * propagate reactively.
  */
 export function useAppLanguage(): Ref<string> {
-  return useConfig<string>("settings.appLanguage", detectLocale())
+  return useConfig<string>(APP_LANGUAGE_KEY, detectLocale())
+}
+
+/** The persisted UI-language choice, or null when the user never made one.
+ *  `useConfig` JSON-encodes its values, so the stored payload is `"ru"`. */
+export async function readStoredAppLanguage(
+  preferences: PreferencesLike
+): Promise<SupportedLocale | null> {
+  const raw = await preferences.get(APP_LANGUAGE_KEY).catch(() => null)
+  if (raw === null) return null
+  let value: unknown = raw
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    // Not JSON — an older build wrote the bare code. Take it as-is.
+  }
+  return (SUPPORTED_LOCALES as readonly string[]).includes(value as string)
+    ? (value as SupportedLocale)
+    : null
+}
+
+/**
+ * Apply the persisted UI language before the first paint.
+ *
+ * The i18n module boots on the DEVICE locale, which is not necessarily the one
+ * the user chose — a phone in English with Русский selected used to mount fully
+ * in English and only swap once `useConfig` had hydrated, a whole-screen flash
+ * (issue #1606). Reading the preference during startup costs one more
+ * `preferences.get` and removes it.
+ *
+ * A stored locale whose chunk cannot be loaded is rewritten to whatever the UI
+ * actually ended up in, so the picker can't keep claiming a language nothing on
+ * screen is written in. Never rejects.
+ */
+export async function applyStoredAppLanguage(preferences: PreferencesLike): Promise<void> {
+  const stored = await readStoredAppLanguage(preferences)
+  if (stored === null || stored === currentLocale()) return
+  if ((await setLocale(stored)) !== "failed") return
+  await preferences.set(APP_LANGUAGE_KEY, JSON.stringify(currentLocale())).catch(() => undefined)
 }

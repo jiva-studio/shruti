@@ -33,10 +33,17 @@ async function applySchema(db: IDatabase): Promise<void> {
     id TEXT PRIMARY KEY, track_id TEXT NOT NULL, added_at INTEGER NOT NULL,
     archived_at INTEGER, collection_id TEXT
   )`)
+  // `source_key` is local-only (migration 025) — it never travels on the wire,
+  // so an apply must leave it alone.
   await db.execute(`CREATE TABLE listening_sessions (
     id TEXT PRIMARY KEY, item_id TEXT NOT NULL, started_at INTEGER NOT NULL,
-    ended_at INTEGER NOT NULL, from_position INTEGER NOT NULL, to_position INTEGER NOT NULL
+    ended_at INTEGER NOT NULL, from_position INTEGER NOT NULL, to_position INTEGER NOT NULL,
+    source_key TEXT
   )`)
+  await db.execute(
+    `CREATE UNIQUE INDEX idx_listening_sessions_source_key
+       ON listening_sessions(source_key)`
+  )
   await db.execute(`CREATE TABLE outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT, collection TEXT NOT NULL, doc_id TEXT NOT NULL,
     op TEXT NOT NULL, data TEXT, hlc TEXT NOT NULL, base_hlc TEXT,
@@ -221,5 +228,57 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
       "SELECT item_id FROM listening_sessions WHERE id = 'ls_remote'"
     )
     expect(rows[0]?.item_id).toBe("pl_other_device")
+  })
+
+  it("keeps the local-only source_key when the server echoes a session back", async () => {
+    // The device journaled this session from the native queue log, pushed it,
+    // and the next pull hands it straight back — the server echoes a device its
+    // own writes. A DELETE+INSERT apply would null `source_key` here and
+    // disarm the replay guard for the row (#1597).
+    await db.execute(
+      `INSERT INTO listening_sessions
+         (id, item_id, started_at, ended_at, from_position, to_position, source_key)
+       VALUES ('ls_own', 'pl_local', 10, 20, 0, 30, 'queue:7:pl_local:1784000000000')`
+    )
+
+    await apply.applyRemote(
+      "listening_sessions",
+      upsertDoc("ls_own", HLC_A, {
+        id: "ls_own",
+        item_id: "pl_local",
+        track_id: null,
+        started_at: 10,
+        ended_at: 25,
+        from_position: 0,
+        to_position: 40,
+      }),
+      HLC_A
+    )
+
+    const [row] = await db.query<{ source_key: string | null; to_position: number }>(
+      "SELECT source_key, to_position FROM listening_sessions WHERE id = 'ls_own'"
+    )
+    expect(row?.to_position).toBe(40)
+    expect(row?.source_key).toBe("queue:7:pl_local:1784000000000")
+  })
+
+  it("forgets only the named documents' server pointers (#1627)", async () => {
+    await apply.recordServerHlc("notes", "note-1", HLC_A)
+    await apply.recordServerHlc("notes", "note-2", HLC_A)
+    await apply.recordServerHlc("playlist_items", "note-1", HLC_B)
+
+    await apply.forgetDocHlcs([{ collection: "notes", docId: "note-1" }])
+
+    expect(await apply.lastServerHlc("notes", "note-1")).toBeNull()
+    expect(await apply.lastServerHlc("notes", "note-2")).toBe(HLC_A)
+    expect(await apply.lastServerHlc("playlist_items", "note-1")).toBe(HLC_B)
+  })
+
+  it("forgets nothing when handed nothing", async () => {
+    await apply.recordServerHlc("notes", "note-1", HLC_A)
+
+    await apply.forgetDocHlcs([])
+
+    expect(await apply.lastServerHlc("notes", "note-1")).toBe(HLC_A)
   })
 })

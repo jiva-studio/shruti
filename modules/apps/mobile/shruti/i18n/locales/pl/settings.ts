@@ -163,6 +163,7 @@ export default {
   appLanguage: {
     title: "Język",
     description: "Język interfejsu",
+    loadFailedToast: "Nie udało się wczytać tego języka. Spróbuj ponownie.",
   },
 
   chatLanguage: {
@@ -212,6 +213,7 @@ export default {
       "10h": "10 godzin",
     },
     archive: {
+      off: "Nigdy",
       immediate: "Natychmiast",
       _8h: "Po 8 godzinach",
       _1d: "Po 1 dniu",

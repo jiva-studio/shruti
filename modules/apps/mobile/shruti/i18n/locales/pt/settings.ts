@@ -162,6 +162,7 @@ export default {
   appLanguage: {
     title: "Idioma",
     description: "Idioma da interface",
+    loadFailedToast: "Não foi possível carregar esse idioma. Tente novamente.",
   },
 
   chatLanguage: {
@@ -212,6 +213,7 @@ export default {
       "10h": "10 horas",
     },
     archive: {
+      off: "Nunca",
       immediate: "Imediatamente",
       _8h: "Após 8 horas",
       _1d: "Após 1 dia",

@@ -80,8 +80,8 @@ type Deps struct {
 	// Glossary, when set, injects canonical Sanskrit/proper-noun hints into the
 	// LLM review (same dictionary as the corpus tool). Optional.
 	Glossary glossaryport.Matcher
-	// JobTimeout bounds one Process call so a hung stage can't wedge the
-	// single-goroutine consumer indefinitely. 0 disables the deadline.
+	// JobTimeout bounds the work stages of one Process call so a hung stage can't
+	// wedge the single-goroutine consumer indefinitely. 0 disables the deadline.
 	JobTimeout time.Duration
 }
 
@@ -108,31 +108,35 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		return nil // unparseable; ack to drop it
 	}
 
-	// Bound the whole pipeline: a hung stage (e.g. a stalled yt-dlp behind a
-	// proxy) would otherwise block the single-goroutine consumer forever. On
-	// timeout the stage's ctx-aware call fails, the job dead-letters/retries
-	// normally, and the consumer moves on.
+	// Bound the WORK stages: a hung stage (e.g. a stalled yt-dlp behind a proxy)
+	// would otherwise block the single-goroutine consumer forever. The deadline
+	// lives in its own context — the terminal result is published on the parent
+	// (see done), because a run that trips this deadline must still be able to
+	// say so. Publishing on the expired context would fail, leave the entry
+	// unacked, and XAUTOCLAIM would re-dispatch it forever without the
+	// orchestrator ever counting an attempt.
+	workCtx := ctx
 	if s.d.JobTimeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.d.JobTimeout)
+		workCtx, cancel = context.WithTimeout(ctx, s.d.JobTimeout)
 		defer cancel()
 	}
 
 	// op=translate is a lightweight run against an already-stored transcript — no
 	// fetch/transcribe. Everything below is the ingest pipeline.
 	if cmd.Op == "translate" {
-		return s.processTranslate(ctx, cmd)
+		return s.processTranslate(ctx, workCtx, cmd)
 	}
 
 	// Every line for this message carries job_id + attempt, so one ingest is a
 	// single LogQL filter across the whole pipeline.
 	lg := slog.With("job_id", cmd.JobID, "request_id", cmd.RequestID, "attempt", cmd.Attempt)
 	started := time.Now()
-	lg.InfoContext(ctx, "ingest_started", "url", cmd.URL)
+	lg.InfoContext(workCtx, "ingest_started", "url", cmd.URL)
 
 	// Best-effort heartbeat: moves the orchestrator's job queued → running, and
 	// reports the first stage (downloading) for granular status.
-	s.progress(ctx, cmd, ingest.StageDownloading)
+	s.progress(workCtx, cmd, ingest.StageDownloading)
 
 	stage := time.Now()
 	// Forward download percent as heartbeats. Throttle to whole-number steps of
@@ -144,29 +148,29 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	onProgress := func(pct int) {
 		if b := pct / progressStep; b > lastBucket {
 			lastBucket = b
-			s.progressPct(ctx, cmd, ingest.StageDownloading, pct)
+			s.progressPct(workCtx, cmd, ingest.StageDownloading, pct)
 		}
 	}
-	localPath, hash, err := s.d.Fetcher.Fetch(ctx, cmd.URL, onProgress)
+	localPath, hash, err := s.d.Fetcher.Fetch(workCtx, cmd.URL, onProgress)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("fetch: %w", err))
 	}
 	defer os.RemoveAll(filepath.Dir(localPath))
 	lg = lg.With("track_id", hash) // known from here on — carry it forward
-	lg.InfoContext(ctx, "ingest_fetched", "duration_ms", ms(stage))
+	lg.InfoContext(workCtx, "ingest_fetched", "duration_ms", ms(stage))
 
 	audio, err := os.ReadFile(localPath)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("read audio: %w", err))
 	}
 
-	s.progress(ctx, cmd, ingest.StageTranscribing)
+	s.progress(workCtx, cmd, ingest.StageTranscribing)
 	stage = time.Now()
-	raw, _, err := s.d.Transcriber.Transcribe(ctx, localPath)
+	raw, _, err := s.d.Transcriber.Transcribe(workCtx, localPath)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("transcribe: %w", err))
 	}
-	lg.InfoContext(ctx, "ingest_transcribed",
+	lg.InfoContext(workCtx, "ingest_transcribed",
 		"duration_ms", ms(stage), "lang", raw.Language, "audio_bytes", len(audio))
 	raw.TrackId = hash
 	if raw.Language == "" {
@@ -176,13 +180,13 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// Source metadata fills what the request didn't carry: the source's own
 	// title as a fallback when no hint was passed (a direct URL add), the
 	// uploader/channel as an author, and the publish date as a date fallback.
-	info := s.probeSource(ctx, lg, cmd.URL)
+	info := s.probeSource(workCtx, lg, cmd.URL)
 	// Extract structured metadata from the best title we have — the caller's hint
 	// if any, else the source's own title — so a direct URL add still gets a real
 	// title, not "Untitled". Best-effort: the audio + transcript are already
 	// produced, so a missing key or an LLM hiccup must NOT fail the ingest.
 	rawTitle := firstNonEmpty(cmd.Title, info.Title)
-	ex := s.extract(ctx, lg, rawTitle)
+	ex := s.extract(workCtx, lg, rawTitle)
 	draft := ingest.TrackDraft{
 		TitleRaw:    firstNonEmpty(ex.Title, rawTitle),
 		AuthorRaw:   firstNonEmpty(ex.AuthorRaw, cmd.Author, info.Uploader),
@@ -194,7 +198,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	} else if d, ok := parseYtdlpDate(info.UploadDate); ok {
 		draft.DateRaw = d
 	}
-	if draft, err = s.d.Reviewer.Review(ctx, draft); err != nil {
+	if draft, err = s.d.Reviewer.Review(workCtx, draft); err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("review: %w", err))
 	}
 
@@ -202,16 +206,16 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 	// transcripts/<lang>.json, and generate that language's overview — a
 	// lecturer+translator recording yields one variant per language; a
 	// single-language track yields exactly one.
-	s.progress(ctx, cmd, ingest.StageReviewing)
-	variants, primaryLang, err := s.reviewSplit(ctx, lg, hash, raw, draft.Lang, draft.TitleRaw, cmd.TranslateLangs)
+	s.progress(workCtx, cmd, ingest.StageReviewing)
+	variants, primaryLang, err := s.reviewSplit(workCtx, lg, hash, raw, draft.Lang, draft.TitleRaw, cmd.TranslateLangs)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, err)
 	}
 
-	s.progress(ctx, cmd, ingest.StageStoring)
+	s.progress(workCtx, cmd, ingest.StageStoring)
 	stage = time.Now()
 	aKey := audioKey(hash)
-	if err := s.d.Blob.Put(ctx, aKey, audio, "audio/mpeg"); err != nil {
+	if err := s.d.Blob.Put(workCtx, aKey, audio, "audio/mpeg"); err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("put audio: %w", err))
 	}
 
@@ -221,7 +225,7 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 		verify = append(verify, v.TranscriptKey)
 	}
 	for _, k := range verify {
-		exists, err := s.d.Blob.Exists(ctx, k)
+		exists, err := s.d.Blob.Exists(workCtx, k)
 		if err != nil {
 			return s.fail(ctx, lg, cmd, fmt.Errorf("verify %s: %w", k, err))
 		}
@@ -229,15 +233,15 @@ func (s *Service) Process(ctx context.Context, _ string, payload []byte) error {
 			return s.fail(ctx, lg, cmd, fmt.Errorf("verify %s: missing after put", k))
 		}
 	}
-	lg.InfoContext(ctx, "ingest_stored",
+	lg.InfoContext(workCtx, "ingest_stored",
 		"duration_ms", ms(stage), "languages", len(variants),
 		"primary_lang", primaryLang, "audio_key", aKey)
 
 	// Cover is best-effort: fetch the source thumbnail and store it under the
 	// public cover key. A miss just means the track has no art — never fatal.
-	coverKey := s.storeCover(ctx, lg, cmd.URL, hash)
+	coverKey := s.storeCover(workCtx, lg, cmd.URL, hash)
 
-	lg.InfoContext(ctx, "ingest_ready", "lang", primaryLang, "languages", len(variants), "total_ms", ms(started))
+	lg.InfoContext(workCtx, "ingest_ready", "lang", primaryLang, "languages", len(variants), "total_ms", ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:         cmd.JobID,
 		RequestID:     cmd.RequestID,
@@ -383,6 +387,9 @@ func (s *Service) appendTranslatedVariants(
 // Warn, while a retriable one means our own dependency misbehaved and logs at
 // Error. That keeps a corpus-wide "error rate" signal meaningful instead of
 // drowning it in bad links.
+//
+// ctx is the parent, not the work context — a job that failed on its own
+// deadline still has to be able to say so.
 func (s *Service) fail(ctx context.Context, lg *slog.Logger, cmd ingest.WorkCommand, cause error) error {
 	retry := retriable(cause)
 	lvl := slog.LevelError
@@ -406,11 +413,13 @@ func (s *Service) fail(ctx context.Context, lg *slog.Logger, cmd ingest.WorkComm
 // transcript, translate it in full (blocks + overview + title), store it as a new
 // variant, and publish a ready result carrying just that variant for the
 // orchestrator to merge into the track. No fetch/transcribe.
-func (s *Service) processTranslate(ctx context.Context, cmd ingest.WorkCommand) error {
+//
+// ctx is the parent (terminal publish); workCtx carries the job deadline.
+func (s *Service) processTranslate(ctx, workCtx context.Context, cmd ingest.WorkCommand) error {
 	lg := slog.With("run_id", cmd.JobID, "op", "translate", "membership_id", cmd.MembershipID,
 		"track", cmd.Track, "source", cmd.SourceLang, "target", cmd.TargetLang)
 	started := time.Now()
-	lg.InfoContext(ctx, "translate_started")
+	lg.InfoContext(workCtx, "translate_started")
 
 	if s.d.Translator == nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("translate unavailable: no translator: %w", ingest.ErrPermanent))
@@ -418,9 +427,9 @@ func (s *Service) processTranslate(ctx context.Context, cmd ingest.WorkCommand) 
 	if cmd.Track == "" || cmd.SourceLang == "" || cmd.TargetLang == "" {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: track/source/target required: %w", ingest.ErrPermanent))
 	}
-	s.progress(ctx, cmd, ingest.StageTranslating)
+	s.progress(workCtx, cmd, ingest.StageTranslating)
 
-	body, err := s.d.Blob.Get(ctx, transcriptKey(cmd.Track, cmd.SourceLang))
+	body, err := s.d.Blob.Get(workCtx, transcriptKey(cmd.Track, cmd.SourceLang))
 	if err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: read source transcript: %w", err))
 	}
@@ -429,16 +438,16 @@ func (s *Service) processTranslate(ctx context.Context, cmd ingest.WorkCommand) 
 		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: parse source transcript: %w: %w", err, ingest.ErrPermanent))
 	}
 
-	translated, err := pipelinetranslate.Reviewed(ctx, s.d.Translator, src, cmd.SourceLang, cmd.TargetLang)
+	translated, err := pipelinetranslate.Reviewed(workCtx, s.d.Translator, src, cmd.SourceLang, cmd.TargetLang)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: %w", err))
 	}
-	v, err := s.storeVariant(ctx, lg, cmd.Track, cmd.TargetLang, translated, cmd.Title, cmd.SourceLang)
+	v, err := s.storeVariant(workCtx, lg, cmd.Track, cmd.TargetLang, translated, cmd.Title, cmd.SourceLang)
 	if err != nil {
 		return s.fail(ctx, lg, cmd, fmt.Errorf("translate: store variant: %w", err))
 	}
 
-	lg.InfoContext(ctx, "translate_ready", "total_ms", ms(started))
+	lg.InfoContext(workCtx, "translate_ready", "total_ms", ms(started))
 	return s.done(ctx, ingest.Result{
 		JobID:        cmd.JobID,
 		RequestID:    cmd.RequestID,
@@ -455,9 +464,17 @@ func (s *Service) processTranslate(ctx context.Context, cmd ingest.WorkCommand) 
 // ms reports elapsed milliseconds for a stage timing attribute.
 func ms(since time.Time) int64 { return time.Since(since).Milliseconds() }
 
+// publishTimeout bounds one terminal publish. It is deliberately independent of
+// JobTimeout: the outcome most in need of announcing is the one that ran out of
+// job time.
+const publishTimeout = 30 * time.Second
+
 // done publishes a TERMINAL result and propagates the publish error: the worker
 // acks only once the outcome is durable (a publish fault → redelivery re-runs).
+// ctx must be the parent, never the deadline-carrying work context.
 func (s *Service) done(ctx context.Context, r ingest.Result) error {
+	ctx, cancel := context.WithTimeout(ctx, publishTimeout)
+	defer cancel()
 	return s.d.Results.Publish(ctx, r)
 }
 

@@ -12,6 +12,13 @@ function msToSec(ms: number): number {
 }
 
 /**
+ * Wall-clock slack (seconds) on the closing edge of a run window: a foreground
+ * skip closes its live session a beat AFTER the instant native stamped on the
+ * transition, so an exact bound would miss the very row it must clamp against.
+ */
+const RUN_WINDOW_SLACK_SEC = 60
+
+/**
  * Durable identity of one native transition. All three components are assigned
  * once, natively, and re-presented verbatim on every replay of the journal, so
  * the same transition always yields the same key while two genuine transitions
@@ -19,6 +26,47 @@ function msToSec(ms: number): number {
  */
 function sourceKey(e: AudioQueueTransition): string {
   return `queue:${e.seq}:${e.finishedItemId}:${e.at}`
+}
+
+/**
+ * The wall-clock window the playback run described by `e` occupied: `fromAt`
+ * is the instant it began, `at` the instant it ended.
+ *
+ * This is what scopes both guards below to ONE listen. A live row written
+ * DURING this run closed inside the window, while an earlier listen of the
+ * same lecture — yesterday, or weeks ago — did not, so a re-listen is still
+ * credited in full.
+ *
+ * `fromAt` is absent only for a journal entry an older build wrote and left
+ * pending across the upgrade; those fall back to the pre-#1656 ESTIMATE, which
+ * stands the audio span in for the wall-clock one and so assumes 1× playback.
+ * Its error is bounded either way, and either way needs a second listen of the
+ * same lecture close in time:
+ *  - too narrow (a long mid-run pause, or playback below 1×) — the live row
+ *    falls outside and its prefix is counted twice;
+ *  - too wide (playback above 1×, which compresses the run to `span / rate`) —
+ *    a genuinely separate listen that ended inside the extra reach-back can
+ *    clamp, under-crediting an immediate back-to-back replay.
+ * A stamped entry has neither problem: the rate assumption disappears.
+ */
+function runWindow(e: AudioQueueTransition): { fromSec: number; toSec: number } {
+  const endSec = Math.floor(e.at / 1000)
+  const toSec = endSec + RUN_WINDOW_SLACK_SEC
+  const stampedSec =
+    typeof e.fromAt === "number" && Number.isFinite(e.fromAt) && e.fromAt > 0
+      ? Math.floor(e.fromAt / 1000)
+      : null
+  // A stamp later than the end is a wall-clock that moved under us (NTP, a
+  // manual change) — meaningless as a lower bound, so estimate instead.
+  if (stampedSec !== null && stampedSec <= endSec) return { fromSec: stampedSec, toSec }
+  const spanSec = Math.max(0, msToSec(e.finishedAtMs) - msToSec(e.fromPositionMs))
+  return { fromSec: endSec - spanSec, toSec }
+}
+
+/** Whether an epoch-ms instant falls inside a run window. */
+function within(atMs: number, w: { fromSec: number; toSec: number }): boolean {
+  const sec = Math.floor(atMs / 1000)
+  return sec >= w.fromSec && sec <= w.toSec
 }
 
 export interface PlayerQueueReconcileReturn {
@@ -54,7 +102,10 @@ export interface PlayerQueueReconcileReturn {
  *    for an item the live `usePlayerSession.applyStatus` path already journaled
  *    in the foreground. It is a foreground-echo filter, not a replay guard: the
  *    map is empty on a cold start, drops completed items once auto-archive
- *    moves them, and only covers the first page of active items.
+ *    moves them, and only covers the first page of active items. It fires only
+ *    when the recorded completion falls inside {@link runWindow} — the map is
+ *    durable, so suppressing on its mere presence would drop every later
+ *    re-listen of an already-finished lecture (#1596).
  *
  * Ordering is write → persist watermark → ack. Acking first would make a failed
  * write a silently lost session; this way the batch is retried and the source
@@ -85,7 +136,10 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     // that peaks BELOW the watermark can only be that regression: rewind, and
     // let the per-transition source keys do the deduping.
     const seen = sorted[sorted.length - 1]!.seq < stored ? 0 : stored
-    let top = stored
+    // Seeded from `seen`, NOT `stored`: after a rewind a watermark left at the
+    // old high would ack a range native never drained and would never come back
+    // down, repeating for the life of the install (#1597).
+    let top = seen
 
     for (const e of sorted) {
       top = Math.max(top, e.seq)
@@ -95,11 +149,16 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
       // skip or a playback error finished it part-way.
       const completed = e.reason === "auto"
 
-      // Skip items the live foreground path already journaled (the
-      // applyStatus completion branch sets completedAt). Background
-      // completions have no completedAt yet, so they fall through.
-      const alreadyDone = completed && playlist.getCompletedAt(e.finishedItemId) != null
-      if (alreadyDone) continue
+      const window = runWindow(e)
+
+      // Skip an item the live foreground path already journaled for THIS run
+      // (the applyStatus completion branch sets completedAt). Scoped to the
+      // run's window, never merely "has ever been completed": the map is
+      // DB-derived and durable, so an existence test drops every later
+      // re-listen of a finished lecture forever (#1596). Outside the window
+      // this falls through to the `source_key` guard and the clamp below.
+      const completedAtMs = completed ? playlist.getCompletedAt(e.finishedItemId) : null
+      if (completedAtMs !== null && within(completedAtMs, window)) continue
 
       // False only for a transition whose session is already on disk — a
       // replay. A write that THROWS still patches progress below, as before:
@@ -109,7 +168,9 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
         const id = await repo.forceStartOnce({
           itemId: e.finishedItemId,
           position: msToSec(e.fromPositionMs),
+          endPosition: msToSec(e.finishedAtMs),
           sourceKey: sourceKey(e),
+          runWindow: window,
         })
         if (id === null) firstTime = false
         // `ended_at` ends up as "now" rather than the original `e.at` —

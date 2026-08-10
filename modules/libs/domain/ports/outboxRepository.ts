@@ -1,4 +1,4 @@
-import type { SyncOp } from "../sync/types.js"
+import type { SyncDocRef, SyncOp } from "../sync/types.js"
 
 /**
  * A pending local change read out of the `outbox` for push, in the clean
@@ -18,8 +18,13 @@ export interface OutboxEntry {
   readonly data: unknown | null
   /** HLC stamped on this change. */
   readonly hlc: string
-  /** Last-seen server HLC the change derived from; `null` until the engine
-   *  reconciles it (see {@link ISyncApplyRepository.lastServerHlc}). */
+  /**
+   * Last-seen server HLC the change derived from; `null` until the engine
+   * reconciles it (see `ISyncApplyRepository.lastServerHlc`). An explicit `""`
+   * is stronger than "unknown": it asserts the change descends from nothing the
+   * pushing ACCOUNT has, so push sends an empty base rather than the doc's
+   * recorded master.
+   */
   readonly baseHlc: string | null
 }
 
@@ -65,6 +70,26 @@ export interface OutboxScope {
 }
 
 /**
+ * Which rows a re-attribution moves from a superseded anonymous identity to
+ * the account that replaced it (#1627). The two arms mirror {@link OutboxScope}
+ * — they select exactly the rows the outgoing identity was allowed to push —
+ * so the handover carries its journal and nothing else.
+ */
+export interface OutboxReattribution {
+  /** The anonymous account being left behind. */
+  readonly fromOwnerId: string
+  /** The account signing in. */
+  readonly toOwnerId: string
+  /**
+   * Unowned rows at or below this id were retired by an EARLIER identity
+   * change and belong to whoever came before the anonymous one; they stay
+   * behind. `0` on a device that has never retired a journal, where every
+   * unstamped row is the anonymous owner's.
+   */
+  readonly unownedAfterId: number
+}
+
+/**
  * Read/write port over the local `outbox` journal (013 migration), consumed
  * by the sync engine's push path. Reads pending (unsent) changes, marks them
  * acknowledged once the server applies them, and appends re-merged changes.
@@ -86,6 +111,23 @@ export interface IOutboxRepository {
 
   /** Append a new pending change (used to re-journal a conflict re-merge). */
   append(entry: NewOutboxEntry): Promise<void>
+
+  /**
+   * Move an anonymous identity's journal to the account that signed in on top
+   * of it, and un-send it so the push replays it under the new owner (#1627).
+   * Returns the distinct documents it touched — their `sync_doc_hlc` pointers
+   * name the anonymous account's masters and have to be forgotten, or the
+   * replay would push against a base the new account never had.
+   *
+   * Each row keeps its original HLC: the replay competes with the target
+   * account's own versions on the real write order, so re-stamping it "now"
+   * (what a re-run of the first-sync backfill would do) is exactly what would
+   * let a stale local copy silently beat a newer one from another device.
+   *
+   * Idempotent — a second call finds no rows left in scope, which is what
+   * makes an interrupted handover safe to resume.
+   */
+  reattribute(scope: OutboxReattribution): Promise<readonly SyncDocRef[]>
 
   /**
    * The highest HLC ever journaled, or `null` when the outbox is empty.

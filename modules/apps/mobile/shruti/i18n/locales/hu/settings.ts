@@ -165,6 +165,7 @@ export default {
   appLanguage: {
     title: "Nyelv",
     description: "A felület nyelve",
+    loadFailedToast: "Ezt a nyelvet nem sikerült betölteni. Próbáld újra.",
   },
 
   chatLanguage: {
@@ -214,6 +215,7 @@ export default {
       "10h": "10 óra",
     },
     archive: {
+      off: "Soha",
       immediate: "Azonnal",
       _8h: "8 óra után",
       _1d: "1 nap után",

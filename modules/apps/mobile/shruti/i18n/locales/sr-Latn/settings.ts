@@ -176,6 +176,7 @@ export default {
   appLanguage: {
     title: "Jezik",
     description: "Jezik interfejsa",
+    loadFailedToast: "Nije moguće učitati taj jezik. Pokušajte ponovo.",
   },
 
   downloadLimit: {
@@ -210,6 +211,7 @@ export default {
       "10h": "10 sati",
     },
     archive: {
+      off: "Nikada",
       immediate: "Odmah",
       _8h: "Posle 8 sati",
       _1d: "Posle 1 dana",
