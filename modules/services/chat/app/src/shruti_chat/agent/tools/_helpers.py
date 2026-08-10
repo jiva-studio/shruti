@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Any
 
 from shruti_chat.domain.user_context import as_aware
@@ -38,12 +38,17 @@ def ok_or_no_ctx(items: list, has_ctx: bool) -> dict[str, Any] | list:
     return items
 
 
-def parse_iso(value: str | None, *, field: str) -> datetime | None:
+def parse_iso(
+    value: str | None, *, field: str, tz: tzinfo | None = None,
+) -> datetime | None:
     """Parse an LLM-written bound, always tz-aware.
 
-    The tool schemas ask for an offset but nothing enforces one, and
-    models routinely emit a bare date. An offset-less value is read as
-    UTC so it can be compared with `last_played_at`.
+    The tool schemas ask for the same offset as `user_context.now` but
+    nothing enforces one, and models routinely emit a bare date. Pass
+    the user's `tz` so an offset-less bound is read as device-local —
+    it is what the model meant, and the alternative (UTC) silently
+    slides the window by the user's offset: at UTC+5, «this week»
+    starting Monday 00:00 would drop everything played before 05:00.
     """
     if value is None or value == "":
         return None
@@ -51,4 +56,4 @@ def parse_iso(value: str | None, *, field: str) -> datetime | None:
         dt = datetime.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(f"{field} must be ISO-8601 (got {value!r})") from exc
-    return as_aware(dt)
+    return as_aware(dt, tz)
