@@ -44,6 +44,7 @@
   * [Ports](repos/shruti/domain/ports.md)
   * [Use cases](repos/shruti/api/use-cases.md)
   * [UI components](repos/shruti/components/)
+  * [Shared UI library](repos/shruti/components/lib-ui.md)
 
 * **Database**
   * [Overview](repos/shruti/db/)

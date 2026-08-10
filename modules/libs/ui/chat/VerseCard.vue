@@ -15,7 +15,9 @@
         <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
       </svg>
       <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-        <path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" />
+        <path
+          d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z"
+        />
       </svg>
     </button>
     <header class="verse-card-addr">{{ displayAddr }}</header>
@@ -45,7 +47,7 @@
 import { computed, ref } from "vue"
 // `showOriginal` toggles the verse translation between the active-locale
 // machine translation and the original English.
-import type { ChatVerseBody } from "@lib/domain/chatMessage.js"
+import type { UiChatVerseBody } from "./types.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 import ScriptureChip from "./ScriptureChip.vue"
@@ -57,7 +59,7 @@ const props = withDefaults(
     tokens: string
     caption?: string
     /** Verse body from the message's `verses` map; absent ⇒ chip fallback. */
-    body?: ChatVerseBody
+    body?: UiChatVerseBody
     /** Active UI locale. Only picks the translation when the body carries no
      *  `lang` of its own (a body streamed by an older server). */
     locale: string
