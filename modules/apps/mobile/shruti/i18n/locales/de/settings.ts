@@ -213,6 +213,7 @@ export default {
       "10h": "10 Stunden",
     },
     archive: {
+      off: "Nie",
       immediate: "Sofort",
       _8h: "Nach 8 Stunden",
       _1d: "Nach 1 Tag",

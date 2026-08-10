@@ -25,6 +25,7 @@ export default {
     title: "Biblioteka",
     empty: "Spróbuj innych słów albo zdejmij któryś filtr.",
     mine: "Własna biblioteka",
+    failed: "Nie udało się przeszukać biblioteki. Spróbuj ponownie.",
   },
   smartLibrary: {
     title: "Inteligentna biblioteka",

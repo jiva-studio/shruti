@@ -15,14 +15,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * composable's module graph loads.
  */
 const ctx = vi.hoisted(() => ({
-  auth: null as { signedIn: boolean; userId: string | null } | null,
+  auth: null as { signedIn: boolean; userId: string | null; anonymous: boolean } | null,
   shruti: null as unknown,
+  adoptAnonymousChanges: null as unknown as ReturnType<typeof vi.fn>,
   backfillLocal: null as unknown as ReturnType<typeof vi.fn>,
   runSync: null as unknown as ReturnType<typeof vi.fn>,
   resumeCb: null as null | ((s: { isActive: boolean }) => void),
 }))
 
 vi.mock("@usecases/sync/index.js", () => ({
+  adoptAnonymousChanges: (...a: unknown[]) =>
+    (ctx.adoptAnonymousChanges as unknown as (...x: unknown[]) => unknown)(...a),
   backfillLocal: (...a: unknown[]) =>
     (ctx.backfillLocal as unknown as (...x: unknown[]) => unknown)(...a),
   runSync: (...a: unknown[]) => (ctx.runSync as unknown as (...x: unknown[]) => unknown)(...a),
@@ -57,9 +60,10 @@ vi.mock("@capacitor/app", () => ({
 
 import { useSyncEngine } from "../useSyncEngine.js"
 
-/** Drain the microtask queue so the void-ed async `sync()` cycles settle. */
+/** Drain the microtask queue so the void-ed async `sync()` cycles settle. The
+ *  count only has to exceed the awaits one cycle chains through. */
 async function flush(): Promise<void> {
-  for (let i = 0; i < 20; i++) await Promise.resolve()
+  for (let i = 0; i < 60; i++) await Promise.resolve()
 }
 
 /** Mount a throwaway component whose only job is to run the composable, so its
@@ -79,8 +83,9 @@ let prefs: Map<string, string>
 
 beforeEach(() => {
   prefs = new Map()
-  ctx.auth = reactive({ signedIn: false, userId: null })
+  ctx.auth = reactive({ signedIn: false, userId: null, anonymous: true })
   ctx.resumeCb = null
+  ctx.adoptAnonymousChanges = vi.fn(async () => ({ docs: 3 }))
   ctx.backfillLocal = vi.fn(async () => ({ enqueued: 2, collections: ["notes"] }))
   ctx.runSync = vi.fn(async () => ({ skipped: false, pulled: 0, pushed: 0, conflicts: 0 }))
   ctx.shruti = {
@@ -306,6 +311,7 @@ describe("useSyncEngine — cursor-ownership reset", () => {
     const app = mountEngine()
     await flush()
     ctx.auth!.userId = "user-1"
+    ctx.auth!.anonymous = false
     ctx.auth!.signedIn = true
     await flush()
     expect(ctx.runSync).toHaveBeenCalledTimes(1)
@@ -357,5 +363,153 @@ describe("useSyncEngine — cursor-ownership reset", () => {
     expect(setPushedOutboxId).toHaveBeenCalledTimes(1)
     expect(ctx.runSync).toHaveBeenCalledTimes(2)
     app.unmount()
+  })
+})
+
+/**
+ * The anonymous → pre-existing-account transition (#1627). Sign-in keeps the
+ * anonymous id only when the human had no account yet; a returning one lands on
+ * a DIFFERENT id, and retiring the journal there strands the whole anonymous
+ * period on an account nobody can reach. The engine has to tell the two apart
+ * from the marker it wrote for the previous identity.
+ */
+describe("useSyncEngine — anonymous handover", () => {
+  let setPushedOutboxId: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    setPushedOutboxId = vi.fn(async () => {})
+    ;(ctx.shruti as { repositories: () => unknown }).repositories = () => ({
+      syncBackfill: {},
+      syncOutbox: { latestId: async () => 7 },
+      syncState: {
+        setPullCursor: async () => {},
+        setAckedSeq: async () => {},
+        setPushedOutboxId,
+        getPushedOutboxId: async () => 0,
+      },
+      syncApply: {},
+      unitOfWork: { run: (fn: () => unknown) => fn() },
+      libraryItems: { listAll: async () => [] },
+    })
+    prefs.set("sync.cursorOwner", "anon-1")
+    prefs.set("sync.cursorOwnerAnon", "1")
+  })
+
+  it("hands the anonymous journal over instead of retiring it", async () => {
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "user-b"
+    ctx.auth!.anonymous = false
+    ctx.auth!.signedIn = true
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).toHaveBeenCalledWith(
+      expect.objectContaining({ fromOwnerId: "anon-1", toOwnerId: "user-b", unownedAfterId: 0 })
+    )
+    // Retiring is the opposite of handing over — the watermark stays put.
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
+    // …and it lands before the cycle that pushes.
+    expect(ctx.adoptAnonymousChanges.mock.invocationCallOrder[0]).toBeLessThan(
+      ctx.runSync.mock.invocationCallOrder[0]
+    )
+    app.unmount()
+  })
+
+  it("leaves behind the rows an earlier identity change retired", async () => {
+    prefs.set("sync.retiredOutboxId", "4")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "user-b"
+    ctx.auth!.anonymous = false
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).toHaveBeenCalledWith(
+      expect.objectContaining({ unownedAfterId: 4 })
+    )
+    app.unmount()
+  })
+
+  it("retires, and records the floor, when the previous owner was signed in", async () => {
+    prefs.set("sync.cursorOwnerAnon", "0")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).not.toHaveBeenCalled()
+    expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    expect(prefs.get("sync.retiredOutboxId")).toBe("7")
+    app.unmount()
+  })
+
+  it("does not hand over when the previous owner's anonymity is unknown", async () => {
+    // A device upgrading from a build that never wrote the flag.
+    prefs.delete("sync.cursorOwnerAnon")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "user-b"
+    ctx.auth!.anonymous = false
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).not.toHaveBeenCalled()
+    expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    app.unmount()
+  })
+
+  it("records the anonymity of the identity it observes, not only on a change", async () => {
+    // Same device, same account, first cycle of the fixed build: stamping the
+    // flag now is what makes a LATER sign-in recognisable as a handover.
+    prefs.delete("sync.cursorOwnerAnon")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-1"
+    await flush()
+
+    expect(prefs.get("sync.cursorOwnerAnon")).toBe("1")
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it("treats an in-place upgrade as no transition at all", async () => {
+    // The third sign-in branch: the anonymous account itself is claimed, so the
+    // id the server knows never changes and nothing is stranded.
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-1"
+    ctx.auth!.anonymous = false
+    ctx.auth!.signedIn = true
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).not.toHaveBeenCalled()
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
+    expect(prefs.get("sync.cursorOwnerAnon")).toBe("0")
+    app.unmount()
+  })
+
+  it("re-runs the handover when the marker never landed", async () => {
+    const app = mountEngine()
+    await flush()
+    ctx.auth!.userId = "user-b"
+    ctx.auth!.anonymous = false
+    await flush()
+    expect(ctx.adoptAnonymousChanges).toHaveBeenCalledTimes(1)
+
+    // Killed between the transaction and the marker write, then relaunched:
+    // the transition is still visible, and the use case is a no-op the second
+    // time round.
+    prefs.set("sync.cursorOwner", "anon-1")
+    prefs.set("sync.cursorOwnerAnon", "1")
+    app.unmount()
+    const relaunched = mountEngine()
+    await flush()
+
+    expect(ctx.adoptAnonymousChanges).toHaveBeenCalledTimes(2)
+    relaunched.unmount()
   })
 })

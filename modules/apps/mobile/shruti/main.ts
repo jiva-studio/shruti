@@ -35,6 +35,7 @@ import router from "./router/index.js"
 import { bootLocaleReady, i18n } from "./i18n/index.js"
 import { initShruti } from "./shruti.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
+import { DATABASES_DIR } from "./services/contentDatabase.js"
 import { findRegion, getRegions, hydrateRegions } from "@shruti/services/regionsRegistry.js"
 import { readPreferredServerId } from "@shruti/services/preferredServer.js"
 import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
@@ -201,7 +202,9 @@ initShruti({
   persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
   databaseFetcher: isNative ? useDatabaseToFsFetcher() : useDatabaseToIndexedDbFetcher(),
   filesStorage: isNative
-    ? useCapacitorRemoteFilesStorage({ cacheDir: "shruti" })
+    ? // `databases/` holds the content catalog and the user DB, not cache —
+      // see `resetContentDatabase` for the path that is allowed to drop it.
+      useCapacitorRemoteFilesStorage({ cacheDir: "shruti", keep: [DATABASES_DIR] })
     : useWebRemoteFilesStorage({ cacheName: "shruti" }),
   preferences,
   // Capacitor plugin selects native vs its own web fallback automatically.

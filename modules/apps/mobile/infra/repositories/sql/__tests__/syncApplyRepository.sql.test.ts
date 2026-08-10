@@ -261,4 +261,24 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
     expect(row?.to_position).toBe(40)
     expect(row?.source_key).toBe("queue:7:pl_local:1784000000000")
   })
+
+  it("forgets only the named documents' server pointers (#1627)", async () => {
+    await apply.recordServerHlc("notes", "note-1", HLC_A)
+    await apply.recordServerHlc("notes", "note-2", HLC_A)
+    await apply.recordServerHlc("playlist_items", "note-1", HLC_B)
+
+    await apply.forgetDocHlcs([{ collection: "notes", docId: "note-1" }])
+
+    expect(await apply.lastServerHlc("notes", "note-1")).toBeNull()
+    expect(await apply.lastServerHlc("notes", "note-2")).toBe(HLC_A)
+    expect(await apply.lastServerHlc("playlist_items", "note-1")).toBe(HLC_B)
+  })
+
+  it("forgets nothing when handed nothing", async () => {
+    await apply.recordServerHlc("notes", "note-1", HLC_A)
+
+    await apply.forgetDocHlcs([])
+
+    expect(await apply.lastServerHlc("notes", "note-1")).toBe(HLC_A)
+  })
 })

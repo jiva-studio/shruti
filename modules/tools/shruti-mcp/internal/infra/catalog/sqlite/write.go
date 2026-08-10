@@ -177,7 +177,7 @@ func rebuildTrackSearchRows(ctx context.Context, tx *sql.Tx, trackID string) err
 	for _, title := range titles {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO tracks_search (content, track_id, kind)
-			VALUES (?, ?, 'title')`, title, trackID); err != nil {
+			VALUES (?, ?, 'title')`, foldSearchText(title), trackID); err != nil {
 			return fmt.Errorf("insert title row: %w", err)
 		}
 	}
@@ -286,7 +286,7 @@ func rebuildTrackSearchRows(ctx context.Context, tx *sql.Tx, trackID string) err
 	parts = append(parts, locNames...)
 	parts = append(parts, tagNames...)
 	parts = append(parts, dateParts...)
-	combined := strings.Join(parts, " ")
+	combined := foldSearchText(strings.Join(parts, " "))
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO tracks_search (content, track_id, kind)
 		VALUES (?, ?, 'combined')`, combined, trackID); err != nil {
