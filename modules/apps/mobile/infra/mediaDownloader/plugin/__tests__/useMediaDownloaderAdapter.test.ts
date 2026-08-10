@@ -22,10 +22,11 @@ const downloadMock = vi.fn(async ({ id }: { id: string }) => ({
   contentLength: 0,
 }))
 const cancelMock = vi.fn(async (o: { id: string; deletePartial?: boolean }) => void o)
-const resolveLocalUrlMock = vi.fn(async (_o: { fileKey: string }) => ({
-  localUrl: null as string | null,
-}))
-const deleteFileMock = vi.fn(async (_o: { fileKey: string }) => undefined)
+const resolveLocalUrlMock = vi.fn(async (o: { fileKey: string }) => {
+  void o
+  return { localUrl: null as string | null }
+})
+const deleteFileMock = vi.fn(async (o: { fileKey: string }) => void o)
 const listTasksMock = vi.fn(async () => ({ tasks: [] as { id: string }[] }))
 
 vi.mock("@shruti/plugin-media-downloader", () => ({
@@ -49,7 +50,6 @@ vi.mock("@shruti/plugin-media-downloader", () => ({
 }))
 
 import { useMediaDownloaderAdapter } from "../useMediaDownloaderAdapter.js"
-
 
 const URL_A = "https://cdn.example.com/public/tracks/t-1/audio/original.mp3"
 const URL_B = "https://other.example.com/public/tracks/t-1/audio/original.mp3"
