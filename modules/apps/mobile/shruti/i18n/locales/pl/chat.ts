@@ -270,6 +270,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Niedokończony wykład",
   proactiveSessionTitleInactivity: "Wróć do swojej praktyki",
   proactiveSessionTitleWeeklyDigest: "Twój tydzień",
+  proactiveSessionTitleDailyWisdom: "Codzienna mądrość",
+
+  proactiveDailyWisdomBody: "Myśl z wykładów na dziś:",
+
   proactiveInactivityWelcomeBody:
     "Minęło trochę czasu. Czekają na Ciebie świeże wykłady — otwórz bibliotekę i wróć tam, gdzie skończyłeś.",
 
@@ -330,6 +334,12 @@ export default {
   actionQueueNextTrackConfirm: "Dodaj",
   actionQueueNextTrackDone: "Dodano do biblioteki.",
   actionQueueNextTrackError: "Nie udało się dodać tego wykładu.",
+
+  actionAddToLibraryTitle: "Dodaj do mojej biblioteki",
+  actionAddToLibraryConfirm: "Dodaj do biblioteki",
+  actionAddToLibraryDone: "Dodano — trwa przetwarzanie.",
+  actionAddToLibraryError: "Nie udało się dodać tego wykładu.",
+  addByLinkCommand: "Dodaj wykład z tego linku: {url}",
 
   citationSaveAsNote: "Zapisz jako notatkę",
   citationOpenInStudio: "Otwórz w Studio",

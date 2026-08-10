@@ -273,6 +273,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Clase sin terminar",
   proactiveSessionTitleInactivity: "Retoma tu práctica",
   proactiveSessionTitleWeeklyDigest: "Tu semana",
+  proactiveSessionTitleDailyWisdom: "Sabiduría diaria",
+
+  proactiveDailyWisdomBody: "Un pensamiento de las clases para hoy:",
+
   proactiveInactivityWelcomeBody:
     "Hace tiempo que no nos vemos. Te esperan clases nuevas — abre tu biblioteca y continúa donde lo dejaste.",
 
@@ -333,6 +337,12 @@ export default {
   actionQueueNextTrackConfirm: "Añadir",
   actionQueueNextTrackDone: "Añadido a la biblioteca.",
   actionQueueNextTrackError: "No se pudo añadir esta clase.",
+
+  actionAddToLibraryTitle: "Añadir a mi biblioteca",
+  actionAddToLibraryConfirm: "Añadir a la biblioteca",
+  actionAddToLibraryDone: "Añadida — la estamos procesando.",
+  actionAddToLibraryError: "No se pudo añadir esta clase.",
+  addByLinkCommand: "Añadir clase con este enlace: {url}",
 
   citationSaveAsNote: "Guardar como nota",
   citationOpenInStudio: "Abrir en el Estudio",

@@ -65,7 +65,11 @@ import {
   useCapacitorDatabaseTransfer,
   useWebDatabaseTransfer,
 } from "@kit/infra"
-import { createFailoverClient } from "@kit/servers"
+import {
+  createRegionFailoverClient,
+  isReplayableAuthPath,
+  withCrossServerReplay,
+} from "./services/regionFailover.js"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
 import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
@@ -107,13 +111,13 @@ const preferences = useCapacitorPreferences()
 // promoted (which persists preferredServerId via the watcher in
 // initShruti). `getServers` is read per request, so a region list
 // refreshed from the remote config is picked up without rebuilding.
-const authHttp = createFailoverClient({
+const authHttp = createRegionFailoverClient({
   getServers: () => getRegions(),
   getPreferredId: () => useShruti().activeServer.value.id,
   pickBaseUrl: (s) => s.authBaseUrl,
   onPromoteFallback: (id) => useShruti().setActiveServerById(id),
 })
-const chatHttp = createFailoverClient({
+const chatHttp = createRegionFailoverClient({
   getServers: () => getRegions(),
   getPreferredId: () => useShruti().activeServer.value.id,
   pickBaseUrl: (s) => s.chatBaseUrl,
@@ -132,9 +136,17 @@ const withUnauthorizedRetry = createUnauthorizedRetry({
 })
 
 // Shared by the SSE turn stream and the proactive service — one decorated fn
-// rather than two, so both go through the same interceptor instance.
+// rather than two, so both go through the same interceptor instance. A turn
+// carries an `Idempotency-Key` and lands in one shared turn store whichever
+// edge accepts it, so it may be re-issued elsewhere; `/chat/feedback` and the
+// per-turn calls keep the method default.
 const chatRequest = withUnauthorizedRetry(
-  withNetworkErrorContext((path, init) => chatHttp.request(path, init))
+  withNetworkErrorContext(
+    withCrossServerReplay(
+      (path, init) => chatHttp.request(path, init),
+      (path) => path === "/chat"
+    )
+  )
 )
 
 // Stable device id (Capacitor Device.getId()), memoized. The single source of
@@ -150,7 +162,7 @@ const getDeviceId = (() => {
 // to chat. A region whose published config predates the `profile` service has
 // no `profileBaseUrl`; the sync engine is then disabled at runtime (the
 // `useSyncEngine` composable gates on it) and this client is never invoked.
-const profileHttp = createFailoverClient({
+const profileHttp = createRegionFailoverClient({
   getServers: () => getRegions(),
   getPreferredId: () => useShruti().activeServer.value.id,
   pickBaseUrl: (s) => s.profileBaseUrl ?? "",
@@ -158,13 +170,20 @@ const profileHttp = createFailoverClient({
 })
 const syncClient = createHttpSyncClient({
   getAccessToken: () => useShruti().auth.getAccessToken(),
+  // pull / push / cursor are HLC + LWW against one profile DB — a repeat
+  // converges — so they may be re-issued against another edge.
   request: withUnauthorizedRetry(
-    withNetworkErrorContext((path, init) => profileHttp.request(path, init))
+    withNetworkErrorContext(
+      withCrossServerReplay(
+        (path, init) => profileHttp.request(path, init),
+        (path) => path.startsWith("/profile/sync/")
+      )
+    )
   ),
 })
 
 // Orchestrator ingest control-plane failover client.
-const orchestratorHttp = createFailoverClient({
+const orchestratorHttp = createRegionFailoverClient({
   getServers: () => getRegions(),
   getPreferredId: () => useShruti().activeServer.value.id,
   pickBaseUrl: (s) => s.orchestratorBaseUrl ?? "",
@@ -180,7 +199,7 @@ const ingestClient = createHttpIngestClient({
 // Discovery search failover client. A published config.json predating the
 // field omits it — fall back to chatBaseUrl, since /discovery/search sits
 // behind the same Caddy as chat, the way shareTranscriptUrl does.
-const discoveryHttp = createFailoverClient({
+const discoveryHttp = createRegionFailoverClient({
   getServers: () => getRegions(),
   getPreferredId: () => useShruti().activeServer.value.id,
   pickBaseUrl: (s) => s.discoveryBaseUrl ?? s.chatBaseUrl ?? "",
@@ -189,11 +208,16 @@ const discoveryHttp = createFailoverClient({
 const discoveryClient = createHttpDiscoveryClient({
   getAccessToken: () => useShruti().auth.getAccessToken(),
   // `/discovery/search` is a POST only because its filter does not fit in a
-  // query string — it writes nothing, so it keeps cross-region fall-through
-  // that the failover client now withholds from real mutations.
+  // query string — it writes nothing, so it walks the candidate list like a
+  // read. Distinct doors only: `createRegionFailoverClient` collapses the
+  // regions that resolve to one discovery host, so a 503 no longer fans one
+  // search out into three requests against it.
   request: withUnauthorizedRetry(
-    withNetworkErrorContext((path, init) =>
-      discoveryHttp.request(path, { ...init, crossServerReplay: true })
+    withNetworkErrorContext(
+      withCrossServerReplay(
+        (path, init) => discoveryHttp.request(path, init),
+        () => true
+      )
     )
   ),
 })
@@ -228,9 +252,13 @@ initShruti({
   // Auth service — anonymous-by-device bootstrap on first launch; Google /
   // Apple sign-in upgrades the same user when invoked from Settings.
   // `request` routes through the failover client so an unreachable
-  // preferred backend transparently falls through to others.
+  // preferred backend transparently falls through to others — including
+  // the anonymous mint, without which a device on a dead edge boots with
+  // no identity at all (see `isReplayableAuthPath` for the carve-outs).
   auth: useCapacitorAuth({
-    request: withNetworkErrorContext((path, init) => authHttp.request(path, init)),
+    request: withNetworkErrorContext(
+      withCrossServerReplay((path, init) => authHttp.request(path, init), isReplayableAuthPath)
+    ),
     googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
     googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,
     // Lets the email-OTP request tell the server which language to send the

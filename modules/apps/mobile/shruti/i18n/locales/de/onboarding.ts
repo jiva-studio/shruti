@@ -28,6 +28,8 @@ export default {
   },
   paywall: {
     title: "Mehr Funktionen mit Pro",
+    subtitle:
+      "Alle Vorträge sind kostenlos. Ein Abo hilft uns, die App weiterzuentwickeln — neue Funktionen und Vorträge hinzuzufügen.",
     later: "Später",
   },
   finish: "Jetzt anhören",
