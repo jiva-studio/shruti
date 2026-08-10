@@ -23,17 +23,21 @@ Correlation: each turn sends a generated X-Trace-Id; the chat logs print it
 as `langfuse_trace_id`, so path/memory are read back deterministically (no
 timing heuristics). Requires the local stack up (see the local-stack skill)
 and the JWT signing key the stack verifies with.
+
+Minting/firing/stream-splitting live in `sse_probe.py`, shared with the
+chat-sse-probe skill; this file only adds the eval-specific scoring.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 import time
-import uuid
 from pathlib import Path
+
+from sse_probe import delta_text, iter_events, mint_token, new_trace_id
+from sse_probe import fire as fire_turn
 
 # BG source id in the corpus — the curated memory's 8 shlokas all live here,
 # so a cited verse alias is "gold" iff (source==BG and token in the gold set).
@@ -45,53 +49,12 @@ BG_SOURCE_ID = "source_dsicuBsFvinZ"
 CHAT_URL = "http://localhost:11080/chat"
 CHAT_CONTAINER = "lectorium-chat-1"
 HERE = Path(__file__).resolve().parent
-# Project root sits two levels above the repo: <…>/lectorium/source/lectorium.
-JWT_KEY = HERE.parents[5] / ".config/lectorium/jwt/private.pem"
-
-
-def mint_token() -> str:
-    import jwt  # PyJWT — in the shared venv
-
-    key = Path(JWT_KEY).read_text()
-    now = int(time.time())
-    return jwt.encode(
-        {"sub": "eval-probe", "aud": "chat", "anonymous": False, "tier": "pro",
-         "iat": now, "exp": now + 3600},
-        key, algorithm="RS256", headers={"kid": "v1"},
-    )
-
-
-def fire(token: str, trace_id: str, q: str, lang: str) -> tuple[str, float]:
-    """POST one SSE turn; return (raw_stream, wall_seconds)."""
-    body = json.dumps({"messages": [{"role": "user", "content": q}], "lang": lang})
-    t0 = time.time()
-    proc = subprocess.run(
-        ["curl", "-sN", "--max-time", "120", "-X", "POST", CHAT_URL,
-         "-H", f"Authorization: Bearer {token}",
-         "-H", "X-Chat-Protocol-Version: 1",
-         "-H", f"X-Trace-Id: {trace_id}",
-         "-H", "Content-Type: application/json",
-         "-d", body],
-        capture_output=True, text=True,
-    )
-    return proc.stdout, time.time() - t0
 
 
 def parse_sse(raw: str, gold_tokens: set[str]) -> dict:
-    ev = re.findall(r'^event:\s*(\w+)\s*\ndata:\s*(.*)$', raw, re.M)
+    ev = iter_events(raw)
     n_sources = sum(1 for k, _ in ev if k == "research_source")
-    # Answer text from deltas (for the judge / manual inspection). Each delta's
-    # data is a JSON object — json.loads it so Cyrillic decodes correctly (a
-    # naive unicode_escape mangles UTF-8 into mojibake).
-    parts: list[str] = []
-    for k, d in ev:
-        if k != "delta":
-            continue
-        try:
-            parts.append(json.loads(d).get("text", ""))
-        except Exception:
-            parts.append("")
-    answer = "".join(parts)
+    answer = delta_text(ev)
 
     cited_verse_tokens: set[str] = set()
     alias_kinds: dict[str, int] = {}
@@ -191,13 +154,13 @@ def main() -> int:
     if args.limit:
         queries = queries[: args.limit]
 
-    token = mint_token()
+    token = mint_token(sub="eval-probe", ttl=3600)
     results = []
     for i, q in enumerate(queries, 1):
         gold_tokens = gold_sets.get(q.get("gold")) if q.get("gold") else set()
-        trace = uuid.uuid4().hex
+        trace = new_trace_id()
         print(f"[{i}/{len(queries)}] {q['id']:14s} {q['q'][:50]}", file=sys.stderr)
-        raw, wall = fire(token, trace, q["q"], q["lang"])
+        raw, wall = fire_turn(CHAT_URL, token, trace, q["q"], q["lang"])
         m = parse_sse(raw, gold_tokens or set())
         time.sleep(0.4)  # let structlog flush
         logs = read_pipeline_logs(trace)
