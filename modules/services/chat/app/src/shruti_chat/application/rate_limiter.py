@@ -34,7 +34,7 @@ from shruti_chat.domain.ports.rate_limit_store import (
     RateLimitStore,
     RateLimitStoreUnavailable,
 )
-from shruti_chat.observability.logging import get_logger
+from shruti_chat.observability.logging import client_ip_hash, get_logger
 from shruti_chat.observability.metrics import rate_limit_hits_counter
 from shruti_chat.observability.metrics import redis_unavailable_counter
 
@@ -239,14 +239,17 @@ class RateLimiter:
         user_key = quota_id or user_id
 
         def reject(rec, key_type: str) -> RateLimitResult:
-            # Structured log with `ip` so grepping aggregated logs can
-            # spot CGNAT peer storms (same ip, many user_ids) vs a
-            # single hammering user (one user_id, growing count).
+            # Structured log with a salted hash of the ip so grepping
+            # aggregated logs can spot CGNAT peer storms (same hash, many
+            # user_ids) vs a single hammering user (one user_id, growing
+            # count). The raw address cannot be logged: `ip` is in
+            # SENSITIVE_KEYS, so `drop_pii` silently deleted it from this
+            # very line for as long as it was passed.
             log.warning(
                 "rate_limit_hit",
                 scope=scope, user_id=user_id, anonymous=anonymous, tier=echoed_tier,
                 key_type=key_type, current=rec.count, limit=rec.limit,
-                ip=ip,
+                client_ip_hash=client_ip_hash(ip),
             )
             # Prometheus counter — bounded cardinality on labels so it
             # stays cheap. Once the chat-service /metrics endpoint
