@@ -35,14 +35,16 @@ func RegisterCatalogPublish(s *server.MCPServer, deps Deps) {
 				"then flips public/config.json to point at it. Asset files (audio, "+
 				"images) are NOT uploaded — they are pushed by their own pipelines. "+
 				"Returns a run_id; monitor via runs.status / runs.wait."),
-		mcp.WithBoolean("dry_run", mcp.Description("If true, compute the publish plan (db key + config flip) without uploading.")),
+		mcp.WithBoolean("dry_run", mcp.Description("If true, compute the publish plan (db key + config flip) and report the asset check without uploading.")),
+		mcp.WithBoolean("skip_asset_check", mcp.Description("Skip probing the target for the transcripts the catalog advertises. Escape hatch only: the published catalog may then point the chat indexer at files that are not there.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		if deps.Runner == nil {
 			return envelope.Err(kind, envelope.CodeInternal, "runner not initialized", nil), nil
 		}
 		opts := publish.Options{
-			DryRun: req.GetBool("dry_run", false),
+			DryRun:         req.GetBool("dry_run", false),
+			SkipAssetCheck: req.GetBool("skip_asset_check", false),
 		}
 		uc := deps.Publish
 

@@ -2,7 +2,8 @@
 // public/config.json so clients see the new version. Asset files under
 // out/public/ and out/artifacts/ are NOT uploaded — they live in S3
 // independently (audio is pushed by the pipeline, images by the content
-// builder). Publish is just: new versioned .db + config pointer flip.
+// builder). Publish is: verify the transcripts the DB advertises are on the
+// target (see assets.go), then new versioned .db + config pointer flip.
 package publish
 
 import (
@@ -31,6 +32,15 @@ type UseCase struct {
 type Options struct {
 	DryRun bool
 
+	// SkipAssetCheck ships the catalog without probing the target for the
+	// transcripts it advertises. Escape hatch for a target whose HEAD is
+	// unavailable — the published catalog may then point the chat indexer
+	// at files that are not there.
+	SkipAssetCheck bool
+	// AssetCheckConcurrency is the number of HEAD probes in flight.
+	// 0 = default.
+	AssetCheckConcurrency int
+
 	// OnProgress, if set, is called after each step (DB upload, then config
 	// flip per target). FilesTotal is 1 (db) + N (targets) for the config
 	// flips.
@@ -45,12 +55,13 @@ type ProgressTick struct {
 }
 
 type Result struct {
-	Version    int64    `json:"version"`
-	Scheme     int      `json:"scheme"`
-	BytesTotal int64    `json:"bytes_uploaded"`
-	Targets    []string `json:"targets"`
-	DryRun     bool     `json:"dry_run,omitempty"`
-	Plan       []string `json:"plan,omitempty"`
+	Version    int64       `json:"version"`
+	Scheme     int         `json:"scheme"`
+	BytesTotal int64       `json:"bytes_uploaded"`
+	Targets    []string    `json:"targets"`
+	DryRun     bool        `json:"dry_run,omitempty"`
+	Plan       []string    `json:"plan,omitempty"`
+	Assets     *AssetCheck `json:"assets,omitempty"`
 }
 
 // configManifest models only the fields catalog.publish owns
@@ -140,6 +151,28 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	}
 	dbKey := fmt.Sprintf("public/db/lectorium.%d.db", cur)
 
+	// Never advertise a transcript the target does not hold: the chat
+	// indexer reads asset_hashes as its listing and re-fetches a 404 on
+	// every run. Unbacked rows are stripped from the uploaded copy only.
+	// See assets.go.
+	uploadDB := currentDB
+	var assets *AssetCheck
+	if !opts.SkipAssetCheck {
+		check, missing, err := verifyTranscriptAssets(ctx, currentDB, primary, opts.AssetCheckConcurrency)
+		if err != nil {
+			return Result{}, err
+		}
+		assets = &check
+		if len(missing) > 0 && !opts.DryRun {
+			pruned, err := writePrunedCopy(ctx, currentDB, missing)
+			if err != nil {
+				return Result{}, err
+			}
+			defer removeDBFiles(pruned)
+			uploadDB = pruned
+		}
+	}
+
 	plan := []string{dbKey, "public/config.json"}
 	if opts.DryRun {
 		return Result{
@@ -148,6 +181,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 			Targets: targetNames(uc.Targets),
 			DryRun:  true,
 			Plan:    plan,
+			Assets:  assets,
 		}, nil
 	}
 
@@ -168,7 +202,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	// 2. Upload the new versioned DB to every target. Held back from config
 	// flip so a partial failure here leaves the previous version still live
 	// on every target.
-	dbBody, dbSize, err := readFileSized(currentDB)
+	dbBody, dbSize, err := readFileSized(uploadDB)
 	if err != nil {
 		return Result{}, err
 	}
@@ -238,6 +272,7 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		Scheme:     uc.SupportedScheme,
 		BytesTotal: uploadedBytes,
 		Targets:    targetNames(uc.Targets),
+		Assets:     assets,
 	}, nil
 }
 
