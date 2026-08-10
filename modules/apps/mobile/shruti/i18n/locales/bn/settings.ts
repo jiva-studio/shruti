@@ -162,6 +162,7 @@ export default {
   appLanguage: {
     title: "ভাষা",
     description: "ইন্টারফেসের ভাষা",
+    loadFailedToast: "এই ভাষাটি লোড করা যায়নি। আবার চেষ্টা করুন।",
   },
 
   chatLanguage: {
