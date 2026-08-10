@@ -117,18 +117,32 @@ export function createSqlListeningSessionRepository(
     },
 
     async forceStartOnce({ itemId, position, sourceKey }) {
-      // Read first so a replay is an ordinary no-op rather than a caught
-      // constraint violation; the UNIQUE index (migration 025) still stands
-      // behind it as the guarantee, and turns a genuine race into a throw the
-      // caller reports instead of a silently doubled total.
-      const existing = await queryOne<{ id: string }, ListeningSessionId>(
-        db,
-        "SELECT id FROM listening_sessions WHERE source_key = ? LIMIT 1",
-        [sourceKey],
-        (r) => r.id as ListeningSessionId
-      )
-      if (existing !== null) return null
-      return insert(itemId, position, position, sourceKey)
+      // The native journal reports a finished item as `[resume point → end]`
+      // and knows nothing about the live tracker, which has usually already
+      // written the foreground prefix of exactly that span. Where `start()`
+      // takes `Math.min` to tile forward without a gap, this path takes the
+      // high-water mark upward — `from` never lands below audio a live row
+      // already claimed, so the two can't both count it (#1623).
+      //
+      // Read-then-insert inside one transaction, as in `start()`: the live
+      // tracker writes on the player's tick cadence, straight through this
+      // drain's window.
+      return unitOfWork.run(async () => {
+        // Read first so a replay is an ordinary no-op rather than a caught
+        // constraint violation; the UNIQUE index (migration 025) still stands
+        // behind it as the guarantee, and turns a genuine race into a throw the
+        // caller reports instead of a silently doubled total.
+        const existing = await queryOne<{ id: string }, ListeningSessionId>(
+          db,
+          "SELECT id FROM listening_sessions WHERE source_key = ? LIMIT 1",
+          [sourceKey],
+          (r) => r.id as ListeningSessionId
+        )
+        if (existing !== null) return null
+        const lastTo = await lastToPositionForItem(itemId)
+        const fromPosition = Math.max(lastTo ?? position, position)
+        return insert(itemId, fromPosition, fromPosition, sourceKey)
+      })
     },
 
     async tick(id, { position }, tx) {
