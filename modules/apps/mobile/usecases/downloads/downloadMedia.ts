@@ -1,4 +1,4 @@
-import type { TrackId } from "@lib/domain/core.js"
+import type { MediaItemId, TrackId } from "@lib/domain/core.js"
 import type { MediaAudioKind, MediaItem } from "@lib/domain/mediaItem.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
@@ -54,6 +54,7 @@ export interface DownloadMediaDeps {
 export type DownloadMediaError =
   | "already-in-progress"
   | "no-candidates"
+  | "cancelled"
   | "transfer-failed"
   | "persist-failed"
 
@@ -61,6 +62,15 @@ export interface DownloadMediaSuccess {
   readonly mediaItem: MediaItem
   /** The CDN server whose URL actually delivered the bytes. */
   readonly server: CdnServer
+}
+
+/**
+ * The transfer was aborted on purpose (`IMediaDownloader.cancel`, thrown as
+ * `DownloadCancelledError` by the adapter). Matched by name because the use
+ * case is layer-pure and cannot import the port that defines the class.
+ */
+function isCancellation(e: unknown): boolean {
+  return e instanceof Error && e.name === "DownloadCancelledError"
 }
 
 /**
@@ -75,7 +85,8 @@ export interface DownloadMediaSuccess {
  * the download still completes by trying every alternative once,
  * priority-ordered, before declaring `transfer-failed`. The caller
  * inspects `success.server` to decide whether to promote a different
- * CDN to active.
+ * CDN to active. A cancelled transfer ends the walk immediately with
+ * `err("cancelled")` — it is a user decision, not a server fault.
  *
  * Optional `onProgress(pct)` reports the rounded percentage 0..100 only
  * when the byte total is known.
@@ -92,15 +103,20 @@ export async function downloadMedia(
   // taps on the same track race here; the unit-of-work serialises them,
   // so the loser sees state="downloading" and bows out with
   // "already-in-progress" instead of starting a parallel transfer.
-  type Claim = { kind: "busy" } | { kind: "cached"; mediaItem: MediaItem } | { kind: "claimed" }
+  type Claim =
+    | { kind: "busy" }
+    | { kind: "cached"; mediaItem: MediaItem }
+    | { kind: "claimed"; id: MediaItemId }
   const claim = await deps.unitOfWork.run<Claim>(async () => {
     const existing = await deps.mediaItems.getByTrack(input.trackId, kind)
     if (existing?.state === "downloading") return { kind: "busy" }
     if (existing?.state === "ready" && existing.localPath) {
       return { kind: "cached", mediaItem: existing }
     }
-    await deps.mediaItems.upsert(input.trackId, "downloading", null, kind)
-    return { kind: "claimed" }
+    // Keep the row id: it identifies OUR claim, so a later release can tell
+    // it from a row a newer task claimed after a wipe.
+    const claimed = await deps.mediaItems.upsert(input.trackId, "downloading", null, kind)
+    return { kind: "claimed", id: claimed.id }
   })
 
   if (claim.kind === "busy") return err("already-in-progress")
@@ -128,7 +144,26 @@ export async function downloadMedia(
       })
       workingServer = server
       break
-    } catch {
+    } catch (e) {
+      // A cancellation is a decision, not a CDN fault: falling through to
+      // the next candidate would re-download the very bytes the user just
+      // asked us to stop. Give up on the whole attempt instead.
+      if (isCancellation(e)) {
+        // Drop the row we claimed rather than demoting it to "failed": the
+        // cancel usually comes from a remove that deletes the track's rows
+        // anyway, and an upsert racing behind that delete would resurrect
+        // it as litter. Deleting releases the "downloading" claim so a
+        // later tap can start over — but only OUR claim: if the row was
+        // deleted and re-claimed meanwhile (a wipe, then a newer task), its
+        // id differs and deleting it would strip that task's guard.
+        try {
+          const current = await deps.mediaItems.getByTrack(input.trackId, kind)
+          if (current?.id === claim.id) await deps.mediaItems.deleteById(claim.id)
+        } catch {
+          /* swallow — best-effort release of the claimed row */
+        }
+        return err("cancelled")
+      }
       // Tell the next attempt to draw 0% — otherwise the radial gauge
       // could display the previous server's last reported chunk while
       // we re-establish from byte 0 elsewhere.
