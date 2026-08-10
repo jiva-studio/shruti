@@ -1,4 +1,4 @@
-import { type Page } from "@playwright/test"
+import { type BrowserContext, type Page } from "@playwright/test"
 
 /**
  * Chat error/quota specs without a backend. We never run the chat server — we
@@ -20,19 +20,54 @@ function jwt(claims: Record<string, unknown>): string {
   return `h.${payload}.s`
 }
 
-/** Mock the auth endpoints so the app has an anonymous (or Pro) session offline. */
-export async function mockChatAuth(page: Page, tier: "free" | "pro" = "free"): Promise<void> {
-  const token = jwt({ tier })
-  const session = {
-    accessToken: token,
+/** The anonymous session handed to the app in place of a real one. */
+function anonymousSession(tier: "free" | "pro"): string {
+  return JSON.stringify({
+    accessToken: jwt({ tier }),
     refreshToken: "e2e-refresh",
     userId: "u-e2e",
     email: null,
     name: null,
     anonymous: true,
-  }
+  })
+}
+
+/**
+ * Suite-wide default for `POST /auth/anonymous`, installed for every spec by
+ * the auto fixture in `support/test.ts`.
+ *
+ * This is the endpoint that mints accounts, and only 9 of 89 specs used to mock
+ * it — the other 80 created a real production user on every run. Making it a
+ * default rather than an opt-in is the whole point: an opt-in guard only covers
+ * the specs that remembered it.
+ *
+ * Registered at CONTEXT level, which Playwright matches *after* page-level
+ * routes, so {@link mockChatAuth} and any spec's own `page.route` still win.
+ *
+ * Deliberately narrow: `/auth/me` and `/auth/refresh` are NOT defaulted. They
+ * describe *which* session the app has, and a blanket anonymous answer would
+ * contradict the specs that seed a signed-in one (`preseedAuthTokens`,
+ * `auth-refresh`). Those endpoints can no longer leak either — the mocked
+ * region points them at the dead loopback sink.
+ */
+export async function installDefaultAnonymousAuth(context: BrowserContext): Promise<void> {
+  await context.route("**/auth/anonymous", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: anonymousSession("free"),
+    })
+  )
+}
+
+/** Mock the auth endpoints so the app has an anonymous (or Pro) session offline. */
+export async function mockChatAuth(page: Page, tier: "free" | "pro" = "free"): Promise<void> {
   await page.route("**/auth/anonymous", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(session) })
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: anonymousSession(tier),
+    })
   )
   await page.route("**/auth/me", (route) =>
     route.fulfill({
