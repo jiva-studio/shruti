@@ -1,4 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
+import { useI18n } from "vue-i18n"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type { Note } from "@lib/domain/note.js"
@@ -22,6 +23,7 @@ import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useTranscriptSystemBars } from "@lectorium/composables/useTranscriptSystemBars.js"
+import { playbackErrorKey } from "@lectorium/utils/playbackErrorKey.js"
 import { useTranscriptHydration } from "./transcript/useTranscriptHydration.js"
 import { useTranscriptLoader } from "./transcript/useTranscriptLoader.js"
 import { useTranscriptSelectionActions } from "./transcript/useTranscriptSelectionActions.js"
@@ -83,6 +85,7 @@ export function useTranscriptDialogController(
   preferredLanguage: MaybeRefOrGetter<LanguageCode> = "en"
 ): TranscriptDialogState {
   const app = useLectorium()
+  const { t } = useI18n()
   const transcriptStore = useTranscriptStore()
   const library = useLibraryStore()
   // Languages currently being translated on demand (drives the ghost chip's
@@ -527,7 +530,10 @@ export function useTranscriptDialogController(
       itemId: playlist.getEntryByTrackId(track.id)?.item.id,
       resumeFromMs: ms,
     })
-    if (!result.ok) loader.error.value = `Could not start playback: ${result.error}`
+    // Chapter rows render off the outline alone, with no audio gate, so a
+    // transcript-only lecture reaches this with "no-audio-available" —
+    // permanent, and told apart from the retryable engine failure.
+    if (!result.ok) loader.error.value = t(playbackErrorKey(result.error))
   }
 
   // Selection lifecycle. The two events are mutually exclusive — opening

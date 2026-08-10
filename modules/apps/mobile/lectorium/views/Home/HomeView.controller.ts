@@ -8,6 +8,7 @@ import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
+import { playbackErrorKey } from "@lectorium/utils/playbackErrorKey.js"
 import { useHomeRowBuilder } from "./useHomeRowBuilder.js"
 import type { HeatmapDay } from "@usecases/activity/buildHeatmapDays.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
@@ -110,12 +111,17 @@ export function useHomeController(): HomeControllerReturn {
     const author = entry.track.authorId
       ? (dictionaries.authorsById.get(entry.track.authorId) ?? null)
       : null
-    await player.openTrack({
+    // A refused open leaves the row looking tapped and nothing playing, and
+    // the drain-event notice cannot cover it (see `syncFromNative`), so say
+    // it here. Nothing gates a queued entry on having an audible variant, so
+    // both refusals are reachable.
+    const result = await player.openTrack({
       track: entry.track,
       preferredLanguage: appLanguage.value,
       author,
       itemId: entry.item.id,
     })
+    if (!result.ok) void toast.error(t(playbackErrorKey(result.error)))
   }
 
   async function onRemove(trackId: string): Promise<void> {
