@@ -270,6 +270,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Aula não concluída",
   proactiveSessionTitleInactivity: "Volte para sua prática",
   proactiveSessionTitleWeeklyDigest: "Sua semana",
+  proactiveSessionTitleDailyWisdom: "Sabedoria diária",
+
+  proactiveDailyWisdomBody: "Um pensamento das aulas para hoje:",
+
   proactiveInactivityWelcomeBody:
     "Faz um tempo. Aulas novas estão esperando — abra sua biblioteca e continue de onde parou.",
 
@@ -330,6 +334,12 @@ export default {
   actionQueueNextTrackConfirm: "Adicionar",
   actionQueueNextTrackDone: "Adicionado à biblioteca.",
   actionQueueNextTrackError: "Não foi possível adicionar esta aula.",
+
+  actionAddToLibraryTitle: "Adicionar à minha biblioteca",
+  actionAddToLibraryConfirm: "Adicionar à biblioteca",
+  actionAddToLibraryDone: "Adicionada — estamos processando.",
+  actionAddToLibraryError: "Não foi possível adicionar esta aula.",
+  addByLinkCommand: "Adicionar aula por este link: {url}",
 
   citationSaveAsNote: "Salvar como nota",
   citationOpenInStudio: "Abrir no Estúdio",

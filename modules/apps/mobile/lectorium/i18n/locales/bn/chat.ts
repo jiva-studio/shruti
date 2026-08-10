@@ -270,6 +270,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "অসম্পূর্ণ লেকচার",
   proactiveSessionTitleInactivity: "আপনার সাধনায় ফিরে আসুন",
   proactiveSessionTitleWeeklyDigest: "আপনার সপ্তাহ",
+  proactiveSessionTitleDailyWisdom: "দৈনিক প্রজ্ঞা",
+
+  proactiveDailyWisdomBody: "আজকের জন্য লেকচার থেকে একটি ভাবনা:",
+
   proactiveInactivityWelcomeBody:
     "অনেকদিন হয়ে গেল। নতুন লেকচার অপেক্ষা করছে — আপনার লাইব্রেরি খুলুন এবং যেখানে থেমেছিলেন সেখান থেকে শুরু করুন।",
 
@@ -330,6 +334,12 @@ export default {
   actionQueueNextTrackConfirm: "যোগ করুন",
   actionQueueNextTrackDone: "লাইব্রেরিতে যোগ করা হয়েছে।",
   actionQueueNextTrackError: "এই লেকচারটি যোগ করা যায়নি।",
+
+  actionAddToLibraryTitle: "আমার লাইব্রেরিতে যোগ করুন",
+  actionAddToLibraryConfirm: "লাইব্রেরিতে যোগ করুন",
+  actionAddToLibraryDone: "যোগ করা হয়েছে — প্রক্রিয়াকরণ চলছে।",
+  actionAddToLibraryError: "এই লেকচারটি যোগ করা যায়নি।",
+  addByLinkCommand: "এই লিঙ্ক থেকে লেকচার যোগ করুন: {url}",
 
   citationSaveAsNote: "নোট হিসেবে সংরক্ষণ করুন",
   citationOpenInStudio: "স্টুডিওতে খুলুন",

@@ -3423,5 +3423,28 @@
       "free",
       "e2e"
     ]
+  },
+  "190": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "A dead edge does not leave the device without an identity",
+    "description": "Offline, with a two-region config. The app settles on edge-a, whose auth service returns 503. The anonymous mint is a device-keyed upsert against the one auth DB every region proxies to, so it must be re-issued on edge-b instead of stranding the device with no token at all (chat, sync and ingest off, and no probe that would notice — the startup probe only checks the storage host). Each door is asked exactly once, so the walk is a failover and not a fan-out at a failing backend.",
+    "preconditions": "Offline fixtures with a clean user db and NO seeded session; config.json publishes edge-a (auth 503) and edge-b (minting).",
+    "steps": [
+      {
+        "action": "Launch the app with no stored session while the active region's auth service is down.",
+        "expected": "A token is minted anyway — the app is not left without an identity."
+      },
+      {
+        "action": "Count the anonymous-mint calls per region.",
+        "expected": "The dead edge is asked once and the live one mints the identity once — a failover, not a fan-out."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
   }
 }

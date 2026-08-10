@@ -41,6 +41,30 @@ export default {
     },
     signInWithGoogle: "Putem Google-a",
     signInWithApple: "Putem Apple-a",
+    signInWithEmail: "Nastavi putem e-pošte",
+    email: {
+      title: "Prijava putem e-pošte",
+      emailStep: "Poslaćemo vam jednokratni kod na e-poštu — lozinka nije potrebna.",
+      emailLabel: "E-pošta",
+      emailPlaceholder: "you{'@'}example.com",
+      sendCode: "Pošalji kod",
+      codeStep: "Unesite šestocifreni kod koji smo poslali na {email}.",
+      codeLabel: "Kod",
+      codePlaceholder: "Šestocifreni kod",
+      verify: "Prijavi se",
+      resend: "Pošalji kod ponovo",
+      resendIn: "Ponovo za {seconds} s",
+      changeEmail: "Promeni e-poštu",
+      errors: {
+        invalidEmail: "Unesite ispravnu adresu e-pošte.",
+        invalidCode: "Kod nije ispravan ili je istekao.",
+        throttled: "Sačekajte malo pre nego što zatražite novi kod.",
+        disabled: "Prijava putem e-pošte trenutno nije dostupna.",
+        network: "Nema veze. Proverite internet i pokušajte ponovo.",
+        server: "Nešto je pošlo po zlu na našoj strani. Pokušajte za trenutak.",
+        generic: "Nešto je pošlo po zlu. Pokušajte ponovo.",
+      },
+    },
     signedIn: "Prijavljeni ste",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -74,6 +98,7 @@ export default {
     trialDisclaimer: "Otkažite bilo kad. Posle probnog perioda pretplata se automatski obnavlja.",
     disclaimer: "Otkažite bilo kad. Pretplata se automatski obnavlja.",
     subscribed: "Pretplata je obavljena",
+    loading: "Učitavanje opcija pretplate…",
     unavailable: "Kupovine unutar aplikacije nisu dostupne na ovom uređaju.",
     manage: "Upravljanje pretplatom",
     restore: "Vrati",
@@ -287,6 +312,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "Posetite naš studio i otkrijte naše druge aplikacije",
+    },
     email: {
       title: "Pošaljite nam e-poruku",
       description: "Imate pitanja ili predloge?",
@@ -332,6 +361,12 @@ export default {
     viewLogs: {
       title: "Pogledaj zapise",
       description: "Zapis događaja u aplikaciji · {count} unosa",
+    },
+    email: {
+      title: "Pošalji dijagnostiku",
+      description: "Pošaljite logove i stanje sistema podršci",
+      emailSubject: "Izveštaj o dijagnostici",
+      emailIntro: "Molimo opišite svoje pitanje ili problem iznad ove linije.",
     },
   },
 

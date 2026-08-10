@@ -270,6 +270,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Незавершена лекція",
   proactiveSessionTitleInactivity: "Поверніться до практики",
   proactiveSessionTitleWeeklyDigest: "Ваш тиждень",
+  proactiveSessionTitleDailyWisdom: "Щоденна мудрість",
+
+  proactiveDailyWisdomBody: "Думка з лекцій на сьогодні:",
+
   proactiveInactivityWelcomeBody:
     "Давно вас не було. Свіжі лекції чекають — відкрийте бібліотеку й продовжуйте з місця, де зупинилися.",
 
@@ -331,6 +335,12 @@ export default {
   actionQueueNextTrackConfirm: "Додати",
   actionQueueNextTrackDone: "Додано до бібліотеки.",
   actionQueueNextTrackError: "Не вдалося додати цю лекцію.",
+
+  actionAddToLibraryTitle: "Додати до моєї бібліотеки",
+  actionAddToLibraryConfirm: "Додати до бібліотеки",
+  actionAddToLibraryDone: "Додано — триває обробка.",
+  actionAddToLibraryError: "Не вдалося додати цю лекцію.",
+  addByLinkCommand: "Додати лекцію за цим посиланням: {url}",
 
   citationSaveAsNote: "Зберегти як нотатку",
   citationOpenInStudio: "Відкрити в Студії",

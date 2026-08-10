@@ -26,6 +26,30 @@ export default {
     },
     signInWithGoogle: "Continuar con Google",
     signInWithApple: "Continuar con Apple",
+    signInWithEmail: "Continuar con correo",
+    email: {
+      title: "Iniciar sesión con correo",
+      emailStep: "Te enviaremos un código de un solo uso por correo, sin contraseña.",
+      emailLabel: "Correo electrónico",
+      emailPlaceholder: "you{'@'}example.com",
+      sendCode: "Enviar código",
+      codeStep: "Introduce el código de 6 dígitos que enviamos a {email}.",
+      codeLabel: "Código",
+      codePlaceholder: "Código de 6 dígitos",
+      verify: "Iniciar sesión",
+      resend: "Reenviar código",
+      resendIn: "Reenviar en {seconds} s",
+      changeEmail: "Cambiar correo",
+      errors: {
+        invalidEmail: "Introduce una dirección de correo válida.",
+        invalidCode: "Ese código no es válido o ha caducado.",
+        throttled: "Espera un momento antes de pedir otro código.",
+        disabled: "El inicio de sesión por correo no está disponible ahora mismo.",
+        network: "Sin conexión. Comprueba tu internet e inténtalo de nuevo.",
+        server: "Algo salió mal por nuestra parte. Inténtalo de nuevo en un momento.",
+        generic: "Algo salió mal. Inténtalo de nuevo.",
+      },
+    },
     signedIn: "Has iniciado sesión",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -60,6 +84,7 @@ export default {
       "Cancela cuando quieras. Tras la prueba, la suscripción se renueva automáticamente.",
     disclaimer: "Cancela cuando quieras. La suscripción se renueva automáticamente.",
     subscribed: "Suscripción completada",
+    loading: "Cargando opciones de suscripción…",
     unavailable: "Las compras dentro de la aplicación no están disponibles en este dispositivo.",
     manage: "Gestionar suscripción",
     restore: "Restaurar",
@@ -288,6 +313,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "Visita nuestro estudio y descubre nuestras otras apps",
+    },
     email: {
       title: "Escríbenos un correo",
       description: "¿Tienes preguntas o sugerencias?",
@@ -333,6 +362,12 @@ export default {
     viewLogs: {
       title: "Ver registros",
       description: "Registro de eventos de la app · {count} entradas",
+    },
+    email: {
+      title: "Enviar diagnóstico",
+      description: "Envía registros y estado del sistema al soporte",
+      emailSubject: "Informe de diagnóstico",
+      emailIntro: "Describe tu pregunta o problema encima de esta línea.",
     },
   },
 
