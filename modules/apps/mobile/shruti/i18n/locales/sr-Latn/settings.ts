@@ -176,6 +176,7 @@ export default {
   appLanguage: {
     title: "Jezik",
     description: "Jezik interfejsa",
+    loadFailedToast: "Nije moguće učitati taj jezik. Pokušajte ponovo.",
   },
 
   downloadLimit: {

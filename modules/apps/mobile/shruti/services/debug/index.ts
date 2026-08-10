@@ -144,8 +144,8 @@ export function installDebugApi(): void {
       player.durationMs = variant.audio?.duration ?? 0
     },
 
-    setLocale(loc: SupportedLocale): Promise<void> {
-      return setLocale(loc)
+    async setLocale(loc: SupportedLocale): Promise<void> {
+      await setLocale(loc)
     },
 
     setSubscription(value: DevSubscriptionOverride): void {
