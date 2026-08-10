@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
 
+from shruti_chat.research import constants, thesis_augmentation
 from shruti_chat.research.models import Outline, Thesis
 from shruti_chat.research.thesis_augmentation import (
     _is_thin,
@@ -365,3 +368,140 @@ async def test_media_already_in_base_notes_not_reminted():
     # No duplicate media envelope appended for the already-present clip.
     media_fresh = [e for e in fresh if e.get("type") == "media"]
     assert media_fresh == []
+
+
+# ── Stage 2 ANN budget ──────────────────────────────────────────────
+
+
+@dataclass
+class _HangingChunkRepo(FakeChunkRepo):
+    """pgvector that never answers — the runaway TIMEOUT_AUGMENT_S guards."""
+
+    cancelled: bool = False
+
+    async def search_by_embedding(self, *_a, **_kw):
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        return []
+
+    async def search_library_by_embedding(self, *_a, **_kw):
+        await asyncio.sleep(30)
+        return []
+
+
+@pytest.mark.asyncio
+async def test_fresh_fetch_bounded_by_stage_budget(monkeypatch):
+    """A hung ANN must not hold Stage 2 open: the whole fresh fan-out is
+    capped by TIMEOUT_AUGMENT_S, the pending queries are cancelled, and the
+    thin thesis keeps Stage 1's picks."""
+    monkeypatch.setattr(thesis_augmentation, "TIMEOUT_AUGMENT_S", 0.05)
+    recorder = _RecordingLog()
+    monkeypatch.setattr(thesis_augmentation, "log", recorder)
+    outline = Outline(theses=[Thesis(thesis="thin topic", supporting_notes=[1])])
+    base_notes = [_lecture_env(text="off-topic")]
+    repo = _HangingChunkRepo()
+    embedder = FakeEmbedder(mapping={
+        "thin topic": [1.0, 0.0, 0.0, 0.0],
+        "off-topic": [0.30, 0.0, 0.954, 0.0],
+    })
+
+    started = time.perf_counter()
+    out, fresh = await augment_thin_theses(
+        outline, base_notes,
+        chunk_repo=repo, embedder=embedder, alias_map=FakeAliasMap(),
+        catalog_repo=FakeCatalogRepo(), lang="ru", router_args={},
+    )
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 2.0
+    assert repo.cancelled is True
+    assert fresh == []
+    assert out.theses[0].supporting_notes == [1]
+    assert any(ev == "augment_fresh_fetch_timeout" for ev, _ in recorder.events)
+    summary = next(kw for ev, kw in recorder.events if ev == "augment_summary")
+    entry = summary["per_thesis"][0]
+    assert entry["outcome"] == "fetch_failed"
+    # Nothing was fetched, so the thesis leaves with exactly what it had.
+    assert entry["new_top_cosine"] == pytest.approx(0.30, abs=1e-3)
+
+
+def test_stage_budget_reads_the_shared_constant():
+    assert thesis_augmentation.TIMEOUT_AUGMENT_S == constants.TIMEOUT_AUGMENT_S
+    assert constants.TIMEOUT_AUGMENT_S > 0
+
+
+# ── augment_summary log ─────────────────────────────────────────────
+
+
+class _RecordingLog:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    def info(self, event: str, **kw: Any) -> None:
+        self.events.append((event, kw))
+
+    def warning(self, event: str, **kw: Any) -> None:
+        self.events.append((event, kw))
+
+
+def _unit(cos: float, axis: int) -> list[float]:
+    """Unit vector at cosine `cos` from the `axis` basis vector; the rest of
+    its length goes on a filler axis nothing else uses."""
+    v = [0.0, 0.0, 0.0, 0.0]
+    v[axis] = cos
+    v[axis + 2] = (1.0 - cos * cos) ** 0.5
+    return v
+
+
+@pytest.mark.asyncio
+async def test_augment_summary_logs_post_stage_top_cosine(monkeypatch):
+    """`new_top_cosine` must report the state a thesis LEAVES Stage 2 with —
+    for the augmented thesis that is the fresh chunk's cosine, not the old
+    top it started from."""
+    recorder = _RecordingLog()
+    monkeypatch.setattr(thesis_augmentation, "log", recorder)
+
+    outline = Outline(theses=[
+        Thesis(thesis="strong topic", supporting_notes=[1, 2]),
+        Thesis(thesis="thin topic", supporting_notes=[3]),
+    ])
+    base_notes = [
+        _lecture_env(text="strong note one"),
+        _lecture_env(text="strong note two"),
+        _lecture_env(text="weak note"),
+    ]
+    repo = FakeChunkRepo(
+        lecture_search=[_Scored(_LecChunk("t_fresh", 0, 1000, "fresh for thin", "ru"), 0.88)],
+    )
+    embedder = FakeEmbedder(mapping={
+        "strong topic": _unit(1.0, 0),
+        "thin topic": _unit(1.0, 1),
+        "strong note one": _unit(0.95, 0),
+        "strong note two": _unit(0.90, 0),
+        "weak note": _unit(0.30, 1),
+        "fresh for thin": _unit(0.88, 1),
+    })
+
+    out, fresh = await augment_thin_theses(
+        outline, base_notes,
+        chunk_repo=repo, embedder=embedder, alias_map=FakeAliasMap(),
+        catalog_repo=FakeCatalogRepo(), lang="ru", router_args={},
+    )
+    assert len(fresh) == 1
+
+    summary = next(kw for ev, kw in recorder.events if ev == "augment_summary")
+    strong, thin = summary["per_thesis"]
+
+    # Passthrough thesis: the value describes the notes it still carries.
+    assert strong["was_thin"] is False
+    assert strong["new_top_cosine"] == pytest.approx(0.95, abs=1e-3)
+
+    # Augmented thesis: the NEW top, not the 0.30 it started from.
+    assert thin["was_thin"] is True
+    assert thin["old_top_cosine"] == pytest.approx(0.30, abs=1e-3)
+    assert thin["new_top_cosine"] == pytest.approx(0.88, abs=1e-3)
+    assert thin["new_top_cosine"] > thin["old_top_cosine"]
+    assert out.theses[1].supporting_notes[0] == 4
