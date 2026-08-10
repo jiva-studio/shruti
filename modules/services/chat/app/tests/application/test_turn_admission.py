@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from lectorium_chat.agent.events import ERROR_MESSAGES
 from lectorium_chat.application.turn_runner import (
     TurnCapacityExceeded,
     TurnRunner,
@@ -158,7 +159,11 @@ async def test_a_turn_over_budget_ends_as_an_error() -> None:
     # The client's last frame explains what happened rather than the stream
     # simply stopping.
     assert frames[-1]["event"] == "error"
-    assert json.loads(frames[-1]["data"])["code"] == "turn_timeout"
+    payload = json.loads(frames[-1]["data"])
+    assert payload["code"] == "turn_timeout"
+    # Built by the one choke point, so a client with no string for the code
+    # still has something to render (issue #1568).
+    assert payload["message"] == ERROR_MESSAGES["turn_timeout"]
     # And the accounting treats it as a failure: finalize refunds, the store
     # records `error`, not a truncated `done`.
     assert seen["had_error"] is True
