@@ -25,6 +25,10 @@ Living checklist of app journeys to cover. Status legend:
   `storage-limit` (184)
 - ✅ a cancelled download releases the track, so re-adding really re-transfers —
   `cancel-then-readd` (185); that it then *finishes* is #1680
+- ✅ a failed download says so, and a deliberate retry is always answered —
+  `download-failure-notice` (186)
+- ✅ a silent CDN does not hold the walk: the live region is asked, and not
+  before the hedge interval — `cdn-hedge` (187); completion is #1682
 - ✅ tap a queued track → floating player — `play`
 - ✅ tap the floating player → transcript — `transcript`
 - ✅ floating player: swipe changes the carousel page — `player-swipe` (CDP)
@@ -61,6 +65,12 @@ Living checklist of app journeys to cover. Status legend:
 - ✅ an empty answer reads differently from a failure — (177)
 - ✅ typing searches the words as written, not via the model-read path — (178)
 - 🔜 the ingest stages on a tile's corner (needs an orchestrator stub — #1673)
+
+## Account & auth
+- ✅ a near-expiry token is refreshed before use — `auth-refresh` (114)
+- ✅ a rejected request refreshes once and is replayed — `auth-401-retry` (188)
+- ✋ a stalled stream: the socket harness exists (`support/sse-server.ts`), but
+  what the UI should do after a stall with partial content is undecided — #1677
 
 ## Chat
 - ✅ chat composer + suggestions render — `chat-render`
