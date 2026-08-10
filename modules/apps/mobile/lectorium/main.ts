@@ -73,6 +73,7 @@ import { installConsoleCapture } from "./services/logger/index.js"
 import { initMonitoring } from "./services/monitoring/index.js"
 import { reportError } from "./services/monitoring/reportError.js"
 import { withNetworkErrorContext } from "./services/http/networkError.js"
+import { createUnauthorizedRetry } from "./services/http/unauthorizedRetry.js"
 
 // Capture console.* into the in-memory debug buffer (Settings → Debug →
 // "View logs") before anything else runs, so the subscription / proactive
@@ -117,6 +118,23 @@ const chatHttp = createFailoverClient({
   onPromoteFallback: (id) => useLectorium().setActiveServerById(id),
 })
 
+// One 401 interceptor for every authenticated service client. The state that
+// makes N simultaneous 401s collapse into a single /auth/refresh lives on this
+// factory, so it must be created once and shared — wrapping each client with
+// its own `createUnauthorizedRetry` would refresh once per client.
+//
+// `authHttp` is deliberately NOT wrapped: a 401 from /auth/refresh IS the
+// answer (the refresh token is dead), and retrying it would recurse.
+const withUnauthorizedRetry = createUnauthorizedRetry({
+  refreshAccessToken: () => useLectorium().auth.refreshAccessToken(),
+})
+
+// Shared by the SSE turn stream and the proactive service — one decorated fn
+// rather than two, so both go through the same interceptor instance.
+const chatRequest = withUnauthorizedRetry(
+  withNetworkErrorContext((path, init) => chatHttp.request(path, init))
+)
+
 // Stable device id (Capacitor Device.getId()), memoized. The single source of
 // this device's identity for the HLC tiebreak + `sync_state` key (via the
 // repository bundle) and the cursor-ack `device_id`. Matches how the auth
@@ -138,7 +156,9 @@ const profileHttp = createFailoverClient({
 })
 const syncClient = createHttpSyncClient({
   getAccessToken: () => useLectorium().auth.getAccessToken(),
-  request: withNetworkErrorContext((path, init) => profileHttp.request(path, init)),
+  request: withUnauthorizedRetry(
+    withNetworkErrorContext((path, init) => profileHttp.request(path, init))
+  ),
 })
 
 // Orchestrator ingest control-plane failover client.
@@ -150,7 +170,9 @@ const orchestratorHttp = createFailoverClient({
 })
 const ingestClient = createHttpIngestClient({
   getAccessToken: () => useLectorium().auth.getAccessToken(),
-  request: withNetworkErrorContext((path, init) => orchestratorHttp.request(path, init)),
+  request: withUnauthorizedRetry(
+    withNetworkErrorContext((path, init) => orchestratorHttp.request(path, init))
+  ),
 })
 
 // Discovery search failover client. A published config.json predating the
@@ -164,7 +186,14 @@ const discoveryHttp = createFailoverClient({
 })
 const discoveryClient = createHttpDiscoveryClient({
   getAccessToken: () => useLectorium().auth.getAccessToken(),
-  request: withNetworkErrorContext((path, init) => discoveryHttp.request(path, init)),
+  // `/discovery/search` is a POST only because its filter does not fit in a
+  // query string — it writes nothing, so it keeps cross-region fall-through
+  // that the failover client now withholds from real mutations.
+  request: withUnauthorizedRetry(
+    withNetworkErrorContext((path, init) =>
+      discoveryHttp.request(path, { ...init, crossServerReplay: true })
+    )
+  ),
 })
 
 initLectorium({
@@ -239,9 +268,9 @@ initLectorium({
   serverProber: useHttpServerProber(() => getRegions()),
   proactiveChat: createHttpProactiveChatService({
     getAccessToken: () => useLectorium().auth.getAccessToken(),
-    request: withNetworkErrorContext((path, init) => chatHttp.request(path, init)),
+    request: chatRequest,
   }),
-  chatHttpRequest: withNetworkErrorContext((path, init) => chatHttp.request(path, init)),
+  chatHttpRequest: chatRequest,
   // Profile device↔server sync (Lane D). `getDeviceId` also enables the
   // sync-journal decorator + the engine repositories in the bundle; `syncClient`
   // is the transport the `useSyncEngine` composable drives when enabled.
