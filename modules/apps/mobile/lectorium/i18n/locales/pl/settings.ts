@@ -26,6 +26,30 @@ export default {
     },
     signInWithGoogle: "Kontynuuj z Google",
     signInWithApple: "Kontynuuj z Apple",
+    signInWithEmail: "Kontynuuj przez e-mail",
+    email: {
+      title: "Logowanie przez e-mail",
+      emailStep: "Wyślemy jednorazowy kod na twój e-mail — hasło nie jest potrzebne.",
+      emailLabel: "E-mail",
+      emailPlaceholder: "you{'@'}example.com",
+      sendCode: "Wyślij kod",
+      codeStep: "Wpisz 6-cyfrowy kod, który wysłaliśmy na {email}.",
+      codeLabel: "Kod",
+      codePlaceholder: "6-cyfrowy kod",
+      verify: "Zaloguj się",
+      resend: "Wyślij kod ponownie",
+      resendIn: "Ponownie za {seconds} s",
+      changeEmail: "Zmień e-mail",
+      errors: {
+        invalidEmail: "Podaj prawidłowy adres e-mail.",
+        invalidCode: "Kod jest nieprawidłowy lub wygasł.",
+        throttled: "Odczekaj chwilę przed prośbą o kolejny kod.",
+        disabled: "Logowanie przez e-mail jest teraz niedostępne.",
+        network: "Brak połączenia. Sprawdź internet i spróbuj ponownie.",
+        server: "Coś poszło nie tak po naszej stronie. Spróbuj ponownie za chwilę.",
+        generic: "Coś poszło nie tak. Spróbuj ponownie.",
+      },
+    },
     signedIn: "Jesteś zalogowany",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -60,6 +84,7 @@ export default {
       "Możesz anulować w dowolnym momencie. Po okresie próbnym subskrypcja odnowi się automatycznie.",
     disclaimer: "Możesz anulować w dowolnym momencie. Subskrypcja odnowi się automatycznie.",
     subscribed: "Subskrypcja zakończona",
+    loading: "Wczytywanie opcji subskrypcji…",
     unavailable: "Zakupy w aplikacji nie są dostępne na tym urządzeniu.",
     manage: "Zarządzaj subskrypcją",
     restore: "Przywróć",
@@ -289,6 +314,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "Odwiedź nasze studio i poznaj nasze inne aplikacje",
+    },
     email: {
       title: "Napisz do nas e-mail",
       description: "Masz pytania lub sugestie?",
@@ -334,6 +363,12 @@ export default {
     viewLogs: {
       title: "Wyświetl dzienniki",
       description: "Dziennik zdarzeń aplikacji · {count} wpisów",
+    },
+    email: {
+      title: "Wyślij diagnostykę",
+      description: "Wyślij logi i stan systemu do wsparcia",
+      emailSubject: "Raport diagnostyczny",
+      emailIntro: "Opisz swoje pytanie lub problem nad tą linią.",
     },
   },
 

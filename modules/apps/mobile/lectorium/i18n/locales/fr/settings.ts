@@ -27,6 +27,30 @@ export default {
     },
     signInWithGoogle: "Continuer avec Google",
     signInWithApple: "Continuer avec Apple",
+    signInWithEmail: "Continuer avec l'e-mail",
+    email: {
+      title: "Se connecter par e-mail",
+      emailStep: "Nous vous enverrons un code à usage unique par e-mail, sans mot de passe.",
+      emailLabel: "E-mail",
+      emailPlaceholder: "you{'@'}example.com",
+      sendCode: "Envoyer le code",
+      codeStep: "Saisissez le code à 6 chiffres envoyé à {email}.",
+      codeLabel: "Code",
+      codePlaceholder: "Code à 6 chiffres",
+      verify: "Se connecter",
+      resend: "Renvoyer le code",
+      resendIn: "Renvoyer dans {seconds} s",
+      changeEmail: "Changer d'e-mail",
+      errors: {
+        invalidEmail: "Veuillez saisir une adresse e-mail valide.",
+        invalidCode: "Ce code est invalide ou a expiré.",
+        throttled: "Veuillez patienter avant de demander un nouveau code.",
+        disabled: "La connexion par e-mail est indisponible pour le moment.",
+        network: "Pas de connexion. Vérifiez votre internet et réessayez.",
+        server: "Une erreur est survenue de notre côté. Réessayez dans un instant.",
+        generic: "Une erreur est survenue. Veuillez réessayer.",
+      },
+    },
     signedIn: "Vous êtes connecté",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -62,6 +86,7 @@ export default {
       "Annulable à tout moment. À la fin de l'essai, l'abonnement se renouvelle automatiquement.",
     disclaimer: "Annulable à tout moment. L'abonnement se renouvelle automatiquement.",
     subscribed: "Abonnement effectué",
+    loading: "Chargement des options d'abonnement…",
     unavailable: "Les achats intégrés ne sont pas disponibles sur cet appareil.",
     manage: "Gérer l'abonnement",
     restore: "Restaurer",
@@ -291,6 +316,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "Découvrez notre studio et nos autres applications",
+    },
     email: {
       title: "Envoyez-nous un e-mail",
       description: "Des questions ou des suggestions ?",
@@ -336,6 +365,12 @@ export default {
     viewLogs: {
       title: "Voir les journaux",
       description: "Journal d'événements de l'application · {count} entrées",
+    },
+    email: {
+      title: "Envoyer un diagnostic",
+      description: "Envoyer les journaux et l'état du système au support",
+      emailSubject: "Rapport de diagnostic",
+      emailIntro: "Veuillez décrire votre question ou votre problème au-dessus de cette ligne.",
     },
   },
 

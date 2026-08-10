@@ -41,6 +41,30 @@ export default {
     },
     signInWithGoogle: "Через Google",
     signInWithApple: "Через Apple",
+    signInWithEmail: "Через пошту",
+    email: {
+      title: "Вхід через пошту",
+      emailStep: "Ми надішлемо одноразовий код на вашу пошту — пароль не потрібен.",
+      emailLabel: "Ел. пошта",
+      emailPlaceholder: "you{'@'}example.com",
+      sendCode: "Надіслати код",
+      codeStep: "Введіть 6-значний код, який ми надіслали на {email}.",
+      codeLabel: "Код",
+      codePlaceholder: "6-значний код",
+      verify: "Увійти",
+      resend: "Надіслати код ще раз",
+      resendIn: "Повтор через {seconds} с",
+      changeEmail: "Змінити пошту",
+      errors: {
+        invalidEmail: "Введіть коректну адресу ел. пошти.",
+        invalidCode: "Код неправильний або застарів.",
+        throttled: "Зачекайте трохи перед запитом нового коду.",
+        disabled: "Вхід через пошту зараз недоступний.",
+        network: "Немає з'єднання. Перевірте інтернет і спробуйте ще раз.",
+        server: "Щось пішло не так на нашому боці. Спробуйте за хвилину.",
+        generic: "Щось пішло не так. Спробуйте ще раз.",
+      },
+    },
     signedIn: "Ви увійшли",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -75,6 +99,7 @@ export default {
       "Скасувати можна будь-коли. Після пробного періоду підписка продовжиться автоматично.",
     disclaimer: "Скасувати можна будь-коли. Підписка продовжиться автоматично.",
     subscribed: "Підписку оформлено",
+    loading: "Завантаження варіантів підписки…",
     unavailable: "Покупки в застосунку недоступні на цьому пристрої.",
     manage: "Керування підпискою",
     restore: "Відновити",
@@ -288,6 +313,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "Наша студія та інші застосунки",
+    },
     email: {
       title: "Написати нам",
       description: "Маєте запитання чи пропозиції?",
@@ -333,6 +362,12 @@ export default {
     viewLogs: {
       title: "Переглянути логи",
       description: "Журнал подій застосунку · {count} записів",
+    },
+    email: {
+      title: "Надіслати діагностику",
+      description: "Надіслати логи та стан системи в підтримку",
+      emailSubject: "Звіт діагностики",
+      emailIntro: "Будь ласка, опишіть своє запитання або проблему над цим рядком.",
     },
   },
 

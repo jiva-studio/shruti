@@ -273,6 +273,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Unbeendeter Vortrag",
   proactiveSessionTitleInactivity: "Zurück zu deiner Praxis",
   proactiveSessionTitleWeeklyDigest: "Deine Woche",
+  proactiveSessionTitleDailyWisdom: "Tägliche Weisheit",
+
+  proactiveDailyWisdomBody: "Ein Gedanke aus den Vorträgen für heute:",
+
   proactiveInactivityWelcomeBody:
     "Du warst eine Weile weg. Frische Vorträge warten schon — öffne deine Bibliothek und höre dort weiter, wo du aufgehört hast.",
 
@@ -335,6 +339,12 @@ export default {
   actionQueueNextTrackConfirm: "Hinzufügen",
   actionQueueNextTrackDone: "Zur Bibliothek hinzugefügt.",
   actionQueueNextTrackError: "Dieser Vortrag konnte nicht hinzugefügt werden.",
+
+  actionAddToLibraryTitle: "Zu meiner Bibliothek hinzufügen",
+  actionAddToLibraryConfirm: "Zur Bibliothek hinzufügen",
+  actionAddToLibraryDone: "Hinzugefügt — wird verarbeitet.",
+  actionAddToLibraryError: "Dieser Vortrag konnte nicht hinzugefügt werden.",
+  addByLinkCommand: "Vortrag über diesen Link hinzufügen: {url}",
 
   citationSaveAsNote: "Als Notiz speichern",
   citationOpenInStudio: "Im Studio öffnen",

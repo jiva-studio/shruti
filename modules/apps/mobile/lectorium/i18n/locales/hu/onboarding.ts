@@ -27,6 +27,8 @@ export default {
   },
   paywall: {
     title: "Több funkció a Pro-val",
+    subtitle:
+      "Minden előadás ingyenes. Az előfizetés segít abban, hogy tovább fejlesszük az alkalmazást — új funkciókkal és előadásokkal.",
     later: "Később",
   },
   finish: "Hallgatás megkezdése",

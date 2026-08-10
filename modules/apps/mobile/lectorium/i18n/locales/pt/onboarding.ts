@@ -27,6 +27,8 @@ export default {
   },
   paywall: {
     title: "Mais recursos com Pro",
+    subtitle:
+      "Todas as aulas são gratuitas. A assinatura nos ajuda a continuar desenvolvendo o app — a adicionar novos recursos e aulas.",
     later: "Mais tarde",
   },
   finish: "Começar a ouvir",
