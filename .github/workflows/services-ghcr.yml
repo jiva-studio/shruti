@@ -309,12 +309,17 @@ jobs:
           python-version: '3.12'
           cache: pip
 
+      # Kept in step with `services-chat-tests.yml`: same suite, same
+      # per-package coverage floors. Lint is deliberately NOT part of the
+      # publish gate — a style regression is not a reason to withhold an
+      # image whose tests pass.
       - name: Run chat test suite
         if: matrix.service == 'chat'
         working-directory: modules/services/chat/app
         run: |
           pip install -e ".[dev]"
-          python -m pytest tests -q
+          python -m pytest tests -q --cov --cov-report=json --cov-report=term
+          python scripts/check_coverage_floors.py
 
       - uses: docker/setup-buildx-action@v3
 

@@ -29,6 +29,33 @@ curl -fsS -N -X POST http://localhost:8080/chat \
   -d '{"messages":[{"role":"user","content":"что Прабхупада говорил про варнашраму?"}],"lang":"ru"}'
 ```
 
+## Tests, coverage and lint
+
+The three lanes CI runs (`.github/workflows/services-chat-tests.yml`), from
+`app/`:
+
+```bash
+pytest tests -q                                    # suite
+pytest tests -q --cov --cov-report=json            # + coverage
+python scripts/check_coverage_floors.py            # per-package floors
+ruff check .                                       # gating lint rules
+```
+
+Coverage is gated by a floor **per package**, not one number for the service:
+the whole-service figure was a healthy 76.7% while individual packages sat near
+zero, because a large well-tested package pays for a small untested one. The
+floors live in `pyproject.toml` under `[tool.coverage_floors]`, each set just
+below its measured value, and are meant to ratchet upward — a failure means
+"add a test", never "lower the floor".
+
+`ruff check` gates on the rules pinned in `[tool.ruff.lint]` (pyflakes + E9)
+and is green. The wider rule set still has ~540 findings; the ruff lane counts
+them in an advisory step so they can be paid down and promoted rule by rule.
+
+Tests that need real infrastructure are marked `needs_db` / `needs_network` and
+skipped unless `--integration` or `LECTORIUM_INTEGRATION_DB` is set. The
+marker is what gates them, not the directory they live in.
+
 ## Production deploy
 
 Deployment is workspace-level — see `infra/README.md`. One command brings

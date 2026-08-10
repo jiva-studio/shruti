@@ -10,6 +10,10 @@ name: Services / chat tests
 # :latest from a red commit (the «Перескажи текущую лекцию» empty-result
 # bug, PR #1016, reached prod that way). The build now runs the same suite
 # itself before pushing the chat image — keep the two in sync.
+#
+# Two jobs: `pytest` (suite + per-package coverage floors) and `ruff`. The
+# floors are enforced in the deploy gate too; the lint lane is not, because a
+# style regression is not a reason to block a build that passes its tests.
 
 on:
   pull_request:
@@ -51,4 +55,47 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Run tests
-        run: python -m pytest tests -q
+        run: python -m pytest tests -q --cov --cov-report=json --cov-report=term
+
+      # Per-package floors rather than one `--fail-under` for the service:
+      # overall coverage was 76.7% while individual packages sat near zero,
+      # because a big well-tested package pays for a small untested one. The
+      # floors live in pyproject's [tool.coverage_floors]; see the script.
+      - name: Check per-package coverage floors
+        run: python scripts/check_coverage_floors.py
+
+  ruff:
+    name: ruff
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/services/chat/app
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      # Just the linter — mirroring the dev-extra constraint — rather than the
+      # whole `.[dev]` tree, so the lane answers in seconds. Ruff needs no
+      # imports to work.
+      - name: Install ruff
+        run: pip install "ruff>=0.7"
+
+      # `ruff` has been a declared dev dep all along and was never run by
+      # anything but hands. The gating rule set is pinned in pyproject
+      # ([tool.ruff.lint]) rather than left to ruff's default, which has grown
+      # a lot across releases — the lane must go red on a code change, not on
+      # a ruff release.
+      - name: Lint (gating rules)
+        run: ruff check --output-format=github .
+
+      # The candidates for promotion into the gating set, counted but not
+      # blocking: 542 findings today, ~285 of them auto-fixable, dominated by
+      # unsorted imports (166) and line length (107). Read the summary here to
+      # pick the next rule to pay down and move into [tool.ruff.lint].select.
+      - name: Lint debt (advisory)
+        continue-on-error: true
+        run: ruff check --select E,W,I,UP,B,SIM,RET,C4,PERF --statistics .
