@@ -11,7 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-import asyncpg
 from fastapi import Request
 
 from lectorium_chat.application.rate_limiter import RateLimiter
@@ -33,7 +32,6 @@ from lectorium_chat.domain.ports.translation import TranslationService
 @dataclass(frozen=True, slots=True)
 class AppDeps:
     settings: Settings
-    pool: asyncpg.Pool
     embedder: EmbedderPort
     chunk_repo: ChunkRepository
     catalog_repo: CatalogRepository

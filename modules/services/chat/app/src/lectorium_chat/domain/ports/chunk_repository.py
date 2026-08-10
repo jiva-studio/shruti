@@ -17,7 +17,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from lectorium_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, ScoredLibraryChunk
+from lectorium_chat.domain.entities import (
+    AttributionCandidate,
+    Chunk,
+    LibraryChunk,
+    ScoredChunk,
+    ScoredLibraryChunk,
+)
 
 
 class ChunkRepository(Protocol):
@@ -205,6 +211,38 @@ class ChunkRepository(Protocol):
         callers narrow via `kinds`. Used by the research pipeline to
         expand verse hits with their commentaries from all authors.
         """
+        ...
+
+    async def find_attributions(
+        self,
+        embedding: list[float],
+        *,
+        kind: str,
+        lang: str | None,
+    ) -> list[AttributionCandidate]:
+        """Top curated attributions of one `kind` ('pinned' / 'boost' /
+        'memory') by cosine against `embedding`, best variant per
+        attribution, score-descending. `lang=None` searches every language
+        (the cross-lingual stage). Implementations apply the active
+        `embed_model` filter and resolve the per-dim embedding table
+        themselves — the caller never names either."""
+        ...
+
+    async def attribution_texts(
+        self, attribution_id: str, *, lang: str | None,
+    ) -> list[str]:
+        """The curated phrasings of one attribution, for the border-zone
+        judge to score the user query against. Prefers `lang`; falls back
+        to every language when it has none there, so a cross-lingual
+        border match still has text to rerank."""
+        ...
+
+    async def fetch_attribution_note(
+        self, attribution_id: str, *, lang: str,
+    ) -> str | None:
+        """The full note of a matched `memory` attribution. Prefers `lang`,
+        then English, then any (the synthesizer reads any language and
+        still answers in the user's). None when the attribution has none."""
         ...
 
     async def get_chunks_by_target(

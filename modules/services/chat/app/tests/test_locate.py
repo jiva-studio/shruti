@@ -87,6 +87,9 @@ class _FakeChunkRepo:
         self.last_source_id = source_id
         return self._scored
 
+    async def find_attributions(self, embedding, *, kind, lang):
+        return []
+
 
 def _scored(item_kind, source_id, tokens, addr_label, score):
     return ScoredLibraryChunk(
@@ -112,7 +115,7 @@ async def test_run_locate_groups_chapters_into_region(tmp_path):
         question="в какой песни Шримад-Бхагаватам история Маркандеи",
         lang="ru", router_args={},
         chunk_repo=repo, embedder=_FakeEmbedder(),
-        pool=None, library_repo=lib,
+        library_repo=lib,
     )
     assert result.verses == []
     assert len(result.regions) == 1
@@ -135,7 +138,7 @@ async def test_run_locate_verse_cue_returns_verses(tmp_path):
         question="в каком стихе сказано про победу над смертью",
         lang="ru", router_args={},
         chunk_repo=repo, embedder=_FakeEmbedder(),
-        pool=None, library_repo=lib,
+        library_repo=lib,
     )
     assert result.regions == []
     assert len(result.verses) == 1
@@ -151,7 +154,7 @@ async def test_run_locate_drops_short_source_code(tmp_path):
     await locate.run_locate(
         question="в какой песни ШБ история Маркандеи", lang="ru",
         router_args={"source_id": "SB"},
-        chunk_repo=repo, embedder=_FakeEmbedder(), pool=None, library_repo=lib,
+        chunk_repo=repo, embedder=_FakeEmbedder(), library_repo=lib,
     )
     assert repo.last_source_id is None
 
@@ -163,7 +166,7 @@ async def test_run_locate_keeps_opaque_source_id(tmp_path):
     await locate.run_locate(
         question="…", lang="ru",
         router_args={"source_id": "source_NoY8sAlXF1IT"},
-        chunk_repo=repo, embedder=_FakeEmbedder(), pool=None, library_repo=lib,
+        chunk_repo=repo, embedder=_FakeEmbedder(), library_repo=lib,
     )
     assert repo.last_source_id == "source_NoY8sAlXF1IT"
 
@@ -183,7 +186,7 @@ async def test_run_locate_queries_both_attribution_kinds(tmp_path, monkeypatch):
     await locate.run_locate(
         question="история Махараджи Прахлады", lang="ru", router_args={},
         chunk_repo=_FakeChunkRepo([]), embedder=_FakeEmbedder(),
-        pool=object(), llm=None, embed_model="m", embed_dim=8, library_repo=lib,
+        llm=None, library_repo=lib,
     )
     assert set(seen) == {"pinned", "boost"}
     # Boost lookup uses the lowered locate-specific accept thresholds so a
@@ -215,8 +218,7 @@ async def test_run_locate_attribution_excludes_semantic_noise(tmp_path, monkeypa
     repo = _FakeChunkRepo([_scored("verse", SB, "12.2.5", "ШБ 12.2.5", 0.8)])
     res = await locate.run_locate(
         question="история Маркандеи", lang="ru", router_args={},
-        chunk_repo=repo, embedder=_FakeEmbedder(), pool=object(), llm=None,
-        embed_model="m", embed_dim=8, library_repo=lib,
+        chunk_repo=repo, embedder=_FakeEmbedder(), llm=None, library_repo=lib,
     )
     assert len(res.regions) == 1
     assert [c.tokens for c in res.regions[0].chapters] == ["12.8"]
@@ -230,7 +232,7 @@ async def test_run_locate_empty_when_no_hits(tmp_path):
         question="где про квантовую механику",
         lang="ru", router_args={},
         chunk_repo=_FakeChunkRepo([]), embedder=_FakeEmbedder(),
-        pool=None, library_repo=lib,
+        library_repo=lib,
     )
     assert result.regions == [] and result.verses == []
 

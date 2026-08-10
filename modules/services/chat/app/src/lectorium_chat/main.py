@@ -253,7 +253,6 @@ async def lifespan(app: FastAPI):
 
     app.state.deps = AppDeps(
         settings=s,
-        pool=pool,
         embedder=embedder,
         chunk_repo=chunk_repo,
         catalog_repo=catalog_repo,
