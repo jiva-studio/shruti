@@ -16,7 +16,7 @@ test(qase(3, caseTitle(3)), { tag: ["@offline", "@notes"] }, async ({ page }) =>
     await gotoTab(page, "notes")
 
     // The seeded user has notes on the demo transcript.
-    const notes = page.locator("ion-item.note")
+    const notes = page.locator(".note[role=button]")
     await expect(notes.first()).toBeVisible({ timeout: 20_000 })
     before = await notes.count()
     expect(before).toBeGreaterThan(0)
@@ -31,6 +31,6 @@ test(qase(3, caseTitle(3)), { tag: ["@offline", "@notes"] }, async ({ page }) =>
     await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
     await gotoTab(page, "notes")
 
-    await expect.poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 }).toBe(before)
+    await expect.poll(() => page.locator(".note[role=button]").count(), { timeout: 15_000 }).toBe(before)
   })
 })
