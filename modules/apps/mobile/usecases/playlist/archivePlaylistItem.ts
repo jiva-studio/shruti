@@ -24,11 +24,12 @@ export async function archivePlaylistItem(
   input: ArchivePlaylistItemInput,
   deps: ArchivePlaylistItemDeps
 ): Promise<Result<void, ArchivePlaylistItemError>> {
-  return deps.unitOfWork.run(async () => {
+  return deps.unitOfWork.run(async (tx) => {
     const existing = await deps.playlistItems.getById(input.itemId)
     if (!existing) return err("not-found")
     if (existing.archivedAt !== null) return err("already-archived")
-    await deps.playlistItems.archive(input.itemId)
+    // The handle keeps the archive and its journal entry in THIS transaction.
+    await deps.playlistItems.archive(input.itemId, tx)
     return ok(undefined)
   })
 }

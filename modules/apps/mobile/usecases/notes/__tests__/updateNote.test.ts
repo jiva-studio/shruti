@@ -5,7 +5,10 @@ import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { Note } from "@lib/domain/note.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
 
-const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
+/** Hands the callback a transaction handle, like a real unit of work, so a
+ *  test can pin that the use case threads it down to the repository. */
+const TX = { kind: "transaction" } as const
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn(TX) }
 
 function makeRepo(overrides: Partial<INoteRepository> = {}): INoteRepository {
   return {
@@ -51,13 +54,16 @@ describe("updateNote", () => {
     )
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.value.text).toBe("new text")
-    expect(updateSpy).toHaveBeenCalledWith({
-      id: "n-1",
-      text: "new text",
-      timeStart: undefined,
-      timeEnd: undefined,
-      meta: undefined,
-    })
+    expect(updateSpy).toHaveBeenCalledWith(
+      {
+        id: "n-1",
+        text: "new text",
+        timeStart: undefined,
+        timeEnd: undefined,
+        meta: undefined,
+      },
+      TX
+    )
   })
 
   it("returns not-found when the note is absent", async () => {
@@ -185,6 +191,9 @@ describe("updateNote", () => {
       { notes: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(true)
-    expect(updateSpy).toHaveBeenCalledWith(expect.objectContaining({ id: "n-1", text: "trimmed" }))
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "n-1", text: "trimmed" }),
+      TX
+    )
   })
 })

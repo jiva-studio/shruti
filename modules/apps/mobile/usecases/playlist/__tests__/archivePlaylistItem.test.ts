@@ -5,7 +5,10 @@ import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 
-const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
+/** Hands the callback a transaction handle, like a real unit of work, so a
+ *  test can pin that the use case threads it down to the repository. */
+const TX = { kind: "transaction" } as const
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn(TX) }
 
 function makeRepo(overrides: Partial<IPlaylistItemRepository> = {}): IPlaylistItemRepository {
   return {
@@ -43,7 +46,7 @@ describe("archivePlaylistItem", () => {
       { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(true)
-    expect(archive).toHaveBeenCalledWith("pi-1")
+    expect(archive).toHaveBeenCalledWith("pi-1", TX)
   })
 
   it("returns not-found when the item is absent", async () => {
