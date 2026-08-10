@@ -33,6 +33,10 @@ concurrency:
 
 permissions:
   contents: read
+  # The image job runs dorny/paths-filter. On `push` it diffs against the
+  # event's before-SHA, but a pull_request event has none, so it asks the
+  # API for this PR's changed files — which needs this read-only scope.
+  pull-requests: read
 
 jobs:
   pytest:
