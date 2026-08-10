@@ -18,6 +18,10 @@ export interface HomeRowBuilderReturn {
  * across Home / Search / Library); Home layers its own `disabled` and
  * `dimmed` flags on top so an in-flight download is non-interactive and
  * the failed-state row dims to read as "something is off."
+ *
+ * Nothing here depends on the playback position, so this computed does not
+ * re-run while a lecture plays (issue #1504). The live radial of the playing
+ * row is applied downstream, per row, from `usePlaybackRowProgress`.
  */
 export function useHomeRowBuilder(): HomeRowBuilderReturn {
   const playlist = usePlaylistStore()
