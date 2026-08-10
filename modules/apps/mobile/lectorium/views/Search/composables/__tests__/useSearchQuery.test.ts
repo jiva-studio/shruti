@@ -82,7 +82,41 @@ describe("useSearchQuery", () => {
 
     expect(search.error.value).toBe("database is locked")
     expect(search.hasMore.value).toBe(false)
+    expect(search.canRetry.value).toBe(true)
     expect(search.rawTracks.value).toHaveLength(PAGE_SIZE)
+  })
+
+  // #1661: the disarmed scroll used to be the end of the list — one transient
+  // failure and no further page was reachable until the query was retyped.
+  it("fetches the failed page again on retry", async () => {
+    const { calls, search } = setup()
+    const first = search.runQuery()
+    calls[0].resolve(page(0))
+    await first
+
+    const failing = search.loadMore()
+    calls[1].reject(new Error("database is locked"))
+    await failing
+
+    const retrying = search.retry()
+    expect(calls).toHaveLength(3)
+    calls[2].resolve(page(PAGE_SIZE))
+    await retrying
+
+    expect(search.error.value).toBeNull()
+    expect(search.canRetry.value).toBe(false)
+    expect(search.hasMore.value).toBe(true)
+    expect(search.rawTracks.value).toHaveLength(PAGE_SIZE * 2)
+  })
+
+  it("offers no retry until a page has failed", async () => {
+    const { calls, search } = setup()
+    const first = search.runQuery()
+    calls[0].resolve(page(0))
+    await first
+
+    await search.retry()
+    expect(calls).toHaveLength(1)
   })
 
   it("reports a failed query instead of leaving a blank pane", async () => {

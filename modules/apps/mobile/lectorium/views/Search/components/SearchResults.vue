@@ -110,6 +110,16 @@
         <IonInfiniteScroll :disabled="!search.hasMore.value" @ion-infinite="onInfinite">
           <IonInfiniteScrollContent />
         </IonInfiniteScroll>
+
+        <!-- A page that failed disarms the scroll, or every further scroll
+             would retry the same offset forever. Without a button that is the
+             end of the list as far as the user can tell — one transient error
+             and the rest of the results are gone until they retype the query. -->
+        <div v-if="search.canRetry.value" class="lane-retry">
+          <IonButton fill="clear" size="small" @click="search.retry()">
+            {{ $t("search.library.retry") }}
+          </IonButton>
+        </div>
       </template>
     </section>
   </div>
@@ -118,6 +128,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import {
+  IonButton,
   IonInfiniteScroll,
   IonInfiniteScrollContent,
   type InfiniteScrollCustomEvent,
@@ -238,6 +249,12 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   max-width: 320px;
   color: var(--ion-color-medium);
   font-size: 14px;
+}
+
+.lane-retry {
+  display: flex;
+  justify-content: center;
+  padding: 4px 16px 8px;
 }
 
 .lane-note {
