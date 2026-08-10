@@ -9,7 +9,7 @@ import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Result } from "@kit/core"
-import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
+import type { AudioQueueItem, AudioQueueState } from "@ports/app/audioPlayer.js"
 import { useShruti } from "@shruti/shruti.js"
 import { setNativeQueueRelease } from "@shruti/services/nativeQueue.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
@@ -66,6 +66,10 @@ export const usePlayerStore = defineStore("player", () => {
   // Set when an item left the queue while the engine was paused: `setQueue`
   // restarts playback, so the rewrite waits for the next resume.
   let queueNeedsRewrite = false
+  // Archived lectures whose audio `usePlaylistStore.archive` left on disk
+  // because the engine could still reach them. Nothing else collects those,
+  // so the player owes them an evict once the engine has let go.
+  const pendingEvictions = new Set<PlaylistItemId>()
   // Single-flight guard for the native-state drain (init / resume /
   // foreground-advance can all trigger it near-simultaneously).
   let syncing = false
@@ -280,40 +284,99 @@ export const usePlayerStore = defineStore("player", () => {
    * Hand the current mirror back to the engine, restarting the item that is
    * playing at its live position. `setQueue` is a full replace — the plugin
    * has no per-item removal — so this is how a queue is rewritten.
+   *
+   * Returns whether the queue was actually handed over. False means the mirror
+   * can't place the current item and the caller has to fall back — the rewrite
+   * flag is cleared either way, since leaving it armed wedges every later
+   * play/pause tap into this path.
    */
-  async function pushQueue(): Promise<void> {
-    const startIndex = currentQueue.findIndex((q) => q.itemId === itemId.value)
-    if (startIndex < 0) return
+  async function pushQueue(state?: AudioQueueState | null): Promise<boolean> {
     queueNeedsRewrite = false
+    const startIndex = currentQueue.findIndex((q) => q.itemId === itemId.value)
+    if (startIndex < 0) return false
     // `positionMs` lags by up to one progress tick and `setQueue` restarts
     // the item at whatever we pass, so take the position from the engine.
-    const s = await app.audioPlayer.getQueueState().catch(() => null)
+    const s = state !== undefined ? state : await app.audioPlayer.getQueueState().catch(() => null)
     const at = s && s.currentItemId === itemId.value ? s.positionMs : positionMs.value
     await app.audioPlayer.setQueue(currentQueue, startIndex, at)
+    await flushPendingEvictions()
+    return true
+  }
+
+  /**
+   * Rebuild the JS mirror of the native queue when it can't place the item the
+   * engine is on. Only `loadTrack` ever fills it, so a queue restored from a
+   * previous (backgrounded, then killed) session leaves it empty — and an empty
+   * mirror waves every archive through, deleting a file the engine still holds.
+   * The tail is rebuilt from the same active playlist the queue was built from.
+   */
+  async function ensureQueueMirror(currentId: PlaylistItemId | null): Promise<void> {
+    if (!currentId) return
+    if (currentQueue.some((q) => q.itemId === currentId)) return
+    const rebuilt = await usePlaylistStore()
+      .buildQueueFrom(currentId, language.value ?? undefined)
+      .catch(() => [])
+    if (rebuilt.length > 0) currentQueue = rebuilt
+  }
+
+  /**
+   * Give back the audio of lectures archived while the engine still held them.
+   * `usePlaylistStore.archive` skips the evict for those (see `dropFromQueue`),
+   * and there is no orphan collection anywhere else, so without this the file
+   * stays against the storage budget for the life of the install.
+   *
+   * An item is reachable while it is playing or sits ahead of the playhead —
+   * and while a rewrite is still deferred, since the engine is then running the
+   * queue we haven't replaced yet.
+   */
+  async function flushPendingEvictions(force = false): Promise<void> {
+    if (pendingEvictions.size === 0) return
+    if (!force && queueNeedsRewrite) return
+    const currentIdx = currentQueue.findIndex((q) => q.itemId === itemId.value)
+    for (const id of [...pendingEvictions]) {
+      if (!force) {
+        if (id === itemId.value) continue
+        const idx = currentQueue.findIndex((q) => q.itemId === id)
+        if (idx >= 0 && (currentIdx < 0 || idx > currentIdx)) continue
+      }
+      pendingEvictions.delete(id)
+      const track = await usePlaylistStore().resolveTrackForItemId(id)
+      if (track) void useDownloadStore().evict(track.id)
+    }
   }
 
   /**
    * Take an item out of the live native queue, so the engine can't advance
    * into a lecture whose audio is about to be deleted. Returns true when the
    * file must be KEPT — the item is playing right now, or the rewrite had to
-   * be deferred and a lock-screen resume could still reach it.
+   * be deferred and a lock-screen resume could still reach it. Every kept file
+   * is remembered so it can be reclaimed once the engine lets go.
    *
    * Only the unplayed tail is rewritten: the engine never auto-advances
    * backwards, and re-pushing the queue for an item behind the playhead would
    * restart the current lecture every time the sweep archives a finished one.
    */
   async function dropFromQueue(id: PlaylistItemId): Promise<boolean> {
-    if (id === itemId.value) return true
+    if (id === itemId.value) {
+      pendingEvictions.add(id)
+      return true
+    }
+    if (queueActive) await ensureQueueMirror(itemId.value)
     const idx = currentQueue.findIndex((q) => q.itemId === id)
     if (idx < 0) return false
     const currentIdx = currentQueue.findIndex((q) => q.itemId === itemId.value)
     currentQueue = currentQueue.filter((q) => q.itemId !== id)
     if (currentIdx < 0 || idx < currentIdx) return false
-    if (!playing.value) {
+    // `playing.value` only moves on a progress tick (1 s in the foreground), so
+    // for about a second after a pause tap it still reads true — and rewriting
+    // a paused queue restarts playback by itself. Ask the engine instead.
+    const state = await app.audioPlayer.getQueueState().catch(() => null)
+    if (!(state?.playing ?? playing.value)) {
       queueNeedsRewrite = true
+      pendingEvictions.add(id)
       return true
     }
-    await pushQueue()
+    await pushQueue(state)
     return false
   }
   setNativeQueueRelease(dropFromQueue)
@@ -355,15 +418,21 @@ export const usePlayerStore = defineStore("player", () => {
         // cold-restore path where `openTrack` never ran — otherwise the dry
         // handling and foreground advance detection stay disabled.
         queueActive = true
+        await ensureQueueMirror(s.currentItemId)
         if (s.currentItemId !== itemId.value) {
           await resyncTo(s.currentItemId, s.positionMs, s.durationMs, s.playing)
         }
+        // A deferred rewrite lands as soon as the engine is playing again —
+        // including a lock-screen resume, which never reaches `togglePause`.
+        if (queueNeedsRewrite && s.playing) await pushQueue(s)
+        await flushPendingEvictions()
       } else if (queueActive) {
         // Queue ran dry — nothing playing. Don't show a stale "playing".
         playing.value = false
         queueActive = false
         queueNeedsRewrite = false
         currentQueue = []
+        await flushPendingEvictions(true)
       }
     } catch (e) {
       // Best-effort — a drain failure must not break playback, but it signals a
@@ -607,13 +676,12 @@ export const usePlayerStore = defineStore("player", () => {
 
   async function togglePause(): Promise<void> {
     if (!open.value) return
-    if (queueNeedsRewrite && !playing.value) {
-      // A queue rewrite was deferred while paused; resuming is exactly when
-      // to push it, since `setQueue` starts playback itself.
-      await pushQueue()
-    } else {
-      await app.audioPlayer.togglePause()
-    }
+    // A queue rewrite was deferred while paused; resuming is exactly when to
+    // push it, since `setQueue` starts playback itself. When the mirror can't
+    // place the current item there is nothing to push — resume normally rather
+    // than swallowing the tap.
+    const pushed = queueNeedsRewrite && !playing.value ? await pushQueue() : false
+    if (!pushed) await app.audioPlayer.togglePause()
     // The engine emits playing=false → session.applyStatus closes the
     // session on the next tick. Patch the playlist immediately so the
     // UI doesn't have to wait for a render-cycle round-trip.
@@ -692,6 +760,7 @@ export const usePlayerStore = defineStore("player", () => {
     queueActive = false
     queueNeedsRewrite = false
     currentQueue = []
+    await flushPendingEvictions(true)
   }
 
   function flushProgressNow(): void {

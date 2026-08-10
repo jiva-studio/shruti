@@ -199,7 +199,18 @@ export const usePlaylistStore = defineStore("playlist", () => {
     return result
   }
 
-  async function archive(itemId: PlaylistItemId): Promise<Result<void, ArchivePlaylistItemError>> {
+  /**
+   * The single way a lecture leaves the active playlist — for a swipe on Home
+   * and for the auto-archive sweep alike. It owns the whole teardown: the
+   * pending prefetch, the live native queue, and the cached audio.
+   *
+   * `refresh: false` lets a batch caller (the sweep) archive many items and
+   * re-hydrate once at the end instead of once per item.
+   */
+  async function archive(
+    itemId: PlaylistItemId,
+    options?: { refresh?: boolean }
+  ): Promise<Result<void, ArchivePlaylistItemError>> {
     const repos = app.repositories()
     // Drop any pending prefetch for this track so we don't waste
     // bandwidth on a file the user is archiving. Mid-flight transfers
@@ -220,12 +231,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
       // true when the item can't be pulled out (it is playing right now) —
       // then the file has to stay.
       const keepFile = await releaseFromNativeQueue(itemId)
-      await refresh()
+      if (options?.refresh ?? true) await refresh()
       // Archiving is the only way a lecture leaves the queue, so it's also
       // the only moment its audio stops being worth keeping. Reclaiming it
       // here is what lets a budget-capped queue keep downloading as the
       // user works through it. Best-effort: a failed delete just leaves the
-      // file for the next pass.
+      // file for the next pass. A kept file is the player's to reclaim once
+      // the engine lets go (see `flushPendingEvictions`).
       if (entry && !keepFile) void useDownloadStore().evict(entry.item.trackId)
     }
     return result
@@ -424,8 +436,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
     return completedAtMap.value.get(itemId) ?? null
   }
 
+  /**
+   * Pre-warm the head of the list on Home mount. Capped at one page: the
+   * rendered window now survives `refresh()`, so a user who scrolled deep
+   * would otherwise re-fan-out over hundreds of rows on every mount.
+   */
   function prefetchAll(): void {
-    prefetch.prefetchAll(entries.value)
+    prefetch.prefetchAll(entries.value.slice(0, PAGE_SIZE))
   }
 
   return {
