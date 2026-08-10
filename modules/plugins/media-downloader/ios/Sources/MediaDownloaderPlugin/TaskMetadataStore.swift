@@ -4,14 +4,26 @@ import Foundation
  * Per-task metadata persisted across app launches via UserDefaults.
  * Mirrors `DownloadStore` on the Android side.
  *
- * Holds the URL, the absolute on-disk path, and the most recent byte
- * counts so `listTasks()` and `getTask()` can answer questions about
- * downloads that finished while the app was suspended.
+ * Holds the file key, the URL it was fetched from, the absolute on-disk
+ * path, and the most recent byte counts so `listTasks()` and `getTask()`
+ * can answer questions about downloads that finished while the app was
+ * suspended.
  */
 final class TaskMetadataStore {
 
     struct Entry: Codable {
         let id: String
+        /**
+         * What names the file, independent of the host it came from. Several
+         * CDNs serve the same file and the active one changes under the app,
+         * so an entry found by URL disappeared the moment the region did —
+         * and the caller read that as a lost download.
+         *
+         * Optional for decoding only: entries written by a build before the
+         * key existed fall back to the path of their URL, which is the same
+         * value, so an upgrade keeps finding what it already downloaded.
+         */
+        let fileKey: String?
         let url: String
         var localPath: String
         var bytesDownloaded: Int64
@@ -39,8 +51,18 @@ final class TaskMetadataStore {
         loadAll()[id]
     }
 
+    /** Match a live URLSession task back to its entry — the one lookup that
+     *  legitimately keys on the address, since that is what the task carries. */
     func findByUrl(_ url: String) -> Entry? {
         loadAll().values.first(where: { $0.url == url })
+    }
+
+    func findByFileKey(_ fileKey: String) -> Entry? {
+        loadAll().values.first(where: { keyOf($0) == fileKey })
+    }
+
+    private func keyOf(_ entry: Entry) -> String? {
+        entry.fileKey ?? URL(string: entry.url)?.path
     }
 
     func all() -> [Entry] {

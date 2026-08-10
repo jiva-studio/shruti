@@ -13,10 +13,10 @@ import { step, caseTitle } from "../../../support/steps.js"
  * 0-based and `getCollectionsOfTrack` converts it with a COUNT subquery, so an
  * off-by-one there is visible here and on no other screen.
  *
- * The row-level ordinal chip is deliberately NOT asserted: `TrackListItem`
- * renders one, but no producer in the app ever puts `position` on a list row,
- * so it cannot appear (issue filed separately). Asserting it here would be
- * asserting a feature that was never wired.
+ * The row-level ordinal chip is not asserted here because it does not belong
+ * here: it is fed from the provenance a whole-collection add records, so it
+ * appears on the Home queue (Qase 40), not on the collection page — where the
+ * list order already states the same thing.
  */
 test(qase(179, caseTitle(179)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "en", { userDb: "clean" })

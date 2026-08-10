@@ -84,6 +84,7 @@ class MediaDownloaderPlugin : Plugin() {
     fun download(call: PluginCall) {
         val id = call.getString("id") ?: return call.reject("'id' is required")
         val url = call.getString("url") ?: return call.reject("'url' is required")
+        val fileKey = call.getString("fileKey") ?: return call.reject("'fileKey' is required")
         val destination = call.getObject("destination")
             ?: return call.reject("'destination' is required")
 
@@ -145,7 +146,7 @@ class MediaDownloaderPlugin : Plugin() {
             .addTag(id)
             .build()
 
-        store.put(DownloadStore.Entry(id, request.id, url, localPath))
+        store.put(DownloadStore.Entry(id, request.id, fileKey, url, localPath))
         WorkManager.getInstance(context).enqueue(request)
         attachObserver(id, request.id)
 
@@ -213,8 +214,8 @@ class MediaDownloaderPlugin : Plugin() {
 
     @PluginMethod
     fun resolveLocalUrl(call: PluginCall) {
-        val url = call.getString("url") ?: return call.reject("'url' is required")
-        val entry = store.findByUrl(url)
+        val fileKey = call.getString("fileKey") ?: return call.reject("'fileKey' is required")
+        val entry = store.findByFileKey(fileKey)
         val file = entry?.let { File(it.localPath) }
         val response = JSObject().apply {
             if (file != null && file.exists()) {
@@ -228,8 +229,8 @@ class MediaDownloaderPlugin : Plugin() {
 
     @PluginMethod
     fun deleteFile(call: PluginCall) {
-        val url = call.getString("url") ?: return call.reject("'url' is required")
-        val entry = store.findByUrl(url)
+        val fileKey = call.getString("fileKey") ?: return call.reject("'fileKey' is required")
+        val entry = store.findByFileKey(fileKey)
         if (entry != null) {
             File(entry.localPath).delete()
             File(entry.localPath + ".download").delete()
