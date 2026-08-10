@@ -3,6 +3,7 @@
     <template v-if="item.kind === 'track'">
       <PlaylistRow
         :row="item.row"
+        :playback="playback"
         @click="emit('click', $event)"
         @delete="emit('delete', $event)"
       />
@@ -19,7 +20,7 @@
         :config="GROUP_HEADER_META"
       >
         <template #state>
-          <RadialIndicator slot="end" :value="groupProgress(item.rows)" color="medium" />
+          <PlaylistGroupProgress :rows="item.rows" :playback="playback" />
         </template>
       </TrackListItem>
       <!-- Rows carry their place in the source collection, resolved from the
@@ -28,22 +29,23 @@
            rest as soon as one is removed. -->
       <template v-for="row in item.rows" :key="row.id">
         <RowDivider />
-        <PlaylistRow :row="row" @click="emit('click', $event)" @delete="emit('delete', $event)" />
+        <PlaylistRow
+          :row="row"
+          :playback="playback"
+          @click="emit('click', $event)"
+          @delete="emit('delete', $event)"
+        />
       </template>
     </div>
   </template>
 </template>
 
 <script setup lang="ts">
-import RadialIndicator from "@ui/components/tracks/state/RadialIndicator.vue"
-import {
-  TrackListItem,
-  type TrackMetaConfig,
-  type UiTrackRow,
-} from "@ui/components/tracks/list/index.js"
+import { TrackListItem, type TrackMetaConfig } from "@ui/components/tracks/list/index.js"
 import RowDivider from "@ui/components/RowDivider.vue"
 import PlaylistRow from "./PlaylistRow.vue"
-import type { PlaylistRenderItem } from "./types.js"
+import PlaylistGroupProgress from "./PlaylistGroupProgress.vue"
+import type { PlaylistRenderItem, UiPlaybackProgress } from "./types.js"
 
 /**
  * Renders the Home playlist as a mix of standalone track rows and collection
@@ -55,6 +57,10 @@ import type { PlaylistRenderItem } from "./types.js"
  */
 defineProps<{
   items: readonly PlaylistRenderItem[]
+  /** Live playback of the currently open track. Forwarded untouched to the
+   *  leaves — this component never reads its position, so a tick doesn't
+   *  re-render the list. */
+  playback?: UiPlaybackProgress
 }>()
 
 const emit = defineEmits<{
@@ -68,21 +74,6 @@ const EMPTY: readonly string[] = []
 // A group has no metadata of its own beyond its author, and the author is a
 // line of the row now — so the configurable line is empty.
 const GROUP_HEADER_META: TrackMetaConfig = { top: null, bottom: [] }
-
-/**
- * Overall listening progress (0–100) across a group's lectures: a completed
- * track counts as 100, an in-progress one as its playback %, anything not
- * started as 0. Averaged over the group.
- */
-function groupProgress(rows: readonly UiTrackRow[]): number {
-  if (rows.length === 0) return 0
-  let sum = 0
-  for (const r of rows) {
-    if (r.state === "completed") sum += 100
-    else if (r.state === "playing" || r.state === "queued") sum += r.progressPct
-  }
-  return Math.round(sum / rows.length)
-}
 
 function itemKey(item: PlaylistRenderItem): string {
   return item.kind === "track" ? `t:${item.row.id}` : `g:${item.id}:${item.rows[0]?.id ?? ""}`

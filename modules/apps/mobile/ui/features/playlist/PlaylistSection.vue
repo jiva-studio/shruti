@@ -1,7 +1,12 @@
 <template>
   <template v-if="items.length > 0">
     <slot name="header" />
-    <PlaylistItems :items="items" @click="emit('click', $event)" @delete="emit('delete', $event)" />
+    <PlaylistItems
+      :items="items"
+      :playback="playback"
+      @click="emit('click', $event)"
+      @delete="emit('delete', $event)"
+    />
   </template>
   <PageSticker
     v-else
@@ -21,7 +26,7 @@
 import { useRouter } from "vue-router"
 import { PageSticker } from "@ui/primitives/index.js"
 import PlaylistItems from "./PlaylistItems.vue"
-import type { PlaylistRenderItem } from "./types.js"
+import type { PlaylistRenderItem, UiPlaybackProgress } from "./types.js"
 
 const router = useRouter()
 
@@ -36,6 +41,9 @@ defineProps<{
   emptyHeader: string
   emptyMessage: string
   emptyImage: string
+  /** Live playback of the currently open track — forwarded to the rows, which
+   *  are built without a playback position (issue #1504). */
+  playback?: UiPlaybackProgress
 }>()
 
 const emit = defineEmits<{
