@@ -166,13 +166,6 @@ class TurnContext:
     # Cross-encoder reranker (RerankerPort). None when no provider is
     # configured / the key is missing → research pipeline uses cosine.
     reranker: Any | None = None
-    pool: Any | None = None             # asyncpg.Pool — for direct attribution lookup
-    embed_model: str | None = None      # settings.embed_model — required for attribution lookup
-    # Per-deployment embedding dimensionality. The attribution-lookup SQL
-    # resolves a `attribution_emb_d{embed_dim}` table at query time
-    # (migration 0030 split per-dim embeddings). Without this the lookup
-    # has no way to find which physical table its vectors live in.
-    embed_dim: int | None = None        # settings.embed_dim
 
     # ── KV cache (Stage 2) ──────────────────────────────────────────────
     # Tiered L1+L2 cache injected by the composition root. Used by

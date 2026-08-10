@@ -299,10 +299,7 @@ async def run_locate(
     *,
     chunk_repo: Any,
     embedder: Any,
-    pool: Any = None,
     llm: Any = None,
-    embed_model: str | None = None,
-    embed_dim: int | None = None,
     library_repo: Any = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
@@ -331,7 +328,7 @@ async def run_locate(
     # curated as boost/topical entries ("История Махараджи Прахлады"), while
     # pinned-kind covers "where is verse X" phrasings. Querying only one kind
     # silently drops the other half of the curated corpus.
-    if pool is not None and embed_model is not None and embed_dim is not None:
+    if chunk_repo is not None:
         async def _lookup(kind: str) -> list[AttributionMatch]:
             # Lower the boost accept bar for locate (see _LOCATE_BOOST_ACCEPT_*).
             extra: dict = {}
@@ -344,7 +341,7 @@ async def run_locate(
                 return await asyncio.wait_for(
                     find_attributions(
                         kind=kind, user_q_embedding=embedding, lang=lang,
-                        embed_model=embed_model, embed_dim=embed_dim, pool=pool,
+                        chunk_repo=chunk_repo,
                         # locate has no reranker wired — the border gate falls
                         # back to the LLM judge, now fed the real query text.
                         user_query=question if kind == "pinned" else None,
