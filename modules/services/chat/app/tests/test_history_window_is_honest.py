@@ -23,7 +23,7 @@ hands over when the last listen was.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -150,3 +150,40 @@ async def test_mixed_naive_and_aware_history_does_not_raise() -> None:
     )
     assert len(ctx.tracks_in_window(since=_NOW - timedelta(days=6))) == 2
     assert len(ctx.completed_tracks()) == 2
+
+
+_EAST = timezone(timedelta(hours=5))
+_NOW_EAST = datetime(2026, 8, 6, 9, 39, tzinfo=_EAST)
+# Monday of that week, 02:00 on the user's own clock — squarely inside
+# «this week», but three hours short of where a UTC-read Monday 00:00
+# would put the boundary (05:00 local).
+_MONDAY_0200_LOCAL = datetime(2026, 8, 3, 2, 0, tzinfo=_EAST)
+
+
+@pytest.mark.parametrize(
+    "since", ["2026-08-03T00:00:00", "2026-08-03T00:00:00+05:00", "2026-08-03"],
+)
+async def test_an_offsetless_bound_means_the_users_midnight_not_utcs(
+    since: str,
+) -> None:
+    """Offset-less does not mean UTC — it means the frame everything else
+    in this turn is written in.
+
+    `now` is the device's local wall-clock with its offset, and the tool
+    description tells the model to compute `since` / `until` «with the same
+    offset as `now`». So when the model leaves the offset off, it means the
+    user's clock. Reading it as UTC moves the boundary by the whole offset:
+    at UTC+5 a «since start of this week» becomes Monday 05:00 local, and a
+    lecture played Monday at 02:00 disappears from the week it belongs to.
+    All three spellings of the same instant must select the same row."""
+    got = await _call(
+        UserContext(
+            user_id="u-1",
+            now=_NOW_EAST,
+            recent_tracks=(_track("monday", played=_MONDAY_0200_LOCAL),),
+        ),
+        since=since,
+        until=_NOW_EAST.isoformat(),
+    )
+    assert isinstance(got, list), got
+    assert [t["track_ref"] for t in got] == [1]
