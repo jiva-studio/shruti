@@ -21,6 +21,7 @@ import { createSqlCollectionRepository } from "./collectionsRepository.sql.js"
 import { createSqlSettingsRepository } from "./settingsRepository.sql.js"
 import { createSqlDailyWisdomRepository } from "./dailyWisdomRepository.sql.js"
 import { createReentrantUnitOfWork } from "./reentrantUnitOfWork.sql.js"
+import { createSqlUnitOfWork } from "./unitOfWork.sql.js"
 import { withSyncJournaling } from "./syncJournalDecorator.js"
 import { createSqlOutboxRepository } from "./outboxRepository.sql.js"
 import { createSqlSyncStateRepository } from "./syncStateRepository.sql.js"
@@ -164,7 +165,16 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     playlistItems: createSqlPlaylistItemRepository(deps.userDb),
     listeningSessions: createSqlListeningSessionRepository(deps.userDb),
     chatSessions: createSqlChatSessionRepository(deps.userDb),
-    chatMessages: createSqlChatMessageRepository(deps.userDb),
+    // Its own PLAIN unit of work, deliberately not the shared reentrant one:
+    // the chat-message `meta` read-modify-writes must be isolated from every
+    // other transaction, and `createReentrantUnitOfWork`'s depth counter is a
+    // plain closure with no execution-context binding — it stays raised for
+    // the whole of any top-level `run` (a `pullAndMerge` page, the entire
+    // first-sign-in `backfillLocal`), so a concurrent write from an unrelated
+    // stack would be misread as nested, spliced into that foreign transaction
+    // and silently discarded when it rolls back. Switch to `unitOfWork` once
+    // #1493 binds the counter to the execution context.
+    chatMessages: createSqlChatMessageRepository(deps.userDb, createSqlUnitOfWork(deps.userDb)),
     libraryMemberships: createSqlLibraryMembershipRepository(deps.userDb),
   }
   const synced = deps.getDeviceId
