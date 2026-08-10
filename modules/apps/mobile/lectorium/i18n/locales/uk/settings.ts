@@ -177,6 +177,7 @@ export default {
   appLanguage: {
     title: "Мова",
     description: "Мова інтерфейсу",
+    loadFailedToast: "Не вдалося завантажити цю мову. Спробуйте ще раз.",
   },
 
   downloadLimit: {

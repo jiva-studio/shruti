@@ -161,6 +161,7 @@ export default {
   appLanguage: {
     title: "भाषा",
     description: "इंटरफ़ेस की भाषा",
+    loadFailedToast: "यह भाषा लोड नहीं हो सकी। कृपया फिर से प्रयास करें।",
   },
 
   chatLanguage: {
