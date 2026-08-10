@@ -38,6 +38,24 @@ Living checklist of app journeys to cover. Status legend:
 - ✅ library content language seeds + filters the catalog per locale — `library-language`
 - ✅ a topic lists only lectures in the library language — `topic-language`
 - ✅ a collection lists only lectures in the library language — `collection-language`
+- ✅ a track row is three lines; the reference sits in the metadata line, not on
+  the title line — `track-row-shape` (182)
+- ✅ the track sheet names the collection a lecture is part of and leads back to
+  it — `collection-part-of` (179)
+- ✋ the row-level collection ordinal: the chip is rendered but no producer ever
+  feeds it, so it cannot appear — #1678
+- ✅ Smart Library off: the archive schedule offers "Never" and shows what is
+  stored — `smart-library-off` (183)
+
+### The internet lane
+- ✅ the shelf, its chevron and the Pro gate on the plus — `web-lane` (167)
+- ✅ a hit with no title of its own reads as its reference span, never a URL —
+  `web-lane-states` (174)
+- ✅ what the service said about the request renders as a note — (175)
+- ✅ an unreachable service leaves the library lane standing — (176)
+- ✅ an empty answer reads differently from a failure — (177)
+- ✅ typing searches the words as written, not via the model-read path — (178)
+- 🔜 the ingest stages on a tile's corner (needs an orchestrator stub — #1673)
 
 ## Chat
 - ✅ chat composer + suggestions render — `chat-render`
@@ -92,6 +110,8 @@ Living checklist of app journeys to cover. Status legend:
 - ✅ Clear cache removes the downloaded audio it is meant to remove — `clear-cache`
 - ✋ Delete account drops the content database (`resetContentDatabase` is a
   no-op on the web build the suite runs — #1663)
+- ✅ the download limit is shown, changed and remembered — `settings-download-limit` (180)
+- ✅ the Logs dialog's Clear takes the tap and empties the list — `logs-clear` (181)
 
 ## Share / export
 - ✅ track share menu offers a PDF export (entry point) — `share-menu`
