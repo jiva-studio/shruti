@@ -4,6 +4,8 @@ export type SingleItemId = string | undefined
 
 export interface UseSingleSelectorOptions {
   value: Ref<SingleItemId>
+  /** Whether the dialog is on screen. */
+  open?: Ref<boolean>
 }
 
 export interface UseSingleSelectorReturn {
@@ -23,6 +25,16 @@ export function useSingleSelectorDialogState(
   watch(options.value, (next) => {
     value.value = next
   })
+
+  // Re-sync to the source of truth whenever the dialog (re)opens, so a pick the
+  // parent did not accept — an abandoned edit, or a UI-language switch whose
+  // chunk failed to load — doesn't persist as a phantom checkmark. Mirrors
+  // MultiListItemSelectorDialog, which has always done this.
+  if (options.open) {
+    watch(options.open, (isOpen) => {
+      if (isOpen) value.value = options.value.value
+    })
+  }
 
   return { value }
 }
