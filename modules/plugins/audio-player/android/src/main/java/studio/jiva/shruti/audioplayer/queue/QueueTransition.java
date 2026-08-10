@@ -26,6 +26,11 @@ public final class QueueTransition {
     public final String startedItemId; // null when the queue ran dry
     public final String reason;
     public final long atEpochMs;
+    /** Wall-clock when listening on this item began — the {@link #fromPositionMs}
+     *  counterpart, so JS gets the run's real span instead of one estimated from
+     *  the audio span at 1×. 0 means "not stamped" (an entry an older build left
+     *  in the durable journal). */
+    public final long fromAtEpochMs;
     public final long seq;
 
     public QueueTransition(
@@ -36,6 +41,7 @@ public final class QueueTransition {
             String startedItemId,
             String reason,
             long atEpochMs,
+            long fromAtEpochMs,
             long seq) {
         this.finishedItemId = finishedItemId;
         this.fromPositionMs = fromPositionMs;
@@ -44,13 +50,14 @@ public final class QueueTransition {
         this.startedItemId = startedItemId;
         this.reason = reason;
         this.atEpochMs = atEpochMs;
+        this.fromAtEpochMs = fromAtEpochMs;
         this.seq = seq;
     }
 
     public QueueTransition withSeq(long newSeq) {
         return new QueueTransition(
                 finishedItemId, fromPositionMs, finishedAtMs, durationMs,
-                startedItemId, reason, atEpochMs, newSeq);
+                startedItemId, reason, atEpochMs, fromAtEpochMs, newSeq);
     }
 
     public JSONObject toJson() throws JSONException {
@@ -66,6 +73,10 @@ public final class QueueTransition {
         }
         obj.put("reason", reason);
         obj.put("at", atEpochMs);
+        // Omitted when unstamped, so JS sees `undefined` and takes the estimate.
+        if (fromAtEpochMs > 0) {
+            obj.put("fromAt", fromAtEpochMs);
+        }
         obj.put("seq", seq);
         return obj;
     }
@@ -81,6 +92,8 @@ public final class QueueTransition {
                 started,
                 obj.optString("reason", REASON_AUTO),
                 obj.optLong("at", 0),
+                // Absent in a journal file written before this field existed.
+                obj.optLong("fromAt", 0),
                 obj.optLong("seq", 0));
     }
 }

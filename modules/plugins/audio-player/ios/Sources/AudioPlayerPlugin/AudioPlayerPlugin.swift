@@ -75,6 +75,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// clobbered by the next item becoming current first.
     private var fromPositionByItemId: [String: Double] = [:]
 
+    /// Wall-clock (epoch ms) when listening on each item began, keyed by
+    /// itemId. Same bookkeeping as `fromPositionByItemId`, in the same places.
+    private var fromAtByItemId: [String: Double] = [:]
+
     /// Maps an AVPlayerItem to its itemId so the currentItem-change
     /// observer knows which entry just became current. AVQueuePlayer
     /// drops finished items, so we also use `entries` for lookups.
@@ -457,6 +461,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         currentItemId = entries[queueIndex].itemId
         fromPositionByItemId[currentItemId] = seekPosition > 0 ? seekPosition : 0
+        fromAtByItemId[currentItemId] = nowEpochMs()
 
         observeCurrentItem()
         setupProgressObserver()
@@ -569,6 +574,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if fromPositionByItemId[newId] == nil {
             fromPositionByItemId[newId] = 0
         }
+        if fromAtByItemId[newId] == nil {
+            fromAtByItemId[newId] = nowEpochMs()
+        }
 
         // Per-item rate must be re-applied on every advance (rate lives
         // on the player but is reset to 1 by AVQueuePlayer on advance).
@@ -667,6 +675,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if pos > 3 {
             player?.seek(to: .zero)
             fromPositionByItemId[currentItemId] = 0
+            fromAtByItemId[currentItemId] = nowEpochMs()
             return true
         }
         guard queueIndex > 0 else {
@@ -691,6 +700,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - Journaling
 
+    private func nowEpochMs() -> Double {
+        return Date().timeIntervalSince1970 * 1000
+    }
+
     private func journalTransition(finished: QueueEntry?, finishedAt: Double, startedItemId: String?, reason: String) {
         guard let finished = finished else { return }
         let durationSec = resolvedDuration(for: finished)
@@ -701,7 +714,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             duration: durationSec,
             startedItemId: startedItemId,
             reason: reason,
-            at: Date().timeIntervalSince1970 * 1000,
+            at: nowEpochMs(),
+            fromAt: fromAtByItemId[finished.itemId],
             seq: journal.nextSeq()
         )
         // Durable append happens BEFORE anything else (e.g. teardown).
@@ -710,6 +724,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         pushTransition(transition)
         // The finished item's resume point is no longer needed.
         fromPositionByItemId.removeValue(forKey: finished.itemId)
+        fromAtByItemId.removeValue(forKey: finished.itemId)
     }
 
     /// Best duration we can report for a finished item: the live
@@ -757,13 +772,15 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             duration: durationSec,
             startedItemId: nextEntry?.itemId,  // null when queue runs dry
             reason: "auto",
-            at: Date().timeIntervalSince1970 * 1000,
+            at: nowEpochMs(),
+            fromAt: fromAtByItemId[endedId],
             seq: journal.nextSeq()
         )
         // Persist BEFORE anything else, including teardown when dry.
         journal.append(transition)
         pushTransition(transition)
         fromPositionByItemId.removeValue(forKey: endedId)
+        fromAtByItemId.removeValue(forKey: endedId)
 
         if nextEntry == nil {
             // Queue exhausted — persist the final journal entry (done

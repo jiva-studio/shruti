@@ -563,6 +563,11 @@ public final class AudioPlayerPlugin extends Plugin {
         }
         o.put("reason", t.reason);
         o.put("at", t.atEpochMs);
+        // Left off when unstamped (an older build's journal entry), so JS sees
+        // `undefined` and falls back to estimating the run's start.
+        if (t.fromAtEpochMs > 0) {
+            o.put("fromAt", t.fromAtEpochMs);
+        }
         o.put("seq", t.seq);
         return o;
     }
