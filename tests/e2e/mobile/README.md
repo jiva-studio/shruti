@@ -63,6 +63,15 @@ the screenshot pipeline's recipe:
   playlist tracks, history and notes) is written into IndexedDB before boot.
 - Transcript JSONs are served from `fixtures/transcript.json`, rewritten to
   match the requested track so the reader renders offline.
+- **Cover art** (`support/assets-mock.ts`) — collection and topic covers are
+  served the fixture PNG. Unserved they died against the sink, and every tile
+  fell back to its no-cover tint, so a cover assertion passed whether or not the
+  plumbing worked. A spec that owns the cover route itself registers it before
+  `boot` and passes `{ covers: false }`.
+- **The internet lane** (`support/discovery-mock.ts`) — `**/discovery/search`
+  answers two hits by default. `installDiscoveryMock(page, …)` replaces that per
+  spec with other hits, the service's `messages`, an empty result or a failure,
+  and can record the request bodies the app sent.
 
 ### Staying offline
 

@@ -3039,5 +3039,242 @@
       "free",
       "e2e"
     ]
+  },
+  "174": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Internet lane: a recording with no title shows its reference span",
+    "description": "Offline. The search stub returns one hit the archive filed without a title of its own, carrying five consecutive references; the tile must be named by the passage it reads, never by the address of its media file.",
+    "preconditions": "Offline fixtures prepared. The internet lane is enabled and its search service is stubbed.",
+    "steps": [
+      {
+        "action": "Open the library search and read the first tile in the internet shelf.",
+        "expected": "The tile reads 'SB 7.5.33-37' and its text contains no URL."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "free",
+      "e2e"
+    ]
+  },
+  "175": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Internet lane: what the service said about the request is shown",
+    "description": "Offline. The stub answers with a `messages` entry (a speaker name that matches nobody). Without it an empty lane cannot tell 'nothing matches' from 'nothing could'.",
+    "preconditions": "Offline fixtures prepared. The internet lane is enabled and its search service is stubbed.",
+    "steps": [
+      {
+        "action": "Open the library search with a stub that returns a message about the request.",
+        "expected": "The lane shows the service's note above the shelf."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "free",
+      "e2e"
+    ]
+  },
+  "176": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Internet lane: an unreachable service does not take the library down with it",
+    "description": "Offline. The stub answers 503 — the state a missing token mount produces on a deploy. The lane must say so in its own strip and leave the local results standing.",
+    "preconditions": "Offline fixtures prepared. The internet lane is enabled and its search service is stubbed.",
+    "steps": [
+      {
+        "action": "Open the library search with the internet service answering 503.",
+        "expected": "The lane shows its unavailable strip."
+      },
+      {
+        "action": "Look at the library lane below it.",
+        "expected": "The local results are listed as usual."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "free",
+      "e2e"
+    ]
+  },
+  "177": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Internet lane: an empty answer reads differently from a failure",
+    "description": "Offline. The stub answers 200 with no hits. The empty state and the failure state must not be the same line, because only one of them is worth retrying.",
+    "preconditions": "Offline fixtures prepared. The internet lane is enabled and its search service is stubbed.",
+    "steps": [
+      {
+        "action": "Open the library search with a stub that returns no hits.",
+        "expected": "The lane says nothing was found on the indexed archives."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "free",
+      "e2e"
+    ]
+  },
+  "178": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Internet lane: typing searches the words as written",
+    "description": "Offline. Typing must send the words as `filter.text`, not as the model-read `query` — the sentence-reading path is a different request with a different cost, and the box must not take it.",
+    "preconditions": "Offline fixtures prepared. The internet lane is enabled and its search service is stubbed.",
+    "steps": [
+      {
+        "action": "Type a query into the library search and record the request the app sent.",
+        "expected": "The request carries `filter.text` and no `query`."
+      }
+    ],
+    "tags": [
+      "search",
+      "web",
+      "free",
+      "e2e"
+    ]
+  },
+  "179": {
+    "suite_id": 12,
+    "automation": 2,
+    "title": "A lecture says which collection it is part of, and leads back to it",
+    "description": "Offline. The track sheet shows a 'part of' card naming the cycle and the lecture's place in it ('Lecture 1 of N' — the catalog stores position 0-based and the query converts it), and tapping the card returns to the collection. The row-level ordinal chip is not asserted: it is rendered by TrackListItem but no producer ever sets it, so it cannot appear.",
+    "preconditions": "Offline fixtures with a clean user db. The catalog fixture ships collections with ordered tracks.",
+    "steps": [
+      {
+        "action": "Open the first collection from the discovery carousel.",
+        "expected": "Its track list is shown."
+      },
+      {
+        "action": "Open the first lecture's track sheet.",
+        "expected": "A 'part of' card names the collection and reads 'Lecture 1 of N'."
+      },
+      {
+        "action": "Tap the 'part of' card.",
+        "expected": "The collection opens again."
+      }
+    ],
+    "tags": [
+      "library",
+      "collections",
+      "free",
+      "e2e"
+    ]
+  },
+  "180": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "The download limit is shown, changed and remembered",
+    "description": "Offline. Settings shows how much disk downloaded lectures may occupy, with the live figure in its subtitle. Changing it re-renders the figure, and the choice survives a relaunch.",
+    "preconditions": "Offline fixtures with a clean user db.",
+    "steps": [
+      {
+        "action": "Open Settings and find the download-limit row.",
+        "expected": "Its subtitle reads the used amount against the 8 GB default."
+      },
+      {
+        "action": "Tap the row and pick the smallest preset.",
+        "expected": "The chooser lists the presets and a no-limit entry; the pick is applied."
+      },
+      {
+        "action": "Read the row again.",
+        "expected": "The subtitle re-renders against the new budget."
+      },
+      {
+        "action": "Reload the app and reopen Settings.",
+        "expected": "The chosen limit is still in force."
+      }
+    ],
+    "tags": [
+      "settings",
+      "downloads",
+      "free",
+      "e2e"
+    ]
+  },
+  "181": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Clearing the logs from the Logs dialog",
+    "description": "Offline. The Debug section's Logs dialog opens and its Clear button — which sits in a footer that a stray global rule had been flattening — actually receives the tap and empties the list.",
+    "preconditions": "Offline fixtures with a clean user db. Booting the app writes log lines.",
+    "steps": [
+      {
+        "action": "Unlock the Debug section and open the Logs dialog.",
+        "expected": "The dialog opens over Settings."
+      },
+      {
+        "action": "Press Clear in the dialog's footer.",
+        "expected": "The button is reachable and takes the tap."
+      },
+      {
+        "action": "Look at the dialog.",
+        "expected": "The list is empty and the footer that held Clear is gone."
+      }
+    ],
+    "tags": [
+      "settings",
+      "debug",
+      "free",
+      "e2e"
+    ]
+  },
+  "182": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "A track row is three lines, and the reference is not one of them",
+    "description": "Offline. Title on its own line, speaker under it, then reference / date / duration / location on the metadata line. The default layout promotes nothing to the title row, so a reference reappearing there is a regression.",
+    "preconditions": "Offline fixtures prepared. The catalog fixture ships tracks with references, dates and durations.",
+    "steps": [
+      {
+        "action": "Search the library and take the first row.",
+        "expected": "It has exactly one title, one author and one metadata line."
+      },
+      {
+        "action": "Read the metadata line.",
+        "expected": "It carries the reference and separates its fields."
+      },
+      {
+        "action": "Read the title line.",
+        "expected": "It carries the title and no reference chip."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "183": {
+    "suite_id": 5,
+    "automation": 2,
+    "title": "Smart Library off means the archiving stops too",
+    "description": "Offline, Pro. The archive schedule offers a 'Never' entry and the radio group reflects what is stored rather than filling in a default — turning the feature off used to leave the sweep deleting.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber.",
+    "steps": [
+      {
+        "action": "Open the Smart Library dialog from its banner.",
+        "expected": "The dialog opens with its Enable toggle."
+      },
+      {
+        "action": "With the feature enabled, look at the archive schedule.",
+        "expected": "It offers a 'Never' option."
+      },
+      {
+        "action": "Pick 'Never'.",
+        "expected": "It becomes the checked option and no other schedule is checked."
+      }
+    ],
+    "tags": [
+      "library",
+      "smart-library",
+      "pro",
+      "e2e"
+    ]
   }
 }
