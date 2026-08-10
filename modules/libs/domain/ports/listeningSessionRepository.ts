@@ -73,6 +73,11 @@ export interface IListeningSessionRepository {
    * Sessions opened by the ordinary player path carry no key and are never
    * deduped against each other — replaying a lecture is legitimately a second
    * session.
+   *
+   * `position` is the log's idea of where the interval began; the adapter
+   * raises it to the item's high-water mark, because the log reports the whole
+   * `[resume point → end]` span while the live tracker has usually already
+   * journaled its foreground prefix (#1623).
    */
   forceStartOnce(args: {
     itemId: PlaylistItemId

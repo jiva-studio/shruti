@@ -1,7 +1,13 @@
-import { AudioPlayer, type QueueTransition, type Status } from "@shruti/plugin-audio-player"
+import {
+  AudioPlayer,
+  type PositionJump,
+  type QueueTransition,
+  type Status,
+} from "@shruti/plugin-audio-player"
 import type {
   AudioMixParams,
   AudioOpenParams,
+  AudioPositionJumpListener,
   AudioProgressListener,
   AudioQueueItem,
   AudioQueueState,
@@ -26,8 +32,10 @@ import type {
 export function useCapacitorAudioPlayer(): IAudioPlayer {
   const listeners = new Set<AudioProgressListener>()
   const transitionListeners = new Set<AudioTransitionListener>()
+  const jumpListeners = new Set<AudioPositionJumpListener>()
   let registered = false
   let transitionRegistered = false
+  let jumpRegistered = false
 
   async function ensureRegistered(): Promise<void> {
     if (registered) return
@@ -41,6 +49,19 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
           duration: Math.round(status.duration * 1000),
         })
       }
+    })
+  }
+
+  async function ensureJumpRegistered(): Promise<void> {
+    if (jumpRegistered) return
+    jumpRegistered = true
+    await AudioPlayer.onPositionJump((jump: PositionJump) => {
+      const mapped = {
+        itemId: jump.itemId,
+        fromMs: Math.round(jump.fromPosition * 1000),
+        toMs: Math.round(jump.toPosition * 1000),
+      }
+      for (const fn of jumpListeners) fn(mapped)
     })
   }
 
@@ -99,6 +120,11 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
     onProgress(listener): () => void {
       listeners.add(listener)
       return () => listeners.delete(listener)
+    },
+    onPositionJump(listener): () => void {
+      jumpListeners.add(listener)
+      void ensureJumpRegistered()
+      return () => jumpListeners.delete(listener)
     },
     async setQueue(
       items: AudioQueueItem[],

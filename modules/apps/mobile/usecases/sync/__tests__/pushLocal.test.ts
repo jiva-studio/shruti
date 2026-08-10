@@ -229,6 +229,25 @@ describe("pushLocal — outbox watermark", () => {
     expect(retry.pushed).toBe(1)
     expect(gateway.pushRequests[1]!.changes.map((c) => c.doc_id)).toEqual(["note-2"])
   })
+
+  it("keeps draining past a full, conflict-free batch", async () => {
+    const gateway = new FakeSyncClient()
+    const outbox = new FakeOutbox()
+    const apply = new FakeApply()
+    const state = new FakeSyncState()
+    applyAll(gateway)
+
+    // A backfill enqueues more than one PUSH_BATCH (200). Stopping on the
+    // first conflict-free round would cap the cycle at 200 rows and leave the
+    // rest waiting on the 3-minute idle cadence (#1597).
+    outbox.seed(Array.from({ length: 250 }, (_, i) => note(i + 1)))
+
+    const result = await pushLocal(deps(gateway, outbox, apply, state))
+
+    expect(result.pushed).toBe(250)
+    expect(gateway.pushRequests).toHaveLength(2)
+    expect(outbox.rows.every((r) => r.sent)).toBe(true)
+  })
 })
 
 describe("pushLocal — owner scoping", () => {

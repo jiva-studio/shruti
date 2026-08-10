@@ -85,7 +85,10 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     // that peaks BELOW the watermark can only be that regression: rewind, and
     // let the per-transition source keys do the deduping.
     const seen = sorted[sorted.length - 1]!.seq < stored ? 0 : stored
-    let top = stored
+    // Seeded from `seen`, NOT `stored`: after a rewind a watermark left at the
+    // old high would ack a range native never drained and would never come back
+    // down, repeating for the life of the install (#1597).
+    let top = seen
 
     for (const e of sorted) {
       top = Math.max(top, e.seq)

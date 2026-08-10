@@ -64,6 +64,14 @@ public final class AudioPlayerPlugin extends Plugin {
     // updates independently via Media3, so this only governs the WebView push.
     private volatile long progressIntervalMs = PROGRESS_INTERVAL_MS;
     private PluginCall transitionCall;
+    private PluginCall positionJumpCall;
+    /**
+     * Seeks this bridge issued on behalf of JS and whose discontinuity has not
+     * come back yet. JS journals its own seeks, so their echo must not be
+     * reported again; anything left over is a jump the system performed on its
+     * own (lock-screen scrub, ±15s notification action, AVRCP remote).
+     */
+    private int pendingJsSeeks = 0;
     private QueueJournal journal;
     private final Runnable progressTick = new Runnable() {
         @Override
@@ -95,6 +103,25 @@ public final class AudioPlayerPlugin extends Plugin {
                     @Override
                     public void onMediaItemTransition(MediaItem item, int reason) {
                         pushLatestTransition();
+                    }
+
+                    @Override
+                    public void onPositionDiscontinuity(
+                            Player.PositionInfo oldPosition,
+                            Player.PositionInfo newPosition,
+                            int reason) {
+                        if (reason != Player.DISCONTINUITY_REASON_SEEK) return;
+                        // A seek ACROSS items is a queue transition, journaled
+                        // natively and drained through getQueueState().
+                        if (oldPosition.mediaItemIndex != newPosition.mediaItemIndex) return;
+                        if (pendingJsSeeks > 0) {
+                            pendingJsSeeks--;
+                            return;
+                        }
+                        pushPositionJump(
+                                oldPosition.mediaItem != null ? oldPosition.mediaItem.mediaId : "",
+                                oldPosition.positionMs,
+                                newPosition.positionMs);
                     }
                 });
                 mainHandler.post(progressTick);
@@ -196,6 +223,7 @@ public final class AudioPlayerPlugin extends Plugin {
         }
         final long positionMs = (long) (position * 1000.0);
         mainHandler.post(() -> {
+            pendingJsSeeks++;
             controller.seekTo(positionMs);
             call.resolve();
         });
@@ -216,6 +244,7 @@ public final class AudioPlayerPlugin extends Plugin {
             long target = current + deltaMs;
             if (target < 0) target = 0;
             if (duration != C.TIME_UNSET && target > duration) target = duration;
+            pendingJsSeeks++;
             controller.seekTo(target);
             call.resolve();
         });
@@ -417,6 +446,13 @@ public final class AudioPlayerPlugin extends Plugin {
     }
 
     @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    public void onPositionJump(PluginCall call) {
+        call.setKeepAlive(true);
+        getBridge().saveCall(call);
+        positionJumpCall = call;
+    }
+
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
     public void onItemTransition(PluginCall call) {
         call.setKeepAlive(true);
         getBridge().saveCall(call);
@@ -529,6 +565,19 @@ public final class AudioPlayerPlugin extends Plugin {
         o.put("at", t.atEpochMs);
         o.put("seq", t.seq);
         return o;
+    }
+
+    /** Report an engine-initiated position jump to JS (seconds, like the rest
+     *  of the surface) so it can journal the discontinuity. */
+    private void pushPositionJump(String itemId, long fromMs, long toMs) {
+        if (positionJumpCall == null) {
+            return;
+        }
+        JSObject o = new JSObject();
+        o.put("itemId", itemId == null ? "" : itemId);
+        o.put("fromPosition", Math.max(0, fromMs) / 1000.0);
+        o.put("toPosition", Math.max(0, toMs) / 1000.0);
+        positionJumpCall.resolve(o);
     }
 
     /** Best-effort foreground push of the newest journal entry to JS. */
