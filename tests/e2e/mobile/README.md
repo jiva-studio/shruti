@@ -109,7 +109,7 @@ Or directly:
 
 ```bash
 npm install
-./scripts/prepare-fixtures.sh   # one-time: build the gitignored DB fixtures
+./scripts/prepare-fixtures.sh   # one-time: seed the gitignored user DBs
 npm test                        # offline   (or: npm run test:headed)
 ./scripts/run-all.sh            # offline + live (auto-starts the stack)
 ```
@@ -152,10 +152,10 @@ Two CI paths run this suite:
 
 - **`e2e (manual)` workflow** (`.github/workflows/e2e.yml`) — **the real run**.
   Trigger it from the Actions tab (`workflow_dispatch`). It builds the in-house
-  plugins, prepares the fixtures (`prepare-fixtures.sh` fetches the published
-  catalog from the CDN and seeds the user DBs), installs Chromium, and runs the
-  full suite against the Vite dev server. Kept manual on purpose — it boots the
-  app, so it's heavier than the unit jobs and not worth gating every push on.
+  plugins, prepares the fixtures (`prepare-fixtures.sh` seeds the user DBs; the
+  catalog is committed), installs Chromium, and runs the full suite against the
+  Vite dev server. Kept manual on purpose — it boots the app, so it's heavier
+  than the unit jobs and not worth gating every push on.
 
 - **kit reusable `e2e` job** (auto, on mobile PRs) — a **no-op**. It activates
   because `package-lock.json` is committed, but every spec SKIPS when the
@@ -163,14 +163,53 @@ Two CI paths run this suite:
   real work. (`E2E_USE_BUNDLE=1` would make `playwright.config.ts` serve the
   prebuilt `dist/` via `vite preview` instead of the dev server.)
 
-Follow-up before the auto job does real testing: wire `prepare-fixtures.sh` into
-it (or commit a slim catalog fixture so it can run offline).
+Follow-up before the auto job does real testing: run `prepare-fixtures.sh` in
+it. The catalog no longer stands in the way — it is committed — so all that is
+missing there are the seeded user DBs.
 
-## Fixtures (`fixtures/`, gitignored except `silent.mp3`)
+## Fixtures (`fixtures/`)
 
-- `content.db` — snapshot of the published catalog DB.
-- `user-en.db` / `user-ru.db` — seeded user DBs from the screenshot pipeline's
-  generator (`modules/tools/screenshots/generate-fixtures`).
-- `silent.mp3` — a valid ~1s silent MP3 audio stub (committed; small).
+Committed (the corpus every spec runs against is pinned, so a run on one branch
+is comparable with a run on another):
 
-Recreate the gitignored ones with `./scripts/prepare-fixtures.sh`.
+- `content.db` — a trimmed catalog, ~1000 lectures carved out of a published
+  snapshot. `content.db.json` records the snapshot it came from, its digest and
+  the row counts.
+- `silent.mp3` / `cover-sample.png` / `transcript.json` — small media stubs.
+
+Rebuilt locally, gitignored:
+
+- `user-en.db` / `user-ru.db` (+ `.clean` / `.single`) — seeded user DBs from
+  the screenshot pipeline's generator
+  (`modules/tools/screenshots/generate-fixtures`). Their listening history is
+  anchored to the local midnight of the day they were generated — the activity
+  heatmap reads the real clock — so they are generated, not committed. Within a
+  day two runs produce byte-identical files; nothing else in the generator reads
+  the clock.
+
+`./scripts/prepare-fixtures.sh` builds the user DBs and verifies `content.db`
+against its recorded digest. It touches no network.
+
+### Moving the catalog fixture
+
+The catalog fixture only changes when someone decides it should, in a commit
+that can be reviewed:
+
+```bash
+scripts/build-catalog-fixture.py --source path/to/lectorium.<version>.db
+git add fixtures/content.db fixtures/content.db.json
+```
+
+`--source` defaults to the local lake output
+(`resources/lake-out/artifacts/catalog/current.db`), but prefer a
+version-addressed published catalog — `public/db/lectorium.{version}.db` is
+immutable per version, so the build is reproducible from what the metadata
+records.
+
+The trim is not just a size cut. The Search landing shuffles its topic tiles, so
+a spec that opens "the first tile" opens a *random* topic; against the full
+catalog whether that topic holds lectures in the library language depends on
+what was published, and Qase 36/45/150/163 then pass or fail on the draw. The
+builder keeps only topics carrying lectures in **both** content languages and
+asserts that (plus per-language title script, non-empty collections, and the
+tracks the seeded playlists reference) before it writes the file.
