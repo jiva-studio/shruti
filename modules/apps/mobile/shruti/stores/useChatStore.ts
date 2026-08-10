@@ -748,6 +748,14 @@ export const useChatStore = defineStore("chat", () => {
     await t1.present()
   }
 
+  /** Ids of the message pair the in-flight Retry is replacing. `retryLast`
+   *  marks them rather than splicing them out up front, so the thread keeps
+   *  its last turn on screen until the fresh user bubble is ready and the swap
+   *  lands in ONE `messages` write (see the `user-message` case below).
+   *  Removing them first blanked a one-question thread back to the welcome
+   *  illustration for a frame, and collapsed the tail in a longer one. */
+  let retryReplacing: ReadonlySet<string> | null = null
+
   async function sendMessage(
     text: string,
     options?: { focus?: FocusFragmentPayload }
@@ -763,7 +771,19 @@ export const useChatStore = defineStore("chat", () => {
     // right before the SSE stream opens — via the `ensureFresh` dep below.
     // Only the assistant reply waits on the network, never the user's
     // own message.
-    const sessionId = (await ensureActiveSession(clean)) as ChatSessionId
+    let sessionId: ChatSessionId
+    try {
+      sessionId = (await ensureActiveSession(clean)) as ChatSessionId
+    } catch (err) {
+      // `sending` is latched before this await, and the try/finally that
+      // releases it starts further down — a failed session INSERT used to
+      // leave the composer disabled with no turn running until a session
+      // switch happened to call `syncComposeBusy`.
+      sending.value = false
+      console.warn("chat: failed to open a session for this turn", err)
+      void toast.error(t("chat.errUnknown"))
+      return
+    }
     const controller = new AbortController()
     turnControllers.set(sessionId, controller)
     const repos = chatRepos()
@@ -777,7 +797,13 @@ export const useChatStore = defineStore("chat", () => {
     // language). The backend treats `lang` as an opaque prompt code, so a
     // non-en/ru locale (uk/sr) is no longer collapsed to "ru".
     const lang = chatLanguage.value || appLanguage.value
-    const history: ChatTurn[] = messages.value
+    // A Retry leaves the failed turn on screen until the replacement bubble
+    // lands, so it is still in `messages` here. It must not be sent back as
+    // history (the server would see the prompt twice) nor count towards
+    // "is this the session's first assistant turn".
+    const replacing = retryReplacing
+    const visible = replacing ? messages.value.filter((m) => !replacing.has(m.id)) : messages.value
+    const history: ChatTurn[] = visible
       .filter((m) => !m.streaming)
       .map((m) => {
         const turn: ChatTurn = { role: m.role, content: m.content }
@@ -801,8 +827,7 @@ export const useChatStore = defineStore("chat", () => {
     let resumableDrop = false
 
     try {
-      const isFirst =
-        messages.value.filter((m) => m.role === "assistant" && !m.streaming).length === 0
+      const isFirst = visible.filter((m) => m.role === "assistant" && !m.streaming).length === 0
       for await (const event of runChatTurn(
         {
           sessionId,
@@ -985,9 +1010,16 @@ export const useChatStore = defineStore("chat", () => {
     // broader store state (sessions, usage, notifications) and stay here.
     if (applyStreamingTurnEvent(event, messages, streamingIndex)) return
     switch (event.kind) {
-      case "user-message":
-        messages.value = [...messages.value, event.message]
+      case "user-message": {
+        // One write: the turn a Retry is replacing goes out in the same
+        // assignment that brings the new prompt in, so the thread is never
+        // rendered without either of them.
+        const replacing = retryReplacing
+        retryReplacing = null
+        const base = replacing ? messages.value.filter((m) => !replacing.has(m.id)) : messages.value
+        messages.value = [...base, event.message]
         return
+      }
       case "assistant-placeholder": {
         streamingMessageId = event.messageId
         // Idempotent: a thinking placeholder may already be on screen (added by
@@ -1303,6 +1335,36 @@ export const useChatStore = defineStore("chat", () => {
     ]
   }
 
+  /** Give up on a turn we will never get an answer for — its server buffer is
+   *  gone (expired / never written) or it never left `running` before the
+   *  buffer TTL. Leaves the user a way forward instead of dots that spin until
+   *  they navigate away: the bubble becomes `failed` (Retry CTA + "connection
+   *  dropped" copy) when nothing streamed, or `truncated` when partial prose
+   *  did land — that variant keeps the text and offers Retry in the actions
+   *  row. View-scoped: an off-screen session has no bubble to convert. */
+  function abandonTurn(entry: PendingTurn): void {
+    if (activeSessionId.value !== entry.sessionId) return
+    const idx = messages.value.findIndex((m) => m.id === entry.assistantMessageId)
+    if (idx < 0) return
+    if (streamingMessageId === entry.assistantMessageId) streamingMessageId = null
+    const prev = messages.value[idx]
+    const error: ChatMessageError =
+      prev.content.length > 0
+        ? { kind: "truncated", reason: "stream" }
+        : { kind: "failed", code: "stream" }
+    const next = [...messages.value]
+    next[idx] = {
+      ...prev,
+      streaming: false,
+      statusKey: undefined,
+      statusParams: undefined,
+      researchQuestions: undefined,
+      researchSources: undefined,
+      error,
+    }
+    messages.value = next
+  }
+
   // Dedup guard so overlapping resume triggers don't stack poll loops per turn.
   const resumePolling = new Set<string>()
 
@@ -1325,13 +1387,16 @@ export const useChatStore = defineStore("chat", () => {
           // Never received, expired, or not ours. Drop only once older than the
           // server TTL so a momentary 404 race doesn't lose a turn — and settle
           // it (ok:false) so the pre-armed forward notification is cancelled
-          // rather than firing a false "answer ready".
+          // rather than firing a false "answer ready". The bubble has to be
+          // abandoned too, or the thinking placeholder this entry put on screen
+          // outlives the record that could ever clear it.
           if (Date.now() - entry.createdAt > PENDING_TTL_MS) {
             emitTurnSettled({
               assistantMessageId: entry.assistantMessageId,
               sessionId: entry.sessionId,
               ok: false,
             })
+            abandonTurn(entry)
             await removePending(entry.assistantMessageId)
           }
           return
@@ -1349,9 +1414,7 @@ export const useChatStore = defineStore("chat", () => {
               sessionId: entry.sessionId,
               ok: false,
             })
-            if (activeSessionId.value === entry.sessionId) {
-              messages.value = messages.value.filter((m) => m.id !== entry.assistantMessageId)
-            }
+            abandonTurn(entry)
             await removePending(entry.assistantMessageId)
             return
           }
@@ -1464,7 +1527,6 @@ export const useChatStore = defineStore("chat", () => {
     const userMsg = all[userIdx]
     const userText = userMsg.content
 
-    messages.value = all.filter((_, i) => i !== assistantIdx && i !== userIdx)
     const repos = chatRepos()
     try {
       await repos.messages.delete(userMsg.id as ChatMessageId)
@@ -1477,7 +1539,16 @@ export const useChatStore = defineStore("chat", () => {
       console.warn("chat: failed to delete failed assistant on retry", err)
     }
 
-    await sendMessage(userText)
+    // The pair stays visible until `sendMessage` yields the replacement user
+    // message, which swaps it out in a single write. The `finally` covers the
+    // paths where no `user-message` ever arrives (a send that bails before the
+    // turn starts) — the old pair then simply stays on screen.
+    retryReplacing = new Set([userMsg.id, assistant.id])
+    try {
+      await sendMessage(userText)
+    } finally {
+      retryReplacing = null
+    }
   }
 
   async function setActionState(
