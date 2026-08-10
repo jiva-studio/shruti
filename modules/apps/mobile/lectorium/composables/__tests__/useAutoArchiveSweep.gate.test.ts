@@ -13,10 +13,15 @@ import { smartLibraryToggled } from "@ui/features/settings/smartLibrary.js"
  */
 const ctx = vi.hoisted(() => ({
   config: null as unknown as Map<string, Ref<unknown>>,
-  playlist: null as unknown as { completedAtMap: Map<PlaylistItemId, number | null> },
+  playlist: null as unknown as {
+    completedAtMap: Map<PlaylistItemId, number | null>
+    archive: ReturnType<typeof vi.fn>
+  },
   purchases: null as unknown as { isSubscribed: boolean },
   listActive: null as unknown as ReturnType<typeof vi.fn>,
-  archive: null as unknown as ReturnType<typeof vi.fn>,
+  /** The raw use case + the raw evict, kept mocked so the tests can prove the
+   *  sweep does NOT reach past the playlist store to either of them. */
+  archivePlaylistItem: null as unknown as ReturnType<typeof vi.fn>,
   evict: null as unknown as ReturnType<typeof vi.fn>,
 }))
 
@@ -40,7 +45,7 @@ vi.mock("@lectorium/stores/useDownloadStore.js", () => ({
 }))
 vi.mock("@usecases/playlist/archivePlaylistItem.js", () => ({
   archivePlaylistItem: (...args: unknown[]) =>
-    (ctx.archive as unknown as (...a: unknown[]) => unknown)(...args),
+    (ctx.archivePlaylistItem as unknown as (...a: unknown[]) => unknown)(...args),
 }))
 vi.mock("@lectorium/lectorium.js", () => ({
   useLectorium: () => ({
@@ -131,10 +136,11 @@ beforeEach(() => {
   ctx.playlist = reactive({
     completedAtMap: new Map<PlaylistItemId, number | null>(),
     refresh: vi.fn(async () => {}),
+    archive: vi.fn(async () => ({ ok: true })),
   })
   ctx.purchases = reactive({ isSubscribed: true })
   ctx.listActive = vi.fn(async () => [{ id: ITEM_ID, trackId: TRACK_ID }])
-  ctx.archive = vi.fn(async () => undefined)
+  ctx.archivePlaylistItem = vi.fn(async () => undefined)
   ctx.evict = vi.fn(async () => true)
 })
 
@@ -146,28 +152,40 @@ describe("useAutoArchiveSweep — master switch", () => {
   it("archives a finished lecture while Smart Library is on", async () => {
     const { app, sweep } = mountSweep()
     await sweep()
-    expect(ctx.archive).toHaveBeenCalledWith({ itemId: ITEM_ID }, expect.anything())
-    expect(ctx.evict).toHaveBeenCalledWith(TRACK_ID)
+    expect(ctx.playlist.archive).toHaveBeenCalledWith(ITEM_ID, { refresh: false })
+    app.unmount()
+  })
+
+  // The automatic path is the one that fires by itself during playback, so it
+  // is the one that must not delete audio the native engine still holds. Only
+  // the playlist store knows to pull the lecture out of the live queue first —
+  // going straight to the use case (and to `evict`) skips that contract (#1660).
+  it("goes through the playlist store, never past it", async () => {
+    const { app, sweep } = mountSweep()
+    await sweep()
+
+    expect(ctx.archivePlaylistItem).not.toHaveBeenCalled()
+    expect(ctx.evict).not.toHaveBeenCalled()
     app.unmount()
   })
 
   it("does not sweep after the toggle is switched off", async () => {
     const { app, sweep } = mountSweep()
     await sweep()
-    expect(ctx.archive).toHaveBeenCalledOnce()
+    expect(ctx.playlist.archive).toHaveBeenCalledOnce()
 
     // Exactly what the dialog persists when the user flips the switch off.
     const next = smartLibraryToggled(false, { targetSeconds: 30 * 60, archiveDelay: "1d" }, 30 * 60)
     setConfig(next.targetSeconds, next.archiveDelay)
     ctx.listActive.mockClear()
-    ctx.archive.mockClear()
+    ctx.playlist.archive.mockClear()
     ctx.evict.mockClear()
 
     await completeALecture()
     await sweep()
 
     expect(ctx.listActive).not.toHaveBeenCalled()
-    expect(ctx.archive).not.toHaveBeenCalled()
+    expect(ctx.playlist.archive).not.toHaveBeenCalled()
     expect(ctx.evict).not.toHaveBeenCalled()
     app.unmount()
   })
@@ -180,7 +198,7 @@ describe("useAutoArchiveSweep — master switch", () => {
     await sweep()
 
     expect(ctx.listActive).not.toHaveBeenCalled()
-    expect(ctx.archive).not.toHaveBeenCalled()
+    expect(ctx.playlist.archive).not.toHaveBeenCalled()
     app.unmount()
   })
 
@@ -188,12 +206,12 @@ describe("useAutoArchiveSweep — master switch", () => {
     setConfig(0, "off")
     const { app } = mountSweep()
     await flush()
-    expect(ctx.archive).not.toHaveBeenCalled()
+    expect(ctx.playlist.archive).not.toHaveBeenCalled()
 
     setConfig(30 * 60, "immediate")
     await flush()
 
-    expect(ctx.archive).toHaveBeenCalledWith({ itemId: ITEM_ID }, expect.anything())
+    expect(ctx.playlist.archive).toHaveBeenCalledWith(ITEM_ID, { refresh: false })
     app.unmount()
   })
 })
