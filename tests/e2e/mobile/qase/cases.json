@@ -682,6 +682,10 @@
       {
         "action": "Confirm the alert.",
         "expected": "The collection's tracks are added and the Home playlist count grows."
+      },
+      {
+        "action": "Open Home and look at the added run of lectures.",
+        "expected": "Each row states its place in the collection order, starting at one."
       }
     ],
     "tags": [

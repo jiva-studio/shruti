@@ -93,4 +93,9 @@ jobs:
     with:
       pages_project: shruti-preview
       plugins: '["audio-player", "media-downloader"]'
+      # Our Playwright suite is at tests/e2e/mobile, not the path the reusable
+      # job probes, so it was reporting a green check having run nothing. It is
+      # also a ~15-minute browser suite: worth running deliberately (the `e2e
+      # (manual)` workflow) rather than on every push.
+      run_e2e: false
     secrets: inherit
