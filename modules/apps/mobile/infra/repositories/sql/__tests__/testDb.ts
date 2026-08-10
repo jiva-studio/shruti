@@ -47,7 +47,7 @@ export async function createInMemoryTestDatabase(): Promise<IDatabase> {
 /**
  * Applies the minimal user-DB schema the repositories tests need.
  * Kept inline here so infra tests don't reach up into `@lectorium/*`.
- * Mirrors `infra/persistence/migrations/user/{000,001,002,003,004,005,006}_*.ts` —
+ * Mirrors `infra/persistence/migrations/user/{000,001,002,003,004,005,006,025}_*.ts` —
  * if a migration changes schema-visible shape, update this too.
  */
 export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
@@ -91,12 +91,17 @@ export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
        started_at    INTEGER NOT NULL,
        ended_at      INTEGER NOT NULL,
        from_position INTEGER NOT NULL,
-       to_position   INTEGER NOT NULL
+       to_position   INTEGER NOT NULL,
+       source_key    TEXT
      )`
   )
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_listening_sessions_item
        ON listening_sessions(item_id, ended_at DESC)`
+  )
+  await db.execute(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_listening_sessions_source_key
+       ON listening_sessions(source_key)`
   )
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_listening_sessions_ended
