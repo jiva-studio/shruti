@@ -10,6 +10,11 @@ generating" and lets us detect a turn orphaned by a server restart (the
 marker's TTL lapses with no heartbeat → the record disappears → the
 client treats it as lost).
 
+Ownership is recorded twice on purpose: inside the record (for GET/DELETE,
+which need the record anyway) and as a standalone `owner` marker on a far
+longer TTL, so feedback on an old message can be authorised after the
+event buffer has expired.
+
 Concrete impl in `infra/turn_store/`. No-op when Redis is unconfigured —
 the resume feature is simply off (`get` returns None, every poll 404s).
 """
@@ -23,7 +28,8 @@ class TurnStore(Protocol):
     async def mark_running(self, trace_id: str, user_id: str) -> None:
         """Write the early `running` marker (before generation) so a poll
         can distinguish "in progress" from "never received" (absent →
-        404). Carries `user_id` for ownership checks on GET/DELETE."""
+        404). Carries `user_id` for ownership checks on GET/DELETE, and
+        also writes the long-lived owner marker `get_owner` reads."""
         ...
 
     async def heartbeat(self, trace_id: str) -> None:
@@ -43,6 +49,14 @@ class TurnStore(Protocol):
         """Read the turn record (`running` marker or finished blob), or
         None when absent/expired. Implementations MUST degrade to None on
         a backing-store error rather than raise."""
+        ...
+
+    async def get_owner(self, trace_id: str) -> str | None:
+        """Owning user id for a turn, or None when unknown/expired. Kept
+        on a much longer horizon than the event buffer so `POST
+        /chat/feedback` can still authorise a rating on a message whose
+        replayable events are long gone. MUST degrade to None on a
+        backing-store error (callers fail closed)."""
         ...
 
     async def request_cancel(self, trace_id: str) -> None:
