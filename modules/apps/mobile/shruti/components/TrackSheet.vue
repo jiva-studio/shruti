@@ -545,8 +545,10 @@ ion-modal.track-sheet {
 }
 
 /* Ionic gives the footer a row of its own below the content; overlaying it is
-   what lets the list run underneath and fade out. */
-ion-footer {
+   what lets the list run underneath and fade out. Anchored to this modal —
+   a bare `ion-footer` selector here is global CSS and disables pointer events
+   on every other footer in the app (#1534). */
+ion-modal.track-sheet ion-footer {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -556,7 +558,7 @@ ion-footer {
   pointer-events: none;
 }
 
-ion-footer .sheet-actions > * {
+ion-modal.track-sheet ion-footer .sheet-actions > * {
   pointer-events: auto;
 }
 </style>
