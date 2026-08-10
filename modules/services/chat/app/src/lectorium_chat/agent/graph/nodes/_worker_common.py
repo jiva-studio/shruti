@@ -53,7 +53,6 @@ from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.application.cache_helpers import TTL_30D, cached_llm_json
 from lectorium_chat.config import get_settings
 from lectorium_chat.domain.entities import Message
-from lectorium_chat.indexer.library.repo import fetch_media, fetch_verse_body
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
 from lectorium_chat.research.pipeline import reduce_locale_to_content_lang
 from lectorium_chat.observability.logging import bind_node_role, get_logger

@@ -41,6 +41,9 @@ from lectorium_chat.infra.repositories.pg_chunk_repository import PgChunkReposit
 from lectorium_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
+from lectorium_chat.infra.repositories.sqlite_library_repository import (
+    SqliteLibraryRepository,
+)
 from lectorium_chat.observability.logging import setup_logging
 from tests.evals.observation import TurnObservation
 from tests.evals.observer import install_capture_processor, observe_turn
@@ -59,7 +62,7 @@ class EvalChatClient:
 
     graph: Any
     llm: Any
-    library_db_path: Any
+    library_repo: Any
     # Seed: a real (track_id, start_ms, end_ms) from the local pgvector
     # used to synthesize FocusFragment / current_track / fake history
     # for cases that need user state.
@@ -182,7 +185,7 @@ class EvalChatClient:
             catalog_tools=_subset(all_aliased, _CATALOG_TOOL_NAMES),
             action_tools=_subset(all_aliased, _ACTION_TOOL_NAMES),
             help_tools=_subset(all_aliased, _HELP_TOOL_NAMES),
-            library_db_path=self.library_db_path,
+            library_repo=self.library_repo,
         )
         return await observe_turn(
             query,
@@ -260,7 +263,7 @@ async def _build_once() -> EvalChatClient:
     _client_cache = EvalChatClient(
         graph=graph,
         llm=llm_provider,
-        library_db_path=s.library_db_path,
+        library_repo=SqliteLibraryRepository(s.library_db_path),
         _seed_track_id=seed_track_id,
         _seed_start_ms=seed_start,
         _seed_end_ms=seed_end,

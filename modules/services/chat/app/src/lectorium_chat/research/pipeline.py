@@ -40,7 +40,6 @@ from lectorium_chat.agent.tools._envelope import (
     library_to_envelope,
     resolve_commentary_author_names,
 )
-from lectorium_chat.indexer.library.repo import fetch_document_body
 from lectorium_chat.domain.ports.llm_provider import provider_unavailable
 from lectorium_chat.domain.language import base_tag
 from lectorium_chat.observability.langfuse_client import langfuse_span
@@ -409,7 +408,7 @@ async def _resolve_memory(
     pool: Any,
     chunk_repo: Any,
     alias_map: Any,
-    library_db: Any | None,
+    library_repo: Any | None,
     catalog_repo: Any | None,
     on_event: OnEvent | None,
     user_query: str = "",
@@ -463,7 +462,7 @@ async def _resolve_memory(
         envelopes = await _fetch_refs(
             scoped_refs, chunk_repo=chunk_repo, alias_map=alias_map,
             lang=retrieval_lang_code, canonical_score=MEMORY_REF_SCORE, on_event=on_event,
-            library_db=library_db, catalog_repo=catalog_repo,
+            library_repo=library_repo, catalog_repo=catalog_repo,
             author_scope=author_scope,
         )
     log.info(
@@ -507,7 +506,7 @@ async def _fetch_refs(
     lang: str | None,
     canonical_score: float,
     on_event: OnEvent | None = None,
-    library_db: Any | None = None,
+    library_repo: Any | None = None,
     catalog_repo: Any | None = None,
     author_scope: Any | None = None,
 ) -> list[dict[str, Any]]:
@@ -591,9 +590,9 @@ async def _fetch_refs(
         # repeat text at segment boundaries and, for some imports, carry
         # duplicated paragraphs). Falls back to the chunk path if the body
         # isn't available. Verse refs always take the chunk path.
-        if ref.ref_kind == "document" and library_db is not None and chunks:
+        if ref.ref_kind == "document" and library_repo is not None and chunks:
             head = chunks[0]
-            body = await fetch_document_body(library_db, head.item_id, lang or head.lang)
+            body = await library_repo.fetch_document_body(head.item_id, lang or head.lang)
             if body:
                 emit_library_research_source(on_event, item_kind=head.item_kind, chunk=head)
                 full = replace(head, text=body, segment_index=0)
@@ -717,7 +716,7 @@ async def run_research(
     llm: Any,                            # LLMPort
     embed_model: str,                    # settings.embed_model
     embed_dim: int,                      # settings.embed_dim — selects attribution_emb_d{N} table
-    library_db: Any | None = None,       # Path to library.db snapshot — full document bodies for pinned doc refs
+    library_repo: Any | None = None,     # LibraryRepository — full document bodies for pinned doc refs
     expand_model: str | None = None,
     topic_model: str | None = None,
     confirm_model: str | None = None,
@@ -796,7 +795,7 @@ async def run_research(
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
             expand_model=expand_model,
-            library_db=library_db,
+            library_repo=library_repo,
             request_id=request_id, on_event=on_event,
             reranker=reranker,
             callbacks=callbacks,
@@ -872,7 +871,7 @@ async def run_research(
             embedder=embedder, retrieval_lang_code=retrieval_lang_code,
             answer_lang=lang, embed_model=embed_model, embed_dim=embed_dim,
             pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
-            library_db=library_db, catalog_repo=catalog_repo, on_event=on_event,
+            library_repo=library_repo, catalog_repo=catalog_repo, on_event=on_event,
             author_scope=author_scope,
             user_query=question, reranker=reranker, llm=llm, confirm_model=confirm_model,
         ),
@@ -912,7 +911,7 @@ async def run_research(
             plan=plan, question=question, lang=lang, retrieval_lang_code=retrieval_lang_code,
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
-            expand_model=expand_model, library_db=library_db,
+            expand_model=expand_model, library_repo=library_repo,
             request_id=request_id, on_event=on_event, reranker=reranker,
             owned_track_ids=owned_track_ids,
             author_scope=author_scope,
@@ -942,7 +941,7 @@ async def run_research(
         expand_model=expand_model,
         topic_model=topic_model, embed_model_for_lookup=embed_model,
         embed_dim_for_lookup=embed_dim, pool=pool,
-        library_db=library_db,
+        library_repo=library_repo,
         request_id=request_id, on_event=on_event,
         precomputed_topics=speculative_topics,
         kv_cache=kv_cache,
@@ -976,7 +975,7 @@ async def _lean_path(
     llm: Any,
     router_args: dict[str, Any],
     expand_model: str | None,
-    library_db: Any | None,
+    library_repo: Any | None,
     request_id: str | None,
     on_event: OnEvent | None,
     reranker: Any,
@@ -1024,7 +1023,7 @@ async def _lean_path(
             lambda: _fetch_refs(
                 all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                 lang=retrieval_lang_code, canonical_score=top_score, on_event=on_event,
-                library_db=library_db, catalog_repo=catalog_repo,
+                library_repo=library_repo, catalog_repo=catalog_repo,
                 author_scope=author_scope,
             ),
             default=[], timeout=TIMEOUT_FETCH_REFS_S,
@@ -1225,7 +1224,7 @@ async def _research_path(
     embed_model_for_lookup: str | None = None,
     embed_dim_for_lookup: int | None = None,
     pool: Any | None = None,
-    library_db: Any | None = None,
+    library_repo: Any | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
     precomputed_topics: list[str] | None = None,
@@ -1325,7 +1324,7 @@ async def _research_path(
             lambda: _fetch_refs(
                 topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                 lang=retrieval_lang_code, canonical_score=0.75, on_event=on_event,
-                library_db=library_db, catalog_repo=catalog_repo,
+                library_repo=library_repo, catalog_repo=catalog_repo,
                 author_scope=author_scope,
             ),
             default=[], timeout=TIMEOUT_FETCH_REFS_S,

@@ -132,7 +132,7 @@ async def locate_worker_node(
         llm=ctx.llm,
         embed_model=ctx.embed_model,
         embed_dim=ctx.embed_dim,
-        library_db=ctx.library_db_path,
+        library_repo=ctx.library_repo,
         request_id=ctx.request_id,
         on_event=on_event,
         precomputed_query_embedding_task=ctx.embed_task,

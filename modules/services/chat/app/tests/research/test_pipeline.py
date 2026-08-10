@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from pathlib import Path
 
 from lectorium_chat.research.models import (
     AttributionMatch,
@@ -345,16 +344,13 @@ async def test_short_path_multi_match_unions_refs():
 
 
 @pytest.mark.asyncio
-async def test_short_path_document_cites_full_body_not_chunks(monkeypatch):
+async def test_short_path_document_cites_full_body_not_chunks():
     """A pinned document ref cites ONE envelope built from the canonical
     library.db body (clean, no chunk-overlap), not N overlapping chunks."""
-    import lectorium_chat.research.pipeline as pl
-
-    async def fake_body(library_db, item_id, lang="ru"):
-        assert item_id == "doc_charter"
-        return "Цель один.\n\nЦель два.\n\nЦель три."
-
-    monkeypatch.setattr(pl, "fetch_document_body", fake_body)
+    class _StubLibraryRepo:
+        async def fetch_document_body(self, item_id, lang="ru"):
+            assert item_id == "doc_charter"
+            return "Цель один.\n\nЦель два.\n\nЦель три."
 
     pool = FakePool({
         ("ru", "pinned"): [
@@ -377,7 +373,7 @@ async def test_short_path_document_cites_full_body_not_chunks(monkeypatch):
 
     result = await run_research(
         question="цели ИСККОН", lang="ru", router_args={},
-        library_db=Path("/fake/library.db"),
+        library_repo=_StubLibraryRepo(),
         **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
     )
 
@@ -814,7 +810,7 @@ async def test_short_path_commentary_ref_resolves_author_name():
     """A pinned attribution referencing a commentary resolves the author name
     so its blockquote carries '— А. Ч. …', not just the address. Regression:
     the authoritative path skipped author resolution (fanout/commentary_expansion
-    did it), so a pinned purport rendered with no author. Chunk path (library_db
+    did it), so a pinned purport rendered with no author. Chunk path (library_repo
     defaults to None) → one envelope per commentary chunk."""
     AUTHOR = "author_jcC2O92Hi1kT"
     pool = FakePool({
@@ -1094,7 +1090,7 @@ async def test_resolve_memory_no_pool_is_noop() -> None:
         pool=None,
         chunk_repo=None,
         alias_map=None,
-        library_db=None,
+        library_repo=None,
         catalog_repo=None,
         on_event=None,
     )
@@ -1133,7 +1129,7 @@ async def test_resolve_memory_probes_sub_queries(monkeypatch) -> None:
         embedder=_Emb(),
         retrieval_lang_code="ru", answer_lang="ru",
         embed_model="m", embed_dim=1024, pool=object(),
-        chunk_repo=None, alias_map=None, library_db=None,
+        chunk_repo=None, alias_map=None, library_repo=None,
         catalog_repo=None, on_event=None,
     )
     # Best across all 3 probes (raw + 2 sub-queries) is the 0.88 one → fires.
