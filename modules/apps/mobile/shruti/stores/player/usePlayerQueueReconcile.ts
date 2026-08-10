@@ -12,6 +12,13 @@ function msToSec(ms: number): number {
 }
 
 /**
+ * Wall-clock slack (seconds) on the closing edge of a run window: a foreground
+ * skip closes its live session a beat AFTER the instant native stamped on the
+ * transition, so an exact bound would miss the very row it must clamp against.
+ */
+const RUN_WINDOW_SLACK_SEC = 60
+
+/**
  * Durable identity of one native transition. All three components are assigned
  * once, natively, and re-presented verbatim on every replay of the journal, so
  * the same transition always yields the same key while two genuine transitions
@@ -19,6 +26,34 @@ function msToSec(ms: number): number {
  */
 function sourceKey(e: AudioQueueTransition): string {
   return `queue:${e.seq}:${e.finishedItemId}:${e.at}`
+}
+
+/**
+ * The wall-clock window the playback run described by `e` occupied. `at` is
+ * the instant it ended; it consumed `finishedAt - fromPosition` of audio,
+ * which is the same span of wall-clock at normal speed.
+ *
+ * This is what makes the `forceStartOnce` clamp safe: a live row written
+ * DURING this run closed inside the window, while an earlier listen of the
+ * same lecture — yesterday, or weeks ago — did not, so a re-listen is still
+ * credited in full.
+ *
+ * It is an ESTIMATE: the journal carries when the run ended, never when it
+ * began, so the audio span stands in for the wall-clock one. Both errors are
+ * bounded, and both need a second listen of the same lecture close in time:
+ *  - too narrow (a long mid-run pause, or playback below 1×) — the live row
+ *    falls outside and its prefix is counted twice, as it was before this fix;
+ *  - too wide (playback above 1×, which compresses the run to `span / rate`) —
+ *    a genuinely separate listen that ended inside the extra reach-back can
+ *    clamp, under-crediting an immediate back-to-back replay.
+ * Deriving the lower bound from the maximum 2× rate would fix the second at
+ * the cost of reintroducing the first for every listener at normal speed —
+ * the common case — so the 1× assumption is the deliberate choice.
+ */
+function runWindow(e: AudioQueueTransition): { fromSec: number; toSec: number } {
+  const endSec = Math.floor(e.at / 1000)
+  const spanSec = Math.max(0, msToSec(e.finishedAtMs) - msToSec(e.fromPositionMs))
+  return { fromSec: endSec - spanSec, toSec: endSec + RUN_WINDOW_SLACK_SEC }
 }
 
 export interface PlayerQueueReconcileReturn {
@@ -85,7 +120,10 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
     // that peaks BELOW the watermark can only be that regression: rewind, and
     // let the per-transition source keys do the deduping.
     const seen = sorted[sorted.length - 1]!.seq < stored ? 0 : stored
-    let top = stored
+    // Seeded from `seen`, NOT `stored`: after a rewind a watermark left at the
+    // old high would ack a range native never drained and would never come back
+    // down, repeating for the life of the install (#1597).
+    let top = seen
 
     for (const e of sorted) {
       top = Math.max(top, e.seq)
@@ -110,6 +148,7 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
           itemId: e.finishedItemId,
           position: msToSec(e.fromPositionMs),
           sourceKey: sourceKey(e),
+          runWindow: runWindow(e),
         })
         if (id === null) firstTime = false
         // `ended_at` ends up as "now" rather than the original `e.at` —

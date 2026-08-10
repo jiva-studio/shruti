@@ -18,6 +18,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setProgressInterval", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "onProgressChanged", returnType: CAPPluginReturnCallback),
+        CAPPluginMethod(name: "onPositionJump", returnType: CAPPluginReturnCallback),
         // Background continuous-playback queue surface (see src/definitions.ts).
         CAPPluginMethod(name: "setQueue", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "appendToQueue", returnType: CAPPluginReturnPromise),
@@ -49,6 +50,11 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var currentItemObservation: NSKeyValueObservation?
     private var statusCallbacks: [String: CAPPluginCall] = [:]
     private var transitionCallbacks: [String: CAPPluginCall] = [:]
+    /// Listeners for jumps the system performed on its own — lock-screen
+    /// scrubbing and the ±N s seek commands. Seeks JS asked for go through
+    /// `seek()` / `seekBy()`, which the app already journals, so those are
+    /// deliberately not reported here.
+    private var positionJumpCallbacks: [String: CAPPluginCall] = [:]
 
     /// The full ordered queue snapshot (current item onward). `queueIndex`
     /// points at the entry currently playing. We keep the entries (not
@@ -195,8 +201,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         commandCenter.seekForwardCommand.addTarget { [weak self] event in
             if let seekEvent = event as? MPSeekCommandEvent, let player = self?.player {
-                let newTime = CMTime(seconds: player.currentTime().seconds + Double(seekEvent.type.rawValue * 30), preferredTimescale: 1)
+                let from = player.currentTime().seconds
+                let newTime = CMTime(seconds: from + Double(seekEvent.type.rawValue * 30), preferredTimescale: 1)
                 player.seek(to: newTime)
+                self?.pushPositionJump(from: from, to: newTime.seconds)
                 return .success
             }
             return .commandFailed
@@ -204,8 +212,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         commandCenter.seekBackwardCommand.addTarget { [weak self] event in
             if let seekEvent = event as? MPSeekCommandEvent, let player = self?.player {
-                let newTime = CMTime(seconds: max(player.currentTime().seconds - Double(seekEvent.type.rawValue * 30), 0), preferredTimescale: 1)
+                let from = player.currentTime().seconds
+                let newTime = CMTime(seconds: max(from - Double(seekEvent.type.rawValue * 30), 0), preferredTimescale: 1)
                 player.seek(to: newTime)
+                self?.pushPositionJump(from: from, to: newTime.seconds)
                 return .success
             }
             return .commandFailed
@@ -213,8 +223,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             if let changeEvent = event as? MPChangePlaybackPositionCommandEvent, let player = self?.player {
+                let from = player.currentTime().seconds
                 let newTime = CMTime(seconds: changeEvent.positionTime, preferredTimescale: 1)
                 player.seek(to: newTime)
+                self?.pushPositionJump(from: from, to: newTime.seconds)
                 return .success
             }
             return .commandFailed
@@ -341,6 +353,29 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func skipToPrevious(_ call: CAPPluginCall) {
         _ = goToPrevious()
         call.resolve()
+    }
+
+    @objc func onPositionJump(_ call: CAPPluginCall) {
+        let callbackId = UUID().uuidString
+        positionJumpCallbacks[callbackId] = call
+        call.keepAlive = true
+        call.resolve([
+            "callbackId": callbackId
+        ])
+    }
+
+    /// Report a jump the system made to JS, so it closes the open listening
+    /// session at `from` instead of absorbing the skipped span into it.
+    private func pushPositionJump(from: Double, to: Double) {
+        guard !positionJumpCallbacks.isEmpty else { return }
+        let payload: [String: Any] = [
+            "itemId": currentItemId,
+            "fromPosition": from.isFinite ? max(0, from) : 0,
+            "toPosition": to.isFinite ? max(0, to) : 0
+        ]
+        for (_, callback) in positionJumpCallbacks {
+            callback.resolve(payload)
+        }
     }
 
     @objc func onItemTransition(_ call: CAPPluginCall) {
