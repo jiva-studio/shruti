@@ -22,10 +22,11 @@ export async function deleteNote(
   input: DeleteNoteInput,
   deps: DeleteNoteDeps
 ): Promise<Result<void, DeleteNoteError>> {
-  return deps.unitOfWork.run(async () => {
+  return deps.unitOfWork.run(async (tx) => {
     const existing = await deps.notes.getById(input.id)
     if (!existing) return err("not-found")
-    await deps.notes.delete(input.id)
+    // The handle keeps the delete and its tombstone in THIS transaction.
+    await deps.notes.delete(input.id, tx)
     return ok(undefined)
   })
 }
