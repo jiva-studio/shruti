@@ -17,7 +17,6 @@ import pytest
 from shruti_chat.application.rate_limiter import RateLimiter
 from shruti_chat.config import Settings
 
-from _shipped_settings import settings_from_model_defaults
 from shruti_chat.domain.ports.rate_limit_store import (
     CounterRecord,
     RateLimitStoreUnavailable,
@@ -49,23 +48,10 @@ class _FakeStore:
 
 
 def _settings() -> Settings:
-    # The SHIPPED caps, from the model's own defaults — see `conftest` for why
-    # `_env_file=None` alone cannot keep the dev `.env` out.
-    return settings_from_model_defaults()
-
-
-def test_the_environment_cannot_move_the_caps_under_test(monkeypatch) -> None:
-    """These tests assert the SHIPPED limits, so a stray env var — or the dev
-    `.env` that `litellm` copies into the environment on import — must not reach
-    them. It did: `IP_RATE_LIMIT_PER_DAY=200` made two 200-admission loops fail
-    in a full run and pass in isolation, decided purely by import order."""
-    monkeypatch.setenv("IP_RATE_LIMIT_PER_DAY", "7")
-    monkeypatch.setenv("ANON_CHAT_RATE_LIMIT_PER_DAY", "1")
-    shipped = _settings()
-    assert shipped.ip_rate_limit_per_day == 2000
-    assert shipped.ip_rate_limit_per_day == (
-        Settings.model_fields["ip_rate_limit_per_day"].default
-    )
+    # The SHIPPED caps. Plain `Settings()` is enough because the root conftest
+    # keeps the environment out of the suite; `tests/test_hermetic_settings.py`
+    # is the guard on that.
+    return Settings()
 
 
 @pytest.fixture
