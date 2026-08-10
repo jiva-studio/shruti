@@ -120,6 +120,15 @@ export const useDownloadStore = defineStore("downloads", () => {
     }
   }
 
+  /** Drop a track back to "idle": no state, no progress, no red X. */
+  function clearDownloadState(trackId: TrackId): void {
+    const nextStates = new Map(states.value)
+    nextStates.delete(trackId)
+    states.value = nextStates
+    const nextProgress = new Map(progress.value)
+    if (nextProgress.delete(trackId)) progress.value = nextProgress
+  }
+
   function setProgress(trackId: TrackId, pct: number): void {
     const clamped = Math.max(0, Math.min(100, Math.round(pct)))
     if (progress.value.get(trackId) === clamped) return
@@ -423,7 +432,8 @@ export const useDownloadStore = defineStore("downloads", () => {
         // or cost nothing; from here on we'd be writing megabytes to disk,
         // so the user's storage limit gets a say. `hasRoomFor` counts
         // in-flight reservations too, so a draining queue can't overshoot
-        // the cap in the window before `usedBytes` catches up.
+        // the cap in the window before `usedBytes` catches up — except this
+        // track's own, which the drain may already have reserved for us.
         //
         // It runs BEFORE the "downloading" paint: a track the budget refuses
         // must never flash a spinner it isn't going to earn. (The stale-row
@@ -432,7 +442,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         const quota = useDownloadQuotaStore()
         await quota.ensureMeasured()
         const sizeBytes = quota.sizeOf(filesize)
-        if (!quota.hasRoomFor(sizeBytes)) {
+        if (!quota.hasRoomFor(sizeBytes, trackId)) {
           if (fresh()) {
             markDeferred(trackId)
             noticeBudgetFull()
@@ -491,6 +501,14 @@ export const useDownloadStore = defineStore("downloads", () => {
           }
           if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
           return result.value.mediaItem.localPath
+        }
+        // A cancelled transfer is a user decision (remove / archive / data
+        // wipe), not a fault: painting "failed" would leave a red retry
+        // affordance on a row the user just asked us to drop. Fall back to
+        // "idle" so a later tap can start over.
+        if (result.error === "cancelled") {
+          if (fresh()) clearDownloadState(trackId)
+          return null
         }
         if (fresh()) {
           setState(trackId, "failed")
@@ -651,11 +669,7 @@ export const useDownloadStore = defineStore("downloads", () => {
   function clearStartingDownload(trackId: TrackId): void {
     if (inFlight.has(trackId)) return
     if (states.value.get(trackId) !== "downloading") return
-    const nextStates = new Map(states.value)
-    nextStates.delete(trackId)
-    states.value = nextStates
-    const nextProgress = new Map(progress.value)
-    if (nextProgress.delete(trackId)) progress.value = nextProgress
+    clearDownloadState(trackId)
   }
 
   /**
@@ -704,11 +718,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         },
       }
     )
-    const nextStates = new Map(states.value)
-    nextStates.delete(trackId)
-    states.value = nextStates
-    const nextProgress = new Map(progress.value)
-    if (nextProgress.delete(trackId)) progress.value = nextProgress
+    clearDownloadState(trackId)
   }
 
   /**
@@ -749,8 +759,8 @@ export const useDownloadStore = defineStore("downloads", () => {
   function cancelPrefetch(trackId: TrackId): void {
     // Already transferring: abort the native transfer so archiving a track
     // mid-download actually stops the bandwidth + leaves no orphan partial.
-    // (The JS task then settles as "failed", but the archived track is no
-    // longer rendered, so that lingering state is harmless.)
+    // (The JS task then settles as "cancelled" and the row drops back to
+    // idle — no red X on a track the user chose to archive.)
     if (inFlight.has(trackId)) {
       cancelInFlight(trackId)
       return
@@ -764,11 +774,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     // track hasn't started transferring yet.
     const painted = states.value.get(trackId)
     if (!inFlight.has(trackId) && (painted === "downloading" || painted === "deferred")) {
-      const nextStates = new Map(states.value)
-      nextStates.delete(trackId)
-      states.value = nextStates
-      const nextProgress = new Map(progress.value)
-      if (nextProgress.delete(trackId)) progress.value = nextProgress
+      clearDownloadState(trackId)
     }
   }
 

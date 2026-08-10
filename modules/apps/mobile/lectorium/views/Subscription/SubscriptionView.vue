@@ -95,13 +95,14 @@ const defaultBackHref = "/tabs/settings"
 .settings-footer {
   margin-top: 16px;
 }
-</style>
 
-<style>
 /* IonHeader paints Material's elevation shadow + a gradient under the
    toolbar; drop both so the page surface stays flat like Settings does
-   via AppPage. Match the modal-override pattern used in
-   SmartLibraryDialog.vue / the old SubscriptionDialog.vue. */
+   via AppPage. The dialogs that kill the same shadow (SmartLibraryDialog,
+   LogsDialog, …) must do it from an unscoped block because Ionic teleports
+   their <ion-modal> out of the component; this is a routed IonPage whose
+   <IonHeader> stays in this template, so the scope attribute reaches it and
+   the override belongs here. */
 .subscription-page ion-header,
 .subscription-page ion-header::after {
   box-shadow: none !important;

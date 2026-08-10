@@ -40,6 +40,7 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@lectorium/composables/useTrackRowAsync.js"
+import { formatTrackDate } from "@lectorium/composables/formatTrackDate.js"
 import { useToast } from "@kit/composables"
 
 const props = defineProps<{ trackId: string }>()
@@ -102,22 +103,9 @@ const detailsLine = computed(() => {
   if (au) parts.push(au)
   const loc = resolveLocalizedNameOrEmpty(location.value, appLanguage.value)
   if (loc) parts.push(loc)
-  if (track.value.date) parts.push(formatDate(track.value.date))
+  if (track.value.date) parts.push(formatTrackDate(track.value.date, appLanguage.value))
   return parts.join(" · ")
 })
-
-function formatDate(d: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d)
-  if (!m) return d
-  const [, y, mo, day] = m
-  if (appLanguage.value === "ru") return `${day}.${mo}.${y}`
-  return `${Number(day)} ${monthEn(mo)} ${y}`
-}
-
-function monthEn(mo: string): string {
-  const i = Math.max(0, Math.min(11, Number(mo) - 1))
-  return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][i]
-}
 
 function onOpen(): void {
   if (!track.value) return

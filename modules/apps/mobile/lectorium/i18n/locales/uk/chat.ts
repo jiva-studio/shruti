@@ -219,6 +219,7 @@ export default {
 
   noteSaved: "Нотатку збережено",
   noteSaving: "Зберігаю нотатку…",
+  actionNoteError: "Не вдалося зберегти нотатку.",
 
   actionPdfKind: "Транскрипт лекції",
   actionPdfShare: "Поділитися",

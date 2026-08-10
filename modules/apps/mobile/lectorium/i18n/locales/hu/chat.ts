@@ -219,6 +219,7 @@ export default {
 
   noteSaved: "Jegyzet mentve",
   noteSaving: "Jegyzet mentése…",
+  actionNoteError: "Nem sikerült menteni a jegyzetet.",
 
   actionPdfKind: "Előadás-átirat",
   actionPdfShare: "Megosztás",

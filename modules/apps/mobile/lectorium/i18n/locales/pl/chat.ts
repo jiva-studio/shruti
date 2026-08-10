@@ -219,6 +219,7 @@ export default {
 
   noteSaved: "Notatka zapisana",
   noteSaving: "Zapisuję notatkę…",
+  actionNoteError: "Nie udało się zapisać notatki.",
 
   actionPdfKind: "Transkrypcja wykładu",
   actionPdfShare: "Udostępnij",
