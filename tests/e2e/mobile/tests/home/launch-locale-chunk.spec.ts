@@ -23,7 +23,7 @@ import { step, caseTitle } from "../../support/steps.js"
  * guarantee is that the app still comes up and is usable — in the resident
  * English fallback, never as raw keys and never as nothing.
  */
-test(qase(168, caseTitle(168)), { tag: ["@offline", "@home"] }, async ({ page }) => {
+test(qase(173, caseTitle(173)), { tag: ["@offline", "@home"] }, async ({ page }) => {
   await interceptContent(page)
   await page.route(localeChunkUrl("ru"), (route) => void route.abort("failed"))
   await preseedUserDb(page, "ru", "clean")
@@ -32,7 +32,7 @@ test(qase(168, caseTitle(168)), { tag: ["@offline", "@home"] }, async ({ page })
   await preseedOnboardingDone(page)
   await preseedNonPro(page)
 
-  await step(page, 168, 0, async () => {
+  await step(page, 173, 0, async () => {
     await page.goto("/?locale=ru")
 
     // The route replace happens BEFORE the awaited chunk, so the URL alone
@@ -41,7 +41,7 @@ test(qase(168, caseTitle(168)), { tag: ["@offline", "@home"] }, async ({ page })
     await expect(page).toHaveURL(/\/tabs\/home/)
   })
 
-  await step(page, 168, 1, async () => {
+  await step(page, 173, 1, async () => {
     // Usable, not merely mounted: navigate and read a real translated string.
     await gotoTab(page, "settings")
     await expect(appLanguageRow(page).first()).toBeVisible({ timeout: 20_000 })
