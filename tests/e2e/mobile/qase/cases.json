@@ -2898,5 +2898,27 @@
       "pro",
       "e2e"
     ]
+  },
+  "168": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "A combining mark in the query does not cut the word in two",
+    "description": "The catalog index folds a combining mark away and keeps the word whole (`unicode61 \"remove_diacritics=2\"`), so the query has to do the same. A stress-marked spelling of a word must reach exactly the lectures the plain spelling reaches, and a transliterated Latin spelling must keep working. Offline, against the committed catalog fixture.",
+    "preconditions": "Offline boot on a clean Russian user db, on the search tab.",
+    "steps": [
+      {
+        "action": "Search a word plainly, then again with a stress mark on it (\"Кришна\" then \"Кри́шна\").",
+        "expected": "Both spellings list the same lectures, and the list is not empty."
+      },
+      {
+        "action": "Search a title in its transliterated spelling and then without the diacritics (\"Bhagavad-gītā\" then \"Bhagavad-gita\").",
+        "expected": "Both spellings list the same lectures, and the list is not empty."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
   }
 }

@@ -25,6 +25,8 @@ export interface SearchControllerReturn {
   showEmptyState: ComputedRef<boolean>
   filters: Ref<FiltersModel>
   hasMore: Ref<boolean>
+  /** A page fetch failed — the list offers to fetch it again. */
+  canRetry: Ref<boolean>
   filterSections: ComputedRef<readonly SearchFilterSectionDef[]>
   filtersOpen: Ref<boolean>
   activeFilterCount: ComputedRef<number>
@@ -35,6 +37,8 @@ export interface SearchControllerReturn {
   /** Tap on a track row → open the per-track sheet (any download state). */
   onSelect: (trackId: string) => Promise<void>
   loadMore: () => Promise<void>
+  /** Fetch the page that failed, again. */
+  retry: () => Promise<void>
 }
 
 export function useSearchController(): SearchControllerReturn {
@@ -60,11 +64,12 @@ export function useSearchController(): SearchControllerReturn {
   // during the initial filter/dictionary hydration before any search has run.
   const hasRun = ref<boolean>(false)
 
-  const { rawTracks, isLoading, error, hasMore, runQuery, loadMore } = useSearchQuery({
-    query,
-    filters,
-    tracks: repos.tracks,
-  })
+  const { rawTracks, isLoading, error, hasMore, canRetry, runQuery, loadMore, retry } =
+    useSearchQuery({
+      query,
+      filters,
+      tracks: repos.tracks,
+    })
 
   onMounted(async () => {
     await filtersReady
@@ -110,6 +115,7 @@ export function useSearchController(): SearchControllerReturn {
     showEmptyState,
     filters,
     hasMore,
+    canRetry,
     filterSections,
     filtersOpen,
     activeFilterCount,
@@ -117,5 +123,6 @@ export function useSearchController(): SearchControllerReturn {
     resetFilters,
     onSelect,
     loadMore,
+    retry,
   }
 }

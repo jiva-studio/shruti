@@ -26,6 +26,7 @@ export default {
     empty: "Próbáld más szavakkal, vagy vegyél le egy szűrőt.",
     mine: "Saját könyvtár",
     failed: "A könyvtárban most nem sikerült keresni. Próbáld újra.",
+    retry: "Újra",
   },
   smartLibrary: {
     title: "Okos könyvtár",
