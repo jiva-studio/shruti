@@ -1,8 +1,14 @@
 # Integration tests — attribution flow
 
-Tests in this directory require a live Postgres with pgvector and an LLM
-provider (OpenRouter). They are gated behind the `SHRUTI_INTEGRATION_DB`
-env var so unit-test CI runs stay fast.
+Most tests in this directory require a live Postgres with pgvector and an LLM
+provider (OpenRouter). They say so with the `needs_db` / `needs_network`
+markers, and the root `tests/conftest.py` skips anything wearing one unless
+`--integration` or `SHRUTI_INTEGRATION_DB` is set, so unit-test CI runs stay
+fast.
+
+The gate reads the marker, not the directory. `test_xff.py` lives here but
+needs no infrastructure — it drives uvicorn's `ProxyHeadersMiddleware` in
+memory — so it carries no marker and runs in the ordinary suite.
 
 ## What's covered
 
@@ -38,9 +44,9 @@ cd modules/services/chat/app
 python -m pytest tests/integration/ -v --integration
 ```
 
-The `--integration` flag (registered in `conftest.py` via `pytest_addoption`)
-skips integration tests when absent — `pytest tests/` keeps working
-without docker.
+The `--integration` flag (registered in the root `tests/conftest.py` via
+`pytest_addoption`) skips the marked tests when absent — `pytest tests/` keeps
+working without docker.
 
 ## Golden questions fixture
 
