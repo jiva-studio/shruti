@@ -1,8 +1,24 @@
 # Mobile i18n locales
 
-`en/` and `ru/` namespaces. Each `.ts` file is one translation surface
-(chat, library, settings, …). Keys are nested objects; the loader at
-`modules/apps/mobile/lectorium/i18n/index.ts` merges them into `vue-i18n`.
+One directory per locale. Each `.ts` file inside it is one translation
+surface (chat, library, settings, …) and keys are nested objects.
+
+## Bundles and lazy loading
+
+A locale's namespaces are assembled into a single default export by
+`../bundles/<locale>.ts`. That indirection is what makes the split
+possible: the build emits one chunk per bundle file, so the entry chunk
+carries only `en` (statically imported as the fallback) and every other
+locale is fetched on demand by `loadLocaleMessages` in
+`../index.ts` — at boot for the device language, and on switch from
+Settings.
+
+Two consequences for edits here:
+
+- A **new locale** needs its own `bundles/<code>.ts` plus an entry in
+  `SUPPORTED_LOCALES` and `AUTONYMS`.
+- A **new namespace** (a new `.ts` file in every locale directory) has to
+  be added to all 14 bundle files, not just to one loader.
 
 ## Conventions
 
