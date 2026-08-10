@@ -21,8 +21,9 @@ type askRequest struct {
 
 // askHandler answers a question written in words.
 //
-// The GET beside it stays: it is cheap, it needs no model, and it is what a
-// link can carry. This is the one that reads.
+// It is the only search this service offers. A filter without a question is
+// still a search, in a body — which is why there is no GET beside it doing the
+// same work with the fields spread across a query string.
 func askHandler(svc *ask.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if svc == nil {
