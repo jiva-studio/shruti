@@ -53,7 +53,19 @@ import {
  *   user-initiated message are ever journaled — a proactive-only session
  *   stays out of sync.
  * - `clearAll` is the local data-wipe path (delete account / reset) — it is not
- *   journaled; the wipe clears the outbox itself.
+ *   journaled, because a wipe is meant to be device-local, not a command to
+ *   erase the account's data everywhere. NOTE: that only holds once the wipe
+ *   also drops the sync state. Today `wipeLocalUserData` touches neither
+ *   `outbox` nor `sync_doc_hlc` (#1496), so on the same-identity wipe path the
+ *   stale upserts stay pending and the next pull re-materialises the wiped
+ *   chat. Clearing the sync tables belongs to that fix, not to the decorator.
+ * - Every decorated repository is built as an EXPLICIT member-by-member
+ *   mapping, never `{ ...base.x, … }`. A spread satisfies the port
+ *   structurally, so a mutating method left un-intercepted compiles silently
+ *   (that is how `delete` / `deleteBySession` / `updateActionStates` /
+ *   `updateFollowups` shipped un-journaled). With the literal, a member added
+ *   to a port is a compile error until it is either wrapped or listed under
+ *   the "not journaled, deliberately" comment above the delegating entries.
  * - `base_hlc` is left NULL here. Reconciling it against the last-known server
  *   HLC per doc is the sync engine's job (Lane D) before push.
  *
@@ -210,9 +222,30 @@ export function withSyncJournaling(
   }
 
   const listeningSessions: IListeningSessionRepository = {
-    // Reads + in-flight session mutations are delegated untouched; only a
-    // *closed* session (finish / finishAt) is journaled.
-    ...base.listeningSessions,
+    // Delegated untouched — reads, plus the in-flight session mutations
+    // (start / forceStart / tick) that describe a session still being
+    // written, and `clearAll` (local wipe). Only a *closed* session
+    // (finish / finishAt) is journaled. Written out member by member on
+    // purpose: a spread would satisfy the port structurally and let a
+    // newly added mutation slip through un-journaled without a type error.
+    start: (args) => base.listeningSessions.start(args),
+    forceStart: (args) => base.listeningSessions.forceStart(args),
+    tick: (id, args) => base.listeningSessions.tick(id, args),
+    getLastSessionForItem: (itemId) => base.listeningSessions.getLastSessionForItem(itemId),
+    getResumePositionForItem: (itemId) => base.listeningSessions.getResumePositionForItem(itemId),
+    getProgressForItems: (itemIds) => base.listeningSessions.getProgressForItems(itemIds),
+    getCompletedAtForItems: (itemIds, durations) =>
+      base.listeningSessions.getCompletedAtForItems(itemIds, durations),
+    getDailyTotals: (fromMs, toMs) => base.listeningSessions.getDailyTotals(fromMs, toMs),
+    getDailyTotalsByDayOffset: (fromMs, toMs) =>
+      base.listeningSessions.getDailyTotalsByDayOffset(fromMs, toMs),
+    hasAny: () => base.listeningSessions.hasAny(),
+    getTotalListenedSeconds: () => base.listeningSessions.getTotalListenedSeconds(),
+    listRecentTracksWithProgress: (limit) =>
+      base.listeningSessions.listRecentTracksWithProgress(limit),
+    getTracksListenedInRange: (fromMs, toMs) =>
+      base.listeningSessions.getTracksListenedInRange(fromMs, toMs),
+    clearAll: () => base.listeningSessions.clearAll(),
 
     finish: (id, args) =>
       unitOfWork.run(async () => {
@@ -275,7 +308,20 @@ export function withSyncJournaling(
   }
 
   const chatSessions: IChatSessionRepository = {
-    ...base.chatSessions,
+    list: (limit) => base.chatSessions.list(limit),
+    getById: (id) => base.chatSessions.getById(id),
+    findLatestByTrack: (trackId) => base.chatSessions.findLatestByTrack(trackId),
+
+    // Not journaled, deliberately:
+    // - `create` — a session enters sync lazily, with its first
+    //   user-initiated message (see `ensureSessionJournaled`); a
+    //   proactive-only session must never be pushed.
+    // - `touch` — bumps `updated_at` for local list ordering only.
+    // - `clearAll` — the local data-wipe path, deliberately device-local (see
+    //   the file header, and #1496 for the sync state the wipe still leaves).
+    create: (input) => base.chatSessions.create(input),
+    touch: (id, updatedAtMs) => base.chatSessions.touch(id, updatedAtMs),
+    clearAll: () => base.chatSessions.clearAll(),
 
     updateTitle: (id, title) =>
       unitOfWork.run(async () => {
@@ -311,8 +357,65 @@ export function withSyncJournaling(
     await journal(CHAT_MESSAGES, row.id, "upsert", chatMessageRowToWire(row))
   }
 
+  /** Re-journal a message whose `meta` was rewritten in place. Only a message
+   *  already in sync is re-snapshotted — a proactive / never-pushed message has
+   *  nothing to update remotely. Runs in its own journal transaction: the base
+   *  `update*` methods open a transaction of their own, and SQLite has no
+   *  nested ones, so the write cannot be joined here. */
+  async function rejournalChatMessage(id: string): Promise<void> {
+    if (!isChatSyncEnabled()) return
+    await unitOfWork.run(async () => {
+      if (await wasJournaled(CHAT_MESSAGES, id)) await journalChatMessage(id)
+    })
+  }
+
+  /** True while the parent session row is still there. `deleteBySession` reads
+   *  it to tell "clear this conversation's messages" (parent kept — the
+   *  messages need their own tombstones) from the whole-conversation delete
+   *  (parent already removed in this transaction — its tombstone cascades). */
+  async function sessionRowExists(sessionId: string): Promise<boolean> {
+    const rows = await userDb.query<{ one: number }>(
+      "SELECT 1 AS one FROM chat_sessions WHERE id = ? LIMIT 1",
+      [sessionId]
+    )
+    return rows.length > 0
+  }
+
+  /** Ids of a session's messages that have entered sync — read BEFORE the rows
+   *  are gone so `deleteBySession` can tombstone each of them.
+   *
+   *  One statement, and deliberately CORRELATED. Both arms are covering-index
+   *  seeks per message — `idx_outbox_collection_doc (collection, doc_id)` and
+   *  `sync_doc_hlc`'s `PRIMARY KEY (collection, doc_id)` — so the cost is
+   *  O(messages in the session), flat in the size of the journal. The
+   *  uncorrelated `id IN (… UNION …)` form reads better but materialises every
+   *  journaled chat doc_id into a temp b-tree first, making the delete O(whole
+   *  outbox) on a table that is append-only and never compacted. */
+  async function journaledMessageIds(sessionId: string): Promise<string[]> {
+    const rows = await userDb.query<{ id: string }>(
+      `SELECT m.id FROM chat_messages m
+        WHERE m.session_id = ?
+          AND (EXISTS (SELECT 1 FROM outbox o
+                        WHERE o.collection = ? AND o.doc_id = m.id)
+            OR EXISTS (SELECT 1 FROM sync_doc_hlc s
+                        WHERE s.collection = ? AND s.doc_id = m.id))`,
+      [sessionId, CHAT_MESSAGES, CHAT_MESSAGES]
+    )
+    return rows.map((row) => row.id)
+  }
+
   const chatMessages: IChatMessageRepository = {
-    ...base.chatMessages,
+    listBySession: (sessionId) => base.chatMessages.listBySession(sessionId),
+
+    // Not journaled, deliberately:
+    // - `updateFeedback` — device-local UI state for the 👍/👎 control; the
+    //   feedback itself travels over `/chat/feedback`, not through sync.
+    // - `clearAll` — the local data-wipe path (delete account / reset), which
+    //   is device-local by design: it must not tombstone the account's chat on
+    //   every other device. Reconciling the sync tables the wipe leaves behind
+    //   is #1496's job (see the file header).
+    updateFeedback: (id, feedback) => base.chatMessages.updateFeedback(id, feedback),
+    clearAll: () => base.chatMessages.clearAll(),
 
     create: (input) =>
       unitOfWork.run(async () => {
@@ -324,6 +427,50 @@ export function withSyncJournaling(
           await journalChatMessage(msg.id)
         }
         return msg
+      }),
+
+    // `meta` is part of the journaled snapshot, so an in-place rewrite of it
+    // has to be re-journaled (LWW) or the server copy silently diverges.
+    updateActionStates: async (id, actionStates) => {
+      await base.chatMessages.updateActionStates(id, actionStates)
+      await rejournalChatMessage(id)
+    },
+
+    updateFollowups: async (id, followups) => {
+      await base.chatMessages.updateFollowups(id, followups)
+      await rejournalChatMessage(id)
+    },
+
+    delete: (id) =>
+      unitOfWork.run(async () => {
+        // Decide before the row is gone — same rule as the session tombstone:
+        // only a message that entered sync gets one. Chat retry deletes the
+        // failed assistant reply AND its user prompt; without the tombstone
+        // the server and every other device would keep them forever.
+        const tombstone = isChatSyncEnabled() && (await wasJournaled(CHAT_MESSAGES, id))
+        await base.chatMessages.delete(id)
+        if (tombstone) await journal(CHAT_MESSAGES, id, "delete", null)
+      }),
+
+    deleteBySession: (sessionId) =>
+      unitOfWork.run(async () => {
+        // Tombstone each synced message ONLY when the parent session survives.
+        //
+        // Whole-conversation delete (`useChatStore.deleteSession`) removes the
+        // session first, in this same transaction: its tombstone already
+        // cascades to the messages server-side, so N per-message tombstones
+        // would be pure duplication written forever into a journal that is
+        // never compacted. A gone parent is also the only case where skipping
+        // is safe — a session that was never journaled has no journaled
+        // messages either (`create` journals the parent first), so nothing is
+        // left stranded on the server.
+        //
+        // Called on its own (the parent kept), this is the only signal the
+        // messages are gone, so every synced one gets its tombstone.
+        const orphaned = isChatSyncEnabled() && (await sessionRowExists(sessionId))
+        const ids = orphaned ? await journaledMessageIds(sessionId) : []
+        await base.chatMessages.deleteBySession(sessionId)
+        for (const id of ids) await journal(CHAT_MESSAGES, id, "delete", null)
       }),
   }
 
