@@ -103,7 +103,10 @@ export function useHomeController(): HomeControllerReturn {
     if (downloads.getEffectiveState(trackId) === "failed") {
       const variant = entry.track.variants.find((v) => v.audio)
       if (variant?.audio) {
-        void downloads.ensureDownloaded(trackId, variant.audio.path)
+        // Pass the catalog size: without it the budget charges the corpus
+        // average for a lecture it already knows the size of, which reads as
+        // a device that fills up faster the more often you retry.
+        void downloads.ensureDownloaded(trackId, variant.audio.path, variant.audio.filesize)
       }
       return
     }
