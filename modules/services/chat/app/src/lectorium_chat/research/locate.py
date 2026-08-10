@@ -113,7 +113,7 @@ async def _await_embedding(
     if precomputed_query_embedding_task is not None:
         try:
             return await precomputed_query_embedding_task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — speculative; a cancel must propagate.
             pass
     try:
         return await embedder.embed_query(question)
