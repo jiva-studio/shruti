@@ -89,6 +89,7 @@ ERROR_MESSAGES: dict[str, str] = {
     "chat_unavailable": "The assistant is temporarily unavailable. Please try again shortly.",
     "agent_error": "The assistant could not complete this request.",
     "max_turns_exceeded": "The assistant took too many steps to answer this question.",
+    "turn_timeout": "The assistant took too long to answer. Please try again.",
 }
 
 _ERROR_FALLBACK = "The assistant could not complete this request."
