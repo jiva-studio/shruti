@@ -8,8 +8,8 @@ logs/
 # Local secrets for @live runs (OPENROUTER_API_KEY, AWS_*). Never commit.
 .env.local
 
-# Large binary fixtures snapshotted from the published catalog + the seeded
-# user DBs. Recreate locally with scripts/prepare-fixtures.sh (see README).
-# The silent.mp3 audio stub is small and IS committed.
-fixtures/content.db
+# The seeded user DBs: their listening history is anchored to the day they were
+# generated, so they are rebuilt locally with scripts/prepare-fixtures.sh (see
+# README). The catalog fixture (fixtures/content.db) and the silent.mp3 audio
+# stub ARE committed — the suite must run against a pinned corpus.
 fixtures/user-*.db

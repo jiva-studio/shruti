@@ -1,4 +1,5 @@
 import type { PlaylistItemId, TrackId, UnixMs } from "../core.js"
+import type { ITransaction } from "./unitOfWork.js"
 import type {
   DailyListeningTotal,
   ListeningSession,
@@ -47,17 +48,20 @@ export interface IListeningSessionRepository {
    * this is what makes background playback measurable on the next
    * resume tick. Returns the new session id.
    */
-  start(args: { itemId: PlaylistItemId; position: TrackPositionSec }): Promise<ListeningSessionId>
+  start(
+    args: { itemId: PlaylistItemId; position: TrackPositionSec },
+    tx?: ITransaction
+  ): Promise<ListeningSessionId>
 
   /**
    * Open a new session with `from_position = position`, ignoring the
    * previous session. Used when the player explicitly seeks — a seek
    * is a discontinuity, not continued listening.
    */
-  forceStart(args: {
-    itemId: PlaylistItemId
-    position: TrackPositionSec
-  }): Promise<ListeningSessionId>
+  forceStart(
+    args: { itemId: PlaylistItemId; position: TrackPositionSec },
+    tx?: ITransaction
+  ): Promise<ListeningSessionId>
 
   /**
    * `forceStart` for a session replayed from an external, durable log — today
@@ -77,10 +81,18 @@ export interface IListeningSessionRepository {
   }): Promise<ListeningSessionId | null>
 
   /** Update `ended_at = now` and `to_position = position` of an open session. */
-  tick(id: ListeningSessionId, args: { position: TrackPositionSec }): Promise<void>
+  tick(
+    id: ListeningSessionId,
+    args: { position: TrackPositionSec },
+    tx?: ITransaction
+  ): Promise<void>
 
   /** Same as tick — semantically "the last update before closing". */
-  finish(id: ListeningSessionId, args: { position: TrackPositionSec }): Promise<void>
+  finish(
+    id: ListeningSessionId,
+    args: { position: TrackPositionSec },
+    tx?: ITransaction
+  ): Promise<void>
 
   /**
    * Close a session with an explicit `ended_at` (unix seconds) instead of
@@ -91,7 +103,8 @@ export interface IListeningSessionRepository {
    */
   finishAt(
     id: ListeningSessionId,
-    args: { position: TrackPositionSec; endedAtSec: number }
+    args: { position: TrackPositionSec; endedAtSec: number },
+    tx?: ITransaction
   ): Promise<void>
 
   /** Most recent session for an item, by `(ended_at, id)`. */

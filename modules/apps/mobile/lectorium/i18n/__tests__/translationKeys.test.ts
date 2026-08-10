@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
+import { beforeAll, describe, expect, it } from "vitest"
 
-import { SUPPORTED_LOCALES, i18n } from "../index.js"
+import { SUPPORTED_LOCALES, i18n, loadLocaleMessages } from "../index.js"
 
 /** `t("a.b")` / `$t('a.b')` with a literal, dotted key. Template-literal and
  *  computed keys are deliberately out of reach — the guard only pins what it
@@ -48,6 +48,12 @@ function lookup(locale: string, key: string): unknown {
 
 describe("translation keys", () => {
   const keys = referencedKeys()
+
+  // Only `en` ships in the entry chunk; the coverage assertions below read
+  // every locale, so pull them all in first.
+  beforeAll(async () => {
+    await Promise.all(SUPPORTED_LOCALES.map(loadLocaleMessages))
+  })
 
   it("finds keys to check", () => {
     expect(keys.size).toBeGreaterThan(100)

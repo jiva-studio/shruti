@@ -19,7 +19,8 @@ export interface UseTrackUiStateMapperReturn {
   toUiRow: (track: Track) => UiTrackRow
   /**
    * Map a list of domain tracks reactively. Recomputes when downloads,
-   * playlist membership, current playback, or the UI language change.
+   * playlist membership, the open player track, or the UI language change —
+   * never on a playback position tick (see the header).
    *
    * `context: "discovery"` (Search / Library) folds the playback-progress
    * states (`playing` and `queued`) into the flat `added` state and zeroes
@@ -46,15 +47,22 @@ export interface UseTrackUiStateMapperReturn {
  *    row that already carries some other state.
  *  - "downloading" / "failed"  — active download flips to a download
  *    indicator regardless of playlist state.
- *  - "playing"                 — currently-open player track AND playback
- *    position is still short of the end. Re-listening a completed track
- *    goes through this branch again until the new pass reaches the end.
  *  - "completed"               — playlist item carries `completedAt`.
- *    Wins over the bare "player is on this track" check, so a finished
- *    track in the player surfaces on the row without a refresh.
+ *  - "playing"                 — the player is on this track.
  *  - "queued"                  — in playlist with saved progress > 0.
  *  - "added"                   — in the active playlist, never played.
  *  - "none"                    — not in playlist.
+ *
+ * NOTHING here reads `player.positionMs` / `player.durationMs`. A row is
+ * built from data that changes when the user acts (download, add, complete),
+ * never at the playback tick rate — otherwise the one playing row would dirty
+ * the whole list computed once a second and every row would be rebuilt
+ * (issue #1504). The live position of the ONE track the player is on is a
+ * separate, per-field reactive object: `usePlaybackRowProgress`, applied by
+ * the row component itself. Two consequences of dropping the position read:
+ * a re-listened (completed) track reads "completed" here until the overlay
+ * flips it back to "playing", and a "playing" row's radial carries the SAVED
+ * playlist progress rather than the live one.
  *
  * The on-disk download cache deliberately does NOT contribute to "added":
  * removing a track from the playlist leaves the cached audio on disk, but
@@ -74,17 +82,13 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     if (downloadState === "downloading") return "downloading"
     if (downloadState === "failed") return "failed"
 
-    const isPlayerOnThisTrack = player.trackId === trackId
-    const playerProgressing =
-      isPlayerOnThisTrack && player.durationMs > 0 && player.positionMs < player.durationMs
-    if (playerProgressing) return "playing"
-
     const entry = playlist.getEntryByTrackId(trackId)
     if (entry && playlist.getCompletedAt(entry.item.id) != null) return "completed"
 
-    // Player is on this track but duration/position not yet hydrated —
-    // don't fall through to "added" / "none" and flash the wrong indicator.
-    if (isPlayerOnThisTrack) return "playing"
+    // Player is on this track — never fall through to "added" / "none" and
+    // flash the wrong indicator. Whether the current pass has actually
+    // reached the end is the live overlay's call, not this computed's.
+    if (player.trackId === trackId) return "playing"
     if (entry && playlist.getProgressMs(entry.item.id) > 0) return "queued"
 
     // Lifetime "listened" badge — but not once the track is re-added: the new
@@ -96,13 +100,9 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   }
 
   /**
-   * Discovery-surface state (Search / Library). Same outcome as `toUiState`
-   * with the discovery fold applied, but deliberately does NOT read
-   * `player.positionMs` / `player.durationMs`: those surfaces collapse the
-   * progress states to the binary "added" / "completed" badge, so the exact
-   * playback position is irrelevant. Reading it would make the row computed
-   * re-run on every playback tick (several times a second) and needlessly
-   * re-render the whole Search page during playback.
+   * Discovery-surface state (Search / Library): `toUiState` with the progress
+   * states folded into the binary "added" / "completed" badge those surfaces
+   * show.
    */
   function toDiscoveryState(trackId: string, downloadState: DownloadState): UiTrackState {
     if (downloadState === "pending") return "pending"
@@ -125,11 +125,12 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
 
   function progressPctFor(track: Track, state: UiTrackState): number {
     if (state === "downloading") return downloads.getProgress(track.id)
-    if (state === "playing") {
-      if (player.durationMs <= 0) return 0
-      return Math.min(100, Math.max(0, (player.positionMs / player.durationMs) * 100))
-    }
-    if (state === "queued") {
+    // "playing" takes the SAVED progress like "queued" does: the live
+    // position belongs to `usePlaybackRowProgress`, which the row component
+    // lays over this value for the one track the player is on. The saved
+    // value is what the radial shows until the first tick lands, and what a
+    // surface without the overlay (Search shelves) keeps showing.
+    if (state === "playing" || state === "queued") {
       const duration = maxAudioDurationMs(track)
       const entry = playlist.getEntryByTrackId(track.id)
       const progress = entry ? playlist.getProgressMs(entry.item.id) : 0
@@ -187,10 +188,8 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   ): ComputedRef<readonly UiTrackRow[]> {
     const discovery = options?.context === "discovery"
     return computed(() => {
-      // Touch reactive sources so `computed` re-runs on changes. Discovery
-      // surfaces deliberately omit player.positionMs / player.durationMs:
-      // they fold the progress states to a binary badge, so re-running on
-      // every playback tick would only thrash the render.
+      // Touch reactive sources so `computed` re-runs on changes. Playback
+      // POSITION is not one of them, in either context — see the header.
       void downloads.states
       void downloads.progress
       void playlist.entries
@@ -198,10 +197,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       void playlist.completedAtMap
       void playlist.completedTrackIds
       void player.trackId
-      if (discovery) return tracks().map(toDiscoveryRow)
-      void player.positionMs
-      void player.durationMs
-      return tracks().map(toUiRow)
+      return tracks().map(discovery ? toDiscoveryRow : toUiRow)
     })
   }
 

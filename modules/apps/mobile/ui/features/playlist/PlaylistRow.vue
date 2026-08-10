@@ -14,7 +14,7 @@
         @select="onTap"
       >
         <template #state>
-          <TrackStateIndicator :state="row.state" :progress="row.progressPct" />
+          <TrackStateIndicator :state="state" :progress="progressPct" />
         </template>
       </TrackListItem>
     </WithDeleteAction>
@@ -25,15 +25,27 @@
 import { WithDeleteAction } from "@ui/primitives/index.js"
 import { TrackListItem, type UiTrackRow } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
+import { usePlaybackRowState } from "./usePlaybackRowState.js"
+import type { UiPlaybackProgress } from "./types.js"
 
 /**
  * One playlist track row (swipe-to-delete + state indicator). Extracted from
  * PlaylistItems so the same leaf renders both flat rows and the rows nested
  * inside a collection group's accordion.
+ *
+ * The row itself carries no live playback position — it comes from the
+ * `playback` overlay and is applied here, per row, so a position tick
+ * re-renders only the row the player is on (issue #1504).
  */
 const props = defineProps<{
   row: UiTrackRow
+  playback?: UiPlaybackProgress
 }>()
+
+const { state, progressPct } = usePlaybackRowState(
+  () => props.row,
+  () => props.playback
+)
 
 const emit = defineEmits<{
   click: [trackId: string]

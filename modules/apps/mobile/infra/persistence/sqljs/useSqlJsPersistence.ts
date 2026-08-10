@@ -25,6 +25,15 @@ export function useSqlJsPersistence(): IPersistence {
       // overlapping BEGIN calls explode with "cannot start a transaction
       // within a transaction". Serialise transaction-callers through a
       // promise chain so every block runs atomically end-to-end.
+      //
+      // `execute()` deliberately skips this queue (repos call it from inside
+      // `fn()`, so queueing it would deadlock), which means a write issued
+      // while an unrelated block is open joins it — and here the rollback also
+      // clears `saveDeferred`, so the write reaches neither the database nor
+      // IndexedDB (#1494). The invariant that keeps that safe is enforced one
+      // layer up: a repository write either runs inside a transaction its
+      // caller opened, or goes through `IUnitOfWork.run`, which lands here as
+      // a queued `transaction()` of its own.
       let txQueue: Promise<unknown> = Promise.resolve()
       // While `inTransaction` is true, repo `save()` calls are deferred
       // — the wrapping transaction issues a single `db.export()` after

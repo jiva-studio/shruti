@@ -39,7 +39,10 @@ export default defineConfigWithVueTs(
       "vue/no-deprecated-filter": "off",
       // Allow these specific single-word names — they're internal UI primitives
       // where the bare noun is the meaningful name.
-      "vue/multi-word-component-names": ["error", { ignores: ["Header", "Message", "Timestamp"] }],
+      "vue/multi-word-component-names": [
+        "error",
+        { ignores: ["Header", "Message", "Timestamp", "Waveform"] },
+      ],
     },
   },
 
@@ -62,9 +65,10 @@ export default defineConfigWithVueTs(
   // page keeps its markup in its own template and gets no exemption.
   //
   // The exemption is per FILE, not per rule, so it certifies nothing about the
-  // contents: TrackSheet.vue still carries a bare, unanchored `ion-footer` rule
-  // that leaks app-wide (#1534). Anchoring every selector to the component's
-  // own modal class is the bar for adding a file here — and for removing one.
+  // contents. Anchoring every selector to the component's own modal class is
+  // the bar for staying here: both files clear it today (TrackSheet's bare
+  // `ion-footer` rule, which leaked app-wide, was anchored in #1534). A file
+  // whose plain block stops needing global reach comes off the list entirely.
   {
     files: [
       "lectorium/components/TrackSheet.vue",
@@ -414,6 +418,58 @@ export default defineConfigWithVueTs(
               group: ["@ui/features/*"],
               message:
                 "Cross-feature imports are forbidden — promote the shared widget to @ui/components/",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // @lib/ui: the cross-app UI library, consumed by this app AND the Astro web
+  // app. Symlinked under submodules/ui; matched via both paths so eslint
+  // catches the violation regardless of which path it traverses. Same bar as
+  // the in-repo ui/** layers, plus two extras that follow from being shared:
+  // no app-local @ui/* (that layer sits above @lib/ui and imports it, never the
+  // reverse) and no Ionic, because the web host does not ship Ionic at all.
+  //
+  // `eslint .` walks the tree itself and does NOT descend through a symlinked
+  // directory, so a block keyed on submodules/** only ever runs when the path
+  // is named explicitly — which is why the `lint` script passes `submodules/ui`
+  // as a second target. The sibling blocks above (contracts, domain,
+  // persistence) are still unenforced for that reason.
+  {
+    files: ["submodules/ui/**/*.{ts,vue}", "../../libs/ui/**/*.{ts,vue}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@ports/*"], message: "UI must not import technical ports" },
+            { group: ["@infra/*"], message: "UI must not import infrastructure" },
+            {
+              group: ["@lib/domain/*", "@lib/domain"],
+              message: "UI must not import domain — use mirror types",
+            },
+            {
+              group: ["@lib/persistence/*"],
+              message: "UI must not import persistence row types",
+            },
+            {
+              group: ["@usecases", "@usecases/**"],
+              message: "UI must not import application layer",
+            },
+            { group: ["@lectorium/*"], message: "UI must not import composition root" },
+            {
+              group: ["@capacitor/*"],
+              message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
+            {
+              group: ["@ui/*"],
+              message: "@lib/ui must not import the app-local UI layer — it is shared across apps",
+            },
+            {
+              group: ["@ionic/*"],
+              message: "@lib/ui must not import Ionic — the web app renders these components too",
             },
           ],
         },

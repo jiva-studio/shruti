@@ -12,6 +12,9 @@ const deleteFile = vi.fn<(url: string) => Promise<void>>()
 const upsert = vi.fn<(id: string, state: string, path: string | null) => Promise<void>>()
 const downloadMedia = vi.fn()
 const toastError = vi.fn()
+/** How an actionable toast ended; mirrors kit's `ToastOutcome`. */
+type Outcome = { kind: "pressed"; index: number } | { kind: "expired" } | { kind: "dismissed" }
+const toastAction = vi.fn<(message: string, opts: unknown) => Promise<Outcome>>()
 const prefetchForTrack = vi.fn()
 
 let hasRoom = true
@@ -20,7 +23,7 @@ const settle = vi.fn()
 
 vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (k: string) => k }) }))
 vi.mock("@kit/composables", () => ({
-  useToast: () => ({ error: toastError, success: vi.fn() }),
+  useToast: () => ({ error: toastError, success: vi.fn(), action: toastAction }),
 }))
 vi.mock("@lib/domain/servers.js", () => ({
   buildServerUrl: (_server: unknown, path: string) => `https://cdn.test/${path}`,
@@ -98,12 +101,23 @@ function online(value: boolean): void {
   vi.stubGlobal("navigator", { onLine: value })
 }
 
+/**
+ * Let the actionable toast resolve and anything it starts run to the end.
+ * The budget notice is deliberately NOT awaited by the download task — the
+ * refused call returns `null` at once — so a press lands a whole task later.
+ */
+async function settleNotice(): Promise<void> {
+  for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 describe("useDownloadStore — tap feedback and failure notices", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     hasRoom = true
     online(true)
+    // Nobody presses the button unless a test says so.
+    toastAction.mockResolvedValue({ kind: "expired" })
     resolveLocalUrl.mockResolvedValue(null)
     deleteFile.mockResolvedValue(undefined)
     upsert.mockResolvedValue(undefined)
@@ -368,7 +382,10 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
 
     await store.ensureDownloaded(TRACK, PATH)
 
-    expect(toastError).toHaveBeenCalledWith("errors.downloadStorageFull")
+    expect(toastAction).toHaveBeenCalledWith(
+      "errors.downloadStorageFull",
+      expect.objectContaining({ durationMs: 20_000 })
+    )
     expect(toastError).not.toHaveBeenCalledWith("errors.downloadFailed")
   })
 
@@ -478,6 +495,7 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     await task
 
     expect(toastError).not.toHaveBeenCalled()
+    expect(toastAction).not.toHaveBeenCalled()
     expect(store.getState(TRACK)).toBe("idle")
   })
 
@@ -487,5 +505,143 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     await store.ensureDownloaded(TRACK, PATH)
 
     expect(toastError).not.toHaveBeenCalled()
+    expect(toastAction).not.toHaveBeenCalled()
+  })
+
+  /* ----------------------------- issue #1487 ---------------------------- */
+
+  it("offers a way past the limit on the notice itself", async () => {
+    hasRoom = false
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+
+    const [, opts] = toastAction.mock.calls[0]!
+    expect(opts).toMatchObject({
+      durationMs: 20_000,
+      buttons: [{ text: "errors.downloadStorageFullAction" }],
+    })
+  })
+
+  it("downloads the track when the user presses “Download anyway”", async () => {
+    hasRoom = false
+    toastAction.mockResolvedValue({ kind: "pressed", index: 0 })
+    const store = useDownloadStore()
+
+    // The refused call answers `null` immediately — it must not sit open for
+    // the length of a toast — and the press starts the transfer behind it.
+    // (Here the mocked toast resolves in a microtask, so the row has already
+    // moved on from "deferred" by the time this resolves; the deferral itself
+    // is pinned by the expired/dismissed cases below.)
+    expect(await store.ensureDownloaded(TRACK, PATH)).toBeNull()
+    await settleNotice()
+
+    // Still no room: what got the bytes through is the one-off exception,
+    // not a widened budget.
+    expect(hasRoom).toBe(false)
+    expect(downloadMedia).toHaveBeenCalledTimes(1)
+    expect(store.getState(TRACK)).toBe("completed")
+  })
+
+  it("leaves the track deferred when the notice expires unpressed", async () => {
+    hasRoom = false
+    toastAction.mockResolvedValue({ kind: "expired" })
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+    await settleNotice()
+
+    expect(downloadMedia).not.toHaveBeenCalled()
+    expect(store.getState(TRACK)).toBe("deferred")
+  })
+
+  it("leaves the track deferred when the notice is swiped away", async () => {
+    hasRoom = false
+    toastAction.mockResolvedValue({ kind: "dismissed" })
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+    await settleNotice()
+
+    expect(downloadMedia).not.toHaveBeenCalled()
+    expect(store.getState(TRACK)).toBe("deferred")
+  })
+
+  it("spends the exception on one download and no more", async () => {
+    hasRoom = false
+    toastAction.mockResolvedValue({ kind: "pressed", index: 0 })
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+    await settleNotice()
+    expect(downloadMedia).toHaveBeenCalledTimes(1)
+
+    // The same track, asked for again after the granted transfer landed: the
+    // grant is gone, so the budget refuses it like any other.
+    toastAction.mockResolvedValue({ kind: "expired" })
+    await store.remove(TRACK, `https://cdn.test/${PATH}`)
+    await store.ensureDownloaded(TRACK, PATH)
+    await settleNotice()
+
+    expect(downloadMedia).toHaveBeenCalledTimes(1)
+    expect(store.getState(TRACK)).toBe("deferred")
+  })
+
+  it("grants nothing to another track", async () => {
+    hasRoom = false
+    toastAction.mockResolvedValue({ kind: "pressed", index: 0 })
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+    await settleNotice()
+
+    toastAction.mockResolvedValue({ kind: "expired" })
+    await store.ensureDownloaded("track-2", "public/audio/track-2.mp3")
+    await settleNotice()
+
+    expect(downloadMedia).toHaveBeenCalledTimes(1)
+    expect(store.getState("track-2")).toBe("deferred")
+  })
+
+  it("offers no override to the prefetch queue", async () => {
+    // Nobody is waiting on a background job, and a FIFO that can wave itself
+    // past the limit is not a limit.
+    hasRoom = false
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH, null, "queue")
+
+    expect(toastAction).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith("errors.downloadStorageFull", expect.anything())
+  })
+
+  it("answers the next deliberate tap instead of going silent for a minute", async () => {
+    hasRoom = false
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+    await settleNotice()
+    await store.ensureDownloaded("track-2", "public/audio/track-2.mp3")
+    await settleNotice()
+
+    expect(toastAction).toHaveBeenCalledTimes(2)
+  })
+
+  it("shows one budget notice at a time, not a stack", async () => {
+    hasRoom = false
+    let releaseNotice: (outcome: Outcome) => void = () => {}
+    toastAction.mockReturnValue(
+      new Promise<Outcome>((resolve) => {
+        releaseNotice = resolve
+      })
+    )
+    const store = useDownloadStore()
+
+    await store.ensureDownloaded(TRACK, PATH)
+    await store.ensureDownloaded("track-2", "public/audio/track-2.mp3")
+
+    expect(toastAction).toHaveBeenCalledTimes(1)
+    releaseNotice({ kind: "expired" })
+    await settleNotice()
   })
 })

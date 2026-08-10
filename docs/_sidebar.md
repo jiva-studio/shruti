@@ -44,6 +44,7 @@
   * [Ports](repos/lectorium/domain/ports.md)
   * [Use cases](repos/lectorium/api/use-cases.md)
   * [UI components](repos/lectorium/components/)
+  * [Shared UI library](repos/lectorium/components/lib-ui.md)
 
 * **Database**
   * [Overview](repos/lectorium/db/)

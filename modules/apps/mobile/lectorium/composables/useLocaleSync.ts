@@ -8,6 +8,10 @@ import { setLocale, SUPPORTED_LOCALES, type SupportedLocale } from "@lectorium/i
  * resolves it. `immediate: true` so the first render uses the saved
  * locale instead of the default one.
  *
+ * `setLocale` is async (it loads the locale's chunk before flipping), and a
+ * watcher cannot await — fire and forget. The boot locale is already loaded,
+ * so the common path resolves within a microtask.
+ *
  * Silently ignores values not in `SUPPORTED_LOCALES` — the config layer
  * trusts whatever string is in storage, and we don't want a corrupted
  * preference value to blow up i18n at startup.
@@ -17,7 +21,7 @@ export function useLocaleSync(appLanguage: Ref<string>): void {
     appLanguage,
     (next) => {
       if ((SUPPORTED_LOCALES as readonly string[]).includes(next)) {
-        setLocale(next as SupportedLocale)
+        void setLocale(next as SupportedLocale)
       }
     },
     { immediate: true }
