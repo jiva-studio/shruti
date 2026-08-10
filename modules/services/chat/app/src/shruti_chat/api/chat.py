@@ -21,7 +21,10 @@ from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.chat_turn_request import ChatTurnRequest
 from shruti_chat.application.proactive_turn import run_proactive_turn
 from shruti_chat.application.rate_limiter import _next_midnight_utc
-from shruti_chat.application.turn_runner import TurnCapacityExceeded
+from shruti_chat.application.turn_runner import (
+    TurnAlreadyRunning,
+    TurnCapacityExceeded,
+)
 from shruti_chat.composition import AppDeps, get_deps
 from shruti_chat.domain.user_context import UserContext
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
@@ -353,7 +356,7 @@ async def chat(
             stream_factory=build_stream,
             finalize=finalize,
         )
-    except TurnCapacityExceeded:
+    except TurnCapacityExceeded as exc:
         # Rejected before anything was spawned, so `finalize` will never run —
         # undo what the gates above already did (the charge, the held key)
         # here, or a user who was told "try again" loses a quota unit and then
@@ -363,6 +366,19 @@ async def chat(
         await deps.rate_limiter.refund(
             user.id, user.anonymous, ip, scope="chat", quota_id=user.quota_id,
         )
+        # A reused trace id is a client conflict, not server load: the same
+        # request retried unchanged bounces again for as long as the first
+        # turn runs, so it gets 409 (like the idempotency gate above) and no
+        # `Retry-After` — the client must resume/stop that turn or mint a new
+        # id, whereas a genuine 503 is worth retrying as-is.
+        if isinstance(exc, TurnAlreadyRunning):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "turn_already_running",
+                    "message": "a turn with this trace id is already in flight",
+                },
+            ) from None
         raise HTTPException(
             status_code=503,
             detail={"error": "server_busy"},
