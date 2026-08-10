@@ -12,6 +12,13 @@ function msToSec(ms: number): number {
 }
 
 /**
+ * Wall-clock slack (seconds) on the closing edge of a run window: a foreground
+ * skip closes its live session a beat AFTER the instant native stamped on the
+ * transition, so an exact bound would miss the very row it must clamp against.
+ */
+const RUN_WINDOW_SLACK_SEC = 60
+
+/**
  * Durable identity of one native transition. All three components are assigned
  * once, natively, and re-presented verbatim on every replay of the journal, so
  * the same transition always yields the same key while two genuine transitions
@@ -19,6 +26,27 @@ function msToSec(ms: number): number {
  */
 function sourceKey(e: AudioQueueTransition): string {
   return `queue:${e.seq}:${e.finishedItemId}:${e.at}`
+}
+
+/**
+ * The wall-clock window the playback run described by `e` occupied. `at` is
+ * the instant it ended; it consumed `finishedAt - fromPosition` of audio,
+ * which is the same span of wall-clock at normal speed.
+ *
+ * This is what makes the `forceStartOnce` clamp safe: a live row written
+ * DURING this run closed inside the window, while an earlier listen of the
+ * same lecture — yesterday, or weeks ago — did not, so a re-listen is still
+ * credited in full.
+ *
+ * The estimate is one-sided by construction. A long mid-run pause, or playback
+ * below 1×, stretches the real run past the window; the live row then falls
+ * outside and its prefix is counted twice, exactly as it was before this fix.
+ * Nothing here can under-count a listen that really happened.
+ */
+function runWindow(e: AudioQueueTransition): { fromSec: number; toSec: number } {
+  const endSec = Math.floor(e.at / 1000)
+  const spanSec = Math.max(0, msToSec(e.finishedAtMs) - msToSec(e.fromPositionMs))
+  return { fromSec: endSec - spanSec, toSec: endSec + RUN_WINDOW_SLACK_SEC }
 }
 
 export interface PlayerQueueReconcileReturn {
@@ -113,6 +141,7 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
           itemId: e.finishedItemId,
           position: msToSec(e.fromPositionMs),
           sourceKey: sourceKey(e),
+          runWindow: runWindow(e),
         })
         if (id === null) firstTime = false
         // `ended_at` ends up as "now" rather than the original `e.at` —
