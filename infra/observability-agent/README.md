@@ -141,6 +141,19 @@ http://${PROD_EU_TS_IP}:9119/chat/metrics  # chat service metrics (via metrics-p
 The obs host's Prometheus scrape config (Stream A's
 `infra/observability/compose/prometheus.yml`) targets these URLs.
 
+## Tests
+
+```bash
+infra/tests/validate-config.sh      # Caddyfile, scrape config, alert rules, compose
+infra/tests/chat-metrics-e2e.sh     # real Prometheus -> real Caddyfile -> chat stub
+```
+
+Both run in CI (`.github/workflows/infra-observability.yml`). Run the e2e one
+before changing `metrics-proxy.Caddyfile`: a status-code check is not enough
+to prove a scrape works, because chat serves `/metrics` from a mounted
+sub-app that redirects the bare path, and a proxy that rewrites to the bare
+path passes every static check while Prometheus records a 404.
+
 ## Blackbox probe targets
 
 Configured **on the Prometheus side**, not here — that way you can add a

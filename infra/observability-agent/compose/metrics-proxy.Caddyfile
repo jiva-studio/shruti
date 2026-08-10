@@ -22,7 +22,15 @@
 	}
 
 	handle /chat/metrics {
-		rewrite * /metrics
+		# The trailing slash is load-bearing. chat serves its metrics from a
+		# mounted sub-app (`app.mount("/metrics", make_asgi_app())`), and a
+		# Starlette Mount answers the bare `/metrics` with a 307 to
+		# `/metrics/`. Prometheus follows redirects, so it would come back
+		# here asking for `/metrics/`, miss this exact-path handler, and get
+		# the catch-all 404 below — a scrape that fails while every config
+		# check still passes. Rewriting straight to the mount's canonical
+		# path means the backend answers 200 on the first hop.
+		rewrite * /metrics/
 		reverse_proxy chat:8080
 	}
 
