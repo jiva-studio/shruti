@@ -74,15 +74,24 @@ export interface IListeningSessionRepository {
    * deduped against each other — replaying a lecture is legitimately a second
    * session.
    *
-   * `position` is the log's idea of where the interval began; the adapter
-   * raises it to the item's high-water mark, because the log reports the whole
-   * `[resume point → end]` span while the live tracker has usually already
-   * journaled its foreground prefix (#1623).
+   * `position` is the log's idea of where the interval began. The log reports
+   * the whole `[resume point → end]` span while the live tracker has usually
+   * already journaled its foreground prefix, so the adapter raises `position`
+   * to whatever a live row of the same run already claimed (#1623).
+   * `runWindow` is what scopes "the same run" — see below.
    */
   forceStartOnce(args: {
     itemId: PlaylistItemId
     position: TrackPositionSec
     sourceKey: string
+    /**
+     * Wall-clock window (unix seconds) the playback run this log entry
+     * describes occupied. Only sessions that CLOSED inside it can raise
+     * `position`, which is what keeps a lecture re-listened weeks later
+     * countable: its earlier sessions are outside the window, so nothing
+     * clamps the new one.
+     */
+    runWindow: { fromSec: number; toSec: number }
   }): Promise<ListeningSessionId | null>
 
   /** Update `ended_at = now` and `to_position = position` of an open session. */

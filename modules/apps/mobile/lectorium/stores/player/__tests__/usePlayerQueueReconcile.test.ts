@@ -247,16 +247,17 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     vi.useRealTimers()
   })
 
-  /** Live tracker: `secondsHeard` of `pi-1` journaled in the foreground. */
-  async function liveSession(secondsHeard: number): Promise<void> {
+  /** Live tracker: `secondsHeard` of `pi-1` journaled in the foreground,
+   *  closing at `atMs`. */
+  async function liveSession(secondsHeard: number, atMs = 1_784_000_000_000): Promise<void> {
     // Distinct wall-clock per row: same-second rows collapse into one
     // `(item, started_at, ended_at, from_position)` group in the totals, which
     // would mask the duplicate the journal writes.
     vi.useFakeTimers({ toFake: ["Date"] })
-    vi.setSystemTime(1_784_000_000_000)
+    vi.setSystemTime(atMs)
     const id = await repo.start({ itemId: "pi-1" as never, position: 0 })
     await repo.finish(id, { position: secondsHeard })
-    vi.setSystemTime(1_784_000_600_000)
+    vi.setSystemTime(atMs + 600_000)
   }
 
   it("does not re-count the foreground prefix on a background auto-advance", async () => {
@@ -283,5 +284,31 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     ])
 
     expect(await repo.getTotalListenedSeconds()).toBe(600)
+  })
+
+  it("credits in full a lecture re-listened entirely in the background weeks later", async () => {
+    // Heard end to end three weeks ago — the item's all-time mark is the whole
+    // 40 minutes. Clamping on position would put this run's `from` at 2400 and
+    // credit the re-listen nothing.
+    const THREE_WEEKS_MS = 21 * 24 * 60 * 60 * 1000
+    await liveSession(2400)
+
+    // Queued and played out entirely with the phone locked, so there is no
+    // live row for THIS run at all.
+    const at = 1_784_000_000_000 + THREE_WEEKS_MS
+    vi.setSystemTime(at)
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({
+        seq: 1,
+        reason: "auto",
+        fromPositionMs: 0,
+        finishedAtMs: 2_400_000,
+        at,
+      }),
+    ])
+
+    expect(await sessionCount()).toBe(2)
+    // Both listens count: 2400 s then and 2400 s now.
+    expect(await repo.getTotalListenedSeconds()).toBe(4800)
   })
 })
