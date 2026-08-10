@@ -92,13 +92,20 @@ async def post_feedback(
     if not rl.allowed:
         raise_429(rl, scope="feedback")
 
-    # Ownership — same check as GET /chat/turn. Without it any valid JWT
-    # could upsert deterministic scores onto an arbitrary trace id.
-    # Note the turn buffer's 24h TTL: feedback on a message older than
-    # that 404s. If late rating turns out to matter, the fix is a
-    # longer-lived owner marker, not relaxing this back to fail-open.
-    blob = await deps.turn_store.get(payload.trace_id)
-    if blob is None or blob.get("user_id") != user.id:
+    # Ownership. Without it any valid JWT could upsert deterministic
+    # scores onto an arbitrary trace id.
+    #
+    # Deliberately the standalone `turn:<id>:owner` marker, NOT the turn
+    # record GET/DELETE read: the record carries the whole event buffer
+    # and expires after 24h, so checking it made a thumbs-up on
+    # yesterday's message 404 into `chat.feedback.failed`. The marker
+    # holds only the user id and lives ~90 days (`TURN_OWNER_TTL_S`).
+    #
+    # Missing marker fails CLOSED, because the absent case is exactly the
+    # spray case — an id no turn ever used is indistinguishable from a
+    # genuinely ancient one. The TTL is what makes that safe to do.
+    owner = await deps.turn_store.get_owner(payload.trace_id)
+    if owner != user.id:
         raise HTTPException(status_code=404, detail="turn not found")
 
     langfuse = get_langfuse()
