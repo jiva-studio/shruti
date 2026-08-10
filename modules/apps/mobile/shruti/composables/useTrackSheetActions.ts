@@ -24,8 +24,11 @@ export function useTrackSheetActions(track: Ref<Track | null>) {
   // A failed/stuck download turns the primary button into a "Download again"
   // retry — the row no longer retries on tap, so the sheet is where the user
   // recovers from a download error.
+  // Read through any in-flight `pending` claim — otherwise the button
+  // flips back to "Add to playlist" for as long as a tap is being resolved.
   const downloadFailed = computed(
-    () => sheet.trackId !== null && downloads.getState(sheet.trackId as TrackId) === "failed"
+    () =>
+      sheet.trackId !== null && downloads.getEffectiveState(sheet.trackId as TrackId) === "failed"
   )
   // The "Add to playlist" action is disabled once the track is already there —
   // the playlist usecase rejects a duplicate add, so there is nothing to do. A
