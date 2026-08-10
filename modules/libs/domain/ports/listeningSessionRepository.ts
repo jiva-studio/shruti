@@ -83,6 +83,12 @@ export interface IListeningSessionRepository {
   forceStartOnce(args: {
     itemId: PlaylistItemId
     position: TrackPositionSec
+    /**
+     * Where the log says this run's interval ENDED. Caps the clamp: raising
+     * `position` past it would leave a row claiming the run reached further
+     * than it did, and completion is read off the latest session (#1662).
+     */
+    endPosition: TrackPositionSec
     sourceKey: string
     /**
      * Wall-clock window (unix seconds) the playback run this log entry

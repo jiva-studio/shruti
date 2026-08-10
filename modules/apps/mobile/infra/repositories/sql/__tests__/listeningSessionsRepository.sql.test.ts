@@ -157,6 +157,7 @@ describe("listeningSessionsRepository.sql", () => {
     const id = await repo.forceStartOnce({
       itemId: ITEM_A,
       position: 0,
+      endPosition: 2400,
       sourceKey: "queue:1:pi-a:1784000000000",
       runWindow: { fromSec: 1000, toSec: 3460 },
     })
@@ -172,6 +173,7 @@ describe("listeningSessionsRepository.sql", () => {
     const later = await repo.forceStartOnce({
       itemId: ITEM_A,
       position: 3000,
+      endPosition: 3400,
       sourceKey: "queue:2:pi-a:1784000600000",
       runWindow: { fromSec: 1000, toSec: 3460 },
     })
@@ -198,6 +200,7 @@ describe("listeningSessionsRepository.sql", () => {
     const id = await repo.forceStartOnce({
       itemId: ITEM_A,
       position: 0,
+      endPosition: 2400,
       sourceKey: "queue:9:pi-a:1786000000000",
       runWindow: { fromSec: 1_800_000, toSec: 1_802_460 },
     })

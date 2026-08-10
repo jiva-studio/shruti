@@ -141,7 +141,7 @@ export function createSqlListeningSessionRepository(
       return unitOfWork.run(() => insert(itemId, position, position), tx)
     },
 
-    async forceStartOnce({ itemId, position, sourceKey, runWindow }) {
+    async forceStartOnce({ itemId, position, endPosition, sourceKey, runWindow }) {
       // The native journal reports a finished item as `[resume point → end]`
       // and knows nothing about the live tracker, which has usually already
       // written the foreground prefix of exactly that span. Raise `from` to
@@ -170,8 +170,17 @@ export function createSqlListeningSessionRepository(
           (r) => r.id as ListeningSessionId
         )
         if (existing !== null) return null
+        // Capped at `endPosition`, because the clamp may only shrink this run's
+        // interval from the LEFT — never push its start past where the run
+        // actually ended. Uncapped, a rewind-then-skip (the live row closed
+        // near the end, this run finished a minute in) lands the row at
+        // `from == to ==` that earlier high-water, and since completion is read
+        // off the LATEST session the lecture the user had just rewound reads as
+        // finished — the Smart Library sweep then archives it and deletes its
+        // audio (#1662). Capping keeps `to >= from`, the invariant `start` /
+        // `tick` / `finish` all maintain, so the row credits zero instead.
         const claimed = await claimedInWindow(itemId, runWindow.fromSec, runWindow.toSec)
-        const fromPosition = Math.max(claimed ?? position, position)
+        const fromPosition = Math.min(Math.max(claimed ?? position, position), endPosition)
         return insert(itemId, fromPosition, fromPosition, sourceKey)
       })
     },
