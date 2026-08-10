@@ -206,6 +206,239 @@ describe("chat sync journaling", () => {
     expect(tombstone.data).toBeNull()
   })
 
+  it("tombstones a deleted message that had entered sync (chat retry)", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "user",
+      content: "q",
+      createdAt: 1,
+    })
+    await repos.chatMessages.create({
+      id: "m2" as ChatMessageId,
+      sessionId: sid,
+      role: "assistant",
+      content: "truncated",
+      createdAt: 2,
+    })
+    // Retry deletes the failed assistant reply AND the prompt that produced it.
+    await repos.chatMessages.delete("m2" as ChatMessageId)
+    await repos.chatMessages.delete("m1" as ChatMessageId)
+
+    const messageRows = (await outboxRows(db)).filter((r) => r.collection === "chat_messages")
+    expect(messageRows.map((r) => [r.doc_id, r.op])).toEqual([
+      ["m1", "upsert"],
+      ["m2", "upsert"],
+      ["m2", "delete"],
+      ["m1", "delete"],
+    ])
+    expect(messageRows[2]!.data).toBeNull()
+    expect(messageRows[3]!.data).toBeNull()
+  })
+
+  it("does not tombstone a message that never entered sync", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    chatSyncEnabled = false
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "user",
+      content: "q",
+      createdAt: 1,
+    })
+    chatSyncEnabled = true
+    await repos.chatMessages.delete("m1" as ChatMessageId)
+    expect(await outboxRows(db)).toHaveLength(0)
+  })
+
+  it("tombstones every synced message of a session on deleteBySession", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "user",
+      content: "q",
+      createdAt: 1,
+    })
+    await repos.chatMessages.create({
+      id: "m2" as ChatMessageId,
+      sessionId: sid,
+      role: "assistant",
+      content: "a",
+      createdAt: 2,
+    })
+    await repos.chatMessages.deleteBySession(sid)
+
+    const tombstones = (await outboxRows(db)).filter(
+      (r) => r.collection === "chat_messages" && r.op === "delete"
+    )
+    expect(tombstones.map((r) => r.doc_id).sort()).toEqual(["m1", "m2"])
+    expect(tombstones.every((r) => r.data === null)).toBe(true)
+  })
+
+  it("records ONE tombstone for a whole-conversation delete, not one per message", async () => {
+    // The order `useChatStore.deleteSession` uses: session first, so its
+    // tombstone's server-side cascade covers the messages.
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    for (const id of ["m1", "m2", "m3"]) {
+      await repos.chatMessages.create({
+        id: id as ChatMessageId,
+        sessionId: sid,
+        role: "user",
+        content: id,
+        createdAt: 1,
+      })
+    }
+    await repos.chatSessions.delete(sid)
+    await repos.chatMessages.deleteBySession(sid)
+
+    const deletes = (await outboxRows(db)).filter((r) => r.op === "delete")
+    expect(deletes.map((r) => [r.collection, r.doc_id])).toEqual([["chat_sessions", "s1"]])
+  })
+
+  it("tombstones a message known only through sync_doc_hlc on deleteBySession", async () => {
+    // A message pulled from the server (or already pushed and compacted) has
+    // no outbox row — the UNION branch of the id lookup is what finds it.
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    chatSyncEnabled = false
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "user",
+      content: "q",
+      createdAt: 1,
+    })
+    chatSyncEnabled = true
+    await db.execute("INSERT INTO sync_doc_hlc (collection, doc_id, server_hlc) VALUES (?, ?, ?)", [
+      "chat_messages",
+      "m1",
+      "1-0-srv",
+    ])
+    await repos.chatMessages.deleteBySession(sid)
+
+    const rows = await outboxRows(db)
+    expect(rows.map((r) => [r.collection, r.doc_id, r.op])).toEqual([
+      ["chat_messages", "m1", "delete"],
+    ])
+  })
+
+  it("emits no message tombstones when the Sync chats toggle is off", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "user",
+      content: "q",
+      createdAt: 1,
+    })
+    const before = (await outboxRows(db)).length
+    chatSyncEnabled = false
+    await repos.chatMessages.delete("m1" as ChatMessageId)
+    await repos.chatMessages.deleteBySession(sid)
+    expect((await outboxRows(db)).length).toBe(before)
+  })
+
+  it("re-journals the snapshot when updateActionStates rewrites meta", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "assistant",
+      content: "a",
+      createdAt: 1,
+    })
+    await repos.chatMessages.updateActionStates("m1" as ChatMessageId, { a1: "done" })
+
+    const upserts = (await outboxRows(db)).filter(
+      (r) => r.collection === "chat_messages" && r.op === "upsert"
+    )
+    expect(upserts).toHaveLength(2)
+    const meta = JSON.parse(JSON.parse(upserts[1]!.data!).meta)
+    expect(meta.data.actionStates).toEqual({ a1: "done" })
+  })
+
+  it("re-journals the snapshot when updateFollowups rewrites meta", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "assistant",
+      content: "a",
+      createdAt: 1,
+    })
+    await repos.chatMessages.updateFollowups("m1" as ChatMessageId, ["next?"])
+
+    const upserts = (await outboxRows(db)).filter(
+      (r) => r.collection === "chat_messages" && r.op === "upsert"
+    )
+    expect(upserts).toHaveLength(2)
+    const meta = JSON.parse(JSON.parse(upserts[1]!.data!).meta)
+    expect(meta.data.followups).toEqual(["next?"])
+  })
+
+  it("does not re-journal a meta rewrite on a message outside sync", async () => {
+    const sid = "s1" as ChatSessionId
+    await repos.chatSessions.create({ id: sid, title: null })
+    chatSyncEnabled = false
+    await repos.chatMessages.create({
+      id: "m1" as ChatMessageId,
+      sessionId: sid,
+      role: "assistant",
+      content: "a",
+      createdAt: 1,
+    })
+    chatSyncEnabled = true
+    await repos.chatMessages.updateFollowups("m1" as ChatMessageId, ["next?"])
+    await repos.chatMessages.updateActionStates("m1" as ChatMessageId, { a1: "done" })
+    expect(await outboxRows(db)).toHaveLength(0)
+  })
+
+  it("maps chat repository members explicitly instead of spreading the base", async () => {
+    // A bare `{ ...base.chatMessages }` would copy whatever the base object
+    // carries — including this probe — and would let a mutating method added
+    // to the port be forwarded un-journaled with no type error. The decorated
+    // repositories are explicit literals, so the probe must NOT come through.
+    const probe = () => "leaked"
+    const decorated = withSyncJournaling(
+      {
+        notes: {} as never,
+        playlistItems: {} as never,
+        listeningSessions: { __probe: probe } as never,
+        libraryMemberships: {} as never,
+        chatSessions: { __probe: probe } as never,
+        chatMessages: { __probe: probe } as never,
+      },
+      { userDb: db, unitOfWork: createReentrantUnitOfWork(db), getDeviceId: async () => "dev-A" }
+    )
+    for (const repo of [
+      decorated.chatMessages,
+      decorated.chatSessions,
+      decorated.listeningSessions,
+    ]) {
+      expect(Object.keys(repo)).not.toContain("__probe")
+    }
+    // Every port member is still present and delegating.
+    expect(Object.keys(decorated.chatMessages).sort()).toEqual([
+      "clearAll",
+      "create",
+      "delete",
+      "deleteBySession",
+      "listBySession",
+      "updateActionStates",
+      "updateFeedback",
+      "updateFollowups",
+    ])
+  })
+
   it("does not journal message edits (updateFeedback / clearAll are not sync writes)", async () => {
     const sid = "s1" as ChatSessionId
     await repos.chatSessions.create({ id: sid, title: null })
