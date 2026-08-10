@@ -5,13 +5,14 @@ import { libraryItemToTrack } from "@lib/domain/libraryItem.js"
 import type { Track } from "@lib/domain/track.js"
 import type { ILibraryItemRepository } from "@lib/domain/ports/libraryItemRepository.js"
 import type { LibraryItemRow } from "@lib/persistence/user"
-import { queryMany, queryOne } from "@kit/persistence"
+import { mutate, queryMany, queryOne } from "@kit/persistence"
 import { rowToLibraryItem } from "./rowMappers.js"
 
 /**
  * SQL adapter over `library_items` (017 migration) — the on-device projection
- * of the server-owned personal-library collection. **Read-only**: the rows are
- * written exclusively by the sync-apply adapter (pull-only), never here.
+ * of the server-owned personal-library collection. Reads only: the rows are
+ * authored exclusively by the sync-apply adapter (pull-only), never here. The
+ * one write is `clearAll`, the local data wipe (#1496).
  *
  * `getTrackByTrackId` composes the read with the `libraryItemToTrack` synthetic
  * adapter so the existing playback stack can resolve a user track by content
@@ -57,6 +58,10 @@ export function createSqlLibraryItemRepository(db: IDatabase): ILibraryItemRepos
     async getTrackByTrackId(trackId: TrackId): Promise<Track | null> {
       const item = await byTrackId(trackId)
       return item ? libraryItemToTrack(item) : null
+    },
+
+    async clearAll(): Promise<void> {
+      await mutate(db, "DELETE FROM library_items")
     },
   }
 }

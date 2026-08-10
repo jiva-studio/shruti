@@ -90,5 +90,9 @@ export function createSqlOutboxRepository(
       const rows = await db.query<{ id: number }>("SELECT id FROM outbox ORDER BY id DESC LIMIT 1")
       return rows.length > 0 ? Number(rows[0]!.id) : 0
     },
+
+    async clearAll(): Promise<void> {
+      await db.execute("DELETE FROM outbox")
+    },
   }
 }
