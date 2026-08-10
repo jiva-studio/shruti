@@ -543,6 +543,11 @@ async function buildOne(args: Args): Promise<void> {
   const db = wrapDatabase(raw)
 
   await runUserMigrations(db)
+  // The migration runner stamps each row with the wall clock, which is the only
+  // thing left in this file that differs between two runs on the same day — and
+  // it made the fixture bytes differ, so two E2E runs of one commit could not be
+  // compared (issue #1539). Restamp to the run's `now` anchor.
+  await db.execute("UPDATE migrations SET applied_at = ?", [new Date(args.now).toISOString()])
   await seedConfig(db, args)
   await STRATEGIES[args.strategy].seed(db, args, rng)
 
