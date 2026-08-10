@@ -2898,5 +2898,71 @@
       "pro",
       "e2e"
     ]
+  },
+  "168": {
+    "suite_id": 2,
+    "automation": 2,
+    "title": "A failed boot-locale chunk still launches a usable app",
+    "description": "Offline, Russian device. The lazily-imported UI-language chunk for the boot locale (bundles/ru.ts) is aborted, as it would be by a 404 after a web deploy rotated chunk hashes or by a dropped radio. Startup awaits that chunk before mounting, so the rejection used to abort the mount entirely and dismiss the splash onto a blank WebView (issue #1605). Asserts the app still mounts, reaches Home and is navigable, rendering the resident English fallback. English devices are immune (en is statically bundled), which is why this never shows up in local testing.",
+    "preconditions": "Offline boot with locale=ru, clean user DB, onboarding already completed; every request for the ru locale chunk is aborted.",
+    "steps": [
+      {
+        "action": "Launch the app on a Russian device while the ru locale chunk fails to load.",
+        "expected": "The app mounts anyway: URL /tabs/home with the bottom tab bar visible — not a blank WebView."
+      },
+      {
+        "action": "Navigate to the Settings tab.",
+        "expected": "The screen renders and the interface-language row is readable (English fallback copy, not raw translation keys)."
+      }
+    ],
+    "tags": [
+      "home",
+      "free",
+      "e2e"
+    ]
+  },
+  "169": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Two quick language switches leave the UI in the one picked last",
+    "description": "Offline. The Ukrainian chunk is held on the wire by a deferred route handler; while it is in flight the user picks Deutsch, which loads normally. When the overtaken uk chunk finally lands it must not flip a UI the user has moved off — that is what stranded the whole interface in a language the setting and the picker did not agree with (issue #1606).",
+    "preconditions": "Booted Russian UI on the Settings tab; requests for the uk locale chunk are parked until the test releases them.",
+    "steps": [
+      {
+        "action": "Pick Українська, then — before its chunk arrives — pick Deutsch.",
+        "expected": "The UI switches to German (the language picked last)."
+      },
+      {
+        "action": "Release the held Ukrainian chunk and let it land.",
+        "expected": "The UI stays German; no Ukrainian string appears."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "e2e"
+    ]
+  },
+  "170": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "A language whose chunk fails does not leave the setting lying",
+    "description": "Offline. Every request for the German chunk is aborted, then Deutsch is picked in the interface-language picker. The choice used to be persisted and the checkmark moved before the load was even attempted, so the setting claimed Deutsch while the UI stayed English — permanently, across restarts (issue #1606). Asserts the failure is surfaced, the picker still reads English, and a reload does not resurrect the phantom choice.",
+    "preconditions": "Booted English UI on the Settings tab, clean user DB; every request for the de locale chunk is aborted.",
+    "steps": [
+      {
+        "action": "Pick Deutsch while its chunk fails to load.",
+        "expected": "An error toast appears, the UI stays English, and reopening the picker shows English still checked."
+      },
+      {
+        "action": "Reload the app and reopen the interface-language picker.",
+        "expected": "English is still the checked language — nothing was persisted by the failed switch."
+      }
+    ],
+    "tags": [
+      "settings",
+      "free",
+      "e2e"
+    ]
   }
 }

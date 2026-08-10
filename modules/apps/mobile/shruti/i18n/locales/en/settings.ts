@@ -186,6 +186,7 @@ export default {
   appLanguage: {
     title: "Language",
     description: "Language of an interface",
+    loadFailedToast: "Couldn't load that language. Please try again.",
   },
 
   chatLanguage: {

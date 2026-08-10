@@ -184,11 +184,15 @@ const loaded = new Set<SupportedLocale>(["en"])
  * Fetch `locale`'s chunk and hand it to vue-i18n. Idempotent and safe to call
  * concurrently — the second caller awaits the same in-flight import, because
  * the module registry dedupes it.
+ *
+ * Rejects when the chunk cannot be fetched (a hash rotated by a web deploy, a
+ * dead radio). Every caller has to decide what that means for it; none may let
+ * the rejection escape (issue #1605).
  */
 export async function loadLocaleMessages(locale: SupportedLocale): Promise<void> {
   if (loaded.has(locale)) return
   const load = BUNDLES[`./bundles/${locale}.ts`]
-  if (!load) return
+  if (!load) throw new Error(`no message bundle for locale "${locale}"`)
   i18n.global.setLocaleMessage(locale, (await load()).default)
   loaded.add(locale)
 }
@@ -198,17 +202,51 @@ export async function loadLocaleMessages(locale: SupportedLocale): Promise<void>
  * parallel with the rest of startup. `main.ts` awaits it before mounting, so
  * the first paint is already in the right language — and until it resolves
  * every key still renders, in `en`, never as a raw key.
+ *
+ * NEVER rejects. `main.ts` awaits this between `router.isReady()` and
+ * `app.mount()`, so a rejection here used to abort startup outright and leave
+ * the WebView blank once the native splash dismissed (issue #1605). The
+ * resident `en` is a perfectly good first paint.
  */
-export const bootLocaleReady: Promise<void> = loadLocaleMessages(BOOT_LOCALE)
+export const bootLocaleReady: Promise<void> = loadLocaleMessages(BOOT_LOCALE).catch((e) => {
+  console.warn("[i18n] boot locale chunk failed; starting in en", e)
+})
+
+/**
+ * Outcome of a {@link setLocale} call:
+ *  - `applied`    — messages loaded and the UI locale now reads `locale`.
+ *  - `superseded` — a later call asked for a different locale while this one
+ *    was still fetching, so this one deliberately did nothing.
+ *  - `failed`     — the chunk could not be loaded; the UI locale is unchanged.
+ */
+export type SetLocaleResult = "applied" | "superseded" | "failed"
+
+/** The locale of the most recent {@link setLocale} call, set synchronously so
+ *  a slow chunk landing after a newer pick can tell it has been overtaken. */
+let requested: SupportedLocale = BOOT_LOCALE
 
 /**
  * Switch the UI language. Async because the messages have to arrive before
  * `locale.value` flips — flipping first would render the new locale against
  * an empty message set and flash English at the user mid-switch.
+ *
+ * Two switches in quick succession resolve in fetch order, not call order: the
+ * second pick is usually already `loaded` and wins in a microtask while the
+ * first is still on the wire. Flipping unconditionally after the await then
+ * stranded the UI in the language the user did NOT pick (issue #1606), so a
+ * call that has been overtaken reports `superseded` and applies nothing.
  */
-export async function setLocale(locale: SupportedLocale): Promise<void> {
-  await loadLocaleMessages(locale)
+export async function setLocale(locale: SupportedLocale): Promise<SetLocaleResult> {
+  requested = locale
+  try {
+    await loadLocaleMessages(locale)
+  } catch (e) {
+    console.warn(`[i18n] locale "${locale}" failed to load`, e)
+    return "failed"
+  }
+  if (requested !== locale) return "superseded"
   i18n.global.locale.value = locale
+  return "applied"
 }
 
 export function currentLocale(): SupportedLocale {

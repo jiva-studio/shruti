@@ -165,6 +165,7 @@ export default {
   appLanguage: {
     title: "Nyelv",
     description: "A felület nyelve",
+    loadFailedToast: "Ezt a nyelvet nem sikerült betölteni. Próbáld újra.",
   },
 
   chatLanguage: {
