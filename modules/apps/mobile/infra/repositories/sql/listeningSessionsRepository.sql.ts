@@ -87,6 +87,13 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
     },
 
     async forceStartOnce({ itemId, position, sourceKey }) {
+      // No trailing `tx` handle, unlike the other writers: that argument exists
+      // so a caller already inside a transaction can join it, and this method's
+      // only caller — the queue reconcile — is never inside one. It should
+      // still move onto the unit of work once #1493 injects one here, both to
+      // keep the read-then-insert below atomic and because the reconcile runs
+      // on foreground resume, right when a sync pull may hold the connection.
+      //
       // Read first so a replay is an ordinary no-op rather than a caught
       // constraint violation; the UNIQUE index (migration 025) still stands
       // behind it as the guarantee, and turns a genuine race into a throw the
