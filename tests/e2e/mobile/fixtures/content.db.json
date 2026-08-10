@@ -1,0 +1,34 @@
+{
+  "bytes": 4366336,
+  "generator": "scripts/build-catalog-fixture.py",
+  "rows": {
+    "asset_hashes": 1001,
+    "authors": 8,
+    "collection_group_items": 38,
+    "collection_groups": 6,
+    "collection_tags": 10,
+    "collection_tracks": 627,
+    "collections": 38,
+    "daily_wisdom": 20,
+    "languages": 14,
+    "locations": 594,
+    "migrations": 6,
+    "settings": 1,
+    "sources": 38,
+    "tags": 24,
+    "topics": 48,
+    "track_audio": 1553,
+    "track_references": 2013,
+    "track_tags": 242,
+    "track_topics": 1547,
+    "track_variants": 1001,
+    "tracks": 1001,
+    "tracks_search": 2082
+  },
+  "sha256": "c3f26c38bf0479cff4621ac6c7859150754f61c421ab6c08c230b1f1a5f48527",
+  "source": {
+    "file": "snapshot.20260804125921.db",
+    "sha256": "6a1b944974ee206662d49febff84b9f968080b439319cd9fd046ae76e5f075f1",
+    "version": 20260804125921
+  }
+}
