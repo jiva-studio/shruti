@@ -122,7 +122,13 @@ class MediaDownloaderPlugin : Plugin() {
             supersededWorkers.add(existing.workerId)
             detach(existing.workerId)
             WorkManager.getInstance(context).cancelWorkById(existing.workerId)
-            File(existing.localPath + ".download").delete()
+            // The partial is only ours to drop when no live sibling writes to
+            // the same path — hedged candidates share a destination while
+            // differing in id, so this entry can name the temp another
+            // candidate is filling. See `mayDeleteSupersededTemp`.
+            if (mayDeleteSupersededTemp(id, existing.localPath, trackedWork())) {
+                File(existing.localPath + ".download").delete()
+            }
             store.remove(id)
         }
 
@@ -377,6 +383,20 @@ class MediaDownloaderPlugin : Plugin() {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    /**
+     * Every tracked download WorkManager still knows about, with the one bit
+     * the cleanup decision needs: whether it can still be writing. An entry
+     * whose work has been pruned is dropped rather than assumed live — it has
+     * no worker left to hold anything.
+     */
+    private fun trackedWork(): List<TrackedWork> {
+        val wm = WorkManager.getInstance(context)
+        return store.all().mapNotNull { entry ->
+            val info = wm.getWorkInfoById(entry.workerId).get() ?: return@mapNotNull null
+            TrackedWork(entry.id, entry.localPath, info.state.isFinished)
+        }
+    }
 
     private fun resolveLocalPath(destination: JSObject): String? {
         val directory = destination.optString("directory", "cache")
