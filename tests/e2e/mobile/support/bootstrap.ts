@@ -10,6 +10,8 @@ import {
   type Locale,
   type UserDbStrategy,
 } from "./fixtures.js"
+import { interceptCovers } from "./assets-mock.js"
+import { installDiscoveryMock } from "./discovery-mock.js"
 import { requireFixtures } from "./test.js"
 
 /**
@@ -76,7 +78,10 @@ const SINK_REGIONS = [
  *  - **​/public/tracks/*​/transcripts/*.json → a fixture transcript (trackId patched
  *    to match the request) so the reader renders offline + deterministically.
  */
-export async function interceptContent(page: Page): Promise<void> {
+export async function interceptContent(
+  page: Page,
+  opts: { covers?: boolean } = {}
+): Promise<void> {
   requireFixtures()
   const fakeConfig = JSON.stringify({
     databases: [
@@ -108,45 +113,15 @@ export async function interceptContent(page: Page): Promise<void> {
     })
   })
 
-  // The "found on the internet" lane. Offline it has no service to ask, and an
-  // unmocked cross-origin POST per keystroke would leave every library spec
-  // rendering an error strip. Two hits, deliberately one of each shape: a
-  // YouTube address (a poster is derivable, so it rides the carousel) and a
-  // plain mp3 on somebody's web server (no poster, so it reads as a row).
-  await page.route("**/discovery/search", (route) => {
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        query: "",
-        filter: {},
-        hits: [
-          {
-            item_id: 9001,
-            media_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            page_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            title: "A lecture published as video",
-            author: "Test Speaker",
-            language: "en",
-            recorded_on: "1974-04-09T00:00:00Z",
-            references: ["BG 4.20"],
-            score: 0.9,
-          },
-          {
-            item_id: 9002,
-            media_url: "https://archive.example/talks/0001.mp3",
-            page_url: "https://archive.example/talks/0001",
-            title: "A lecture published as a file",
-            author: "Test Speaker",
-            language: "en",
-            recorded_on: "1974-03-27T00:00:00Z",
-            references: [],
-            score: 0.8,
-          },
-        ],
-      }),
-    })
-  })
+  // Cover art for the catalog rows — unserved, it is not just noise: every tile
+  // falls back to its tint, so a cover assertion passes either way. A spec that
+  // owns the cover route itself (image-cache-retry drops the first requests on
+  // purpose) registers it BEFORE boot and opts out here, since the later
+  // registration would otherwise win.
+  if (opts.covers !== false) await interceptCovers(page)
+
+  // The "found on the internet" lane, with its default two hits.
+  await installDiscoveryMock(page)
 
   // Serve one fixture transcript for every track, with its `trackId`/`language`
   // rewritten to match the requested URL so the reader doesn't reject it on a
@@ -363,11 +338,17 @@ const KILL_ANIMATIONS_CSS = `
 export async function boot(
   page: Page,
   locale: Locale = "en",
-  opts: { dismissNags?: boolean; sourceIds?: string[]; pro?: boolean; userDb?: UserDbStrategy } = {}
+  opts: {
+    dismissNags?: boolean
+    sourceIds?: string[]
+    pro?: boolean
+    userDb?: UserDbStrategy
+    covers?: boolean
+  } = {}
 ): Promise<void> {
   const { dismissNags = true, pro = false, userDb = "preseed" } = opts
   assertFixturesPresent()
-  await interceptContent(page)
+  await interceptContent(page, { covers: opts.covers })
   await preseedUserDb(page, locale, userDb)
   await preseedSearchFilter(page, locale, opts.sourceIds)
   if (dismissNags) await preseedDismissedNags(page)
