@@ -123,7 +123,6 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
       this.emit<FailedEvent>('failed', {
         id: options.id,
         error: isAbort ? 'cancelled' : message,
-        retryable: !isAbort,
         ...(isAbort ? { code: 'cancelled' as const } : {}),
       });
     } finally {

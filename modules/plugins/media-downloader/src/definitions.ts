@@ -76,8 +76,6 @@ export interface CompletedEvent {
 export interface FailedEvent {
   id: string;
   error: string;
-  /** Whether the failure is recoverable on retry (network drop) vs terminal (404, disk full). */
-  retryable: boolean;
   /**
    * Set when the transfer ended for a local reason rather than failing on
    * its own — `"cancelled"` for `cancel()` (or the platform aborting the

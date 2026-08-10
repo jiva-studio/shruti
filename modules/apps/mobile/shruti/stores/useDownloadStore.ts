@@ -63,8 +63,10 @@ export const useDownloadStore = defineStore("downloads", () => {
   const inFlight = new Map<TrackId, Promise<string | null>>()
   // The CDN url a track's transfer was started with, kept while it's in
   // flight so remove()/cancelPrefetch()/reset() can abort the native
-  // transfer (the downloader cancels by url → pathname id). Cleared when
-  // the task settles.
+  // transfer. One url is enough even though the download may be hedging
+  // several regions at once: the downloader keys by the url's path, so
+  // cancelling with any of them stops every candidate. Cleared when the
+  // task settles.
   const inFlightUrls = new Map<TrackId, string>()
   // Who is waiting on each in-flight task, boxed so a caller that JOINS a
   // running transfer can upgrade it (see `ensureDownloaded`). Only the
@@ -477,10 +479,14 @@ export const useDownloadStore = defineStore("downloads", () => {
           {
             mediaItems: app.repositories().mediaItems,
             unitOfWork: app.repositories().unitOfWork,
-            transfer: (url, onProgress) =>
-              app.mediaDownloader.download(url, (received, total) => {
-                onProgress?.(received, total)
-              }),
+            transfer: (url, onProgress, signal) =>
+              app.mediaDownloader.download(
+                url,
+                (received, total) => {
+                  onProgress?.(received, total)
+                },
+                signal
+              ),
           },
           (pct) => {
             if (fresh()) setProgress(trackId, pct)
