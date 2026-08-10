@@ -32,7 +32,7 @@ import "./theme/misc.css"
 /* Composition root + infrastructure adapters */
 import App from "./App.vue"
 import router from "./router/index.js"
-import { i18n } from "./i18n/index.js"
+import { bootLocaleReady, i18n } from "./i18n/index.js"
 import { initShruti } from "./shruti.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
 import { findRegion, getRegions, hydrateRegions } from "@shruti/services/regionsRegistry.js"
@@ -318,6 +318,12 @@ async function start(): Promise<void> {
     // Keep the query (e.g. ?locale) — a bare path replace would drop it.
     await router.replace({ path: target, query: router.currentRoute.value.query })
   }
+
+  // The boot locale's message chunk was requested when i18n's module first
+  // evaluated, so by now it has been downloading alongside everything above.
+  // Awaiting it here means the first paint is already in the device language
+  // instead of flashing the English fallback.
+  await bootLocaleReady
   app.mount("#app")
 
   // Fire-and-forget post-mount work. Failures must not block startup.
