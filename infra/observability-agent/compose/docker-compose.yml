@@ -1,8 +1,9 @@
 # observability-agent — lightweight metrics + log collectors on prod-EU.
 #
 # Pushes logs (promtail) and exposes metrics endpoints (node-exporter,
-# cAdvisor, postgres-exporter, redis-exporter, blackbox-exporter) for the
-# obs host (Tailscale IP ${OBS_TS_IP}) to scrape/receive.
+# cAdvisor, postgres-exporter, redis-exporter, blackbox-exporter,
+# metrics-proxy) for the obs host (Tailscale IP ${OBS_TS_IP}) to
+# scrape/receive.
 #
 # Conventions:
 #   - All exporters bind on the Tailscale IP (${PROD_EU_TS_IP}), never on
@@ -218,6 +219,27 @@ services:
     # Joined to the chat-stack network so blackbox can reach chat/auth/
     # share-* by service DNS for /healthz probes. (Public probes via
     # Caddy domain still work over the bridge default gateway.)
+    networks:
+      - lectorium
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Reverse proxy for the app services' own /metrics endpoints. They expose
+  # them on their service port, but the app stack publishes no host ports —
+  # so without this there is no route from Prometheus on obs. Same network
+  # trick as blackbox-exporter above; see metrics-proxy.Caddyfile for why a
+  # proxy and not a port publish (chat's API stays unpublished, only the
+  # scrape path is reachable, and it is reachable on the Tailnet only).
+  metrics-proxy:
+    image: caddy:2.8-alpine
+    container_name: lectorium-metrics-proxy
+    restart: unless-stopped
+    labels: *no-watchtower
+    volumes:
+      - ./metrics-proxy.Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "${PROD_EU_TS_IP}:9119:9119"
     networks:
       - lectorium
     logging:

@@ -249,9 +249,9 @@ class RateLimiter:
                 ip=ip,
             )
             # Prometheus counter — bounded cardinality on labels so it
-            # stays cheap. Once the chat-service /metrics endpoint
-            # lands, Grafana picks this up automatically without
-            # further wiring.
+            # stays cheap. Scraped from the obs host via metrics-proxy
+            # (infra/observability-agent) — chat publishes no host port,
+            # so nothing reaches /metrics without that hop.
             try:
                 rate_limit_hits_counter.labels(
                     scope=scope, key_type=key_type, tier=echoed_tier,
