@@ -38,10 +38,17 @@ function sourceKey(e: AudioQueueTransition): string {
  * same lecture — yesterday, or weeks ago — did not, so a re-listen is still
  * credited in full.
  *
- * The estimate is one-sided by construction. A long mid-run pause, or playback
- * below 1×, stretches the real run past the window; the live row then falls
- * outside and its prefix is counted twice, exactly as it was before this fix.
- * Nothing here can under-count a listen that really happened.
+ * It is an ESTIMATE: the journal carries when the run ended, never when it
+ * began, so the audio span stands in for the wall-clock one. Both errors are
+ * bounded, and both need a second listen of the same lecture close in time:
+ *  - too narrow (a long mid-run pause, or playback below 1×) — the live row
+ *    falls outside and its prefix is counted twice, as it was before this fix;
+ *  - too wide (playback above 1×, which compresses the run to `span / rate`) —
+ *    a genuinely separate listen that ended inside the extra reach-back can
+ *    clamp, under-crediting an immediate back-to-back replay.
+ * Deriving the lower bound from the maximum 2× rate would fix the second at
+ * the cost of reintroducing the first for every listener at normal speed —
+ * the common case — so the 1× assumption is the deliberate choice.
  */
 function runWindow(e: AudioQueueTransition): { fromSec: number; toSec: number } {
   const endSec = Math.floor(e.at / 1000)
