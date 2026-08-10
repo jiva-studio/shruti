@@ -9,6 +9,7 @@ export default {
   languageListUnavailable: "Nie udało się wczytać języków — wyświetlono skróconą listę.",
   dictionariesUnavailable: "Nie udało się załadować nazw — niektóre etykiety mogą być niedostępne.",
   playbackFailed: "Nie udało się odtworzyć tego wykładu. Sprawdź połączenie i spróbuj ponownie.",
+  noAudioForLecture: "Ten wykład nie ma audio.",
   downloadStorageFull:
     "Osiągnięto limit pamięci. Usuń wysłuchane wykłady lub zwiększ limit w ustawieniach.",
 }

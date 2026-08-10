@@ -14,8 +14,9 @@ import type { Migration } from "./types.js"
  * sync engine fills it before push).
  *
  * `sync_state` is per-device bookkeeping for the engine (Lane D): the pull
- * cursor, the cursor acknowledged to the server for compaction, and the
- * highest local `outbox.id` confirmed pushed.
+ * cursor, the cursor acknowledged to the server for compaction, and
+ * `pushed_outbox_id` — the outbox watermark below which rows are retired,
+ * either because they were pushed or because the owning identity changed.
  *
  * Both are additive `CREATE TABLE IF NOT EXISTS` — no existing table is
  * touched or renamed.

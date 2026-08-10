@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { useRoute } from "vue-router"
 import { useI18n } from "vue-i18n"
+import { useToast } from "@kit/composables"
 import { loadTrackDetail } from "@usecases/playback/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
@@ -12,6 +13,7 @@ import { preferredContentLanguage, resolveTrackTitle } from "@lib/domain/service
 import { resolveTrackAuthorName } from "@lib/domain/services/trackAuthor.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { playbackErrorKey } from "@shruti/utils/playbackErrorKey.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                    Types                                   */
@@ -47,6 +49,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const player = usePlayerStore()
   const playlist = usePlaylistStore()
   const route = useRoute()
+  const toast = useToast()
   const { t } = useI18n()
 
   // Deep-link timecode: when the route carries `?resumeFromMs=…` (chat
@@ -118,34 +121,40 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     selectedLanguage.value = language
   }
 
-  async function onPlay(): Promise<void> {
+  /**
+   * Open the loaded track and report a refusal. A rejected `openTrack` and
+   * the native drain-event notice are mutually exclusive per item (see
+   * `syncFromNative`), so this is the only place the user can be told
+   * playback didn't start.
+   *
+   * `hasAudio` is the same predicate `playTrack` falls back on, so the
+   * `v-if`-gated Play button can only ever produce `engine-failed`. The
+   * `?resumeFromMs=` deep link has no such gate and can hit either.
+   */
+  async function startPlayback(resumeFromMs?: number): Promise<void> {
     if (!track.value) return
     const lang = selectedLanguage.value ?? contentLang.value
     // If the track is queued in the playlist, resume from saved progress.
     // Otherwise (ad-hoc play from the Track screen) play without
     // persistence — there's no playlist item to write to.
     const entry = playlist.getEntryByTrackId(track.value.id)
-    await player.openTrack({
+    const result = await player.openTrack({
       track: track.value,
       preferredLanguage: lang,
       author: author.value,
       itemId: entry?.item.id,
+      resumeFromMs,
     })
+    if (!result.ok) void toast.error(t(playbackErrorKey(result.error)))
+  }
+
+  async function onPlay(): Promise<void> {
+    await startPlayback()
   }
 
   onMounted(() => {
     void loadEverything().then(async () => {
-      if (resumeFromMs !== null && track.value) {
-        const lang = selectedLanguage.value ?? contentLang.value
-        const entry = playlist.getEntryByTrackId(track.value.id)
-        await player.openTrack({
-          track: track.value,
-          preferredLanguage: lang,
-          author: author.value,
-          itemId: entry?.item.id,
-          resumeFromMs,
-        })
-      }
+      if (resumeFromMs !== null) await startPlayback(resumeFromMs)
     })
   })
 

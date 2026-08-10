@@ -95,6 +95,17 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
                     call.resolve(task)
                     return
                 }
+                // Nothing live for this id, so we are about to supersede it.
+                // Any stale task still bound to this id must stop speaking
+                // for it first: its cancellation/failure would be delivered
+                // under an id the replacement now owns, and the JS caller —
+                // which addresses events by id — would settle the download
+                // we are starting. Unbinding also makes the cancel below
+                // silent (the delegate guards on the binding).
+                for task in tasks where self.delegate.id(for: task.taskIdentifier) == id {
+                    self.delegate.unbind(taskIdentifier: task.taskIdentifier)
+                    task.cancel()
+                }
                 self.startNewDownload(call: call, id: id, url: url, localPath: localPath)
             }
         } else {

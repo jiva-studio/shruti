@@ -261,6 +261,10 @@ export const usePlayerStore = defineStore("player", () => {
       // item, but a single track / the last item just stops with nothing told
       // to the user — the player would sit silently "not playing". Surface it.
       // Events are ack'd above, so each error is seen exactly once (no spam).
+      // This never doubles up with the refusal the `openTrack` call sites
+      // report: `open()` is itself a queue of length one, but neither it nor
+      // `setQueue` awaits readiness, so a bad URL / 404 cannot reject the JS
+      // call — it can only arrive here. Per item the two are exclusive.
       if (s.events.some((e) => e.reason === "error")) {
         void toast.error(t("errors.playbackFailed"))
       }
@@ -343,7 +347,27 @@ export const usePlayerStore = defineStore("player", () => {
     positionMs.value = Math.min(upper, positionMs.value + SKIP_DELTA_MS)
   }
 
+  /**
+   * Open a track for playback. The sheet only appears once the engine has
+   * loaded (`open` follows `trackId`), and getting there costs a play plan,
+   * a session hand-off, a resume lookup and possibly a whole download — so
+   * claim the row synchronously first and hold the claim for the entire
+   * open. Every exit path, including a bail on a stale generation or a
+   * rejected plan, releases it.
+   */
   async function openTrack(
+    args: OpenArgs
+  ): Promise<Result<void, PlayTrackError | "engine-failed">> {
+    const downloads = useDownloadStore()
+    downloads.markPending(args.track.id)
+    try {
+      return await loadTrack(args)
+    } finally {
+      downloads.clearPending(args.track.id)
+    }
+  }
+
+  async function loadTrack(
     args: OpenArgs
   ): Promise<Result<void, PlayTrackError | "engine-failed">> {
     // Claim this open as the latest. Any open already in flight is now
@@ -407,8 +431,8 @@ export const usePlayerStore = defineStore("player", () => {
     if (stale()) return { ok: true, value: undefined }
 
     // Over the storage budget this returns null and playback falls through
-    // to the streaming URL below — a lecture the user taps always plays,
-    // it just may not be kept offline.
+    // to the streaming URL below — the lecture still plays, it just isn't
+    // kept offline.
     const localUrl = await useDownloadStore().ensureDownloaded(
       cmd.trackId,
       cmd.audio.path,

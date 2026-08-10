@@ -81,6 +81,11 @@ export interface SyncJournalDeps {
    *  composition root from the auth/device layer; kept as a provider because
    *  the underlying `Device.getId()` is async. */
   readonly getDeviceId: () => Promise<string>
+  /** Resolves the account journaling right now — stamped on each row (023
+   *  migration) so push can tell a deleted account's un-pushed changes from
+   *  the ones the identity replacing it wrote. Read per write, never captured:
+   *  the identity changes under a live bundle. Omitted ⇒ rows are unowned. */
+  readonly getOwnerId?: () => string | null
   /** Device-local "Sync chats" gate (default ON). Read on every chat write;
    *  when it returns `false` no chat change is journaled. Omitted ⇒ treated as
    *  ON. Never gates the non-chat collections. */
@@ -128,9 +133,18 @@ export function withSyncJournaling(
     const lastSeen = rows.length > 0 ? parseHlc(rows[0]!.hlc) : null
     const hlc = hlcToString(hlcNow(deviceId, lastSeen))
     await userDb.execute(
-      `INSERT INTO outbox (collection, doc_id, op, data, hlc, base_hlc, created_at, sent)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, 0)`,
-      [collection, docId, op, data === null ? null : JSON.stringify(data), hlc, Date.now()]
+      `INSERT INTO outbox
+         (collection, doc_id, op, data, hlc, base_hlc, created_at, sent, owner_id)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, 0, ?)`,
+      [
+        collection,
+        docId,
+        op,
+        data === null ? null : JSON.stringify(data),
+        hlc,
+        Date.now(),
+        deps.getOwnerId?.() ?? null,
+      ]
     )
   }
 
