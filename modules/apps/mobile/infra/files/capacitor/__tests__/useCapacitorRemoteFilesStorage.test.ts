@@ -8,21 +8,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 // Declared via `vi.hoisted` so they exist when the hoisted `vi.mock` factories
 // below reference them (and can be assigned directly as the mocked methods,
 // avoiding wrapper closures with unused params).
-const { writeFileMock, renameMock, deleteFileMock, readFileMock, rmdirMock, resolveLocalUrlMock } =
-  vi.hoisted(() => ({
-    writeFileMock: vi.fn<(o: unknown) => Promise<{ uri: string }>>(async () => ({
-      uri: "file:///written",
-    })),
-    renameMock: vi.fn<(o: unknown) => Promise<void>>(async () => {}),
-    deleteFileMock: vi.fn<(o: unknown) => Promise<void>>(async () => {}),
-    readFileMock: vi.fn<(o: unknown) => Promise<{ data: string }>>(async () => ({
-      data: JSON.stringify({ cached: true }),
-    })),
-    rmdirMock: vi.fn<(o: unknown) => Promise<void>>(async () => {}),
-    resolveLocalUrlMock: vi.fn<(o: unknown) => Promise<{ localUrl: string | null }>>(async () => ({
-      localUrl: "file:///DATA/cache/foo.json",
-    })),
-  }))
+const {
+  writeFileMock,
+  renameMock,
+  deleteFileMock,
+  readFileMock,
+  rmdirMock,
+  readdirMock,
+  resolveLocalUrlMock,
+} = vi.hoisted(() => ({
+  writeFileMock: vi.fn<(o: unknown) => Promise<{ uri: string }>>(async () => ({
+    uri: "file:///written",
+  })),
+  renameMock: vi.fn<(o: unknown) => Promise<void>>(async () => {}),
+  deleteFileMock: vi.fn<(o: unknown) => Promise<void>>(async () => {}),
+  readFileMock: vi.fn<(o: unknown) => Promise<{ data: string }>>(async () => ({
+    data: JSON.stringify({ cached: true }),
+  })),
+  rmdirMock: vi.fn<(o: unknown) => Promise<void>>(async () => {}),
+  readdirMock: vi.fn<(o: unknown) => Promise<{ files: { name: string; type: string }[] }>>(
+    async () => ({ files: [] })
+  ),
+  resolveLocalUrlMock: vi.fn<(o: unknown) => Promise<{ localUrl: string | null }>>(async () => ({
+    localUrl: "file:///DATA/cache/foo.json",
+  })),
+}))
 
 vi.mock("@capacitor/filesystem", () => ({
   Directory: { Data: "DATA", Cache: "CACHE" },
@@ -33,6 +43,7 @@ vi.mock("@capacitor/filesystem", () => ({
     deleteFile: deleteFileMock,
     readFile: readFileMock,
     rmdir: rmdirMock,
+    readdir: readdirMock,
   },
 }))
 
@@ -101,6 +112,65 @@ describe("useCapacitorRemoteFilesStorage — temp cleanup on rename failure (#29
     await flush()
 
     expect(renameMock).toHaveBeenCalledOnce()
+    expect(deleteFileMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("useCapacitorRemoteFilesStorage — clearAll scope (#1630)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readdirMock.mockResolvedValue({
+      files: [
+        { name: "databases", type: "directory" },
+        { name: "media", type: "directory" },
+        { name: "transcripts", type: "directory" },
+        { name: "config.json", type: "file" },
+      ],
+    })
+  })
+
+  it("leaves the content database in place while clearing everything else", async () => {
+    const storage = useCapacitorRemoteFilesStorage({ cacheDir: "shruti", keep: ["databases"] })
+
+    await storage.clearAll()
+
+    // The whole point: "Clear cache" must never cost a ~54 MB re-download.
+    expect(rmdirMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ path: "shruti/databases" })
+    )
+    // …and it must never take the cache root out from under it either.
+    expect(rmdirMock).not.toHaveBeenCalledWith(expect.objectContaining({ path: "shruti" }))
+    expect(rmdirMock).toHaveBeenCalledWith({
+      path: "shruti/media",
+      directory: "DATA",
+      recursive: true,
+    })
+    expect(rmdirMock).toHaveBeenCalledWith({
+      path: "shruti/transcripts",
+      directory: "DATA",
+      recursive: true,
+    })
+    expect(deleteFileMock).toHaveBeenCalledWith({
+      path: "shruti/config.json",
+      directory: "DATA",
+    })
+  })
+
+  it("keeps sweeping after one entry fails to delete", async () => {
+    rmdirMock.mockRejectedValueOnce(new Error("locked"))
+    const storage = useCapacitorRemoteFilesStorage({ cacheDir: "shruti", keep: ["databases"] })
+
+    await expect(storage.clearAll()).resolves.toBeUndefined()
+    expect(rmdirMock).toHaveBeenCalledTimes(2)
+    expect(deleteFileMock).toHaveBeenCalledOnce()
+  })
+
+  it("is a no-op when the cache root doesn't exist", async () => {
+    readdirMock.mockRejectedValueOnce(new Error("no such directory"))
+    const storage = useCapacitorRemoteFilesStorage({ cacheDir: "shruti", keep: ["databases"] })
+
+    await expect(storage.clearAll()).resolves.toBeUndefined()
+    expect(rmdirMock).not.toHaveBeenCalled()
     expect(deleteFileMock).not.toHaveBeenCalled()
   })
 })
