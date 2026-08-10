@@ -16,6 +16,7 @@ from lectorium_chat.domain.user_context import (
     FocusFragment,
     UserContext,
     UserContextTrack,
+    as_aware,
 )
 
 
@@ -274,10 +275,14 @@ def _parse_iso(s: str | None) -> datetime | None:
     missing timestamps as "unknown" rather than raising on the boundary;
     the mobile client should always send a value, and a parse miss is
     not worth failing the whole request over.
+
+    A value without an offset is read as UTC: everything downstream
+    compares these against each other, and mixing naive with aware
+    raises TypeError.
     """
     if not s:
         return None
     try:
-        return datetime.fromisoformat(s)
+        return as_aware(datetime.fromisoformat(s))
     except ValueError:
         return None

@@ -9,7 +9,7 @@ from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.domain import UserContext
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
-from lectorium_chat.domain.user_context import TrackStatus, UserContextTrack
+from lectorium_chat.domain.user_context import TrackStatus, UserContextTrack, as_aware
 
 
 _DESCRIPTION = (
@@ -92,7 +92,7 @@ def _nothing_here(user_context: UserContext) -> dict[str, Any] | list[Any]:
     played = [t for t in user_context.recent_tracks if t.last_played_at is not None]
     if not played:
         return []
-    newest = max(played, key=lambda t: t.last_played_at)
+    newest = max(played, key=lambda t: as_aware(t.last_played_at))
     return {
         "tracks": [],
         "history_exists": True,

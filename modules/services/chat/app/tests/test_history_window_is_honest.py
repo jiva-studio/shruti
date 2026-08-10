@@ -125,3 +125,28 @@ async def test_a_track_the_catalog_no_longer_carries_is_not_a_blank_denial() -> 
 async def test_a_bad_bound_still_says_what_is_wrong(bad: str) -> None:
     got = await _call(_ctx(_track("t1", played=_NOW)), since=bad)
     assert got["error"] == "bad_argument"
+
+
+@pytest.mark.parametrize("since", ["2026-08-03", "2026-08-03T00:00:00"])
+async def test_a_bound_without_an_offset_still_filters(since: str) -> None:
+    """The bounds are written by the model, not the client, and a bare
+    date is what models emit. Comparing it against a tz-aware
+    `last_played_at` used to raise TypeError, which the dispatcher turned
+    into `{"error": …}` and the model read as "you never listened"."""
+    got = await _call(
+        _ctx(
+            _track("in", played=_NOW - timedelta(days=1)),
+            _track("out", played=_LAST_MONTH),
+        ),
+        since=since,
+    )
+    assert isinstance(got, list) and len(got) == 1
+
+
+async def test_mixed_naive_and_aware_history_does_not_raise() -> None:
+    ctx = _ctx(
+        _track("aware", played=_NOW - timedelta(days=1)),
+        _track("naive", played=datetime(2026, 8, 4, 12, 0)),  # noqa: DTZ001
+    )
+    assert len(ctx.tracks_in_window(since=_NOW - timedelta(days=6))) == 2
+    assert len(ctx.completed_tracks()) == 2
