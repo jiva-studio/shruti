@@ -92,6 +92,15 @@ async def post_feedback(
     if not rl.allowed:
         raise_429(rl, scope="feedback")
 
+    # Ownership — same check as GET /chat/turn. Without it any valid JWT
+    # could upsert deterministic scores onto an arbitrary trace id.
+    # Note the turn buffer's 24h TTL: feedback on a message older than
+    # that 404s. If late rating turns out to matter, the fix is a
+    # longer-lived owner marker, not relaxing this back to fail-open.
+    blob = await deps.turn_store.get(payload.trace_id)
+    if blob is None or blob.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="turn not found")
+
     langfuse = get_langfuse()
     if langfuse is None:
         # Singleton not initialised (missing env / force-fallback /
