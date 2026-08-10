@@ -7,10 +7,16 @@ client propagates `sentry-trace`, a crash and the server error that caused it
 land on one trace instead of in two systems nobody joins by hand.
 
 Nothing here calls `capture_exception`. `LoggingIntegration(event_level=ERROR)`
-picks up all 21 existing `log.exception` sites for free: structlog is
-configured with `structlog.stdlib.LoggerFactory()` and the root handler is a
-plain stdlib `StreamHandler` (`logging.py`), so every structlog error already
-travels through the stdlib `logging` tree that the integration hooks.
+picks up all 21 existing `log.exception` sites: structlog is configured with
+`structlog.stdlib.LoggerFactory()` and the root handler is a plain stdlib
+`StreamHandler` (`logging.py`), so every structlog error already travels
+through the stdlib `logging` tree that the integration hooks.
+
+Not quite for free, though — `logging.py` has to hand the exception over
+explicitly (`keep_exc_info_for_sentry` / `wrap_for_formatter`). `format_exc_info`
+otherwise strips `exc_info` from the event dict before the record is created,
+and the integration reads `record.exc_info`: without the handover every event
+here arrives with no stacktrace and the deny-list below never matches.
 
 That same wiring is why `before_send` has work to do. `wrap_for_formatter`
 puts the whole event *dict* in `record.msg`, so the SDK's default title is a
@@ -66,9 +72,13 @@ _BENIGN_CODES = frozenset({"chat_unavailable"})
 def _structlog_payload(hint: dict[str, Any]) -> dict[str, Any] | None:
     """The original structlog event dict behind a `LoggingIntegration` event.
 
-    `ProcessorFormatter.wrap_for_formatter` is the final structlog processor
-    here, and it passes the event dict through as `record.msg` — so the fields
-    a call site bound (`code`, `request_id`, …) survive intact on the record.
+    `wrap_for_formatter` is the final structlog processor here, and it passes
+    the event dict through as `record.msg` — so the fields a call site bound
+    (`code`, `request_id`, …) survive intact on the record.
+
+    Safe to hoist wholesale into `extra`: `drop_pii` and
+    `redact_ru_message_bodies` are shared processors, so this dict has already
+    been through them by the time it becomes `record.msg`.
     """
     record = hint.get("log_record")
     msg = getattr(record, "msg", None)
@@ -159,14 +169,29 @@ def init_sentry(settings: Settings) -> bool:
         # Same shape as the mobile release name, so a server issue and the
         # client issue it caused can be filtered by the same deploy.
         release=settings.service_version,
-        # ERROR and above becomes an issue; INFO and above becomes a
-        # breadcrumb, which is what gives an issue the preceding turn's
-        # narrative without a second logging pipeline.
+        # ERROR and above becomes an issue. `level=None` deliberately turns
+        # OFF log breadcrumbs: a breadcrumb is the whole structlog event dict,
+        # so the preceding turn's narrative would drag the turn's payload —
+        # question text included — into every issue raised after it.
         integrations=[LoggingIntegration(level=None, event_level="ERROR")],
         # User messages, auth headers and IPs must never leave the service.
         # The RU-region redaction in `logging.py` protects the log pipeline;
         # this protects Sentry's.
         send_default_pii=False,
+        # `send_default_pii=False` is worth nothing on its own here. The SDK
+        # defaults to attaching every frame's local variables, and in this
+        # service a frame local IS the payload: the user's question, the
+        # rendered prompt, the retrieved chunks, the decoded JWT claims. One
+        # `log.exception` on the turn path would ship all of it.
+        include_local_variables=False,
+        # Never read the chat POST body. The ASGI integration is disarmed only
+        # by init order today (the app is already built when `init_sentry`
+        # runs in lifespan); say it in the options instead, so a future
+        # reordering cannot turn body capture back on.
+        max_request_body_size="never",
+        # No stack on non-exception events either — nothing in a `log.error`
+        # needs one, and every stack is another frame-variable surface.
+        attach_stacktrace=False,
         traces_sample_rate=settings.sentry_traces_sample_rate,
         before_send=before_send,
     )
