@@ -8,7 +8,9 @@ sees `running` and waits.
 
 Alongside it, `turn:<id>:owner` holds nothing but the owning user id on a
 much longer TTL — feedback needs to authorise a rating on a message whose
-buffered events have long since expired.
+buffered events have long since expired. Both `mark_running` and `finish`
+claim it (SET NX, first writer wins), so losing one write to a Redis blip
+costs nothing.
 
 Every op degrades softly (logs + no-op / None / False) — buffering is a
 best-effort enhancement on top of the live SSE stream, never a
@@ -72,6 +74,17 @@ class RedisTurnStore:
     def _owner_key(trace_id: str) -> str:
         return f"turn:{trace_id}:owner"
 
+    def _claim_owner(self, pipe: Any, trace_id: str, user_id: str) -> None:
+        # NX: whoever writes first owns the turn. The trace id is minted by
+        # the client, so a later writer naming the same id must not be able
+        # to take the marker over.
+        pipe.set(
+            name=self._owner_key(trace_id),
+            value=user_id.encode(),
+            ex=self._owner_ttl_s,
+            nx=True,
+        )
+
     async def mark_running(self, trace_id: str, user_id: str) -> None:
         # Both writes in one round trip: the record the resume flow reads,
         # and the owner marker that outlives it.
@@ -82,11 +95,7 @@ class RedisTurnStore:
                     value=json.dumps({"state": "running", "user_id": user_id}).encode(),
                     ex=self._running_ttl_s,
                 )
-                pipe.set(
-                    name=self._owner_key(trace_id),
-                    value=user_id.encode(),
-                    ex=self._owner_ttl_s,
-                )
+                self._claim_owner(pipe, trace_id, user_id)
                 await pipe.execute()
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("turn_store_mark_running_error", err=str(exc))
@@ -100,15 +109,22 @@ class RedisTurnStore:
     async def finish(
         self, trace_id: str, *, state: str, events: list[dict[str, Any]], user_id: str
     ) -> None:
+        # The owner claim is repeated here so a turn whose `mark_running`
+        # write was lost to a Redis blip still becomes rateable: without it
+        # the marker would be missing for the whole owner TTL and every
+        # feedback call on that turn would fail closed forever.
         try:
-            await self._client.set(
-                name=self._key(trace_id),
-                value=json.dumps(
-                    {"state": state, "user_id": user_id, "events": events},
-                    ensure_ascii=False,
-                ).encode(),
-                ex=self._result_ttl_s,
-            )
+            async with self._client.pipeline(transaction=False) as pipe:
+                pipe.set(
+                    name=self._key(trace_id),
+                    value=json.dumps(
+                        {"state": state, "user_id": user_id, "events": events},
+                        ensure_ascii=False,
+                    ).encode(),
+                    ex=self._result_ttl_s,
+                )
+                self._claim_owner(pipe, trace_id, user_id)
+                await pipe.execute()
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("turn_store_finish_error", err=str(exc))
 
