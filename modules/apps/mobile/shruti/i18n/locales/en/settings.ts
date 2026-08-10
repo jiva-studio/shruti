@@ -235,6 +235,7 @@ export default {
       "10h": "10 hours",
     },
     archive: {
+      off: "Never",
       immediate: "Immediately",
       _8h: "After 8 hours",
       _1d: "After 1 day",
