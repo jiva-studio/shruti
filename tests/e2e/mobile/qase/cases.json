@@ -3336,5 +3336,88 @@
       "free",
       "e2e"
     ]
+  },
+  "186": {
+    "suite_id": 10,
+    "automation": 2,
+    "title": "A failed download says so, and a deliberate retry is always answered",
+    "description": "Offline, with the audio route aborting so every transfer fails. The failure must surface as a notice rather than only a red X on a row nobody is watching, and the queue's rate-limit must never suppress the answer to something the user just pressed.",
+    "preconditions": "Offline fixtures with a clean user db; the audio route aborts every request.",
+    "steps": [
+      {
+        "action": "Add a lecture whose audio cannot be fetched.",
+        "expected": "It is added and the transfer starts."
+      },
+      {
+        "action": "Wait for the transfer to fail.",
+        "expected": "A notice names the failure and the row shows the failed state."
+      },
+      {
+        "action": "Dismiss the notice.",
+        "expected": "No toast is on screen."
+      },
+      {
+        "action": "Press 'Download again' in the track sheet.",
+        "expected": "The failure is reported again immediately, despite the queue cooldown."
+      }
+    ],
+    "tags": [
+      "downloads",
+      "free",
+      "e2e"
+    ]
+  },
+  "187": {
+    "suite_id": 10,
+    "automation": 2,
+    "title": "A silent CDN costs seconds: the download hedges to a live region",
+    "description": "Offline, with a two-region config. The preferred region accepts the audio request and never answers — the shape a dead region actually takes. The walk must not park on it: the other region is asked and serves the bytes, and not before the hedge interval, or the hedge is a fan-out that doubles CDN load. Completion of the row is covered by issue 1682, not here.",
+    "preconditions": "Offline fixtures with a clean user db; config.json publishes edge-a (silent for audio) and edge-b (serving).",
+    "steps": [
+      {
+        "action": "Add a lecture while the preferred region never answers for audio.",
+        "expected": "It is added to the queue."
+      },
+      {
+        "action": "Watch the download while the preferred region stays silent.",
+        "expected": "The other region is asked and serves the audio."
+      },
+      {
+        "action": "Check when the second candidate was first asked.",
+        "expected": "Not before the hedge interval — the head candidate ran alone first."
+      }
+    ],
+    "tags": [
+      "downloads",
+      "free",
+      "e2e"
+    ]
+  },
+  "188": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "A rejected request refreshes once and is replayed",
+    "description": "Offline. The access token is seeded an hour out so nothing proactive can fire; the server rejects the first authed call with 401 and accepts the replay. The answer must still arrive, the client must refresh exactly once, and the session must not drop to anonymous. Case 114 covers the proactive expiry-driven refresh; this covers the rejection the user actually hits when the device clock is off.",
+    "preconditions": "Offline fixtures with a clean user db and a seeded signed-in session; /auth/refresh and /auth/me are mocked.",
+    "steps": [
+      {
+        "action": "Send a chat message while the server rejects the first authed call.",
+        "expected": "The answer arrives — the rejection is not terminal."
+      },
+      {
+        "action": "Count the refreshes and the chat calls.",
+        "expected": "Exactly one refresh, and the rejected request was replayed once."
+      },
+      {
+        "action": "Read the stored session.",
+        "expected": "Still signed in — no silent drop to anonymous."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
   }
 }

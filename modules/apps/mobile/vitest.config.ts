@@ -59,6 +59,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "submodules/domain/**/__tests__/**/*.test.ts",
+      "submodules/contracts/**/__tests__/**/*.test.ts",
       "usecases/**/__tests__/**/*.test.ts",
       "infra/**/__tests__/**/*.test.ts",
       "lectorium/**/__tests__/**/*.test.ts",
