@@ -221,6 +221,7 @@ export default {
 
   noteSaved: "Белешка је сачувана",
   noteSaving: "Чувам белешку…",
+  actionNoteError: "Није могуће сачувати белешку.",
 
   actionPdfKind: "Транскрипт предавања",
   actionPdfShare: "Подели",
