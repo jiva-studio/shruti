@@ -1,0 +1,38 @@
+# infra/observability-agent/compose/metrics-proxy.Caddyfile
+#
+# The app services expose /metrics on their own service port, but the app
+# stack publishes no host ports for them — only caddy is reachable from
+# outside the bridge, and it must not carry /metrics on the public edge.
+# So Prometheus on obs has no route to them.
+#
+# blackbox-exporter already shows the shape of the fix: sit on the app
+# network and reach services by DNS. blackbox can only probe, so this is the
+# same trick with a plain reverse proxy — one tailnet-bound port that maps
+# `/<service>/metrics` onto `<service>:<port>/metrics` and 404s everything
+# else. Nothing but the scrape path is reachable, and the services stay
+# unpublished.
+{
+	admin off
+	auto_https off
+}
+
+:9119 {
+	log {
+		format json
+	}
+
+	handle /chat/metrics {
+		rewrite * /metrics
+		reverse_proxy chat:8080
+	}
+
+	# Own liveness, so deploy.sh and `up` have something to check that does
+	# not depend on a backend being healthy.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	handle {
+		respond "no metrics route for this path" 404
+	}
+}

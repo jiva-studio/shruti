@@ -1471,6 +1471,117 @@ groups:
     noDataState: OK
     execErrState: OK
 - orgId: 1
+  name: chat
+  folder: Shruti-Alerts
+  interval: 1m
+  rules:
+  # Threshold is 80% of `max_in_flight_turns` (config.py default 24). Past the
+  # cap, new turns are rejected at admission rather than queued, so the useful
+  # page is the approach, not the breach. If the setting is ever overridden in
+  # the env, this number has to move with it.
+  - uid: chat_turns_in_flight_high
+    title: chat_turns_in_flight_high
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: chat
+    annotations:
+      summary: Chat turns in flight >19 of the 24-turn admission cap for 5m
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_chat_turns_in_flight)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 19
+    noDataState: OK
+    execErrState: OK
+  # Any non-zero rate means the rate-limit store is refusing reads: non-Pro
+  # requests fail closed with 503, Pro brownouts through unlimited. Both are
+  # invisible in the service's own error rate, which is why this is counted.
+  - uid: chat_rate_limit_store_unavailable
+    title: chat_rate_limit_store_unavailable
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: chat
+    annotations:
+      summary: Chat rate-limit store unavailable — non-Pro requests failing closed
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: sum(rate(shruti_chat_rate_limit_redis_unavailable_total[5m]))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+  # Waiters is the gauge that separates "healthily busy" from "requests are
+  # queueing"; pool size alone cannot. The series is omitted entirely when
+  # asyncpg's private queue state can't be read, hence noDataState OK.
+  - uid: chat_db_pool_waiters
+    title: chat_db_pool_waiters
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: chat
+    annotations:
+      summary: Chat coroutines queueing for a DB connection (pool exhausted)
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_chat_db_pool_waiters)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+- orgId: 1
   name: generic
   folder: Shruti-Alerts
   interval: 1m

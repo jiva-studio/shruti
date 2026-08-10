@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy the observability-agent (Promtail + 5 exporters) to prod-EU.
+# Deploy the observability-agent (Promtail + 5 exporters + metrics-proxy)
+# to prod-EU.
 #
 # Idempotent: rsync code, generate missing secrets, compose up. Run again
 # any time to push new images / config.
@@ -132,6 +133,8 @@ ENDPOINTS=(
   "$PROD_EU_TS_IP:9121/metrics      redis-exporter"
   "$PROD_EU_TS_IP:9115/metrics      blackbox-exporter"
   "$PROD_EU_TS_IP:9080/metrics      promtail"
+  "$PROD_EU_TS_IP:9119/healthz      metrics-proxy"
+  "$PROD_EU_TS_IP:9119/chat/metrics metrics-proxy->chat"
 )
 for entry in "${ENDPOINTS[@]}"; do
   url=$(awk '{print $1}' <<<"$entry")

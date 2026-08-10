@@ -19,6 +19,7 @@ Prometheus / Langfuse stack lives on a separate VPS — see (Stream A's)
 | `shruti-postgres-exporter` | `quay.io/prometheuscommunity/postgres-exporter:v0.16.0` | `${PROD_EU_TS_IP}:9187` | Postgres metrics + custom queries (`share_video_queue_depth`, `oldest_pending_seconds`). |
 | `shruti-redis-exporter` | `oliver006/redis_exporter:v1.66.0` | `${PROD_EU_TS_IP}:9121` | Redis hit-rate, memory, evictions. |
 | `shruti-blackbox-exporter` | `prom/blackbox-exporter:v0.25.0` | `${PROD_EU_TS_IP}:9115` | HTTP `/healthz` probes for chat/auth/share-*, TLS expiry check for `*.obs.eu.shruti.jiva.studio`. |
+| `shruti-metrics-proxy` | `caddy:2.8-alpine` | `${PROD_EU_TS_IP}:9119` | Exposes app services' own `/metrics` to Prometheus — they publish no host ports. Maps `/<service>/metrics` → `<service>:<port>/metrics`, 404s everything else. Currently: `chat`. |
 
 All exporters bind on the Tailscale IP — they're invisible from the public
 Cloud Provider interface. Watchtower is told not to auto-update these
@@ -28,9 +29,10 @@ Cloud Provider interface. Watchtower is told not to auto-update these
 ## Prereqs on the host
 
 1. **chat-stack docker network must exist** — `shruti_shruti`.
-   `postgres-exporter`, `redis-exporter`, and `blackbox-exporter` attach to
-   it as an `external` network. If `infra/app/` (or current `infra/compose/`)
-   isn't deployed first, `deploy.sh` aborts with a clear error.
+   `postgres-exporter`, `redis-exporter`, `blackbox-exporter`, and
+   `metrics-proxy` attach to it as an `external` network. If `infra/app/`
+   (or current `infra/compose/`) isn't deployed first, `deploy.sh` aborts
+   with a clear error.
 
 2. **Postgres `shruti_exporter` role must exist** — see "Postgres bootstrap"
    below.
@@ -133,6 +135,7 @@ http://${PROD_EU_TS_IP}:9187/metrics    # postgres-exporter
 http://${PROD_EU_TS_IP}:9121/metrics    # redis-exporter
 http://${PROD_EU_TS_IP}:9115/metrics    # blackbox-exporter (self-metrics)
 http://${PROD_EU_TS_IP}:9080/metrics    # promtail self-metrics
+http://${PROD_EU_TS_IP}:9119/chat/metrics  # chat service metrics (via metrics-proxy)
 ```
 
 The obs host's Prometheus scrape config (Stream A's
