@@ -73,9 +73,12 @@ export async function startSseServer(options: SseServerOptions): Promise<SseServ
         res.write(`${frames[i]}\n\n`)
         await new Promise((r) => setTimeout(r, frameDelayMs))
       }
-      // Past the limit the socket stays open and silent — the half-open stream
-      // the client has to notice on its own.
-      if (limit >= frames.length && !res.writableEnded) res.end()
+      // Closing is what `stallAfter` opts out of. Keyed on the option, NOT on
+      // whether the limit happened to reach the end of the frame list —
+      // `stallAfter: frames.length` is a stall too, and reading it as "wrote
+      // everything, so close" turns a stall test into a normal-stream test
+      // that passes in a fraction of the time and proves nothing.
+      if (stallAfter === undefined && !res.writableEnded) res.end()
     })()
   })
 
