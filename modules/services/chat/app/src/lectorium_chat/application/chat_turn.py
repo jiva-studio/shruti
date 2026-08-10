@@ -28,7 +28,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
 
 from lectorium_chat.agent.aliased_tools import build_aliased_tools
-from lectorium_chat.agent.events import AgentEvent
+from lectorium_chat.agent.events import AgentEvent, error_event
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.markers import CARD_RE, CITE_RE, OUTLINE_RE
@@ -509,16 +509,20 @@ async def run_chat_turn(
                         # the speculative embed task — no need to repeat it.
                         return
             except Exception as exc:
-                log.exception("chat_graph_failed", request_id=request_id, error=str(exc))
+                log.exception(
+                    "chat_graph_failed",
+                    request_id=request_id,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
                 had_error = True
                 # An out-of-credits / provider-down failure is not a graph
                 # bug — surface it as a calm "chat unavailable" so the
                 # client shows "try again later", not a generic error.
                 code = "chat_unavailable" if provider_unavailable(exc) else "agent_error"
-                yield AgentEvent(
-                    type="error",
-                    data={"code": code, "message": str(exc)},
-                )
+                # Only the code crosses to the client — the exception text stays
+                # in the log line above (issue #1568).
+                yield error_event(code)
                 return
 
             # The expander is fed and flushed entirely inside the
@@ -633,10 +637,7 @@ async def run_chat_turn(
                 request_id=request_id,
                 intent=detected_intent,
             )
-            yield AgentEvent(
-                type="error",
-                data={"code": "agent_error", "message": "empty answer"},
-            )
+            yield error_event("agent_error")
             return
 
         # ── Terminal `done` carries the alias map inline ─────────────
