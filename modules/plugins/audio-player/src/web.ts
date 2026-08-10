@@ -55,6 +55,9 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
   private queue: QueueItem[] = []
   private queueIndex = 0
   private currentFromSec = 0
+  /** Wall-clock counterpart of `currentFromSec` — when the current item's
+   *  listening run began (epoch ms). */
+  private currentFromAtMs = Date.now()
   private journal: QueueTransition[] = []
   private seqCounter = 0
   private transitionCb: ((t: QueueTransition) => void) | null = null
@@ -117,6 +120,7 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
       startedItemId,
       reason,
       at: Date.now(),
+      fromAt: this.currentFromAtMs,
       seq: ++this.seqCounter,
     }
     this.journal.push(t)
@@ -129,6 +133,7 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     if (!item) return
     this.queueIndex = index
     this.currentFromSec = positionSec
+    this.currentFromAtMs = Date.now()
     this.audio.pause()
     this.pendingSeekSec = positionSec > 0 ? positionSec : null
     this.audio.removeAttribute("src")
@@ -212,6 +217,7 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     this.queue = []
     this.queueIndex = 0
     this.currentFromSec = 0
+    this.currentFromAtMs = Date.now()
   }
 
   async setQueue(params: SetQueueParams): Promise<void> {
