@@ -396,3 +396,64 @@ def test_route_rejects_a_duplicate_trace_id_with_409() -> None:
     assert "Retry-After" not in r.headers
     assert deps.rate_limiter.refunds == 1
     assert f"chat:{user.id}:{key}" not in deps.idempotency_store.held
+
+
+async def test_route_rejects_a_duplicate_trace_id_through_the_real_runner() -> None:
+    """The test above pins the route's mapping with a double that raises
+    `TurnAlreadyRunning` on command, so it survives the guard being deleted
+    from `TurnRunner.start`. This one wires the REAL runner in: a turn is
+    already in flight on the id, and the route has to bounce the second
+    request rather than spawn a producer that silently overwrites the first.
+    """
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from lectorium_chat.api import chat as chat_api
+    from lectorium_chat.api._auth import get_current_user
+    from lectorium_chat.composition import get_deps
+    from lectorium_chat.infra.auth.jwt_verifier import VerifiedUser
+
+    user = VerifiedUser(id="user-1", anonymous=False, tier="free")
+    key = "idem-key-0003"
+    trace_id = "b" * 32
+
+    runner = TurnRunner(_FakeTurnStore(), max_in_flight=4)
+    release = asyncio.Event()
+    started: list[int] = []
+    runner.start(
+        trace_id, user.id,
+        stream_factory=_counting_factory(release, started),
+        finalize=_noop_finalize,
+    )
+    await asyncio.sleep(0)
+
+    deps = _Deps(runner)
+    app = FastAPI()
+    app.include_router(chat_api.router)
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_deps] = lambda: deps
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver",
+        ) as client:
+            r = await client.post(
+                "/chat",
+                json={"messages": [{"role": "user", "content": "hi"}], "lang": "en"},
+                headers={
+                    "X-Chat-Protocol-Version": "1",
+                    "Idempotency-Key": key,
+                    "X-Trace-Id": trace_id,
+                },
+            )
+
+        assert r.status_code == 409
+        assert r.json()["detail"]["code"] == "turn_already_running"
+        assert "Retry-After" not in r.headers
+        assert started == [0], "the route must not have spawned a second producer"
+        assert runner.in_flight() == 1
+        assert deps.rate_limiter.refunds == 1
+        assert f"chat:{user.id}:{key}" not in deps.idempotency_store.held
+    finally:
+        release.set()
+        await runner.shutdown()
