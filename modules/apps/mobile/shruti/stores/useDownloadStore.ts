@@ -438,6 +438,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     // if it is still the one we put there — reset() may have wiped
     // and a newer task may already own this trackId.
     const ownership: { current: Promise<string | null> | null } = { current: null }
+    const quota = useDownloadQuotaStore()
 
     const task = (async (): Promise<string | null> => {
       try {
@@ -471,6 +472,11 @@ export const useDownloadStore = defineStore("downloads", () => {
             .repositories()
             .mediaItems.upsert(trackId, "failed", null)
             .catch(() => {})
+          // The bytes go with the row. Whatever the last measurement charged
+          // this track is not on disk — the probe just said so — and leaving
+          // it charged makes the gate below refuse a re-download the budget
+          // has room for.
+          quota.uncharge(trackId)
         }
         // Offline guard: a transfer kicked off with no connectivity (airplane
         // mode) otherwise enqueues a native job that waits indefinitely for the
@@ -496,7 +502,6 @@ export const useDownloadStore = defineStore("downloads", () => {
         // must never flash a spinner it isn't going to earn. (The stale-row
         // repair above is deliberately NOT behind it — that one is a fix for
         // the DB, owed whether or not this transfer happens.)
-        const quota = useDownloadQuotaStore()
         await quota.ensureMeasured()
         // Last gate before bytes start moving: an archive or remove that
         // landed while the budget was being measured must not be overtaken.
@@ -514,7 +519,11 @@ export const useDownloadStore = defineStore("downloads", () => {
             // Only a request the user is waiting on gets a notice, and it
             // always carries the way past. The queue's own refusals are told
             // by the row's `deferred` state and nothing else.
-            if (claimedOrigin.current === "user") {
+            //
+            // And only when the budget is actually known to be full: an
+            // unmeasured budget refuses too, and "storage is full" would be
+            // a guess about a device we failed to measure.
+            if (claimedOrigin.current === "user" && quota.isMeasured) {
               noticeBudgetFull(() => {
                 budgetExceptions.add(trackId)
                 void ensureDownloaded(trackId, path, filesize, "user")
@@ -545,6 +554,10 @@ export const useDownloadStore = defineStore("downloads", () => {
             .repositories()
             .mediaItems.upsert(trackId, "failed", null)
             .catch(() => {})
+          // Same as the probe-miss demotion above: the row is no longer
+          // ready, so it holds no budget. The reservation made just above
+          // is untouched — it funds the bytes now on their way in.
+          quota.uncharge(trackId)
         }
         const result = await downloadMedia(
           { trackId, path, candidates: fallback.candidates() },
@@ -609,7 +622,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         // Release any reservation this task still holds — a cache hit, an
         // early return, or a throw all land here. No-op once the success
         // branch has already promoted it into `usedBytes`.
-        useDownloadQuotaStore().settle(trackId, false)
+        quota.settle(trackId, false)
         // Same for the synchronous claim: a throw before any outcome was
         // recorded must not leave the row shimmering forever. Epoch-gated
         // like the writes above — after a reset() our claim is already gone
@@ -830,8 +843,11 @@ export const useDownloadStore = defineStore("downloads", () => {
     // active CDN resolves the same local file even if the bytes arrived
     // from a different one.
     await remove(trackId, buildServerUrl(app.activeServer.value, audio.path))
-    const quota = useDownloadQuotaStore()
-    quota.forget(trackId, quota.sizeOf(audio.filesize))
+    // The credit is the ledger's, not this variant's `filesize`. That read
+    // was a third source of truth — the FIRST language's audio, where the
+    // measurement charges the LARGEST — and every disagreement between the
+    // two left budget stranded for the rest of the session.
+    useDownloadQuotaStore().forget(trackId)
     resumeDeferred()
     return true
   }
@@ -905,9 +921,12 @@ export const useDownloadStore = defineStore("downloads", () => {
   // Raising the limit must let the waiting tail through without requiring
   // the user to re-add anything; lowering it just means the next job
   // doesn't fit, which the drain loop discovers on its own.
-  watch(
-    () => useDownloadQuotaStore().limitBytes,
-    () => resumeDeferred()
+  //
+  // A budget that only just became measurable is the same event: everything
+  // enqueued before it was refused for want of a number, not for want of
+  // room, and the queue would otherwise sit deferred until an eviction.
+  watch([() => useDownloadQuotaStore().limitBytes, () => useDownloadQuotaStore().isMeasured], () =>
+    resumeDeferred()
   )
 
   return {
