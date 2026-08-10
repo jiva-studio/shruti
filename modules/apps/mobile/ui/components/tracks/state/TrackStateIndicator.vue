@@ -8,6 +8,7 @@
       data-testid="track-state"
       :data-state="state"
     />
+    <PendingIndicator v-else-if="mode === 'pending'" slot="end" key="pending" />
     <RadialIndicator
       v-else-if="mode === 'downloading'"
       slot="end"
@@ -28,6 +29,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import IconIndicator, { type StateIcon } from "./IconIndicator.vue"
+import PendingIndicator from "./PendingIndicator.vue"
 import RadialIndicator from "./RadialIndicator.vue"
 import type { UiTrackState } from "./types.js"
 
@@ -47,7 +49,8 @@ const icon = computed<StateIcon>(() => {
   return "none"
 })
 
-const mode = computed<"downloading" | "icon" | "progress" | undefined>(() => {
+const mode = computed<"pending" | "downloading" | "icon" | "progress" | undefined>(() => {
+  if (props.state === "pending") return "pending"
   if (props.state === "downloading") return "downloading"
   if (props.state === "failed" || props.state === "completed" || props.state === "added")
     return "icon"

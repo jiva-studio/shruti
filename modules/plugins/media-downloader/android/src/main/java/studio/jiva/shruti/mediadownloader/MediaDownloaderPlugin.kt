@@ -18,7 +18,9 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import org.json.JSONArray
 import java.io.File
+import java.util.Collections
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Capacitor bridge for `MediaDownloader`.
@@ -43,6 +45,13 @@ class MediaDownloaderPlugin : Plugin() {
 
     private val activeObservers = mutableMapOf<UUID, Observer<WorkInfo?>>()
     private val activeLiveData = mutableMapOf<UUID, LiveData<WorkInfo?>>()
+    // Workers that `download()` replaced with a fresh request under the same
+    // id. Their CANCELLED delivery must never reach JS: events are addressed
+    // by `id`, so it would settle — and thereby cancel — the download that
+    // just started. Written from Capacitor's background thread, read on the
+    // main looper, hence the concurrent set.
+    private val supersededWorkers: MutableSet<UUID> =
+        Collections.newSetFromMap(ConcurrentHashMap())
     private lateinit var store: DownloadStore
     // Capacitor invokes plugin methods on a background HandlerThread, but
     // LiveData.observeForever() / removeObserver() must run on the main
@@ -101,6 +110,16 @@ class MediaDownloaderPlugin : Plugin() {
                 call.resolve(taskJson(id, info, localPath))
                 return
             }
+            // Retire the old observer BEFORE cancelling. `cancelWorkById` is
+            // what makes WorkManager deliver CANCELLED to it, and between
+            // that call and the `store.put` below the store still resolves
+            // this id to the OLD worker — so the observer would take its
+            // normal path and emit a `cancelled` event under an id the fresh
+            // request is about to reuse, rejecting the download we are
+            // starting. Marking first (and detaching) closes that window
+            // regardless of how the two main-looper posts interleave.
+            supersededWorkers.add(existing.workerId)
+            detach(existing.workerId)
             WorkManager.getInstance(context).cancelWorkById(existing.workerId)
             File(existing.localPath + ".download").delete()
             store.remove(id)
@@ -231,7 +250,38 @@ class MediaDownloaderPlugin : Plugin() {
             val live = WorkManager.getInstance(context).getWorkInfoByIdLiveData(workerId)
             val observer = Observer<WorkInfo?> { info ->
                 if (info == null) return@Observer
-                val entry = store.findByWorkerId(workerId) ?: return@Observer
+                val known = store.findByWorkerId(workerId)
+                // Whether this update may be reported at all — a cancelled
+                // worker the caller awaits, or one `download()` replaced
+                // under the same id — is decided by `workUpdateAction`.
+                val action = workUpdateAction(
+                    superseded = supersededWorkers.remove(workerId),
+                    tracksThisWorker = known != null,
+                    trackedWorkerId = store.get(id)?.workerId,
+                    workerId = workerId,
+                    state = info.state,
+                )
+                when (action) {
+                    WorkUpdateAction.WAIT -> return@Observer
+                    WorkUpdateAction.DETACH -> {
+                        detach(workerId)
+                        return@Observer
+                    }
+                    WorkUpdateAction.REPORT_CANCELLED -> {
+                        notifyCancelled(id)
+                        detach(workerId)
+                        return@Observer
+                    }
+                    WorkUpdateAction.REPORT_REMOVED -> {
+                        notifyRemoved(id)
+                        detach(workerId)
+                        return@Observer
+                    }
+                    WorkUpdateAction.PROCEED -> Unit
+                }
+                // PROCEED is only returned for a worker the store tracks;
+                // the elvis restates that for the compiler.
+                val entry = known ?: return@Observer
                 val task = taskJson(id, info, entry.localPath)
 
                 // Progress from setProgress() while the worker is running.
@@ -272,6 +322,7 @@ class MediaDownloaderPlugin : Plugin() {
                         detach(workerId)
                     }
                     WorkInfo.State.CANCELLED -> {
+                        notifyCancelled(id)
                         detach(workerId)
                     }
                     else -> { /* ENQUEUED, RUNNING, BLOCKED — keep observing */ }
@@ -283,6 +334,41 @@ class MediaDownloaderPlugin : Plugin() {
             // observeForever() is safe because we manage detach() ourselves.
             live.observeForever(observer)
         }
+    }
+
+    /**
+     * A cancellation is terminal for the JS caller as well: its promise
+     * resolves on `completed` and rejects on `failed`, so without an event
+     * here it would stay pending forever and never release the download
+     * slot. The `cancelled` code distinguishes a deliberate abort from a
+     * genuine failure, so the UI can skip the red "retry" affordance.
+     */
+    private fun notifyCancelled(id: String) {
+        val payload = JSObject().apply {
+            put("id", id)
+            put("error", "cancelled")
+            put("retryable", false)
+            put("code", "cancelled")
+        }
+        notifyListeners("failed", payload)
+    }
+
+    /**
+     * The work reached a terminal state after `deleteFile()` dropped its
+     * bookkeeping, so there is no local file to hand back even if the bytes
+     * did land. Terminal for the caller, and — like a cancellation — the
+     * result of a deliberate local action, so the `removed` code keeps the
+     * caller from treating it as a CDN fault and rotating to another server
+     * for bytes the user just deleted.
+     */
+    private fun notifyRemoved(id: String) {
+        val payload = JSObject().apply {
+            put("id", id)
+            put("error", "download was removed")
+            put("retryable", false)
+            put("code", "removed")
+        }
+        notifyListeners("failed", payload)
     }
 
     private fun detach(workerId: UUID) {

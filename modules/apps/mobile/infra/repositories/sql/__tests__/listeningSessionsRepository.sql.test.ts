@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { IDatabase } from "@ports/app/index.js"
+import type { IDatabase, QueryParams } from "@ports/app/index.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
+import { COMPLETION_THRESHOLD_SEC } from "@lib/domain/listeningSession.js"
 import {
   startOfNextLocalDay,
   useListeningSessionTracker,
@@ -788,5 +789,258 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
 
     const rows = await db.query<{ id: string }>("SELECT id FROM listening_sessions")
     expect(rows).toHaveLength(2)
+  })
+
+  describe("getCompletedAtForItems batching", () => {
+    /** The pre-batching implementation, kept as the parity oracle. */
+    async function perItemCompletedAt(
+      target: IDatabase,
+      itemIds: readonly PlaylistItemId[],
+      durations: ReadonlyMap<PlaylistItemId, number>
+    ): Promise<Map<PlaylistItemId, number | null>> {
+      const result = new Map<PlaylistItemId, number | null>()
+      for (const id of itemIds) result.set(id, null)
+      for (const itemId of itemIds) {
+        const dur = durations.get(itemId)
+        if (typeof dur !== "number" || dur <= 0) continue
+        const threshold = Math.max(0, dur - COMPLETION_THRESHOLD_SEC)
+        const rows = await target.query<{ ended_at: number; to_position: number }>(
+          `SELECT ended_at, to_position FROM listening_sessions
+            WHERE item_id = ?
+            ORDER BY ended_at DESC, id DESC
+            LIMIT 1`,
+          [itemId]
+        )
+        if (rows[0] && rows[0].to_position >= threshold) result.set(itemId, rows[0].ended_at)
+      }
+      return result
+    }
+
+    function countingDb(target: IDatabase): { db: IDatabase; queries: () => number } {
+      let count = 0
+      return {
+        db: {
+          ...target,
+          query: <T>(sql: string, params?: QueryParams): Promise<T[]> => {
+            count += 1
+            return target.query<T>(sql, params)
+          },
+        },
+        queries: () => count,
+      }
+    }
+
+    it("matches the per-item implementation across items with, without and tied sessions", async () => {
+      const itemIds = ["pi-1", "pi-2", "pi-3", "pi-4", "pi-5", "pi-6"] as PlaylistItemId[]
+      // pi-1: finished, then replayed and finished again — latest wins.
+      await rawInsert(db, {
+        id: "s1a",
+        itemId: "pi-1",
+        startedAt: 100,
+        endedAt: 200,
+        fromPosition: 0,
+        toPosition: 999,
+      })
+      await rawInsert(db, {
+        id: "s1b",
+        itemId: "pi-1",
+        startedAt: 300,
+        endedAt: 400,
+        fromPosition: 0,
+        toPosition: 1000,
+      })
+      // pi-2: finished, then rewound in a later session — not completed.
+      await rawInsert(db, {
+        id: "s2a",
+        itemId: "pi-2",
+        startedAt: 100,
+        endedAt: 200,
+        fromPosition: 0,
+        toPosition: 1000,
+      })
+      await rawInsert(db, {
+        id: "s2b",
+        itemId: "pi-2",
+        startedAt: 300,
+        endedAt: 400,
+        fromPosition: 0,
+        toPosition: 300,
+      })
+      // pi-3: two sessions closed in the SAME second — `id` breaks the tie,
+      // so the higher id (in-progress) decides.
+      await rawInsert(db, {
+        id: "s3a",
+        itemId: "pi-3",
+        startedAt: 100,
+        endedAt: 500,
+        fromPosition: 0,
+        toPosition: 1000,
+      })
+      await rawInsert(db, {
+        id: "s3b",
+        itemId: "pi-3",
+        startedAt: 100,
+        endedAt: 500,
+        fromPosition: 0,
+        toPosition: 10,
+      })
+      // pi-4: never listened — no rows at all.
+      // pi-5: listened but the track duration is unknown (0).
+      await rawInsert(db, {
+        id: "s5a",
+        itemId: "pi-5",
+        startedAt: 100,
+        endedAt: 200,
+        fromPosition: 0,
+        toPosition: 1000,
+      })
+      // pi-6: listened, duration missing from the map entirely.
+      await rawInsert(db, {
+        id: "s6a",
+        itemId: "pi-6",
+        startedAt: 100,
+        endedAt: 200,
+        fromPosition: 0,
+        toPosition: 1000,
+      })
+      const durations = new Map<PlaylistItemId, number>([
+        ["pi-1" as PlaylistItemId, 1000],
+        ["pi-2" as PlaylistItemId, 1000],
+        ["pi-3" as PlaylistItemId, 1000],
+        ["pi-4" as PlaylistItemId, 1000],
+        ["pi-5" as PlaylistItemId, 0],
+      ])
+
+      const repo = createSqlListeningSessionRepository(db)
+      const batched = await repo.getCompletedAtForItems(itemIds, durations)
+      const expected = await perItemCompletedAt(db, itemIds, durations)
+
+      expect([...batched.entries()].sort()).toEqual([...expected.entries()].sort())
+      expect(batched.get("pi-1" as PlaylistItemId)).toBe(400)
+      expect(batched.get("pi-2" as PlaylistItemId)).toBeNull()
+      expect(batched.get("pi-3" as PlaylistItemId)).toBeNull()
+      expect(batched.get("pi-4" as PlaylistItemId)).toBeNull()
+      expect(batched.get("pi-5" as PlaylistItemId)).toBeNull()
+      expect(batched.get("pi-6" as PlaylistItemId)).toBeNull()
+    })
+
+    it("issues one query regardless of how many items are asked for", async () => {
+      const itemIds: PlaylistItemId[] = []
+      const durations = new Map<PlaylistItemId, number>()
+      for (let i = 0; i < 200; i++) {
+        const itemId = `pi-${i}` as PlaylistItemId
+        itemIds.push(itemId)
+        durations.set(itemId, 1000)
+        await rawInsert(db, {
+          id: `s-${i}`,
+          itemId,
+          startedAt: 100,
+          endedAt: 200 + i,
+          fromPosition: 0,
+          toPosition: 1000,
+        })
+      }
+      const counting = countingDb(db)
+      const repo = createSqlListeningSessionRepository(counting.db)
+      const result = await repo.getCompletedAtForItems(itemIds, durations)
+
+      expect(counting.queries()).toBe(1)
+      expect([...result.values()].filter((v) => v !== null)).toHaveLength(200)
+    })
+
+    it("chunks the ids so a huge union stays under SQLite's parameter limit", async () => {
+      // 1200 ids > the 999-parameter floor of older SQLite builds: three
+      // chunked queries, not 1200 per-item ones.
+      const itemIds: PlaylistItemId[] = []
+      const durations = new Map<PlaylistItemId, number>()
+      for (let i = 0; i < 1200; i++) {
+        const itemId = `pi-${i}` as PlaylistItemId
+        itemIds.push(itemId)
+        durations.set(itemId, 1000)
+      }
+      await rawInsert(db, {
+        id: "s-1199",
+        itemId: "pi-1199",
+        startedAt: 100,
+        endedAt: 900,
+        fromPosition: 0,
+        toPosition: 1000,
+      })
+      const counting = countingDb(db)
+      const repo = createSqlListeningSessionRepository(counting.db)
+      const result = await repo.getCompletedAtForItems(itemIds, durations)
+
+      expect(counting.queries()).toBe(3)
+      expect(result.size).toBe(1200)
+      expect(result.get("pi-1199" as PlaylistItemId)).toBe(900)
+      expect(result.get("pi-0" as PlaylistItemId)).toBeNull()
+    })
+
+    it("stays byte-for-byte equivalent to the per-item read under randomized input", async () => {
+      // Seeded so a failure is reproducible. Covers ended_at ties, duplicate
+      // and unknown ids, empty input, missing/zero/negative durations and
+      // mixed lexical id shapes (the tiebreak compares ids as text).
+      let seed = 0x5eed
+      const rnd = (): number => {
+        seed = (seed + 0x6d2b79f5) | 0
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+      }
+      const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]
+      const idShapes = ["pi-{n}", "PI_{n}", "item.{n}", "{n}", "z{n}z", "pi-00{n}"]
+
+      const repo = createSqlListeningSessionRepository(db)
+      for (let trial = 0; trial < 150; trial++) {
+        await db.execute("DELETE FROM listening_sessions")
+        const itemCount = Math.floor(rnd() * 8)
+        const pool: PlaylistItemId[] = []
+        for (let i = 0; i < itemCount; i++) {
+          pool.push(pick(idShapes).replace("{n}", String(i)) as PlaylistItemId)
+        }
+        let rowSeq = 0
+        for (const itemId of pool) {
+          const sessions = Math.floor(rnd() * 5)
+          for (let s = 0; s < sessions; s++) {
+            // A 3-value ended_at range makes same-second ties common; the
+            // session id shape varies so ordering is not just numeric.
+            const endedAt = 100 + Math.floor(rnd() * 3)
+            const idShape = pick(["ls-{n}", "ls-0{n}", "LS{n}", "{n}"])
+            await rawInsert(db, {
+              id: idShape.replace("{n}", String(rowSeq++)),
+              itemId,
+              startedAt: endedAt - 10,
+              endedAt,
+              fromPosition: 0,
+              // Half random, half sitting exactly on a completion boundary
+              // (`>= duration - COMPLETION_THRESHOLD_SEC`) for the durations
+              // handed out below, so the comparison itself is exercised.
+              toPosition:
+                rnd() < 0.5
+                  ? Math.floor(rnd() * 1200)
+                  : pick([997, 998, 999, 1000, 1197, 1198, 1199, 0, 1]),
+            })
+          }
+        }
+        // Ask about a shuffled bag: some pool ids twice, some never inserted.
+        const asked: PlaylistItemId[] = []
+        for (const itemId of pool) {
+          if (rnd() < 0.85) asked.push(itemId)
+          if (rnd() < 0.2) asked.push(itemId)
+        }
+        if (rnd() < 0.5) asked.push(`ghost-${trial}` as PlaylistItemId)
+        const durations = new Map<PlaylistItemId, number>()
+        for (const itemId of asked) {
+          const d = pick([1000, 1000, 1200, 1, 0, -5])
+          if (rnd() < 0.85) durations.set(itemId, d)
+        }
+
+        const batched = await repo.getCompletedAtForItems(asked, durations)
+        const expected = await perItemCompletedAt(db, asked, durations)
+        // Key order matters: callers iterate the map to build sets.
+        expect([...batched.keys()]).toEqual([...expected.keys()])
+        expect([...batched.values()]).toEqual([...expected.values()])
+      }
+    })
   })
 })

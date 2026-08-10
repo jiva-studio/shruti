@@ -8,6 +8,7 @@ import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { playbackErrorKey } from "@shruti/utils/playbackErrorKey.js"
 import { useHomeRowBuilder } from "./useHomeRowBuilder.js"
 import type { HeatmapDay } from "@usecases/activity/buildHeatmapDays.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
@@ -96,7 +97,10 @@ export function useHomeController(): HomeControllerReturn {
     // (which is what `openTrack` would do via `localUrl ?? remoteUrl`
     // fallback). `ensureDownloaded` already does the cache probe first,
     // so it's equivalent to "check files, then download if missing".
-    if (downloads.getState(trackId) === "failed") {
+    // Read through any in-flight `pending` claim: a claimed row reads
+    // "pending" while still being the failed one that needs a retry, and
+    // falling through here would stream from the CDN instead.
+    if (downloads.getEffectiveState(trackId) === "failed") {
       const variant = entry.track.variants.find((v) => v.audio)
       if (variant?.audio) {
         void downloads.ensureDownloaded(trackId, variant.audio.path)
@@ -107,12 +111,17 @@ export function useHomeController(): HomeControllerReturn {
     const author = entry.track.authorId
       ? (dictionaries.authorsById.get(entry.track.authorId) ?? null)
       : null
-    await player.openTrack({
+    // A refused open leaves the row looking tapped and nothing playing, and
+    // the drain-event notice cannot cover it (see `syncFromNative`), so say
+    // it here. Nothing gates a queued entry on having an audible variant, so
+    // both refusals are reachable.
+    const result = await player.openTrack({
       track: entry.track,
       preferredLanguage: appLanguage.value,
       author,
       itemId: entry.item.id,
     })
+    if (!result.ok) void toast.error(t(playbackErrorKey(result.error)))
   }
 
   async function onRemove(trackId: string): Promise<void> {

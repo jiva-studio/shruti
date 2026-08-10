@@ -219,6 +219,8 @@ export default {
 
   noteSaved: "Note saved",
   noteSaving: "Saving note…",
+  /** Both saveCitationAsNote failures (empty text, create failed) land here. */
+  actionNoteError: "Couldn't save the note.",
 
   actionPdfKind: "Lecture transcript",
   actionPdfShare: "Share",

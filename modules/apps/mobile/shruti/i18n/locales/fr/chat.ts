@@ -222,6 +222,7 @@ export default {
 
   noteSaved: "Note enregistrée",
   noteSaving: "Enregistrement de la note…",
+  actionNoteError: "Impossible d'enregistrer la note.",
 
   actionPdfKind: "Transcription de la conférence",
   actionPdfShare: "Partager",
