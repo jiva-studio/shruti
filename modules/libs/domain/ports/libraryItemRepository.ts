@@ -3,11 +3,11 @@ import type { LibraryItem } from "../libraryItem.js"
 import type { Track } from "../track.js"
 
 /**
- * Read-only port over the personal-library membership rows (`library_items`,
- * epic #1236). The collection is **server-owned and pull-only** — the sync
- * engine applies the `profile` server's version and the app never writes it —
- * so this port exposes reads only (no add/remove; those are server-authored
- * actions triggered over the chat/add transport in #1229).
+ * Port over the personal-library membership rows (`library_items`, epic #1236).
+ * The collection is **server-owned and pull-only** — the sync engine applies the
+ * `profile` server's version and the app never authors a row — so this port
+ * exposes reads only (no add/remove; those are server-authored actions triggered
+ * over the chat/add transport in #1229), plus the local wipe.
  */
 export interface ILibraryItemRepository {
   getById(id: string): Promise<LibraryItem | null>
@@ -23,4 +23,13 @@ export interface ILibraryItemRepository {
    * unchanged.
    */
   getTrackByTrackId(trackId: TrackId): Promise<Track | null>
+
+  /**
+   * Drop every projected item — the local data-wipe path (#1496). Required for
+   * the wipe to be coherent rather than merely partial: removals live in the
+   * sibling `library_memberships` table where ABSENCE MEANS ACTIVE, so clearing
+   * that table while these rows stay puts every item the user had removed back
+   * on the shelf.
+   */
+  clearAll(): Promise<void>
 }

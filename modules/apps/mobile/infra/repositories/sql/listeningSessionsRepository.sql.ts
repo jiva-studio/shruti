@@ -78,16 +78,17 @@ export function createSqlListeningSessionRepository(
   async function insert(
     itemId: PlaylistItemId,
     fromPosition: TrackPositionSec,
-    toPosition: TrackPositionSec
+    toPosition: TrackPositionSec,
+    sourceKey: string | null = null
   ): Promise<ListeningSessionId> {
     const id = newSessionId()
     const t = nowSec()
     await mutate(
       db,
       `INSERT INTO listening_sessions
-         (id, item_id, started_at, ended_at, from_position, to_position)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, itemId, t, t, fromPosition, toPosition]
+         (id, item_id, started_at, ended_at, from_position, to_position, source_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, itemId, t, t, fromPosition, toPosition, sourceKey]
     )
     return id
   }
@@ -113,6 +114,21 @@ export function createSqlListeningSessionRepository(
 
     async forceStart({ itemId, position }, tx) {
       return unitOfWork.run(() => insert(itemId, position, position), tx)
+    },
+
+    async forceStartOnce({ itemId, position, sourceKey }) {
+      // Read first so a replay is an ordinary no-op rather than a caught
+      // constraint violation; the UNIQUE index (migration 025) still stands
+      // behind it as the guarantee, and turns a genuine race into a throw the
+      // caller reports instead of a silently doubled total.
+      const existing = await queryOne<{ id: string }, ListeningSessionId>(
+        db,
+        "SELECT id FROM listening_sessions WHERE source_key = ? LIMIT 1",
+        [sourceKey],
+        (r) => r.id as ListeningSessionId
+      )
+      if (existing !== null) return null
+      return insert(itemId, position, position, sourceKey)
     },
 
     async tick(id, { position }, tx) {

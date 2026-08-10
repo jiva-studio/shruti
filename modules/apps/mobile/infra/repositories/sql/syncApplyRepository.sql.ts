@@ -402,5 +402,9 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     },
 
     recordServerHlc,
+
+    clearDocHlcs: async () => {
+      await db.execute("DELETE FROM sync_doc_hlc")
+    },
   }
 }
