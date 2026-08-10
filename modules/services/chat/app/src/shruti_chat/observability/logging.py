@@ -121,14 +121,14 @@ def client_ip_hash(ip: str | None) -> str | None:
     correlation without persisting the address. The salt matters: the
     IPv4 space is small enough to enumerate against an unsalted digest.
 
-    The salt is `LANGFUSE_PII_SALT` when configured, which keeps hashes
+    The salt is `LOG_IP_SALT` when configured, which keeps hashes
     comparable across restarts and replicas; otherwise a per-process
     random salt, which still holds correlation over the minutes a storm
     is spotted on and never writes anything reversible.
     """
     if not ip:
         return None
-    salt = get_settings().langfuse_pii_salt or _PROCESS_SALT
+    salt = get_settings().log_ip_salt or _PROCESS_SALT
     return hashlib.sha256(f"{salt}:{ip}".encode()).hexdigest()[:16]
 
 

@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # turn co-occur, which keeps the per-turn breakdown coherent.
     stage_timing_enabled: bool = True
     stage_timing_sample_rate: float = 1.0
+    # Salt for the `client_ip_hash` on rate-limit log lines. Set it to keep
+    # hashes comparable across restarts and replicas; unset falls back to a
+    # per-process random salt, which still correlates one process's lifetime.
+    log_ip_salt: str | None = None
 
     # ── cache (Redis L2 + in-proc L1) ──────────────────────────────────
     # If redis_url is unset, only L1 runs (per-process LRU). cache_enabled
