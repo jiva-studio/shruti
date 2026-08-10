@@ -29,6 +29,23 @@ curl -fsS -N -X POST http://localhost:8080/chat \
   -d '{"messages":[{"role":"user","content":"что Прабхупада говорил про варнашраму?"}],"lang":"ru"}'
 ```
 
+## Dependencies
+
+`app/uv.lock` is the source of truth for every version. The image
+(`Dockerfile`) installs with `uv sync --frozen`; CI installs the same lock
+with `uv sync --locked`, so the tree CI proves green is the tree that ships
+and rebuilding a commit reproduces its dependencies.
+
+Editing `app/pyproject.toml` therefore requires re-locking, or `--locked`
+fails CI:
+
+```bash
+cd modules/services/chat/app
+uv lock              # or: uv lock --upgrade-package langfuse
+uv sync --extra dev  # local venv, Python 3.12 per .python-version
+uv run python -m pytest tests -q
+```
+
 ## Production deploy
 
 Deployment is workspace-level — see `infra/README.md`. One command brings
