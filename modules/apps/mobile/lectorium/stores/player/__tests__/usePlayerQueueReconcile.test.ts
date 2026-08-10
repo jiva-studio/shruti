@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AudioQueueTransition } from "@ports/app/audioPlayer.js"
 import type { IDatabase } from "@ports/app/index.js"
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
@@ -198,5 +198,90 @@ describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
     ])
 
     expect(await sessionCount()).toBe(3)
+  })
+
+  it("acks only what it drained after a native-counter rewind", async () => {
+    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    expect(prefs.get("player.queue.lastSeq")).toBe("2")
+    // Preferences survived a restore, native's counter did not.
+    prefs.set("player.queue.lastSeq", "5000")
+    acked = []
+
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({ seq: 1, finishedItemId: "pi-3", at: 1_790_000_000_000 }),
+      transition({ seq: 2, finishedItemId: "pi-4", at: 1_790_000_001_000 }),
+    ])
+
+    // Acking 5000 would discard transitions native logged after the read, and
+    // the watermark would never come back down (#1597).
+    expect(acked).toEqual([2])
+    expect(prefs.get("player.queue.lastSeq")).toBe("2")
+  })
+})
+
+/**
+ * The gap that let #1623 ship: every case above drains the journal against an
+ * EMPTY history. In the real continuous-playback flow the live tracker has
+ * already written the part heard in the foreground, and the journal reports the
+ * finished item as `[resume point → end]` — the same audio, a second time.
+ */
+describe("usePlayerQueueReconcile — a live session already covers the item", () => {
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await runMigrations(db, userMigrations)
+    repo = createSqlAppRepositories({
+      contentDb: db,
+      userDb: db,
+      getActiveLanguage: () => "en",
+      getDeviceId: async () => "dev-1",
+      getOwnerId: () => "user-1",
+    }).listeningSessions
+    prefs = new Map()
+    acked = []
+    ackFails = false
+    completedAt = new Map()
+    patched = []
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** Live tracker: `secondsHeard` of `pi-1` journaled in the foreground. */
+  async function liveSession(secondsHeard: number): Promise<void> {
+    // Distinct wall-clock per row: same-second rows collapse into one
+    // `(item, started_at, ended_at, from_position)` group in the totals, which
+    // would mask the duplicate the journal writes.
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(1_784_000_000_000)
+    const id = await repo.start({ itemId: "pi-1" as never, position: 0 })
+    await repo.finish(id, { position: secondsHeard })
+    vi.setSystemTime(1_784_000_600_000)
+  }
+
+  it("does not re-count the foreground prefix on a background auto-advance", async () => {
+    // 10 minutes with the app open, then the phone locks and the queue plays
+    // the remaining 30 out in the background.
+    await liveSession(600)
+    // Cold start / background completion, so the `completedAt` echo filter
+    // cannot fire — that is the whole point of this path.
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000 }),
+    ])
+
+    expect(await sessionCount()).toBe(2)
+    // 600 s live + 1800 s background — the lecture is 2400 s long.
+    expect(await repo.getTotalListenedSeconds()).toBe(2400)
+  })
+
+  it("does not double-count a lock-screen skip over audio the live row claimed", async () => {
+    // ⏭ on the lock screen: `reason` is not "auto", so NO filter runs at all
+    // and the journal row covers exactly the span the live row already did.
+    await liveSession(600)
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({ seq: 1, reason: "skip-next", fromPositionMs: 0, finishedAtMs: 600_000 }),
+    ])
+
+    expect(await repo.getTotalListenedSeconds()).toBe(600)
   })
 })

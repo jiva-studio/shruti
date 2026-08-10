@@ -85,6 +85,20 @@ export interface AudioQueueState {
 
 export type AudioTransitionListener = (transition: AudioQueueTransition) => void
 
+/**
+ * A position jump the engine performed on its own — lock-screen scrubbing,
+ * the system ±15 s / seek commands, a Bluetooth remote. Seeks JS asked for are
+ * NOT reported here; the caller already journals those, and a second report
+ * would open a spurious session.
+ */
+export interface AudioPositionJump {
+  itemId: string
+  fromMs: number
+  toMs: number
+}
+
+export type AudioPositionJumpListener = (jump: AudioPositionJump) => void
+
 export interface IAudioPlayer {
   open(params: AudioOpenParams): Promise<void>
   play(): Promise<void>
@@ -106,6 +120,9 @@ export interface IAudioPlayer {
    */
   setProgressInterval(intervalMs: number): Promise<void>
   onProgress(listener: AudioProgressListener): () => void
+  /** Engine-initiated position jumps, so the caller can journal the
+   *  discontinuity instead of absorbing it as listened audio. */
+  onPositionJump(listener: AudioPositionJumpListener): () => void
 
   /** Replace the queue and start at `startIndex` / `startPositionMs`. */
   setQueue(items: AudioQueueItem[], startIndex: number, startPositionMs: number): Promise<void>

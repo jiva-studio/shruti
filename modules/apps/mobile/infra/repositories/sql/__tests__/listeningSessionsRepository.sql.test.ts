@@ -140,6 +140,45 @@ describe("listeningSessionsRepository.sql", () => {
     expect(sessions[1].to_position).toBe(600)
   })
 
+  it("forceStartOnce() raises from_position to the item's high-water mark", async () => {
+    // The live tracker already journaled the 10 minutes heard in the
+    // foreground …
+    await rawInsert(db, {
+      id: "live",
+      itemId: ITEM_A,
+      startedAt: 1000,
+      endedAt: 1600,
+      fromPosition: 0,
+      toPosition: 600,
+    })
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
+    // … and the native journal re-presents the WHOLE [resume point → end] span.
+    const id = await repo.forceStartOnce({
+      itemId: ITEM_A,
+      position: 0,
+      sourceKey: "queue:1:pi-a:1784000000000",
+    })
+    expect(id).not.toBeNull()
+    await repo.finish(id!, { position: 2400 })
+
+    const [journaled] = await db.query<{ from_position: number; to_position: number }>(
+      "SELECT from_position, to_position FROM listening_sessions WHERE source_key IS NOT NULL"
+    )
+    expect(journaled).toMatchObject({ from_position: 600, to_position: 2400 })
+
+    // A log entry that genuinely begins ahead of the mark is left alone.
+    const later = await repo.forceStartOnce({
+      itemId: ITEM_A,
+      position: 3000,
+      sourceKey: "queue:2:pi-a:1784000600000",
+    })
+    const [ahead] = await db.query<{ from_position: number }>(
+      "SELECT from_position FROM listening_sessions WHERE id = ?",
+      [later!]
+    )
+    expect(ahead?.from_position).toBe(3000)
+  })
+
   it("tick() and finish() advance to_position and ended_at", async () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const id = await repo.start({ itemId: ITEM_A, position: 0 })
