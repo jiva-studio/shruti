@@ -369,6 +369,13 @@ class Settings(BaseSettings):
     turn_running_ttl_s: int = 180
     turn_result_ttl_s: int = 86_400
     turn_cancel_ttl_s: int = 180
+    # Separate ownership marker (`turn:<id>:owner`, just the user id),
+    # written at turn start. `POST /chat/feedback` checks THIS rather than
+    # the result blob, so rating a message stays possible long after the
+    # 24h buffer has gone — device chat history is never time-pruned, and
+    # tying feedback to the buffer's lifetime made day-old messages 404.
+    # 90 days covers any realistic rating window at ~120 bytes per turn.
+    turn_owner_ttl_s: int = 7_776_000
 
     # ── CORS ────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins. Default `*` keeps dev easy;

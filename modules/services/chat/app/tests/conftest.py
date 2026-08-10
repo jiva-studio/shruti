@@ -79,10 +79,12 @@ class FakeTurnStore:
 
     def __init__(self) -> None:
         self.records: dict[str, dict[str, Any]] = {}
+        self.owners: dict[str, str] = {}
         self.cancelled: set[str] = set()
 
     async def mark_running(self, trace_id: str, user_id: str) -> None:
         self.records[trace_id] = {"state": "running", "user_id": user_id}
+        self.owners[trace_id] = user_id
 
     async def heartbeat(self, trace_id: str) -> None:
         return None
@@ -94,6 +96,11 @@ class FakeTurnStore:
 
     async def get(self, trace_id: str) -> dict[str, Any] | None:
         return self.records.get(trace_id)
+
+    async def get_owner(self, trace_id: str) -> str | None:
+        """Outlives `records` in the real store — a test can expire the
+        buffer by dropping the record and leaving the owner behind."""
+        return self.owners.get(trace_id)
 
     async def request_cancel(self, trace_id: str) -> None:
         self.cancelled.add(trace_id)

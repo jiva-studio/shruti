@@ -194,6 +194,7 @@ async def lifespan(app: FastAPI):
             running_ttl_s=s.turn_running_ttl_s,
             result_ttl_s=s.turn_result_ttl_s,
             cancel_ttl_s=s.turn_cancel_ttl_s,
+            owner_ttl_s=s.turn_owner_ttl_s,
         )
     else:
         from lectorium_chat.infra.turn_store.noop import NoopTurnStore

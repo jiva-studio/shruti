@@ -72,11 +72,9 @@ class _FakeTurnStore:
         self.owner = owner
         self.seen: list[str] = []
 
-    async def get(self, trace_id: str) -> dict[str, Any] | None:
+    async def get_owner(self, trace_id: str) -> str | None:
         self.seen.append(trace_id)
-        if self.owner is None:
-            return None
-        return {"state": "done", "user_id": self.owner, "events": []}
+        return self.owner
 
 
 def _deps(turn_store: _FakeTurnStore | None = None) -> Any:

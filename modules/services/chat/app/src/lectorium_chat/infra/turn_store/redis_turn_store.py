@@ -6,6 +6,10 @@ completion we overwrite it with the full event list under a 24h TTL. A
 reconnecting client polls `get` and either replays the finished events or
 sees `running` and waits.
 
+Alongside it, `turn:<id>:owner` holds nothing but the owning user id on a
+much longer TTL — feedback needs to authorise a rating on a message whose
+buffered events have long since expired.
+
 Every op degrades softly (logs + no-op / None / False) — buffering is a
 best-effort enhancement on top of the live SSE stream, never a
 correctness dependency. AOF persistence on the Redis instance keeps the
@@ -36,14 +40,17 @@ class RedisTurnStore:
         running_ttl_s: int = 180,
         result_ttl_s: int = 86_400,
         cancel_ttl_s: int = 180,
+        owner_ttl_s: int = 7_776_000,
     ) -> None:
         # `running` is the heartbeat-refreshed liveness window (lapses => a
         # resuming client reads the turn as orphaned); `result` is how long a
         # finished answer stays fetchable; `cancel` is the cross-replica Stop
-        # flag, kept on the same horizon as a live turn.
+        # flag, kept on the same horizon as a live turn; `owner` outlives all
+        # of them so feedback on an old message can still be authorised.
         self._running_ttl_s = running_ttl_s
         self._result_ttl_s = result_ttl_s
         self._cancel_ttl_s = cancel_ttl_s
+        self._owner_ttl_s = owner_ttl_s
         self._client = redis_async.from_url(
             url,
             decode_responses=False,
@@ -61,13 +68,26 @@ class RedisTurnStore:
     def _cancel_key(trace_id: str) -> str:
         return f"turn:{trace_id}:cancel"
 
+    @staticmethod
+    def _owner_key(trace_id: str) -> str:
+        return f"turn:{trace_id}:owner"
+
     async def mark_running(self, trace_id: str, user_id: str) -> None:
+        # Both writes in one round trip: the record the resume flow reads,
+        # and the owner marker that outlives it.
         try:
-            await self._client.set(
-                name=self._key(trace_id),
-                value=json.dumps({"state": "running", "user_id": user_id}).encode(),
-                ex=self._running_ttl_s,
-            )
+            async with self._client.pipeline(transaction=False) as pipe:
+                pipe.set(
+                    name=self._key(trace_id),
+                    value=json.dumps({"state": "running", "user_id": user_id}).encode(),
+                    ex=self._running_ttl_s,
+                )
+                pipe.set(
+                    name=self._owner_key(trace_id),
+                    value=user_id.encode(),
+                    ex=self._owner_ttl_s,
+                )
+                await pipe.execute()
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("turn_store_mark_running_error", err=str(exc))
 
@@ -100,6 +120,14 @@ class RedisTurnStore:
             return json.loads(raw)
         except (RedisError, TimeoutError, OSError, ValueError) as exc:
             log.warning("turn_store_get_error", err=str(exc))
+            return None
+
+    async def get_owner(self, trace_id: str) -> str | None:
+        try:
+            raw = await self._client.get(self._owner_key(trace_id))
+            return None if raw is None else raw.decode()
+        except (RedisError, TimeoutError, OSError, UnicodeDecodeError) as exc:
+            log.warning("turn_store_get_owner_error", err=str(exc))
             return None
 
     async def request_cancel(self, trace_id: str) -> None:
