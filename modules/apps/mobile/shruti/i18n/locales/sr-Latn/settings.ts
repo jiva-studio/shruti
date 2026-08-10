@@ -30,7 +30,7 @@ export default {
   },
 
   syncChats: {
-    title: "Sinhronizuj četove",
+    title: "Sinhronizuj ćaskanja",
     description: "Držite svoje Ask Sadhu razgovore usklađene na svim uređajima.",
   },
 

@@ -18,6 +18,22 @@
   (see memory `feedback_no_english_calques_in_russian`). When in doubt,
   ask before substituting machine-translated jargon.
 
+## Generated locale: `sr-Cyrl/`
+
+`sr-Cyrl/` is **not** hand-authored. It is a pure function of `sr-Latn/`
+plus `modules/tools/sr-transliterate/`, which maps Serbian gajica to
+Cyrillic and keeps a do-not-transliterate list of brand tokens
+(`Shruti`, `Ask Sadhu`, `Pro`, `PRO`, `PDF`, `Google`, …) in
+Latin, the way `ru/` writes them. Edit `sr-Latn/`, then:
+
+```
+cd modules/apps/mobile && npm run locales:sr-cyrl
+```
+
+and commit both bundles. Editing `sr-Cyrl/` directly is silently
+reverted by the next regeneration; the `Mobile / sr-Cyrl locale` workflow
+fails the PR when the two drift apart.
+
 ## Hardcoded-count rule
 
 Strings under `chat.errQuota*` (anonymous / free / pro daily-message
