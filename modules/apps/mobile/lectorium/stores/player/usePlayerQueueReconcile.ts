@@ -168,6 +168,7 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
         const id = await repo.forceStartOnce({
           itemId: e.finishedItemId,
           position: msToSec(e.fromPositionMs),
+          endPosition: msToSec(e.finishedAtMs),
           sourceKey: sourceKey(e),
           runWindow: window,
         })
