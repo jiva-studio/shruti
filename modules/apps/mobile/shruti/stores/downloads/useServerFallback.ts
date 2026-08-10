@@ -43,6 +43,13 @@ export function useServerFallback(): ServerFallbackReturn {
 
   async function tryServers<T>(attempt: () => Promise<T>): Promise<T | null> {
     let lastError: unknown = null
+    // Where we started. When every candidate fails the walk proves nothing
+    // about any of them — offline, all three fail — so leaving the last one
+    // tried as active would demote a healthy region on the strength of a dead
+    // radio, and it sticks: the watcher persists it, and the startup probe
+    // only checks the storage host, which is a different machine and answers
+    // fine. A user could sit on the wrong region for days.
+    const started = app.activeServer.value
     for (const server of candidates()) {
       // Flip activeServer before `attempt()` runs so the in-flight
       // request observes the new server when it builds its URL via
@@ -59,6 +66,8 @@ export function useServerFallback(): ServerFallbackReturn {
     if (lastError !== null) {
       console.warn("[downloads] all CDNs failed:", lastError)
     }
+    // Nothing worked, so nothing was learned. Put the choice back.
+    app.setActiveServer(started)
     return null
   }
 
