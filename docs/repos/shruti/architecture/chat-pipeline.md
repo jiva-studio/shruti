@@ -147,7 +147,9 @@ deterministically (`get_chunks_by_addr_label`) at `ADDRESS_HIT_SCORE = 0.85`.
 
 Lexical and address hits are **`forced`** members: they carry their true (often low) cosine
 but bypass the cosine floor and are guaranteed into the rerank pool so the cross-encoder can
-judge them on text.
+judge them on text. The two lanes are **not** rank-fused — guaranteed membership plus the
+cross-encoder is what merges them; there is no reciprocal-rank scoring anywhere in the chat
+service.
 
 **Ranking is two-pass.** When a reranker is wired (`rerank_active`):
 
@@ -406,7 +408,7 @@ COVERAGE_MIN_MAX_SCORE=0.55    # + COVERAGE_MIN_LECTURES=2
 MAX_FANOUT_ROUNDS=2
 REGEN_MAX_SUBQUERIES=4
 LEXICAL_FETCH_TOP_K=24         # hybrid lexical lane per-sub-query fetch
-RRF_K=60                       # reciprocal rank fusion constant
+LEXICAL_TRGM_MIN_SIM=0.3       # pg_trgm floor for the lexical address match
 ADDRESS_HIT_SCORE=0.85
 THIN_THESIS_MIN_SCORE=0.55     # + THIN_THESIS_MIN_STRONG_NOTES=2
 AUGMENT_FRESH_TOP_K=10
