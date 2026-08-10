@@ -19,7 +19,9 @@ export function useDangerActions(app: Lectorium): UseDangerActionsReturn {
     // track keeps showing "downloaded" and tapping play resolves to a file
     // that's gone ("can't play offline"). User records — notes, playlist,
     // listening history, chat — are deliberately left untouched; this is a
-    // cache reset, not a data wipe.
+    // cache reset, not a data wipe. Neither is the content catalog: it is not
+    // cache, and re-fetching it costs ~54 MB and takes the app offline
+    // meanwhile (#1630).
     await app.filesStorage.clearAll()
     await app.repositories().mediaItems.clearAll()
     // Drop the in-memory per-track state map (and cancel/abandon any in-flight

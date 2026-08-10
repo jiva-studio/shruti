@@ -38,6 +38,8 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   // to its live status BEFORE its row syncs down (where sourceUrl isn't yet set
   // during processing) — used to show ingest progress on the chat candidate card.
   const submittedIngestIds = ref<ReadonlyMap<string, string>>(new Map())
+  // Normalized sources with a submit in flight — the double-tap guard.
+  const inFlightSources = new Set<string>()
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
@@ -193,10 +195,17 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     url: string,
     hints?: { title?: string; author?: string }
   ): Promise<void> {
+    const key = normalizeSource(url)
+    // A second tap while the first request is still on the wire is a no-op —
+    // findBySource can't see it yet (the row hasn't synced down), so without this
+    // both taps submit the same run. Bounded by the ingest client's request
+    // timeout, so a hung connection can't leave the button silently dead.
+    if (inFlightSources.has(key)) return
+    inFlightSources.add(key)
     try {
       const res = await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
       const next = new Map(submittedIngestIds.value)
-      next.set(normalizeSource(url), res.membership_id)
+      next.set(key, res.membership_id)
       submittedIngestIds.value = next
       requestSync()
     } catch (err) {
@@ -205,6 +214,8 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
         return
       }
       error.value = err instanceof Error ? err.message : "Failed to add lecture"
+    } finally {
+      inFlightSources.delete(key)
     }
   }
 

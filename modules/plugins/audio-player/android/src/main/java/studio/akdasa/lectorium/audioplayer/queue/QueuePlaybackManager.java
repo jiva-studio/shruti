@@ -43,6 +43,8 @@ public final class QueuePlaybackManager {
 
     /** Where listening on the currently-playing item began (resume pt / 0). */
     private long currentFromPositionMs = 0;
+    /** When it began, in wall-clock — same bookkeeping, same places. */
+    private long currentFromAtEpochMs = System.currentTimeMillis();
     /** True for the transition that an error-recovery seek will produce, so we
      *  don't double-journal (the error path already wrote the transition). */
     private boolean suppressNextDiscontinuity = false;
@@ -72,6 +74,7 @@ public final class QueuePlaybackManager {
      *  of the start item (only the start item honours a resume position). */
     public void onQueueStarted(long startPositionMs) {
         currentFromPositionMs = startPositionMs;
+        currentFromAtEpochMs = System.currentTimeMillis();
         consecutiveErrors = 0;
         pendingSkipReason = null;
         suppressNextDiscontinuity = false;
@@ -122,6 +125,7 @@ public final class QueuePlaybackManager {
                 // The error path already journaled this finished item.
                 suppressNextDiscontinuity = false;
                 currentFromPositionMs = Math.max(0, newPosition.positionMs);
+                currentFromAtEpochMs = System.currentTimeMillis();
                 consecutiveErrors = 0;
                 persistSnapshot();
                 return;
@@ -155,11 +159,13 @@ public final class QueuePlaybackManager {
                     startedItemId,
                     transitionReason,
                     System.currentTimeMillis(),
+                    currentFromAtEpochMs,
                     0));
 
             // The started item begins at wherever the player landed (0 for an
             // auto-advance; only the original start item carried a resume pt).
             currentFromPositionMs = Math.max(0, newPosition.positionMs);
+            currentFromAtEpochMs = System.currentTimeMillis();
             consecutiveErrors = 0;
             persistSnapshot();
         }
@@ -185,6 +191,7 @@ public final class QueuePlaybackManager {
                         null,
                         QueueTransition.REASON_AUTO,
                         System.currentTimeMillis(),
+                        currentFromAtEpochMs,
                         0));
                 journal.persistSnapshot(null, 0);
             }
@@ -212,6 +219,7 @@ public final class QueuePlaybackManager {
                     startedItemId,
                     QueueTransition.REASON_ERROR,
                     System.currentTimeMillis(),
+                    currentFromAtEpochMs,
                     0));
 
             consecutiveErrors++;
@@ -222,6 +230,7 @@ public final class QueuePlaybackManager {
                 player.seekToNextMediaItem();
                 player.prepare();
                 currentFromPositionMs = 0;
+                currentFromAtEpochMs = System.currentTimeMillis();
             } else {
                 // Queue dry or too many failures: stop and clear the snapshot.
                 journal.persistSnapshot(null, 0);

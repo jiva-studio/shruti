@@ -23,6 +23,12 @@ export type SyncCollection =
 /** A change operation as journaled in the outbox / replicated over the wire. */
 export type SyncOp = "upsert" | "delete"
 
+/** Address of one synced document — the collection plus its natural key. */
+export interface SyncDocRef {
+  readonly collection: string
+  readonly docId: string
+}
+
 /**
  * One collection document as seen by the merge layer: its natural key, the HLC
  * stamped on the write, and the payload (or `null` when the document is a

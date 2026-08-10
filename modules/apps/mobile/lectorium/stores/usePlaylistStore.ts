@@ -9,6 +9,7 @@ import {
   type ArchivePlaylistItemError,
 } from "@usecases/playlist/archivePlaylistItem.js"
 import { listActivePlaylistTracks } from "@usecases/playlist/listPlaylistTracks.js"
+import { trackIdFromSyntheticItemId } from "@usecases/playback/playTrack.js"
 import type { AuthorId, LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Author } from "@lib/domain/author.js"
 import { isCompleted } from "@lib/domain/listeningSession.js"
@@ -20,6 +21,7 @@ import { buildServerUrl } from "@lib/domain/servers.js"
 import type { Result } from "@kit/core"
 import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { releaseFromNativeQueue } from "@lectorium/services/nativeQueue.js"
 import { requestSync } from "@lectorium/services/syncEvents.js"
 import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlaylistDerivedData } from "./playlist/usePlaylistDerivedData.js"
@@ -31,6 +33,14 @@ export interface PlaylistEntry {
 }
 
 const PAGE_SIZE = 50
+
+/**
+ * Upper bound on the native playback queue handed over in one go. Each item
+ * costs a `resolveLocalUrl` bridge round-trip at open time, so the tail is
+ * capped — but it is capped on the *active list*, not on what Home happens to
+ * have rendered.
+ */
+const QUEUE_SIZE = 50
 
 /**
  * Single source of truth for the user's active playlist.
@@ -48,6 +58,10 @@ export const usePlaylistStore = defineStore("playlist", () => {
   const derived = usePlaylistDerivedData()
   const prefetch = usePlaylistPrefetch()
 
+  // The whole active playlist, hydrated. `entries` below is only the window
+  // Home has rendered so far: the native queue and every by-id lookup outlive
+  // that window, so they read from here instead.
+  const activeEntries = ref<readonly PlaylistEntry[]>([])
   const entries = ref<readonly PlaylistEntry[]>([])
   const total = ref<number>(0)
   // All track ids in the active playlist, regardless of whether their
@@ -65,23 +79,28 @@ export const usePlaylistStore = defineStore("playlist", () => {
   const error = ref<string | null>(null)
   let loaded = false
 
-  const hasMore = computed(() => entries.value.length < total.value)
+  const hasMore = computed(() => entries.value.length < activeEntries.value.length)
 
   async function refresh(): Promise<void> {
     isLoading.value = true
     error.value = null
     try {
       const repos = app.repositories()
-      const page = await listActivePlaylistTracks(
-        { playlistItems: repos.playlistItems, tracks: repos.tracks },
-        { limit: PAGE_SIZE, offset: 0 }
-      )
-      entries.value = page.entries
-      total.value = page.total
+      const all = await listActivePlaylistTracks({
+        playlistItems: repos.playlistItems,
+        tracks: repos.tracks,
+      })
+      activeEntries.value = all.entries
+      // Keep whatever the user has already paged in: refresh() also fires
+      // mid-playback (auto-archive sweep, add, archive), and resetting the
+      // list back to the first page under a scrolled Home is a jump.
+      const rendered = Math.max(PAGE_SIZE, entries.value.length)
+      entries.value = all.entries.slice(0, rendered)
+      total.value = all.total
       // hasTrack() needs the full active list, not just the first page.
       const allItems = await repos.playlistItems.listActive()
       activeTrackIds.value = new Set(allItems.map((i) => i.trackId))
-      const next = await derived.loadFor(page.entries)
+      const next = await derived.loadFor(entries.value)
       progressMap.value = next.progress
       completedAtMap.value = next.completed
       // Union active + archived items, then run the same completion check
@@ -117,6 +136,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load playlist"
+      activeEntries.value = []
       entries.value = []
       total.value = 0
       activeTrackIds.value = new Set()
@@ -128,17 +148,14 @@ export const usePlaylistStore = defineStore("playlist", () => {
     }
   }
 
+  /** Widen the rendered window over the already-loaded active list. */
   async function loadMore(): Promise<void> {
     if (!hasMore.value || isLoading.value) return
     try {
-      const repos = app.repositories()
-      const page = await listActivePlaylistTracks(
-        { playlistItems: repos.playlistItems, tracks: repos.tracks },
-        { limit: PAGE_SIZE, offset: entries.value.length }
-      )
-      entries.value = [...entries.value, ...page.entries]
-      total.value = page.total
-      const next = await derived.loadFor(page.entries)
+      const from = entries.value.length
+      const page = activeEntries.value.slice(from, from + PAGE_SIZE)
+      entries.value = [...entries.value, ...page]
+      const next = await derived.loadFor(page)
       const merged = derived.mergeInto(
         { progress: progressMap.value, completed: completedAtMap.value },
         next
@@ -182,14 +199,25 @@ export const usePlaylistStore = defineStore("playlist", () => {
     return result
   }
 
-  async function archive(itemId: PlaylistItemId): Promise<Result<void, ArchivePlaylistItemError>> {
+  /**
+   * The single way a lecture leaves the active playlist — for a swipe on Home
+   * and for the auto-archive sweep alike. It owns the whole teardown: the
+   * pending prefetch, the live native queue, and the cached audio.
+   *
+   * `refresh: false` lets a batch caller (the sweep) archive many items and
+   * re-hydrate once at the end instead of once per item.
+   */
+  async function archive(
+    itemId: PlaylistItemId,
+    options?: { refresh?: boolean }
+  ): Promise<Result<void, ArchivePlaylistItemError>> {
     const repos = app.repositories()
     // Drop any pending prefetch for this track so we don't waste
     // bandwidth on a file the user is archiving. Mid-flight transfers
     // can't be aborted yet; this only covers the queued case (the
     // common one — auto-download queues many items deeper than the
     // user's reach).
-    const entry = entries.value.find((e) => e.item.id === itemId)
+    const entry = getEntryByItemId(itemId)
     if (entry) useDownloadStore().cancelPrefetch(entry.item.trackId)
     const result = await archivePlaylistItem(
       { itemId },
@@ -197,13 +225,20 @@ export const usePlaylistStore = defineStore("playlist", () => {
     )
     if (result.ok || result.error === "already-archived") {
       requestSync()
-      await refresh()
+      // Pull the lecture out of the live native queue BEFORE its audio goes:
+      // the engine holds `file://` URLs resolved when the queue was built, and
+      // advancing into a deleted one strands playback. `keepFile` comes back
+      // true when the item can't be pulled out (it is playing right now) —
+      // then the file has to stay.
+      const keepFile = await releaseFromNativeQueue(itemId)
+      if (options?.refresh ?? true) await refresh()
       // Archiving is the only way a lecture leaves the queue, so it's also
       // the only moment its audio stops being worth keeping. Reclaiming it
       // here is what lets a budget-capped queue keep downloading as the
       // user works through it. Best-effort: a failed delete just leaves the
-      // file for the next pass.
-      if (entry) void useDownloadStore().evict(entry.item.trackId)
+      // file for the next pass. A kept file is the player's to reclaim once
+      // the engine lets go (see `flushPendingEvictions`).
+      if (entry && !keepFile) void useDownloadStore().evict(entry.item.trackId)
     }
     return result
   }
@@ -211,7 +246,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
   async function archiveByTrackId(
     trackId: TrackId
   ): Promise<Result<void, ArchivePlaylistItemError> | null> {
-    const target = entries.value.find((e) => e.item.trackId === trackId)
+    const target = getEntryByTrackId(trackId)
     if (!target) return null
     return archive(target.item.id)
   }
@@ -230,14 +265,36 @@ export const usePlaylistStore = defineStore("playlist", () => {
     return completedTrackIds.value.has(trackId)
   }
 
-  /** First entry whose track matches the given id, or `undefined`. */
+  /**
+   * First entry whose track matches the given id, or `undefined`. Searches
+   * the whole active playlist — a lecture opened from the Track screen or a
+   * chat citation must resolve to its playlist item however deep it sits,
+   * otherwise playback is journaled under a synthetic id no row carries.
+   */
   function getEntryByTrackId(trackId: TrackId): PlaylistEntry | undefined {
-    return entries.value.find((e) => e.item.trackId === trackId)
+    return activeEntries.value.find((e) => e.item.trackId === trackId)
   }
 
-  /** Entry for a playlist item id, or `undefined`. */
+  /** Entry for a playlist item id, or `undefined`. Not bounded by the page. */
   function getEntryByItemId(itemId: PlaylistItemId): PlaylistEntry | undefined {
-    return entries.value.find((e) => e.item.id === itemId)
+    return activeEntries.value.find((e) => e.item.id === itemId)
+  }
+
+  /**
+   * The track behind a playback item id, wherever the id came from: the
+   * active list, an item archived while it was still queued, or the
+   * synthetic `track:<id>` a screen outside the playlist plays under. The
+   * native queue outlives the list this store holds, so the player needs a
+   * lookup that survives the item leaving it.
+   */
+  async function resolveTrackForItemId(itemId: PlaylistItemId): Promise<Track | undefined> {
+    const entry = getEntryByItemId(itemId)
+    if (entry) return entry.track
+    const repos = app.repositories()
+    const item = await repos.playlistItems.getById(itemId).catch(() => null)
+    const trackId = item?.trackId ?? trackIdFromSyntheticItemId(itemId)
+    if (!trackId) return undefined
+    return (await repos.tracks.getById(trackId).catch(() => null)) ?? undefined
   }
 
   function pickVariant(track: Track, preferred?: LanguageCode): TrackVariant | undefined {
@@ -249,10 +306,10 @@ export const usePlaylistStore = defineStore("playlist", () => {
   }
 
   /**
-   * Build the native playback queue starting at `fromItemId` and running
-   * to the end of the loaded playlist — the tapped track plus every
-   * following entry, in order (no skip/reorder; already-listened entries
-   * still play). This is what enables continuous **background** playback:
+   * Build the native playback queue starting at `fromItemId` — the tapped
+   * track plus every following entry of the ACTIVE playlist, in order (no
+   * skip/reorder; already-listened entries still play), capped at
+   * {@link QUEUE_SIZE}. This is what enables continuous **background** playback:
    * the whole tail is handed to the native engine up front so it can
    * auto-advance while the JS layer is suspended.
    *
@@ -260,17 +317,14 @@ export const usePlaylistStore = defineStore("playlist", () => {
    * without forcing a download — `prefetchAll` owns downloading) and
    * falls back to the public CDN URL for streaming when online. Entries
    * without audio are skipped.
-   *
-   * Bounded by the currently-loaded `entries` page; on resume the player
-   * can extend the native queue via `appendToQueue`.
    */
   async function buildQueueFrom(
     fromItemId: PlaylistItemId,
     preferredLanguage?: LanguageCode
   ): Promise<AudioQueueItem[]> {
-    const startIdx = entries.value.findIndex((e) => e.item.id === fromItemId)
+    const startIdx = activeEntries.value.findIndex((e) => e.item.id === fromItemId)
     if (startIdx < 0) return []
-    const slice = entries.value.slice(startIdx)
+    const slice = activeEntries.value.slice(startIdx, startIdx + QUEUE_SIZE)
     const authorCache = new Map<AuthorId, Author | null>()
     const repos = app.repositories()
     const out: AudioQueueItem[] = []
@@ -353,7 +407,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     // correct whichever source is shorter while still tolerating a stale
     // or missing engine duration.
     const catalogDurationMs = (() => {
-      const entry = entries.value.find((e) => e.item.id === itemId)
+      const entry = getEntryByItemId(itemId)
       return entry ? maxAudioDurationMs(entry.track) : 0
     })()
     const engineDurationMs = durationMs && durationMs > 0 ? durationMs : 0
@@ -382,12 +436,18 @@ export const usePlaylistStore = defineStore("playlist", () => {
     return completedAtMap.value.get(itemId) ?? null
   }
 
+  /**
+   * Pre-warm the head of the list on Home mount. Capped at one page: the
+   * rendered window now survives `refresh()`, so a user who scrolled deep
+   * would otherwise re-fan-out over hundreds of rows on every mount.
+   */
   function prefetchAll(): void {
-    prefetch.prefetchAll(entries.value)
+    prefetch.prefetchAll(entries.value.slice(0, PAGE_SIZE))
   }
 
   return {
     entries,
+    activeEntries,
     total,
     hasMore,
     isLoading,
@@ -405,6 +465,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     hasCompletedTrack,
     getEntryByTrackId,
     getEntryByItemId,
+    resolveTrackForItemId,
     buildQueueFrom,
     getProgressMs,
     getCompletedAt,

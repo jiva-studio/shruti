@@ -177,6 +177,7 @@ export default {
   appLanguage: {
     title: "Мова",
     description: "Мова інтерфейсу",
+    loadFailedToast: "Не вдалося завантажити цю мову. Спробуйте ще раз.",
   },
 
   downloadLimit: {
@@ -211,6 +212,7 @@ export default {
       "10h": "10 годин",
     },
     archive: {
+      off: "Ніколи",
       immediate: "Одразу",
       _8h: "За 8 годин",
       _1d: "За 1 день",

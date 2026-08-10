@@ -6,6 +6,7 @@ export { default as DailyNotificationsTimeSettingsItem } from "./DailyNotificati
 export { default as DownloadLimitSettingsItem } from "./DownloadLimitSettingsItem.vue"
 export { default as SmartLibrarySettingsItem } from "./SmartLibrarySettingsItem.vue"
 export { formatStorageSize } from "./formatStorageSize.js"
+export { ARCHIVE_OPTIONS, archiveOptionKey, smartLibraryToggled } from "./smartLibrary.js"
 export { default as SmartLibraryDialog } from "./SmartLibraryDialog.vue"
 export { default as AppLanguageSettingsItem } from "./AppLanguageSettingsItem.vue"
 export { default as ServerSettingsItem } from "./ServerSettingsItem.vue"

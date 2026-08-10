@@ -26,4 +26,20 @@ describe("useDangerActions.onClearCache", () => {
     expect(clearAllMedia).toHaveBeenCalledOnce()
     expect(reset).toHaveBeenCalledOnce()
   })
+
+  it("never touches the content database (#1630)", async () => {
+    reset.mockClear()
+    const deleteDb = vi.fn()
+    const app = {
+      appConfig: { database: { localPathTemplate: "lectorium/databases/lectorium.{version}.db" } },
+      filesStorage: { clearAll: vi.fn().mockResolvedValue(undefined) },
+      databaseFetcher: { list: vi.fn().mockResolvedValue(["lectorium.42.db"]), delete: deleteDb },
+      repositories: () => ({ mediaItems: { clearAll: vi.fn().mockResolvedValue(undefined) } }),
+    } as unknown as Lectorium
+
+    await useDangerActions(app).onClearCache()
+
+    // Clear cache is not allowed to cost a ~54 MB re-download.
+    expect(deleteDb).not.toHaveBeenCalled()
+  })
 })

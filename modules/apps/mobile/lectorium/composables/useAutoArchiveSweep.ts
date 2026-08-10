@@ -1,10 +1,9 @@
 import { onBeforeUnmount, onMounted, watch, type Ref } from "vue"
-import { archivePlaylistItem } from "@usecases/playlist/archivePlaylistItem.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { AUTO_DOWNLOAD_TARGET_SECONDS_KEY } from "@lectorium/composables/useAutoDownloadLoop.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
-import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 
@@ -40,6 +39,15 @@ export function autoArchiveDelayMs(value: AutoArchiveDelay): number | null {
   }
 }
 
+/**
+ * Archiving is the destructive half of Smart Library — it deletes downloaded
+ * audio — so it runs only while the master switch (the auto-download target)
+ * is on, whatever a stale delay says (#1624).
+ */
+export function isAutoArchiveActive(delay: AutoArchiveDelay, targetSeconds: number): boolean {
+  return targetSeconds > 0 && autoArchiveDelayMs(delay) !== null
+}
+
 export interface AutoArchiveSweepDeps {
   listActive: () => Promise<readonly { id: PlaylistItemId; trackId: TrackId }[]>
   getTracks: (ids: readonly TrackId[]) => Promise<ReadonlyMap<TrackId, Track>>
@@ -47,9 +55,12 @@ export interface AutoArchiveSweepDeps {
     itemIds: readonly PlaylistItemId[],
     durations: ReadonlyMap<PlaylistItemId, number>
   ) => Promise<ReadonlyMap<PlaylistItemId, number | null>>
+  /**
+   * Archive one item, teardown included: leaving the live native queue and
+   * reclaiming the cached audio are the archive path's job, not the sweep's.
+   * Deleting a file the engine still holds strands playback (#1625/#1660).
+   */
   archive: (itemId: PlaylistItemId) => Promise<unknown>
-  /** Reclaim the archived lecture's cached audio. Best-effort. */
-  evict: (trackId: TrackId) => Promise<unknown>
   now: () => number
 }
 
@@ -93,10 +104,6 @@ export async function runAutoArchiveSweep(
     if (now - sec * 1000 >= delayMs) {
       await deps.archive(item.id)
       archived.push(item.id)
-      // The lecture is done and out of the queue — its audio is dead
-      // weight, and giving the bytes back is what unblocks the storage
-      // budget for whatever is still waiting to download.
-      await deps.evict(item.trackId)
     }
   }
   return archived
@@ -119,6 +126,7 @@ export function useAutoArchiveSweep(): {
   sweep: () => Promise<void>
 } {
   const delay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
+  const targetSeconds = useConfig<number>(AUTO_DOWNLOAD_TARGET_SECONDS_KEY, 0)
   const app = useLectorium()
   const playlist = usePlaylistStore()
   const purchases = usePurchasesStore()
@@ -127,7 +135,7 @@ export function useAutoArchiveSweep(): {
 
   async function sweep(): Promise<void> {
     if (!purchases.isSubscribed) return
-    if (delay.value === "off") return
+    if (!isAutoArchiveActive(delay.value, targetSeconds.value)) return
     if (running) return
     running = true
     try {
@@ -148,12 +156,10 @@ export function useAutoArchiveSweep(): {
         getTracks: (ids) => repos.tracks.getByIds(ids),
         getCompletedAt: (itemIds, durations) =>
           repos.listeningSessions.getCompletedAtForItems(itemIds, durations),
-        archive: (itemId) =>
-          archivePlaylistItem(
-            { itemId },
-            { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
-          ),
-        evict: (trackId) => useDownloadStore().evict(trackId),
+        // Through the store, not the use case: it is the only place that
+        // knows to pull the lecture out of the live native queue before its
+        // audio goes. Re-hydration is deferred to the single refresh below.
+        archive: (itemId) => playlist.archive(itemId, { refresh: false }),
         now: () => Date.now(),
       })
       if (archived.length > 0) {
@@ -175,9 +181,10 @@ export function useAutoArchiveSweep(): {
   })
 
   // Re-sweep when the user flips the delay (e.g. `off → immediate` or
-  // `1d → immediate`). Without this the previous completions sit until
-  // the next fresh finish triggers the completion-watcher below.
-  watch(delay, () => void sweep())
+  // `1d → immediate`) or turns Smart Library back on. Without this the
+  // previous completions sit until the next fresh finish triggers the
+  // completion-watcher below.
+  watch([delay, targetSeconds], () => void sweep())
 
   // Run a sweep right after the user subscribes (they may have a backlog
   // of long-finished items waiting for the gate to lift).

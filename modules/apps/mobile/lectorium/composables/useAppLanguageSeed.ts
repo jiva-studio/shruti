@@ -1,8 +1,7 @@
 import { type Ref } from "vue"
 import { detectDeviceLocaleAsync } from "@lectorium/i18n/index.js"
+import { APP_LANGUAGE_KEY as KEY } from "@lectorium/composables/useAppLanguage.js"
 import { useLectorium } from "@lectorium/lectorium.js"
-
-const KEY = "settings.appLanguage"
 
 /**
  * Seed `settings.appLanguage` from the **native** device locale on first

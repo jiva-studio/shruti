@@ -25,6 +25,7 @@ One run, one report: `npm run test:all` runs `mocked` + `stack` into a single
 | Spec | Journey |
 | --- | --- |
 | `launch` | app boots past Welcome to a populated Home |
+| `launch-locale-chunk` | a boot-locale chunk that fails to load still yields a usable app |
 | `search` | the library search box filters the catalog list |
 | `track-card` | tapping a track opens its detail card |
 | `add-track` | adding from the card grows the playlist |
@@ -37,6 +38,8 @@ One run, one report: `npm run test:all` runs `mocked` + `stack` into a single
 | `topic-language` | a topic lists only lectures in the library language |
 | `collection-language` | a collection lists only lectures in the library language |
 | `settings-library-language` | the Settings library-language picker re-filters discovery |
+| `settings-language-race` | two quick UI-language switches settle on the one picked last |
+| `settings-language-failure` | a UI language whose chunk fails leaves the setting where it was |
 | `chat-render` | the chat composer + suggestions render |
 | `share-menu` | the track share menu offers a PDF export |
 

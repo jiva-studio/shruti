@@ -249,10 +249,22 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
       )
       if (local[0]) itemId = local[0].id
     }
+    // In-place UPSERT listing only the synced columns, NOT `INSERT OR REPLACE`
+    // (a DELETE+INSERT): the row also carries the local-only `source_key`
+    // (migration 025), which the wire never brings back, so a REPLACE nulls it
+    // and disarms the queue-journal dedup for that row. The server echoes a
+    // device its own writes, so that happens on the very next sync cycle of the
+    // device that authored the session (#1597).
     await db.execute(
-      `INSERT OR REPLACE INTO listening_sessions
+      `INSERT INTO listening_sessions
          (id, item_id, started_at, ended_at, from_position, to_position)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         item_id       = excluded.item_id,
+         started_at    = excluded.started_at,
+         ended_at      = excluded.ended_at,
+         from_position = excluded.from_position,
+         to_position   = excluded.to_position`,
       [docId, itemId, wire.started_at, wire.ended_at, wire.from_position, wire.to_position]
     )
   }
@@ -402,6 +414,20 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     },
 
     recordServerHlc,
+
+    forgetDocHlcs: async (refs) => {
+      // Chunked: one placeholder pair per ref, under SQLite's 999-variable cap.
+      const CHUNK = 400
+      for (let i = 0; i < refs.length; i += CHUNK) {
+        const slice = refs.slice(i, i + CHUNK)
+        const placeholders = slice.map(() => "(?, ?)").join(",")
+        const params = slice.flatMap((r) => [r.collection, r.docId])
+        await db.execute(
+          `DELETE FROM sync_doc_hlc WHERE (collection, doc_id) IN (${placeholders})`,
+          params
+        )
+      }
+    },
 
     clearDocHlcs: async () => {
       await db.execute("DELETE FROM sync_doc_hlc")

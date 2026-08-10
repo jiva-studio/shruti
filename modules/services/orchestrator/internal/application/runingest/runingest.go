@@ -230,9 +230,30 @@ func (h *RequestHandler) Submit(ctx context.Context, req ingest.Request) (Submit
 	}
 	lg.InfoContext(ctx, "job_created", "user_id", userID, "url", req.URL)
 	if err := h.createJob(ctx, runID, userID, req, spec); err != nil {
+		// Lost the create race with a concurrent submit of the SAME run (a
+		// double-tap, the same URL from a second device). The winner created it, so
+		// this is the dedup path above, not a failure to report to the user.
+		if errors.Is(err, ports.ErrJobExists) {
+			return h.dedup(ctx, runID, membership, lg)
+		}
 		return SubmitResult{}, err
 	}
 	return SubmitResult{JobID: runID, MembershipID: membership, State: job.StateQueued}, nil
+}
+
+// dedup resolves a lost create race by re-reading the winning run, so the
+// duplicate submission returns the same result the Get-hit path would have.
+func (h *RequestHandler) dedup(ctx context.Context, runID, membership string, lg *slog.Logger) (SubmitResult, error) {
+	existing, err := h.d.Repo.Get(ctx, runID)
+	if err != nil {
+		return SubmitResult{}, fmt.Errorf("load job: %w", err)
+	}
+	state := job.StateQueued
+	if existing != nil {
+		state = existing.State
+	}
+	lg.InfoContext(ctx, "submit_duplicate", "state", string(state), "raced", true)
+	return SubmitResult{JobID: runID, MembershipID: membership, State: state}, nil
 }
 
 // StatusLabel maps the internal job state onto the client-facing lifecycle
@@ -341,9 +362,14 @@ func (h *RequestHandler) restartFailed(ctx context.Context, j *job.Job, req inge
 		if err := h.d.Repo.SaveTx(ctx, tx, locked); err != nil {
 			return err
 		}
-		queued := event(locked.ID+":queued", ingest.EventQueued, disp.RequestID, locked.OwnerID, locked.ID, "", locked.Generation, statusData("queued", disp.Title, disp.URL))
-		if err := h.publishEvent(ctx, tx, queued); err != nil {
-			return err
+		// Same guard as createJob: only ingest drives the library row's lifecycle,
+		// and the row is keyed on the MEMBERSHIP — a translate run's id is not a
+		// library row id, so emitting it would insert a phantom card.
+		if locked.Op == job.OpIngest {
+			queued := event(locked.ID+":queued", ingest.EventQueued, disp.RequestID, locked.OwnerID, locked.MembershipID, "", locked.Generation, statusData("queued", disp.Title, disp.URL))
+			if err := h.publishEvent(ctx, tx, queued); err != nil {
+				return err
+			}
 		}
 		return h.dispatchWork(ctx, tx, locked.ID, locked.OwnerID, disp, attempt)
 	})
@@ -425,27 +451,53 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseReady:
-		j.TrackID = res.TrackID
-		j.Result = readyResult(res)
-		// A ready may arrive while the job is still queued (a lost processing
-		// heartbeat) — step it through running so To(Done) is legal.
-		if j.State == job.StateQueued {
-			_ = j.To(job.StateRunning)
-		}
-		if err := j.To(job.StateDone); err != nil {
-			return fmt.Errorf("to done: %w", err)
+		// Read the ingest run's state BEFORE the membership: the ingest commits its
+		// terminal state and the membership row in ONE tx, so observing it settled
+		// first and finding no row after is proof the row can never arrive. The
+		// reverse order would read "settled" from a tx that committed in between
+		// and dead-letter a membership that now exists.
+		ingestSettled := true
+		if j.Op == job.OpTranslate {
+			// The membership id IS the ingest run's id (runIdentity).
+			ing, gerr := h.d.Repo.Get(ctx, j.MembershipID)
+			if gerr != nil {
+				return fmt.Errorf("load ingest run: %w", gerr)
+			}
+			ingestSettled = ing == nil || ing.State.IsTerminal()
 		}
 		// Merge into the track membership under a row lock and emit the merged doc
 		// keyed on membership_id (the stable library row id). Ingest sets the full
 		// doc at the run's generation; translate appends its variant and takes
 		// version+1 so it out-ranks the prior ready under LWW.
-		lg.InfoContext(ctx, "job_done", "op", j.Op, "track_id", res.TrackID, "membership", j.MembershipID)
 		return h.d.Repo.WithTx(ctx, func(tx ports.Tx) error {
-			if err := h.d.Repo.SaveTx(ctx, tx, j); err != nil {
-				return err
-			}
 			m, err := h.d.Repo.GetMembershipForUpdateTx(ctx, tx, j.MembershipID)
 			if err != nil {
+				return err
+			}
+			// Translate advances an EXISTING row. Absent while its ingest is still in
+			// flight means NOT YET — return an error so the entry stays pending and
+			// redelivery heals it. Absent once that ingest has settled means gone: no
+			// redelivery can conjure the row, so settle the run as failed and ack
+			// rather than poisoning the stream forever.
+			if j.Op == job.OpTranslate && m == nil {
+				if !ingestSettled {
+					return fmt.Errorf("translate ready ahead of ingest run %s: no membership yet", j.MembershipID)
+				}
+				lg.ErrorContext(ctx, "translate_membership_missing", "membership", j.MembershipID, "user_id", j.OwnerID)
+				return h.failTx(ctx, tx, j, errMembershipMissing)
+			}
+			j.TrackID = res.TrackID
+			j.Result = readyResult(res)
+			// A ready may arrive while the job is still queued (a lost processing
+			// heartbeat) — step it through running so To(Done) is legal.
+			if j.State == job.StateQueued {
+				_ = j.To(job.StateRunning)
+			}
+			if err := j.To(job.StateDone); err != nil {
+				return fmt.Errorf("to done: %w", err)
+			}
+			lg.InfoContext(ctx, "job_done", "op", j.Op, "track_id", res.TrackID, "membership", j.MembershipID)
+			if err := h.d.Repo.SaveTx(ctx, tx, j); err != nil {
 				return err
 			}
 			version, doc, err := mergeReady(j, res, m)
@@ -531,6 +583,23 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 // failure keeps the job non-terminal (it is re-dispatched, not transitioned),
 // so any terminal state is genuinely settled.
 func isSettled(j *job.Job) bool { return j.State.IsTerminal() }
+
+// errMembershipMissing is the terminal error recorded when a run completes, the
+// track membership it advances does not exist, and the ingest run that would
+// have created it has already settled. Nothing will write the row now, so the
+// run dead-letters and the result is acked instead of poisoning the stream.
+const errMembershipMissing = "membership row missing"
+
+// failTx settles a run as failed inside the caller's transaction. It emits no
+// lifecycle event: the only caller is a translate run, whose failures the user
+// sees through the run status poll (the library row is already ready).
+func (c *core) failTx(ctx context.Context, tx ports.Tx, j *job.Job, reason string) error {
+	if err := j.To(job.StateFailed); err != nil {
+		return fmt.Errorf("to failed: %w", err)
+	}
+	j.Err = reason
+	return c.d.Repo.SaveTx(ctx, tx, j)
+}
 
 // save persists a job update and its outbox events in one tx.
 func (c *core) save(ctx context.Context, j *job.Job, events ...ingest.TrackEvent) error {

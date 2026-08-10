@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jiva-studio/lectorium/ingest/internal/domain/ingest"
 	"github.com/jiva-studio/lectorium/ingest/internal/infra/review"
@@ -46,6 +48,15 @@ func (f *fakeFetcher) Fetch(_ context.Context, _ string, onProgress func(int)) (
 		return "", "", err
 	}
 	return p, ingest.ContentID(f.content), nil
+}
+
+// blockingFetcher never returns until the context it is given expires — the
+// shape of a stage that outlives INGEST_JOB_TIMEOUT_SECONDS.
+type blockingFetcher struct{}
+
+func (blockingFetcher) Fetch(ctx context.Context, _ string, _ func(int)) (string, string, error) {
+	<-ctx.Done()
+	return "", "", ctx.Err()
 }
 
 type fakeTranscriber struct {
@@ -111,7 +122,13 @@ type fakeResults struct {
 	failTerminal bool // when true, publishing a ready/failed result errors
 }
 
-func (r *fakeResults) Publish(_ context.Context, res ingest.Result) error {
+// Publish honours ctx like the real XADD does — go-redis fails immediately on a
+// context whose deadline has passed, so a fake that ignored it hid the terminal
+// result being published on the expired job context.
+func (r *fakeResults) Publish(ctx context.Context, res ingest.Result) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.list = append(r.list, res)
@@ -341,6 +358,29 @@ func TestProcess_TerminalPublishFails_NotAcked(t *testing.T) {
 	}
 	if last := h.results.last(); last.Phase != ingest.PhaseReady {
 		t.Fatalf("expected a ready terminal attempt, got %+v", last)
+	}
+}
+
+// A run that exceeds JobTimeout must still publish its terminal failure: the
+// deadline bounds the work stages only. Publishing on the expired context fails,
+// the entry is never acked, and XAUTOCLAIM re-dispatches it forever while the
+// orchestrator — never seeing a failed phase — never counts an attempt.
+func TestProcess_JobTimeout_PublishesFailure(t *testing.T) {
+	h := newHarness()
+	h.svc = New(Deps{
+		Fetcher: blockingFetcher{}, Transcriber: h.trans, Reviewer: review.New(),
+		Blob: h.blob, Results: h.results, JobTimeout: 20 * time.Millisecond,
+	})
+
+	if err := h.svc.Process(context.Background(), "msg-timeout", workPayload(t, "https://x/y")); err != nil {
+		t.Fatalf("Process must ack (nil) once the timeout failure is published, got %v", err)
+	}
+	last := h.results.last()
+	if last.Phase != ingest.PhaseFailed || !last.Retriable {
+		t.Fatalf("expected a retriable failed result on job timeout, got %+v", last)
+	}
+	if !strings.Contains(last.Error, context.DeadlineExceeded.Error()) {
+		t.Fatalf("failure must name the deadline, got %q", last.Error)
 	}
 }
 

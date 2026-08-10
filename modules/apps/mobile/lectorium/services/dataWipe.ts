@@ -1,4 +1,5 @@
 import type { Lectorium } from "../lectorium.js"
+import { resetContentDatabase } from "./contentDatabase.js"
 import { useAutoDownloadFiltersStore } from "../stores/useAutoDownloadFiltersStore.js"
 import { useChatStore } from "../stores/useChatStore.js"
 import { useDownloadStore } from "../stores/useDownloadStore.js"
@@ -12,9 +13,9 @@ const PLAYER_STOP_TIMEOUT_MS = 5000
 
 /**
  * Wipe every byte of local user state — notes, playlist, listening
- * history, the personal library, downloaded audio + transcript files, chat
- * history, search filters, the sync journal, and every Pinia store that
- * mirrors them.
+ * history, the personal library, downloaded audio + transcript files, the
+ * local content catalog, chat history, search filters, the sync journal, and
+ * every Pinia store that mirrors them.
  *
  * Shared between the debug "Clear user data" action and the user-facing
  * "Delete account" flow. Both want the same all-or-nothing effect; only
@@ -116,6 +117,10 @@ export async function wipeLocalUserData(app: Lectorium): Promise<void> {
   // are gone but the blobs on disk linger as orphans until the user
   // manually triggers "Clear cache".
   await app.filesStorage.clearAll()
+  // …and the content catalog, which `clearAll()` deliberately spares (#1630).
+  // A departing user's local copy genuinely should go; the next launch
+  // re-downloads it from zero.
+  await resetContentDatabase(app)
   await app.preferences.remove("search.filters.v3")
   // Legacy key from before #411; harmless if it doesn't exist.
   await app.preferences.remove("search.filters.v2")
