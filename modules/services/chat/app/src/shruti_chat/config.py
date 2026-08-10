@@ -47,6 +47,18 @@ class Settings(BaseSettings):
     # turn co-occur, which keeps the per-turn breakdown coherent.
     stage_timing_enabled: bool = True
     stage_timing_sample_rate: float = 1.0
+    # Sentry DSN for server-side error aggregation. Unset (the default) keeps
+    # the SDK uninitialised, so the service behaves exactly as it did before
+    # Sentry existed — no network calls, no event queue. The 21 `log.exception`
+    # sites reach Sentry through `LoggingIntegration`, not through explicit
+    # capture calls, so there is nothing to disable beyond this one variable.
+    sentry_dsn: str | None = None
+    # Fraction of requests that start a performance transaction. Kept low
+    # because transactions, unlike errors, are billed per event and the
+    # service's value here is trace CONTINUATION — joining the mobile app's
+    # `sentry-trace` header to the server span — not server-side profiling.
+    # 0.0 disables tracing while errors keep flowing.
+    sentry_traces_sample_rate: float = 0.05
 
     # ── cache (Redis L2 + in-proc L1) ──────────────────────────────────
     # If redis_url is unset, only L1 runs (per-process LRU). cache_enabled
