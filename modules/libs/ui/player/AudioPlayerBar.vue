@@ -18,11 +18,17 @@
         >
           <span v-if="busy" class="play-spinner"><slot name="spinner" /></span>
           <svg v-else-if="playing" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-            <path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
-            <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" />
+            <path
+              d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z"
+            />
+            <path
+              d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z"
+            />
           </svg>
           <svg v-else viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-            <path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" />
+            <path
+              d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z"
+            />
           </svg>
         </button>
         <select
@@ -62,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef } from 'vue'
+import { computed, useTemplateRef } from "vue"
 
 const props = withDefaults(
   defineProps<{
@@ -83,13 +89,13 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   toggle: []
-  'skip-back': []
-  'skip-forward': []
+  "skip-back": []
+  "skip-forward": []
   seek: [ms: number]
-  'update:speed': [value: number]
+  "update:speed": [value: number]
 }>()
 
-const trackEl = useTemplateRef<HTMLDivElement>('trackEl')
+const trackEl = useTemplateRef<HTMLDivElement>("trackEl")
 
 const fraction = computed(() => {
   if (!props.durationMs || props.durationMs <= 0) return 0
@@ -103,7 +109,7 @@ function formatSpeed(value: number): string {
 }
 
 function onSpeedChange(event: Event) {
-  emit('update:speed', Number((event.target as HTMLSelectElement).value))
+  emit("update:speed", Number((event.target as HTMLSelectElement).value))
 }
 
 function seekFromClientX(clientX: number) {
@@ -113,7 +119,7 @@ function seekFromClientX(clientX: number) {
   let f = (clientX - rect.left) / rect.width
   if (f < 0) f = 0
   if (f > 1) f = 1
-  emit('seek', Math.round(f * props.durationMs))
+  emit("seek", Math.round(f * props.durationMs))
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -123,13 +129,13 @@ function onPointerDown(event: PointerEvent) {
   seekFromClientX(event.clientX)
   const move = (e: PointerEvent) => seekFromClientX(e.clientX)
   const up = () => {
-    el.removeEventListener('pointermove', move)
-    el.removeEventListener('pointerup', up)
-    el.removeEventListener('pointercancel', up)
+    el.removeEventListener("pointermove", move)
+    el.removeEventListener("pointerup", up)
+    el.removeEventListener("pointercancel", up)
   }
-  el.addEventListener('pointermove', move)
-  el.addEventListener('pointerup', up)
-  el.addEventListener('pointercancel', up)
+  el.addEventListener("pointermove", move)
+  el.addEventListener("pointerup", up)
+  el.addEventListener("pointercancel", up)
 }
 </script>
 
@@ -301,7 +307,7 @@ function onPointerDown(event: PointerEvent) {
 }
 
 .seek-track::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   right: 0;

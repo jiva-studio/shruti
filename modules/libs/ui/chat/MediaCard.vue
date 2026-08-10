@@ -78,7 +78,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import type { MediaPayload } from "@lib/domain/chatMessage.js"
+import type { UiMediaPayload } from "./types.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 
@@ -86,7 +86,7 @@ const props = withDefaults(
   defineProps<{
     /** Server-streamed media payload, read off `message.media[token.mediaId]`.
      *  Optional so a not-yet-resolved id renders nothing instead of throwing. */
-    payload?: MediaPayload
+    payload?: UiMediaPayload
     /** Playback state — drives the play overlay. Owned by the host. */
     isPlaying?: boolean
     /** Playhead position as a fraction of duration (0–1). Owned by the host. */
