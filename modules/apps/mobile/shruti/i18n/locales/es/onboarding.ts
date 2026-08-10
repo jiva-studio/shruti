@@ -28,6 +28,8 @@ export default {
   },
   paywall: {
     title: "Más funciones con Pro",
+    subtitle:
+      "Todas las clases son gratuitas. La suscripción nos ayuda a seguir desarrollando la app: añadir nuevas funciones y clases.",
     later: "Más tarde",
   },
   finish: "Empezar a escuchar",

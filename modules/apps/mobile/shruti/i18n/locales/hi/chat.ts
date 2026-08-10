@@ -270,6 +270,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "अधूरा प्रवचन",
   proactiveSessionTitleInactivity: "अपनी साधना पर लौटें",
   proactiveSessionTitleWeeklyDigest: "आपका सप्ताह",
+  proactiveSessionTitleDailyWisdom: "दैनिक ज्ञान",
+
+  proactiveDailyWisdomBody: "आज के लिए प्रवचनों से एक विचार:",
+
   proactiveInactivityWelcomeBody:
     "काफ़ी समय बीत गया। ताज़ा प्रवचन आपका इंतज़ार कर रहे हैं — अपनी लाइब्रेरी खोलें और जहाँ छोड़ा था वहीं से आगे बढ़ें।",
 
@@ -331,6 +335,12 @@ export default {
   actionQueueNextTrackConfirm: "जोड़ें",
   actionQueueNextTrackDone: "लाइब्रेरी में जोड़ा गया।",
   actionQueueNextTrackError: "यह प्रवचन नहीं जोड़ा जा सका।",
+
+  actionAddToLibraryTitle: "मेरी लाइब्रेरी में जोड़ें",
+  actionAddToLibraryConfirm: "लाइब्रेरी में जोड़ें",
+  actionAddToLibraryDone: "जोड़ा गया — हम इसे प्रोसेस कर रहे हैं।",
+  actionAddToLibraryError: "यह प्रवचन नहीं जोड़ा जा सका।",
+  addByLinkCommand: "इस लिंक से प्रवचन जोड़ें: {url}",
 
   citationSaveAsNote: "नोट के रूप में सहेजें",
   citationOpenInStudio: "Studio में खोलें",

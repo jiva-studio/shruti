@@ -119,6 +119,53 @@ describe("locale switch race", () => {
   })
 })
 
+describe("document language", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    for (const path of MOCKED) vi.doUnmock(path)
+  })
+
+  /** `index.html` hardcodes `lang="en"`; the screen reader reads that, not the
+   *  rendered copy, so it has to follow the UI language (#1607). */
+  function stubDocument(): { lang: string } {
+    const documentElement = { lang: "en" }
+    vi.stubGlobal("document", { documentElement })
+    return documentElement
+  }
+
+  it("stamps the boot locale on <html lang>", async () => {
+    const documentElement = stubDocument()
+
+    const { bootLocaleReady } = await freshI18n("de-DE")
+    await bootLocaleReady
+
+    expect(documentElement.lang).toBe("de")
+  })
+
+  it("follows a language switch", async () => {
+    const documentElement = stubDocument()
+
+    const { setLocale } = await freshI18n("en-US")
+    // A script subtag has to survive intact — `sr` alone picks the wrong voice.
+    expect(await setLocale("sr-Latn")).toBe("applied")
+
+    expect(documentElement.lang).toBe("sr-Latn")
+  })
+
+  it("leaves it alone when the switch never applies", async () => {
+    const documentElement = stubDocument()
+    vi.doMock("../bundles/de.js", () => {
+      throw new Error("Failed to fetch dynamically imported module")
+    })
+
+    const { setLocale } = await freshI18n("en-US")
+    expect(await setLocale("de")).toBe("failed")
+
+    // The UI still renders en, so announcing German would be a lie.
+    expect(documentElement.lang).toBe("en")
+  })
+})
+
 describe("locale switch failure", () => {
   afterEach(() => {
     vi.unstubAllGlobals()

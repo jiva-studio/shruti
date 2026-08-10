@@ -273,6 +273,9 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Conférence inachevée",
   proactiveSessionTitleInactivity: "Reprenez votre pratique",
   proactiveSessionTitleWeeklyDigest: "Votre semaine",
+  proactiveSessionTitleDailyWisdom: "Sagesse du jour",
+
+  proactiveDailyWisdomBody: "Une pensée tirée des conférences pour aujourd'hui :",
 
   // Welcome body shown when re-engaging the user after a period of
   // inactivity (the `inactivity` proactive rule).
@@ -337,6 +340,12 @@ export default {
   actionQueueNextTrackConfirm: "Ajouter",
   actionQueueNextTrackDone: "Ajouté à la bibliothèque.",
   actionQueueNextTrackError: "Impossible d'ajouter cette conférence.",
+
+  actionAddToLibraryTitle: "Ajouter à ma bibliothèque",
+  actionAddToLibraryConfirm: "Ajouter à la bibliothèque",
+  actionAddToLibraryDone: "Ajoutée — traitement en cours.",
+  actionAddToLibraryError: "Impossible d'ajouter cette conférence.",
+  addByLinkCommand: "Ajouter la conférence depuis ce lien : {url}",
 
   citationSaveAsNote: "Enregistrer comme note",
   citationOpenInStudio: "Ouvrir dans le Studio",

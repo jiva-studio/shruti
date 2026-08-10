@@ -270,6 +270,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Befejezetlen előadás",
   proactiveSessionTitleInactivity: "Térj vissza a gyakorlásodhoz",
   proactiveSessionTitleWeeklyDigest: "A heted",
+  proactiveSessionTitleDailyWisdom: "Napi bölcsesség",
+
+  proactiveDailyWisdomBody: "Egy gondolat az előadásokból mára:",
+
   proactiveInactivityWelcomeBody:
     "Rég jártál itt. Friss előadások várnak — nyisd meg a könyvtáradat, és folytasd ott, ahol abbahagytad.",
 
@@ -331,6 +335,12 @@ export default {
   actionQueueNextTrackConfirm: "Hozzáadás",
   actionQueueNextTrackDone: "Hozzáadva a könyvtárhoz.",
   actionQueueNextTrackError: "Nem sikerült hozzáadni ezt az előadást.",
+
+  actionAddToLibraryTitle: "Hozzáadás a könyvtáramhoz",
+  actionAddToLibraryConfirm: "Hozzáadás a könyvtárhoz",
+  actionAddToLibraryDone: "Hozzáadva — feldolgozás alatt.",
+  actionAddToLibraryError: "Nem sikerült hozzáadni ezt az előadást.",
+  addByLinkCommand: "Előadás hozzáadása erről a linkről: {url}",
 
   citationSaveAsNote: "Mentés jegyzetként",
   citationOpenInStudio: "Megnyitás a Stúdióban",
