@@ -8,6 +8,7 @@ import type { LibraryItem } from "@lib/domain/libraryItem.js"
 
 const listAll = vi.fn<() => Promise<readonly LibraryItem[]>>()
 const listArchivedIds = vi.fn<() => Promise<ReadonlySet<string>>>()
+const submit = vi.fn<() => Promise<{ membership_id: string }>>()
 
 vi.mock("@lectorium/lectorium.js", () => ({
   useLectorium: () => ({
@@ -15,7 +16,18 @@ vi.mock("@lectorium/lectorium.js", () => ({
       libraryItems: { listAll },
       libraryMemberships: { listArchivedIds },
     }),
+    ingestClient: { submit },
   }),
+}))
+
+vi.mock("@lectorium/services/syncEvents.js", () => ({ requestSync: vi.fn() }))
+
+vi.mock("@lectorium/stores/usePurchasesStore.js", () => ({
+  usePurchasesStore: () => ({ isSubscribed: true }),
+}))
+
+vi.mock("@lectorium/stores/usePaywallStore.js", () => ({
+  usePaywallStore: () => ({ requestOpen: vi.fn() }),
 }))
 
 import { useLibraryStore } from "../useLibraryStore.js"
@@ -57,6 +69,7 @@ describe("useLibraryStore", () => {
     setActivePinia(createPinia())
     listAll.mockReset()
     listArchivedIds.mockReset()
+    submit.mockReset()
     listArchivedIds.mockResolvedValue(new Set())
   })
 
@@ -102,5 +115,29 @@ describe("useLibraryStore", () => {
     await store.refresh()
     expect(store.error).toBe("db closed")
     expect(store.items).toEqual([])
+  })
+
+  // A double-tap on "Add to library" must not put two requests on the wire: the
+  // row hasn't synced down yet, so findBySource can't dedup it (issue #1622).
+  it("submits once while an add for the same source is in flight", async () => {
+    listAll.mockResolvedValue([])
+    const pending: Array<(v: { membership_id: string }) => void> = []
+    submit.mockImplementation(
+      () => new Promise<{ membership_id: string }>((resolve) => pending.push(resolve))
+    )
+    const store = useLibraryStore()
+    await store.refresh()
+
+    // First tap: held on the wire. Second tap: a URL variant of the same video,
+    // which findBySource cannot match yet (the row has not synced down).
+    const first = store.addByUrl("https://youtu.be/2QezV4DhHVo")
+    await vi.waitFor(() => expect(submit).toHaveBeenCalled())
+    const second = store.addByUrl("https://www.youtube.com/watch?v=2QezV4DhHVo&t=30")
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(submit).toHaveBeenCalledTimes(1)
+    pending.forEach((resolve) => resolve({ membership_id: "run-1" }))
+    await Promise.all([first, second])
+    expect(store.error).toBeNull()
   })
 })

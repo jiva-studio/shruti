@@ -129,6 +129,9 @@ interface FixtureTrack {
 
 const sortRefFromGroup = (g: FixtureRefGroup): string => `${g.sourceId}_${g.tokens}`
 
+/** SQL for the catalog writer's search folding, applied to `expr`. */
+const fold = (expr: string): string => `replace(replace(${expr}, 'ё', 'е'), 'Ё', 'Е')`
+
 async function seedFixture(
   db: IDatabase,
   sources: FixtureSource[],
@@ -188,11 +191,11 @@ async function seedFixture(
   }
   // Populate the FTS index exactly the way the catalog writer does
   // (modules/tools/lectorium-mcp/internal/infra/catalog/sqlite/write.go
-  // rebuildTrackSearchRows). The `combined` kind is what `search()`
-  // filters on.
+  // rebuildTrackSearchRows, searchfold.go). The `combined` kind is what
+  // `search()` filters on; `fold()` is the writer's ё → е folding.
   await db.execute(
     `INSERT INTO tracks_search(content, track_id, kind)
-       SELECT title, track_id, 'title' FROM track_variants`
+       SELECT ${fold("title")}, track_id, 'title' FROM track_variants`
   )
   await db.execute(
     `INSERT INTO tracks_search(content, track_id, kind)
@@ -210,7 +213,7 @@ async function seedFixture(
   await db.execute(
     `INSERT INTO tracks_search(content, track_id, kind)
      SELECT
-       (
+       ${fold(`(
          COALESCE((SELECT GROUP_CONCAT(title, ' ') FROM track_variants WHERE track_id = t.id), '')
          || ' ' ||
          COALESCE((SELECT GROUP_CONCAT(r.source_id || ' ' || r.tokens, ' ')
@@ -234,7 +237,7 @@ async function seedFixture(
          || ' ' || COALESCE(SUBSTR(t.date, 1, 4), '')
          || ' ' || COALESCE(SUBSTR(t.date, 1, 7), '')
          || ' ' || COALESCE(SUBSTR(t.date, 1, 10), '')
-       ),
+       )`)},
        t.id,
        'combined'
      FROM tracks t`
@@ -549,6 +552,103 @@ describe("tracksRepository.sql — search", () => {
   })
 })
 
+describe("tracksRepository.sql — non-ASCII Cyrillic", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "ru" as LanguageCode
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    await seedFixture(
+      db,
+      [{ id: "bg", en: { full: "Bhagavad-gita", short: "BG" } }],
+      [
+        {
+          id: "t-yo",
+          date: "1974-11-01",
+          titles: { ru: "Кришна пришёл как имя" },
+          references: [],
+        },
+        {
+          id: "t-uk",
+          date: "1975-01-01",
+          titles: { uk: "Ґанді і світ їжі" },
+          references: [],
+        },
+        {
+          id: "t-sr",
+          date: "1976-01-01",
+          titles: { "sr-Cyrl": "Ђурђевдан у Њујорку" },
+          references: [],
+        },
+      ]
+    )
+  })
+
+  // #1629: `ё` (U+0451) sits outside the old `а-я` class, so it was deleted
+  // from the query — "Кришна пришёл" was sent as `кришна* пришл*` and found
+  // nothing. Both spellings must now reach the track.
+  it.each(["Кришна пришёл", "Кришна пришел"])("finds a ё title for query %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-yo"])
+  })
+
+  it.each(["світ", "їжі", "Ґанді"])("keeps Ukrainian %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-uk"])
+  })
+
+  it.each(["Ђурђевдан", "Њујорку"])("keeps Serbian %s", async (text) => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text })
+    expect(results.map((t) => t.id)).toEqual(["t-sr"])
+  })
+})
+
+describe("tracksRepository.sql — sorted search window", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "ru" as LanguageCode
+  // Past SCORE_CAP (500), which used to clip the match set *before* the sort.
+  const TRACK_COUNT = 520
+  const oldest = `${2100 - (TRACK_COUNT - 1)}-01-01`
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    // Dates run backwards through insertion order, so the oldest track is the
+    // last one FTS yields — invisible to a sort that only sees the first 500.
+    await seedFixture(
+      db,
+      [],
+      Array.from({ length: TRACK_COUNT }, (_, i) => ({
+        id: `t-${String(i).padStart(4, "0")}`,
+        date: `${2100 - i}-01-01`,
+        titles: { ru: `Лекция ${i}` },
+        references: [],
+      }))
+    )
+  })
+
+  it("sorts the whole match set, not the first SCORE_CAP rows", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text: "лекция", sortBy: "byDateAsc", limit: 1 })
+    expect(results[0]?.date).toBe(oldest)
+  })
+
+  it("pages past SCORE_CAP", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({
+      text: "лекция",
+      sortBy: "byDateAsc",
+      limit: 50,
+      offset: 500,
+    })
+    expect(results).toHaveLength(TRACK_COUNT - 500)
+  })
+})
+
 describe("tracksRepository.sql — buildFtsQuery", () => {
   it("promotes a multi-component reference to a phrase, leaves the word prefix", () => {
     expect(buildFtsQuery("bg 2.13")).toBe(`bg* "2 13"`)
@@ -583,6 +683,22 @@ describe("tracksRepository.sql — buildFtsQuery", () => {
   it("returns an empty string for whitespace-only input", () => {
     expect(buildFtsQuery("   ")).toBe("")
     expect(buildFtsQuery("")).toBe("")
+  })
+
+  it("folds ё to е instead of deleting it", () => {
+    expect(buildFtsQuery("Кришна пришёл всё учёные")).toBe("кришна* пришел* все* ученые*")
+  })
+
+  it("keeps Cyrillic letters outside а-я", () => {
+    expect(buildFtsQuery("Ґанді і світ")).toBe("ґанді* і* світ*")
+    expect(buildFtsQuery("Ђурђевдан Њујорк")).toBe("ђурђевдан* њујорк*")
+  })
+
+  // The deny-list erased Devanagari and Bengali outright, so `search()` bailed
+  // on an empty expression. Marks split the word here exactly as `unicode61`
+  // splits it in the index, so the prefixes line up with the indexed terms.
+  it("keeps scripts the deny-list used to erase whole", () => {
+    expect(buildFtsQuery("कृष्ण")).toBe("क* ष* ण*")
   })
 })
 

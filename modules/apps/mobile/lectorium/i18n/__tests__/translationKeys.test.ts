@@ -77,14 +77,19 @@ describe("translation keys", () => {
   // success, failure) has to be translated everywhere, not just in en.
   // `actionNoteError` covers both saveCitationAsNote failures (empty text and
   // create-note-failed) and was missing from all 14 locales (#1478).
-  it.each(["chat.noteSaving", "chat.noteSaved", "chat.actionNoteError"])(
-    "translates %s in every locale",
-    (key) => {
-      const missing = SUPPORTED_LOCALES.filter((locale) => {
-        const value = lookup(locale, key)
-        return typeof value !== "string" || value.trim() === ""
-      })
-      expect(missing).toEqual([])
-    }
-  )
+  // `smartLibrary.archive.off` is built from a template literal, so the static
+  // scan above can't see it — and it is the only way to stop the sweep from
+  // deleting downloaded audio (#1624).
+  it.each([
+    "chat.noteSaving",
+    "chat.noteSaved",
+    "chat.actionNoteError",
+    "settings.smartLibrary.archive.off",
+  ])("translates %s in every locale", (key) => {
+    const missing = SUPPORTED_LOCALES.filter((locale) => {
+      const value = lookup(locale, key)
+      return typeof value !== "string" || value.trim() === ""
+    })
+    expect(missing).toEqual([])
+  })
 })
