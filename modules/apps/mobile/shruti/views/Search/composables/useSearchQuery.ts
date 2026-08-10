@@ -20,10 +20,14 @@ export interface UseSearchQueryReturn {
   isLoading: Ref<boolean>
   error: Ref<string | null>
   hasMore: Ref<boolean>
+  /** A page fetch failed and the next one is the user's to ask for. */
+  canRetry: Ref<boolean>
   /** Re-runs the query immediately and resets pagination. */
   runQuery: () => Promise<void>
   /** Loads the next page when `hasMore` is true. */
   loadMore: () => Promise<void>
+  /** Re-arms pagination after a failed page and fetches it again. */
+  retry: () => Promise<void>
 }
 
 /**
@@ -58,6 +62,7 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   const error = ref<string | null>(null)
   const offset = ref<number>(0)
   const hasMore = ref<boolean>(false)
+  const canRetry = ref<boolean>(false)
   let searchToken = 0
 
   async function fetchPage(pageOffset: number): Promise<readonly Track[]> {
@@ -87,6 +92,7 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   async function runFirstPage(): Promise<void> {
     const token = ++searchToken
     error.value = null
+    canRetry.value = false
     offset.value = 0
     hasMore.value = false
     isLoading.value = true
@@ -108,6 +114,8 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   async function runNextPage(): Promise<void> {
     const token = searchToken
     const pageOffset = offset.value
+    error.value = null
+    canRetry.value = false
     isLoading.value = true
     try {
       const tracks = await fetchPage(pageOffset)
@@ -118,9 +126,11 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
     } catch (err) {
       if (token !== searchToken) return
       error.value = err instanceof Error ? err.message : "Search failed"
-      // Disarm infinite scroll: an armed `hasMore` on a failed page means the
-      // next scroll retries the same offset, forever.
+      // Disarm infinite scroll — an armed `hasMore` on a failed page means the
+      // next scroll retries the same offset, forever — but hand the page to
+      // the user instead of ending the list: `canRetry` puts a button under it.
       hasMore.value = false
+      canRetry.value = true
     } finally {
       if (token === searchToken) isLoading.value = false
     }
@@ -151,8 +161,7 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
     return activeRun
   }
 
-  async function loadMore(): Promise<void> {
-    if (activeRun || !hasMore.value || isLoading.value) return
+  function fetchNextPage(): Promise<void> {
     activeRun = (async () => {
       try {
         await runNextPage()
@@ -164,10 +173,20 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
     return activeRun
   }
 
+  async function loadMore(): Promise<void> {
+    if (activeRun || !hasMore.value || isLoading.value) return
+    return fetchNextPage()
+  }
+
+  async function retry(): Promise<void> {
+    if (activeRun || !canRetry.value || isLoading.value) return
+    return fetchNextPage()
+  }
+
   const debouncedRun = useDebounceFn(() => runQuery(), 200)
   watch(options.query, () => {
     void debouncedRun()
   })
 
-  return { rawTracks, isLoading, error, hasMore, runQuery, loadMore }
+  return { rawTracks, isLoading, error, hasMore, canRetry, runQuery, loadMore, retry }
 }
