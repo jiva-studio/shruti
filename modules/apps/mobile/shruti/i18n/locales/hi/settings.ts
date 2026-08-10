@@ -161,6 +161,7 @@ export default {
   appLanguage: {
     title: "भाषा",
     description: "इंटरफ़ेस की भाषा",
+    loadFailedToast: "यह भाषा लोड नहीं हो सकी। कृपया फिर से प्रयास करें।",
   },
 
   chatLanguage: {
@@ -210,6 +211,7 @@ export default {
       "10h": "10 घंटे",
     },
     archive: {
+      off: "कभी नहीं",
       immediate: "तुरंत",
       _8h: "8 घंटे बाद",
       _1d: "1 दिन बाद",

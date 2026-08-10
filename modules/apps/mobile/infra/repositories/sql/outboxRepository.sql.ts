@@ -3,9 +3,10 @@ import type {
   IOutboxRepository,
   OutboxEntry,
   OutboxScope,
+  OutboxReattribution,
   NewOutboxEntry,
 } from "@lib/domain/ports/outboxRepository.js"
-import type { SyncOp } from "@lib/domain"
+import type { SyncDocRef, SyncOp } from "@lib/domain"
 import type { OutboxRow } from "@lib/persistence/user"
 
 /**
@@ -77,6 +78,26 @@ export function createSqlOutboxRepository(
           entry.ownerId !== undefined ? entry.ownerId : (getOwnerId?.() ?? null),
         ]
       )
+    },
+
+    async reattribute(scope: OutboxReattribution): Promise<readonly SyncDocRef[]> {
+      if (scope.fromOwnerId === scope.toOwnerId) return []
+      const where = "(owner_id = ? OR (owner_id IS NULL AND id > ?))"
+      const params = [scope.fromOwnerId, scope.unownedAfterId]
+      const refs = await db.query<{ collection: string; doc_id: string }>(
+        `SELECT DISTINCT collection, doc_id FROM outbox WHERE ${where}`,
+        params
+      )
+      if (refs.length === 0) return []
+      // `sent = 0` is what re-opens the already-uploaded history: those rows
+      // reached the anonymous account only, so the new owner has to see them
+      // as pending again. `base_hlc = ''` states they descend from nothing the
+      // new account has — see the push's reading of it.
+      await db.execute(`UPDATE outbox SET owner_id = ?, sent = 0, base_hlc = '' WHERE ${where}`, [
+        scope.toOwnerId,
+        ...params,
+      ])
+      return refs.map((r) => ({ collection: r.collection, docId: r.doc_id }))
     },
 
     async latestHlc(): Promise<string | null> {

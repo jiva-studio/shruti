@@ -1,4 +1,4 @@
-import type { SyncDoc } from "../sync/types.js"
+import type { SyncDoc, SyncDocRef } from "../sync/types.js"
 
 /**
  * Port for applying **remote** sync changes to the local collection tables and
@@ -46,6 +46,15 @@ export interface ISyncApplyRepository {
 
   /** Record `hlc` as the doc's last server-known HLC (push apply / conflict). */
   recordServerHlc(collection: string, docId: string, hlc: string): Promise<void>
+
+  /**
+   * Drop the pointers for the named documents — the anonymous → signed-in
+   * handover (#1627). Each one records a master in the ACCOUNT THAT WAS LEFT
+   * BEHIND; the new account has never seen the document, so the pointer would
+   * hand the replay a `base_hlc` the server cannot match, and the backfill's
+   * anti-join would go on treating the row as already synced.
+   */
+  forgetDocHlcs(refs: readonly SyncDocRef[]): Promise<void>
 
   /**
    * Drop every `(collection, doc_id)` pointer — the local data-wipe path

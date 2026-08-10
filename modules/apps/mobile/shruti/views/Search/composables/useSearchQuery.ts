@@ -20,10 +20,14 @@ export interface UseSearchQueryReturn {
   isLoading: Ref<boolean>
   error: Ref<string | null>
   hasMore: Ref<boolean>
+  /** A page fetch failed and the next one is the user's to ask for. */
+  canRetry: Ref<boolean>
   /** Re-runs the query immediately and resets pagination. */
   runQuery: () => Promise<void>
   /** Loads the next page when `hasMore` is true. */
   loadMore: () => Promise<void>
+  /** Re-arms pagination after a failed page and fetches it again. */
+  retry: () => Promise<void>
 }
 
 /**
@@ -43,7 +47,9 @@ export interface UseSearchQueryReturn {
  * the failure mode where typing three letters used to compound into
  * multi-second waits because each keystroke queued its own MATCH and
  * the hydrate calls of the latest search waited behind every prior
- * MATCH in the plugin's queue.
+ * MATCH in the plugin's queue. `loadMore()` takes the same gate — a page
+ * fetch is the same roundtrip — and hands the gate back to a query raised
+ * while it was busy.
  *
  * Empty query + no filters falls through to `tracks.list()` (the
  * `searchAndFilterTracks` use case handles the branching) so the initial
@@ -56,6 +62,7 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   const error = ref<string | null>(null)
   const offset = ref<number>(0)
   const hasMore = ref<boolean>(false)
+  const canRetry = ref<boolean>(false)
   let searchToken = 0
 
   async function fetchPage(pageOffset: number): Promise<readonly Track[]> {
@@ -82,45 +89,34 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   let activeRun: Promise<void> | null = null
   let rerunPending = false
 
-  async function runQuery(): Promise<void> {
-    if (activeRun) {
-      rerunPending = true
-      return activeRun
+  async function runFirstPage(): Promise<void> {
+    const token = ++searchToken
+    error.value = null
+    canRetry.value = false
+    offset.value = 0
+    hasMore.value = false
+    isLoading.value = true
+    try {
+      const tracks = await fetchPage(0)
+      if (token !== searchToken) return
+      rawTracks.value = tracks
+      hasMore.value = tracks.length >= PAGE_SIZE
+      offset.value = PAGE_SIZE
+    } catch (err) {
+      if (token !== searchToken) return
+      error.value = err instanceof Error ? err.message : "Search failed"
+      rawTracks.value = []
+    } finally {
+      if (token === searchToken) isLoading.value = false
     }
-    activeRun = (async () => {
-      try {
-        do {
-          rerunPending = false
-          const token = ++searchToken
-          error.value = null
-          offset.value = 0
-          hasMore.value = false
-          isLoading.value = true
-          try {
-            const tracks = await fetchPage(0)
-            if (token !== searchToken) continue
-            rawTracks.value = tracks
-            hasMore.value = tracks.length >= PAGE_SIZE
-            offset.value = PAGE_SIZE
-          } catch (err) {
-            if (token !== searchToken) continue
-            error.value = err instanceof Error ? err.message : "Search failed"
-            rawTracks.value = []
-          } finally {
-            if (token === searchToken) isLoading.value = false
-          }
-        } while (rerunPending)
-      } finally {
-        activeRun = null
-      }
-    })()
-    return activeRun
   }
 
-  async function loadMore(): Promise<void> {
-    if (!hasMore.value || isLoading.value) return
+  async function runNextPage(): Promise<void> {
     const token = searchToken
     const pageOffset = offset.value
+    error.value = null
+    canRetry.value = false
+    isLoading.value = true
     try {
       const tracks = await fetchPage(pageOffset)
       if (token !== searchToken) return
@@ -130,7 +126,61 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
     } catch (err) {
       if (token !== searchToken) return
       error.value = err instanceof Error ? err.message : "Search failed"
+      // Disarm infinite scroll — an armed `hasMore` on a failed page means the
+      // next scroll retries the same offset, forever — but hand the page to
+      // the user instead of ending the list: `canRetry` puts a button under it.
+      hasMore.value = false
+      canRetry.value = true
+    } finally {
+      if (token === searchToken) isLoading.value = false
     }
+  }
+
+  /** Drain a `runQuery()` raised while this run held the gate. */
+  async function drainReruns(): Promise<void> {
+    while (rerunPending) {
+      rerunPending = false
+      await runFirstPage()
+    }
+  }
+
+  async function runQuery(): Promise<void> {
+    if (activeRun) {
+      rerunPending = true
+      return activeRun
+    }
+    activeRun = (async () => {
+      try {
+        rerunPending = false
+        await runFirstPage()
+        await drainReruns()
+      } finally {
+        activeRun = null
+      }
+    })()
+    return activeRun
+  }
+
+  function fetchNextPage(): Promise<void> {
+    activeRun = (async () => {
+      try {
+        await runNextPage()
+        await drainReruns()
+      } finally {
+        activeRun = null
+      }
+    })()
+    return activeRun
+  }
+
+  async function loadMore(): Promise<void> {
+    if (activeRun || !hasMore.value || isLoading.value) return
+    return fetchNextPage()
+  }
+
+  async function retry(): Promise<void> {
+    if (activeRun || !canRetry.value || isLoading.value) return
+    return fetchNextPage()
   }
 
   const debouncedRun = useDebounceFn(() => runQuery(), 200)
@@ -138,5 +188,5 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
     void debouncedRun()
   })
 
-  return { rawTracks, isLoading, error, hasMore, runQuery, loadMore }
+  return { rawTracks, isLoading, error, hasMore, canRetry, runQuery, loadMore, retry }
 }

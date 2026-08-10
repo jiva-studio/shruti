@@ -18,6 +18,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setProgressInterval", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "onProgressChanged", returnType: CAPPluginReturnCallback),
+        CAPPluginMethod(name: "onPositionJump", returnType: CAPPluginReturnCallback),
         // Background continuous-playback queue surface (see src/definitions.ts).
         CAPPluginMethod(name: "setQueue", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "appendToQueue", returnType: CAPPluginReturnPromise),
@@ -53,6 +54,11 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var currentItemObservation: NSKeyValueObservation?
     private var statusCallbacks: [String: CAPPluginCall] = [:]
     private var transitionCallbacks: [String: CAPPluginCall] = [:]
+    /// Listeners for jumps the system performed on its own — lock-screen
+    /// scrubbing and the ±N s seek commands. Seeks JS asked for go through
+    /// `seek()` / `seekBy()`, which the app already journals, so those are
+    /// deliberately not reported here.
+    private var positionJumpCallbacks: [String: CAPPluginCall] = [:]
 
     /// The full ordered queue snapshot (current item onward). `queueIndex`
     /// points at the entry currently playing. We keep the entries (not
@@ -72,6 +78,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// either order — the finished item's `fromPosition` must not be
     /// clobbered by the next item becoming current first.
     private var fromPositionByItemId: [String: Double] = [:]
+
+    /// Wall-clock (epoch ms) when listening on each item began, keyed by
+    /// itemId. Same bookkeeping as `fromPositionByItemId`, in the same places.
+    private var fromAtByItemId: [String: Double] = [:]
 
     /// Maps an AVPlayerItem to its itemId so the currentItem-change
     /// observer knows which entry just became current. AVQueuePlayer
@@ -206,8 +216,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         commandCenter.seekForwardCommand.addTarget { [weak self] event in
             if let seekEvent = event as? MPSeekCommandEvent, let player = self?.player {
-                let newTime = CMTime(seconds: player.currentTime().seconds + Double(seekEvent.type.rawValue * 30), preferredTimescale: 1)
+                let from = player.currentTime().seconds
+                let newTime = CMTime(seconds: from + Double(seekEvent.type.rawValue * 30), preferredTimescale: 1)
                 player.seek(to: newTime)
+                self?.pushPositionJump(from: from, to: newTime.seconds)
                 return .success
             }
             return .commandFailed
@@ -215,8 +227,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         commandCenter.seekBackwardCommand.addTarget { [weak self] event in
             if let seekEvent = event as? MPSeekCommandEvent, let player = self?.player {
-                let newTime = CMTime(seconds: max(player.currentTime().seconds - Double(seekEvent.type.rawValue * 30), 0), preferredTimescale: 1)
+                let from = player.currentTime().seconds
+                let newTime = CMTime(seconds: max(from - Double(seekEvent.type.rawValue * 30), 0), preferredTimescale: 1)
                 player.seek(to: newTime)
+                self?.pushPositionJump(from: from, to: newTime.seconds)
                 return .success
             }
             return .commandFailed
@@ -224,8 +238,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             if let changeEvent = event as? MPChangePlaybackPositionCommandEvent, let player = self?.player {
+                let from = player.currentTime().seconds
                 let newTime = CMTime(seconds: changeEvent.positionTime, preferredTimescale: 1)
                 player.seek(to: newTime)
+                self?.pushPositionJump(from: from, to: newTime.seconds)
                 return .success
             }
             return .commandFailed
@@ -375,6 +391,29 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
+    @objc func onPositionJump(_ call: CAPPluginCall) {
+        let callbackId = UUID().uuidString
+        positionJumpCallbacks[callbackId] = call
+        call.keepAlive = true
+        call.resolve([
+            "callbackId": callbackId
+        ])
+    }
+
+    /// Report a jump the system made to JS, so it closes the open listening
+    /// session at `from` instead of absorbing the skipped span into it.
+    private func pushPositionJump(from: Double, to: Double) {
+        guard !positionJumpCallbacks.isEmpty else { return }
+        let payload: [String: Any] = [
+            "itemId": currentItemId,
+            "fromPosition": from.isFinite ? max(0, from) : 0,
+            "toPosition": to.isFinite ? max(0, to) : 0
+        ]
+        for (_, callback) in positionJumpCallbacks {
+            callback.resolve(payload)
+        }
+    }
+
     @objc func onItemTransition(_ call: CAPPluginCall) {
         let callbackId = UUID().uuidString
         transitionCallbacks[callbackId] = call
@@ -461,6 +500,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         currentItemId = entries[queueIndex].itemId
         fromPositionByItemId[currentItemId] = seekPosition > 0 ? seekPosition : 0
+        fromAtByItemId[currentItemId] = nowEpochMs()
 
         observeCurrentItem()
         setupProgressObserver()
@@ -575,6 +615,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if fromPositionByItemId[newId] == nil {
             fromPositionByItemId[newId] = 0
         }
+        if fromAtByItemId[newId] == nil {
+            fromAtByItemId[newId] = nowEpochMs()
+        }
 
         // Per-item rate must be re-applied on every advance (rate lives
         // on the player but is reset to 1 by AVQueuePlayer on advance).
@@ -680,6 +723,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if pos > 3 {
             player?.seek(to: .zero)
             fromPositionByItemId[currentItemId] = 0
+            fromAtByItemId[currentItemId] = nowEpochMs()
             return true
         }
         guard queueIndex > 0 else {
@@ -704,6 +748,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - Journaling
 
+    private func nowEpochMs() -> Double {
+        return Date().timeIntervalSince1970 * 1000
+    }
+
     private func journalTransition(finished: QueueEntry?, finishedAt: Double, startedItemId: String?, reason: String) {
         guard let finished = finished else { return }
         let durationSec = resolvedDuration(for: finished)
@@ -714,7 +762,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             duration: durationSec,
             startedItemId: startedItemId,
             reason: reason,
-            at: Date().timeIntervalSince1970 * 1000,
+            at: nowEpochMs(),
+            fromAt: fromAtByItemId[finished.itemId],
             seq: journal.nextSeq()
         )
         // Durable append happens BEFORE anything else (e.g. teardown).
@@ -723,6 +772,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         pushTransition(transition)
         // The finished item's resume point is no longer needed.
         fromPositionByItemId.removeValue(forKey: finished.itemId)
+        fromAtByItemId.removeValue(forKey: finished.itemId)
     }
 
     /// Best duration we can report for a finished item: the live
@@ -770,13 +820,15 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             duration: durationSec,
             startedItemId: nextEntry?.itemId,  // null when queue runs dry
             reason: "auto",
-            at: Date().timeIntervalSince1970 * 1000,
+            at: nowEpochMs(),
+            fromAt: fromAtByItemId[endedId],
             seq: journal.nextSeq()
         )
         // Persist BEFORE anything else, including teardown when dry.
         journal.append(transition)
         pushTransition(transition)
         fromPositionByItemId.removeValue(forKey: endedId)
+        fromAtByItemId.removeValue(forKey: endedId)
 
         if nextEntry == nil {
             // Queue exhausted — persist the final journal entry (done

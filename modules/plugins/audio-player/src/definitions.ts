@@ -159,6 +159,11 @@ export type QueueTransition = {
   // Native wall-clock when the transition happened (epoch ms). The
   // completion may be hours old by the time JS drains it.
   at: number
+  // Native wall-clock when listening on this item BEGAN (epoch ms) — the
+  // `fromPosition` counterpart, so `[fromAt, at]` is the run's real
+  // wall-clock span instead of one estimated from the audio span at 1×.
+  // Absent on entries an older build left in the durable journal.
+  fromAt?: number
   // Monotonic per-install sequence — drives the idempotent ack-based clear.
   seq: number
 }
@@ -179,6 +184,20 @@ export type QueueState = {
   events: QueueTransition[]
 }
 
+/**
+ * A position jump the engine performed without JS asking — lock-screen
+ * scrubbing, the system ±15s / seek commands, a Bluetooth remote. Seeks made
+ * through `seek()` / `seekBy()` are deliberately NOT reported: the caller
+ * already knows about those and journals them itself.
+ *
+ * Positions in seconds, like the rest of this surface.
+ */
+export type PositionJump = {
+  itemId: string
+  fromPosition: number
+  toPosition: number
+}
+
 export interface AudioPlayerPlugin extends Plugin {
   open(params: OpenParams): Promise<void>
   play(): Promise<void>
@@ -191,6 +210,13 @@ export interface AudioPlayerPlugin extends Plugin {
   setProgressInterval(params: SetProgressIntervalParams): Promise<void>
   onProgressChanged(
     callback: (status: Status) => void
+  ): Promise<AudioPlayerListenerResult>
+
+  /** Engine-initiated position jumps (lock screen, remote controls), so the
+   *  app can journal the discontinuity rather than count the skipped audio
+   *  as listened. */
+  onPositionJump(
+    callback: (jump: PositionJump) => void
   ): Promise<AudioPlayerListenerResult>
 
   /**

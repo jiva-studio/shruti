@@ -129,4 +129,94 @@ describe("createSqlOutboxRepository — push scoping", () => {
     expect(await outbox.latestId()).toBe(3)
     expect(await pendingFor(null, 3)).toEqual([])
   })
+
+  describe("reattribute (#1627)", () => {
+    it("re-opens the anonymous account's uploaded history for the new owner", async () => {
+      owner = "anon-1"
+      await journal("note-1")
+      await journal("note-2")
+      await outbox.markSent([1, 2])
+
+      const refs = await outbox.reattribute({
+        fromOwnerId: "anon-1",
+        toOwnerId: "user-b",
+        unownedAfterId: 0,
+      })
+
+      expect(refs).toEqual([
+        { collection: "notes", docId: "note-1" },
+        { collection: "notes", docId: "note-2" },
+      ])
+      expect(await pendingFor("user-b")).toEqual(["note-1", "note-2"])
+    })
+
+    it("stamps an empty base so the push cannot fast-forward the new account", async () => {
+      owner = "anon-1"
+      await journal("note-1")
+
+      await outbox.reattribute({ fromOwnerId: "anon-1", toOwnerId: "user-b", unownedAfterId: 0 })
+
+      const [row] = await outbox.listPending(200, { ownerId: "user-b" })
+      expect(row!.baseHlc).toBe("")
+    })
+
+    it("takes unstamped rows above the retired floor and leaves the rest", async () => {
+      owner = null
+      await journal("note-1")
+      await journal("note-2")
+
+      const refs = await outbox.reattribute({
+        fromOwnerId: "anon-1",
+        toOwnerId: "user-b",
+        unownedAfterId: 1,
+      })
+
+      expect(refs).toEqual([{ collection: "notes", docId: "note-2" }])
+      expect(await pendingFor("user-b", 1)).toEqual(["note-2"])
+    })
+
+    it("never moves another account's rows", async () => {
+      owner = "user-c"
+      await journal("note-1")
+      owner = "anon-1"
+      await journal("note-2")
+
+      await outbox.reattribute({ fromOwnerId: "anon-1", toOwnerId: "user-b", unownedAfterId: 0 })
+
+      expect(await pendingFor("user-c")).toEqual(["note-1"])
+      expect(await pendingFor("user-b")).toEqual(["note-2"])
+    })
+
+    it("is a no-op on a re-run and on an upgrade in place", async () => {
+      owner = "anon-1"
+      await journal("note-1")
+
+      await outbox.reattribute({ fromOwnerId: "anon-1", toOwnerId: "user-b", unownedAfterId: 0 })
+      await outbox.markSent([1])
+
+      expect(
+        await outbox.reattribute({ fromOwnerId: "anon-1", toOwnerId: "user-b", unownedAfterId: 0 })
+      ).toEqual([])
+      expect(
+        await outbox.reattribute({ fromOwnerId: "user-b", toOwnerId: "user-b", unownedAfterId: 0 })
+      ).toEqual([])
+      expect(await pendingFor("user-b")).toEqual([])
+    })
+
+    it("collapses the journal to one ref per document", async () => {
+      owner = "anon-1"
+      await journal("note-1")
+      await journal("note-1")
+
+      const refs = await outbox.reattribute({
+        fromOwnerId: "anon-1",
+        toOwnerId: "user-b",
+        unownedAfterId: 0,
+      })
+
+      expect(refs).toEqual([{ collection: "notes", docId: "note-1" }])
+      // Both versions still replay, in write order.
+      expect(await pendingFor("user-b")).toEqual(["note-1", "note-1"])
+    })
+  })
 })

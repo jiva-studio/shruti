@@ -87,6 +87,11 @@ Living checklist of app journeys to cover. Status legend:
 - 🔜 player-on-notes · highlight-sentence · track-info toggles
 - ✋ autoplay · automatic-scroll (Pro-gated; need a non-dev build to see paywall)
 - 🌐 chat answer language · translate citations · smart library
+- ✅ Clear cache keeps the content database — no re-download, app still searches
+  offline — `clear-cache`
+- ✅ Clear cache removes the downloaded audio it is meant to remove — `clear-cache`
+- ✋ Delete account drops the content database (`resetContentDatabase` is a
+  no-op on the web build the suite runs — #1663)
 
 ## Share / export
 - ✅ track share menu offers a PDF export (entry point) — `share-menu`

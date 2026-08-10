@@ -3,6 +3,7 @@ import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import {
   autoArchiveDelayMs,
+  isAutoArchiveActive,
   runAutoArchiveSweep,
   type AutoArchiveSweepDeps,
 } from "../useAutoArchiveSweep.js"
@@ -46,7 +47,6 @@ function deps(
     getTracks: async () => new Map(),
     getCompletedAt: async () => new Map(),
     archive: archiveSpy,
-    evict: async () => false,
     now: () => 0,
     ...overrides,
   }
@@ -63,6 +63,19 @@ describe("autoArchiveDelayMs", () => {
     expect(autoArchiveDelayMs("1d")).toBe(86_400_000)
     expect(autoArchiveDelayMs("2d")).toBe(2 * 86_400_000)
     expect(autoArchiveDelayMs("3d")).toBe(3 * 86_400_000)
+  })
+})
+
+describe("isAutoArchiveActive", () => {
+  it("is off whenever Smart Library itself is off, whatever the delay says", () => {
+    expect(isAutoArchiveActive("1d", 0)).toBe(false)
+    expect(isAutoArchiveActive("immediate", 0)).toBe(false)
+  })
+  it("is off when the delay is off, whatever the target says", () => {
+    expect(isAutoArchiveActive("off", 1800)).toBe(false)
+  })
+  it("is on only when both halves are set", () => {
+    expect(isAutoArchiveActive("1d", 1800)).toBe(true)
   })
 })
 
