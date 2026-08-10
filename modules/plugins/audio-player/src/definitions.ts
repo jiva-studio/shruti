@@ -159,6 +159,11 @@ export type QueueTransition = {
   // Native wall-clock when the transition happened (epoch ms). The
   // completion may be hours old by the time JS drains it.
   at: number
+  // Native wall-clock when listening on this item BEGAN (epoch ms) — the
+  // `fromPosition` counterpart, so `[fromAt, at]` is the run's real
+  // wall-clock span instead of one estimated from the audio span at 1×.
+  // Absent on entries an older build left in the durable journal.
+  fromAt?: number
   // Monotonic per-install sequence — drives the idempotent ack-based clear.
   seq: number
 }

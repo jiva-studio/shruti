@@ -286,6 +286,120 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     expect(await repo.getTotalListenedSeconds()).toBe(600)
   })
 
+  it("credits a lecture finished weeks ago and re-listened entirely in the background", async () => {
+    // The #1596 headline. Same shape as the case below, but the item is still
+    // an active first-page entry, so the playlist HAS hydrated its
+    // `completedAt` — and that map is DB-derived and durable, so an existence
+    // test drops this run entirely and records not one second of it.
+    const THREE_WEEKS_MS = 21 * 24 * 60 * 60 * 1000
+    await liveSession(2400)
+    completedAt.set("pi-1", 1_784_000_000_000)
+
+    const at = 1_784_000_000_000 + THREE_WEEKS_MS
+    vi.setSystemTime(at)
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({
+        seq: 1,
+        reason: "auto",
+        fromPositionMs: 0,
+        finishedAtMs: 2_400_000,
+        at,
+        fromAt: at - 2_400_000,
+      }),
+    ])
+
+    expect(await sessionCount()).toBe(2)
+    expect(await repo.getTotalListenedSeconds()).toBe(4800)
+    expect(patched).toEqual(["pi-1"])
+  })
+
+  it("still suppresses a foreground completion echoed by native's `auto` transition", async () => {
+    // What the filter exists for: the live tracker journaled the whole lecture
+    // in the foreground and set `completedAt`; native then reports the same
+    // listen as an `auto` transition. The completion sits INSIDE the run
+    // window, so it is still suppressed and the 40 minutes count once.
+    const at = 1_784_000_000_000
+    await liveSession(2400, at)
+    completedAt.set("pi-1", at)
+
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({
+        seq: 1,
+        reason: "auto",
+        fromPositionMs: 0,
+        finishedAtMs: 2_400_000,
+        at,
+        fromAt: at - 2_400_000,
+      }),
+    ])
+
+    // Filtered out entirely — one row, one listen, no re-patch.
+    expect(await sessionCount()).toBe(1)
+    expect(await repo.getTotalListenedSeconds()).toBe(2400)
+    expect(patched).toEqual([])
+  })
+
+  it("falls back to the estimated window for a journal entry with no `fromAt`", async () => {
+    // Upgrade mid-queue: entries an older build wrote carry no start stamp and
+    // must keep working. A weeks-later background re-listen of a completed
+    // lecture is still credited, on the estimate alone.
+    const THREE_WEEKS_MS = 21 * 24 * 60 * 60 * 1000
+    await liveSession(2400)
+    completedAt.set("pi-1", 1_784_000_000_000)
+
+    const at = 1_784_000_000_000 + THREE_WEEKS_MS
+    vi.setSystemTime(at)
+    await usePlayerQueueReconcile().reconcileAndAck([
+      // No `fromAt` — exactly what a pre-#1656 journal replays.
+      transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000, at }),
+    ])
+
+    expect(await sessionCount()).toBe(2)
+    expect(await repo.getTotalListenedSeconds()).toBe(4800)
+  })
+
+  it("suppresses an old-format foreground echo on the estimated window", async () => {
+    // The fallback's other half: with no stamp the window is estimated from
+    // the audio span, and a foreground completion of that same run still lands
+    // inside it — so an upgrading user does not double-count either.
+    const at = 1_784_000_000_000
+    await liveSession(2400, at)
+    completedAt.set("pi-1", at)
+
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000, at }),
+    ])
+
+    expect(await sessionCount()).toBe(1)
+    expect(await repo.getTotalListenedSeconds()).toBe(2400)
+  })
+
+  it("uses the stamped start, not the audio span, to bound the window", async () => {
+    // A run paused for half an hour mid-lecture: 40 min of audio spread over
+    // 70 min of wall-clock. The estimate reaches back only 40 min from the end
+    // and misses the live row, double-counting its prefix; the stamp covers
+    // the real span and clamps correctly.
+    const startedAt = 1_784_000_000_000
+    const endedAt = startedAt + 70 * 60 * 1000
+    await liveSession(600, startedAt)
+
+    vi.setSystemTime(endedAt)
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({
+        seq: 1,
+        reason: "auto",
+        fromPositionMs: 0,
+        finishedAtMs: 2_400_000,
+        at: endedAt,
+        fromAt: startedAt,
+      }),
+    ])
+
+    expect(await sessionCount()).toBe(2)
+    // 600 s live + 1800 s background, not 600 + 2400.
+    expect(await repo.getTotalListenedSeconds()).toBe(2400)
+  })
+
   it("credits in full a lecture re-listened entirely in the background weeks later", async () => {
     // Heard end to end three weeks ago — the item's all-time mark is the whole
     // 40 minutes. Clamping on position would put this run's `from` at 2400 and
