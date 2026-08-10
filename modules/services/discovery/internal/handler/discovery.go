@@ -274,17 +274,6 @@ func intParam(r *http.Request, name string, def int) int {
 	return def
 }
 
-func dateParam(s string) *time.Time {
-	if s == "" {
-		return nil
-	}
-	d, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return nil
-	}
-	return &d
-}
-
 func authorsHandler(repo *store.Repo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authors, err := repo.Authors(r.Context(), r.URL.Query().Get("source"), intParam(r, "limit", 100))

@@ -222,6 +222,7 @@ export default {
 
   noteSaved: "Nota guardada",
   noteSaving: "Guardando nota…",
+  actionNoteError: "No se pudo guardar la nota.",
 
   actionPdfKind: "Transcripción de la clase",
   actionPdfShare: "Compartir",

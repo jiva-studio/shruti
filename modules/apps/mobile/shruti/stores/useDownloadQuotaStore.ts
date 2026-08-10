@@ -66,9 +66,16 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
     return typeof filesize === "number" && filesize > 0 ? filesize : ESTIMATED_AUDIO_BYTES
   }
 
-  function hasRoomFor(bytes: number): boolean {
+  /**
+   * `exceptTrackId` discounts that track's own reservation. A caller that
+   * reserves up front (the prefetch drain) would otherwise be billed twice
+   * when the download path re-checks the budget for the same track, making
+   * the effective test `used + 2·size <= limit`.
+   */
+  function hasRoomFor(bytes: number, exceptTrackId?: TrackId): boolean {
     if (unlimited.value) return true
-    return committedBytes.value + bytes <= limitBytes.value
+    const own = exceptTrackId === undefined ? 0 : (reservations.value.get(exceptTrackId) ?? 0)
+    return committedBytes.value - own + bytes <= limitBytes.value
   }
 
   /**
