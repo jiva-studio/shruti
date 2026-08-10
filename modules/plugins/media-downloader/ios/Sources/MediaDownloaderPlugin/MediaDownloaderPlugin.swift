@@ -40,10 +40,30 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
         DownloadDelegate(plugin: self, metadataStore: metadataStore)
     }()
 
+    /// How long a request may go without delivering data before it fails.
+    /// Matches the JS candidate loop's ceiling: it hedges CDN regions ~5 s
+    /// apart and gives the whole connection phase ~15 s, so a task that has
+    /// said nothing by then is one the loop has already given up on.
+    private static let requestTimeout: TimeInterval = 15
+
+    /// Ceiling for a whole transfer. Lecture audio runs to ~150 MB and a
+    /// background session may legitimately be stretched over a slow link, so
+    /// this is a backstop against a task that never ends, not a performance
+    /// bound.
+    private static let resourceTimeout: TimeInterval = 60 * 60
+
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.background(withIdentifier: Self.backgroundIdentifier)
         config.sessionSendsLaunchEvents = true
         config.isDiscretionary = false
+        // Without these the session ran on URLSession's defaults and the
+        // plugin set no ceiling of its own. A stalled transfer did still
+        // surface — `URLRequest(url:)` carries a 60 s default and reports
+        // `NSURLErrorTimedOut` through `didCompleteWithError` — but nothing
+        // in our code chose that bound, and there was no watchdog behind it.
+        // Now both platforms fail on the same policy.
+        config.timeoutIntervalForRequest = Self.requestTimeout
+        config.timeoutIntervalForResource = Self.resourceTimeout
         return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
     }()
 
@@ -115,6 +135,9 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func startNewDownload(call: CAPPluginCall, id: String, url: URL, localPath: String) {
         var request = URLRequest(url: url)
+        // Explicit rather than inheriting `URLRequest`'s 60 s default, which
+        // outlives the JS candidate loop's whole ceiling.
+        request.timeoutInterval = Self.requestTimeout
         if let headers = call.getObject("headers") as? [String: String] {
             for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
         }

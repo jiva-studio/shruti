@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest"
-import { downloadMedia } from "../downloadMedia.js"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { downloadMedia, HEDGE_CEILING_MS, HEDGE_INTERVAL_MS } from "../downloadMedia.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
@@ -61,11 +61,56 @@ function claimAs(id: string) {
     }))
 }
 
-/** What the adapter throws when the native transfer was cancelled. */
-function cancellation(): Error {
-  const e = new Error("Download cancelled")
+/**
+ * What the adapter throws when a transfer was cancelled. `reason` is the
+ * whole point: "user" ends the download, "superseded" is a losing candidate
+ * being dropped and must stay invisible.
+ */
+function cancellation(reason: "user" | "superseded" = "user"): Error {
+  const e = new Error("Download cancelled") as Error & { reason: string }
   e.name = "DownloadCancelledError"
+  e.reason = reason
   return e
+}
+
+/**
+ * A transfer that answers only when the test says so. `deliver` reports a
+ * byte (which is what wins the race) and resolves; `fail` rejects. An
+ * untouched one stays silent forever — a dead region.
+ */
+function controllable() {
+  const attempts: {
+    url: string
+    signal?: AbortSignal
+    /** Report bytes without finishing — this is what wins the race. */
+    report: (received: number, total: number) => void
+    deliver: (localUrl?: string) => void
+    fail: (e: unknown) => void
+  }[] = []
+  const transfer = vi.fn(
+    (
+      url: string,
+      onProgress?: (received: number, total: number) => void,
+      signal?: AbortSignal
+    ): Promise<string> =>
+      new Promise<string>((resolve, reject) => {
+        const attempt = {
+          url,
+          signal,
+          report: (received: number, total: number) => onProgress?.(received, total),
+          deliver: (localUrl = `blob:${url}`) => {
+            onProgress?.(50, 100)
+            resolve(localUrl)
+          },
+          fail: reject,
+        }
+        attempts.push(attempt)
+        // The adapter turns an abort into a superseded cancellation; the
+        // fake has to do the same or the loop under test never sees one.
+        signal?.addEventListener("abort", () => reject(cancellation("superseded")), { once: true })
+      })
+  )
+  return { transfer, attempts }
 }
 
 const existingItem = (state: MediaItemState, localPath: string | null = null): MediaItem => ({
@@ -100,7 +145,11 @@ describe("downloadMedia", () => {
       expect(result.value.server).toEqual(SERVER_A)
     }
     expect(transfer).toHaveBeenCalledTimes(1)
-    expect(transfer).toHaveBeenCalledWith(`https://a.example.com/${PATH}`, expect.any(Function))
+    expect(transfer).toHaveBeenCalledWith(
+      `https://a.example.com/${PATH}`,
+      expect.any(Function),
+      expect.any(AbortSignal)
+    )
     expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null, "original")
     expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/1", "original")
   })
@@ -132,12 +181,14 @@ describe("downloadMedia", () => {
     expect(transfer).toHaveBeenNthCalledWith(
       1,
       `https://a.example.com/${PATH}`,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     )
     expect(transfer).toHaveBeenNthCalledWith(
       2,
       `https://b.example.com/${PATH}`,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     )
     // Crucially we did NOT mark the row "failed" between attempts —
     // the second candidate succeeded, so the user never sees a flash
@@ -172,12 +223,14 @@ describe("downloadMedia", () => {
     expect(transfer).toHaveBeenNthCalledWith(
       1,
       `https://a.example.com/${PATH}`,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     )
     expect(transfer).toHaveBeenNthCalledWith(
       2,
       `https://b.example.com/${PATH}`,
-      expect.any(Function)
+      expect.any(Function),
+      expect.any(AbortSignal)
     )
     expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "failed", null, "original")
   })
@@ -422,5 +475,180 @@ describe("downloadMedia", () => {
     expect(onProgress).toHaveBeenCalledWith(50)
     expect(onProgress).toHaveBeenCalledWith(0)
     expect(onProgress).toHaveBeenLastCalledWith(100)
+  })
+})
+
+const SERVER_C: CdnServer = {
+  id: "server-c",
+  name: "Server C",
+  urlTemplate: "https://c.example.com/{path}",
+  shareAudioUrl: "https://c.example.com/excerpts",
+  shareVideoUrl: "https://c.example.com/reels",
+  authBaseUrl: "https://c.example.com/auth",
+  chatBaseUrl: "https://c.example.com",
+}
+
+describe("downloadMedia — hedged candidates", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("starts the next candidate alongside a silent one instead of waiting it out", async () => {
+    vi.useFakeTimers()
+    const { transfer, attempts } = controllable()
+    const pending = downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer }
+    )
+    await vi.waitFor(() => expect(attempts).toHaveLength(1))
+
+    // A is connected but silent. It is NOT cancelled — slow to answer is not
+    // dead — and B joins it.
+    await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS)
+    expect(attempts).toHaveLength(2)
+    expect(attempts[0]!.signal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS)
+    expect(attempts).toHaveLength(3)
+
+    attempts[1]!.deliver("blob:from-b")
+    const result = await pending
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.server).toEqual(SERVER_B)
+  })
+
+  it("cancels every other candidate the moment one delivers bytes", async () => {
+    vi.useFakeTimers()
+    const { transfer, attempts } = controllable()
+    const pending = downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer }
+    )
+    await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS * 2)
+    expect(attempts).toHaveLength(3)
+
+    attempts[2]!.deliver("blob:from-c")
+    await pending
+
+    // Both losers are aborted — the whole point is that they stop before
+    // writing a byte, since all three share one destination on disk.
+    expect(attempts[0]!.signal?.aborted).toBe(true)
+    expect(attempts[1]!.signal?.aborted).toBe(true)
+    expect(attempts[2]!.signal?.aborted).toBe(false)
+    // And no further candidate is dragged in behind the winner.
+    await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS * 3)
+    expect(transfer).toHaveBeenCalledTimes(3)
+  })
+
+  it("a dropped loser surfaces nothing and does not advance the walk", async () => {
+    vi.useFakeTimers()
+    const { transfer, attempts } = controllable()
+    const upsert = claimAs("mi-1")
+    const pending = downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
+      { mediaItems: makeRepo({ upsert }), unitOfWork: noopUnitOfWork, transfer }
+    )
+    await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS)
+    expect(attempts).toHaveLength(2)
+
+    attempts[0]!.deliver("blob:from-a")
+    // B now rejects as a superseded loser. That must not read as a failure
+    // (no "failed" row, no toast) and must not pull C in.
+    await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS * 3)
+
+    const result = await pending
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.server).toEqual(SERVER_A)
+    expect(transfer).toHaveBeenCalledTimes(2)
+    expect(upsert).not.toHaveBeenCalledWith("t-1", "failed", null, "original")
+  })
+
+  it("a user cancel stops the loop instead of advancing to the next region", async () => {
+    vi.useFakeTimers()
+    const { transfer, attempts } = controllable()
+    const deleteById = vi.fn<IMediaItemRepository["deleteById"]>()
+    const getByTrack = vi
+      .fn<IMediaItemRepository["getByTrack"]>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(existingItem("downloading"))
+    const pending = downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
+      {
+        mediaItems: makeRepo({ getByTrack, deleteById, upsert: claimAs("mi-1") }),
+        unitOfWork: noopUnitOfWork,
+        transfer,
+      }
+    )
+    await vi.advanceTimersByTimeAsync(HEDGE_INTERVAL_MS)
+    expect(attempts).toHaveLength(2)
+
+    // The user removed the track: the downloader aborts every live attempt
+    // and tags them "user".
+    attempts[0]!.fail(cancellation("user"))
+    attempts[1]!.fail(cancellation("user"))
+    await vi.advanceTimersByTimeAsync(HEDGE_CEILING_MS)
+
+    const result = await pending
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("cancelled")
+    // C was never started — trying it would fetch the very bytes the cancel
+    // was meant to save.
+    expect(transfer).toHaveBeenCalledTimes(2)
+    expect(deleteById).toHaveBeenCalledWith("mi-1")
+  })
+
+  it("fails once when nothing has delivered by the ceiling", async () => {
+    vi.useFakeTimers()
+    const { transfer, attempts } = controllable()
+    const upsert = claimAs("mi-1")
+    const pending = downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
+      { mediaItems: makeRepo({ upsert }), unitOfWork: noopUnitOfWork, transfer }
+    )
+    await vi.advanceTimersByTimeAsync(HEDGE_CEILING_MS)
+
+    const result = await pending
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("transfer-failed")
+    // Every candidate got to try, all three are dropped, and the row is
+    // marked failed exactly once — one message for the user, not one per
+    // region.
+    expect(attempts).toHaveLength(3)
+    for (const attempt of attempts) expect(attempt.signal?.aborted).toBe(true)
+    const failedWrites = upsert.mock.calls.filter(([, state]) => state === "failed")
+    expect(failedWrites).toHaveLength(1)
+  })
+
+  it("bounds the whole wait by one ceiling, not one per region", async () => {
+    vi.useFakeTimers()
+    const started = Date.now()
+    const { transfer } = controllable()
+    const pending = downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B, SERVER_C] },
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer }
+    )
+    await vi.advanceTimersByTimeAsync(HEDGE_CEILING_MS)
+    await pending
+    expect(Date.now() - started).toBeLessThanOrEqual(HEDGE_CEILING_MS)
+  })
+
+  it("re-opens the race when the winner dies mid-body", async () => {
+    vi.useFakeTimers()
+    const { transfer, attempts } = controllable()
+    const pending = downloadMedia(
+      { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
+      { mediaItems: makeRepo(), unitOfWork: noopUnitOfWork, transfer }
+    )
+    await vi.waitFor(() => expect(attempts).toHaveLength(1))
+
+    // A wins on first byte, then the connection drops — the in-flight CDN
+    // failure the fallback exists for.
+    attempts[0]!.report(10, 100)
+    attempts[0]!.fail(new Error("connection reset"))
+    await vi.waitFor(() => expect(attempts).toHaveLength(2))
+    attempts[1]!.deliver("blob:from-b")
+
+    const result = await pending
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.server).toEqual(SERVER_B)
   })
 })
