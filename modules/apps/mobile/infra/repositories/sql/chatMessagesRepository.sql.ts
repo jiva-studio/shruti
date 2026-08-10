@@ -64,12 +64,13 @@ export function createSqlChatMessageRepository(
    *
    * Goes through the injected unit of work rather than reaching for
    * `runInTransaction` itself, so the transaction boundary is the composition
-   * root's to choose. It must be given an ISOLATING one (`createSqlUnitOfWork`
-   * — what `createSqlAppRepositories` wires) and NOT the shared reentrant
-   * instance: that one's depth counter is not bound to the execution context,
-   * so while any unrelated top-level `run` is in flight this write would be
-   * misread as nested, spliced into that foreign transaction and lost with it
-   * on rollback. See the wiring note in `index.ts` and #1493.
+   * root's to choose. `createSqlAppRepositories` wires an ISOLATING one
+   * (`createSqlUnitOfWork`) — #1531's workaround for the reentrant instance's
+   * unbound depth counter, which used to misread this write as nested while
+   * any unrelated top-level `run` was in flight and lose it on that
+   * transaction's rollback. Since #1493 the join is decided by an explicit
+   * transaction handle, which this repository never passes, so either instance
+   * is now correct here. See the wiring note in `index.ts`.
    */
   async function rewriteMeta(id: ChatMessageId, patch: Partial<ParsedMeta>): Promise<void> {
     await unitOfWork.run(async () => {
