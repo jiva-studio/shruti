@@ -26,6 +26,7 @@ export default {
     empty: "Probajte druge reči ili uklonite neki filter.",
     mine: "Lična biblioteka",
     failed: "Pretraga biblioteke trenutno nije uspela. Pokušajte ponovo.",
+    retry: "Pokušajte ponovo",
   },
   smartLibrary: {
     title: "Pametna biblioteka",
