@@ -9,4 +9,5 @@ export default {
   noAudioForLecture: "This lecture has no audio.",
   downloadStorageFull:
     "Storage limit reached. Remove listened lectures or raise the limit in Settings.",
+  downloadStorageFullAction: "Download anyway",
 }

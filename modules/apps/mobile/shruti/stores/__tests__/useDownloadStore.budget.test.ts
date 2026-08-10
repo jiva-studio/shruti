@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(),
   resolveLocalUrl: vi.fn(),
   downloadMedia: vi.fn(),
+  toastError: vi.fn(),
+  toastAction: vi.fn(),
   // Replaced with a real Vue ref by the useConfig mock factory (which can
   // import "vue"; a hoisted block runs before any import).
   limitBytes: { value: 0 } as { value: number },
@@ -51,7 +53,7 @@ vi.mock("vue-i18n", () => ({
 }))
 
 vi.mock("@kit/composables", () => ({
-  useToast: () => ({ error: vi.fn(async () => {}) }),
+  useToast: () => ({ error: mocks.toastError, action: mocks.toastAction }),
 }))
 
 vi.mock("@usecases/downloads/downloadMedia.js", () => ({ downloadMedia: mocks.downloadMedia }))
@@ -99,6 +101,9 @@ describe("useDownloadStore prefetch budget gate", () => {
     vi.clearAllMocks()
     mocks.resolveLocalUrl.mockResolvedValue(null)
     mocks.upsert.mockResolvedValue(undefined)
+    mocks.toastError.mockResolvedValue(undefined)
+    // Nobody presses "Download anyway" unless a test says so.
+    mocks.toastAction.mockResolvedValue({ kind: "expired" })
     mocks.downloadMedia.mockImplementation(async () => ({
       ok: true,
       value: { server: mocks.SERVER, mediaItem: { localPath: "file://local" } },
@@ -163,5 +168,52 @@ describe("useDownloadStore prefetch budget gate", () => {
     await settleQueue()
 
     expect(useDownloadQuotaStore().reservedBytes).toBe(0)
+  })
+
+  /* ----------------------------- issue #1487 ---------------------------- */
+
+  it("lets a pressed “Download anyway” overshoot the limit — once", async () => {
+    mocks.limitBytes.value = 100 * MB
+    seedUsed(90 * MB)
+    mocks.toastAction.mockResolvedValue({ kind: "pressed", index: 0 })
+
+    const store = useDownloadStore()
+    await store.ensureDownloaded("t1" as TrackId, "public/t1.mp3", 40 * MB)
+    await settleQueue()
+
+    const quota = useDownloadQuotaStore()
+    expect(mocks.downloadMedia).toHaveBeenCalledTimes(1)
+    expect(store.getState("t1" as TrackId)).toBe("completed")
+    expect(quota.usedBytes).toBe(130 * MB)
+    // The exception is spent on those bytes and nothing else: the configured
+    // limit is exactly what the user left in Settings, and the next track is
+    // measured against it — now with the overshoot counted in.
+    expect(mocks.limitBytes.value).toBe(100 * MB)
+    expect(quota.limitBytes).toBe(100 * MB)
+    expect(quota.hasRoomFor(1 * MB)).toBe(false)
+
+    mocks.toastAction.mockResolvedValue({ kind: "expired" })
+    store.prefetch("t2" as TrackId, "public/t2.mp3", 1 * MB)
+    await settleQueue()
+
+    expect(mocks.downloadMedia).toHaveBeenCalledTimes(1)
+    expect(store.getState("t2" as TrackId)).toBe("deferred")
+  })
+
+  it("keeps a draining queue to a single notice now the cooldown is gone", async () => {
+    // What replaced the 60s suppression is "one notice on screen at a time",
+    // so a queue that hits the wall twice in a row still says it once.
+    mocks.limitBytes.value = 100 * MB
+    seedUsed(90 * MB)
+
+    const store = useDownloadStore()
+    for (const id of ["t1", "t2"]) store.prefetch(id as TrackId, `public/${id}.mp3`, 40 * MB)
+    await settleQueue()
+    for (const id of ["t3", "t4"]) store.prefetch(id as TrackId, `public/${id}.mp3`, 40 * MB)
+    await settleQueue()
+
+    expect(mocks.downloadMedia).not.toHaveBeenCalled()
+    expect(mocks.toastError).toHaveBeenCalledTimes(1)
+    expect(mocks.toastAction).not.toHaveBeenCalled()
   })
 })
