@@ -70,6 +70,13 @@ export interface AudioQueueTransition {
   reason: "auto" | "skip-next" | "skip-prev" | "error"
   /** Native wall-clock of the transition (epoch ms). */
   at: number
+  /**
+   * Native wall-clock when listening on this item began (epoch ms) — the
+   * `fromPositionMs` counterpart, making `[fromAt, at]` the run's exact span.
+   * Undefined for an entry an older build left in the durable journal, which
+   * the caller then has to estimate.
+   */
+  fromAt?: number
   /** Monotonic sequence; pass back to `ackEvents` to clear. */
   seq: number
 }
