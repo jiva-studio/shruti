@@ -1,6 +1,6 @@
 # Domain ports
 
-Ports are TypeScript interfaces that the domain depends on but does not implement. Use cases consume them; concrete adapters under `modules/apps/mobile/infra/repositories/` provide them; the composition root in [`shruti.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/shruti/shruti.ts) wires the two together. There are **16 domain ports** under [`modules/libs/domain/ports/`](https://github.com/jiva-studio/shruti/tree/main/modules/libs/domain/ports) — 15 repositories plus `IUnitOfWork`. The barrel [`ports/index.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/index.ts) re-exports most of them; `ITopicRepository` is imported directly from its module by the discovery use cases. A separate set of **technical ports** (see the layer doc) covers non-domain concerns like the audio player or the file system.
+Ports are TypeScript interfaces that the domain depends on but does not implement. Use cases consume them; concrete adapters under `modules/apps/mobile/infra/repositories/` provide them; the composition root in [`shruti.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/shruti/shruti.ts) wires the two together. There are **24 domain ports** under [`modules/libs/domain/ports/`](https://github.com/jiva-studio/shruti/tree/main/modules/libs/domain/ports) — 23 repositories plus `IUnitOfWork`. The barrel [`ports/index.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/index.ts) re-exports most of them; `ITopicRepository`, `ISettingsRepository` and `IDailyWisdomRepository` are imported directly from their modules (by the discovery use cases and the onboarding loader). A separate set of **technical ports** (see the layer doc) covers non-domain concerns like the audio player or the file system.
 
 > Note: Shruti has **no REST/GraphQL/tRPC API** — it is a client-only app. These repository ports *are* the API surface from the perspective of use cases.
 
@@ -16,33 +16,49 @@ graph LR
         ILA[ILanguageRepository]
         ITG[ITagRepository]
         ITP[ITopicRepository]
+        ISE[ISettingsRepository]
+        IDW[IDailyWisdomRepository]
         ITRX[ITranscriptRepository]
         INO[INoteRepository]
         IPI[IPlaylistItemRepository]
         IMI[IMediaItemRepository]
         ILS[IListeningSessionRepository]
+        ILI[ILibraryItemRepository]
+        ILM[ILibraryMembershipRepository]
         ICS[IChatSessionRepository]
         ICM[IChatMessageRepository]
         IPS[IProactiveStateRepository]
+        IOB[IOutboxRepository]
+        ISS[ISyncStateRepository]
+        ISA[ISyncApplyRepository]
+        ISB[ISyncBackfillRepository]
         IUOW[IUnitOfWork]
     end
 
     subgraph SQL["infra/repositories/sql<br/>(SQLite content + user DB)"]
-        SQLT[tracksRepository.sql.ts]
+        SQLT["tracksRepository.sql.ts<br/>(via compositeTrackRepository.ts)"]
         SQLA[authorsRepository.sql.ts]
         SQLL[locationsRepository.sql.ts]
         SQLS[sourcesRepository.sql.ts]
         SQLLA[languagesRepository.sql.ts]
         SQLTG[tagsRepository.sql.ts]
         SQLTP[topicsRepository.sql.ts]
+        SQLSE[settingsRepository.sql.ts]
+        SQLDW[dailyWisdomRepository.sql.ts]
         SQLN[notesRepository.sql.ts]
         SQLP[playlistItemsRepository.sql.ts]
         SQLM[mediaItemsRepository.sql.ts]
         SQLLS[listeningSessionsRepository.sql.ts]
+        SQLLI[libraryItemsRepository.sql.ts]
+        SQLLM[libraryMembershipsRepository.sql.ts]
         SQLCS[chatSessionsRepository.sql.ts]
         SQLCM[chatMessagesRepository.sql.ts]
         SQLPS[proactiveStateRepository.sql.ts]
-        SQLUW[unitOfWork.sql.ts]
+        SQLOB[outboxRepository.sql.ts]
+        SQLSS[syncStateRepository.sql.ts]
+        SQLSA[syncApplyRepository.sql.ts]
+        SQLSB[syncBackfillRepository.sql.ts]
+        SQLUW[reentrantUnitOfWork.sql.ts]
     end
 
     subgraph HTTP["infra/repositories/http<br/>(S3 / CDN)"]
@@ -56,25 +72,35 @@ graph LR
     SQLLA -.implements.-> ILA
     SQLTG -.implements.-> ITG
     SQLTP -.implements.-> ITP
+    SQLSE -.implements.-> ISE
+    SQLDW -.implements.-> IDW
     SQLN -.implements.-> INO
     SQLP -.implements.-> IPI
     SQLM -.implements.-> IMI
     SQLLS -.implements.-> ILS
+    SQLLI -.implements.-> ILI
+    SQLLM -.implements.-> ILM
     SQLCS -.implements.-> ICS
     SQLCM -.implements.-> ICM
     SQLPS -.implements.-> IPS
+    SQLOB -.implements.-> IOB
+    SQLSS -.implements.-> ISS
+    SQLSA -.implements.-> ISA
+    SQLSB -.implements.-> ISB
     SQLUW -.implements.-> IUOW
     TRH -.implements.-> ITRX
 
     classDef port fill:#cba6f7,stroke:#6c7086,color:#1e1e2e;
     classDef sqlimpl fill:#a6e3a1,stroke:#6c7086,color:#1e1e2e;
     classDef httpimpl fill:#89dceb,stroke:#6c7086,color:#1e1e2e;
-    class ITR,IAR,ILR,ISR,ILA,ITG,ITP,ITRX,INO,IPI,IMI,ILS,ICS,ICM,IPS,IUOW port;
-    class SQLT,SQLA,SQLL,SQLS,SQLLA,SQLTG,SQLTP,SQLN,SQLP,SQLM,SQLLS,SQLCS,SQLCM,SQLPS,SQLUW sqlimpl;
+    class ITR,IAR,ILR,ISR,ILA,ITG,ITP,ISE,IDW,ITRX,INO,IPI,IMI,ILS,ILI,ILM,ICS,ICM,IPS,IOB,ISS,ISA,ISB,IUOW port;
+    class SQLT,SQLA,SQLL,SQLS,SQLLA,SQLTG,SQLTP,SQLSE,SQLDW,SQLN,SQLP,SQLM,SQLLS,SQLLI,SQLLM,SQLCS,SQLCM,SQLPS,SQLOB,SQLSS,SQLSA,SQLSB,SQLUW sqlimpl;
     class TRH httpimpl;
 ```
 
 `ITranscriptRepository` is the one port backed by HTTP (transcripts are JSON files on the CDN), not SQL. Every other port targets the on-device SQLite layer.
+
+Two wirings in [`repositories/sql/index.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/index.ts) are not one-to-one and worth knowing before reading the catalog below. `ITrackRepository` is served by [`compositeTrackRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/compositeTrackRepository.ts), which resolves a track by id from the corpus **or** the personal library, so callers never learn which source answered. And the synced user repositories (`notes`, `playlistItems`, `listeningSessions`, `chatSessions`, `chatMessages`, `libraryMemberships`) are wrapped by `withSyncJournaling` when a device id is available, so every mutation lands in the `outbox` inside the caller's transaction — which is why the sync lane writes rows through `ISyncApplyRepository` instead of the domain repositories.
 
 ---
 
@@ -158,6 +184,32 @@ interface ITopicRepository {
 ```
 
 Backs the recommender / discovery surfaces. `weightsForTracks` feeds the on-device taste profile (each row is one `(track, topic)` membership weight). `topTrackIds` returns the highest-weighted tracks carrying a topic (the topic shelf / topic page), `topicIdsWithTracksIn` drops topics with no lectures in the user's library languages from discovery, and `similarTrackIds` scores neighbours by summed weight over shared topics for "more like this". Every method takes a `languages` filter (empty = no language filter). Imported directly from its module by the discovery use cases (`buildRecommendations`, `listSimilarTracksByTopic`), not via the `ports/index.ts` barrel.
+
+### `ISettingsRepository`
+
+Source: [`settingsRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/settingsRepository.ts) · Implementation: [`settingsRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/settingsRepository.sql.ts)
+
+```ts
+interface ISettingsRepository {
+  get(key: string): Promise<string | null>
+}
+```
+
+A general-purpose key/value read over the content DB's `settings` table. Values are opaque strings (usually JSON) authored on the MCP side via the config registry and shipped inside `current.db` — the caller owns the meaning of each key. The adapter swallows a missing-table error and returns `null`, so a device still running an older bundled DB degrades to "unset" instead of crashing. The onboarding topic loader reads its curated topic list through this port. Imported directly from its module, not via the barrel.
+
+### `IDailyWisdomRepository`
+
+Source: [`dailyWisdomRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/dailyWisdomRepository.ts) · Implementation: [`dailyWisdomRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/dailyWisdomRepository.sql.ts)
+
+```ts
+interface IDailyWisdomRepository {
+  byId(id: string): Promise<DailyWisdom | null>
+  /** Omit `language` for any language. */
+  list(language?: LanguageCode): Promise<readonly DailyWisdom[]>
+}
+```
+
+Read-only access to the catalog's `daily_wisdom` corpus — short lecture excerpts tied to a topic, authored on the MCP side and shipped in `current.db`. A `DailyWisdom` carries its `trackId`, `topicId`, `language`, the `startMs` / `endMs` fragment bounds and the excerpt `text`, which is exactly what the daily-wisdom proactive rule needs to post a playable cite into chat. Like `ISettingsRepository`, `list` returns an empty array (rather than throwing) when the table predates this feature on an older bundled DB. Imported directly from its module, not via the barrel.
 
 ### `ITranscriptRepository`
 
@@ -294,6 +346,47 @@ interface IMediaItemRepository {
 
 A media row is keyed by `(track, kind)`, where `kind: MediaAudioKind` is `"original"` or `"clean"` (the denoised version) — a track can cache both versions independently. `failStaleDownloads()` runs on app startup so a force-close mid-download doesn't leave a row stuck in `"downloading"` and lock further retries.
 
+### `ILibraryItemRepository`
+
+Source: [`libraryItemRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/libraryItemRepository.ts) · Implementation: [`libraryItemsRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/libraryItemsRepository.sql.ts)
+
+```ts
+interface ILibraryItemRepository {
+  getById(id: string): Promise<LibraryItem | null>
+  /** Resolve the membership row for a content hash, or null. */
+  getByTrackId(trackId: TrackId): Promise<LibraryItem | null>
+  /** All items, newest-first — the "My library" shelf/list source. */
+  listAll(): Promise<readonly LibraryItem[]>
+  /** Synthetic Track for a user-added lecture, or null when it has no
+   *  content hash yet. */
+  getTrackByTrackId(trackId: TrackId): Promise<Track | null>
+}
+```
+
+The personal library — lectures the user added that are not in the shared corpus (see [Personal library](../architecture/personal-library.md)). The `library_items` collection is **server-owned and pull-only**: the `profile` service authors it, the sync engine applies its version, and the client never writes it, which is why this port has no `add` / `remove`. `getTrackByTrackId` is the seam that makes the rest of the app source-agnostic: it adapts a `LibraryItem` into a synthetic `Track` (via `libraryItemToTrack`) whose variant paths are full bucket keys, so the storage-URL resolver, the download store and the HTTP transcript repository consume a user-added lecture unchanged. It returns `null` until the ingest computes a content hash — nothing is playable before then. `compositeTrackRepository` wires this port behind `ITrackRepository`.
+
+### `ILibraryMembershipRepository`
+
+Source: [`libraryMembershipRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/libraryMembershipRepository.ts) · Implementation: [`libraryMembershipsRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/libraryMembershipsRepository.sql.ts)
+
+```ts
+interface LibraryMembership {
+  readonly id: string                  // = library_items.id (the sync doc_id)
+  readonly archivedAt: number | null   // unix ms when removed; null = active
+}
+
+interface ILibraryMembershipRepository {
+  /** Ids the user has REMOVED — drives the "hide removed" join. */
+  listArchivedIds(): Promise<ReadonlySet<string>>
+  getById(id: string): Promise<LibraryMembership | null>
+  setArchived(id: string): Promise<void>   // remove: archived_at = now
+  setActive(id: string): Promise<void>     // re-add: archived_at = NULL
+  clearAll(): Promise<void>
+}
+```
+
+The client-owned companion to the server-owned `library_items`: the user's remove/re-add intent, synced last-write-wins. A row exists only once the user has acted on an item, so **absence means active** — the store joins `listArchivedIds()` against `listAll()` to hide removed items rather than deleting anything. The client only ever upserts (`setArchived` / `setActive`), never deletes, which keeps the LWW merge total. Being client-owned, it is one of the repositories wrapped by `withSyncJournaling`.
+
 ---
 
 ## Chat ports (read-write user DB)
@@ -375,11 +468,91 @@ This is the scheduler's bookkeeping port for agent-initiated (proactive) chat me
 
 ---
 
+## Sync ports (profile sync, read-write user DB)
+
+These four back the device↔server profile-sync engine — see [Profile sync](../architecture/profile-sync.md) for the wire contract and the server side. They are built only when a stable device id is available — the same gate that enables outbox journaling — so they are optional on the repository bundle (`syncOutbox?`, `syncState?`, `syncApply?`, `syncBackfill?`) and absent on web. All of them join the caller's reentrant unit-of-work and never open a transaction of their own, so a pull-merge batch or an outbox drain is one atomic write.
+
+### `IOutboxRepository`
+
+Source: [`outboxRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/outboxRepository.ts) · Implementation: [`outboxRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/outboxRepository.sql.ts)
+
+```ts
+interface IOutboxRepository {
+  /** Pending (sent = 0) changes in insertion order, oldest first. */
+  listPending(limit?: number): Promise<readonly OutboxEntry[]>
+  markSent(ids: readonly number[]): Promise<void>          // idempotent
+  append(entry: NewOutboxEntry): Promise<void>             // re-journal a re-merge
+  /** Highest HLC ever journaled, or null when the outbox is empty. */
+  latestHlc(): Promise<string | null>
+}
+```
+
+The push side of the engine, over the local `outbox` journal (migration 013). An `OutboxEntry` carries the autoincrement `id` (which doubles as the local push cursor), the `collection` (= the source `user.db` table name), the natural `docId`, the `op` (`"upsert"` / `"delete"`), the deserialized wire-row `data` (`null` on a tombstone), the `hlc` stamped on the change, and the `baseHlc` it derived from. `append` exists for one case: when a conflict is re-merged, the engine re-journals the merged document with a fresh HLC based on the server's `master.hlc`, and `latestHlc()` seeds that stamp so it stays monotonic.
+
+### `ISyncStateRepository`
+
+Source: [`syncStateRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/syncStateRepository.ts) · Implementation: [`syncStateRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/syncStateRepository.sql.ts)
+
+```ts
+interface ISyncStateRepository {
+  getDeviceId(): Promise<string>
+  getPullCursor(): Promise<number>          // highest applied global_seq
+  setPullCursor(cursor: number): Promise<void>
+  getAckedSeq(): Promise<number>            // acknowledged → drives compaction
+  setAckedSeq(seq: number): Promise<void>
+  getPushedOutboxId(): Promise<number>      // highest confirmed-pushed outbox id
+  setPushedOutboxId(id: number): Promise<void>
+}
+```
+
+The per-device `sync_state` row (migration 013) — three cursors and the device id. `getDeviceId()` returns the stable id that is both the HLC tiebreak and the pull `X-Device-Id` echo-suppression key, resolved from the same source that stamps HLCs.
+
+### `ISyncApplyRepository`
+
+Source: [`syncApplyRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/syncApplyRepository.ts) · Implementation: [`syncApplyRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/syncApplyRepository.sql.ts)
+
+```ts
+interface ISyncApplyRepository {
+  /** Local doc for a merge, or null when neither the row nor any
+   *  bookkeeping for it exists. */
+  getLocalDoc(collection: string, docId: string): Promise<SyncDoc<unknown> | null>
+  /** Upsert/delete the collection row WITHOUT journaling, and record
+   *  `serverHlc` as this doc's last server-known HLC. */
+  applyRemote(collection: string, doc: SyncDoc<unknown>, serverHlc: string): Promise<void>
+  lastServerHlc(collection: string, docId: string): Promise<string | null>
+  recordServerHlc(collection: string, docId: string, hlc: string): Promise<void>
+}
+```
+
+The pull side. It exists *because* the domain repositories are wrapped by the journal decorator: writing a pulled change through `INoteRepository` would re-journal it into the outbox and echo it straight back to the server. This port writes the raw collection rows without journaling, and maintains the `sync_doc_hlc` side-table (migration 014) that records the last server-known HLC per document — the `base_hlc` source on push and the local doc's known HLC on a pull-merge. `serverHlc` is passed separately from `doc.hlc` because on a merge the winning local document's HLC can differ from the server master pointer the device must remember. The `data` on these `SyncDoc`s is the client-native snake_case `user.db` row snapshot, so the adapter maps it straight onto columns.
+
+### `ISyncBackfillRepository`
+
+Source: [`syncBackfillRepository.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/syncBackfillRepository.ts) · Implementation: [`syncBackfillRepository.sql.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/apps/mobile/infra/repositories/sql/syncBackfillRepository.sql.ts)
+
+```ts
+interface BackfillCandidate {
+  readonly collection: string
+  readonly docId: string
+  /** Client-native wire snapshot. Never null — backfill only enqueues
+   *  upserts of live rows. */
+  readonly data: unknown
+}
+
+interface ISyncBackfillRepository {
+  listUnsynced(): Promise<readonly BackfillCandidate[]>
+}
+```
+
+A read-only enumeration of local rows that predate journaling — created while the device was anonymous, or before the engine was wired — so the first-sync backfill can enqueue them the first time a real account signs in. A row qualifies when it has **neither** an `outbox` entry **nor** a `sync_doc_hlc` record; that anti-join *is* the idempotency guard, because once a candidate is enqueued it owns an outbox row and can never be returned twice. The chat collections are gated and filtered exactly like the journal decorator (toggle-respecting, proactive-excluding, parent-before-child), so a re-signed device uploads the same history it would have journaled live.
+
+---
+
 ## Transactional port
 
 ### `IUnitOfWork`
 
-Source: [`unitOfWork.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/unitOfWork.ts) · Implementation: `modules/apps/mobile/infra/repositories/sql/unitOfWork.sql.ts`
+Source: [`unitOfWork.ts`](https://github.com/jiva-studio/shruti/blob/main/modules/libs/domain/ports/unitOfWork.ts) · Implementation: `modules/apps/mobile/infra/repositories/sql/reentrantUnitOfWork.sql.ts`
 
 ```ts
 interface IUnitOfWork {
@@ -387,7 +560,7 @@ interface IUnitOfWork {
 }
 ```
 
-Wraps a SQLite transaction. Use cases that do a read-then-write pair (`addTrackToPlaylist`, `archivePlaylistItem`, `updateNote`, `deleteNote`) run their callback inside `unitOfWork.run` so a concurrent caller can't slip a write between the check and the act.
+Wraps a SQLite transaction. Use cases that do a read-then-write pair (`addTrackToPlaylist`, `archivePlaylistItem`, `updateNote`, `deleteNote`) run their callback inside `unitOfWork.run` so a concurrent caller can't slip a write between the check and the act. The wired implementation is **reentrant**: a nested `run` joins the open transaction instead of starting a second one (SQLite has no nested transactions), which is what lets a journal entry or a sync apply ride inside the caller's transaction. It behaves identically to the plain implementation when un-nested.
 
 <!-- END AUTOGEN -->
 
