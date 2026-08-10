@@ -10,4 +10,5 @@ export default {
   noAudioForLecture: "Questa lezione non ha audio.",
   downloadStorageFull:
     "Limite di spazio raggiunto. Rimuovi le lezioni ascoltate o aumenta il limite nelle impostazioni.",
+  downloadStorageFullAction: "Scarica comunque",
 }

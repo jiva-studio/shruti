@@ -12,4 +12,5 @@ export default {
   noAudioForLecture: "Ten wykład nie ma audio.",
   downloadStorageFull:
     "Osiągnięto limit pamięci. Usuń wysłuchane wykłady lub zwiększ limit w ustawieniach.",
+  downloadStorageFullAction: "Pobierz mimo to",
 }

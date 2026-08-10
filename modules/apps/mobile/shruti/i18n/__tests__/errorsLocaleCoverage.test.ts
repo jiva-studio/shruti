@@ -83,6 +83,17 @@ describe("errors locale bundles", () => {
     expect(ru.downloadFailed).toContain("VPN")
   })
 
+  it("labels the storage notice's “Download anyway” button in every locale", () => {
+    // The button IS the only escape from the limit short of Settings, so an
+    // untranslated one is worse than a missing sentence — it is a dead affordance.
+    for (const locale of LOCALES) {
+      const label = BUNDLES[locale].downloadStorageFullAction
+      expect(label, locale).toBeTypeOf("string")
+      expect(label.trim().length, locale).toBeGreaterThan(0)
+      if (locale !== "en") expect(label, locale).not.toBe(en.downloadStorageFullAction)
+    }
+  })
+
   it("keeps the storage-budget notice distinct from the failure notice", () => {
     // They fire from different branches and mean different things — a track
     // held back by the budget still plays from the stream.
