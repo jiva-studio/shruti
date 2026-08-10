@@ -24,9 +24,106 @@ stalled on tests gripping module internals, not on the production change.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
+
+
+# ── hermetic configuration ────────────────────────────────────────────
+#
+# Importing `litellm` calls `load_dotenv()`, which walks up from the installed
+# package and loads the first `.env` it finds. In a checkout that is the
+# developer's service `.env` — 24 live names, among them the provider keys,
+# `DATABASE_URL`, `APP_SHARED_TOKEN` and the tier caps. Environment variables
+# outrank a model default, so the suite was asserting against dev config:
+# `ip_rate_limit_per_day` 200 against a shipped 2000, `llm_default` a gemini
+# model against the shipped deepseek one. CI was hermetic only by accident,
+# because `.env` is gitignored.
+#
+# `litellm` is a transitive import of nearly every test and can land at any
+# point of a session, so one scrub is not enough. Two moves instead: seal
+# `load_dotenv` so nothing can inject later, and drop whatever an earlier
+# import already injected. Both are independent of where the file happens to
+# resolve from, so they hold in CI (no `.env` at all) and locally alike.
+
+_HERMETIC_ENV_FILE = ".env.pytest-hermetic-never-exists"
+
+# The one name the suite sets on itself, per test, by design — see
+# `_no_langfuse_network` below. The hermeticity guards exempt it.
+SUITE_ENV_OVERRIDES = frozenset({"LANGFUSE_FORCE_FALLBACK"})
+
+
+def _settings_env_names() -> frozenset[str]:
+    """The env var names `Settings` reads — field names, upper-cased.
+
+    No `env_prefix` and no aliases in `config.py`, so the mapping is direct.
+    """
+    from lectorium_chat.config import Settings
+
+    return frozenset(name.upper() for name in Settings.model_fields)
+
+
+def _seal_dotenv() -> None:
+    """Turn `load_dotenv()` into a no-op for the rest of the process."""
+    try:
+        import dotenv
+        import dotenv.main
+    except ModuleNotFoundError:  # pragma: no cover — ships with litellm
+        return
+
+    def _refuse(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+    dotenv.load_dotenv = _refuse
+    dotenv.main.load_dotenv = _refuse
+
+
+def _scrub_settings_env() -> list[str]:
+    """Remove every `Settings` name from `os.environ`.
+
+    Deliberately blunt: a name exported by the developer's shell contaminates
+    the run exactly as much as one copied out of a dotenv file. Nothing the
+    suite needs lives here — `LECTORIUM_INTEGRATION_DB`, the one env var the
+    integration gate reads, is not a `Settings` field.
+    """
+    removed = sorted(name for name in _settings_env_names() if name in os.environ)
+    for name in removed:
+        del os.environ[name]
+    return removed
+
+
+def _seal_settings_env_file() -> None:
+    """Point the dotenv *file* source at a path that cannot exist.
+
+    `Settings.model_config` names `.env` relative to the working directory, so
+    running pytest from the service root rather than `app/` would read the dev
+    file directly, bypassing the `os.environ` scrub. A non-existent name keeps
+    `warn_unknown_env_keys()` — which reads this same key — working.
+    """
+    from lectorium_chat.config import Settings
+
+    Settings.model_config["env_file"] = _HERMETIC_ENV_FILE
+
+
+def _make_hermetic() -> None:
+    _seal_dotenv()
+    _seal_settings_env_file()
+    _scrub_settings_env()
+    from lectorium_chat import config as config_mod
+
+    config_mod._settings = None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _hermetic_settings() -> None:
+    """Re-assert hermeticity once collection is over.
+
+    `pytest_configure` runs before any test module is imported, which is where
+    most `litellm` imports happen; this catches anything that slipped in during
+    collection (a module-scope `os.environ[...]`, an early plugin).
+    """
+    _make_hermetic()
 
 
 # ── markers ───────────────────────────────────────────────────────────
@@ -39,6 +136,7 @@ import pytest
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    _make_hermetic()
     config.addinivalue_line(
         "markers", "needs_db: requires a real Postgres (see LECTORIUM_INTEGRATION_DB)",
     )
