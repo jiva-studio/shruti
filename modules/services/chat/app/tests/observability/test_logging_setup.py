@@ -146,6 +146,23 @@ def test_client_ip_hash_is_stable_and_hides_the_address():
     assert client_ip_hash("") is None
 
 
+def test_client_ip_hash_uses_the_configured_salt(monkeypatch):
+    """`LOG_IP_SALT` owns the ip hash — it must not borrow another
+    setting's salt, so a change to it changes the digest."""
+    from lectorium_chat import config as cfg
+
+    def _with_salt(salt: str) -> str:
+        monkeypatch.setenv("LOG_IP_SALT", salt)
+        monkeypatch.setattr(cfg, "_settings", None)
+        return client_ip_hash("203.0.113.7")
+
+    try:
+        assert _with_salt("salt-a") == _with_salt("salt-a")
+        assert _with_salt("salt-a") != _with_salt("salt-b")
+    finally:
+        monkeypatch.setattr(cfg, "_settings", None)
+
+
 def test_client_ip_hash_survives_drop_pii():
     event = drop_pii(
         None, "warning", {"ip": "203.0.113.7", "client_ip_hash": "0123456789abcdef"}
