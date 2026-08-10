@@ -183,16 +183,27 @@ describe("useSyncEngine — first-sync backfill", () => {
 describe("useSyncEngine — cursor-ownership reset", () => {
   let setPullCursor: ReturnType<typeof vi.fn>
   let setAckedSeq: ReturnType<typeof vi.fn>
+  let setPushedOutboxId: ReturnType<typeof vi.fn>
+  /** Where the watermark already sits when the guard runs. */
+  let pushedOutboxId: number
 
   beforeEach(() => {
     setPullCursor = vi.fn(async () => {})
     setAckedSeq = vi.fn(async () => {})
+    setPushedOutboxId = vi.fn(async () => {})
+    pushedOutboxId = 0
     // Swap in a syncState that records the reset writes and a unit-of-work that
     // actually invokes its callback (the default mocks are opaque `{}`).
+    // The outbox holds 7 rows journaled by whoever owned the device before.
     ;(ctx.lectorium as { repositories: () => unknown }).repositories = () => ({
       syncBackfill: {},
-      syncOutbox: {},
-      syncState: { setPullCursor, setAckedSeq },
+      syncOutbox: { latestId: async () => 7 },
+      syncState: {
+        setPullCursor,
+        setAckedSeq,
+        setPushedOutboxId,
+        getPushedOutboxId: async () => pushedOutboxId,
+      },
       syncApply: {},
       unitOfWork: { run: (fn: () => unknown) => fn() },
       libraryItems: { listAll: async () => [] },
@@ -230,6 +241,7 @@ describe("useSyncEngine — cursor-ownership reset", () => {
 
     expect(setPullCursor).not.toHaveBeenCalled()
     expect(setAckedSeq).not.toHaveBeenCalled()
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
     app.unmount()
   })
 
@@ -242,7 +254,108 @@ describe("useSyncEngine — cursor-ownership reset", () => {
     await flush()
 
     expect(setPullCursor).not.toHaveBeenCalled()
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
     expect(prefs.get("sync.cursorOwner")).toBe("user-1")
+    app.unmount()
+  })
+
+  it("retires the previous owner's outbox rows before the new identity pushes", async () => {
+    // Account deleted with un-pushed rows still journaled; the wipe leaves them
+    // behind and the device drops to a fresh anonymous identity (#1497).
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+
+    expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    expect(setPushedOutboxId.mock.invocationCallOrder[0]).toBeLessThan(
+      ctx.runSync.mock.invocationCallOrder[0]
+    )
+    app.unmount()
+  })
+
+  it("scopes the drain to the account that owns the device now", async () => {
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+
+    expect(ctx.runSync.mock.calls[0]![0]).toMatchObject({ ownerId: "anon-2" })
+    app.unmount()
+  })
+
+  it("still scopes the drain when the identity changes mid-cycle", async () => {
+    // A cycle for user-1 is in flight when the account is deleted, so the
+    // watch-triggered sync is swallowed by the single-flight guard and the
+    // owner reset does not run until a later cycle — by which point anon-2 has
+    // journaled rows of its own. `ownerId` is what keeps those rows pushable;
+    // the watermark, stamped late at the journal's tail, cannot be trusted.
+    prefs.set("sync.cursorOwner", "user-1")
+    let releaseCycle: () => void = () => {}
+    ctx.runSync = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          releaseCycle = () => resolve({ skipped: false, pulled: 0, pushed: 0, conflicts: 0 })
+        })
+    )
+
+    const app = mountEngine()
+    await flush()
+    ctx.auth!.userId = "user-1"
+    ctx.auth!.signedIn = true
+    await flush()
+    expect(ctx.runSync).toHaveBeenCalledTimes(1)
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
+
+    // Account deleted mid-cycle: the new identity's sync trigger is dropped.
+    ctx.auth!.userId = "anon-2"
+    ctx.auth!.signedIn = false
+    await flush()
+    expect(ctx.runSync).toHaveBeenCalledTimes(1)
+
+    releaseCycle()
+    await flush()
+    ctx.resumeCb?.({ isActive: true })
+    await flush()
+
+    // The late reset lands, and the cycle it precedes drains as anon-2.
+    expect(setPushedOutboxId).toHaveBeenCalledWith(7)
+    expect(ctx.runSync.mock.calls[1]![0]).toMatchObject({ ownerId: "anon-2" })
+    app.unmount()
+  })
+
+  it("never rewinds the watermark to a shorter journal", async () => {
+    // A pruned or restored user.db has a tail below the current mark. Writing
+    // it would un-retire the previous account's unowned rows — #1497 again.
+    pushedOutboxId = 50
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+
+    expect(setPullCursor).toHaveBeenCalledWith(0)
+    expect(setPushedOutboxId).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it("stamps the watermark once per switch, not on every later cycle", async () => {
+    prefs.set("sync.cursorOwner", "user-1")
+    const app = mountEngine()
+    await flush()
+
+    ctx.auth!.userId = "anon-2"
+    await flush()
+    ctx.resumeCb?.({ isActive: true })
+    await flush()
+
+    expect(setPushedOutboxId).toHaveBeenCalledTimes(1)
+    expect(ctx.runSync).toHaveBeenCalledTimes(2)
     app.unmount()
   })
 })

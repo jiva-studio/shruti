@@ -2,6 +2,7 @@ import type { IDatabase } from "@ports/app/index.js"
 import type {
   IOutboxRepository,
   OutboxEntry,
+  OutboxScope,
   NewOutboxEntry,
 } from "@lib/domain/ports/outboxRepository.js"
 import type { SyncOp } from "@lib/domain"
@@ -15,8 +16,16 @@ import type { OutboxRow } from "@lib/persistence/user"
  * the engine wraps every mutation in the shared reentrant unit-of-work, so the
  * one enclosing transaction commits and persists once. Never opens its own
  * transaction.
+ *
+ * `getOwnerId` resolves the account journaling right now (023 migration); it
+ * is read per append, not captured, because the identity changes under a live
+ * repository bundle. Omitted ⇒ rows are written unowned, which leaves them to
+ * the watermark exactly as they were before the column existed.
  */
-export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
+export function createSqlOutboxRepository(
+  db: IDatabase,
+  getOwnerId?: () => string | null
+): IOutboxRepository {
   function toEntry(row: OutboxRow): OutboxEntry {
     return {
       id: row.id,
@@ -30,14 +39,17 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
   }
 
   return {
-    async listPending(limit?: number): Promise<readonly OutboxEntry[]> {
+    async listPending(limit?: number, scope?: OutboxScope): Promise<readonly OutboxEntry[]> {
+      // `owner_id = NULL` is never true, so an absent ownerId degrades to the
+      // watermark-only rule the unowned rows already follow.
+      const sql = `SELECT * FROM outbox
+                    WHERE sent = 0 AND (owner_id = ? OR (owner_id IS NULL AND id > ?))
+                    ORDER BY id ASC`
+      const params = [scope?.ownerId ?? null, scope?.afterId ?? 0]
       const rows =
         limit === undefined
-          ? await db.query<OutboxRow>("SELECT * FROM outbox WHERE sent = 0 ORDER BY id ASC")
-          : await db.query<OutboxRow>(
-              "SELECT * FROM outbox WHERE sent = 0 ORDER BY id ASC LIMIT ?",
-              [limit]
-            )
+          ? await db.query<OutboxRow>(sql, params)
+          : await db.query<OutboxRow>(`${sql} LIMIT ?`, [...params, limit])
       return rows.map(toEntry)
     },
 
@@ -49,8 +61,9 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
 
     async append(entry: NewOutboxEntry): Promise<void> {
       await db.execute(
-        `INSERT INTO outbox (collection, doc_id, op, data, hlc, base_hlc, created_at, sent)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+        `INSERT INTO outbox
+           (collection, doc_id, op, data, hlc, base_hlc, created_at, sent, owner_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         [
           entry.collection,
           entry.docId,
@@ -59,6 +72,9 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
           entry.hlc,
           entry.baseHlc,
           Date.now(),
+          // An explicit owner wins: the caller knows whose row this is, the
+          // provider only knows who is here now.
+          entry.ownerId !== undefined ? entry.ownerId : (getOwnerId?.() ?? null),
         ]
       )
     },
@@ -68,6 +84,11 @@ export function createSqlOutboxRepository(db: IDatabase): IOutboxRepository {
         "SELECT hlc FROM outbox ORDER BY id DESC LIMIT 1"
       )
       return rows.length > 0 ? rows[0]!.hlc : null
+    },
+
+    async latestId(): Promise<number> {
+      const rows = await db.query<{ id: number }>("SELECT id FROM outbox ORDER BY id DESC LIMIT 1")
+      return rows.length > 0 ? Number(rows[0]!.id) : 0
     },
   }
 }
