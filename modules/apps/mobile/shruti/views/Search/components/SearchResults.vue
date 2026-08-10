@@ -89,6 +89,11 @@
     <section class="lane">
       <SectionHeader :title="$t('search.library.title')" />
 
+      <!-- A failed query used to render as a blank lane: no rows, no empty
+           state (which suppresses itself on error), no message. Sits above the
+           list rather than replacing it, so a failed page keeps what loaded. -->
+      <p v-if="search.error.value" class="lane-note">{{ $t("search.library.failed") }}</p>
+
       <!-- Named `.no-results` because that is what it is, and because the
            filter sheet is the usual cause: a content language seeded on first
            launch can hide most of the catalog from a user who never chose it. -->
