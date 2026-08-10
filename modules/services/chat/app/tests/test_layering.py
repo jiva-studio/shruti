@@ -9,8 +9,9 @@ This used to be violated: `domain/turn_context.py` imported
 `agent.marker_expander` / `agent.turn_aliases`, creating a domain↔agent
 import cycle. TurnContext was moved to `agent/graph/` to break it. This
 test keeps the rule from regressing — it's the cheap, no-extra-tooling
-substitute for an import-linter contract (there is no Python lint lane
-in CI yet; wire this rule there too if one is added).
+substitute for an import-linter contract. There IS a ruff lane in CI now
+(`services-chat-tests.yml`), but ruff has no layering rule, so the guard
+stays here.
 """
 
 from __future__ import annotations

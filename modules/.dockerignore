@@ -48,6 +48,9 @@ services/*/layers/
 **/.vscode
 **/logs
 **/coverage
+**/.coverage
+**/.coverage.*
+**/coverage.json
 **/.next
 **/target/
 
