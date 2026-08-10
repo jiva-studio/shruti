@@ -32,6 +32,12 @@ import (
 // The rows are dropped from the UPLOADED COPY only, never from local
 // current.db: a row pruned here comes back by itself on the next publish
 // once the asset lands, and no local state is lost if the target lied.
+//
+// asset_hashes is not the only advertisement. `track_variants.transcript_path`
+// is the one the *clients* read (mobile builds its transcript descriptor from
+// it; chat's own transcript lookup resolves it), so removing the hash row
+// alone would silence the indexer and leave every reader still pointed at the
+// 404. Both are cleared for the same path, in the same copy.
 
 const (
 	defaultAssetCheckConcurrency = 32
@@ -58,6 +64,19 @@ type AssetCheck struct {
 	// Unverifiable counts paths whose HEAD errored out. Those are kept —
 	// an unanswered probe is not evidence of a missing file.
 	Unverifiable int `json:"transcripts_unverifiable,omitempty"`
+	// Forced records that the operator waived the prune budget.
+	Forced bool `json:"prune_budget_waived,omitempty"`
+}
+
+// assetCheckOpts are the knobs the publish caller passes through.
+type assetCheckOpts struct {
+	// Concurrency is the number of HEAD probes in flight; 0 = default.
+	Concurrency int
+	// Force waives the prune budget: every unbacked row is dropped from the
+	// uploaded copy no matter how many there are, instead of refusing the
+	// publish. The narrow escape from a phantom count over budget — unlike
+	// skip_asset_check it still keeps the phantoms out of the catalog.
+	Force bool
 }
 
 const prunedSampleSize = 10
@@ -130,8 +149,19 @@ func missingAssets(ctx context.Context, target s3port.Uploader, paths []string, 
 			}
 		}()
 	}
+	// The workers give up as soon as ctx is done, so an unguarded send here
+	// blocks forever once the last one has left — and publish holds OpMutex
+	// for the whole run, so that hang takes the whole tool down, not just
+	// this call. Stop feeding when ctx is done and let the workers drain.
 	for _, p := range paths {
-		jobs <- p
+		select {
+		case jobs <- p:
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			sort.Strings(missing)
+			return missing, unverifiable
+		}
 	}
 	close(jobs)
 	wg.Wait()
@@ -141,7 +171,7 @@ func missingAssets(ctx context.Context, target s3port.Uploader, paths []string, 
 
 // verifyTranscriptAssets probes the catalog's advertised transcripts against
 // the target. It returns the summary; the caller decides what to ship.
-func verifyTranscriptAssets(ctx context.Context, dbPath string, target s3port.Uploader, concurrency int) (AssetCheck, []string, error) {
+func verifyTranscriptAssets(ctx context.Context, dbPath string, target s3port.Uploader, opts assetCheckOpts) (AssetCheck, []string, error) {
 	paths, err := listTranscriptAssets(ctx, dbPath)
 	if err != nil {
 		return AssetCheck{}, nil, err
@@ -150,17 +180,28 @@ func verifyTranscriptAssets(ctx context.Context, dbPath string, target s3port.Up
 	if len(paths) == 0 {
 		return check, nil, nil
 	}
-	missing, unverifiable := missingAssets(ctx, target, paths, concurrency)
+	missing, unverifiable := missingAssets(ctx, target, paths, opts.Concurrency)
+	// A cancelled sweep probed only a prefix of the corpus, so "not found"
+	// is a verdict on nothing — the unprobed rest would look present.
+	if err := ctx.Err(); err != nil {
+		return AssetCheck{}, nil, fmt.Errorf("asset check: %w", err)
+	}
 	check.Unverifiable = unverifiable
 	if len(missing) == 0 {
 		return check, nil, nil
 	}
-	if over := pruneBudget(len(paths)); len(missing) > over {
-		return check, nil, fmt.Errorf(
-			"asset check: %s is missing %d of %d advertised transcripts (budget %d) — "+
-				"that reads as a target/credential problem, not stale rows; "+
-				"publish refused (first missing: %s)",
-			target.Name(), len(missing), len(paths), over, missing[0])
+	over := pruneBudget(len(paths))
+	if overBudget := len(missing) > over; overBudget {
+		if !opts.Force {
+			return check, nil, fmt.Errorf(
+				"asset check: %s is missing %d of %d advertised transcripts (budget %d) — "+
+					"that reads as a target/credential problem, not stale rows; "+
+					"publish refused (first missing: %s). If the target is known good and "+
+					"the corpus really has that many phantoms, re-run with force_prune to "+
+					"drop them from the published copy; skip_asset_check would ship them all",
+				target.Name(), len(missing), len(paths), over, missing[0])
+		}
+		check.Forced = true
 	}
 	check.Pruned = len(missing)
 	check.PrunedSample = missing[:min(len(missing), prunedSampleSize)]
@@ -177,9 +218,11 @@ func pruneBudget(total int) int {
 	return budget
 }
 
-// writePrunedCopy copies srcDB next to itself and deletes the named
-// asset_hashes rows from the copy. Returns the copy's path; the caller
-// removes it. The name is dot-prefixed so an assetsync walk skips it.
+// writePrunedCopy copies srcDB next to itself and withdraws the named
+// transcript paths from the copy — both advertisements, the `asset_hashes`
+// row the indexer lists and the `track_variants.transcript_path` the clients
+// resolve. Returns the copy's path; the caller removes it. The name is
+// dot-prefixed so an assetsync walk skips it.
 func writePrunedCopy(ctx context.Context, srcDB string, paths []string) (string, error) {
 	tmp, err := os.CreateTemp(filepath.Dir(srcDB), ".publish-*.db")
 	if err != nil {
@@ -200,7 +243,7 @@ func writePrunedCopy(ctx context.Context, srcDB string, paths []string) (string,
 		return "", fmt.Errorf("prune: copy db: %w", err)
 	}
 
-	if err := deleteAssetRows(ctx, dst, paths); err != nil {
+	if err := withdrawTranscripts(ctx, dst, paths); err != nil {
 		removeDBFiles(dst)
 		return "", err
 	}
@@ -213,7 +256,7 @@ func writePrunedCopy(ctx context.Context, srcDB string, paths []string) (string,
 	return dst, nil
 }
 
-func deleteAssetRows(ctx context.Context, dbPath string, paths []string) error {
+func withdrawTranscripts(ctx context.Context, dbPath string, paths []string) error {
 	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?_busy_timeout=15000", dbPath))
 	if err != nil {
 		return fmt.Errorf("prune: open copy: %w", err)
@@ -224,14 +267,31 @@ func deleteAssetRows(ctx context.Context, dbPath string, paths []string) error {
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck
-	stmt, err := tx.PrepareContext(ctx, `DELETE FROM asset_hashes WHERE path = ?`)
+
+	dropHash, err := tx.PrepareContext(ctx, `DELETE FROM asset_hashes WHERE path = ?`)
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer dropHash.Close()
+	// The variant row stays — only its pointer at a file nobody can fetch
+	// goes. A variant without a transcript is a normal state everywhere
+	// downstream (mobile maps it to `transcript: null`, chat's resolver
+	// falls through to another language), whereas a variant that vanished
+	// would take the track's title with it.
+	clearPointer, err := tx.PrepareContext(ctx,
+		`UPDATE track_variants SET transcript_path = NULL, transcript_kind = NULL
+		 WHERE transcript_path = ?`)
+	if err != nil {
+		return err
+	}
+	defer clearPointer.Close()
+
 	for _, p := range paths {
-		if _, err := stmt.ExecContext(ctx, p); err != nil {
+		if _, err := dropHash.ExecContext(ctx, p); err != nil {
 			return fmt.Errorf("prune %s: %w", p, err)
+		}
+		if _, err := clearPointer.ExecContext(ctx, p); err != nil {
+			return fmt.Errorf("prune %s (variant pointer): %w", p, err)
 		}
 	}
 	return tx.Commit()

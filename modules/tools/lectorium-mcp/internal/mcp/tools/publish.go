@@ -37,14 +37,18 @@ func RegisterCatalogPublish(s *server.MCPServer, deps Deps) {
 				"Returns a run_id; monitor via runs.status / runs.wait."),
 		mcp.WithBoolean("dry_run", mcp.Description("If true, compute the publish plan (db key + config flip) and report the asset check without uploading.")),
 		mcp.WithBoolean("skip_asset_check", mcp.Description("Skip probing the target for the transcripts the catalog advertises. Escape hatch only: the published catalog may then point the chat indexer at files that are not there.")),
+		mcp.WithBoolean("force_prune", mcp.Description("Prune every unbacked transcript from the published copy even when there are more of them than the safety budget allows (which normally refuses the publish as a suspected target outage). Narrower than skip_asset_check: the phantoms stay out of the catalog. Local current.db is untouched either way.")),
+		mcp.WithNumber("asset_check_concurrency", mcp.Description("HEAD probes in flight during the asset check. 0/omitted = 32.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		if deps.Runner == nil {
 			return envelope.Err(kind, envelope.CodeInternal, "runner not initialized", nil), nil
 		}
 		opts := publish.Options{
-			DryRun:         req.GetBool("dry_run", false),
-			SkipAssetCheck: req.GetBool("skip_asset_check", false),
+			DryRun:                req.GetBool("dry_run", false),
+			SkipAssetCheck:        req.GetBool("skip_asset_check", false),
+			ForcePrune:            req.GetBool("force_prune", false),
+			AssetCheckConcurrency: req.GetInt("asset_check_concurrency", 0),
 		}
 		uc := deps.Publish
 
