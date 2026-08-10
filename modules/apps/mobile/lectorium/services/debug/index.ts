@@ -59,7 +59,10 @@ interface LectoriumDebugApi {
   openTranscript(trackId: string): Promise<void>
   openTrackSheet(trackId: string): void
   setPlayerState(trackId: string, positionMs: number): Promise<void>
-  setLocale(loc: SupportedLocale): void
+  /** Awaitable — the locale's message chunk has to land before the UI
+   *  re-renders, so a screenshot taken without awaiting could catch the
+   *  previous language. */
+  setLocale(loc: SupportedLocale): Promise<void>
   /** Force the subscription state on this dev/preview build so paywalled
    *  surfaces (incl. the onboarding paywall) are reviewable without a real
    *  purchase: "free" shows plan cards, "pro" unlocks, "default" restores. */
@@ -141,8 +144,8 @@ export function installDebugApi(): void {
       player.durationMs = variant.audio?.duration ?? 0
     },
 
-    setLocale(loc: SupportedLocale): void {
-      setLocale(loc)
+    setLocale(loc: SupportedLocale): Promise<void> {
+      return setLocale(loc)
     },
 
     setSubscription(value: DevSubscriptionOverride): void {

@@ -42,7 +42,7 @@ declare global {
         openTranscript: (trackId: string) => Promise<void>
         openTrackSheet: (trackId: string) => void
         setPlayerState: (trackId: string, positionMs: number) => Promise<void>
-        setLocale: (loc: "en" | "ru") => void
+        setLocale: (loc: "en" | "ru") => Promise<void>
         setSubscription: (value: "free" | "pro" | "default") => void
       }
     }
