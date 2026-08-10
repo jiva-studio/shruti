@@ -54,11 +54,13 @@ vi.mock("@lectorium/lectorium.js", () => ({
 
 const quota = {
   limitBytes: 0,
+  isMeasured: true,
   ensureMeasured: vi.fn(async () => {}),
   sizeOf: () => 1000,
   hasRoomFor: () => true,
   reserve: vi.fn(),
   settle: vi.fn(),
+  uncharge: vi.fn(),
   forget: vi.fn(),
   refresh: vi.fn(async () => {}),
   reset: vi.fn(),
