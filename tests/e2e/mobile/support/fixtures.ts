@@ -13,6 +13,7 @@ export const FIXTURES_DIR = path.resolve(E2E_ROOT, "fixtures")
 export const CONTENT_DB_PATH = path.resolve(FIXTURES_DIR, "content.db")
 export const SILENT_MP3_PATH = path.resolve(FIXTURES_DIR, "silent.mp3")
 export const TRANSCRIPT_JSON_PATH = path.resolve(FIXTURES_DIR, "transcript.json")
+export const COVER_PNG_PATH = path.resolve(FIXTURES_DIR, "cover-sample.png")
 
 export type Locale = "en" | "ru"
 
