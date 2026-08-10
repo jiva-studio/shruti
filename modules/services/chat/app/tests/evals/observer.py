@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import contextvars
 import json
+import logging
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -94,12 +95,31 @@ def _capture_processor(
 def install_capture_processor() -> None:
     cfg = structlog.get_config()
     processors = list(cfg.get("processors") or [])
-    if _capture_processor in processors:
-        return
-    # Insert at the front so the processor sees the full event dict
-    # before any renderer touches it.
-    processors.insert(0, _capture_processor)
-    structlog.configure(processors=processors)
+    if _capture_processor not in processors:
+        # Insert at the front so the processor sees the full event dict
+        # before any renderer touches it.
+        processors.insert(0, _capture_processor)
+    # The capture lives in the PROCESSOR chain, but the bound logger
+    # `setup_logging` installs filters BEFORE the chain runs: at
+    # LOG_LEVEL=warning the info-level `research_worker_react_fallback`
+    # never reached `_capture_processor`, so the eval runner's
+    # "unconditional" fallback guard passed vacuously — the harness
+    # scored the wrong lane precisely when logs were quiet. So the
+    # harness owns the structlog level while it is capturing.
+    #
+    # Stdout volume is unchanged: `setup_logging` renders through a
+    # stdlib handler and gates emission on the ROOT LOGGER's level,
+    # which still follows LOG_LEVEL. We only stop structlog from
+    # discarding the event before we can see it.
+    #
+    # `cache_logger_on_first_use=False` because a proxy that binds once
+    # freezes its wrapper class for the process — with caching on, any
+    # logger touched before this call would keep filtering forever.
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+        cache_logger_on_first_use=False,
+    )
 
 
 # Also try to install at import (covers tests where setup_logging

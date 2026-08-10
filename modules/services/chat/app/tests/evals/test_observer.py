@@ -8,10 +8,12 @@ OpenRouter; FakeLLM here keeps the test deterministic and free.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, TypeVar
 
 import pytest
+import structlog
 from pydantic import BaseModel
 
 from lectorium_chat.agent.graph import build_chat_graph
@@ -22,7 +24,7 @@ from lectorium_chat.domain.entities import CompletionChunk, Message
 from lectorium_chat.domain.routing import RoutingDecision
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.research.models import ResearchResult
-from tests.evals.observer import observe_turn
+from tests.evals.observer import install_capture_processor, observe_turn
 from tests.evals.run_chunk_tools_eval import evaluate_case
 
 
@@ -356,3 +358,106 @@ async def test_observer_into_evaluate_case_full_pipeline() -> None:
     }
     passed, failures = evaluate_case(case, obs)
     assert passed, f"failures: {failures!r}"
+
+
+@pytest.mark.asyncio
+async def test_react_fallback_is_detected_at_a_quiet_log_level() -> None:
+    """The runner's fallback guard must not depend on LOG_LEVEL.
+
+    `_capture_processor` sits in the structlog PROCESSOR chain, but the
+    bound logger `setup_logging` installs filters before the chain runs.
+    At LOG_LEVEL=warning the info-level `research_worker_react_fallback`
+    was therefore dropped before the harness could see it, and the
+    "unconditional" guard passed vacuously — measured: the fallback case
+    scored `passed=False` at info and `passed=True` at warning, i.e. the
+    guard was silently off exactly when logs were quiet.
+    """
+    saved = structlog.get_config()
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING),
+        cache_logger_on_first_use=False,
+    )
+    install_capture_processor()
+    try:
+
+        async def search_x(*, q: str) -> dict[str, Any]:
+            return {"hits": []}
+
+        llm = FakeLLM(
+            router_responses=[RoutingDecision(intent="research", confidence=0.9)],
+            stream_responses=[
+                [
+                    _tool_call_chunk(idx=0, tc_id="c1", name="search_x", args='{"q": "karma"}'),
+                    {"finish_reason": "stop"},
+                ],
+                [{"finish_reason": "stop"}],
+                [{"text": "Карма..."}, {"finish_reason": "stop"}],
+            ],
+        )
+        graph = build_chat_graph()
+        ctx = _make_ctx(llm, tools={"search_x": search_x})
+
+        obs = await observe_turn(
+            "найди про карму", graph=graph, base_ctx=ctx, lang="ru"
+        )
+
+        assert obs.react_fallback is True
+        passed, failures = evaluate_case({"expect_intent": "research"}, obs)
+        assert not passed
+        assert any("ReAct fallback" in f for f in failures)
+    finally:
+        structlog.configure(**saved)
+
+
+# ── harness wiring (tests/evals/_fixtures.py) ───────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_eval_client_puts_the_pipeline_collaborators_on_the_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_fixtures.EvalChatClient` is the load-bearing half of #1566 and the
+    only place the live runner builds a TurnContext.
+
+    `research_worker` drops to the ReAct loop when any of chunk_repo /
+    embedder / pool / embed_model / embed_dim is None, and the fixture used
+    to hand those to `bind_repositories` only — every research case in the
+    offline eval scored a lane production has not run since 2026-05-21.
+    Build the client with sentinels and assert they arrive on `base_ctx`,
+    together with `lang_code` and `locate_tools`, which the same rebuild
+    dropped.
+    """
+    from tests.evals import _fixtures
+
+    sentinels = {
+        "chunk_repo": object(),
+        "catalog_repo": object(),
+        "embedder": object(),
+        "pool": object(),
+        "embed_model": "stub-embed",
+        "embed_dim": 1024,
+    }
+    client = _fixtures.EvalChatClient(
+        graph=object(), llm=object(), library_db_path=None, **sentinels
+    )
+
+    captured: dict[str, Any] = {}
+
+    async def fake_observe_turn(query: str, **kwargs: Any) -> str:
+        captured["ctx"] = kwargs["base_ctx"]
+        return "obs"
+
+    monkeypatch.setattr(_fixtures, "observe_turn", fake_observe_turn)
+
+    assert await client.observe_turn("найди про карму", lang="en") == "obs"
+    ctx = captured["ctx"]
+
+    for name, value in sentinels.items():
+        assert getattr(ctx, name) is value, f"{name} never reached the TurnContext"
+    # The exact predicate research_worker_node branches on.
+    assert not any(
+        getattr(ctx, name) is None
+        for name in ("chunk_repo", "embedder", "pool", "embed_model", "embed_dim")
+    ), "the live harness would take the ReAct fallback"
+    assert ctx.lang_code == "en"
+    assert ctx.locate_tools, "locate_tools must be sliced onto the context"
