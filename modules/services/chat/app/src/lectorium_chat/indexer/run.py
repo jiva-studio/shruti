@@ -66,7 +66,7 @@ async def bootstrap_catalog(settings: Settings | None = None) -> None:
     try:
         await library_db.ensure_library(s)
     except Exception as exc:
-        log.error("library_bootstrap_failed", error=str(exc))
+        log.exception("library_bootstrap_failed", error=str(exc))
 
 
 # ── Periodic loop ──────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ async def run_once(
         try:
             catalog_to = await catalog.ensure_catalog(s, force=force_catalog) or catalog_from
         except Exception as exc:
-            log.error("catalog_refresh_failed", error=str(exc))
+            log.exception("catalog_refresh_failed", error=str(exc))
 
         # List all transcripts on the requested languages
         langs = [lang_filter] if lang_filter else s.langs

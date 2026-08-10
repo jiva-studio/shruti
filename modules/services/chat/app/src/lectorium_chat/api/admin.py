@@ -44,7 +44,10 @@ def _log_reindex_result(task: asyncio.Task[str]) -> None:
         return
     exc = task.exception()
     if exc is not None:
-        log.error("reindex_failed", error=str(exc))
+        # `exc_info=exc` and not `log.exception`: the callback runs outside
+        # the failing frame, so `sys.exc_info()` is empty here — the task
+        # object is the only place the traceback still exists.
+        log.error("reindex_failed", error=str(exc), exc_info=exc)
     else:
         log.info("reindex_finished", run_id=task.result())
 
