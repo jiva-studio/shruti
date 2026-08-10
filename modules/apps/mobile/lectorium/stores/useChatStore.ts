@@ -1653,9 +1653,11 @@ export const useChatStore = defineStore("chat", () => {
     // per message (the decorator skips per-message tombstones exactly when the
     // parent is already gone). The message sweep still runs — the FK cascade
     // that would have covered it is best-effort on the native adapter.
-    await app.repositories().unitOfWork.run(async () => {
-      await repos.sessions.delete(id as ChatSessionId)
-      await repos.messages.deleteBySession(id as ChatSessionId)
+    await app.repositories().unitOfWork.run(async (tx) => {
+      // Both writes carry the transaction's handle, so each one's journal
+      // entry joins THIS transaction instead of opening a second BEGIN.
+      await repos.sessions.delete(id as ChatSessionId, tx)
+      await repos.messages.deleteBySession(id as ChatSessionId, tx)
     })
     sessions.value = sessions.value.filter((s) => s.id !== id)
     if (activeSessionId.value === id) {

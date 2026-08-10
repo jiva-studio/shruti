@@ -1,3 +1,5 @@
+import type { ITransaction } from "./unitOfWork.js"
+
 /**
  * Personal-library membership repository — the user's remove/re-add intent for a
  * library item, CLIENT-owned and synced (pushed + merged last-write-wins). A row
@@ -14,13 +16,15 @@ export interface LibraryMembership {
 }
 
 export interface ILibraryMembershipRepository {
+  /* `tx` on the mutating methods: the caller's open transaction handle (see
+   * {@link ITransaction}). */
   /** Ids of items the user has REMOVED (an archived membership). Absence from
    *  the set = active by default. Drives the "hide removed" join in the store. */
   listArchivedIds(): Promise<ReadonlySet<string>>
   getById(id: string): Promise<LibraryMembership | null>
   /** Remove from the library: upsert `archived_at = now`. */
-  setArchived(id: string): Promise<void>
+  setArchived(id: string, tx?: ITransaction): Promise<void>
   /** Re-add to the library: upsert `archived_at = NULL`. */
-  setActive(id: string): Promise<void>
+  setActive(id: string, tx?: ITransaction): Promise<void>
   clearAll(): Promise<void>
 }

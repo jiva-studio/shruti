@@ -14,6 +14,7 @@ import type {
   RecentTrackProgress,
   TrackListeningTotal,
 } from "@lib/domain/ports/listeningSessionRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { ListeningSessionRow } from "@lib/persistence/user"
 import { mutate, queryOne } from "@kit/persistence"
 import { createIdGenerator } from "./idGenerator.js"
@@ -36,7 +37,32 @@ function chunked<T>(items: readonly T[], size: number): T[][] {
   return chunks
 }
 
-export function createSqlListeningSessionRepository(db: IDatabase): IListeningSessionRepository {
+/**
+ * Every write goes through the injected {@link IUnitOfWork} rather than a bare
+ * `mutate`.
+ *
+ * `mutate` is `execute` + `save`, and `execute` deliberately bypasses the
+ * adapters' transaction queue (repos call it from inside a transaction
+ * callback, so queueing it would dead-lock — see
+ * `useCapacitorSqlPersistence.ts`). The consequence is that a bare write
+ * issued while an unrelated transaction is open joins that transaction on the
+ * single shared connection and is discarded when it rolls back (#1494). This
+ * repository is the one that makes that routine: `forceStart` and `tick` fire
+ * off the player's progress cadence, i.e. on a timer, straight through a sync
+ * pull's transaction window — and on sql.js the rollback also drops the
+ * deferred `save()`, so the write reaches neither the database nor IndexedDB.
+ *
+ * Routing them through the unit of work puts each one in the adapter's
+ * transaction queue instead, so it waits for the foreign block and commits in
+ * a transaction of its own. `finish` / `finishAt` are additionally called by
+ * the sync-journal decorator from inside ITS transaction; they take that
+ * transaction's handle and join it, keeping the row and its outbox entry
+ * atomic.
+ */
+export function createSqlListeningSessionRepository(
+  db: IDatabase,
+  unitOfWork: IUnitOfWork
+): IListeningSessionRepository {
   async function lastToPositionForItem(itemId: PlaylistItemId): Promise<TrackPositionSec | null> {
     // `id DESC` is a deterministic tiebreak: `ended_at` has whole-second
     // resolution, so two sessions closed in the same second would otherwise
@@ -67,7 +93,7 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
   }
 
   return {
-    async start({ itemId, position }) {
+    async start({ itemId, position }, tx) {
       // `from_position` is where THIS listening interval begins. Resuming
       // forward from where we left off, the previous session's end is the
       // true start (the first progress frame may already be a beat ahead),
@@ -76,46 +102,62 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       // after seeking back — `lastTo > position` would make `to - from`
       // negative and silently cancel the day's heatmap total. Clamp to
       // `position` so a session can never count negative time.
-      const lastTo = await lastToPositionForItem(itemId)
-      const fromPosition = Math.min(lastTo ?? position, position)
-      return insert(itemId, fromPosition, position)
+      // Read-then-insert: one transaction so a concurrent writer can't slip
+      // between the high-water read and the row it decides.
+      return unitOfWork.run(async () => {
+        const lastTo = await lastToPositionForItem(itemId)
+        const fromPosition = Math.min(lastTo ?? position, position)
+        return insert(itemId, fromPosition, position)
+      }, tx)
     },
 
-    async forceStart({ itemId, position }) {
-      return insert(itemId, position, position)
+    async forceStart({ itemId, position }, tx) {
+      return unitOfWork.run(() => insert(itemId, position, position), tx)
     },
 
-    async tick(id, { position }) {
+    async tick(id, { position }, tx) {
       // `to_position` is monotonic non-decreasing WITHIN a session: a backward
       // position event — a fast scrub or an out-of-order player tick that
       // bypassed `seek()` — must not rewind `to` below `from` and manufacture a
       // negative `to - from` delta. `MAX(to_position, ?)` keeps the high-water
       // mark and preserves real forward progress; a genuine backward jump is a
       // seek and opens its own session via `seek()`.
-      await mutate(
-        db,
-        "UPDATE listening_sessions SET ended_at = ?, to_position = MAX(to_position, ?) WHERE id = ?",
-        [nowSec(), position, id]
+      await unitOfWork.run(
+        () =>
+          mutate(
+            db,
+            "UPDATE listening_sessions SET ended_at = ?, to_position = MAX(to_position, ?) WHERE id = ?",
+            [nowSec(), position, id]
+          ),
+        tx
       )
     },
 
-    async finish(id, { position }) {
+    async finish(id, { position }, tx) {
       // Same monotonic guard as tick(): a finish landing below where the
       // session already reached keeps the high-water mark, so a session can
       // never persist a negative delta. See tick() for the rationale.
-      await mutate(
-        db,
-        "UPDATE listening_sessions SET ended_at = ?, to_position = MAX(to_position, ?) WHERE id = ?",
-        [nowSec(), position, id]
+      await unitOfWork.run(
+        () =>
+          mutate(
+            db,
+            "UPDATE listening_sessions SET ended_at = ?, to_position = MAX(to_position, ?) WHERE id = ?",
+            [nowSec(), position, id]
+          ),
+        tx
       )
     },
 
-    async finishAt(id, { position, endedAtSec }) {
-      await mutate(db, "UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
-        endedAtSec,
-        position,
-        id,
-      ])
+    async finishAt(id, { position, endedAtSec }, tx) {
+      await unitOfWork.run(
+        () =>
+          mutate(db, "UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
+            endedAtSec,
+            position,
+            id,
+          ]),
+        tx
+      )
     },
 
     async getLastSessionForItem(itemId): Promise<ListeningSession | null> {

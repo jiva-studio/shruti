@@ -161,6 +161,17 @@ export function useCapacitorSqlPersistence(): IPersistence {
       // atomically end-to-end (mirrors the sql.js adapter). `execute()` is
       // intentionally NOT queued — repos call it from inside `fn()`, so
       // routing it through the same chain would deadlock.
+      //
+      // The price of that bypass: a write issued while an unrelated block is
+      // open joins it on this one connection and is rolled back with it
+      // (#1494). Closing it HERE would mean threading a transaction handle
+      // through every `IDatabase.execute` call site (and through `@kit`'s
+      // `mutate`), so the invariant is enforced one layer up instead: a
+      // repository write must either run inside a transaction the caller
+      // opened, or go through `IUnitOfWork.run` — which queues it here and
+      // gives it a block of its own. `listeningSessionsRepository.sql.ts` is
+      // the timer-driven writer that made the bypass bite; the rest of the
+      // repositories are event-driven and follow the same rule as they move.
       let txQueue: Promise<unknown> = Promise.resolve()
 
       return {
