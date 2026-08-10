@@ -343,7 +343,27 @@ export const usePlayerStore = defineStore("player", () => {
     positionMs.value = Math.min(upper, positionMs.value + SKIP_DELTA_MS)
   }
 
+  /**
+   * Open a track for playback. The sheet only appears once the engine has
+   * loaded (`open` follows `trackId`), and getting there costs a play plan,
+   * a session hand-off, a resume lookup and possibly a whole download — so
+   * claim the row synchronously first and hold the claim for the entire
+   * open. Every exit path, including a bail on a stale generation or a
+   * rejected plan, releases it.
+   */
   async function openTrack(
+    args: OpenArgs
+  ): Promise<Result<void, PlayTrackError | "engine-failed">> {
+    const downloads = useDownloadStore()
+    downloads.markPending(args.track.id)
+    try {
+      return await loadTrack(args)
+    } finally {
+      downloads.clearPending(args.track.id)
+    }
+  }
+
+  async function loadTrack(
     args: OpenArgs
   ): Promise<Result<void, PlayTrackError | "engine-failed">> {
     // Claim this open as the latest. Any open already in flight is now

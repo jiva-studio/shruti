@@ -33,7 +33,10 @@ export function useHomeRowBuilder(): HomeRowBuilderReturn {
       // played should show the empty/in-progress radial, NOT the "added"
       // checkmark (checkmark belongs on Library / Search).
       const state = row.state === "added" ? "queued" : row.state
-      const disabled = state === "downloading"
+      // Non-interactive while the audio isn't playable yet — "downloading"
+      // obviously, and "pending" so the second tap of a double-tap doesn't
+      // queue another open behind the first.
+      const disabled = state === "downloading" || state === "pending"
       // Dim any row whose audio isn't actually on disk yet — "downloading"
       // and "failed" obviously, but also "idle" rows that carry a saved
       // listening percentage from a previous session. Without this, a
