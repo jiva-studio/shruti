@@ -2,11 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { AudioQueueTransition } from "@ports/app/audioPlayer.js"
 import type { IDatabase } from "@ports/app/index.js"
 import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
-import { createSqlListeningSessionRepository } from "@infra/repositories/sql/listeningSessionsRepository.sql.js"
-import {
-  applyUserSchemaForTests,
-  createInMemoryTestDatabase,
-} from "@infra/repositories/sql/__tests__/testDb.js"
+import { runMigrations } from "@kit/persistence"
+import { createSqlAppRepositories } from "@infra/repositories/sql/index.js"
+import { createInMemoryTestDatabase } from "@infra/repositories/sql/__tests__/testDb.js"
+import { userMigrations } from "@infra/persistence/migrations/user/index.js"
 import { usePlayerQueueReconcile } from "../usePlayerQueueReconcile.js"
 
 /**
@@ -15,6 +14,12 @@ import { usePlayerQueueReconcile } from "../usePlayerQueueReconcile.js"
  * against a REAL `listening_sessions` adapter and assert the history is
  * unchanged — the double-counted rows of #1495 would show up here as extra
  * rows and inflated totals.
+ *
+ * The repository comes from `createSqlAppRepositories`, not from the adapter
+ * factory directly: that is what production hands the reconcile path
+ * (`app.repositories().listeningSessions`), so the sync-journal decorator is in
+ * the loop and a `forceStartOnce` it forgot to delegate fails here. It also
+ * keeps this test off the factory's own signature, which #1493 is changing.
  */
 
 let db: IDatabase
@@ -89,8 +94,15 @@ const BATCH: AudioQueueTransition[] = [
 describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
-    await applyUserSchemaForTests(db)
-    repo = createSqlListeningSessionRepository(db)
+    await runMigrations(db, userMigrations)
+    repo = createSqlAppRepositories({
+      contentDb: db,
+      userDb: db,
+      getActiveLanguage: () => "en",
+      // Wired, so the repository is the journaled one the app actually uses.
+      getDeviceId: async () => "dev-1",
+      getOwnerId: () => "user-1",
+    }).listeningSessions
     prefs = new Map()
     acked = []
     ackFails = false
