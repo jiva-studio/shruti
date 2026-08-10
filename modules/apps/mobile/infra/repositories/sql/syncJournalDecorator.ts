@@ -29,7 +29,12 @@ import {
  * Hybrid Logical Clock. The atomicity comes from a shared reentrant
  * {@link IUnitOfWork}: the decorator wraps each mutating call in `run`, which
  * either opens a fresh transaction (standalone write) or joins the caller's
- * open one (e.g. `addTrackToPlaylist`, `deleteNote`) — never a nested BEGIN.
+ * open one — never a nested BEGIN. Which of the two happens is decided by the
+ * transaction HANDLE the caller passes as the mutating method's trailing `tx`
+ * argument (`addTrackToPlaylist`, `deleteNote`, `useChatStore.deleteSession`, …
+ * do); without a live handle the write gets a transaction of its own, so a
+ * call from an unrelated stack is never spliced into whatever else happens to
+ * be in flight (#1493).
  *
  * The journal's `doc_id` is the collection's natural sync key: `track_id` for
  * playlist items (not the local `pl_…` surrogate), and the row id for notes /
@@ -75,7 +80,8 @@ export interface SyncJournalDeps {
   /** The user database — same connection the wrapped repositories write to. */
   readonly userDb: IDatabase
   /** Reentrant unit-of-work SHARED with the repository bundle's `unitOfWork`,
-   *  so a journal joins an outer caller transaction instead of dead-locking. */
+   *  so a journal joins the caller's transaction — when the caller hands its
+   *  handle down — instead of dead-locking on a nested BEGIN. */
   readonly unitOfWork: IUnitOfWork
   /** Resolves this device's stable id (the HLC tiebreak). Supplied by the
    *  composition root from the auth/device layer; kept as a provider because
@@ -169,25 +175,25 @@ export function withSyncJournaling(
     listRecent: (limit) => base.notes.listRecent(limit),
     clearAll: () => base.notes.clearAll(),
 
-    create: (input) =>
-      unitOfWork.run(async () => {
-        const note = await base.notes.create(input)
+    create: (input, tx) =>
+      unitOfWork.run(async (scope) => {
+        const note = await base.notes.create(input, scope)
         await journal(NOTES, note.id, "upsert", noteToWire(note))
         return note
-      }),
+      }, tx),
 
-    update: (input) =>
-      unitOfWork.run(async () => {
-        const note = await base.notes.update(input)
+    update: (input, tx) =>
+      unitOfWork.run(async (scope) => {
+        const note = await base.notes.update(input, scope)
         await journal(NOTES, note.id, "upsert", noteToWire(note))
         return note
-      }),
+      }, tx),
 
-    delete: (id) =>
-      unitOfWork.run(async () => {
-        await base.notes.delete(id)
+    delete: (id, tx) =>
+      unitOfWork.run(async (scope) => {
+        await base.notes.delete(id, scope)
         await journal(NOTES, id, "delete", null)
-      }),
+      }, tx),
   }
 
   const playlistItems: IPlaylistItemRepository = {
@@ -196,29 +202,29 @@ export function withSyncJournaling(
     listArchived: () => base.playlistItems.listArchived(),
     clearAll: () => base.playlistItems.clearAll(),
 
-    add: (trackId, collectionId) =>
-      unitOfWork.run(async () => {
-        const item = await base.playlistItems.add(trackId, collectionId)
+    add: (trackId, collectionId, tx) =>
+      unitOfWork.run(async (scope) => {
+        const item = await base.playlistItems.add(trackId, collectionId, scope)
         // doc_id is the natural key track_id, not the local pl_… surrogate.
         await journal(PLAYLIST_ITEMS, item.trackId, "upsert", playlistToWire(item))
         return item
-      }),
+      }, tx),
 
-    archive: (id) =>
-      unitOfWork.run(async () => {
-        await base.playlistItems.archive(id)
+    archive: (id, tx) =>
+      unitOfWork.run(async (scope) => {
+        await base.playlistItems.archive(id, scope)
         const item = await base.playlistItems.getById(id)
         if (item) await journal(PLAYLIST_ITEMS, item.trackId, "upsert", playlistToWire(item))
-      }),
+      }, tx),
 
-    remove: (id) =>
-      unitOfWork.run(async () => {
+    remove: (id, tx) =>
+      unitOfWork.run(async (scope) => {
         // Read the track_id BEFORE the row is gone so the tombstone keys on
         // the natural sync key.
         const item = await base.playlistItems.getById(id)
-        await base.playlistItems.remove(id)
+        await base.playlistItems.remove(id, scope)
         if (item) await journal(PLAYLIST_ITEMS, item.trackId, "delete", null)
-      }),
+      }, tx),
   }
 
   const listeningSessions: IListeningSessionRepository = {
@@ -228,9 +234,9 @@ export function withSyncJournaling(
     // (finish / finishAt) is journaled. Written out member by member on
     // purpose: a spread would satisfy the port structurally and let a
     // newly added mutation slip through un-journaled without a type error.
-    start: (args) => base.listeningSessions.start(args),
-    forceStart: (args) => base.listeningSessions.forceStart(args),
-    tick: (id, args) => base.listeningSessions.tick(id, args),
+    start: (args, tx) => base.listeningSessions.start(args, tx),
+    forceStart: (args, tx) => base.listeningSessions.forceStart(args, tx),
+    tick: (id, args, tx) => base.listeningSessions.tick(id, args, tx),
     getLastSessionForItem: (itemId) => base.listeningSessions.getLastSessionForItem(itemId),
     getResumePositionForItem: (itemId) => base.listeningSessions.getResumePositionForItem(itemId),
     getProgressForItems: (itemIds) => base.listeningSessions.getProgressForItems(itemIds),
@@ -247,17 +253,17 @@ export function withSyncJournaling(
       base.listeningSessions.getTracksListenedInRange(fromMs, toMs),
     clearAll: () => base.listeningSessions.clearAll(),
 
-    finish: (id, args) =>
-      unitOfWork.run(async () => {
-        await base.listeningSessions.finish(id, args)
+    finish: (id, args, tx) =>
+      unitOfWork.run(async (scope) => {
+        await base.listeningSessions.finish(id, args, scope)
         await journalSession(id)
-      }),
+      }, tx),
 
-    finishAt: (id, args) =>
-      unitOfWork.run(async () => {
-        await base.listeningSessions.finishAt(id, args)
+    finishAt: (id, args, tx) =>
+      unitOfWork.run(async (scope) => {
+        await base.listeningSessions.finishAt(id, args, scope)
         await journalSession(id)
-      }),
+      }, tx),
   }
 
   /** Snapshot a closed session row (with its stable `track_id`) and journal it
@@ -323,24 +329,24 @@ export function withSyncJournaling(
     touch: (id, updatedAtMs) => base.chatSessions.touch(id, updatedAtMs),
     clearAll: () => base.chatSessions.clearAll(),
 
-    updateTitle: (id, title) =>
-      unitOfWork.run(async () => {
-        await base.chatSessions.updateTitle(id, title)
+    updateTitle: (id, title, tx) =>
+      unitOfWork.run(async (scope) => {
+        await base.chatSessions.updateTitle(id, title, scope)
         // Only re-journal the title (LWW) for a session already in sync — a
         // proactive session (never journaled) has nothing to update remotely.
         if (isChatSyncEnabled() && (await wasJournaled(CHAT_SESSIONS, id))) {
           await journalChatSession(id)
         }
-      }),
+      }, tx),
 
-    delete: (id) =>
-      unitOfWork.run(async () => {
+    delete: (id, tx) =>
+      unitOfWork.run(async (scope) => {
         // Decide before the row is gone: only a session that entered sync gets
         // a tombstone (its cascade drops the messages on every device).
         const tombstone = isChatSyncEnabled() && (await wasJournaled(CHAT_SESSIONS, id))
-        await base.chatSessions.delete(id)
+        await base.chatSessions.delete(id, scope)
         if (tombstone) await journal(CHAT_SESSIONS, id, "delete", null)
-      }),
+      }, tx),
   }
 
   /* ----------------------------- chat messages ---------------------------- */
@@ -417,9 +423,9 @@ export function withSyncJournaling(
     updateFeedback: (id, feedback) => base.chatMessages.updateFeedback(id, feedback),
     clearAll: () => base.chatMessages.clearAll(),
 
-    create: (input) =>
-      unitOfWork.run(async () => {
-        const msg = await base.chatMessages.create(input)
+    create: (input, tx) =>
+      unitOfWork.run(async (scope) => {
+        const msg = await base.chatMessages.create(input, scope)
         // Completed messages only: `create` is the finalise seam (streaming
         // tokens never touch it). Journal the parent session first.
         if (isChatSyncEnabled()) {
@@ -427,7 +433,7 @@ export function withSyncJournaling(
           await journalChatMessage(msg.id)
         }
         return msg
-      }),
+      }, tx),
 
     // `meta` is part of the journaled snapshot, so an in-place rewrite of it
     // has to be re-journaled (LWW) or the server copy silently diverges.
@@ -441,19 +447,19 @@ export function withSyncJournaling(
       await rejournalChatMessage(id)
     },
 
-    delete: (id) =>
-      unitOfWork.run(async () => {
+    delete: (id, tx) =>
+      unitOfWork.run(async (scope) => {
         // Decide before the row is gone — same rule as the session tombstone:
         // only a message that entered sync gets one. Chat retry deletes the
         // failed assistant reply AND its user prompt; without the tombstone
         // the server and every other device would keep them forever.
         const tombstone = isChatSyncEnabled() && (await wasJournaled(CHAT_MESSAGES, id))
-        await base.chatMessages.delete(id)
+        await base.chatMessages.delete(id, scope)
         if (tombstone) await journal(CHAT_MESSAGES, id, "delete", null)
-      }),
+      }, tx),
 
-    deleteBySession: (sessionId) =>
-      unitOfWork.run(async () => {
+    deleteBySession: (sessionId, tx) =>
+      unitOfWork.run(async (scope) => {
         // Tombstone each synced message ONLY when the parent session survives.
         //
         // Whole-conversation delete (`useChatStore.deleteSession`) removes the
@@ -469,9 +475,9 @@ export function withSyncJournaling(
         // messages are gone, so every synced one gets its tombstone.
         const orphaned = isChatSyncEnabled() && (await sessionRowExists(sessionId))
         const ids = orphaned ? await journaledMessageIds(sessionId) : []
-        await base.chatMessages.deleteBySession(sessionId)
+        await base.chatMessages.deleteBySession(sessionId, scope)
         for (const id of ids) await journal(CHAT_MESSAGES, id, "delete", null)
-      }),
+      }, tx),
   }
 
   /* -------------------------- library memberships ------------------------- */
@@ -493,17 +499,17 @@ export function withSyncJournaling(
     getById: (id) => base.libraryMemberships.getById(id),
     clearAll: () => base.libraryMemberships.clearAll(),
 
-    setArchived: (id) =>
-      unitOfWork.run(async () => {
-        await base.libraryMemberships.setArchived(id)
+    setArchived: (id, tx) =>
+      unitOfWork.run(async (scope) => {
+        await base.libraryMemberships.setArchived(id, scope)
         await journalMembership(id)
-      }),
+      }, tx),
 
-    setActive: (id) =>
-      unitOfWork.run(async () => {
-        await base.libraryMemberships.setActive(id)
+    setActive: (id, tx) =>
+      unitOfWork.run(async (scope) => {
+        await base.libraryMemberships.setActive(id, scope)
         await journalMembership(id)
-      }),
+      }, tx),
   }
 
   return {

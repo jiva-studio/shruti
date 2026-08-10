@@ -1,4 +1,4 @@
-export type { IUnitOfWork } from "./unitOfWork.js"
+export type { ITransaction, IUnitOfWork } from "./unitOfWork.js"
 export type {
   ITrackRepository,
   TrackListFilters,

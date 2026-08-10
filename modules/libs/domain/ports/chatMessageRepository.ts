@@ -15,6 +15,7 @@ import type {
   MediaPayload,
 } from "../chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "../core.js"
+import type { ITransaction } from "./unitOfWork.js"
 
 export interface CreateChatMessageInput {
   readonly id: ChatMessageId
@@ -68,8 +69,10 @@ export interface IChatMessageRepository {
   /** All messages in a session, oldest-first. */
   listBySession(sessionId: ChatSessionId): Promise<readonly ChatMessage[]>
 
-  /** Append one message. Returns the persisted entity. */
-  create(input: CreateChatMessageInput): Promise<ChatMessage>
+  /** Append one message. Returns the persisted entity. `tx`: the caller's
+   *  open transaction handle, keeping the write and its journal entry inside
+   *  that transaction (see {@link ITransaction}). */
+  create(input: CreateChatMessageInput, tx?: ITransaction): Promise<ChatMessage>
 
   /** Replace the action-state map. Used when the user confirms /
    *  dismisses an action card; read-modify-writes the `meta` envelope. */
@@ -82,7 +85,7 @@ export interface IChatMessageRepository {
    *  Retry on a failed/truncated assistant reply, the store deletes the
    *  failed assistant row AND the user prompt that produced it so the
    *  fresh turn doesn't pile a duplicate user message into history. */
-  delete(id: ChatMessageId): Promise<void>
+  delete(id: ChatMessageId, tx?: ITransaction): Promise<void>
 
   /** Replace the followups list. Used to persist server-generated
    *  Ask-Sadhu suggestion chips onto a focus message after the
@@ -92,7 +95,7 @@ export interface IChatMessageRepository {
 
   /** Delete every message belonging to a session. The session row is
    *  removed by the session repository; this is the cascade companion. */
-  deleteBySession(sessionId: ChatSessionId): Promise<void>
+  deleteBySession(sessionId: ChatSessionId, tx?: ITransaction): Promise<void>
 
   /** Wipe every message — paired with session.clearAll(). */
   clearAll(): Promise<void>

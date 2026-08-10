@@ -5,7 +5,10 @@ import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { Note } from "@lib/domain/note.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
 
-const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
+/** Hands the callback a transaction handle, like a real unit of work, so a
+ *  test can pin that the use case threads it down to the repository. */
+const TX = { kind: "transaction" } as const
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn(TX) }
 
 function makeRepo(overrides: Partial<INoteRepository> = {}): INoteRepository {
   return {
@@ -47,7 +50,7 @@ describe("deleteNote", () => {
       { notes: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(true)
-    expect(del).toHaveBeenCalledWith("n-1")
+    expect(del).toHaveBeenCalledWith("n-1", TX)
   })
 
   it("returns not-found for absent notes", async () => {
