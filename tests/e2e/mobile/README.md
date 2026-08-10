@@ -58,8 +58,35 @@ the screenshot pipeline's recipe:
   real ~1s silent MP3 so playback genuinely starts.
 - **IndexedDB pre-seed** — `fixtures/user-<locale>.db` (a seeded user with ~9
   playlist tracks, history and notes) is written into IndexedDB before boot.
-- Transcript JSONs are **not** intercepted — they hit real S3, so the transcript
-  spec exercises the live fetch.
+- Transcript JSONs are served from `fixtures/transcript.json`, rewritten to
+  match the requested track so the reader renders offline.
+
+### Staying offline
+
+The `@offline` tier must never touch a real backend. Four things enforce that,
+all automatic — nothing to opt into per spec:
+
+- **A sink region.** The mocked `config.json` carries a `regions` block whose
+  every service URL (`urlTemplate`, `authBaseUrl`, `chatBaseUrl`,
+  `profileBaseUrl`, `orchestratorBaseUrl`, `discoveryBaseUrl`, `share*Url`)
+  points at `http://127.0.0.1:11098` — a port nothing listens on. Without it
+  `startup.ts` returns early on `if (!config.regions)` and the app keeps its
+  compiled-in `SERVERS`, whose `global` region is **production**.
+- **A network guard** (`support/network-guard.ts`) blocks every request that
+  would leave the machine, and *fails the test* when it was aimed at a
+  production host — naming the URL and the spec.
+- **`POST /auth/anonymous`** is answered with a canned session for every spec,
+  so no run can mint a real account. `/auth/me` and `/auth/refresh` stay
+  opt-in: they describe *which* session a spec seeded.
+- **`**​/profile/sync/*`** is answered with an empty pull and an accepting
+  push, so the sync engine — which runs for anonymous users too — has a
+  deterministic local answer.
+
+Those route sets are registered on the browser **context**, which Playwright
+matches after page-level routes, so a spec's own `page.route` still wins.
+
+Set `E2E_NET_LOG=<file>` to append a JSONL record of every blocked outbound
+attempt — that is how the leak is measured.
 
 Everything is driven through the rendered UI; the suite never touches the
 `window.__shruti.debug` bridge (the screenshot pipeline does). That bridge
