@@ -60,7 +60,8 @@ _REGION_REDACTED_MARKER = "[redacted:ru]"
 # `setup_logging` strips those handlers and re-enables propagation.
 _UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access", "uvicorn.asgi")
 
-# Request paths dropped from the access log before formatting. /healthz
+# Request paths whose SUCCESSFUL access lines are dropped before
+# formatting (see `DropAccessLogPaths` for the status rule). /healthz
 # is polled by the container healthcheck every 15 s plus two blackbox
 # probes; over 7 days it was 120,666 of 145,361 shipped lines — 83% of
 # the whole service's log volume, and 99.7% of its access lines.
@@ -78,13 +79,24 @@ class DropAccessLogPaths(logging.Filter):
     uvicorn formats access lines lazily — `record.args` is
     `(client_addr, method, full_path, http_version, status_code)` — so
     the path is matched without rendering the message.
+
+    Only successful probes are silenced. A healthcheck that answers 4xx/5xx
+    without raising leaves no `uvicorn.error` traceback behind, so dropping
+    it by path alone would erase the only record that the probe failed —
+    exactly the line an operator goes looking for.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
         args = record.args
         if not isinstance(args, tuple) or len(args) != 5:
             return True
-        return str(args[2]).split("?", 1)[0] not in SILENCED_ACCESS_PATHS
+        if str(args[2]).split("?", 1)[0] not in SILENCED_ACCESS_PATHS:
+            return True
+        try:
+            status = int(args[4])  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return True
+        return status >= 400
 
 
 def add_base_context(base: dict):
