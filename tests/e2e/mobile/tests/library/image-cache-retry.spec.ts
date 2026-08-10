@@ -76,7 +76,9 @@ test(
     const loadedCovers = page.locator(".collection-card .cached-image.is-loaded")
 
     await step(page, 143, 0, async () => {
-      await boot(page, "en", { userDb: "clean" })
+      // This spec owns the cover route (it drops the first requests on
+      // purpose), so the default cover stub must stay out of its way.
+      await boot(page, "en", { userDb: "clean", covers: false })
       // Search landing: collection / topic tiles render through CachedImage.
       await gotoTab(page, "search")
 
