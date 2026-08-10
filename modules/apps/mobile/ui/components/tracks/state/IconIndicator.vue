@@ -11,9 +11,9 @@
 <script lang="ts" setup>
 import { computed, type Component } from "vue"
 import { IconRosetteDiscountCheckFilled } from "@ui/icons/index.js"
-import { IconCircleCheckFilled, IconCircleXFilled } from "@tabler/icons-vue"
+import { IconCircleCheckFilled, IconCircleXFilled, IconCloudOff } from "@tabler/icons-vue"
 
-export type StateIcon = "none" | "failed" | "added" | "completed"
+export type StateIcon = "none" | "failed" | "added" | "deferred" | "completed"
 
 const props = defineProps<{
   icon: StateIcon
@@ -29,6 +29,9 @@ const stateIconMaps: StateIconMap = {
   none: { icon: undefined, color: undefined, size: 24 },
   failed: { icon: IconCircleXFilled, color: "danger", size: 24 },
   added: { icon: IconCircleCheckFilled, color: "medium", size: 24 },
+  // Queued but NOT kept offline — it must not read as saved, because it will
+  // not play in airplane mode. Distinct from "failed": nothing went wrong.
+  deferred: { icon: IconCloudOff, color: "medium", size: 24 },
   completed: { icon: IconRosetteDiscountCheckFilled, color: "medium", size: 24 },
 }
 const statusIcon = computed(() => stateIconMaps[props.icon])

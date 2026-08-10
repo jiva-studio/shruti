@@ -118,4 +118,27 @@ describe("useDownloadStore — how a settled transfer is painted", () => {
     expect(await store.ensureDownloaded(TRACK, PATH)).toBe("file:///data/x.mp3")
     expect(store.getState(TRACK)).toBe("completed")
   })
+
+  it("stops a task cancelled before the transfer was ever registered", async () => {
+    // Nothing exists natively until `transfer()` runs, so a cancel arriving
+    // during the cache probe used to issue a native cancel for a url the
+    // plugin had never heard of — and the download went ahead anyway, putting
+    // the file back moments after remove() deleted it.
+    let releaseProbe: (v: string | null) => void = () => {}
+    resolveLocalUrl.mockImplementationOnce(
+      () => new Promise<string | null>((resolve) => (releaseProbe = resolve))
+    )
+    downloadMediaMock.mockResolvedValue(
+      ok({ mediaItem: { localPath: "file:///data/x.mp3" }, server: SERVER })
+    )
+    const store = useDownloadStore()
+
+    const pending = store.ensureDownloaded(TRACK, PATH)
+    // The user archives the track while the probe is still outstanding.
+    store.cancelPrefetch(TRACK)
+    releaseProbe(null)
+
+    expect(await pending).toBeNull()
+    expect(downloadMediaMock).not.toHaveBeenCalled()
+  })
 })

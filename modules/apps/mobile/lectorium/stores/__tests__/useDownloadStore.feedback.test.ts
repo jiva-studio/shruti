@@ -603,16 +603,19 @@ describe("useDownloadStore — tap feedback and failure notices", () => {
     expect(store.getState("track-2")).toBe("deferred")
   })
 
-  it("offers no override to the prefetch queue", async () => {
-    // Nobody is waiting on a background job, and a FIFO that can wave itself
-    // past the limit is not a limit.
+  it("tells the prefetch queue nothing — neither an override nor a notice", async () => {
+    // Nobody is waiting on a background job: a FIFO that can wave itself past
+    // the limit is not a limit, and a FIFO that talks about it is the toast
+    // that greeted every launch (#1578). The row's `deferred` state is the
+    // whole signal.
     hasRoom = false
     const store = useDownloadStore()
 
     await store.ensureDownloaded(TRACK, PATH, null, "queue")
 
     expect(toastAction).not.toHaveBeenCalled()
-    expect(toastError).toHaveBeenCalledWith("errors.downloadStorageFull", expect.anything())
+    expect(toastError).not.toHaveBeenCalled()
+    expect(store.getState(TRACK)).toBe("deferred")
   })
 
   it("answers the next deliberate tap instead of going silent for a minute", async () => {
