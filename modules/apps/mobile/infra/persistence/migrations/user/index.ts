@@ -22,6 +22,7 @@ import { migration_020_library_items_source_url } from "./020_library_items_sour
 import { migration_021_library_memberships } from "./021_library_memberships.js"
 import { migration_022_library_items_variants } from "./022_library_items_variants.js"
 import { migration_023_outbox_owner } from "./023_outbox_owner.js"
+import { migration_024_outbox_collection_docid_index } from "./024_outbox_collection_docid_index.js"
 
 /**
  * Ordered list of user-DB migrations. Append new migrations at the end —
@@ -51,4 +52,5 @@ export const userMigrations: readonly Migration[] = [
   migration_021_library_memberships,
   migration_022_library_items_variants,
   migration_023_outbox_owner,
+  migration_024_outbox_collection_docid_index,
 ]
