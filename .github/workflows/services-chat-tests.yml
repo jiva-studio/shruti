@@ -16,11 +16,16 @@ on:
     paths:
       - 'modules/services/chat/**'
       - '.github/workflows/services-chat-tests.yml'
+      - '.github/workflows/services-ghcr.yml'
   push:
     branches: [main]
     paths:
       - 'modules/services/chat/**'
       - '.github/workflows/services-chat-tests.yml'
+      - '.github/workflows/services-ghcr.yml'
+  # The image job below is the only PR-time check on the chat Dockerfile;
+  # dispatch lets the author re-run it without pushing a commit.
+  workflow_dispatch:
 
 concurrency:
   group: services-chat-tests-${{ github.ref }}
@@ -71,3 +76,61 @@ jobs:
 
       - name: Run tests
         run: uv run --no-sync python -m pytest tests -q
+
+  # ------------------------------------------------------------------
+  # image: PR-time validation of the chat Dockerfile and the ghcr gate.
+  #
+  # `services-ghcr.yml` only runs on push to main and workflow_dispatch,
+  # so until now a broken Dockerfile or a broken chat gate inside it got
+  # ZERO review-time signal — it landed red on main and stopped image
+  # publishing for every service in that push's matrix.
+  #
+  # Deliberately cheap: the build is skipped unless a file that can
+  # actually change the image changed, it never pushes, and it writes no
+  # GHA cache (reads main's `chat` scope, so an unchanged dependency
+  # layer is a cache hit). Cost is ~0 on a source-only chat PR and one
+  # `uv sync --frozen` on a dependency PR — which is exactly the PR that
+  # needs proving.
+  # ------------------------------------------------------------------
+  image:
+    name: image build (chat)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Both workflows carry hand-written shell and matrix expressions; a
+      # parse error in either is a red main. Near-free, so it runs always.
+      - name: Parse workflow YAML
+        run: |
+          python3 -c 'import sys, yaml; [yaml.safe_load(open(p)) for p in sys.argv[1:]]' \
+            .github/workflows/services-chat-tests.yml \
+            .github/workflows/services-ghcr.yml
+
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            image:
+              - 'modules/services/chat/Dockerfile'
+              - 'modules/services/chat/app/pyproject.toml'
+              - 'modules/services/chat/app/uv.lock'
+              - 'modules/services/chat/app/.python-version'
+              - 'modules/.dockerignore'
+              - '.github/workflows/services-ghcr.yml'
+              - '.github/workflows/services-chat-tests.yml'
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.filter.outputs.image == 'true' || github.event_name != 'pull_request'
+
+      # Same context + dockerfile as the `chat` matrix entry in
+      # services-ghcr.yml. No `push`, no `load` (nothing scans it here)
+      # and no `cache-to` — a PR must not evict main's build cache.
+      - uses: docker/build-push-action@v6
+        if: steps.filter.outputs.image == 'true' || github.event_name != 'pull_request'
+        with:
+          context: ./modules
+          file: ./modules/services/chat/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=chat
