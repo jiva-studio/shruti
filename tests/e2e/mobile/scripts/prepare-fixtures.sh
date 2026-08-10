@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# Recreate the local-only E2E fixtures (gitignored binaries).
+# Recreate the local-only E2E fixtures (the gitignored user DBs).
 #
-#   - content.db   : a snapshot of the published catalog DB.
 #   - user-en.db   : seeded user DB (playlist, history, notes) — EN.
 #   - user-ru.db   : seeded user DB — RU.
+#   - …plus the .clean / .single variants.
 #
-# The two user DBs are produced by the screenshot pipeline's fixture generator,
-# so we generate them there once and copy them over. The catalog snapshot comes
-# from the local lake output.
+# The user DBs are produced by the screenshot pipeline's fixture generator, so
+# we generate them there once and copy them over. They are deliberately NOT
+# committed: the activity heatmap reads the real clock, so their listening
+# history is anchored to the local midnight of the day they were generated.
+#
+# The catalog fixture is NOT built here. `fixtures/content.db` is a committed
+# test asset — see scripts/build-catalog-fixture.py, which a human runs when
+# the corpus is deliberately moved. This script therefore needs NO network:
+# nothing below reaches a backend, least of all the production origin.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"      # tests/e2e/mobile
@@ -16,19 +22,26 @@ SHOTS="$REPO_ROOT/modules/tools/screenshots"
 FIX="$HERE/fixtures"
 mkdir -p "$FIX"
 
-# content.db: local lake → screenshot fixture → published CDN (CI path).
-PUBLIC_BASE="${SHRUTI_PUBLIC_BASE:-https://cdn-s3.shruti.local}"
-CATALOG="$REPO_ROOT/resources/lake-out/artifacts/catalog/current.db"
-if [[ -f "$CATALOG" ]]; then
-  cp "$CATALOG" "$FIX/content.db"
-elif [[ -f "$SHOTS/fixtures/content.db" ]]; then
-  cp "$SHOTS/fixtures/content.db" "$FIX/content.db"
-else
-  echo ">> fetching published catalog from $PUBLIC_BASE"
-  VER="$(curl -fsSL "$PUBLIC_BASE/public/config.json" \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin)["databases"][0]["version"])')"
-  curl -fsSL "$PUBLIC_BASE/public/db/shruti.$VER.db" -o "$FIX/content.db"
-fi
+# The committed catalog must be the one the recorded digest describes: a copy
+# left behind by the old generating script (or half-written by a failed
+# checkout) would silently change what every spec runs against.
+python3 - "$FIX/content.db" "$FIX/content.db.json" <<'PY'
+import hashlib, json, sys
+db, meta = sys.argv[1], sys.argv[2]
+expected = json.load(open(meta))["sha256"]
+h = hashlib.sha256()
+with open(db, "rb") as fh:
+    for chunk in iter(lambda: fh.read(1 << 20), b""):
+        h.update(chunk)
+if h.hexdigest() != expected:
+    sys.exit(
+        f"{db} does not match the digest in {meta}.\n"
+        f"  expected {expected}\n  actual   {h.hexdigest()}\n"
+        "Restore it with `git checkout -- fixtures/content.db`, or rebuild it "
+        "deliberately with scripts/build-catalog-fixture.py and commit both files."
+    )
+print(f">> catalog fixture verified ({expected[:12]}…)")
+PY
 
 # Reuse the screenshot pipeline's seeded user DBs (generate them if absent).
 # Two strategies: `preseed` (full demo dataset) and `clean` (schema + config
