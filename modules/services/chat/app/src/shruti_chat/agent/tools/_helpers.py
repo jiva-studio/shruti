@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from shruti_chat.domain.user_context import as_aware
+
 
 _NO_CTX_HINT = (
     "Контекст пользователя не передан. Скажи пользователю, что нужно "
@@ -37,9 +39,16 @@ def ok_or_no_ctx(items: list, has_ctx: bool) -> dict[str, Any] | list:
 
 
 def parse_iso(value: str | None, *, field: str) -> datetime | None:
+    """Parse an LLM-written bound, always tz-aware.
+
+    The tool schemas ask for an offset but nothing enforces one, and
+    models routinely emit a bare date. An offset-less value is read as
+    UTC so it can be compared with `last_played_at`.
+    """
     if value is None or value == "":
         return None
     try:
-        return datetime.fromisoformat(value)
+        dt = datetime.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(f"{field} must be ISO-8601 (got {value!r})") from exc
+    return as_aware(dt)

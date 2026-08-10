@@ -30,6 +30,17 @@ from typing import Literal
 _DT_MIN: datetime = datetime.min.replace(tzinfo=timezone.utc)
 
 
+def as_aware(dt: datetime) -> datetime:
+    """Read a naive datetime as UTC.
+
+    Bounds reaching the domain can be naive — the LLM writes `since` /
+    `until` itself and `datetime.fromisoformat("2026-08-03")` has no
+    offset. Parsers normalise on the way in; this keeps a comparison
+    against a stray naive value from raising TypeError mid-turn.
+    """
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 # Single source of truth for "in-progress" vs "completed" thresholds.
 # Every filter on UserContext uses these so the LLM's tool calls and the
 # system-prompt counters stay aligned.
@@ -123,12 +134,16 @@ class UserContext:
                 # window they sort last via _DT_MIN; that's fine.)
                 if t.last_played_at is None:
                     continue
-                if since is not None and t.last_played_at < since:
+                played = as_aware(t.last_played_at)
+                if since is not None and played < as_aware(since):
                     continue
-                if until is not None and t.last_played_at > until:
+                if until is not None and played > as_aware(until):
                     continue
             out.append(t)
-        out.sort(key=lambda t: t.last_played_at or _DT_MIN, reverse=True)
+        out.sort(
+            key=lambda t: as_aware(t.last_played_at) if t.last_played_at else _DT_MIN,
+            reverse=True,
+        )
         return out
 
 

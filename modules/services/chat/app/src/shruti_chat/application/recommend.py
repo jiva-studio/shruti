@@ -27,6 +27,7 @@ from datetime import timedelta
 from typing import Protocol
 
 from shruti_chat.domain import UserContext
+from shruti_chat.domain.user_context import as_aware
 
 
 # Defaults mirror the spirit of the mobile config (a recent window, a
@@ -95,14 +96,16 @@ async def recommend_tracks(
     # sends a recent slice, so tracks with no timestamp are kept.
     now = user_context.now
     window_start = (
-        now - timedelta(days=history_window_days) if now is not None else None
+        as_aware(now) - timedelta(days=history_window_days)
+        if now is not None
+        else None
     )
     seconds_by_track: dict[str, float] = {}
     for t in user_context.recent_tracks:
         if (
             window_start is not None
             and t.last_played_at is not None
-            and t.last_played_at < window_start
+            and as_aware(t.last_played_at) < window_start
         ):
             continue
         seconds_by_track[t.track_id] = _listened_seconds(t)
