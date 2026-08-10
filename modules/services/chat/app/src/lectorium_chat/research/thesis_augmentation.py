@@ -34,6 +34,7 @@ from lectorium_chat.research.constants import (
     AUGMENT_FRESH_TOP_K,
     THIN_THESIS_MIN_SCORE,
     THIN_THESIS_MIN_STRONG_NOTES,
+    TIMEOUT_AUGMENT_S,
 )
 
 
@@ -56,6 +57,17 @@ def _is_thin(scored: list[tuple[float, int]]) -> bool:
         return True
     strong = sum(1 for s, _ in scored if s >= THIN_THESIS_MIN_SCORE)
     return strong < THIN_THESIS_MIN_STRONG_NOTES
+
+
+def _top_cosine(scored: list[tuple[float, int]], keep: list[int]) -> float:
+    """Best cosine among the notes in `keep`, 0.0 when none of them scored.
+
+    `new_top_cosine` in the augment summary must be MEASURED on the notes a
+    thesis leaves Stage 2 with. Reading it off the pre-augmentation `old_top`
+    variable instead reported the old number under the new key.
+    """
+    kept = set(keep)
+    return max((s for s, idx in scored if idx in kept), default=0.0)
 
 
 def _as_ids(author_id: Any) -> list[str] | None:
@@ -283,7 +295,24 @@ async def augment_thin_theses(
         )
         return lec_scored, lib_scored, lib_author_names
 
-    fetched = await asyncio.gather(*(_fetch_for(i) for i in thin_indices))
+    # Stage 2's total ANN budget, the same `wait_for` shape the research
+    # pipeline puts around every other external call. `_fetch_for` handles its
+    # own errors, but nothing bounded the WALL time — a hung pgvector held the
+    # post-planner path open for as long as it liked. On expiry every thin
+    # thesis falls into the `fetch_failed` branch below, so Stage 1's picks
+    # survive untouched.
+    try:
+        fetched = await asyncio.wait_for(
+            asyncio.gather(*(_fetch_for(i) for i in thin_indices)),
+            timeout=TIMEOUT_AUGMENT_S,
+        )
+    except asyncio.TimeoutError:
+        log.warning(
+            "augment_fresh_fetch_timeout",
+            timeout=TIMEOUT_AUGMENT_S,
+            n_thin=len(thin_indices),
+        )
+        fetched = [None] * len(thin_indices)
     fetch_by_thesis: dict[int, Any] = dict(zip(thin_indices, fetched))
     fetch_failed: set[int] = {i for i in thin_indices if fetch_by_thesis.get(i) is None}
 
@@ -445,7 +474,9 @@ async def augment_thin_theses(
             per_thesis_summary.append({
                 "idx": i, "was_thin": False,
                 "old_top_cosine": round(old_top, 3),
-                "new_top_cosine": round(old_top, 3),
+                "new_top_cosine": round(
+                    _top_cosine(per_thesis_scored[i], t.supporting_notes), 3,
+                ),
                 "fresh_fetched": 0, "fresh_above_threshold": 0,
             })
             continue
@@ -454,7 +485,9 @@ async def augment_thin_theses(
             per_thesis_summary.append({
                 "idx": i, "was_thin": True,
                 "old_top_cosine": round(old_top, 3),
-                "new_top_cosine": round(old_top, 3),
+                "new_top_cosine": round(
+                    _top_cosine(per_thesis_scored[i], t.supporting_notes), 3,
+                ),
                 "fresh_fetched": 0, "fresh_above_threshold": 0,
                 "outcome": "fetch_failed",
             })

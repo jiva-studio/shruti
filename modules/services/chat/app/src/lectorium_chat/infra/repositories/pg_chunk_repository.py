@@ -781,9 +781,10 @@ class PgChunkRepository:
         Matches `text` via tsvector (`russian` morphology OR `simple` for
         Sanskrit transliteration) AND the canonical address via pg_trgm —
         exactly the classes dense ANN misses. Results are ordered by lexical
-        relevance (caller uses the position as the lexical rank for RRF), and
-        each carries its TRUE cosine vs `query_embedding` (INNER JOIN to the
-        embedding table) so the downstream coverage/max_score gates stay honest.
+        relevance (informational — the caller does not fuse ranks; it forces
+        these rows into the rerank pool instead), and each carries its TRUE
+        cosine vs `query_embedding` (INNER JOIN to the embedding table) so the
+        downstream coverage/max_score gates stay honest.
         Rows lacking an embedding for the active model (a rare indexing
         inconsistency) are dropped rather than surfaced unscored.
 
