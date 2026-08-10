@@ -101,4 +101,17 @@ export interface IOutboxRepository {
    * writing, and those writes must survive it.
    */
   latestId(): Promise<number>
+
+  /**
+   * Drop every journaled row — the local data-wipe path (#1496). The rows
+   * describe local documents that no longer exist, and nothing else retires
+   * them: `owner_id` only separates identities, so on a wipe that keeps the
+   * same account they would still be pushed, re-creating the wiped data on the
+   * server and on every other device.
+   *
+   * Safe against the `pushed_outbox_id` watermark, which is NOT rewound: `id`
+   * is `INTEGER PRIMARY KEY AUTOINCREMENT`, so a delete leaves `sqlite_sequence`
+   * alone and the next journaled row still lands above the watermark.
+   */
+  clearAll(): Promise<void>
 }

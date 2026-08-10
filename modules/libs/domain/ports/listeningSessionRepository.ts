@@ -63,6 +63,23 @@ export interface IListeningSessionRepository {
     tx?: ITransaction
   ): Promise<ListeningSessionId>
 
+  /**
+   * `forceStart` for a session replayed from an external, durable log — today
+   * the native queue's transition journal (#1495). `sourceKey` is the identity
+   * of the source record; the insert happens at most once per key and returns
+   * `null` when that key was already folded in, so a log entry whose ack never
+   * landed can be replayed for free instead of counting its minutes twice.
+   *
+   * Sessions opened by the ordinary player path carry no key and are never
+   * deduped against each other — replaying a lecture is legitimately a second
+   * session.
+   */
+  forceStartOnce(args: {
+    itemId: PlaylistItemId
+    position: TrackPositionSec
+    sourceKey: string
+  }): Promise<ListeningSessionId | null>
+
   /** Update `ended_at = now` and `to_position = position` of an open session. */
   tick(
     id: ListeningSessionId,

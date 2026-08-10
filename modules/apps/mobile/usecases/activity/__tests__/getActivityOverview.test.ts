@@ -18,6 +18,9 @@ function makeListeningSessions(
     forceStart: async () => {
       throw new Error("not stubbed")
     },
+    forceStartOnce: async () => {
+      throw new Error("not stubbed")
+    },
     tick: async () => {},
     finish: async () => {},
     finishAt: async () => {},

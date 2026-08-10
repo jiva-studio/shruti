@@ -2,6 +2,7 @@ import type { Shruti } from "../shruti.js"
 import { useAutoDownloadFiltersStore } from "../stores/useAutoDownloadFiltersStore.js"
 import { useChatStore } from "../stores/useChatStore.js"
 import { useDownloadStore } from "../stores/useDownloadStore.js"
+import { useLibraryStore } from "../stores/useLibraryStore.js"
 import { useNotesStore } from "../stores/useNotesStore.js"
 import { usePlayerStore } from "../stores/usePlayerStore.js"
 import { usePlaylistStore } from "../stores/usePlaylistStore.js"
@@ -11,13 +12,40 @@ const PLAYER_STOP_TIMEOUT_MS = 5000
 
 /**
  * Wipe every byte of local user state — notes, playlist, listening
- * history, downloaded audio + transcript files, chat history, search
- * filters, and every Pinia store that mirrors them.
+ * history, the personal library, downloaded audio + transcript files, chat
+ * history, search filters, the sync journal, and every Pinia store that
+ * mirrors them.
  *
- * Shared between the debug "Clear user data" action and the upcoming
- * user-facing "Delete account" flow. Both want the same all-or-nothing
- * effect; only the confirm UX differs, so the dialog stays out of here
- * and the caller is responsible for getting consent.
+ * Shared between the debug "Clear user data" action and the user-facing
+ * "Delete account" flow. Both want the same all-or-nothing effect; only
+ * the confirm UX differs, so the dialog stays out of here and the caller
+ * is responsible for getting consent.
+ *
+ * **Sync-aware (#1496).** A wipe that clears only the domain tables is not a
+ * wipe, it is a divergence:
+ *   - `library_items` left behind puts the whole personal library back on
+ *     screen — including every item the user had REMOVED, because a removal is
+ *     an `archived_at` row in `library_memberships` and ABSENCE MEANS ACTIVE
+ *     (`ILibraryMembershipRepository`). Clearing memberships alone un-removes
+ *     them; the two tables have to go together.
+ *   - `outbox` left behind still describes the deleted documents, and nothing
+ *     retires it: `owner_id` (023) only separates identities, so on a wipe that
+ *     keeps the same account the next cycle pushes the stale rows and
+ *     re-creates the wiped data server-side.
+ *   - `sync_doc_hlc` left behind hands stale `base_hlc` values to unrelated
+ *     future writes and makes `wasJournaled` claim a re-created chat document
+ *     is already in sync.
+ *
+ * `sync_state` is deliberately NOT reset. Its `pull_cursor` is this device's
+ * high-water mark in the server's change log; rewinding it to 0 would re-pull
+ * everything the wipe just deleted and undo it within one cycle. A wipe is
+ * device-local by design (see the sync-journal decorator's header) — the server
+ * copy is meant to survive, just not to flow back. On the account-deletion path
+ * the identity changes, and `useSyncEngine.maybeResetCursorForOwner` is what
+ * resets the cursor for the account replacing it; that decision belongs there,
+ * not here. `pushed_outbox_id` likewise stays put: `outbox.id` is AUTOINCREMENT,
+ * so emptying the table does not rewind the sequence and later rows still land
+ * above the watermark.
  *
  * Ordering matters:
  *   1. Stop playback — the engine may be holding a track row that's
@@ -34,6 +62,7 @@ export async function wipeLocalUserData(app: Shruti): Promise<void> {
   const player = usePlayerStore()
   const playlist = usePlaylistStore()
   const notes = useNotesStore()
+  const library = useLibraryStore()
   const downloads = useDownloadStore()
   const searchFilters = useSearchFiltersStore()
   const autoDownloadFilters = useAutoDownloadFiltersStore()
@@ -58,13 +87,31 @@ export async function wipeLocalUserData(app: Shruti): Promise<void> {
   // 1. On-disk wipe.
   await repos.notes.clearAll()
   await repos.playlistItems.clearAll()
-  await repos.libraryMemberships.clearAll()
+  // Both halves of the personal library, in one transaction: the items and the
+  // remove/re-add intents that qualify them. Either one surviving alone leaves
+  // the shelf lying — items without memberships means every removed item is
+  // back (absence = active).
+  await repos.unitOfWork.run(async () => {
+    await repos.libraryItems.clearAll()
+    await repos.libraryMemberships.clearAll()
+  })
   await repos.mediaItems.clearAll()
   await repos.listeningSessions.clearAll()
   // Chat sessions + messages live in the user DB; `chat.clearAll()`
   // also aborts any in-flight SSE stream and resets the in-memory
   // store, so no separate refresh is needed below.
   await chat.clearAll()
+  // The sync journal, once every domain row it describes is gone. Present only
+  // when the engine was wired (`getDeviceId`); without it nothing was ever
+  // journaled and there is nothing to clear. One transaction so a half-cleared
+  // journal — pending rows for deleted docs, or HLC pointers with no rows —
+  // can never be observed by a cycle running alongside the wipe.
+  if (repos.syncOutbox || repos.syncApply) {
+    await repos.unitOfWork.run(async () => {
+      await repos.syncOutbox?.clearAll()
+      await repos.syncApply?.clearDocHlcs()
+    })
+  }
   // The cached audio + transcript files. Without this the rows above
   // are gone but the blobs on disk linger as orphans until the user
   // manually triggers "Clear cache".
@@ -82,8 +129,10 @@ export async function wipeLocalUserData(app: Shruti): Promise<void> {
   //    - searchFilters / autoDownloadFilters: clear in-memory selection
   //      without re-writing preferences (we just removed the keys on
   //      disk); resetting `loaded` forces a re-hydrate on next access.
+  //    - library: re-reads the (now empty) items + memberships, so the
+  //      "My library" shelf empties instead of rendering the pre-wipe rows.
   //    - chat: already reset by chat.clearAll() above.
-  await Promise.all([playlist.refresh(), notes.refresh()])
+  await Promise.all([playlist.refresh(), notes.refresh(), library.refresh()])
   downloads.reset()
   searchFilters.reset()
   autoDownloadFilters.reset()
