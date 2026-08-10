@@ -198,7 +198,8 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     const key = normalizeSource(url)
     // A second tap while the first request is still on the wire is a no-op —
     // findBySource can't see it yet (the row hasn't synced down), so without this
-    // both taps submit the same run.
+    // both taps submit the same run. Bounded by the ingest client's request
+    // timeout, so a hung connection can't leave the button silently dead.
     if (inFlightSources.has(key)) return
     inFlightSources.add(key)
     try {

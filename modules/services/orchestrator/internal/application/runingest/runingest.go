@@ -451,6 +451,20 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 		return h.save(ctx, j, ev)
 
 	case ingest.PhaseReady:
+		// Read the ingest run's state BEFORE the membership: the ingest commits its
+		// terminal state and the membership row in ONE tx, so observing it settled
+		// first and finding no row after is proof the row can never arrive. The
+		// reverse order would read "settled" from a tx that committed in between
+		// and dead-letter a membership that now exists.
+		ingestSettled := true
+		if j.Op == job.OpTranslate {
+			// The membership id IS the ingest run's id (runIdentity).
+			ing, gerr := h.d.Repo.Get(ctx, j.MembershipID)
+			if gerr != nil {
+				return fmt.Errorf("load ingest run: %w", gerr)
+			}
+			ingestSettled = ing == nil || ing.State.IsTerminal()
+		}
 		// Merge into the track membership under a row lock and emit the merged doc
 		// keyed on membership_id (the stable library row id). Ingest sets the full
 		// doc at the run's generation; translate appends its variant and takes
@@ -460,10 +474,15 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 			if err != nil {
 				return err
 			}
-			// Translate advances an EXISTING row. If it is gone, no redelivery can
-			// conjure one — settle the run as failed and ack, rather than returning
-			// an error that leaves the result entry pending forever.
+			// Translate advances an EXISTING row. Absent while its ingest is still in
+			// flight means NOT YET — return an error so the entry stays pending and
+			// redelivery heals it. Absent once that ingest has settled means gone: no
+			// redelivery can conjure the row, so settle the run as failed and ack
+			// rather than poisoning the stream forever.
 			if j.Op == job.OpTranslate && m == nil {
+				if !ingestSettled {
+					return fmt.Errorf("translate ready ahead of ingest run %s: no membership yet", j.MembershipID)
+				}
 				lg.ErrorContext(ctx, "translate_membership_missing", "membership", j.MembershipID, "user_id", j.OwnerID)
 				return h.failTx(ctx, tx, j, errMembershipMissing)
 			}
@@ -565,10 +584,10 @@ func (h *ResultHandler) Process(ctx context.Context, _ string, payload []byte) e
 // so any terminal state is genuinely settled.
 func isSettled(j *job.Job) bool { return j.State.IsTerminal() }
 
-// errMembershipMissing is the terminal error recorded when a run completes but
-// the track membership it advances does not exist. Not retriable — no
-// redelivery can create the row — so the run dead-letters and the result is
-// acked instead of poisoning the stream.
+// errMembershipMissing is the terminal error recorded when a run completes, the
+// track membership it advances does not exist, and the ingest run that would
+// have created it has already settled. Nothing will write the row now, so the
+// run dead-letters and the result is acked instead of poisoning the stream.
 const errMembershipMissing = "membership row missing"
 
 // failTx settles a run as failed inside the caller's transaction. It emits no

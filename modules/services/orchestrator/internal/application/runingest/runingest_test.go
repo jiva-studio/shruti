@@ -40,6 +40,14 @@ func (r *fakeRepo) GetMembershipForUpdateTx(_ context.Context, _ ports.Tx, id st
 	return &m, nil
 }
 
+// dropMembership deletes a membership row, reproducing a track whose ingest run
+// is long done but which never got a projection row (the pre-0005 gap, #1621).
+func (r *fakeRepo) dropMembership(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.memberships, id)
+}
+
 func (r *fakeRepo) SaveMembershipTx(_ context.Context, _ ports.Tx, m *job.Membership) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -791,25 +799,102 @@ func translateReq(membership string) ingest.Request {
 	}
 }
 
-// A ready for a translate run whose membership row does not exist (a track
-// ingested before the projection existed, migration 0005's backfill target) must
-// DEAD-LETTER and ack. Returning an error instead left the ingest.result entry
-// pending and redelivered forever — a permanent poison entry (#1621).
-func TestResult_TranslateReady_MissingMembership_DeadLetters(t *testing.T) {
+// translateReady is a ready result for a translate run against membership.
+func translateReadyRes(runID, membership string) ingest.Result {
+	return ingest.Result{
+		JobID: runID, Phase: ingest.PhaseReady, Op: job.OpTranslate,
+		MembershipID: membership, TrackID: "hash",
+		Variants: []ingest.Variant{{Lang: "ru", TranscriptKey: "k/ru"}},
+	}
+}
+
+// ingestReadyRes is the ingest ready that creates the membership row.
+func ingestReadyRes(runID string) ingest.Result {
+	return ingest.Result{
+		JobID: runID, Phase: ingest.PhaseReady, TrackID: "hash",
+		Variants: []ingest.Variant{{Lang: "en", TranscriptKey: "k/en"}},
+	}
+}
+
+// variantLangs reads the languages of a membership doc's variants array.
+func variantLangs(t *testing.T, doc []byte) map[string]bool {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(doc, &fields); err != nil {
+		t.Fatalf("doc parse: %v", err)
+	}
+	var variants []ingest.Variant
+	_ = json.Unmarshal(fields["variants"], &variants)
+	langs := map[string]bool{}
+	for _, v := range variants {
+		langs[v.Lang] = true
+	}
+	return langs
+}
+
+// A ready for a translate run whose membership row does not exist YET — its
+// ingest is still in flight, because the ingest ready's tx rolled back on a
+// transient fault, or because both results landed in one XReadGroup batch — must
+// NOT settle the run. Missing means "not yet" here, so the entry stays pending
+// and redelivery heals it; dead-lettering lost the translated variant with no
+// way back (#1659).
+func TestResult_TranslateReady_IngestInFlight_StaysPending(t *testing.T) {
 	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
-	// The ingest job exists (so Submit's ownership check, which reads jobs, passes)
-	// but it never wrote a track_memberships row.
-	membership := h.seedQueued(t, "msg-legacy", "https://x/y")
+	membership := h.seedQueued(t, "msg-race", "https://x/y") // ingest not settled
 	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
 	if err != nil {
 		t.Fatalf("translate submit: %v", err)
 	}
 
-	ready := ingest.Result{
-		JobID: tRun.JobID, Phase: ingest.PhaseReady, Op: job.OpTranslate,
-		MembershipID: membership, TrackID: "hash",
-		Variants: []ingest.Variant{{Lang: "ru", TranscriptKey: "k/ru"}},
+	ready := translateReadyRes(tRun.JobID, membership)
+	if err := h.res.Process(context.Background(), "r-early", resPayload(t, ready)); err == nil {
+		t.Fatal("a translate ready ahead of its ingest must stay pending (error), got an ack")
 	}
+	j, _ := h.repo.Get(context.Background(), tRun.JobID)
+	if j.State.IsTerminal() {
+		t.Fatalf("translate run settled as %s while its ingest was still in flight — the variant is lost", j.State)
+	}
+
+	// The ingest ready is redelivered and commits the membership...
+	if err := h.res.Process(context.Background(), "r-ingest", resPayload(t, ingestReadyRes(membership))); err != nil {
+		t.Fatalf("ingest ready: %v", err)
+	}
+	// ...so the redelivered translate ready merges instead of dead-lettering.
+	if err := h.res.Process(context.Background(), "r-again", resPayload(t, ready)); err != nil {
+		t.Fatalf("redelivered translate ready: %v", err)
+	}
+	if j, _ = h.repo.Get(context.Background(), tRun.JobID); j.State != job.StateDone {
+		t.Fatalf("healed translate run = %s, want done", j.State)
+	}
+	m, _ := h.repo.GetMembershipForUpdateTx(context.Background(), nil, membership)
+	if m == nil {
+		t.Fatal("no membership after the ingest ready")
+	}
+	if langs := variantLangs(t, m.Doc); !langs["en"] || !langs["ru"] {
+		t.Fatalf("merged variants = %v, want en+ru", langs)
+	}
+}
+
+// A ready for a translate run whose membership row does not exist and whose
+// ingest is DONE (a track ingested before the projection existed, migration
+// 0005's backfill target) must DEAD-LETTER and ack. Returning an error instead
+// left the ingest.result entry pending and redelivered forever — a permanent
+// poison entry (#1621).
+func TestResult_TranslateReady_MissingMembership_DeadLetters(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	// The ingest job exists and is done (so Submit's ownership check, which reads
+	// jobs, passes) but it left no track_memberships row.
+	membership := h.seedQueued(t, "msg-legacy", "https://x/y")
+	if err := h.res.Process(context.Background(), "r0", resPayload(t, ingestReadyRes(membership))); err != nil {
+		t.Fatalf("ingest ready: %v", err)
+	}
+	h.repo.dropMembership(membership)
+	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
+	if err != nil {
+		t.Fatalf("translate submit: %v", err)
+	}
+
+	ready := translateReadyRes(tRun.JobID, membership)
 	if err := h.res.Process(context.Background(), "r", resPayload(t, ready)); err != nil {
 		t.Fatalf("a missing membership must ack (terminal), got %v", err)
 	}
@@ -821,12 +906,38 @@ func TestResult_TranslateReady_MissingMembership_DeadLetters(t *testing.T) {
 	if m, _ := h.repo.GetMembershipForUpdateTx(context.Background(), nil, membership); m != nil {
 		t.Fatalf("missing membership must not be created: %+v", m)
 	}
-	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventQueued {
-		t.Fatalf("last track event = %q, want the ingest queued event unchanged", got)
+	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventReady {
+		t.Fatalf("last track event = %q, want the ingest ready event unchanged", got)
 	}
 	// Redelivery of the same result is a no-op on the now-terminal run.
 	if err := h.res.Process(context.Background(), "r-again", resPayload(t, ready)); err != nil {
 		t.Fatalf("redelivery must ack, got %v", err)
+	}
+}
+
+// An ingest run that dead-lettered will never write its membership row, so a
+// translate ready against it must settle straight away rather than wait on a row
+// that can no longer arrive (#1659).
+func TestResult_TranslateReady_IngestDeadLettered_DeadLetters(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	membership := h.seedQueued(t, "msg-dead", "https://x/y")
+	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
+	if err != nil {
+		t.Fatalf("translate submit: %v", err)
+	}
+	if err := h.res.Process(context.Background(), "f", resPayload(t, ingest.Result{
+		JobID: membership, Attempt: 1, Phase: ingest.PhaseFailed,
+		Error: "unsupported url", Retriable: false,
+	})); err != nil {
+		t.Fatalf("ingest dead-letter: %v", err)
+	}
+
+	if err := h.res.Process(context.Background(), "r", resPayload(t, translateReadyRes(tRun.JobID, membership))); err != nil {
+		t.Fatalf("a translate whose ingest is dead must ack (terminal), got %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), tRun.JobID)
+	if j.State != job.StateFailed || j.Err != errMembershipMissing {
+		t.Fatalf("run not dead-lettered: state=%s err=%q", j.State, j.Err)
 	}
 }
 

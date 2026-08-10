@@ -50,6 +50,15 @@ export class IngestGatewayError extends Error {
   }
 }
 
+/**
+ * Cap on one control-plane call. Both routes are cheap (one row written, one row
+ * read), so anything this slow is a connection the mobile network dropped
+ * without an RST — which `fetch` would otherwise sit on until the OS TCP timeout,
+ * minutes later. Callers gate on the call being in flight (the library store's
+ * double-tap guard), so an unbounded hang reads as a dead button.
+ */
+const REQUEST_TIMEOUT_MS = 15_000
+
 /** Build the `IIngestClient` HTTP adapter. */
 export function createHttpIngestClient(deps: HttpIngestClientDeps): IIngestClient {
   async function call(method: string, path: string, body?: unknown): Promise<Response> {
@@ -57,15 +66,23 @@ export function createHttpIngestClient(deps: HttpIngestClientDeps): IIngestClien
     if (!token) {
       throw new IngestGatewayError(0, "no access token for ingest request")
     }
-    return deps.request(path, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    try {
+      return await deps.request(path, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      })
+    } catch (err) {
+      if ((err as { name?: string })?.name === "TimeoutError") {
+        throw new IngestGatewayError(0, "ingest api timed out", "timeout")
+      }
+      throw err
+    }
   }
 
   async function parse<T>(res: Response): Promise<T> {
