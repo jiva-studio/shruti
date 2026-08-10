@@ -46,4 +46,13 @@ export interface ISyncApplyRepository {
 
   /** Record `hlc` as the doc's last server-known HLC (push apply / conflict). */
   recordServerHlc(collection: string, docId: string, hlc: string): Promise<void>
+
+  /**
+   * Drop every `(collection, doc_id)` pointer — the local data-wipe path
+   * (#1496). Left behind, they describe documents the wipe deleted: they would
+   * hand a stale `base_hlc` to an unrelated future write and, through
+   * `wasJournaled`, make the journal decorator treat a re-created chat document
+   * as one already in sync (so its parent session is never journaled).
+   */
+  clearDocHlcs(): Promise<void>
 }

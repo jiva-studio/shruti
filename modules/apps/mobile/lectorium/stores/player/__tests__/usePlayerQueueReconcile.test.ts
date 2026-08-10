@@ -1,0 +1,202 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { AudioQueueTransition } from "@ports/app/audioPlayer.js"
+import type { IDatabase } from "@ports/app/index.js"
+import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
+import { runMigrations } from "@kit/persistence"
+import { createSqlAppRepositories } from "@infra/repositories/sql/index.js"
+import { createInMemoryTestDatabase } from "@infra/repositories/sql/__tests__/testDb.js"
+import { userMigrations } from "@infra/persistence/migrations/user/index.js"
+import { usePlayerQueueReconcile } from "../usePlayerQueueReconcile.js"
+
+/**
+ * The native journal is durable and only `ackEvents` removes an entry, so an
+ * un-acked batch is re-presented on the next launch. These tests replay one
+ * against a REAL `listening_sessions` adapter and assert the history is
+ * unchanged — the double-counted rows of #1495 would show up here as extra
+ * rows and inflated totals.
+ *
+ * The repository comes from `createSqlAppRepositories`, not from the adapter
+ * factory directly: that is what production hands the reconcile path
+ * (`app.repositories().listeningSessions`), so the sync-journal decorator is in
+ * the loop and a `forceStartOnce` it forgot to delegate fails here. It also
+ * keeps this test off the factory's own signature, which #1493 is changing.
+ */
+
+let db: IDatabase
+let repo: IListeningSessionRepository
+let prefs: Map<string, string>
+let acked: number[]
+let ackFails: boolean
+/** `completedAt` per item, as the playlist store would report it. Empty models
+ *  the cold start, where nothing has hydrated the map yet. */
+let completedAt: Map<string, number | null>
+let patched: string[]
+
+vi.mock("@lectorium/services/monitoring/reportError.js", () => ({
+  reportError: vi.fn(),
+}))
+
+vi.mock("@lectorium/lectorium.js", () => ({
+  useLectorium: () => ({
+    repositories: () => ({ listeningSessions: repo }),
+    preferences: {
+      get: async (key: string) => prefs.get(key) ?? null,
+      set: async (key: string, value: string) => {
+        prefs.set(key, value)
+      },
+      remove: async (key: string) => {
+        prefs.delete(key)
+      },
+    },
+    audioPlayer: {
+      ackEvents: async (upToSeq: number) => {
+        if (ackFails) throw new Error("bridge torn down")
+        acked.push(upToSeq)
+      },
+    },
+  }),
+}))
+
+vi.mock("@lectorium/stores/usePlaylistStore.js", () => ({
+  usePlaylistStore: () => ({
+    getCompletedAt: (itemId: string) => completedAt.get(itemId) ?? null,
+    patchProgress: (itemId: string) => {
+      patched.push(itemId)
+    },
+  }),
+}))
+
+function transition(over: Partial<AudioQueueTransition> & { seq: number }): AudioQueueTransition {
+  return {
+    finishedItemId: "pi-1",
+    fromPositionMs: 0,
+    finishedAtMs: 600_000,
+    durationMs: 3_600_000,
+    startedItemId: "pi-2",
+    reason: "skip-next",
+    at: 1_784_000_000_000 + over.seq * 1000,
+    ...over,
+  }
+}
+
+async function sessionCount(): Promise<number> {
+  const rows = await db.query<{ n: number }>("SELECT count(*) AS n FROM listening_sessions")
+  return Number(rows[0]!.n)
+}
+
+/** Two lock-screen "next" taps on two different lectures. Different items so
+ *  the storm-dedup in `getTotalListenedSeconds` can't mask a duplicate row. */
+const BATCH: AudioQueueTransition[] = [
+  transition({ seq: 1, finishedItemId: "pi-1", fromPositionMs: 0, finishedAtMs: 600_000 }),
+  transition({ seq: 2, finishedItemId: "pi-2", fromPositionMs: 0, finishedAtMs: 300_000 }),
+]
+
+describe("usePlayerQueueReconcile — replay of an un-acked batch", () => {
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await runMigrations(db, userMigrations)
+    repo = createSqlAppRepositories({
+      contentDb: db,
+      userDb: db,
+      getActiveLanguage: () => "en",
+      // Wired, so the repository is the journaled one the app actually uses.
+      getDeviceId: async () => "dev-1",
+      getOwnerId: () => "user-1",
+    }).listeningSessions
+    prefs = new Map()
+    acked = []
+    ackFails = false
+    completedAt = new Map()
+    patched = []
+  })
+
+  it("does not double-count a non-`auto` batch whose ack never landed", async () => {
+    // The ack rejects (bridge torn down / process killed straight after).
+    ackFails = true
+    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+
+    expect(await sessionCount()).toBe(2)
+    expect(await repo.getTotalListenedSeconds()).toBe(900)
+    expect(patched).toEqual(["pi-1", "pi-2"])
+
+    // Next launch: a brand-new composable (its in-memory `lastSeq` is 0 again)
+    // draining the same, still-unacked journal.
+    ackFails = false
+    patched = []
+    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+
+    expect(await sessionCount()).toBe(2)
+    expect(await repo.getTotalListenedSeconds()).toBe(900)
+    // Nothing was folded in, so nothing re-patched the progress map either.
+    expect(patched).toEqual([])
+    // …but the ack IS retried, which is what finally clears the journal.
+    expect(acked).toEqual([2])
+  })
+
+  it("still dedups when the persisted watermark is lost too", async () => {
+    ackFails = true
+    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    expect(await sessionCount()).toBe(2)
+
+    // Watermark gone as well (the preferences write failed, or the key was
+    // dropped): the per-transition source keys are the last line of defence.
+    prefs.clear()
+    ackFails = false
+    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+
+    expect(await sessionCount()).toBe(2)
+    expect(await repo.getTotalListenedSeconds()).toBe(900)
+  })
+
+  it("suppresses a cold-start replay of an `auto` transition", async () => {
+    // Cold start: `syncFromNative` runs at store construction, before any view
+    // has hydrated `completedAt`, so the completion guard cannot fire.
+    const auto = transition({
+      seq: 7,
+      reason: "auto",
+      fromPositionMs: 0,
+      finishedAtMs: 3_600_000,
+    })
+    ackFails = true
+    await usePlayerQueueReconcile().reconcileAndAck([auto])
+    expect(await sessionCount()).toBe(1)
+    expect(completedAt.get("pi-1") ?? null).toBeNull()
+
+    prefs.clear()
+    ackFails = false
+    await usePlayerQueueReconcile().reconcileAndAck([auto])
+
+    expect(await sessionCount()).toBe(1)
+    expect(await repo.getTotalListenedSeconds()).toBe(3600)
+  })
+
+  it("records genuinely distinct transitions (no over-dedup)", async () => {
+    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    // A later, real skip on the same item — new seq, new wall-clock.
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({
+        seq: 3,
+        finishedItemId: "pi-1",
+        fromPositionMs: 600_000,
+        finishedAtMs: 900_000,
+      }),
+    ])
+
+    expect(await sessionCount()).toBe(3)
+    expect(await repo.getTotalListenedSeconds()).toBe(1200)
+    expect(acked).toEqual([2, 3])
+  })
+
+  it("processes a native counter that restarted below the watermark", async () => {
+    await usePlayerQueueReconcile().reconcileAndAck(BATCH)
+    expect(prefs.get("player.queue.lastSeq")).toBe("2")
+
+    // A reinstall / cleared app storage restarts the journal at seq 1. Without
+    // the regression check the stale watermark would swallow it forever.
+    await usePlayerQueueReconcile().reconcileAndAck([
+      transition({ seq: 1, finishedItemId: "pi-3", at: 1_790_000_000_000 }),
+    ])
+
+    expect(await sessionCount()).toBe(3)
+  })
+})
