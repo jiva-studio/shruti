@@ -142,3 +142,84 @@ describe("useCapacitorAuth — anonymous bootstrap resilience", () => {
     expect(anonCalls(request)).toBe(1)
   })
 })
+
+describe("useCapacitorAuth — refreshAccessToken", () => {
+  beforeEach(() => prefs.clear())
+  afterEach(() => vi.restoreAllMocks())
+
+  const refreshedBody = {
+    accessToken: jwt({ anonymous: true, sub: "user-1" }),
+    refreshToken: "refresh-2",
+    userId: "user-1",
+    anonymous: true,
+  }
+
+  /** Bootstrapped session plus a scripted /refresh response. */
+  function makeRefreshCfg(refresh: ReturnType<typeof resp>): {
+    cfg: AuthConfig
+    request: ReturnType<typeof vi.fn>
+  } {
+    const request = vi.fn(async (path: string) => {
+      if (path === "/anonymous") return resp(200, anonBody)
+      if (path === "/refresh") return refresh
+      if (path === "/me") return resp(200, meBody)
+      throw new Error(`unexpected request ${path}`)
+    })
+    return {
+      request: request as ReturnType<typeof vi.fn>,
+      cfg: { request, googleWebClientId: "x", googleIOSClientId: "y" } as unknown as AuthConfig,
+    }
+  }
+
+  const refreshCalls = (request: ReturnType<typeof vi.fn>): number =>
+    request.mock.calls.filter((c) => c[0] === "/refresh").length
+
+  it("refreshes even though the cached token is nowhere near expiry", async () => {
+    const { cfg, request } = makeRefreshCfg(resp(200, refreshedBody))
+    const auth = useCapacitorAuth(cfg)
+    await auth.initialize()
+
+    // The clock-gated reader is happy with the cached token (exp is an hour
+    // out) — the forced path is what a 401 needs.
+    expect(await auth.getAccessToken()).toBe(anonBody.accessToken)
+    expect(refreshCalls(request)).toBe(0)
+
+    expect(await auth.refreshAccessToken()).toBe(refreshedBody.accessToken)
+    expect(refreshCalls(request)).toBe(1)
+    expect(await auth.getAccessToken()).toBe(refreshedBody.accessToken)
+  })
+
+  it("shares one /refresh with concurrent refreshTokens callers", async () => {
+    const { cfg, request } = makeRefreshCfg(resp(200, refreshedBody))
+    const auth = useCapacitorAuth(cfg)
+    await auth.initialize()
+
+    const [token, session] = await Promise.all([
+      auth.refreshAccessToken(),
+      auth.refreshTokens(),
+      auth.refreshAccessToken(),
+    ])
+
+    expect(token).toBe(refreshedBody.accessToken)
+    expect(session?.userId).toBe("user-1")
+    expect(refreshCalls(request)).toBe(1)
+  })
+
+  it("returns null and drops the session when the refresh token is rejected", async () => {
+    const { cfg } = makeRefreshCfg(resp(401, {}))
+    const auth = useCapacitorAuth(cfg)
+    await auth.initialize()
+
+    expect(await auth.refreshAccessToken()).toBeNull()
+    expect(auth.getSession()).toBeNull()
+  })
+
+  it("returns null on a transient failure without dropping the session", async () => {
+    const { cfg } = makeRefreshCfg(resp(503, {}))
+    const auth = useCapacitorAuth(cfg)
+    await auth.initialize()
+
+    expect(await auth.refreshAccessToken()).toBeNull()
+    expect(auth.getSession()?.userId).toBe("user-1")
+  })
+})
