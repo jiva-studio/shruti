@@ -43,6 +43,8 @@ interface Args {
   days: number
   now: number
   strategy: StrategyName
+  /** Catalog the `queue` strategy draws its track ids from. */
+  catalog: string
 }
 
 /** Raw CLI options. `locale`/`out` are resolved per-locale in main(). */
@@ -53,6 +55,7 @@ interface CliOpts {
   days: number
   now: number
   strategy: StrategyName
+  catalog: string
 }
 
 function parseArgs(argv: string[]): CliOpts {
@@ -76,6 +79,7 @@ function parseArgs(argv: string[]): CliOpts {
     locale: opts.locale,
     out: opts.out,
     strategy,
+    catalog: opts.catalog ?? defaultCatalogPath(),
     seed: opts.seed ? Number(opts.seed) : 42,
     days: opts.days ? Number(opts.days) : 120,
     // Anchor to the START of the generation day (local midnight), NOT a
@@ -190,6 +194,28 @@ const STRATEGIES = {
       console.log("  clean strategy — schema + config only (no playlist/history/notes/chat)")
     },
   },
+  /**
+   * A queue longer than one page of it.
+   *
+   * The playlist loads in pages and keeps a bounded window of the native
+   * queue, so everything about "an item past the loaded page" — resolving it,
+   * archiving it, playing it — is unreachable while the seeded queue is nine
+   * rows. This seeds past that boundary, with real tracks read from the
+   * catalog rather than a hand-kept list, because the point is the count.
+   */
+  queue: {
+    suffix: ".queue",
+    seed: async (db, args, rng) => {
+      const tracks = await catalogTracks(args, QUEUE_ITEMS)
+      for (let i = 0; i < tracks.length; i++) {
+        await db.execute(
+          "INSERT INTO playlist_items (id, track_id, added_at, archived_at) VALUES (?, ?, ?, NULL)",
+          [`pli_${nanoId(rng)}`, tracks[i]!, args.now - i * 60 * 60 * 1000]
+        )
+      }
+      console.log(`  queue strategy — ${tracks.length} queued tracks, no history/notes/chat`)
+    },
+  },
   /** One queued, downloaded track and nothing else — for "play the first queued
    *  track" specs (player / transcript / notes / mixer) that need exactly one
    *  track. Keeps the Home queue a single row instead of the full demo set, so
@@ -209,6 +235,61 @@ const STRATEGIES = {
 } satisfies Record<string, Strategy>
 
 type StrategyName = keyof typeof STRATEGIES
+
+/* ---------------------------- Catalog reads ---------------------------- */
+
+/**
+ * Long enough to sit past the playlist's page size and the native queue window
+ * (both 50), so an item beyond the loaded page exists to be resolved, archived
+ * or played.
+ */
+const QUEUE_ITEMS = 60
+
+const REPO_ROOT = path.resolve(TOOL_ROOT, "../../..")
+
+/**
+ * Where to read track ids from. The lake output is the real catalog and wins
+ * when it is there; the e2e suite's committed carve-out stands in when it is
+ * not, which is the usual case on a fresh checkout.
+ */
+function defaultCatalogPath(): string {
+  const lake = path.resolve(REPO_ROOT, "resources/lake-out/artifacts/catalog/current.db")
+  if (fs.existsSync(lake)) return lake
+  return path.resolve(REPO_ROOT, "tests/e2e/mobile/fixtures/content.db")
+}
+
+/**
+ * `count` tracks that have audio in the locale's content language, ordered by
+ * id so two runs against the same catalog pick the same ones.
+ */
+async function catalogTracks(args: Args, count: number): Promise<string[]> {
+  if (!fs.existsSync(args.catalog)) {
+    throw new Error(
+      `catalog not found at ${args.catalog} — pass --catalog=<path to a published catalog>`
+    )
+  }
+  const SQL = await initSqlJs()
+  const catalog = new SQL.Database(fs.readFileSync(args.catalog))
+  try {
+    const language = contentLanguageFor(args.locale)
+    const rows = catalog.exec(
+      `SELECT DISTINCT t.id FROM tracks t
+         JOIN track_variants v ON v.track_id = t.id
+         JOIN track_audio a ON a.track_id = t.id
+        WHERE v.language = '${language}' AND COALESCE(t.hidden, 0) = 0
+        ORDER BY t.id LIMIT ${count}`
+    )
+    const ids = (rows[0]?.values ?? []).map((r) => String(r[0]))
+    if (ids.length < count) {
+      throw new Error(
+        `catalog ${args.catalog} yielded only ${ids.length} ${language} tracks with audio, need ${count}`
+      )
+    }
+    return ids
+  } finally {
+    catalog.close()
+  }
+}
 
 /* ------------------------------- Seeders ------------------------------ */
 
@@ -567,7 +648,15 @@ async function main(): Promise<void> {
   const { suffix } = STRATEGIES[cli.strategy]
   for (const locale of locales) {
     const out = cli.out ?? path.join(DEFAULT_OUT_DIR, `user-${locale}${suffix}.db`)
-    await buildOne({ locale, out, seed: cli.seed, days: cli.days, now: cli.now, strategy: cli.strategy })
+    await buildOne({
+      locale,
+      out,
+      seed: cli.seed,
+      days: cli.days,
+      now: cli.now,
+      strategy: cli.strategy,
+      catalog: cli.catalog,
+    })
   }
 }
 
