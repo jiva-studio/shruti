@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
+import pytest  # noqa: F401
 
 from shruti_chat.agent.tools.chunks_search import chunks_search
 from shruti_chat.agent.turn_aliases import TurnAliasMap

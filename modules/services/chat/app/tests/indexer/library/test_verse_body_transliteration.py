@@ -11,7 +11,7 @@ import asyncio
 import sqlite3
 from pathlib import Path
 
-import pytest
+import pytest  # noqa: F401
 
 from shruti_chat.indexer.library.repo import fetch_verse_body
 

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-import shruti_chat.agent.graph.nodes._worker_common as wc
+import shruti_chat.agent.graph.nodes._worker_common as wc  # noqa: F401
 from shruti_chat.agent import cards as _cards
 from shruti_chat.agent.graph.nodes._worker_common import flush_card_payloads
 from shruti_chat.agent.graph.turn_context import TurnContext
