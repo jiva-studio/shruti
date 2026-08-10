@@ -162,6 +162,7 @@ export default {
   appLanguage: {
     title: "Idioma",
     description: "Idioma de la interfaz",
+    loadFailedToast: "No se pudo cargar ese idioma. Inténtalo de nuevo.",
   },
 
   chatLanguage: {
