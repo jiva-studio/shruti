@@ -56,10 +56,10 @@
         <IonLabel>{{ $t("settings.smartLibrary.sections.archive") }}</IonLabel>
       </IonListHeader>
       <IonList lines="none" class="ion-no-margin ion-no-padding">
-        <IonRadioGroup :model-value="effectiveArchive" @ion-change="onArchiveChange">
+        <IonRadioGroup :model-value="archiveDelay" @ion-change="onArchiveChange">
           <IonItem v-for="opt in ARCHIVE_OPTIONS" :key="opt" :disabled="!isEnabled">
             <IonRadio :value="opt">
-              {{ $t(`settings.smartLibrary.archive.${archiveKey(opt)}`) }}
+              {{ $t(`settings.smartLibrary.archive.${archiveOptionKey(opt)}`) }}
             </IonRadio>
           </IonItem>
         </IonRadioGroup>
@@ -87,11 +87,13 @@ import {
 } from "@ionic/vue"
 import { IconFilterFilled } from "@tabler/icons-vue"
 import { Header, IconChip } from "@ui/primitives/index.js"
-
-type AutoArchiveDelay = "off" | "immediate" | "8h" | "1d" | "2d" | "3d"
-
-const DEFAULT_SECONDS = 30 * 60
-const DEFAULT_ARCHIVE: ArchiveOption = "1d"
+import {
+  ARCHIVE_OPTIONS,
+  archiveOptionKey,
+  isSmartLibraryEnabled,
+  smartLibraryToggled,
+  type AutoArchiveDelay,
+} from "./smartLibrary.js"
 
 const TARGET_PRESETS = [
   { id: "30m", seconds: 30 * 60 },
@@ -105,16 +107,7 @@ const TARGET_PRESETS = [
 
 type PresetId = (typeof TARGET_PRESETS)[number]["id"]
 
-type ArchiveOption = Exclude<AutoArchiveDelay, "off">
-const ARCHIVE_OPTIONS = [
-  "immediate",
-  "8h",
-  "1d",
-  "2d",
-  "3d",
-] as const satisfies readonly ArchiveOption[]
-
-defineProps<{
+const props = defineProps<{
   open: boolean
   filterSummary: string
 }>()
@@ -131,41 +124,38 @@ const emit = defineEmits<{
 }>()
 
 const lastNonZeroSeconds = ref<number>(targetSeconds.value > 0 ? targetSeconds.value : 0)
-const lastArchive = ref<ArchiveOption>(
-  archiveDelay.value !== "off" ? (archiveDelay.value as ArchiveOption) : DEFAULT_ARCHIVE
-)
 
 watch(targetSeconds, (v) => {
   if (v > 0) lastNonZeroSeconds.value = v
 })
 
-watch(archiveDelay, (v) => {
-  if (v !== "off") lastArchive.value = v as ArchiveOption
-})
+const isEnabled = computed<boolean>(() =>
+  isSmartLibraryEnabled({ targetSeconds: targetSeconds.value, archiveDelay: archiveDelay.value })
+)
 
-const isEnabled = computed<boolean>(() => targetSeconds.value > 0)
+// Heal builds that persisted a live delay behind the off switch (#1624), so
+// re-enabling can't resurrect an archive schedule the user never picked.
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (isOpen && !isEnabled.value) archiveDelay.value = "off"
+  }
+)
 
 const selectedPreset = computed<PresetId | undefined>(() => {
   const match = TARGET_PRESETS.find((p) => p.seconds === targetSeconds.value)
   return match?.id
 })
 
-const effectiveArchive = computed<ArchiveOption>(() => {
-  return archiveDelay.value !== "off" ? (archiveDelay.value as ArchiveOption) : DEFAULT_ARCHIVE
-})
-
-function archiveKey(opt: ArchiveOption): string {
-  return opt === "immediate" ? "immediate" : `_${opt}`
-}
-
 function onToggleEnabled(ev: CustomEvent): void {
   const checked = (ev.detail as { checked: boolean }).checked
-  if (checked) {
-    targetSeconds.value = lastNonZeroSeconds.value > 0 ? lastNonZeroSeconds.value : DEFAULT_SECONDS
-    if (archiveDelay.value === "off") archiveDelay.value = lastArchive.value
-  } else {
-    targetSeconds.value = 0
-  }
+  const next = smartLibraryToggled(
+    checked,
+    { targetSeconds: targetSeconds.value, archiveDelay: archiveDelay.value },
+    lastNonZeroSeconds.value
+  )
+  targetSeconds.value = next.targetSeconds
+  archiveDelay.value = next.archiveDelay
 }
 
 function onPresetChange(ev: CustomEvent): void {
@@ -177,7 +167,7 @@ function onPresetChange(ev: CustomEvent): void {
 }
 
 function onArchiveChange(ev: CustomEvent): void {
-  const value = (ev.detail as { value?: ArchiveOption }).value
+  const value = (ev.detail as { value?: AutoArchiveDelay }).value
   if (!value) return
   archiveDelay.value = value
 }

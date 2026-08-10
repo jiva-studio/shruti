@@ -13,6 +13,9 @@ import type { PlaylistItemId } from "@lib/domain/core.js"
 const MAX_ATTEMPTS_PER_RUN = 50
 const PAGE_SIZE = 50
 
+/** Smart Library's master switch: 0 seconds means the whole feature is off. */
+export const AUTO_DOWNLOAD_TARGET_SECONDS_KEY = "settings.autoDownloadTargetSeconds"
+
 /**
  * Best-effort background loop that keeps a configurable amount of
  * unlistened audio queued in the active playlist. Driven by the
@@ -34,7 +37,7 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
   const playlist = usePlaylistStore()
   const filtersStore = useAutoDownloadFiltersStore()
   const purchases = usePurchasesStore()
-  const targetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
+  const targetSeconds = useConfig<number>(AUTO_DOWNLOAD_TARGET_SECONDS_KEY, 0)
   let running = false
 
   function currentFilters(): TrackListFilters {
