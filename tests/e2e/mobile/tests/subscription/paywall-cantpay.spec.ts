@@ -8,10 +8,13 @@ import { step, caseTitle } from "../../support/steps.js"
 // paywall (RU has no working IAP). Reach the paywall via a Pro toggle.
 //
 // DISABLED: the "Не могу оплатить" support screen has been turned off for now
-// (the paywall screen that expected payment to appear was removed). Commented
-// out rather than deleted until the screen is decided on.
-/*
-test(
+// (the paywall screen that expected payment to appear was removed).
+//
+// `test.fixme` rather than a comment block: a commented-out test is invisible
+// twice over — the run reports every spec green while this Qase case silently
+// receives no result at all, so nobody can tell a disabled case from one that
+// was never written. Kept, not deleted, until the screen is decided on.
+test.fixme(
   qase(106, caseTitle(106)),
   { tag: ["@offline", "@subscription"] },
   async ({ page }) => {
@@ -39,4 +42,3 @@ test(
     })
   }
 )
-*/
