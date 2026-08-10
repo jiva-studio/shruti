@@ -169,11 +169,20 @@ Two CI paths run this suite:
   Vite dev server. Kept manual on purpose — it boots the app, so it's heavier
   than the unit jobs and not worth gating every push on.
 
-- **kit reusable `e2e` job** (auto, on mobile PRs) — a **no-op**. It activates
-  because `package-lock.json` is committed, but every spec SKIPS when the
-  fixtures aren't prepared (`support/test.ts`), so it stays green without doing
-  real work. (`E2E_USE_BUNDLE=1` would make `playwright.config.ts` serve the
-  prebuilt `dist/` via `vite preview` instead of the dev server.)
+- **kit reusable `e2e` job** — **switched off** for this repo
+  (`run_e2e: false` in `.github/workflows/apps-mobile.yml`).
+
+  It used to sit on every mobile PR reporting a green `test / e2e` in ten
+  seconds having run nothing: the job probes for a suite at
+  `modules/tests/e2e/`, which does not exist here — ours is at
+  `tests/e2e/mobile/`. The earlier note in this file blamed the fixture guard,
+  which was wrong; the job never got as far as a spec. A check that cannot fail
+  is worse than no check, so it is gone rather than fixed: this is a
+  ~15-minute browser suite and it is worth running deliberately.
+
+  (`E2E_USE_BUNDLE=1` makes `playwright.config.ts` serve the prebuilt `dist/`
+  instead of the dev server — note the `pro: true` caveat below before relying
+  on it.)
 
 Follow-up before the auto job does real testing: run `prepare-fixtures.sh` in
 it. The catalog no longer stands in the way — it is committed — so all that is

@@ -182,6 +182,29 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
     expect(cancelMock).toHaveBeenCalledWith({ id: ID_B, deletePartial: false })
   })
 
+  it("the winner still resolves while a dropped rival never settles natively", async () => {
+    // The hedge's whole shape: candidate A connects and goes silent, B is
+    // started alongside it, B delivers, and A is aborted as superseded. The
+    // point here is that A's native task NEVER reports anything afterwards —
+    // a silent CDN does not send a `failed` for an abort it never noticed —
+    // so the winner must not be waiting on anything belonging to the loser.
+    const downloader = useMediaDownloaderAdapter({ cacheDir: "lectorium" })
+    const controller = new AbortController()
+    const silent = downloader.download(URL_A, undefined, controller.signal)
+    const winner = downloader.download(URL_B)
+    await vi.waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(2))
+
+    controller.abort()
+    emit("completed", {
+      id: ID_B,
+      localUrl: "file:///data/audio.mp3",
+      bytesDownloaded: 10,
+    })
+
+    await expect(winner).resolves.toBe("file:///data/audio.mp3")
+    await expect(silent).rejects.toMatchObject({ reason: "superseded" })
+  })
+
   it("a user cancel stops every live candidate and tags them `user`", async () => {
     const downloader = useMediaDownloaderAdapter({ cacheDir: "lectorium" })
     const a = downloader.download(URL_A)

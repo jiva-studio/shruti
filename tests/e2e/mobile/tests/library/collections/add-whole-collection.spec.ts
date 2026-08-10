@@ -42,5 +42,18 @@ test(
         .poll(() => playlistRows(page).count(), { timeout: 15_000 })
         .toBeGreaterThan(0)
     })
+
+    await step(page, 40, 2, async () => {
+      // Adding a whole collection is what records the provenance the Home
+      // grouping reads, so this is the one place the running order is stated:
+      // a run of lectures inside an otherwise mixed queue needs to say where
+      // in the cycle it sits. The numbers come from the catalog, not from the
+      // queue — counting rows would renumber the rest the moment one is played
+      // or archived — so they start at one and follow the collection's order.
+      const positions = playlistRows(page).locator(".position")
+      await expect(positions.first()).toBeVisible({ timeout: 15_000 })
+      await expect(positions.nth(0)).toHaveText("1")
+      await expect(positions.nth(1)).toHaveText("2")
+    })
   }
 )
