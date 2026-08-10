@@ -14,6 +14,7 @@ the moment the environment gets a vote again.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 from pydantic_core import PydanticUndefined
@@ -59,10 +60,31 @@ def test_no_settings_name_survives_in_the_environment() -> None:
     assert sorted(name for name in leaked if name in os.environ) == []
 
 
-def test_load_dotenv_cannot_inject_mid_session() -> None:
-    """The leak happens at import time, and imports are not ours to order."""
-    import dotenv
+def test_suite_env_overrides_is_pinned_to_one_name() -> None:
+    """The three guards above all subtract this set, so a name added here is
+    exempted from every one of them at once. Pinning it makes that a deliberate
+    edit rather than a side effect."""
+    from conftest import SUITE_ENV_OVERRIDES
+
+    assert SUITE_ENV_OVERRIDES == frozenset({"LANGFUSE_FORCE_FALLBACK"})
+
+
+@pytest.mark.parametrize("module_name", ["dotenv", "dotenv.main"])
+def test_load_dotenv_cannot_inject_mid_session(
+    module_name: str, tmp_path: Path
+) -> None:
+    """The leak happens at import time, and imports are not ours to order.
+
+    The file is passed explicitly: a bare `load_dotenv()` finds nothing in a
+    worktree or in CI, so it would pass with the seal reverted.
+    """
+    import importlib
+
+    module = importlib.import_module(module_name)
+    env_file = tmp_path / "injection.env"
+    env_file.write_text("LLM_DEFAULT=injected-by-dotenv\n", encoding="utf-8")
 
     before = dict(os.environ)
-    assert dotenv.load_dotenv() is False
+    assert module.load_dotenv(dotenv_path=env_file, override=True) is False
+    assert "LLM_DEFAULT" not in os.environ
     assert dict(os.environ) == before
