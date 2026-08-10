@@ -71,17 +71,33 @@ func TestFoldExistingFtsRows(t *testing.T) {
 		VALUES ('006_add_settings_and_daily_wisdom', 20260621, 1)`)
 	exec(t, db, `INSERT INTO tracks_search (content, track_id, kind)
 		VALUES ('Кришна пришёл как имя', 'track_abc', 'combined')`)
+	// `й` as и + U+0306, the way the shipped catalog spells 14 of its titles:
+	// unicode61 deletes the breve, so before the fold the row was reachable
+	// only as `настроика*`.
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO tracks_search (content, track_id, kind) VALUES (?, 'track_def', 'combined')`,
+		"Настро"+"и\u0306"+"ка на джапу"); err != nil {
+		t.Fatalf("seed decomposed row: %v", err)
+	}
 
 	if err := foldExistingFtsRows(ctx, db); err != nil {
 		t.Fatalf("fold: %v", err)
 	}
 
-	var trackID string
-	row := db.QueryRowContext(ctx, `
-		SELECT track_id FROM tracks_search
-		WHERE tracks_search MATCH 'кришна* пришел*' AND kind = 'combined'`)
-	if err := row.Scan(&trackID); err != nil {
-		t.Fatalf("query folded row: %v", err)
+	for q, want := range map[string]string{
+		`кришна* пришел*`: "track_abc",
+		`настройка*`:      "track_def",
+	} {
+		var trackID string
+		row := db.QueryRowContext(ctx, `
+			SELECT track_id FROM tracks_search
+			WHERE tracks_search MATCH ? AND kind = 'combined'`, q)
+		if err := row.Scan(&trackID); err != nil {
+			t.Fatalf("query %q: %v", q, err)
+		}
+		if trackID != want {
+			t.Errorf("query %q matched %s, want %s", q, trackID, want)
+		}
 	}
 
 	var scheme int
@@ -101,7 +117,66 @@ func TestFoldExistingFtsRows(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tracks_search`).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	if n != 1 {
-		t.Errorf("row count = %d, want 1", n)
+	if n != 2 {
+		t.Errorf("row count = %d, want 2", n)
+	}
+}
+
+// TestFoldSearchText pins the fold itself, both halves of #1661: a mark is
+// deleted rather than allowed to split the word, but only where `unicode61`
+// deletes it too — precomposed Cyrillic has to survive or every Russian
+// title becomes unreachable.
+func TestFoldSearchText(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"cyrillic stress", "Кри́шна", "Кришна"},
+		{"decomposed short i", "Настройка", "Настройка"},
+		{"precomposed cyrillic", "Настройка їжа Ґанді", "Настройка їжа Ґанді"},
+		{"yo", "учёные", "ученые"},
+		{"latin macron", "Bhagavad-gītā", "Bhagavad-gita"},
+		{"dotted capital i", "İSKCON", "ISKCON"},
+		{"devanagari", "कृष्ण", "कषण"},
+		{"bengali", "কৃষ্ণ", "কষণ"},
+	} {
+		if got := foldSearchText(tc.in); got != tc.want {
+			t.Errorf("%s: foldSearchText(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestRebuildTrackSearchRowsFoldsMarks is the writer half of the Devanagari
+// defect: `unicode61` treats a matra as a separator, so an unfolded title was
+// indexed as single consonants and `कृष्ण*` could not reach it.
+func TestRebuildTrackSearchRowsFoldsMarks(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	setupFtsSchema(t, db)
+	seedFixture(t, db)
+	exec(t, db,
+		`UPDATE track_variants SET title = 'कृष्ण की महिमा' WHERE track_id = 'track_abc' AND language = 'ru'`)
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tracks_search WHERE track_id = ?`, "track_abc"); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if err := rebuildTrackSearchRows(ctx, tx, "track_abc"); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	var trackID string
+	row := db.QueryRowContext(ctx, `
+		SELECT track_id FROM tracks_search
+		WHERE tracks_search MATCH 'कषण*' AND kind = 'combined'`)
+	if err := row.Scan(&trackID); err != nil {
+		t.Fatalf("query folded Devanagari row: %v", err)
 	}
 }
