@@ -42,6 +42,11 @@ export function useCapacitorRemoteFilesStorage({
     return { directory: "data", subdir, filename }
   }
 
+  /**
+   * The file's own name — its path, with no host. It doubles as the download
+   * id here because this storage never races the same file across CDNs, so
+   * one attempt per file is all there ever is.
+   */
   function idFor(url: string): string {
     return new URL(url).pathname
   }
@@ -85,7 +90,7 @@ export function useCapacitorRemoteFilesStorage({
 
   return {
     async get(url: string): Promise<string> {
-      const cached = await MediaDownloader.resolveLocalUrl({ url })
+      const cached = await MediaDownloader.resolveLocalUrl({ fileKey: idFor(url) })
       if (cached.localUrl) return Capacitor.convertFileSrc(cached.localUrl)
 
       const id = idFor(url)
@@ -93,6 +98,7 @@ export function useCapacitorRemoteFilesStorage({
       try {
         await MediaDownloader.download({
           id,
+          fileKey: id,
           url,
           destination: destinationFor(url),
         })
@@ -110,7 +116,7 @@ export function useCapacitorRemoteFilesStorage({
       // new content. The refresh fetches over the WebView (`fetch`) and
       // overwrites the cached file with `Filesystem.writeFile` — one
       // atomic write, no MediaDownloader delete-then-redownload gap.
-      const cached = await MediaDownloader.resolveLocalUrl({ url })
+      const cached = await MediaDownloader.resolveLocalUrl({ fileKey: idFor(url) })
       if (cached.localUrl) {
         const localUrl = cached.localUrl
         void (async () => {
@@ -165,6 +171,7 @@ export function useCapacitorRemoteFilesStorage({
       try {
         await MediaDownloader.download({
           id,
+          fileKey: id,
           url,
           destination: destinationFor(url),
         })
@@ -180,12 +187,12 @@ export function useCapacitorRemoteFilesStorage({
     },
 
     async has(url: string): Promise<boolean> {
-      const { localUrl } = await MediaDownloader.resolveLocalUrl({ url })
+      const { localUrl } = await MediaDownloader.resolveLocalUrl({ fileKey: idFor(url) })
       return localUrl !== null
     },
 
     async delete(url: string): Promise<void> {
-      await MediaDownloader.deleteFile({ url })
+      await MediaDownloader.deleteFile({ fileKey: idFor(url) })
     },
 
     async clearAll(): Promise<void> {
