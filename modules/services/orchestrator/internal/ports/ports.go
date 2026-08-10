@@ -8,10 +8,17 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jiva-studio/lectorium/orchestrator/internal/domain/job"
 )
+
+// ErrJobExists reports that CreateTx found a row with the same id already
+// committed — two submissions of the SAME run racing (a double-tap, the same URL
+// from two devices). The run id is deterministic, so this is a dedup hit, not a
+// conflict: the caller re-reads the winner instead of failing.
+var ErrJobExists = errors.New("job already exists")
 
 // EventBus publishes messages to the broker via the transactional outbox (the
 // payload is enqueued in the same tx as the job write). The orchestrator uses
@@ -35,6 +42,8 @@ type JobRepository interface {
 	// GetForUpdateTx loads a job inside a tx taking a row lock, so the retry
 	// decision is serialized across concurrent redelivery of the same result.
 	GetForUpdateTx(ctx context.Context, q Tx, id string) (*job.Job, error)
+	// CreateTx inserts a new job, returning ErrJobExists when the id is already
+	// taken so a racing duplicate submit dedups instead of erroring.
 	CreateTx(ctx context.Context, q Tx, j *job.Job) error
 	SaveTx(ctx context.Context, q Tx, j *job.Job) error
 	// UpdateProgress writes ONLY the job's progress blob (the frequent per-stage

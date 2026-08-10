@@ -20,6 +20,10 @@ type fakeRepo struct {
 	jobs        map[string]job.Job
 	progress    map[string][]byte
 	memberships map[string]job.Membership
+	// raceOnGetMiss fires (once) when Get misses, so a test can commit a
+	// concurrent submitter's row in the window between the caller's Get and its
+	// insert — the double-tap race.
+	raceOnGetMiss func(id string)
 }
 
 func newRepo() *fakeRepo {
@@ -43,8 +47,19 @@ func (r *fakeRepo) SaveMembershipTx(_ context.Context, _ ports.Tx, m *job.Member
 	return nil
 }
 
-func (r *fakeRepo) CreateTx(_ context.Context, _ ports.Tx, j *job.Job) error { return r.put(j) }
-func (r *fakeRepo) SaveTx(_ context.Context, _ ports.Tx, j *job.Job) error   { return r.put(j) }
+// CreateTx mirrors the postgres insert: an id already taken is reported as
+// ports.ErrJobExists, never as a hard failure.
+func (r *fakeRepo) CreateTx(_ context.Context, _ ports.Tx, j *job.Job) error {
+	r.mu.Lock()
+	_, exists := r.jobs[j.ID]
+	r.mu.Unlock()
+	if exists {
+		return ports.ErrJobExists
+	}
+	return r.put(j)
+}
+
+func (r *fakeRepo) SaveTx(_ context.Context, _ ports.Tx, j *job.Job) error { return r.put(j) }
 
 func (r *fakeRepo) UpdateProgress(_ context.Context, id string, progress []byte) error {
 	r.mu.Lock()
@@ -77,9 +92,16 @@ func (r *fakeRepo) put(j *job.Job) error {
 
 func (r *fakeRepo) Get(_ context.Context, id string) (*job.Job, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	j, ok := r.jobs[id]
+	race := r.raceOnGetMiss
+	if !ok && race != nil {
+		r.raceOnGetMiss = nil
+	}
+	r.mu.Unlock()
 	if !ok {
+		if race != nil {
+			race(id)
+		}
 		return nil, nil
 	}
 	cp := j
@@ -393,6 +415,36 @@ func TestSubmit_ReAddDoneJob_NoRestart(t *testing.T) {
 	}
 	if n := len(h.events.works()); n != worksBefore {
 		t.Fatalf("done re-add must not dispatch: got %d want %d", n, worksBefore)
+	}
+}
+
+// A duplicate submit that LOSES the create race (two taps, or the same URL from
+// two devices) must dedup onto the winning run, not surface the primary-key
+// violation as a 500 while the ingest actually runs (#1622).
+func TestSubmit_ConcurrentCreate_DedupsOntoWinner(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	// The other device commits the same run in the window between our Get and
+	// our insert.
+	h.repo.raceOnGetMiss = func(id string) {
+		_ = h.repo.put(&job.Job{
+			ID: id, Kind: job.KindLibraryIngest, Op: job.OpIngest,
+			MembershipID: id, OwnerID: "user-1", State: job.StateQueued,
+		})
+	}
+	res, err := h.req.Submit(context.Background(), reqObj("https://x/y"))
+	if err != nil {
+		t.Fatalf("a lost create race must dedup, got %v", err)
+	}
+	jobID := jobIDFor("user-1", "", "https://x/y")
+	if res.JobID != jobID || res.MembershipID != jobID || res.State != job.StateQueued {
+		t.Fatalf("dedup result wrong: %+v", res)
+	}
+	// The loser must not double-dispatch work nor re-emit the queued lifecycle.
+	if n := len(h.events.works()); n != 0 {
+		t.Fatalf("the losing submit dispatched %d ingest.work, want 0", n)
+	}
+	if n := len(h.events.trackEvents()); n != 0 {
+		t.Fatalf("the losing submit emitted %d track events, want 0", n)
 	}
 }
 
@@ -728,5 +780,114 @@ func TestResult_TranslateReady_MergesVariant(t *testing.T) {
 	ev := lastTrackEvent(h.events.trackEvents())
 	if ev.Type != ingest.EventReady || ev.DocID != membership || ev.Generation != 1 {
 		t.Fatalf("translate ready event = type=%s doc=%s gen=%d", ev.Type, ev.DocID, ev.Generation)
+	}
+}
+
+// translateReq is a translate submission against an existing membership.
+func translateReq(membership string) ingest.Request {
+	return ingest.Request{
+		Op: job.OpTranslate, MembershipID: membership, Track: "hash",
+		SourceLang: "en", TargetLang: "ru", Token: "tok",
+	}
+}
+
+// A ready for a translate run whose membership row does not exist (a track
+// ingested before the projection existed, migration 0005's backfill target) must
+// DEAD-LETTER and ack. Returning an error instead left the ingest.result entry
+// pending and redelivered forever — a permanent poison entry (#1621).
+func TestResult_TranslateReady_MissingMembership_DeadLetters(t *testing.T) {
+	h := newHarness(3, fakeTier{userID: "user-1", pro: true})
+	// The ingest job exists (so Submit's ownership check, which reads jobs, passes)
+	// but it never wrote a track_memberships row.
+	membership := h.seedQueued(t, "msg-legacy", "https://x/y")
+	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
+	if err != nil {
+		t.Fatalf("translate submit: %v", err)
+	}
+
+	ready := ingest.Result{
+		JobID: tRun.JobID, Phase: ingest.PhaseReady, Op: job.OpTranslate,
+		MembershipID: membership, TrackID: "hash",
+		Variants: []ingest.Variant{{Lang: "ru", TranscriptKey: "k/ru"}},
+	}
+	if err := h.res.Process(context.Background(), "r", resPayload(t, ready)); err != nil {
+		t.Fatalf("a missing membership must ack (terminal), got %v", err)
+	}
+	j, _ := h.repo.Get(context.Background(), tRun.JobID)
+	if j.State != job.StateFailed || j.Err != errMembershipMissing {
+		t.Fatalf("run not dead-lettered: state=%s err=%q", j.State, j.Err)
+	}
+	// No membership conjured, and no library lifecycle emitted for a translate.
+	if m, _ := h.repo.GetMembershipForUpdateTx(context.Background(), nil, membership); m != nil {
+		t.Fatalf("missing membership must not be created: %+v", m)
+	}
+	if got := lastTrackType(h.events.trackEvents()); got != ingest.EventQueued {
+		t.Fatalf("last track event = %q, want the ingest queued event unchanged", got)
+	}
+	// Redelivery of the same result is a no-op on the now-terminal run.
+	if err := h.res.Process(context.Background(), "r-again", resPayload(t, ready)); err != nil {
+		t.Fatalf("redelivery must ack, got %v", err)
+	}
+}
+
+// Retrying a dead-lettered TRANSLATE run must not emit track.queued: the run id
+// is not a library row id, so the profile projection would insert a phantom card
+// that nothing ever advances (#1621).
+func TestSubmit_RetryDeadLetteredTranslate_NoQueuedEvent(t *testing.T) {
+	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
+	membership := h.seedQueued(t, "msg-1", "https://x/y")
+	if err := h.res.Process(context.Background(), "r1", resPayload(t, ingest.Result{
+		JobID: membership, Phase: ingest.PhaseReady, TrackID: "hash",
+		Variants: []ingest.Variant{{Lang: "en", TranscriptKey: "k/en"}},
+	})); err != nil {
+		t.Fatalf("ingest ready: %v", err)
+	}
+	tRun, err := h.req.Submit(context.Background(), translateReq(membership))
+	if err != nil {
+		t.Fatalf("translate submit: %v", err)
+	}
+	// The translate dead-letters (e.g. no translator configured).
+	if err := h.res.Process(context.Background(), "f", resPayload(t, ingest.Result{
+		JobID: tRun.JobID, Attempt: 1, Phase: ingest.PhaseFailed,
+		Error: "translate unavailable: no translator", Retriable: false,
+	})); err != nil {
+		t.Fatalf("translate failed: %v", err)
+	}
+
+	before := len(h.events.trackEvents())
+	if _, err := h.req.Submit(context.Background(), translateReq(membership)); err != nil {
+		t.Fatalf("translate retry: %v", err)
+	}
+	for _, ev := range h.events.trackEvents() {
+		if ev.DocID == tRun.JobID {
+			t.Fatalf("lifecycle event %s keyed on the translate run id %q — phantom library row", ev.Type, ev.DocID)
+		}
+	}
+	if after := len(h.events.trackEvents()); after != before {
+		t.Fatalf("translate restart emitted %d lifecycle events, want 0", after-before)
+	}
+	// The retry itself still happens — the guard suppresses the event, not the run.
+	j, _ := h.repo.Get(context.Background(), tRun.JobID)
+	if j.State != job.StateQueued || j.Generation != 1 {
+		t.Fatalf("translate restart wrong: state=%s gen=%d", j.State, j.Generation)
+	}
+	works := h.events.works()
+	last := works[len(works)-1]
+	if last.JobID != tRun.JobID || last.Op != job.OpTranslate || last.Attempt != 1 {
+		t.Fatalf("translate re-dispatch wrong: %+v", last)
+	}
+}
+
+// The ingest restart keeps emitting track.queued, keyed on the MEMBERSHIP id —
+// the guard above must not silence the library spinner it drives.
+func TestSubmit_RetryDeadLetteredIngest_QueuedKeyedOnMembership(t *testing.T) {
+	h := newHarness(5, fakeTier{userID: "user-1", pro: true})
+	jobID := h.deadLetter(t, "msg-dl", "https://x/y")
+	if _, err := h.req.Submit(context.Background(), reqObj("https://x/y")); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	q := lastTrackEvent(h.events.trackEvents())
+	if q.Type != ingest.EventQueued || q.DocID != jobID {
+		t.Fatalf("ingest restart queued event = type=%s doc=%s, want queued on %s", q.Type, q.DocID, jobID)
 	}
 }
