@@ -20,6 +20,11 @@ Living checklist of app journeys to cover. Status legend:
 - ✅ a non-empty playlist surfaces the reminders nag — `reminders-banner`
 - ✋ activity tracker updates after listen → pause (streak / count / time)
 - ✋ download indicator shown while a lecture loads
+- ✅ at the storage limit the queue refuses silently, the row says it is not
+  kept offline, and a deliberate tap is answered with "Download anyway" —
+  `storage-limit` (184)
+- ✅ a cancelled download releases the track, so re-adding really re-transfers —
+  `cancel-then-readd` (185); that it then *finishes* is #1680
 - ✅ tap a queued track → floating player — `play`
 - ✅ tap the floating player → transcript — `transcript`
 - ✅ floating player: swipe changes the carousel page — `player-swipe` (CDP)
