@@ -43,7 +43,9 @@ export interface UseSearchQueryReturn {
  * the failure mode where typing three letters used to compound into
  * multi-second waits because each keystroke queued its own MATCH and
  * the hydrate calls of the latest search waited behind every prior
- * MATCH in the plugin's queue.
+ * MATCH in the plugin's queue. `loadMore()` takes the same gate — a page
+ * fetch is the same roundtrip — and hands the gate back to a query raised
+ * while it was busy.
  *
  * Empty query + no filters falls through to `tracks.list()` (the
  * `searchAndFilterTracks` use case handles the branching) so the initial
@@ -82,45 +84,31 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   let activeRun: Promise<void> | null = null
   let rerunPending = false
 
-  async function runQuery(): Promise<void> {
-    if (activeRun) {
-      rerunPending = true
-      return activeRun
+  async function runFirstPage(): Promise<void> {
+    const token = ++searchToken
+    error.value = null
+    offset.value = 0
+    hasMore.value = false
+    isLoading.value = true
+    try {
+      const tracks = await fetchPage(0)
+      if (token !== searchToken) return
+      rawTracks.value = tracks
+      hasMore.value = tracks.length >= PAGE_SIZE
+      offset.value = PAGE_SIZE
+    } catch (err) {
+      if (token !== searchToken) return
+      error.value = err instanceof Error ? err.message : "Search failed"
+      rawTracks.value = []
+    } finally {
+      if (token === searchToken) isLoading.value = false
     }
-    activeRun = (async () => {
-      try {
-        do {
-          rerunPending = false
-          const token = ++searchToken
-          error.value = null
-          offset.value = 0
-          hasMore.value = false
-          isLoading.value = true
-          try {
-            const tracks = await fetchPage(0)
-            if (token !== searchToken) continue
-            rawTracks.value = tracks
-            hasMore.value = tracks.length >= PAGE_SIZE
-            offset.value = PAGE_SIZE
-          } catch (err) {
-            if (token !== searchToken) continue
-            error.value = err instanceof Error ? err.message : "Search failed"
-            rawTracks.value = []
-          } finally {
-            if (token === searchToken) isLoading.value = false
-          }
-        } while (rerunPending)
-      } finally {
-        activeRun = null
-      }
-    })()
-    return activeRun
   }
 
-  async function loadMore(): Promise<void> {
-    if (!hasMore.value || isLoading.value) return
+  async function runNextPage(): Promise<void> {
     const token = searchToken
     const pageOffset = offset.value
+    isLoading.value = true
     try {
       const tracks = await fetchPage(pageOffset)
       if (token !== searchToken) return
@@ -130,7 +118,50 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
     } catch (err) {
       if (token !== searchToken) return
       error.value = err instanceof Error ? err.message : "Search failed"
+      // Disarm infinite scroll: an armed `hasMore` on a failed page means the
+      // next scroll retries the same offset, forever.
+      hasMore.value = false
+    } finally {
+      if (token === searchToken) isLoading.value = false
     }
+  }
+
+  /** Drain a `runQuery()` raised while this run held the gate. */
+  async function drainReruns(): Promise<void> {
+    while (rerunPending) {
+      rerunPending = false
+      await runFirstPage()
+    }
+  }
+
+  async function runQuery(): Promise<void> {
+    if (activeRun) {
+      rerunPending = true
+      return activeRun
+    }
+    activeRun = (async () => {
+      try {
+        rerunPending = false
+        await runFirstPage()
+        await drainReruns()
+      } finally {
+        activeRun = null
+      }
+    })()
+    return activeRun
+  }
+
+  async function loadMore(): Promise<void> {
+    if (activeRun || !hasMore.value || isLoading.value) return
+    activeRun = (async () => {
+      try {
+        await runNextPage()
+        await drainReruns()
+      } finally {
+        activeRun = null
+      }
+    })()
+    return activeRun
   }
 
   const debouncedRun = useDebounceFn(() => runQuery(), 200)
