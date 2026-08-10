@@ -62,6 +62,11 @@ async def execute_tool_call(
         args = json.loads(call.arguments_json or "{}")
     except json.JSONDecodeError:
         args = {}
+    # A model may stream `arguments` that parse to a non-object
+    # (`null`, `[]`, a bare string/number) — most often for a call it
+    # means to make with no arguments. Treat that as "no arguments".
+    if not isinstance(args, dict):
+        args = {}
 
     # Reasoning for the default: a Russian-language UI session asking
     # «что Прабхупада говорил про X» almost always wants RU material if

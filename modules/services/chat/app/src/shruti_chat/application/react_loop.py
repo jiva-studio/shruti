@@ -151,6 +151,12 @@ async def _dispatch_tool_call(
         args = json.loads(arguments_json or "{}")
     except json.JSONDecodeError as exc:
         return {"error": f"bad JSON in tool args: {exc}"}
+    # Valid JSON that isn't an object (`null`, `[]`, a bare string or
+    # number) is what a weak model emits for a call it means to make
+    # with no arguments. Treat it as "no arguments" instead of letting
+    # the item-assignment / `.items()` below blow up the whole turn.
+    if not isinstance(args, dict):
+        args = {}
     if name in EMITS_EVENTS and yield_event is not None:
         args["yield_event"] = yield_event
     # Lazy import to avoid circular dep on agent boot path.
