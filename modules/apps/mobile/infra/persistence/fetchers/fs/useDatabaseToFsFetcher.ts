@@ -106,6 +106,9 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
         armStall()
         await MediaDownloader.download({
           id,
+          // The catalog is fetched once per version from whichever host is
+          // active, and is addressed by that path everywhere else too.
+          fileKey: new URL(url).pathname,
           url,
           destination: { directory: "data", subdir, filename },
         })
