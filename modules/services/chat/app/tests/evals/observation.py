@@ -51,6 +51,12 @@ class TurnObservation:
     outline_has_intro: bool | None = None
     outline_has_conclusion: bool | None = None
     outline_skipped_notes_ratio: float | None = None
+    # True when `research_worker` took the legacy ReAct fallback because
+    # a pipeline collaborator was missing from the TurnContext. Always
+    # False on a correctly wired run — the harness would otherwise be
+    # scoring a lane production never executes (#1566). Stays False on
+    # the HTTP pathway, where structlog events aren't observable.
+    react_fallback: bool = False
 
     @property
     def first_tool(self) -> ToolInvocation | None:

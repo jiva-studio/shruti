@@ -24,13 +24,17 @@ The capture sources:
   logs `tool_call` after dispatch with name + duration; we extend
   it for args/results below).
 - response_text — accumulated from `delta` SSE events.
+- react_fallback — set when `research_worker` logs
+  `research_worker_react_fallback`, i.e. the turn ran the legacy ReAct
+  lane instead of `research/pipeline.run_research`. A real eval run
+  must never trip this; the runner fails the case if it does.
 """
 
 from __future__ import annotations
 
 import contextvars
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import structlog
@@ -55,6 +59,7 @@ class _CaptureBuf:
     intent: str | None = None
     confidence: float | None = None
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    react_fallback: bool = False
 
 
 def _capture_processor(
@@ -74,6 +79,8 @@ def _capture_processor(
         conf = event_dict.get("confidence")
         if isinstance(conf, (int, float)):
             buf.confidence = float(conf)
+    elif event_name == "research_worker_react_fallback":
+        buf.react_fallback = True
     # `tool_call` events are NO LONGER mirrored to buf — the per-tool
     # wrapper in `_wrap_tools_for_capture` is the single source of truth
     # for chain entries (carries name + args + result). Without this
@@ -177,17 +184,20 @@ async def observe_turn(
     buf = _CaptureBuf()
     token = _capture_buf.set(buf)
     try:
-        ctx_wrapped = TurnContext(
-            request_id=base_ctx.request_id,
-            aliases=base_ctx.aliases,
-            expander=base_ctx.expander,
+        # `replace` rather than a fresh TurnContext: rebuilding by hand
+        # silently dropped every field the literal forgot — that is how
+        # the research collaborators (chunk_repo / embedder / pool /
+        # embed_model / embed_dim) and `locate_tools` went missing and
+        # sent every research case down the ReAct fallback (#1566).
+        ctx_wrapped = replace(
+            base_ctx,
+            lang_code=lang,
             emitted_card_keys=set(),
-            llm=base_ctx.llm,
             research_tools=_wrap_tools_for_capture(base_ctx.research_tools, buf),
+            locate_tools=_wrap_tools_for_capture(base_ctx.locate_tools, buf),
             catalog_tools=_wrap_tools_for_capture(base_ctx.catalog_tools, buf),
             action_tools=_wrap_tools_for_capture(base_ctx.action_tools, buf),
             help_tools=_wrap_tools_for_capture(base_ctx.help_tools, buf),
-            library_db_path=base_ctx.library_db_path,
         )
         state: dict[str, Any] = {
             "history": history or [],
@@ -246,6 +256,7 @@ async def observe_turn(
             outline_has_intro=outline_has_intro,
             outline_has_conclusion=outline_has_conclusion,
             outline_skipped_notes_ratio=outline_skipped_notes_ratio,
+            react_fallback=buf.react_fallback,
         )
     finally:
         _capture_buf.reset(token)
