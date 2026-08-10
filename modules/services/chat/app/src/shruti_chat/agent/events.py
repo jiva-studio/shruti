@@ -44,6 +44,10 @@ absent or unsupported). The current set is **9 event types**:
 - `done`       — final terminator         `{aliases?: dict, tokens?: int}`
                  Aliases map embedded here (no separate event).
 - `error`      — error payload            `{code, message, retry_after?}`
+                 `code` is the contract: every client localises off it
+                 and drops `message`. Build the frame with `error_event`
+                 — `message` is a fixed fallback string, never the text
+                 of the exception that caused the failure.
 
 The two `research_*` events are additive — old clients ignore
 unknown event names (chatClient drops them via the default branch),
@@ -74,3 +78,30 @@ from typing import Any
 class AgentEvent:
     type: str
     data: dict[str, Any]
+
+
+# Client-facing text for each `error` code. Every client localises the bubble
+# off `code` alone and drops `message`, so this is the fallback for consumers
+# that have no string for the code — it must never carry the exception text.
+# A raw `str(exc)` here once shipped the internal model id, the provider name
+# and a link to the provider's settings page to a user (issue #1568).
+ERROR_MESSAGES: dict[str, str] = {
+    "chat_unavailable": "The assistant is temporarily unavailable. Please try again shortly.",
+    "agent_error": "The assistant could not complete this request.",
+    "max_turns_exceeded": "The assistant took too many steps to answer this question.",
+}
+
+_ERROR_FALLBACK = "The assistant could not complete this request."
+
+
+def error_event(code: str, message: str | None = None) -> AgentEvent:
+    """Build the client-facing `error` frame for `code`.
+
+    `message` is optional and only for codes that carry a genuinely
+    caller-specific note; blank or omitted resolves to the fixed string for
+    `code`, and an unknown code to a generic one — so the frame is never
+    empty. Two of three production `chat_graph_failed` events carried an
+    exception whose `str()` was empty and the client rendered nothing.
+    """
+    text = (message or "").strip() or ERROR_MESSAGES.get(code, _ERROR_FALLBACK)
+    return AgentEvent(type="error", data={"code": code, "message": text})
