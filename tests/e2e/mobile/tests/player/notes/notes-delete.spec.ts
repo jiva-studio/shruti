@@ -23,7 +23,7 @@ test(
     await step(page, 5, 0, async () => {
       await gotoTab(page, "notes")
 
-      const notes = page.locator("ion-item.note")
+      const notes = page.locator(".note[role=button]")
       await expect(notes.first()).toBeVisible({ timeout: 20_000 })
       before = await notes.count()
       expect(before).toBeGreaterThan(0)
@@ -44,7 +44,7 @@ test(
       // The sheet dismisses and the list shrinks by exactly one.
       await expect(sheet).toBeHidden({ timeout: 10_000 })
       await expect
-        .poll(() => page.locator("ion-item.note").count(), { timeout: 15_000 })
+        .poll(() => page.locator(".note[role=button]").count(), { timeout: 15_000 })
         .toBe(before - 1)
     })
   }
