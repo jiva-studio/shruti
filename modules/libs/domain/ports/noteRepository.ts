@@ -1,5 +1,6 @@
 import type { NoteId, TrackId } from "../core.js"
 import type { Note, NoteMeta } from "../note.js"
+import type { ITransaction } from "./unitOfWork.js"
 
 export interface CreateNoteInput {
   readonly trackId: TrackId
@@ -37,8 +38,12 @@ export interface INoteRepository {
   getById(id: NoteId): Promise<Note | null>
   listByTrack(trackId: TrackId): Promise<readonly Note[]>
   listRecent(limit: number): Promise<readonly Note[]>
-  create(input: CreateNoteInput): Promise<Note>
-  update(input: UpdateNoteInput): Promise<Note>
-  delete(id: NoteId): Promise<void>
+  /* `tx` on the mutating methods: the handle of the transaction the caller
+   * already opened (see {@link ITransaction}). Passing it keeps the write —
+   * and the sync-journal entry the decorator writes with it — inside that
+   * transaction; omitting it gives the write one of its own. */
+  create(input: CreateNoteInput, tx?: ITransaction): Promise<Note>
+  update(input: UpdateNoteInput, tx?: ITransaction): Promise<Note>
+  delete(id: NoteId, tx?: ITransaction): Promise<void>
   clearAll(): Promise<void>
 }

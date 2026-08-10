@@ -8,4 +8,5 @@ export default {
   playbackFailed: "এই বক্তৃতাটি চালানো যায়নি। আপনার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
   noAudioForLecture: "এই বক্তৃতার কোনও অডিও নেই।",
   downloadStorageFull: "সঞ্চয়ের সীমা শেষ। শোনা বক্তৃতাগুলি সরান বা সেটিংসে সীমা বাড়ান।",
+  downloadStorageFullAction: "তবুও ডাউনলোড করুন",
 }

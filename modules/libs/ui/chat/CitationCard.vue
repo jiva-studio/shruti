@@ -72,7 +72,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
-import type { ChatCiteSnippet } from "@lib/domain/chatMessage.js"
+import type { UiChatCiteSnippet } from "./types.js"
 import { ExcerptCard } from "@lib/ui/excerpt/index.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
@@ -85,7 +85,7 @@ const props = withDefaults(
     caption?: string
     /** Transcript snippet from the owning message's `cites` map; absent ⇒
      *  chip fallback. */
-    body?: ChatCiteSnippet
+    body?: UiChatCiteSnippet
     /** Resolved lecture title (content language). Loaded by the parent. */
     trackTitle?: string
     /** Resolved author name (UI language). Loaded by the parent. */

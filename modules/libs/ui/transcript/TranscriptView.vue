@@ -10,14 +10,13 @@
       </h2>
       <p
         class="tx-group"
-        :class="{ 'is-active': activeEnabled && isActive(group), 'is-dim': activeEnabled && hasActive && !isActive(group) }"
+        :class="{
+          'is-active': activeEnabled && isActive(group),
+          'is-dim': activeEnabled && hasActive && !isActive(group),
+        }"
         @click="emit('seek', group.startMs)"
       >
-        <button
-          type="button"
-          class="tx-time"
-          @click.stop="emit('seek', group.startMs)"
-        >
+        <button type="button" class="tx-time" @click.stop="emit('seek', group.startMs)">
           {{ formatTime(group.startMs) }}
         </button>
         <template v-for="(block, bi) in renderable(group)" :key="bi">
@@ -33,9 +32,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { TranscriptBlock, TranscriptGroup } from '@lib/catalog/types.js'
-import TranscriptBlockText from './TranscriptBlockText.vue'
+import { computed } from "vue"
+import type { TranscriptBlock, TranscriptGroup } from "@lib/catalog/types.js"
+import TranscriptBlockText from "./TranscriptBlockText.vue"
 
 const props = withDefaults(
   defineProps<{
@@ -57,7 +56,7 @@ function isActive(group: TranscriptGroup): boolean {
 }
 
 function renderable(group: TranscriptGroup): TranscriptBlock[] {
-  return group.blocks.filter((b) => b.type !== 'paragraph')
+  return group.blocks.filter((b) => b.type !== "paragraph")
 }
 
 // "{gi}:{bi}" -> speaker name, set on the first sentence after the speaker
@@ -67,7 +66,7 @@ const speakerStarts = computed(() => {
   let prev: string | undefined
   props.groups.forEach((group, gi) => {
     renderable(group).forEach((block, bi) => {
-      if (block.type !== 'sentence') return
+      if (block.type !== "sentence") return
       const sp = block.speaker
       if (sp !== undefined && sp !== prev) {
         out.set(`${gi}:${bi}`, sp)

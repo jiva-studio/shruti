@@ -1,11 +1,6 @@
 <template>
   <span class="vref">
-    <button
-      type="button"
-      class="vref-chip"
-      :class="{ openable: hasVerse }"
-      @click.stop="toggle"
-    >
+    <button type="button" class="vref-chip" :class="{ openable: hasVerse }" @click.stop="toggle">
       {{ verseNo }}
     </button>
 
@@ -26,22 +21,26 @@
         class="vref-iast"
         v-html="md(line)"
       />
-      <span v-if="reference.translation" class="vref-translation" v-html="md(reference.translation)" />
+      <span
+        v-if="reference.translation"
+        class="vref-translation"
+        v-html="md(reference.translation)"
+      />
     </span>
   </span>
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
-import type { BlockReference } from '@lib/catalog/types.js'
-import { renderInlineMarkdown } from './renderInlineMarkdown.js'
+import { computed, onUnmounted, ref, watch } from "vue"
+import type { BlockReference } from "@lib/catalog/types.js"
+import { renderInlineMarkdown } from "./renderInlineMarkdown.js"
 
 const props = defineProps<{
   reference: BlockReference
 }>()
 
 const open = ref(false)
-const verseNo = computed(() => props.reference.label ?? props.reference.tokens.join('.'))
+const verseNo = computed(() => props.reference.label ?? props.reference.tokens.join("."))
 const hasVerse = computed(
   () =>
     !!(
@@ -62,12 +61,12 @@ function close(): void {
 // Close on any click elsewhere. The opening click is @click.stop so it never
 // reaches the document, so the popover doesn't immediately self-close.
 watch(open, (isOpen) => {
-  if (typeof document === 'undefined') return
-  if (isOpen) document.addEventListener('click', close)
-  else document.removeEventListener('click', close)
+  if (typeof document === "undefined") return
+  if (isOpen) document.addEventListener("click", close)
+  else document.removeEventListener("click", close)
 })
 onUnmounted(() => {
-  if (typeof document !== 'undefined') document.removeEventListener('click', close)
+  if (typeof document !== "undefined") document.removeEventListener("click", close)
 })
 </script>
 
@@ -130,7 +129,7 @@ onUnmounted(() => {
 .vref-original {
   display: block;
   line-height: 1.5;
-  font-family: 'Sanskrit2003', 'Noto Sans Devanagari', var(--font-serif, serif);
+  font-family: "Sanskrit2003", "Noto Sans Devanagari", var(--font-serif, serif);
 }
 .vref-iast {
   display: block;

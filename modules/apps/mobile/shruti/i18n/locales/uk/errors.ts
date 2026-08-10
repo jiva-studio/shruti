@@ -10,4 +10,5 @@ export default {
   noAudioForLecture: "Ця лекція не має аудіо.",
   downloadStorageFull:
     "Досягнуто ліміт сховища. Видаліть прослухані лекції або збільште ліміт у налаштуваннях.",
+  downloadStorageFullAction: "Все одно завантажити",
 }

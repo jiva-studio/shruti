@@ -93,7 +93,6 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
             plugin?.emit(event: "failed", data: [
                 "id": id,
                 "error": "Failed to move downloaded file: \(error.localizedDescription)",
-                "retryable": false,
             ])
             return
         }
@@ -139,13 +138,10 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
             plugin?.emit(event: "failed", data: [
                 "id": id,
                 "error": "cancelled",
-                "retryable": false,
                 "code": "cancelled",
             ])
             return
         }
-        let retryable = [NSURLErrorTimedOut, NSURLErrorNetworkConnectionLost,
-                         NSURLErrorNotConnectedToInternet].contains(nsError.code)
         // Clean up the metadata entry AND any partial file URLSession
         // may have written before failing. Without this, the next call
         // to `resolveLocalUrl(url)` would still find both the entry and
@@ -165,7 +161,6 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         plugin?.emit(event: "failed", data: [
             "id": id,
             "error": error.localizedDescription,
-            "retryable": retryable,
         ])
     }
 
