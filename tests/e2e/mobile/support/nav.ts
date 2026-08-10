@@ -145,6 +145,75 @@ export async function editLibraryLanguages(
   await dialog.getByRole("button", { name: /apply|примен/i }).click()
 }
 
+/**
+ * URL the Vite dev server hands a lazily-imported UI-language chunk out at
+ * (`shruti/i18n/bundles/<locale>.ts`). `page.route` on this is how the
+ * locale specs express "the chunk 404s" / "the chunk is still on the wire";
+ * `en` is statically imported, which is why only non-English devices are
+ * exposed to either.
+ */
+export function localeChunkUrl(locale: string): string {
+  return `**/i18n/bundles/${locale}.ts`
+}
+
+/** The Settings → Appearance "Language of an interface" row. Matched on the
+ *  subtitle so it can't collide with the chat- or library-language rows, in
+ *  whichever UI language the app currently is. */
+export function appLanguageRow(page: Page): Locator {
+  return page.locator("ion-item", {
+    hasText:
+      /Language of an interface|Язык интерфейса|Мова інтерфейсу|Sprache der Oberfläche|Jezik interfejsa/,
+  })
+}
+
+/**
+ * The OPEN selector dialog. Settings keeps a dozen `SelectorDialog`s mounted at
+ * once (interface / chat / library language, auto-archive, server, …), so the
+ * only thing that identifies the one under the finger is that it is on screen.
+ */
+export function openSelectorDialog(page: Page): Locator {
+  return page.locator("ion-modal.selector-dialog:visible")
+}
+
+/**
+ * Pick a UI language through the real gesture: Settings → the interface-language
+ * row → its radio → Apply. `autonym` is the native name the picker lists
+ * (`Deutsch`, `Українська`, …). Does NOT wait for the switch to take effect —
+ * the whole point of the locale specs is what happens in between.
+ */
+export async function pickAppLanguage(page: Page, autonym: string | RegExp): Promise<void> {
+  await openAppLanguageDialog(page)
+  const dialog = openSelectorDialog(page)
+  await dialog.locator("ion-radio", { hasText: autonym }).click()
+  await dialog.getByRole("button", { name: /apply|примен|застосув|anwenden/i }).click()
+  await expect(dialog).toHaveCount(0, { timeout: 10_000 })
+}
+
+/**
+ * The autonym the interface-language picker currently has checked — i.e. what
+ * the SETTING claims, as opposed to what the UI is rendering in. Leaves the
+ * dialog dismissed without committing anything.
+ */
+export async function checkedAppLanguage(page: Page): Promise<string> {
+  await openAppLanguageDialog(page)
+  const dialog = openSelectorDialog(page)
+  const checked = dialog.locator("ion-radio.radio-checked")
+  await expect(checked).toHaveCount(1, { timeout: 10_000 })
+  const title = (await checked.innerText()).trim()
+  // Escape dismisses the modal; the dialog has no Cancel, and Apply would
+  // commit a pick this helper is only meant to read.
+  await page.keyboard.press("Escape")
+  await expect(dialog).toHaveCount(0, { timeout: 10_000 })
+  return title
+}
+
+async function openAppLanguageDialog(page: Page): Promise<void> {
+  await appLanguageRow(page).first().click()
+  await expect(openSelectorDialog(page).locator("ion-radio").first()).toBeVisible({
+    timeout: 10_000,
+  })
+}
+
 /** The per-track detail bottom sheet (TrackSheet). */
 export function trackSheet(page: Page): Locator {
   return page.locator("ion-modal.track-sheet")

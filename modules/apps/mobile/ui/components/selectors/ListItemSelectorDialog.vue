@@ -45,8 +45,8 @@ const emit = defineEmits<{
   select: [items: ItemId]
 }>()
 
-const { value: valueProp } = toRefs(props)
-const { value: selected } = useSingleSelectorDialogState({ value: valueProp })
+const { value: valueProp, open: openProp } = toRefs(props)
+const { value: selected } = useSingleSelectorDialogState({ value: valueProp, open: openProp })
 
 function onClose() {
   emit("close")
