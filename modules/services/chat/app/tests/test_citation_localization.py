@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-import lectorium_chat.agent.graph.nodes._worker_common as wc
+import lectorium_chat.agent.graph.nodes._worker_common as wc  # noqa: F401
 from lectorium_chat.agent import cards as _cards
 from lectorium_chat.agent.graph.nodes._worker_common import (
     build_verse_payload,

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request  # noqa: F401
 from pydantic import BaseModel, Field
 
 from lectorium_chat.agent.oneshot import run_oneshot

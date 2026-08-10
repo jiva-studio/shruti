@@ -19,15 +19,15 @@ runs; toolset is parameterised.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Any, Callable
+from dataclasses import dataclass  # noqa: F401
+from typing import Any, Callable  # noqa: F401
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prompts import build_prompt, standalone_prompt
-from lectorium_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
+from lectorium_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef  # noqa: F401
 # The card / citation payload layer moved to `agent/cards.py` — it touches
 # neither LangGraph nor ChatState. Re-exported so existing call sites keep
 # their import path; the definitions live there.
@@ -53,9 +53,9 @@ from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.application.cache_helpers import TTL_30D, cached_llm_json
 from lectorium_chat.config import get_settings
 from lectorium_chat.domain.entities import Message
-from lectorium_chat.indexer.library.repo import fetch_media, fetch_verse_body
+from lectorium_chat.indexer.library.repo import fetch_media, fetch_verse_body  # noqa: F401
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
-from lectorium_chat.research.pipeline import reduce_locale_to_content_lang
+from lectorium_chat.research.pipeline import reduce_locale_to_content_lang  # noqa: F401
 from lectorium_chat.observability.logging import bind_node_role, get_logger
 
 from pydantic import BaseModel, Field

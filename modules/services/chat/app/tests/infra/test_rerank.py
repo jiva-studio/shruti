@@ -7,7 +7,7 @@ the parsed response without a network call.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from types import SimpleNamespace  # noqa: F401
 from typing import Any
 
 import httpx

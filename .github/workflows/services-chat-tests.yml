@@ -78,11 +78,16 @@ jobs:
           python-version: '3.12'
           cache: pip
 
-      # Just the linter — mirroring the dev-extra constraint — rather than the
-      # whole `.[dev]` tree, so the lane answers in seconds. Ruff needs no
-      # imports to work.
+      # Just the linter, rather than the whole `.[dev]` tree, so the lane
+      # answers in seconds — ruff needs no imports to work.
+      #
+      # Pinned to an exact version, not the `ruff>=0.7` dev-extra range: an
+      # unpinned install makes the gate a moving target, so a ruff release
+      # that adds a check or changes an existing one turns the lane red on a
+      # commit that changed nothing. Bump this deliberately, in a PR that also
+      # clears whatever the new version reports.
       - name: Install ruff
-        run: pip install "ruff>=0.7"
+        run: pip install "ruff==0.16.1"
 
       # `ruff` has been a declared dev dep all along and was never run by
       # anything but hands. The gating rule set is pinned in pyproject

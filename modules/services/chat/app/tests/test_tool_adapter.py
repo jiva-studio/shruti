@@ -8,7 +8,7 @@ runtime).
 
 from __future__ import annotations
 
-import inspect
+import inspect  # noqa: F401
 from typing import Any
 
 import pytest
@@ -19,7 +19,7 @@ from lectorium_chat.agent.graph.tool_adapter import (
     _schema_to_pydantic,
     as_langchain_tool,
 )
-from lectorium_chat.agent.tools import TOOLS
+from lectorium_chat.agent.tools import TOOLS  # noqa: F401
 from lectorium_chat.agent.tools._registry import ToolDef, all_tools
 
 

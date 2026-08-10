@@ -22,7 +22,7 @@ hands over when the last listen was.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass  # noqa: F401
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
