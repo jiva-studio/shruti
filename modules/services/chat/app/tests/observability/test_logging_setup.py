@@ -51,7 +51,7 @@ def isolated_logging():
     logging.captureWarnings(False)
 
 
-def _access_record(path: str) -> logging.LogRecord:
+def _access_record(path: str, status: int = 200) -> logging.LogRecord:
     """A record shaped exactly like uvicorn's lazily formatted access line."""
     return logging.LogRecord(
         name="uvicorn.access",
@@ -59,7 +59,7 @@ def _access_record(path: str) -> logging.LogRecord:
         pathname=__file__,
         lineno=1,
         msg='%s - "%s %s HTTP/%s" %d',
-        args=("127.0.0.1:52000", "GET", path, "1.1", 200),
+        args=("127.0.0.1:52000", "GET", path, "1.1", status),
         exc_info=None,
     )
 
@@ -93,6 +93,21 @@ def test_healthz_is_dropped_from_the_access_log(isolated_logging):
     assert filters[0].filter(_access_record("/healthz")) is False
     assert filters[0].filter(_access_record("/healthz?probe=blackbox")) is False
     assert filters[0].filter(_access_record("/chat")) is True
+
+
+def test_a_failing_healthz_still_reaches_the_access_log(isolated_logging):
+    """Silencing is by path AND status — a broken probe must stay visible."""
+    filt = DropAccessLogPaths()
+
+    assert filt.filter(_access_record("/healthz", 200)) is False
+    assert filt.filter(_access_record("/healthz", 500)) is True
+    assert filt.filter(_access_record("/healthz", 503)) is True
+    assert filt.filter(_access_record("/healthz?probe=blackbox", 404)) is True
+
+    # Shapes uvicorn never sends: an unreadable status keeps the line
+    # rather than raising inside a log filter.
+    assert filt.filter(_access_record("/healthz", "-")) is True  # type: ignore[arg-type]
+    assert filt.filter(_access_record("/healthz", None)) is True  # type: ignore[arg-type]
 
 
 def test_the_access_filter_is_not_stacked_on_repeated_setup(isolated_logging):
