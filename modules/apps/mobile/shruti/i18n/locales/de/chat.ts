@@ -222,6 +222,7 @@ export default {
 
   noteSaved: "Notiz gespeichert",
   noteSaving: "Notiz wird gespeichert…",
+  actionNoteError: "Die Notiz konnte nicht gespeichert werden.",
 
   actionPdfKind: "Vortragstranskript",
   actionPdfShare: "Teilen",
