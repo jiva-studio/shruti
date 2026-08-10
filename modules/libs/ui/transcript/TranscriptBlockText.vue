@@ -1,22 +1,38 @@
 <template>
   <span v-if="block.type === 'sentence'" class="tx-sentence">
-    <span v-html="html(block.text + ' ')" /><VerseRefChip v-if="block.reference" :reference="block.reference" />
+    <span v-html="html(block.text + ' ')" /><VerseRefChip
+      v-if="block.reference"
+      :reference="block.reference"
+    />
   </span>
   <span v-else-if="block.type === 'verse:text'" class="tx-verse">
     <span v-if="verseNo" class="tx-verse-no">{{ verseNo }}</span>
-    <span v-for="(line, i) in block.original ?? []" :key="'o' + i" class="tx-verse-original" v-html="html(line)" />
+    <span
+      v-for="(line, i) in block.original ?? []"
+      :key="'o' + i"
+      class="tx-verse-original"
+      v-html="html(line)"
+    />
     <span v-for="(line, i) in block.text" :key="i" class="tx-verse-line" v-html="html(line)" />
     <span v-if="block.translation" class="tx-verse-translation" v-html="html(block.translation)" />
   </span>
-  <span v-else-if="block.type === 'verse:translation'" class="tx-translation" v-html="html(block.text + ' ')" />
-  <span v-else-if="block.type === 'marker'" class="tx-marker" v-html="'[' + html(block.text) + '] '" />
+  <span
+    v-else-if="block.type === 'verse:translation'"
+    class="tx-translation"
+    v-html="html(block.text + ' ')"
+  />
+  <span
+    v-else-if="block.type === 'marker'"
+    class="tx-marker"
+    v-html="'[' + html(block.text) + '] '"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { TranscriptBlock } from '@lib/catalog/types.js'
-import { renderInlineMarkdown } from './renderInlineMarkdown.js'
-import VerseRefChip from './VerseRefChip.vue'
+import { computed } from "vue"
+import type { TranscriptBlock } from "@lib/catalog/types.js"
+import { renderInlineMarkdown } from "./renderInlineMarkdown.js"
+import VerseRefChip from "./VerseRefChip.vue"
 
 const props = defineProps<{
   block: TranscriptBlock
@@ -27,8 +43,8 @@ const html = (text: string): string => renderInlineMarkdown(text)
 // Reference label shown as a centered header above the verse (e.g. "BG 5.52").
 const verseNo = computed(() => {
   const b = props.block
-  if (b.type !== 'verse:text' || !b.reference) return ''
-  return b.reference.label ?? b.reference.tokens.join('.')
+  if (b.type !== "verse:text" || !b.reference) return ""
+  return b.reference.label ?? b.reference.tokens.join(".")
 })
 </script>
 

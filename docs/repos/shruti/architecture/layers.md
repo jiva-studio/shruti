@@ -326,13 +326,21 @@ Capacitor plugins share the `@shruti` npm scope). Note `@kit/*` is *not*
 restricted by these rules — it is the shared kernel/toolkit and may be
 imported by every layer.
 
-**Known gap: `@lib/ui` is unenforced.** The shared UI package
+**`@lib/ui` has its own block.** The shared UI package
 (`modules/libs/ui/`, symlinked into the app as `submodules/ui/` and aliased
-`@lib/ui`) has **no** rule block in `eslint.config.js` — the UI rules key on
-`ui/**`, which does not match it. So the "UI must not import domain — use
-mirror types" rule does not apply there, and `@lib/ui` does in fact import
-`@lib/domain` directly. Treat the grep checks above as the real boundary check
-for that package until the config gains a `submodules/ui/**` block (#1509).
+`@lib/ui`) is a second, cross-app UI body that the `ui/**` globs do not match,
+so it carries a rule block of its own keyed on `submodules/ui/**` /
+`../../libs/ui/**` — the in-repo UI bans plus `@ui/*` and `@ionic/*`, because
+the Astro web app renders the same components and ships no Ionic. See
+[Shared UI library](../components/lib-ui.md).
+
+**Known gap: the symlinked libs are only linted when named.** `eslint .` walks
+the tree itself and does **not** descend through a symlinked directory, so any
+block keyed on `submodules/**` is inert during a plain `eslint .`. The mobile
+`lint` script works around this for one path — it passes `submodules/ui` as an
+explicit second target — but the `contracts`, `domain` and `persistence-*`
+blocks are still never evaluated. Treat the grep checks above as the real
+boundary check for those three.
 
 ## Error-Handling Policy
 
