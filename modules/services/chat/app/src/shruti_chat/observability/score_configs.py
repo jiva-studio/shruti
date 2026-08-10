@@ -37,8 +37,10 @@ from langfuse.api import ConfigCategory
 from shruti_chat.domain.routing import Intent
 
 
-# Each entry is the kwargs dict passed verbatim into
-# `langfuse.api.score_configs.create(...)`. Keep `name`s globally
+# Each entry is the kwargs dict for a `CreateScoreConfigRequest`, which
+# the bootstrap passes to `langfuse.api.score_configs.create(request=...)`.
+# Field names are the model's own (snake_case), not the wire aliases.
+# Keep `name`s globally
 # unique — Langfuse keys configs by name and the bootstrap dedups on it.
 SCORE_CONFIGS: list[dict] = [
     # ── User feedback (POST /chat/feedback) ────────────────────────────
