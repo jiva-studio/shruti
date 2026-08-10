@@ -37,6 +37,7 @@ import sys
 import structlog
 
 from lectorium_chat.config import get_settings
+from lectorium_chat.observability.sentry import set_sentry_tag
 
 
 # PII keys that MUST NOT reach stdout / Loki / Langfuse traces. The
@@ -197,6 +198,13 @@ def bind_turn_context(
         parent_trace_id=parent_trace_id or "",
         langfuse_trace_id=langfuse_trace_id or "",
     )
+    # Same id on the Sentry scope, so an issue deep-links to the Langfuse
+    # trace that produced it — the prompts, the model calls and the retrieval
+    # scores behind the failure, which no stack trace can show. No-op when
+    # Sentry is disabled or absent.
+    set_sentry_tag("trace_id", trace_id)
+    if langfuse_trace_id:
+        set_sentry_tag("langfuse_trace_id", langfuse_trace_id)
 
 
 def bind_node_role(role: str) -> None:
