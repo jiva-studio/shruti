@@ -11,13 +11,16 @@ import type {
   TaskState,
 } from './definitions';
 
+/** Matches `useWebRemoteFilesStorage`, which reads the same cache. */
+const CACHE_NAME = 'lectorium';
+
 /**
  * Web implementation. fetch() with streaming body to report progress, and
  * Cache API to persist files across reloads.
  *
- * Cache name: "lectorium", matching `useWebRemoteFilesStorage`. Cache key:
- * `URL.pathname`. `destination.subdir` is ignored on web — it's a
- * native-only filesystem layout hint.
+ * Entries are stored under `options.fileKey` — the caller's name for the
+ * file, not the address it was fetched from. `destination.subdir` is ignored
+ * on web: it's a native-only filesystem layout hint.
  *
  * No real background: closing the tab cancels the in-flight download.
  */
@@ -31,8 +34,7 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
     const existing = this.tasks.get(options.id);
     if (existing && existing.state === 'running') return existing;
 
-    const cacheName = this.cacheNameFor(options.url);
-    const cacheKey = this.cacheKey(options.url);
+    const cacheKey = options.fileKey;
 
     const initial: DownloadTask = {
       id: options.id,
@@ -45,13 +47,12 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
     const abort = new AbortController();
     this.aborts.set(options.id, abort);
 
-    void this.runDownload(options, cacheName, cacheKey, abort.signal);
+    void this.runDownload(options, cacheKey, abort.signal);
     return initial;
   }
 
   private async runDownload(
     options: DownloadOptions,
-    cacheName: string,
     cacheKey: string,
     signal: AbortSignal,
   ): Promise<void> {
@@ -84,7 +85,7 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
       }
 
       const blob = new Blob(chunks as BlobPart[]);
-      const cache = await caches.open(cacheName);
+      const cache = await caches.open(CACHE_NAME);
       await cache.put(cacheKey, new Response(blob));
 
       const localUrl = URL.createObjectURL(blob);
@@ -160,30 +161,20 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
 
   // ── Cache management (per-file) ───────────────────────────────────────
 
-  async resolveLocalUrl(options: { url: string }): Promise<{ localUrl: string | null }> {
-    const cacheName = this.cacheNameFor(options.url);
-    const cache = await caches.open(cacheName);
-    const cached = await cache.match(this.cacheKey(options.url));
+  async resolveLocalUrl(options: { fileKey: string }): Promise<{ localUrl: string | null }> {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(options.fileKey);
     if (!cached) return { localUrl: null };
     const blob = await cached.blob();
     return { localUrl: URL.createObjectURL(blob) };
   }
 
-  async deleteFile(options: { url: string }): Promise<void> {
-    const cacheName = this.cacheNameFor(options.url);
-    const cache = await caches.open(cacheName);
-    await cache.delete(this.cacheKey(options.url));
+  async deleteFile(options: { fileKey: string }): Promise<void> {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.delete(options.fileKey);
   }
 
   // ── Internals ─────────────────────────────────────────────────────────
-
-  private cacheKey(url: string): string {
-    return new URL(url).pathname;
-  }
-
-  private cacheNameFor(_url: string): string {
-    return 'lectorium';
-  }
 
   private setTask(task: DownloadTask): void {
     this.tasks.set(task.id, task);

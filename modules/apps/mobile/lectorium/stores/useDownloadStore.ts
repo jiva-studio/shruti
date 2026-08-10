@@ -441,9 +441,11 @@ export const useDownloadStore = defineStore("downloads", () => {
 
     const task = (async (): Promise<string | null> => {
       try {
-        // Cache lookup uses the active server's URL; the platform
-        // downloader keys by URL pathname, so any previously-downloaded
-        // file is still resolvable even if we later swapped CDNs.
+        // The probe URL names the active server, but the lookup underneath
+        // is addressed by the file's own key — so a file downloaded before a
+        // CDN swap is still found. That used to be an assumption stated in
+        // this comment and contradicted by the native stores, which compared
+        // the whole URL; it is now the plugin contract.
         const probeUrl = buildServerUrl(app.activeServer.value, path)
         // Record the url so a concurrent remove/archive/reset can cancel the
         // native transfer (keyed by url → pathname id, host-independent).

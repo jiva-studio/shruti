@@ -99,6 +99,10 @@ export function useCapacitorExcerptCache(): IExcerptCache {
       try {
         await MediaDownloader.download({
           id,
+          // The temp name IS this file's identity: the excerpt is published to
+          // its final path by hand once the transfer lands, so nothing ever
+          // looks the download up again.
+          fileKey: tmpFilename,
           url,
           destination: { directory: "cache", subdir: "", filename: tmpFilename },
         })

@@ -59,4 +59,35 @@ describe("useServerFallback.tryServers (transcript / opaque-URL failover)", () =
     // Rotated through all three candidates.
     expect(attempt).toHaveBeenCalledTimes(3)
   })
+
+  it("puts the active server back when every candidate failed", async () => {
+    // Offline, all three fail — which says nothing about any of them. Leaving
+    // the last one tried as active demotes a healthy region on the strength of
+    // a dead radio, and it sticks: the watcher persists the choice, and the
+    // startup probe checks the storage host, a different machine that answers
+    // fine. The user can sit on the wrong region for days.
+    active.value = B
+    const fb = useServerFallback()
+
+    await fb.tryServers(async () => {
+      throw new Error("airplane mode")
+    })
+
+    expect(active.value).toEqual(B)
+  })
+
+  it("keeps the server that worked", async () => {
+    // The other half of the same rule: a successful walk HAS learned
+    // something, so the winner stays active.
+    active.value = A
+    const fb = useServerFallback()
+
+    const result = await fb.tryServers(async () => {
+      if (active.value.id !== "c") throw new Error("dead")
+      return "bytes"
+    })
+
+    expect(result).toBe("bytes")
+    expect(active.value).toEqual(C)
+  })
 })

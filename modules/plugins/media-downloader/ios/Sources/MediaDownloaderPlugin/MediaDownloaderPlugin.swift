@@ -92,6 +92,9 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func download(_ call: CAPPluginCall) {
         guard let id = call.getString("id") else { return call.reject("'id' is required") }
+        guard let fileKey = call.getString("fileKey") else {
+            return call.reject("'fileKey' is required")
+        }
         guard let urlString = call.getString("url"), let url = URL(string: urlString) else {
             return call.reject("'url' is required and must be valid")
         }
@@ -144,6 +147,7 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
         let downloadTask = session.downloadTask(with: request)
         let entry = TaskMetadataStore.Entry(
             id: id,
+            fileKey: fileKey,
             url: url.absoluteString,
             localPath: localPath,
             bytesDownloaded: 0,
@@ -235,8 +239,10 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func resolveLocalUrl(_ call: CAPPluginCall) {
-        guard let url = call.getString("url") else { return call.reject("'url' is required") }
-        if let entry = metadataStore.findByUrl(url) {
+        guard let fileKey = call.getString("fileKey") else {
+            return call.reject("'fileKey' is required")
+        }
+        if let entry = metadataStore.findByFileKey(fileKey) {
             let path = resolvedPath(entry.localPath)
             if FileManager.default.fileExists(atPath: path) {
                 call.resolve(["localUrl": "file://" + path])
@@ -247,8 +253,10 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func deleteFile(_ call: CAPPluginCall) {
-        guard let url = call.getString("url") else { return call.reject("'url' is required") }
-        if let entry = metadataStore.findByUrl(url) {
+        guard let fileKey = call.getString("fileKey") else {
+            return call.reject("'fileKey' is required")
+        }
+        if let entry = metadataStore.findByFileKey(fileKey) {
             try? FileManager.default.removeItem(atPath: resolvedPath(entry.localPath))
             metadataStore.remove(id: entry.id)
         }
