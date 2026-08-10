@@ -47,7 +47,6 @@ function deps(
     getTracks: async () => new Map(),
     getCompletedAt: async () => new Map(),
     archive: archiveSpy,
-    evict: async () => false,
     now: () => 0,
     ...overrides,
   }

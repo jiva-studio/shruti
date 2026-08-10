@@ -83,7 +83,7 @@ const resolveLocalUrl = vi.fn<(url: string) => Promise<string | null>>(async () 
 
 const repositories = {
   playlistItems: {
-    listActive: async () => activeItems,
+    listActive: vi.fn(async () => activeItems),
     listArchived: async () => archivedItems,
     getById: async (id: string) =>
       activeItems.find((i) => i.id === id) ?? archivedItems.find((i) => i.id === id) ?? null,
@@ -154,6 +154,8 @@ describe("usePlaylistStore", () => {
     for (const i of playlistOf(120)) tracksById.set(i.trackId, track(i.trackId))
     downloads.cancelPrefetch.mockClear()
     downloads.evict.mockClear()
+    downloads.evict.mockImplementation(async () => true)
+    repositories.playlistItems.listActive.mockClear()
     resolveLocalUrl.mockClear()
   })
 
@@ -234,6 +236,29 @@ describe("usePlaylistStore", () => {
       await store.archive("i-2" as PlaylistItemId)
 
       expect(downloads.evict).not.toHaveBeenCalled()
+    })
+
+    // The auto-archive sweep archives a run of finished lectures in one pass.
+    // It goes through this entry point — not the use case — so the queue is
+    // released before any file goes; re-hydration is its own single step.
+    it("archives a swept item through the same contract, without re-hydrating", async () => {
+      const order: string[] = []
+      setNativeQueueRelease(async () => {
+        order.push("release")
+        return false
+      })
+      downloads.evict.mockImplementation(async () => {
+        order.push("evict")
+        return true
+      })
+      const store = usePlaylistStore()
+      await store.refresh()
+      repositories.playlistItems.listActive.mockClear()
+
+      await store.archive("i-2" as PlaylistItemId, { refresh: false })
+
+      expect(order).toEqual(["release", "evict"])
+      expect(repositories.playlistItems.listActive).not.toHaveBeenCalled()
     })
   })
 
