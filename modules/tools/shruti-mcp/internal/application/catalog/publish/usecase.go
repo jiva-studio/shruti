@@ -37,6 +37,12 @@ type Options struct {
 	// unavailable — the published catalog may then point the chat indexer
 	// at files that are not there.
 	SkipAssetCheck bool
+	// ForcePrune waives the "too much is missing reads as a broken target"
+	// budget. The narrow escape when the corpus genuinely carries more
+	// phantoms than the budget allows: the unbacked rows are still pruned
+	// from the uploaded copy, where SkipAssetCheck would publish every one
+	// of them. Local current.db is untouched either way.
+	ForcePrune bool
 	// AssetCheckConcurrency is the number of HEAD probes in flight.
 	// 0 = default.
 	AssetCheckConcurrency int
@@ -158,7 +164,10 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	uploadDB := currentDB
 	var assets *AssetCheck
 	if !opts.SkipAssetCheck {
-		check, missing, err := verifyTranscriptAssets(ctx, currentDB, primary, opts.AssetCheckConcurrency)
+		check, missing, err := verifyTranscriptAssets(ctx, currentDB, primary, assetCheckOpts{
+			Concurrency: opts.AssetCheckConcurrency,
+			Force:       opts.ForcePrune,
+		})
 		if err != nil {
 			return Result{}, err
 		}
