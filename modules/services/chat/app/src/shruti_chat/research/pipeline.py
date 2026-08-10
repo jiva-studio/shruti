@@ -378,24 +378,6 @@ def _dedupe_refs(refs: list[AttributionRef]) -> list[AttributionRef]:
 
 
 
-async def _fetch_memory_note(pool: Any, attribution_id: str, lang: str) -> str | None:
-    """The full note for a matched memory. Prefer the answer language; fall
-    back to English, then any language (the synthesizer reads any language and
-    still answers in the user's, so a fallback note is fine)."""
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT note FROM attribution_notes WHERE attribution_id = $1 AND language = $2",
-            attribution_id, lang,
-        )
-        if row is None:
-            row = await conn.fetchrow(
-                "SELECT note FROM attribution_notes WHERE attribution_id = $1 "
-                "ORDER BY (language = 'en') DESC, language LIMIT 1",
-                attribution_id,
-            )
-    return row["note"] if row else None
-
-
 async def _resolve_memory(
     *,
     user_q_embedding: list[float],
@@ -403,9 +385,6 @@ async def _resolve_memory(
     embedder: Any,
     retrieval_lang_code: str,
     answer_lang: str,
-    embed_model: str | None,
-    embed_dim: int,
-    pool: Any,
     chunk_repo: Any,
     alias_map: Any,
     library_repo: Any | None,
@@ -431,7 +410,7 @@ async def _resolve_memory(
     gate can require a STRONGER signal to short-circuit the sweep than the
     (loose) inject threshold. Best-effort — returns an empty `MemoryResolution`
     on no match."""
-    if pool is None or not embed_model:
+    if chunk_repo is None:
         return MemoryResolution()
 
     embeddings: list[list[float]] = [user_q_embedding]
@@ -445,15 +424,16 @@ async def _resolve_memory(
     for emb in embeddings:
         matches = await find_attributions(
             kind="memory", user_q_embedding=emb, lang=retrieval_lang_code,
-            embed_model=embed_model, embed_dim=embed_dim, pool=pool,
-            reranker=reranker, user_query=user_query,
+            chunk_repo=chunk_repo, reranker=reranker, user_query=user_query,
             llm=llm, confirm_model=confirm_model,
         )
         if matches and (top is None or matches[0].score > top.score):
             top = matches[0]
     if top is None:
         return MemoryResolution()
-    note = await _fetch_memory_note(pool, top.attribution_id, retrieval_lang_code)
+    note = await chunk_repo.fetch_attribution_note(
+        top.attribution_id, lang=retrieval_lang_code,
+    )
     # Keep refs that are language-agnostic OR scoped to this answer language
     # (e.g. drop the EN lecture ref when answering in RU).
     scoped_refs = [r for r in top.refs if not r.language or r.language == answer_lang]
@@ -712,10 +692,7 @@ async def run_research(
     catalog_repo: Any,                   # CatalogRepository
     embedder: Any,                       # EmbedderPort
     alias_map: Any,                      # TurnAliasMap (ctx.aliases)
-    pool: Any,                           # asyncpg pool
     llm: Any,                            # LLMPort
-    embed_model: str,                    # settings.embed_model
-    embed_dim: int,                      # settings.embed_dim — selects attribution_emb_d{N} table
     library_repo: Any | None = None,     # LibraryRepository — full document bodies for pinned doc refs
     expand_model: str | None = None,
     topic_model: str | None = None,
@@ -824,15 +801,14 @@ async def run_research(
     q_lookup_task = asyncio.create_task(_safe(
         lambda: find_attributions(
             kind="pinned", user_q_embedding=user_q_embedding, lang=retrieval_lang_code,
-            embed_model=embed_model, embed_dim=embed_dim,
-            pool=pool, reranker=reranker, user_query=question,
+            chunk_repo=chunk_repo, reranker=reranker, user_query=question,
             llm=llm, confirm_model=confirm_model,
         ),
         default=[], timeout=TIMEOUT_QUESTION_LOOKUP_S,
         name="question_lookup", request_id=request_id,
     ))
     topic_task: asyncio.Task[list[str]] | None = None
-    if pool is not None and embed_model is not None:
+    if chunk_repo is not None:
         topic_task = asyncio.create_task(_safe(
             lambda: extract_topics(
                 question, lang, [],
@@ -869,8 +845,7 @@ async def run_research(
         lambda: _resolve_memory(
             user_q_embedding=user_q_embedding, sub_query_texts=sub_query_texts,
             embedder=embedder, retrieval_lang_code=retrieval_lang_code,
-            answer_lang=lang, embed_model=embed_model, embed_dim=embed_dim,
-            pool=pool, chunk_repo=chunk_repo, alias_map=alias_map,
+            answer_lang=lang, chunk_repo=chunk_repo, alias_map=alias_map,
             library_repo=library_repo, catalog_repo=catalog_repo, on_event=on_event,
             author_scope=author_scope,
             user_query=question, reranker=reranker, llm=llm, confirm_model=confirm_model,
@@ -939,8 +914,7 @@ async def run_research(
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
         expand_model=expand_model,
-        topic_model=topic_model, embed_model_for_lookup=embed_model,
-        embed_dim_for_lookup=embed_dim, pool=pool,
+        topic_model=topic_model,
         library_repo=library_repo,
         request_id=request_id, on_event=on_event,
         precomputed_topics=speculative_topics,
@@ -1221,9 +1195,6 @@ async def _research_path(
     router_args: dict[str, Any],
     expand_model: str | None,
     topic_model: str | None = None,
-    embed_model_for_lookup: str | None = None,
-    embed_dim_for_lookup: int | None = None,
-    pool: Any | None = None,
     library_repo: Any | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
@@ -1255,11 +1226,7 @@ async def _research_path(
     # interleaves, which the client dedups by id.
     async def _produce_topic_refs() -> tuple[list[AttributionMatch], list[dict[str, Any]]]:
         topic_matches: list[AttributionMatch] = []
-        if (
-            pool is not None
-            and embed_model_for_lookup is not None
-            and embed_dim_for_lookup is not None
-        ):
+        if chunk_repo is not None:
             # Step A: LLM extracts topics from the question. Use the
             # speculative result from `run_research` if it's available
             # (already paid for under `plan_queries` latency); otherwise
@@ -1290,10 +1257,8 @@ async def _research_path(
                     lookup_tasks = [
                         _safe(
                             lambda emb=emb: find_attributions(
-                                kind="boost", user_q_embedding=emb, lang=retrieval_lang_code,
-                                embed_model=embed_model_for_lookup,
-                                embed_dim=embed_dim_for_lookup,
-                                pool=pool,
+                                kind="boost", user_q_embedding=emb,
+                                lang=retrieval_lang_code, chunk_repo=chunk_repo,
                             ),
                             default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
                             name="topic_lookup", request_id=request_id,

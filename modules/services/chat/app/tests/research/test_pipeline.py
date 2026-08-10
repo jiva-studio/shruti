@@ -1,7 +1,7 @@
 """Unit tests for research.pipeline.run_research — orchestrator.
 
 Heavy fake harness: every collaborator (embedder, chunk_repo, catalog_repo,
-llm, pool, alias_map) is a thin in-memory stub. Real Postgres + LLM behaviour
+llm, chunk_repo, alias_map) is a thin in-memory stub. Real Postgres + LLM behaviour
 is covered by integration tests.
 """
 
@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from shruti_chat.domain.entities import AttributionCandidate
 from shruti_chat.research.models import (
     AttributionMatch,
     AttributionRef,
@@ -197,72 +198,55 @@ class FakeLLM:
         return schema()
 
 
-class FakePool:
-    """asyncpg-shaped fake. Stores attribution rows keyed by (kind, lang), plus
-    optional curated variant phrasings keyed by attribution_id (what the
-    border-judge gate reranks / LLM-confirms against)."""
+class FakeAttributions:
+    """Scripted attribution data: candidate rows keyed by (lang, kind), the
+    curated variant phrasings the border judge reads, and memory notes."""
 
     def __init__(
         self,
-        rows: dict[tuple, list[dict]] | None = None,
+        rows: dict[tuple, list[AttributionCandidate]] | None = None,
         variant_texts: dict[str, list[str]] | None = None,
+        notes: dict[str, str] | None = None,
     ) -> None:
         self.rows = rows or {}
         self.variant_texts = variant_texts or {}
-
-    def acquire(self):
-        return _Acq(self.rows, self.variant_texts)
+        self.notes = notes or {}
 
 
-class _Acq:
-    def __init__(self, rows: dict[tuple, list[dict]], variant_texts: dict[str, list[str]]):
-        self.rows = rows
-        self.conn = _FakeConn(rows, variant_texts)
+class _RepoWithAttributions:
+    """A chunk repo that also serves attributions — the shape the real
+    `PgChunkRepository` has now that the attribution SQL sits behind the
+    port. Delegates everything else to the inner `FakeChunkRepo`, which the
+    test keeps its own reference to."""
 
-    async def __aenter__(self):
-        return self.conn
+    def __init__(self, chunks: Any, attributions: FakeAttributions) -> None:
+        self._chunks = chunks
+        self._attrs = attributions
 
-    async def __aexit__(self, *a):
-        return None
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._chunks, name)
 
+    async def find_attributions(self, embedding, *, kind, lang):
+        return list(self._attrs.rows.get((lang, kind), []))
 
-class _FakeConn:
-    def __init__(self, rows: dict[tuple, list[dict]], variant_texts: dict[str, list[str]]):
-        self.rows = rows
-        self.variant_texts = variant_texts
+    async def attribution_texts(self, attribution_id, *, lang):
+        return list(self._attrs.variant_texts.get(attribution_id, []))
 
-    async def fetch(self, sql, *args):
-        # Border-judge gate: _fetch_variant_texts issues two shapes of this query
-        # (with/without a language filter → 3 or 2 positional args). Keyed on the
-        # attribution_id ($1) in both, so match on the projection, not arg count.
-        if "DISTINCT text" in sql:
-            aid = args[0]
-            return [{"text": t} for t in self.variant_texts.get(aid, [])]
-        if "WHERE e.language" in sql:
-            lang, _embed_model, kind = args[1], args[2], args[3]
-            return [dict(r) for r in self.rows.get((lang, kind), [])]
-        _embed_model, kind = args[1], args[2]
-        return [dict(r) for r in self.rows.get((None, kind), [])]
+    async def fetch_attribution_note(self, attribution_id, *, lang):
+        return self._attrs.notes.get(attribution_id)
 
 
-def _row(aid: str, score: float, refs: list[dict]) -> dict:
-    import json
-    return {"id": aid, "refs_json": json.dumps(refs), "score": score}
+def _row(aid: str, score: float, refs: list[dict]) -> AttributionCandidate:
+    return AttributionCandidate(attribution_id=aid, refs=refs, score=score)
 
 
-def _common_kwargs(*, llm, pool, chunk_repo=None, embedder=None, catalog_repo=None) -> dict:
+def _common_kwargs(*, llm, attributions, chunk_repo=None, embedder=None, catalog_repo=None) -> dict:
     return {
-        "chunk_repo": chunk_repo or FakeChunkRepo(),
+        "chunk_repo": _RepoWithAttributions(chunk_repo or FakeChunkRepo(), attributions),
         "catalog_repo": catalog_repo or FakeCatalogRepo(),
         "embedder": embedder or FakeEmbedder(),
         "alias_map": FakeAliasMap(),
-        "pool": pool,
         "llm": llm,
-        "embed_model": "openai/text-embedding-3-small",
-        # Default to the legacy 1536 dim (text-embedding-3-small);
-        # router will resolve `attribution_emb_d1536` for the lookup
-        # SQL — the FakePool below ignores the table name in any case.
-        "embed_dim": 1536,
     }
 
 
@@ -273,7 +257,7 @@ def _common_kwargs(*, llm, pool, chunk_repo=None, embedder=None, catalog_repo=No
 async def test_short_path_question_match():
     """Question-attribution found → authoritative refs populated, no topic
     lookup, no extract_topics LLM call."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [
             _row("attribution_q1", 0.92, [
                 {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
@@ -294,7 +278,7 @@ async def test_short_path_question_match():
 
     result = await run_research(
         question="что такое душа", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     assert result.matched_question_ids == ["attribution_q1"]
@@ -313,7 +297,7 @@ async def test_short_path_question_match():
 @pytest.mark.asyncio
 async def test_short_path_multi_match_unions_refs():
     """Two question-matches with partially overlapping refs → deduped union."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [
             _row("attribution_a", 0.95, [
                 {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
@@ -334,7 +318,7 @@ async def test_short_path_multi_match_unions_refs():
 
     result = await run_research(
         question="природа души", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     assert set(result.matched_question_ids) == {"attribution_a", "attribution_b"}
@@ -352,7 +336,7 @@ async def test_short_path_document_cites_full_body_not_chunks():
             assert item_id == "doc_charter"
             return "Цель один.\n\nЦель два.\n\nЦель три."
 
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [
             _row("attribution_doc", 0.95, [
                 {"ref_kind": "document", "target_id": "doc_charter"},
@@ -374,7 +358,7 @@ async def test_short_path_document_cites_full_body_not_chunks():
     result = await run_research(
         question="цели ИСККОН", lang="ru", router_args={},
         library_repo=_StubLibraryRepo(),
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     # ONE authoritative envelope (collapsed), carrying the full clean body.
@@ -387,7 +371,7 @@ async def test_short_path_drops_supplementary_chunks_of_pinned_document():
     """When a pinned ref pulls a document IN FULL, supplementary fanout hits
     of that SAME document are dropped (no piecemeal re-citation), while
     fanout hits of OTHER documents survive."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [
             _row("attribution_doc", 0.95, [
                 {"ref_kind": "document", "target_id": "doc_charter"},
@@ -415,7 +399,7 @@ async def test_short_path_drops_supplementary_chunks_of_pinned_document():
 
     result = await run_research(
         question="цели ИСККОН", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     assert result.matched_question_ids == ["attribution_doc"]
@@ -430,7 +414,7 @@ async def test_short_path_drops_supplementary_chunks_of_pinned_document():
 @pytest.mark.asyncio
 async def test_long_path_no_question_match():
     """No question match → extract_topics → topic lookup → fanout."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         # No question matches.
         ("ru", "pinned"): [],
         (None, "pinned"): [],
@@ -457,7 +441,7 @@ async def test_long_path_no_question_match():
 
     result = await run_research(
         question="что Прабхупада говорил о вечности атмана", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     assert result.authoritative_refs == []
@@ -471,7 +455,7 @@ async def test_long_path_no_question_match():
 @pytest.mark.asyncio
 async def test_long_path_no_topics_extracted_no_boost():
     """LLM returns 0 topics → no topic matches → plain fanout."""
-    pool = FakePool({("ru", "pinned"): []})
+    attrs = FakeAttributions({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("track_a", 0, 1000, "x", "ru"), 0.6)],
         library_results=[],
@@ -482,7 +466,7 @@ async def test_long_path_no_topics_extracted_no_boost():
     })
     result = await run_research(
         question="q", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
     assert result.matched_topic_ids == []
     # Fanout still runs (the lecture chunk should be there).
@@ -492,7 +476,7 @@ async def test_long_path_no_topics_extracted_no_boost():
 @pytest.mark.asyncio
 async def test_cold_start_empty_attributions_pure_fanout():
     """Both lookups return [] → no attribution matches → plain fanout. No crash."""
-    pool = FakePool({})  # no rows for any (lang, kind)
+    attrs = FakeAttributions({})  # no rows for any (lang, kind)
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("t", 0, 1000, "lec", "ru"), 0.7)],
         library_results=[],
@@ -503,7 +487,7 @@ async def test_cold_start_empty_attributions_pure_fanout():
     })
     result = await run_research(
         question="что про карму", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
     assert result.authoritative_refs == []
     assert result.matched_question_ids == []
@@ -515,7 +499,7 @@ async def test_cold_start_empty_attributions_pure_fanout():
 async def test_expand_failure_falls_back_to_question_only():
     """plan_queries raises → degraded QueryPlan with a single sub_query
     containing the raw question."""
-    pool = FakePool({("ru", "pinned"): []})
+    attrs = FakeAttributions({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("t", 0, 1000, "x", "ru"), 0.7)],
         library_results=[],
@@ -528,7 +512,7 @@ async def test_expand_failure_falls_back_to_question_only():
     # we just verify the pipeline completes with one fanout call.
     result = await run_research(
         question="вопрос", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
     assert len(result.research_chunks) == 1
 
@@ -536,7 +520,7 @@ async def test_expand_failure_falls_back_to_question_only():
 @pytest.mark.asyncio
 async def test_embed_failure_falls_through_to_fanout():
     """User-query embed fails → no attribution lookup possible → straight fanout."""
-    pool = FakePool({})
+    attrs = FakeAttributions({})
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("t", 0, 1000, "x", "ru"), 0.7)],
         library_results=[],
@@ -545,9 +529,9 @@ async def test_embed_failure_falls_through_to_fanout():
     llm = FakeLLM(by_schema={"QueryPlan": _plan("q")})
     result = await run_research(
         question="вопрос", lang="ru", router_args={},
-        chunk_repo=chunk_repo, catalog_repo=FakeCatalogRepo(),
-        embedder=embedder, alias_map=FakeAliasMap(),
-        pool=pool, llm=llm, embed_model="m", embed_dim=1536,
+        chunk_repo=_RepoWithAttributions(chunk_repo, attrs),
+        catalog_repo=FakeCatalogRepo(),
+        embedder=embedder, alias_map=FakeAliasMap(), llm=llm,
     )
     assert result.authoritative_refs == []
     assert len(result.research_chunks) == 1
@@ -556,7 +540,7 @@ async def test_embed_failure_falls_through_to_fanout():
 @pytest.mark.asyncio
 async def test_router_args_propagated_to_fanout(monkeypatch):
     """Filter args from router_args (author_id, tag_ids, dates) reach fanout."""
-    pool = FakePool({("ru", "pinned"): []})
+    attrs = FakeAttributions({("ru", "pinned"): []})
     captured: list[dict] = []
 
     class _CatalogRepoCapture:
@@ -572,9 +556,9 @@ async def test_router_args_propagated_to_fanout(monkeypatch):
     await run_research(
         question="x", lang="ru",
         router_args={"author_id": "author_p", "tag_ids": ["t1"], "doc_date_from": "1972-01-01"},
-        chunk_repo=chunk_repo, catalog_repo=_CatalogRepoCapture(),
-        embedder=FakeEmbedder(), alias_map=FakeAliasMap(),
-        pool=pool, llm=llm, embed_model="m", embed_dim=1536,
+        chunk_repo=_RepoWithAttributions(chunk_repo, attrs),
+        catalog_repo=_CatalogRepoCapture(),
+        embedder=FakeEmbedder(), alias_map=FakeAliasMap(), llm=llm,
     )
     assert captured  # filter_track_ids was called
     assert captured[0]["author_ids"] == ["author_p"]
@@ -586,7 +570,7 @@ async def test_router_args_propagated_to_fanout(monkeypatch):
 async def test_authoritative_carries_canonical_score():
     """Authoritative envelopes MUST carry score = top_match.score so the
     synthesizer doesn't refuse them as junk (score < 0.45)."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [
             _row("attribution_q", 0.91, [{"ref_kind": "verse", "target_id": "verse_x"}]),
         ],
@@ -597,7 +581,7 @@ async def test_authoritative_carries_canonical_score():
     llm = FakeLLM(by_schema={"QueryPlan": _plan()})
     result = await run_research(
         question="q", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
     assert result.authoritative_refs[0]["score"] == pytest.approx(0.91)
 
@@ -606,7 +590,7 @@ async def test_authoritative_carries_canonical_score():
 async def test_on_event_emits_research_questions_short_path():
     """SHORT path: on_event receives one research_question per non-echo
     sub-query, and a research_source per attribution ref consulted."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [
             _row("attribution_q", 0.92, [
                 {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
@@ -635,7 +619,7 @@ async def test_on_event_emits_research_questions_short_path():
     await run_research(
         question="что такое душа", lang="ru", router_args={},
         on_event=lambda t, d: events.append((t, d)),
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     questions = [d["question"] for t, d in events if t == "research_question"]
@@ -664,7 +648,7 @@ async def test_on_event_emits_research_questions_short_path():
 async def test_on_event_emits_research_sources_from_fanout():
     """LONG path: corpus_fanout emits research_source per inspected raw
     chunk (lecture / verse / library), keyed for client-side dedup."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [],
         (None, "pinned"): [],
         ("ru", "boost"): [],
@@ -692,7 +676,7 @@ async def test_on_event_emits_research_sources_from_fanout():
         question="природа души", lang="ru", router_args={},
         on_event=lambda t, d: events.append((t, d)),
         **_common_kwargs(
-            llm=llm, pool=pool, chunk_repo=chunk_repo,
+            llm=llm, attributions=attrs, chunk_repo=chunk_repo,
             catalog_repo=FakeCatalogRepo(titles={"track_A": "Утренняя прогулка"}),
         ),
     )
@@ -725,7 +709,7 @@ async def test_on_event_emits_research_sources_from_fanout():
 async def test_on_event_no_callback_is_safe():
     """Pipeline must run identically when on_event is omitted — the
     research worker passes None for the legacy fallback path."""
-    pool = FakePool({("ru", "pinned"): []})
+    attrs = FakeAttributions({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
         "QueryPlan": _plan("q"),
@@ -734,7 +718,7 @@ async def test_on_event_no_callback_is_safe():
     # No on_event kwarg — just confirm it doesn't raise.
     result = await run_research(
         question="x", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
     assert result is not None
 
@@ -743,7 +727,7 @@ async def test_on_event_no_callback_is_safe():
 async def test_on_event_callback_exception_does_not_break_research():
     """A misbehaving on_event must not unwind the research loop — log
     and move on, since this is pure UI observability."""
-    pool = FakePool({("ru", "pinned"): []})
+    attrs = FakeAttributions({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
         "QueryPlan": _plan("вечность"),
@@ -755,7 +739,7 @@ async def test_on_event_callback_exception_does_not_break_research():
 
     result = await run_research(
         question="x", lang="ru", router_args={}, on_event=boom,
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
     # Research completes despite the callback raising.
     assert result is not None
@@ -813,7 +797,7 @@ async def test_short_path_commentary_ref_resolves_author_name():
     did it), so a pinned purport rendered with no author. Chunk path (library_repo
     defaults to None) → one envelope per commentary chunk."""
     AUTHOR = "author_jcC2O92Hi1kT"
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [
             _row("attribution_comm", 0.95, [
                 {"ref_kind": "document", "target_id": "doc_purport"},
@@ -833,7 +817,7 @@ async def test_short_path_commentary_ref_resolves_author_name():
     alias = FakeAliasMap()
     llm = FakeLLM(by_schema={"QueryPlan": _plan("душа")})
 
-    kwargs = _common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo, catalog_repo=catalog)
+    kwargs = _common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo, catalog_repo=catalog)
     kwargs["alias_map"] = alias
     result = await run_research(
         question="что такое душа", lang="ru", router_args={}, **kwargs,
@@ -889,7 +873,7 @@ async def test_fanout_provider_unavailable_propagates_not_partial():
     fanout must PROPAGATE (so chat_turn surfaces a calm `chat_unavailable`),
     NOT be swallowed into an empty/partial outline. `_safe` re-raises a
     provider-unavailable error rather than degrading it to its default."""
-    pool = FakePool({("ru", "pinned"): []})  # no question match → LONG path → fanout
+    attrs = FakeAttributions({("ru", "pinned"): []})  # no question match → LONG path → fanout
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
         "QueryPlan": _plan("q"),
@@ -900,9 +884,9 @@ async def test_fanout_provider_unavailable_propagates_not_partial():
     with pytest.raises(Exception) as ei:
         await run_research(
             question="вопрос", lang="ru", router_args={},
-            chunk_repo=chunk_repo, catalog_repo=FakeCatalogRepo(),
-            embedder=embedder, alias_map=FakeAliasMap(),
-            pool=pool, llm=llm, embed_model="m", embed_dim=1536,
+            chunk_repo=_RepoWithAttributions(chunk_repo, attrs),
+            catalog_repo=FakeCatalogRepo(),
+            embedder=embedder, alias_map=FakeAliasMap(), llm=llm,
         )
     # The error chat_turn will classify is a provider-availability failure.
     assert provider_unavailable(ei.value) is True
@@ -926,7 +910,7 @@ async def test_fanout_non_provider_error_still_degrades():
         async def embed_queries(self, texts: list[str]) -> list[list[float]]:
             return await self.embed_documents(texts)
 
-    pool = FakePool({("ru", "pinned"): []})
+    attrs = FakeAttributions({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
         "QueryPlan": _plan("q"),
@@ -934,9 +918,9 @@ async def test_fanout_non_provider_error_still_degrades():
     })
     result = await run_research(
         question="вопрос", lang="ru", router_args={},
-        chunk_repo=chunk_repo, catalog_repo=FakeCatalogRepo(),
-        embedder=_PlainBoomEmbedder(), alias_map=FakeAliasMap(),
-        pool=pool, llm=llm, embed_model="m", embed_dim=1536,
+        chunk_repo=_RepoWithAttributions(chunk_repo, attrs),
+        catalog_repo=FakeCatalogRepo(),
+        embedder=_PlainBoomEmbedder(), alias_map=FakeAliasMap(), llm=llm,
     )
     # Degraded, not raised: empty research with no crash.
     assert result.research_chunks == []
@@ -967,7 +951,7 @@ async def test_boost_topic_refs_gated_by_reranker():
     """A fetched boost topic-ref that the reranker scores BELOW the accept
     threshold is dropped; an on-topic one is kept. The normal fanout path is
     untouched."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [],
         (None, "pinned"): [],
         ("ru", "boost"): [
@@ -997,7 +981,7 @@ async def test_boost_topic_refs_gated_by_reranker():
     })
     reranker = _FakeReranker(score_by_text={"ON TOPIC": 0.9, "OFF TOPIC": 0.1})
 
-    kwargs = _common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo)
+    kwargs = _common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo)
     result = await run_research(
         question="вопрос", lang="ru", router_args={},
         reranker=reranker, **kwargs,
@@ -1011,7 +995,7 @@ async def test_boost_topic_refs_gated_by_reranker():
 async def test_boost_topic_refs_ungated_without_reranker():
     """No reranker wired → boost refs pass through ungated (prior behaviour),
     both on- and off-topic refs surface."""
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [],
         (None, "pinned"): [],
         ("ru", "boost"): [
@@ -1038,7 +1022,7 @@ async def test_boost_topic_refs_ungated_without_reranker():
     })
     result = await run_research(
         question="вопрос", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
     texts = {e["text"] for e in result.research_chunks}
     assert {"A", "B"} <= texts
@@ -1078,16 +1062,13 @@ def test_attach_memory_no_match_is_noop() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_memory_no_pool_is_noop() -> None:
+async def test_resolve_memory_no_repo_is_noop() -> None:
     mem = await _resolve_memory(
         user_q_embedding=[0.1, 0.2],
         sub_query_texts=[],
         embedder=None,
         retrieval_lang_code="ru",
         answer_lang="ru",
-        embed_model="m",
-        embed_dim=1024,
-        pool=None,
         chunk_repo=None,
         alias_map=None,
         library_repo=None,
@@ -1117,19 +1098,18 @@ async def test_resolve_memory_probes_sub_queries(monkeypatch) -> None:
         return [AttributionMatch(attribution_id="attribution_m", kind="memory",
                                  refs=[], score=s, stage="native")]
 
-    async def fake_note(pool, aid, lang):
-        return "note-body"
+    class _NoteRepo:
+        async def fetch_attribution_note(self, attribution_id, *, lang):
+            return "note-body"
 
     monkeypatch.setattr(pl, "find_attributions", fake_find)
-    monkeypatch.setattr(pl, "_fetch_memory_note", fake_note)
 
     mem = await _resolve_memory(
         user_q_embedding=[0.1],
         sub_query_texts=["структура Бхагавад-гиты", "темы частей"],
         embedder=_Emb(),
         retrieval_lang_code="ru", answer_lang="ru",
-        embed_model="m", embed_dim=1024, pool=object(),
-        chunk_repo=None, alias_map=None, library_repo=None,
+        chunk_repo=_NoteRepo(), alias_map=None, library_repo=None,
         catalog_repo=None, on_event=None,
     )
     # Best across all 3 probes (raw + 2 sub-queries) is the 0.88 one → fires.
@@ -1139,7 +1119,7 @@ async def test_resolve_memory_probes_sub_queries(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_memory_only_takes_lean_path(monkeypatch) -> None:
+async def test_memory_only_takes_lean_path() -> None:
     """A strong memory match with NO pinned attribution → the sufficiency gate
     returns CORRECT and run_research takes the LEAN path: the memory's shlokas
     ride as authoritative_refs, the note is set, and the WIDE topic lookup never
@@ -1151,14 +1131,8 @@ async def test_memory_only_takes_lean_path(monkeypatch) -> None:
     variant phrasing this fake serves for `attribution_mem`)."""
     import types
 
-    import shruti_chat.research.pipeline as pl
-
-    async def fake_note(pool, aid, lang):
-        return "Гиту можно читать как доказательство в три шага."
-
-    monkeypatch.setattr(pl, "_fetch_memory_note", fake_note)
-
-    pool = FakePool(
+    attrs = FakeAttributions(
+        notes={"attribution_mem": "Гиту можно читать как доказательство в три шага."},
         rows={
             # memory match clears the recall floor; no pinned/boost.
             ("ru", "memory"): [_row("attribution_mem", 0.90, [
@@ -1183,7 +1157,7 @@ async def test_memory_only_takes_lean_path(monkeypatch) -> None:
 
     result = await run_research(
         question="структура Бхагавад-гиты", lang="ru", router_args={},
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     # memory-only CORRECT → lean: note set, 3 curator shlokas pinned as
@@ -1207,7 +1181,7 @@ async def test_a_selection_with_no_lectures_leaves_no_lecture_note_anywhere():
     would happily hand back a lecture from any lane that forgets to ask: the
     fanout, and a track pinned by attribution.
     """
-    pool = FakePool({
+    attrs = FakeAttributions({
         # A question match that pins a TRACK — the path that bypasses every
         # eligible-id filter, since it arrives by link rather than by search.
         ("ru", "pinned"): [
@@ -1242,7 +1216,7 @@ async def test_a_selection_with_no_lectures_leaves_no_lecture_note_anywhere():
     result = await run_research(
         question="как развить смирение", lang="ru", router_args={},
         author_scope=scope,
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     notes = list(result.research_chunks) + list(result.authoritative_refs)
@@ -1260,7 +1234,7 @@ async def test_the_long_path_narrows_its_fanout_rounds_too():
     and the multi-round fanout — different code from the lean path above, and
     the rounds are where a live probe found 31 other lecturers' talks.
     """
-    pool = FakePool({
+    attrs = FakeAttributions({
         ("ru", "pinned"): [],
         (None, "pinned"): [],
         ("ru", "boost"): [
@@ -1296,7 +1270,7 @@ async def test_the_long_path_narrows_its_fanout_rounds_too():
     result = await run_research(
         question="как развить смирение", lang="ru", router_args={},
         author_scope=scope,
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(llm=llm, attributions=attrs, chunk_repo=chunk_repo),
     )
 
     notes = list(result.research_chunks) + list(result.authoritative_refs)
