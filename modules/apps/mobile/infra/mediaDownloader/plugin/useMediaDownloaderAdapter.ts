@@ -74,12 +74,31 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
    */
   const attempts = new Map<string, Map<string, { reason: DownloadCancelReason }>>()
 
-  function trackAttempt(fileKey: string, attemptId: string): { reason: DownloadCancelReason } {
-    const record: { reason: DownloadCancelReason } = { reason: "user" }
+  /**
+   * Claim a native task id for one attempt, distinct from every attempt for
+   * this file that is still live.
+   *
+   * `attemptIdFor` separates candidates by host, which holds only while the
+   * regions differ by one — two can name the same host (a region renamed, the
+   * dev region mirroring global). A repeated id is precisely how the native
+   * side is told "this is the same download": it cancels the task holding
+   * that id and enqueues a fresh one, which for a candidate already writing
+   * bytes to the shared destination is the collision of issue #1603. Racing
+   * needs two ids, so a collision takes a suffix rather than a sibling's
+   * place. The suffix keeps the `<fileKey>#…` shape `cancel()` matches on
+   * when it has to ask the platform which tasks belong to a file.
+   */
+  function claimAttempt(
+    fileKey: string,
+    baseId: string
+  ): { id: string; record: { reason: DownloadCancelReason } } {
     const forFile = attempts.get(fileKey) ?? new Map()
-    forFile.set(attemptId, record)
+    let id = baseId
+    for (let n = 2; forFile.has(id); n++) id = `${baseId}~${n}`
+    const record: { reason: DownloadCancelReason } = { reason: "user" }
+    forFile.set(id, record)
     attempts.set(fileKey, forFile)
-    return record
+    return { id, record }
   }
 
   function untrackAttempt(fileKey: string, attemptId: string): void {
@@ -96,9 +115,8 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
       signal?: AbortSignal
     ): Promise<string> {
       const fileKey = fileKeyFor(url)
-      const id = attemptIdFor(url)
       const destination = destinationFor(url)
-      const attempt = trackAttempt(fileKey, id)
+      const { id, record: attempt } = claimAttempt(fileKey, attemptIdFor(url))
 
       const handles: PluginListenerHandle[] = []
       let onCompleted!: (localUrl: string) => void
