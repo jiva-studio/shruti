@@ -50,7 +50,7 @@ const TRACK_ID = "t1" as TrackId
 const track = {
   id: TRACK_ID,
   authorId: null,
-  variants: [{ language: "en", audio: { path: "a.mp3" } }],
+  variants: [{ language: "en", audio: { path: "a.mp3", filesize: 12_000_000 } }],
 } as unknown as Track
 
 const playlist = {
@@ -133,6 +133,17 @@ describe("useHomeController.onSelect", () => {
     expect(downloads.ensureDownloaded).toHaveBeenCalledOnce()
     expect(openTrack).not.toHaveBeenCalled()
     expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it("funds the retry with the catalog size it already holds (#1613)", async () => {
+    // Omitting it charged the storage budget a 40 MB estimate for a 12 MB
+    // lecture, and the eviction credited the real size back — so every retry
+    // from Home leaked the difference for the rest of the session.
+    storedState = "failed"
+
+    await useHomeController().onSelect(TRACK_ID)
+
+    expect(downloads.ensureDownloaded).toHaveBeenCalledWith(TRACK_ID, "a.mp3", 12_000_000)
   })
 
   // A masked row — stored state "failed" behind a held claim, so `getState`

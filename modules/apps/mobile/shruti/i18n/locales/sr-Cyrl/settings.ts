@@ -43,6 +43,30 @@ export default {
     },
     signInWithGoogle: "Путем Google-а",
     signInWithApple: "Путем Apple-а",
+    signInWithEmail: "Настави путем е-поште",
+    email: {
+      title: "Пријава путем е-поште",
+      emailStep: "Послаћемо вам једнократни код на е-пошту — лозинка није потребна.",
+      emailLabel: "Е-пошта",
+      emailPlaceholder: "yоу{'@'}еxампле.цом",
+      sendCode: "Пошаљи код",
+      codeStep: "Унесите шестоцифрени код који смо послали на {email}.",
+      codeLabel: "Код",
+      codePlaceholder: "Шестоцифрени код",
+      verify: "Пријави се",
+      resend: "Пошаљи код поново",
+      resendIn: "Поново за {seconds} с",
+      changeEmail: "Промени е-пошту",
+      errors: {
+        invalidEmail: "Унесите исправну адресу е-поште.",
+        invalidCode: "Код није исправан или је истекао.",
+        throttled: "Сачекајте мало пре него што затражите нови код.",
+        disabled: "Пријава путем е-поште тренутно није доступна.",
+        network: "Нема везе. Проверите интернет и покушајте поново.",
+        server: "Нешто је пошло по злу на нашој страни. Покушајте за тренутак.",
+        generic: "Нешто је пошло по злу. Покушајте поново.",
+      },
+    },
     signedIn: "Пријављени сте",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -76,6 +100,7 @@ export default {
     trialDisclaimer: "Откажите било кад. После пробног периода претплата се аутоматски обнавља.",
     disclaimer: "Откажите било кад. Претплата се аутоматски обнавља.",
     subscribed: "Претплата је обављена",
+    loading: "Учитавање опција претплате…",
     unavailable: "Куповине унутар апликације нису доступне на овом уређају.",
     manage: "Управљање претплатом",
     restore: "Врати",
@@ -289,6 +314,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Јива Студио",
+      description: "Посетите наш студио и откријте наше друге апликације",
+    },
     email: {
       title: "Пошаљите нам е-поруку",
       description: "Имате питања или предлоге?",
@@ -334,6 +363,12 @@ export default {
     viewLogs: {
       title: "Погледај записе",
       description: "Запис догађаја у апликацији · {count} уноса",
+    },
+    email: {
+      title: "Пошаљи дијагностику",
+      description: "Пошаљите логове и стање система подршци",
+      emailSubject: "Извештај о дијагностици",
+      emailIntro: "Молимо опишите своје питање или проблем изнад ове линије.",
     },
   },
 

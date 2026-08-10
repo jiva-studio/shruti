@@ -27,6 +27,8 @@ export default {
   },
   paywall: {
     title: "Więcej funkcji z Pro",
+    subtitle:
+      "Wszystkie wykłady są bezpłatne. Subskrypcja pomaga nam rozwijać aplikację — dodawać nowe funkcje i wykłady.",
     later: "Później",
   },
   finish: "Zacznij słuchać",

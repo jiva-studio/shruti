@@ -28,6 +28,8 @@ export default {
   },
   paywall: {
     title: "Plus de fonctionnalités avec Pro",
+    subtitle:
+      "Toutes les conférences sont gratuites. L'abonnement nous aide à poursuivre le développement de l'application — à ajouter de nouvelles fonctionnalités et conférences.",
     later: "Plus tard",
   },
   finish: "Commencer à écouter",

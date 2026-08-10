@@ -47,11 +47,28 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
   const app = useShruti()
   const limitBytes = useConfig<number>(DOWNLOAD_LIMIT_KEY, DEFAULT_DOWNLOAD_LIMIT_BYTES)
 
-  const usedBytes = ref(0)
+  /**
+   * What each track is charged to the budget, keyed by track — not a running
+   * total. The same track is charged from two places (the measurement below
+   * and a settled transfer) and credited from two others (an eviction, a
+   * demoted row), and a total can only stay honest if every one of those
+   * four agrees on the byte count. They don't: the catalog knows a size the
+   * caller may not, and an unknown size charges a 40 MB estimate. Keyed by
+   * track, a second charge REPLACES the first instead of adding to it, and a
+   * credit hands back exactly what this track took.
+   */
+  const chargedBytes = ref<Map<TrackId, number>>(new Map())
+  const usedBytes = computed(() => {
+    let total = 0
+    for (const bytes of chargedBytes.value.values()) total += bytes
+    return total
+  })
   // Until the first successful measurement `usedBytes` is a placeholder 0,
   // which would wave through a whole playlist on a cold start. Callers that
-  // are about to spend budget await `ensureMeasured()` first.
-  let measured = false
+  // are about to spend budget await `ensureMeasured()` first — and until one
+  // succeeds, `hasRoomFor` answers "no room", because an unmeasured budget
+  // is unknown, not empty.
+  const measured = ref(false)
   let measuring: Promise<void> | null = null
   const reservations = ref<Map<TrackId, number>>(new Map())
   const reservedBytes = computed(() => {
@@ -71,9 +88,18 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
    * reserves up front (the prefetch drain) would otherwise be billed twice
    * when the download path re-checks the budget for the same track, making
    * the effective test `used + 2·size <= limit`.
+   *
+   * An unmeasured budget has NO room. `refresh()` can fail for reasons that
+   * leave the rest of the app working (a content DB that isn't open yet, a
+   * read error on the catalog), and the placeholder `usedBytes` of 0 that it
+   * leaves behind reads as an empty disk — which admitted every queued
+   * transfer on a device whose limit was long since reached. Refusing here
+   * is recoverable: the next spender re-runs `ensureMeasured`, and the
+   * download store re-drains the deferred tail once a measurement lands.
    */
   function hasRoomFor(bytes: number, exceptTrackId?: TrackId): boolean {
     if (unlimited.value) return true
+    if (!measured.value) return false
     const own = exceptTrackId === undefined ? 0 : (reservations.value.get(exceptTrackId) ?? 0)
     return committedBytes.value - own + bytes <= limitBytes.value
   }
@@ -93,10 +119,10 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
       // de-dupe so a track with both rows isn't counted twice.
       const trackIds = [...new Set(ready.map((item) => item.trackId))]
       const sizes = await repos.tracks.getAudioSizesBytes(trackIds)
-      let total = 0
-      for (const trackId of trackIds) total += sizeOf(sizes.get(trackId))
-      usedBytes.value = total
-      measured = true
+      const next = new Map<TrackId, number>()
+      for (const trackId of trackIds) next.set(trackId, sizeOf(sizes.get(trackId)))
+      chargedBytes.value = next
+      measured.value = true
     } catch (err) {
       // The DBs may simply not be open yet (App mounts before the welcome
       // flow opens them). Leave `measured` false so the next spender
@@ -110,7 +136,7 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
    * Concurrent callers share the one in-flight measurement.
    */
   async function ensureMeasured(): Promise<void> {
-    if (measured) return
+    if (measured.value) return
     measuring ??= refresh().finally(() => {
       measuring = null
     })
@@ -123,26 +149,48 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
     reservations.value = next
   }
 
-  /** Drop a reservation, promoting it into `usedBytes` when bytes landed. */
+  /**
+   * Drop a reservation, charging the track for the bytes when they landed.
+   * The charge REPLACES whatever this track was already charged: a row the
+   * measurement counted and that is then re-downloaded (its file went
+   * missing under the native cache) used to pay twice, and nothing gave the
+   * first payment back.
+   */
   function settle(trackId: TrackId, stored: boolean): void {
     const bytes = reservations.value.get(trackId)
     if (bytes === undefined) return
     const next = new Map(reservations.value)
     next.delete(trackId)
     reservations.value = next
-    if (stored) usedBytes.value += bytes
+    if (!stored) return
+    const charged = new Map(chargedBytes.value)
+    charged.set(trackId, bytes)
+    chargedBytes.value = charged
   }
 
-  /** Give back the budget an evicted track held. */
-  function forget(trackId: TrackId, bytes: number): void {
+  /**
+   * Credit back what a track was charged, if anything. Takes no byte count
+   * on purpose — the ledger already knows. A caller passing its own number
+   * is how the budget leaked: a track charged the 40 MB estimate and
+   * credited its real 12 MB never handed the other 28 MB back.
+   */
+  function uncharge(trackId: TrackId): void {
+    if (!chargedBytes.value.has(trackId)) return
+    const next = new Map(chargedBytes.value)
+    next.delete(trackId)
+    chargedBytes.value = next
+  }
+
+  /** Give back everything an evicted track held — charge and reservation. */
+  function forget(trackId: TrackId): void {
     settle(trackId, false)
-    usedBytes.value = Math.max(0, usedBytes.value - bytes)
+    uncharge(trackId)
   }
 
   function reset(): void {
-    usedBytes.value = 0
+    chargedBytes.value = new Map()
     reservations.value = new Map()
-    measured = false
+    measured.value = false
   }
 
   return {
@@ -151,12 +199,14 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
     reservedBytes,
     committedBytes,
     unlimited,
+    isMeasured: computed(() => measured.value),
     hasRoomFor,
     sizeOf,
     refresh,
     ensureMeasured,
     reserve,
     settle,
+    uncharge,
     forget,
     reset,
   }

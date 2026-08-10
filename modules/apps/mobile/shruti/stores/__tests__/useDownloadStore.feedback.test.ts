@@ -46,11 +46,13 @@ vi.mock("../downloads/useTranscriptPrefetch.js", () => ({
 vi.mock("../useDownloadQuotaStore.js", () => ({
   useDownloadQuotaStore: () => ({
     limitBytes: 0,
+    isMeasured: true,
     ensureMeasured: () => Promise.resolve(),
     sizeOf: () => 1000,
     hasRoomFor: () => hasRoom,
     reserve,
     settle,
+    uncharge: vi.fn(),
     forget: vi.fn(),
     refresh: () => Promise.resolve(),
     reset: vi.fn(),

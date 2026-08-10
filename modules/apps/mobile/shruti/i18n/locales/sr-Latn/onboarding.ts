@@ -27,6 +27,8 @@ export default {
   },
   paywall: {
     title: "Više funkcija uz Pro",
+    subtitle:
+      "Sva predavanja su besplatna. Pretplata nam pomaže da nastavimo razvoj aplikacije — da dodajemo nove funkcije i predavanja.",
     later: "Kasnije",
   },
   finish: "Počni da slušaš",
