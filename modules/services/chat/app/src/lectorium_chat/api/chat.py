@@ -424,17 +424,35 @@ async def get_turn(
 
 @router.delete("/chat/turn/{trace_id}")
 async def cancel_turn(
+    request: Request,
     trace_id: str,
     user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ):
     """Explicit Stop — really cancel the turn (vs a passive disconnect,
     which lets it finish). Cancels the producer on this replica instantly
-    and sets a cross-replica Redis flag for the case it runs elsewhere."""
+    and sets a cross-replica Redis flag for the case it runs elsewhere.
+
+    Rate limited because `cancel` SETs a 180s Redis flag unconditionally,
+    including for a trace id no turn ever used.
+
+    Ownership fails CLOSED (404 on a missing blob): the store returns
+    None on any Redis error, and an unknown trace id must not be able to
+    pre-arm a kill flag. The cost is that a Redis blip lets the turn run
+    to completion instead of stopping — the same way `is_cancelled`
+    already degrades."""
     if not _TRACE_ID_RE.match(trace_id):
         raise HTTPException(status_code=400, detail="invalid trace id")
+    ip = request.client.host if request.client else "unknown"
+    rl = await deps.rate_limiter.check_and_increment(
+        user.id, user.anonymous, ip, scope="turn_cancel",
+        tier=user.tier, quota_id=user.quota_id,
+        tier_expires_at=user.tier_expires_at,
+    )
+    if not rl.allowed:
+        raise_429(rl, scope="turn_cancel")
     blob = await deps.turn_store.get(trace_id)
-    if blob is not None and blob.get("user_id") != user.id:
+    if blob is None or blob.get("user_id") != user.id:
         raise HTTPException(status_code=404, detail="turn not found")
     await deps.turn_runner.cancel(trace_id)
     return {"ok": True}

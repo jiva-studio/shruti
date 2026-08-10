@@ -63,8 +63,27 @@ def _user() -> Any:
     )
 
 
-def _deps() -> Any:
-    return SimpleNamespace(rate_limiter=_AlwaysAllowLimiter())
+class _FakeTurnStore:
+    """Only the read the feedback route makes. `owner=None` mimics both a
+    trace id no turn ever used and a Redis error — the adapter collapses
+    them into the same `None`."""
+
+    def __init__(self, owner: str | None = "user-1") -> None:
+        self.owner = owner
+        self.seen: list[str] = []
+
+    async def get(self, trace_id: str) -> dict[str, Any] | None:
+        self.seen.append(trace_id)
+        if self.owner is None:
+            return None
+        return {"state": "done", "user_id": self.owner, "events": []}
+
+
+def _deps(turn_store: _FakeTurnStore | None = None) -> Any:
+    return SimpleNamespace(
+        rate_limiter=_AlwaysAllowLimiter(),
+        turn_store=turn_store or _FakeTurnStore(),
+    )
 
 
 @pytest.fixture
