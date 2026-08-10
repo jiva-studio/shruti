@@ -403,6 +403,20 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
 
     recordServerHlc,
 
+    forgetDocHlcs: async (refs) => {
+      // Chunked: one placeholder pair per ref, under SQLite's 999-variable cap.
+      const CHUNK = 400
+      for (let i = 0; i < refs.length; i += CHUNK) {
+        const slice = refs.slice(i, i + CHUNK)
+        const placeholders = slice.map(() => "(?, ?)").join(",")
+        const params = slice.flatMap((r) => [r.collection, r.docId])
+        await db.execute(
+          `DELETE FROM sync_doc_hlc WHERE (collection, doc_id) IN (${placeholders})`,
+          params
+        )
+      }
+    },
+
     clearDocHlcs: async () => {
       await db.execute("DELETE FROM sync_doc_hlc")
     },
