@@ -125,8 +125,18 @@ export const usePlayerStore = defineStore("player", () => {
 
   let unsubscribeProgress: (() => void) | null = null
   let unsubscribeTransition: (() => void) | null = null
+  let unsubscribeJump: (() => void) | null = null
   function subscribeOnce(): void {
     if (unsubscribeProgress) return
+    // Jumps the engine made without us — lock-screen scrubbing, the system
+    // ±15s commands, a Bluetooth remote. JS never issued them, so nothing has
+    // journaled the discontinuity and the next progress tick would silently
+    // extend the open session across the skipped span.
+    unsubscribeJump = app.audioPlayer.onPositionJump((jump) => {
+      if (itemId.value === null || jump.itemId !== itemId.value) return
+      positionMs.value = jump.toMs
+      void journalJump(jump.fromMs, jump.toMs).catch((e: unknown) => reportError("player", e))
+    })
     // Native pushes a transition the instant the queue advances — react to
     // it immediately rather than waiting on the next (possibly 1–5s,
     // adaptive-cadence) progress tick. The durable journal drained via
@@ -167,6 +177,8 @@ export const usePlayerStore = defineStore("player", () => {
     unsubscribeProgress = null
     unsubscribeTransition?.()
     unsubscribeTransition = null
+    unsubscribeJump?.()
+    unsubscribeJump = null
     appStateHandle?.remove()
     appStateHandle = null
   })
@@ -334,17 +346,38 @@ export const usePlayerStore = defineStore("player", () => {
 
   async function skipBack(): Promise<void> {
     if (!open.value) return
+    const before = positionMs.value
     await app.audioPlayer.seekBy(-SKIP_DELTA_MS)
     // Optimistic local update so the progress bar moves before the next
     // native tick lands; the tracker will correct on the next emit.
-    positionMs.value = Math.max(0, positionMs.value - SKIP_DELTA_MS)
+    positionMs.value = Math.max(0, before - SKIP_DELTA_MS)
+    await journalJump(before, positionMs.value)
   }
 
   async function skipForward(): Promise<void> {
     if (!open.value) return
+    const before = positionMs.value
     await app.audioPlayer.seekBy(SKIP_DELTA_MS)
-    const upper = durationMs.value > 0 ? durationMs.value : positionMs.value + SKIP_DELTA_MS
-    positionMs.value = Math.min(upper, positionMs.value + SKIP_DELTA_MS)
+    const upper = durationMs.value > 0 ? durationMs.value : before + SKIP_DELTA_MS
+    positionMs.value = Math.min(upper, before + SKIP_DELTA_MS)
+    await journalJump(before, positionMs.value)
+  }
+
+  /**
+   * Journal a position discontinuity: close the open session where playback
+   * actually left off and reopen at the landing point. Without it the next
+   * tick just raises `to_position` over the skipped span and the day's total
+   * counts audio nobody heard (#1623).
+   */
+  async function journalJump(beforeMs: number, afterMs: number): Promise<void> {
+    const id = itemId.value
+    if (!id || beforeMs === afterMs) return
+    await session.recordSeek({
+      itemId: id,
+      positionBeforeMs: beforeMs,
+      positionAfterMs: afterMs,
+      willKeepPlaying: playing.value,
+    })
   }
 
   /**
@@ -550,14 +583,7 @@ export const usePlayerStore = defineStore("player", () => {
     const before = positionMs.value
     positionMs.value = clamped
     await app.audioPlayer.seek(clamped)
-    if (itemId.value) {
-      await session.recordSeek({
-        itemId: itemId.value,
-        positionBeforeMs: before,
-        positionAfterMs: clamped,
-        willKeepPlaying: playing.value,
-      })
-    }
+    await journalJump(before, clamped)
   }
 
   /** Skip to the next queued lecture (continuous-playback mode only). The

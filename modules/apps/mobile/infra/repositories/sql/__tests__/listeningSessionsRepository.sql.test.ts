@@ -140,6 +140,75 @@ describe("listeningSessionsRepository.sql", () => {
     expect(sessions[1].to_position).toBe(600)
   })
 
+  it("forceStartOnce() raises from_position to what a live row of the same run claimed", async () => {
+    // The live tracker already journaled the 10 minutes heard in the
+    // foreground, closing at wall-clock 1600 …
+    await rawInsert(db, {
+      id: "live",
+      itemId: ITEM_A,
+      startedAt: 1000,
+      endedAt: 1600,
+      fromPosition: 0,
+      toPosition: 600,
+    })
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
+    // … and the native journal re-presents the WHOLE [resume point → end]
+    // span of the run that ended at 3400.
+    const id = await repo.forceStartOnce({
+      itemId: ITEM_A,
+      position: 0,
+      sourceKey: "queue:1:pi-a:1784000000000",
+      runWindow: { fromSec: 1000, toSec: 3460 },
+    })
+    expect(id).not.toBeNull()
+    await repo.finish(id!, { position: 2400 })
+
+    const [journaled] = await db.query<{ from_position: number; to_position: number }>(
+      "SELECT from_position, to_position FROM listening_sessions WHERE source_key IS NOT NULL"
+    )
+    expect(journaled).toMatchObject({ from_position: 600, to_position: 2400 })
+
+    // A log entry that genuinely begins ahead of the mark is left alone.
+    const later = await repo.forceStartOnce({
+      itemId: ITEM_A,
+      position: 3000,
+      sourceKey: "queue:2:pi-a:1784000600000",
+      runWindow: { fromSec: 1000, toSec: 3460 },
+    })
+    const [ahead] = await db.query<{ from_position: number }>(
+      "SELECT from_position FROM listening_sessions WHERE id = ?",
+      [later!]
+    )
+    expect(ahead?.from_position).toBe(3000)
+  })
+
+  it("forceStartOnce() ignores sessions that closed outside the run window", async () => {
+    // The lecture was heard to the end long before this run — the only row on
+    // the item sits far outside the window. Clamping on the item's ALL-TIME
+    // mark would put from_position at 2400 and credit the new listen zero.
+    await rawInsert(db, {
+      id: "weeks-ago",
+      itemId: ITEM_A,
+      startedAt: 1000,
+      endedAt: 3400,
+      fromPosition: 0,
+      toPosition: 2400,
+    })
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
+    const id = await repo.forceStartOnce({
+      itemId: ITEM_A,
+      position: 0,
+      sourceKey: "queue:9:pi-a:1786000000000",
+      runWindow: { fromSec: 1_800_000, toSec: 1_802_460 },
+    })
+    await repo.finish(id!, { position: 2400 })
+
+    const [replay] = await db.query<{ from_position: number; to_position: number }>(
+      "SELECT from_position, to_position FROM listening_sessions WHERE source_key IS NOT NULL"
+    )
+    expect(replay).toMatchObject({ from_position: 0, to_position: 2400 })
+  })
+
   it("tick() and finish() advance to_position and ended_at", async () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const id = await repo.start({ itemId: ITEM_A, position: 0 })

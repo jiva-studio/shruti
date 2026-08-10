@@ -75,6 +75,31 @@ export function createSqlListeningSessionRepository(
     )
   }
 
+  /**
+   * Highest `to_position` among the item's sessions that CLOSED inside
+   * `[fromSec, toSec]`. Deliberately time-scoped: it answers "did a live row
+   * already claim part of THIS playback run?", which the item's all-time mark
+   * cannot — that one also matches a listen from weeks ago and would zero out
+   * a legitimate re-listen.
+   *
+   * `MAX`, not the latest row: one run can leave several (a seek splits the
+   * session, so does a midnight roll), and the furthest of them is the mark
+   * a journal row must not reach back behind.
+   */
+  async function claimedInWindow(
+    itemId: PlaylistItemId,
+    fromSec: number,
+    toSec: number
+  ): Promise<TrackPositionSec | null> {
+    return queryOne<{ hwm: number | null }, TrackPositionSec | null>(
+      db,
+      `SELECT MAX(to_position) AS hwm FROM listening_sessions
+        WHERE item_id = ? AND ended_at >= ? AND ended_at <= ?`,
+      [itemId, fromSec, toSec],
+      (r) => r.hwm
+    )
+  }
+
   async function insert(
     itemId: PlaylistItemId,
     fromPosition: TrackPositionSec,
@@ -116,19 +141,39 @@ export function createSqlListeningSessionRepository(
       return unitOfWork.run(() => insert(itemId, position, position), tx)
     },
 
-    async forceStartOnce({ itemId, position, sourceKey }) {
-      // Read first so a replay is an ordinary no-op rather than a caught
-      // constraint violation; the UNIQUE index (migration 025) still stands
-      // behind it as the guarantee, and turns a genuine race into a throw the
-      // caller reports instead of a silently doubled total.
-      const existing = await queryOne<{ id: string }, ListeningSessionId>(
-        db,
-        "SELECT id FROM listening_sessions WHERE source_key = ? LIMIT 1",
-        [sourceKey],
-        (r) => r.id as ListeningSessionId
-      )
-      if (existing !== null) return null
-      return insert(itemId, position, position, sourceKey)
+    async forceStartOnce({ itemId, position, sourceKey, runWindow }) {
+      // The native journal reports a finished item as `[resume point → end]`
+      // and knows nothing about the live tracker, which has usually already
+      // written the foreground prefix of exactly that span. Raise `from` to
+      // whatever a live row of the SAME run already claimed, so the two can't
+      // both count it (#1623).
+      //
+      // The clamp is scoped to the run's wall-clock window, NOT the item's
+      // all-time mark: a lecture re-listened weeks later leaves no row inside
+      // the window, so it is credited in full. Clamping on position alone
+      // would zero it out — and for an already-completed lecture that is the
+      // same case the `completedAt` filter drops in #1596, so it would die
+      // twice over.
+      //
+      // Read-then-insert inside one transaction, as in `start()`: the live
+      // tracker writes on the player's tick cadence, straight through this
+      // drain's window.
+      return unitOfWork.run(async () => {
+        // Read first so a replay is an ordinary no-op rather than a caught
+        // constraint violation; the UNIQUE index (migration 025) still stands
+        // behind it as the guarantee, and turns a genuine race into a throw the
+        // caller reports instead of a silently doubled total.
+        const existing = await queryOne<{ id: string }, ListeningSessionId>(
+          db,
+          "SELECT id FROM listening_sessions WHERE source_key = ? LIMIT 1",
+          [sourceKey],
+          (r) => r.id as ListeningSessionId
+        )
+        if (existing !== null) return null
+        const claimed = await claimedInWindow(itemId, runWindow.fromSec, runWindow.toSec)
+        const fromPosition = Math.max(claimed ?? position, position)
+        return insert(itemId, fromPosition, fromPosition, sourceKey)
+      })
     },
 
     async tick(id, { position }, tx) {

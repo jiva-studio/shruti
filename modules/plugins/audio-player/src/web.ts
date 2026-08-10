@@ -13,6 +13,7 @@ import type {
   SetProgressIntervalParams,
   SetQueueParams,
   Status,
+  PositionJump,
 } from "./definitions"
 
 
@@ -436,6 +437,15 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     return new Promise((resolve, _reject) => {
       resolve({ callbackId: "123" });
     });
+  }
+
+  /** Never fires: the browser fallback registers no system transport
+   *  controls, so every seek arrives through `seek()` / `seekBy()` and the
+   *  caller has already journaled it. Present for interface parity. */
+  onPositionJump(
+    _callback: (jump: PositionJump) => void
+  ): Promise<AudioPlayerListenerResult> {
+    return Promise.resolve({ callbackId: "position-jump" })
   }
 
   addListener(_eventName: string, _listenerFunc: (...args: any[]) => any): Promise<PluginListenerHandle> {
