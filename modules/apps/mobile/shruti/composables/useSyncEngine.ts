@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted, watch } from "vue"
 import { App as CapApp } from "@capacitor/app"
 import type { PluginListenerHandle } from "@capacitor/core"
 import {
+  adoptAnonymousChanges,
   backfillLocal,
   hasPendingLibraryItems,
   nextSyncDelayMs,
@@ -28,6 +29,18 @@ const BACKFILL_MARKER_PREFIX = "sync.backfilled."
  *  differs we reset the cursor so the new identity re-pulls from 0 — and
  *  retire the outbox rows the previous owner journaled. */
 const CURSOR_OWNER_KEY = "sync.cursorOwner"
+/** Whether the account in {@link CURSOR_OWNER_KEY} is anonymous ("1" / "0").
+ *  Written on every observed identity, not only on a change, so a device
+ *  upgrading from a build that didn't record it is stamped on its next cycle.
+ *  Absent ⇒ unknown ⇒ treated as NOT anonymous, which only forgoes the
+ *  handover below. */
+const CURSOR_OWNER_ANON_KEY = "sync.cursorOwnerAnon"
+/** Highest outbox id retired by an identity change that did NOT hand the
+ *  journal over. Unstamped rows at or below it belong to some earlier account
+ *  and must never be adopted by a later one (#1497) — `pushed_outbox_id` cannot
+ *  answer that, since a plain push advances it too. */
+const RETIRED_OUTBOX_KEY = "sync.retiredOutboxId"
+const ANON_FLAG = "1"
 
 /**
  * Trigger composable for the profile sync engine (Lane D). Mounted once in
@@ -74,6 +87,9 @@ export function useSyncEngine(): void {
    *  cursor currently belongs to, so the common path skips the Preferences read
    *  once confirmed. The persisted marker survives restarts. */
   let cursorOwnerId: string | null = null
+  /** In-memory echo of that account's anonymity — part of the marker, so an
+   *  upgrade-in-place (same id, `anonymous` flipping false) is re-recorded. */
+  let cursorOwnerAnon: boolean | null = null
 
   function isEnabled(): boolean {
     // Any user identity syncs — anonymous device accounts included, so their
@@ -143,6 +159,15 @@ export function useSyncEngine(): void {
    * 023 migration carries its `owner_id`, so push filters on ownership and a
    * late watermark cannot retire a row the current account wrote.
    *
+   * **Anonymous → a different account is the exception** (#1627). Sign-in only
+   * keeps the anonymous id when the human had no account yet; a returning one
+   * is cross-linked to the account they already had, and the id changes. There
+   * the previous owner is not a stranger — it is the same person, and retiring
+   * its journal would strand every note, queued lecture and listening session
+   * of the anonymous period on an account nobody can reach again. So that one
+   * transition hands the journal over instead of retiring it (see
+   * {@link adoptAnonymousChanges}); every other one behaves as before.
+   *
    * Runs once per account per process (guarded by an in-memory echo + a
    * persisted `sync.cursorOwner` marker) and only when enabled.
    */
@@ -150,11 +175,15 @@ export function useSyncEngine(): void {
     if (!isEnabled()) return
     const userId = auth.userId
     if (!userId) return
-    if (cursorOwnerId === userId) return
+    const anonymous = !!auth.anonymous
+    if (cursorOwnerId === userId && cursorOwnerAnon === anonymous) return
 
     const stored = await app.preferences.get(CURSOR_OWNER_KEY).catch(() => null)
+    const storedAnon = await app.preferences.get(CURSOR_OWNER_ANON_KEY).catch(() => null)
+    // Same account — including the in-place anonymous upgrade, where only the
+    // flag moves. Nothing is stranded: the id the server knows is unchanged.
     if (stored === userId) {
-      cursorOwnerId = userId
+      await recordOwner(userId, anonymous, storedAnon)
       return
     }
 
@@ -164,7 +193,7 @@ export function useSyncEngine(): void {
     } catch {
       return
     }
-    const { syncOutbox, syncState, unitOfWork } = repos
+    const { syncApply, syncOutbox, syncState, unitOfWork } = repos
     if (!syncState) return
 
     try {
@@ -172,10 +201,28 @@ export function useSyncEngine(): void {
       // (the pre-marker upgrade path), so neither side is touched; recording
       // ownership is what makes a later switch detectable.
       if (stored !== null) {
+        const adopt =
+          storedAnon === ANON_FLAG && syncOutbox && syncApply
+            ? { outbox: syncOutbox, apply: syncApply }
+            : null
         const outboxTail = syncOutbox ? await syncOutbox.latestId() : null
+        const retiredId = adopt ? await readRetiredOutboxId() : 0
         await unitOfWork.run(async () => {
           await syncState.setPullCursor(0)
           await syncState.setAckedSeq(0)
+          if (adopt) {
+            // No watermark raise: the rows it would retire are exactly the ones
+            // being handed over, and what stays unowned already sits under
+            // `sync.retiredOutboxId`.
+            await adoptAnonymousChanges({
+              ...adopt,
+              unitOfWork,
+              fromOwnerId: stored,
+              toOwnerId: userId,
+              unownedAfterId: retiredId,
+            })
+            return
+          }
           if (outboxTail === null) return
           // Clamp: `setPushedOutboxId` is a bare column write, and a tail
           // BELOW the current mark (a pruned or restored journal) would rewind
@@ -183,13 +230,44 @@ export function useSyncEngine(): void {
           const prev = await syncState.getPushedOutboxId()
           if (outboxTail > prev) await syncState.setPushedOutboxId(outboxTail)
         })
+        if (!adopt && outboxTail !== null) await raiseRetiredOutboxId(outboxTail)
       }
-      await app.preferences.set(CURSOR_OWNER_KEY, userId).catch(() => undefined)
-      cursorOwnerId = userId
+      await recordOwner(userId, anonymous, storedAnon)
     } catch (err) {
       // Non-fatal: leave the marker unset so the next cycle retries the reset.
+      // Everything it does is idempotent, so a resumed run is a no-op.
       console.warn("[sync] cursor owner reset failed", err)
     }
+  }
+
+  /** Persist (and echo) the identity the cursor now belongs to. */
+  async function recordOwner(
+    userId: string,
+    anonymous: boolean,
+    storedAnon: string | null
+  ): Promise<void> {
+    const flag = anonymous ? ANON_FLAG : "0"
+    await app.preferences.set(CURSOR_OWNER_KEY, userId).catch(() => undefined)
+    if (storedAnon !== flag) {
+      await app.preferences.set(CURSOR_OWNER_ANON_KEY, flag).catch(() => undefined)
+    }
+    cursorOwnerId = userId
+    cursorOwnerAnon = anonymous
+  }
+
+  async function readRetiredOutboxId(): Promise<number> {
+    const raw = await app.preferences.get(RETIRED_OUTBOX_KEY).catch(() => null)
+    const parsed = raw === null ? 0 : Number(raw)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+  }
+
+  /** Never rewound — a wiped journal reports a tail of 0, and lowering the
+   *  floor would re-expose a previous account's rows to a later handover. */
+  async function raiseRetiredOutboxId(tail: number): Promise<void> {
+    if (tail <= 0) return
+    const current = await readRetiredOutboxId()
+    if (tail <= current) return
+    await app.preferences.set(RETIRED_OUTBOX_KEY, String(tail)).catch(() => undefined)
   }
 
   /**
