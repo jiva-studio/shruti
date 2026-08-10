@@ -11,6 +11,7 @@ import type { Track } from "@lib/domain/track.js"
 import type { Result } from "@kit/core"
 import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { setNativeQueueRelease } from "@lectorium/services/nativeQueue.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
@@ -62,6 +63,9 @@ export const usePlayerStore = defineStore("player", () => {
   // The queue items currently handed to the engine, kept so we can resync
   // the FloatingPlayer's title/author when native auto-advances under us.
   let currentQueue: AudioQueueItem[] = []
+  // Set when an item left the queue while the engine was paused: `setQueue`
+  // restarts playback, so the rewrite waits for the next resume.
+  let queueNeedsRewrite = false
   // Single-flight guard for the native-state drain (init / resume /
   // foreground-advance can all trigger it near-simultaneously).
   let syncing = false
@@ -181,7 +185,29 @@ export const usePlayerStore = defineStore("player", () => {
     unsubscribeJump = null
     appStateHandle?.remove()
     appStateHandle = null
+    setNativeQueueRelease(null)
   })
+
+  /**
+   * Close out the item we're moving off, the same handoff `openTrack` does.
+   * In the foreground the live completion path usually closed the session
+   * already; this is a safety net. Disarms the progress guard first so late
+   * events can't mutate state against a stale identity.
+   */
+  async function handOffSession(nextId: PlaylistItemId | null): Promise<void> {
+    const prevItemId = itemId.value
+    const prevPositionMs = positionMs.value
+    itemId.value = null
+    if (!prevItemId || prevItemId === nextId) return
+    // Best-effort: a rejected finishCurrent must not abort the resync — the
+    // catch is in the caller, so without this `itemId` would stay null and
+    // the FloatingPlayer would vanish until the next successful resume.
+    try {
+      await session.finishCurrent(prevItemId, prevPositionMs)
+    } catch (err) {
+      console.warn("[player] finishCurrent during resync failed", err)
+    }
+  }
 
   /**
    * Move the player's reactive identity onto a queue item the native
@@ -194,13 +220,23 @@ export const usePlayerStore = defineStore("player", () => {
     durationMsValue: number,
     isPlaying: boolean
   ): Promise<void> {
-    const entry = usePlaylistStore().getEntryByItemId(id)
-    if (!entry) return
+    const track = await usePlaylistStore().resolveTrackForItemId(id)
+    if (!track) {
+      // The engine is on something we can't name any more (row hard-deleted,
+      // playlist wiped under a queue native restored). Leaving `itemId`
+      // pinned to the PREVIOUS lecture is what freezes the player: every
+      // later tick fails the identity guard and lands back here, and a pause
+      // tap patches the wrong item. Let it go instead — the next transition
+      // onto a resolvable item re-adopts.
+      await handOffSession(null)
+      playing.value = false
+      return
+    }
     // Resolve the play plan BEFORE mutating any state, so a failure can't
     // leave `itemId` stuck null (which would hide the FloatingPlayer and
     // wedge the progress guard).
     const plan = await playTrack({
-      track: entry.track,
+      track,
       preferredLanguage: language.value ?? undefined,
       itemId: id,
     })
@@ -212,22 +248,7 @@ export const usePlayerStore = defineStore("player", () => {
     const wasMirroringTranscript =
       transcript.trackId !== null && transcript.trackId === trackId.value
 
-    // Close out the previous item's session before swapping identity, the
-    // same handoff `openTrack` does. In the foreground the live completion
-    // path usually closed it already; this is a safety net.
-    const prevItemId = itemId.value
-    const prevPositionMs = positionMs.value
-    itemId.value = null
-    if (prevItemId && prevItemId !== id) {
-      // Best-effort: a rejected finishCurrent must not abort the resync — the
-      // catch is in the caller, so without this `itemId` would stay null and
-      // the FloatingPlayer would vanish until the next successful resume.
-      try {
-        await session.finishCurrent(prevItemId, prevPositionMs)
-      } catch (err) {
-        console.warn("[player] finishCurrent during resync failed", err)
-      }
-    }
+    await handOffSession(id)
     const meta = currentQueue.find((q) => q.itemId === id)
     trackId.value = cmd.trackId
     // `||`, not `??`: the queue meta carries `""` for tracks with no
@@ -254,6 +275,48 @@ export const usePlayerStore = defineStore("player", () => {
     // the player vanishes mid-queue (bug: transcript open + auto-advance).
     if (wasMirroringTranscript) transcript.show(cmd.trackId)
   }
+
+  /**
+   * Hand the current mirror back to the engine, restarting the item that is
+   * playing at its live position. `setQueue` is a full replace — the plugin
+   * has no per-item removal — so this is how a queue is rewritten.
+   */
+  async function pushQueue(): Promise<void> {
+    const startIndex = currentQueue.findIndex((q) => q.itemId === itemId.value)
+    if (startIndex < 0) return
+    queueNeedsRewrite = false
+    // `positionMs` lags by up to one progress tick and `setQueue` restarts
+    // the item at whatever we pass, so take the position from the engine.
+    const s = await app.audioPlayer.getQueueState().catch(() => null)
+    const at = s && s.currentItemId === itemId.value ? s.positionMs : positionMs.value
+    await app.audioPlayer.setQueue(currentQueue, startIndex, at)
+  }
+
+  /**
+   * Take an item out of the live native queue, so the engine can't advance
+   * into a lecture whose audio is about to be deleted. Returns true when the
+   * file must be KEPT — the item is playing right now, or the rewrite had to
+   * be deferred and a lock-screen resume could still reach it.
+   *
+   * Only the unplayed tail is rewritten: the engine never auto-advances
+   * backwards, and re-pushing the queue for an item behind the playhead would
+   * restart the current lecture every time the sweep archives a finished one.
+   */
+  async function dropFromQueue(id: PlaylistItemId): Promise<boolean> {
+    if (id === itemId.value) return true
+    const idx = currentQueue.findIndex((q) => q.itemId === id)
+    if (idx < 0) return false
+    const currentIdx = currentQueue.findIndex((q) => q.itemId === itemId.value)
+    currentQueue = currentQueue.filter((q) => q.itemId !== id)
+    if (currentIdx < 0 || idx < currentIdx) return false
+    if (!playing.value) {
+      queueNeedsRewrite = true
+      return true
+    }
+    await pushQueue()
+    return false
+  }
+  setNativeQueueRelease(dropFromQueue)
 
   /**
    * Drain the native queue's transition journal into listening history,
@@ -299,6 +362,7 @@ export const usePlayerStore = defineStore("player", () => {
         // Queue ran dry — nothing playing. Don't show a stale "playing".
         playing.value = false
         queueActive = false
+        queueNeedsRewrite = false
         currentQueue = []
       }
     } catch (e) {
@@ -491,6 +555,7 @@ export const usePlayerStore = defineStore("player", () => {
           queue[startIndex] = { ...queue[startIndex], url }
           currentQueue = queue
           queueActive = true
+          queueNeedsRewrite = false
           await app.audioPlayer.setQueue(queue, startIndex, resumeMs)
           started = true
         }
@@ -498,6 +563,7 @@ export const usePlayerStore = defineStore("player", () => {
       if (!started) {
         currentQueue = []
         queueActive = false
+        queueNeedsRewrite = false
         await app.audioPlayer.open({
           itemId: cmd.itemId,
           url,
@@ -541,7 +607,13 @@ export const usePlayerStore = defineStore("player", () => {
 
   async function togglePause(): Promise<void> {
     if (!open.value) return
-    await app.audioPlayer.togglePause()
+    if (queueNeedsRewrite && !playing.value) {
+      // A queue rewrite was deferred while paused; resuming is exactly when
+      // to push it, since `setQueue` starts playback itself.
+      await pushQueue()
+    } else {
+      await app.audioPlayer.togglePause()
+    }
     // The engine emits playing=false → session.applyStatus closes the
     // session on the next tick. Patch the playlist immediately so the
     // UI doesn't have to wait for a render-cycle round-trip.
@@ -618,6 +690,7 @@ export const usePlayerStore = defineStore("player", () => {
     positionMs.value = 0
     durationMs.value = 0
     queueActive = false
+    queueNeedsRewrite = false
     currentQueue = []
   }
 
