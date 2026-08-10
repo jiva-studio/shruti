@@ -47,6 +47,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // a single track is just a queue of length 1 (one play path).
     private var player: AVQueuePlayer?
     private var progressObserver: Any?
+    /// The player the periodic observer was added to. A token must be
+    /// returned to its own player — `player` alone is the wrong reference
+    /// the moment a rebuild swaps it (#1626).
+    private weak var progressObserverPlayer: AVQueuePlayer?
     private var currentItemObservation: NSKeyValueObservation?
     private var statusCallbacks: [String: CAPPluginCall] = [:]
     private var transitionCallbacks: [String: CAPPluginCall] = [:]
@@ -108,6 +112,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// `setProgressInterval` so we stream fast for transcript highlighting,
     /// slower for the floating player, and a heartbeat when backgrounded.
     private var progressIntervalSec: Double = 1.0
+
+    /// Whether playback was running when an audio-session interruption
+    /// began, so `.ended` doesn't start a lecture the user had paused.
+    private var wasPlayingBeforeInterruption = false
 
     /// Coarse safety timer that snapshots the in-flight position to disk
     /// (~30 s) while playing, so a hard background kill loses at most that
@@ -192,7 +200,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         // Lock-screen next/previous drive the native queue skips so the
-        // background advance + journaling go through one path.
+        // background advance + journaling go through one path. Both are
+        // disabled until a queue with somewhere to go is loaded.
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
             guard let self = self else { return .commandFailed }
             return self.advanceToNext(reason: "skip-next") ? .success : .noSuchContent
@@ -202,6 +211,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let self = self else { return .commandFailed }
             return self.goToPrevious() ? .success : .noSuchContent
         }
+
+        updateRemoteSkipCommands()
 
         commandCenter.seekForwardCommand.addTarget { [weak self] event in
             if let seekEvent = event as? MPSeekCommandEvent, let player = self?.player {
@@ -237,6 +248,21 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// Keep the remote skip buttons in step with the live queue. iOS shows
+    /// (and honours, from a car or headset) whatever is enabled here, so a
+    /// one-item queue must not expose them — advancing would empty the
+    /// AVQueuePlayer. Android gets this from the Media3 timeline.
+    private func updateRemoteSkipCommands() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+        commandCenter.nextTrackCommand.isEnabled = PlaybackPolicy.remoteNextEnabled(
+            queueIndex: queueIndex,
+            entryCount: entries.count
+        )
+        commandCenter.previousTrackCommand.isEnabled = PlaybackPolicy.remotePreviousEnabled(
+            entryCount: entries.count
+        )
+    }
+
     @objc func handleInterruption(notification: Notification) {
         guard let info = notification.userInfo,
               let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
@@ -246,18 +272,22 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
         switch type {
         case .began:
-            // Audio session interrupted, pause playback
-            if player?.rate != 0 {
+            wasPlayingBeforeInterruption = (player?.rate ?? 0) != 0
+            if wasPlayingBeforeInterruption {
                 togglePause()
             }
         case .ended:
-            // Interruption ended, resume playback if needed
-            if let optionsValue = info[AVAudioSessionInterruptionOptionKey] as? UInt {
-                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-                if options.contains(.shouldResume) {
-                    play()
-                }
+            // Our session is never deactivated, so iOS offers `.shouldResume`
+            // even for a lecture the user had paused before the call arrived.
+            let optionsValue = info[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+            if PlaybackPolicy.shouldResumeAfterInterruption(
+                wasPlaying: wasPlayingBeforeInterruption,
+                systemSuggestsResume: options.contains(.shouldResume)
+            ) {
+                play()
             }
+            wasPlayingBeforeInterruption = false
         @unknown default:
             break
         }
@@ -331,7 +361,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         } else if let entry = currentEntry(), let known = entry.knownDuration {
             duration = known
         }
-        let playing = (player?.rate ?? 0) != 0
+        // An itemless player is not playing whatever its last rate was —
+        // JS reads this to clear a stale "playing" when the queue is dry.
+        let playing = player?.currentItem != nil && (player?.rate ?? 0) != 0
         let currentId: Any = currentItemId.isEmpty ? NSNull() : currentItemId
 
         call.resolve([
@@ -448,6 +480,13 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Used both for a fresh setQueue and for skipToPrevious (which must
     /// rebuild because AVQueuePlayer is forward-only).
     private func rebuildPlayer(seekFirstTo seekPosition: Double) {
+        guard queueIndex >= 0, queueIndex < entries.count else { return }
+
+        // Tear the old player down BEFORE building/swapping: removeTimeObserver
+        // must be handed the player that owns the token, and releasing a player
+        // that still owns a live periodic observer is undefined behaviour.
+        teardownPlayer()
+
         // Build AVPlayerItems for the remaining entries.
         var avItems: [AVPlayerItem] = []
         for entry in entries[queueIndex...] {
@@ -473,6 +512,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         updateNowPlayingInfo(for: entries[queueIndex])
+        updateRemoteSkipCommands()
         startPlaybackPersistTimer()
 
         play()
@@ -535,6 +575,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 player.insert(item, after: nil)
             }
         }
+        updateRemoteSkipCommands()
     }
 
     private func currentEntry() -> QueueEntry? {
@@ -587,6 +628,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if let entry = currentEntry() {
             updateNowPlayingInfo(for: entry)
         }
+        updateRemoteSkipCommands()
         // Snapshot the new current item immediately.
         journal.savePosition(itemId: newId.isEmpty ? nil : newId, positionSec: 0)
     }
@@ -640,6 +682,12 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     @discardableResult
     private func advanceToNext(reason: String) -> Bool {
         guard player != nil, currentEntry() != nil else { return false }
+        // Nothing to advance into: advancing anyway empties the AVQueuePlayer
+        // and JS is never told playback stopped (#1626). Same guard Android
+        // gets from `hasNextMediaItem()`.
+        guard PlaybackPolicy.hasNext(queueIndex: queueIndex, entryCount: entries.count) else {
+            return false
+        }
         let pos = player?.currentTime().seconds ?? 0
         advanceWithJournal(reason: reason, finishedAt: pos)
         return true
@@ -1004,6 +1052,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.updatePlaybackInfo()
             self?.notifyProgressChanged()
         }
+        progressObserverPlayer = progressObserver != nil ? player : nil
     }
 
     /// Change how often progress is pushed to the WebView. The lock-screen
@@ -1025,10 +1074,11 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func removeProgressObserver() {
-        if let observer = progressObserver, let player = player {
-            player.removeTimeObserver(observer)
+        if let observer = progressObserver, let owner = progressObserverPlayer {
+            owner.removeTimeObserver(observer)
         }
         progressObserver = nil
+        progressObserverPlayer = nil
     }
 
     // MARK: - Durable position persistence

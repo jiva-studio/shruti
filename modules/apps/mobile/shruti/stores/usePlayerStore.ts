@@ -426,8 +426,12 @@ export const usePlayerStore = defineStore("player", () => {
         // including a lock-screen resume, which never reaches `togglePause`.
         if (queueNeedsRewrite && s.playing) await pushQueue(s)
         await flushPendingEvictions()
-      } else if (queueActive) {
-        // Queue ran dry — nothing playing. Don't show a stale "playing".
+      } else if (!s.playing) {
+        // Nothing current natively and nothing playing — don't show a stale
+        // "playing". NOT gated on `queueActive`: the single-track path never
+        // sets it, and a stuck `playing` wedges recovery (the `sameItem`
+        // short-circuit in `loadTrack` turns every tap on that row into a
+        // no-op). Engines report `playing: false` for an itemless player.
         playing.value = false
         queueActive = false
         queueNeedsRewrite = false
