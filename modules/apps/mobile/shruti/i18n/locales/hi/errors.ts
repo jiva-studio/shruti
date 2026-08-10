@@ -10,4 +10,5 @@ export default {
   noAudioForLecture: "इस व्याख्यान का कोई ऑडियो नहीं है।",
   downloadStorageFull:
     "संग्रहण सीमा पूरी हो गई। सुनी हुई व्याख्यान हटाएँ या सेटिंग्स में सीमा बढ़ाएँ।",
+  downloadStorageFullAction: "फिर भी डाउनलोड करें",
 }
