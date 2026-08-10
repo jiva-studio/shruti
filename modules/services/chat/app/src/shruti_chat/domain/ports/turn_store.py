@@ -42,7 +42,9 @@ class TurnStore(Protocol):
         self, trace_id: str, *, state: str, events: list[dict[str, Any]], user_id: str
     ) -> None:
         """Persist the completed turn (state + verbatim ordered SSE event
-        list) with the result TTL, overwriting the `running` marker."""
+        list) with the result TTL, overwriting the `running` marker. Also
+        claims the owner marker if `mark_running` failed to write it, so a
+        turn is never left permanently unrateable by one lost write."""
         ...
 
     async def get(self, trace_id: str) -> dict[str, Any] | None:
