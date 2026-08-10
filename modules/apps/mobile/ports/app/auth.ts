@@ -108,6 +108,16 @@ export interface AuthPort {
   refreshTokens(): Promise<AuthSession | null>
 
   /**
+   * Same forced refresh as {@link refreshTokens}, returning the new access
+   * token instead of the session. Exists for the 401 interceptor, which needs
+   * the bearer to put on the replayed request and must not fall back to
+   * `getAccessToken()` — that one is gated on the local clock and would hand
+   * back the very token the server just rejected. Shares the refresh mutex,
+   * so concurrent callers of either method make one `/auth/refresh` call.
+   */
+  refreshAccessToken(): Promise<string | null>
+
+  /**
    * Server-side view of the current user. Read-only — does not rotate
    * tokens. Used by foreground-resume to detect a webhook-driven tier
    * flip without paying the cost of a refresh round-trip every time
