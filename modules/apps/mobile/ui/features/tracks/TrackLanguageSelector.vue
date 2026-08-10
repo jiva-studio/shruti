@@ -1,7 +1,7 @@
 <template>
   <IonList v-if="languages.length">
     <IonItem>
-      <IonLabel>{{ label ?? "Language" }}</IonLabel>
+      <IonLabel>{{ label }}</IonLabel>
       <IonSelect
         :value="value"
         interface="popover"
@@ -23,8 +23,8 @@ defineProps<{
   languages: readonly string[]
   /** Currently selected language code. */
   value: string | null | undefined
-  /** Optional override for the row label. */
-  label?: string
+  /** Translated row label. Required — the component has no copy of its own. */
+  label: string
 }>()
 
 const emit = defineEmits<{
