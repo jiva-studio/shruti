@@ -195,6 +195,9 @@ function toMsTransition(t: QueueTransition) {
     startedItemId: t.startedItemId,
     reason: t.reason,
     at: t.at,
+    // Already epoch ms, like `at` — and left undefined when native didn't
+    // stamp it (a journal entry from a build before the field existed).
+    fromAt: t.fromAt,
     seq: t.seq,
   }
 }
