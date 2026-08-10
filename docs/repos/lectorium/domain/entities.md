@@ -1,6 +1,6 @@
 # Domain entities
 
-Lectorium's data model has two halves: a **catalog** of lectures (read-only, shipped via the prebuilt content DB) and a set of **user entities** (notes, playlist, offline cache, listening journal, Sadhu chat) stored in a writable user DB. The diagram below shows every domain entity and its relations; the rest of this page lists fields and lifecycle for each one.
+Lectorium's data model has two halves: a **catalog** of lectures (read-only, shipped via the prebuilt content DB) and a set of **user entities** (notes, playlist, offline cache, listening journal, Sadhu chat, personal library) stored in a writable user DB. Part of the user half is replicated to the `profile` service by the sync engine, which adds a small set of transport-shaped domain primitives of its own. The diagram below shows every domain entity and its relations; the rest of this page lists fields and lifecycle for each one.
 
 ## Class diagram
 
@@ -139,6 +139,46 @@ classDiagram
         UnixMs createdAt
     }
 
+    class LibraryItem {
+        string id
+        TrackId? trackId
+        LibraryItemStatus status
+        LibraryItemOrigin? origin
+        string? titleRaw
+        AuthorId? authorId
+        LocationId? locationId
+        IsoDate date
+        LanguageCode? lang
+        string? audioKey
+        string? transcriptKey
+        number? duration
+        Reference[] references
+        LibraryItemVariant[] variants
+    }
+
+    class LibraryItemVariant {
+        LanguageCode language
+        string? title
+        string transcriptKey
+        string? description
+        TrackOutlineChapter[]? outline
+    }
+
+    class LibraryMembership {
+        string id
+        UnixMs? archivedAt
+    }
+
+    class DailyWisdom {
+        string id
+        TrackId trackId
+        LanguageCode language
+        number startMs
+        number endMs
+        string text
+        TopicId topicId
+    }
+
     Track "1" *-- "many" TrackVariant : variants
     TrackVariant "1" *-- "many" TrackAudio : audios
     TrackVariant "1" o-- "0..1" TrackTranscriptRef : transcript
@@ -156,9 +196,19 @@ classDiagram
     ListeningSession "*" --> "1" PlaylistItem : itemId
     ChatMessage "*" --> "1" ChatSession : sessionId
     ChatSession "*" --> "0..1" Track : trackId
+
+    LibraryItem "1" *-- "many" LibraryItemVariant : variants
+    LibraryItem "1" *-- "many" Reference : references
+    LibraryItem "*" --> "0..1" Author : authorId
+    LibraryItem "*" --> "0..1" Location : locationId
+    LibraryMembership "1" --> "1" LibraryItem : id
+    DailyWisdom "*" --> "1" Track : trackId
+    DailyWisdom "*" --> "1" Topic : topicId
 ```
 
 Solid diamond `*--` = composition (variants and references live with the track row, no separate identity). Hollow `o--` = optional component. Arrow `-->` = reference by id.
+
+`LibraryItem` is the one entity that does not have a table in the content DB *or* a plain user-authored row: it lands in the user DB by replication from the `profile` service, and `libraryItemToTrack` adapts it into a synthetic `Track` so the rest of the model can ignore where a lecture came from.
 
 ---
 
@@ -224,11 +274,27 @@ The "named id" dictionaries follow the same shape: an id plus a `Map<LanguageCod
 
 `Language` is the registry of locales itself (English name + optional flag emoji), keyed by `code` rather than `(id, language)`.
 
+### `DailyWisdom` — [`dailyWisdom.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/dailyWisdom.ts)
+
+A short, playable excerpt of a lecture tied to a topic. Authored on the MCP side and shipped in the content DB alongside the catalog; the daily-wisdom proactive rule samples one for a topic the user picked and posts it into chat as a playable cite.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `string` | Fragment id |
+| `trackId` | `TrackId` | The lecture the fragment is cut from |
+| `language` | `LanguageCode` | Language of `text` — the rule filters by the user's library languages |
+| `startMs` | `number` | **Milliseconds** — fragment start within the track |
+| `endMs` | `number` | **Milliseconds** — fragment end |
+| `text` | `string` | The excerpt / aphorism shown in chat |
+| `topicId` | `TopicId` | Topic the fragment illustrates |
+
+Read through [`IDailyWisdomRepository`](./ports.md#idailywisdomrepository). The content DB also carries an untyped `settings` key/value table (opaque strings, read via [`ISettingsRepository`](./ports.md#isettingsrepository)) — it is configuration shipped with the catalog, not a domain entity.
+
 ---
 
 ## User entities (user DB, writable)
 
-These entities live in the per-device user DB built by [`runMigrations.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/infra/persistence/migrations/user/runMigrations.ts). They never leave the device — there is no sync.
+These entities live in the per-device user DB built by [`runMigrations.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/infra/persistence/migrations/user/runMigrations.ts). Some of them stay on the device (`MediaItem`) and some are replicated to the `profile` service — `Note`, `PlaylistItem`, `ListeningSession`, `ChatSession`, `ChatMessage` and `LibraryMembership` are pushed from the device, while `LibraryItem` is pulled from the server. See [Sync primitives](#sync-primitives) below.
 
 ### `Note` — [`note.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/note.ts)
 
@@ -327,6 +393,42 @@ stateDiagram-v2
 
 Stale `downloading` rows on app start are flipped to `failed` by [`IMediaItemRepository.failStaleDownloads()`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/ports/mediaItemRepository.ts) so a force-close mid-download doesn't permanently lock the row with `already-in-progress`. See [`downloadMedia.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/usecases/downloads/downloadMedia.ts) and [`removeDownloadedMedia.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/apps/mobile/usecases/downloads/removeDownloadedMedia.ts) for the full transition rules.
 
+### `LibraryItem` — [`libraryItem.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/libraryItem.ts)
+
+A lecture the user added that is **not** in the shared corpus — the personal library. The `profile` service owns the row: it runs the ingest (fetch → transcribe → translate), writes the metadata, and the device receives it as a pull-only sync collection. The client never edits it.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `string` | Per-user membership id (UUID) — also the sync `doc_id` |
+| `trackId` | `TrackId \| null` | Content hash; `null` until the fetch step computes it |
+| `status` | `LibraryItemStatus` | `"queued" \| "processing" \| "ready" \| "failed"` |
+| `origin` | `LibraryItemOrigin \| null` | `"private"` (owner-only) or `"published"` (promoted to the shared corpus, a later phase) |
+| `titleRaw` / `authorRaw` / `locationRaw` / `dateRaw` | `string \| null` | Raw ingest metadata — always present and lossless |
+| `authorId` / `locationId` / `date` | resolved ids / `IsoDate` | `null` until the pipeline confidently matches the raw values |
+| `langHint` / `lang` | `LanguageCode \| null` | Requested hint vs. ASR-detected content language (`lang` is authoritative when present) |
+| `audioKey` / `transcriptKey` / `coverKey` | `string \| null` | **Full bucket keys**, populated once `status === "ready"` |
+| `duration` | `number \| null` | **Milliseconds** |
+| `references` | `Reference[]` | Parsed from the title but left unresolved — carried as `sourceName` + tokens |
+| `variants` | `LibraryItemVariant[]` | One per stored transcript language |
+| `sourceUrl` | `string \| null` | Where the lecture was added from; `null` on older rows |
+| `error` | `string \| null` | Failure reason when `status === "failed"` |
+| `createdAt` / `updatedAt` | `UnixMs \| null` | Server-stamped |
+
+`LibraryItemVariant` is `{ language, title, transcriptKey, description, outline }` — a per-language transcript with its own generated overview. Audio is shared across a track's variants, so it is not repeated per variant.
+
+`libraryItemToTrack(item)` is the pure adapter that turns an item into a synthetic [`Track`](#track--trackts), and it is the reason the personal library needed no changes to playback: the storage-URL resolver, the download store and the HTTP transcript repository all read a `Track`'s variant paths and never touch SQL. Variant paths point at the content-addressed CDN location `public/tracks/<track_id>/…` — the server-supplied keys when present, else the deterministic scheme. It returns `null` while `trackId` is `null`, because nothing is playable before the content hash exists.
+
+### `LibraryMembership` — [`libraryMembershipRepository.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/ports/libraryMembershipRepository.ts)
+
+The client-owned companion to the server-owned `LibraryItem`: the user's remove/re-add intent, merged last-write-wins.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `string` | The library item id (= `LibraryItem.id`, the sync `doc_id`) |
+| `archivedAt` | `UnixMs \| null` | When the item was removed; `null` when active (re-added) |
+
+**Absence means active.** A row exists only once the user has acted on an item, and the client only ever upserts — a remove sets `archivedAt`, a re-add clears it — so "no row" and `archivedAt === null` are the same state and the LWW merge stays total. The shape is declared next to its port rather than in its own entity module.
+
 ### `ChatSession` — [`chatSession.ts`](https://github.com/jiva-studio/lectorium/blob/main/modules/libs/domain/chatSession.ts)
 
 One Sadhu-tab conversation. Persisted in the user DB (`chat_sessions`), surfaced in the History sheet sorted by `updatedAt` most-recent-first.
@@ -384,6 +486,21 @@ The block discriminator (`type`) lets the UI render paragraphs, sentences, and v
 
 ---
 
+## Sync primitives
+
+[`modules/libs/domain/sync/`](https://github.com/jiva-studio/lectorium/tree/main/modules/libs/domain/sync) holds the pure value objects the profile-sync merge rules reason over. They are not entities — they are the *transport shape* of the entities above — but they live in the domain because the merge rules must stay pure and property-testable. The engine, the wire types and the server side are described in [Profile sync](../architecture/profile-sync.md).
+
+| Type | Shape | Notes |
+|---|---|---|
+| `SyncCollection` | union of `user.db` table names | `playlist_items`, `listening_sessions`, `notes`, `chat_sessions`, `chat_messages`, `library_items`, `library_memberships` — the collection name **is** the table name |
+| `SyncOp` | `"upsert" \| "delete"` | As journaled in the outbox and replicated over the wire |
+| `SyncDoc<T>` | `{ docId, hlc, deleted, data }` | One version of a document. `docId` is the *natural* key — `track_id` for `playlist_items`, the row id elsewhere — not the local surrogate `pl_…` id. `data` is `null` iff `deleted` |
+| `Hlc` | `{ physical, counter, deviceId }` | Hybrid Logical Clock; serialized `<physical>:<counter>:<device_id>` with zero-padded fixed widths so a lexicographic string compare matches `compareHlc`. `(counter, deviceId)` makes every write unique, so the HLC doubles as the push idempotency key |
+
+Each collection has a payload type and a merge rule beside it in `merge.ts`. `PlaylistItemSyncData` (`trackId`, `addedAt`, `archivedAt`, `collectionId`) merges **add-wins** field-wise — the item is in the library iff `addedAt >= archivedAt`, so a stale device can neither resurrect nor wrongly delete it. `listening_sessions` is a **grow-only union** (a closed session is immutable, so a "conflict" is just the same row arriving twice). `notes`, chat, and `LibraryMembershipSyncData` are **last-write-wins** by HLC, with a delete tombstone competing on the same footing. `LibraryItemSyncData` has no field-level merge at all: the collection is server-owned, so the rule applies the server's version wholesale. Every rule is pure, idempotent, and commutative in outcome.
+
+---
+
 ## Where each entity is stored
 
 ```mermaid
@@ -400,6 +517,8 @@ graph LR
         TG[Tag]
         TP[Topic]
         LA[Language]
+        DW[DailyWisdom]
+        SET[settings k/v]
     end
 
     subgraph userDb["user DB (writable, on device)"]
@@ -409,7 +528,13 @@ graph LR
         LS[ListeningSession]
         CS[ChatSession]
         CM[ChatMessage]
+        LM[LibraryMembership]
         CFG[config k/v]
+        SYNC["sync bookkeeping<br/>outbox, sync_state, sync_doc_hlc"]
+    end
+
+    subgraph pulled["replicated from profile (pull-only)"]
+        LI[LibraryItem]
     end
 
     subgraph s3["public S3 bucket"]
@@ -420,9 +545,11 @@ graph LR
     classDef ro fill:#a6e3a1,stroke:#6c7086,color:#1e1e2e;
     classDef rw fill:#f9e2af,stroke:#6c7086,color:#1e1e2e;
     classDef remote fill:#89dceb,stroke:#6c7086,color:#1e1e2e;
-    class T,TV,TR,TT,TTP,AU,LO,SO,TG,TP,LA ro;
-    class NO,PI,MI,LS,CS,CM,CFG rw;
-    class TRX,AUD remote;
+    class T,TV,TR,TT,TTP,AU,LO,SO,TG,TP,LA,DW,SET ro;
+    class NO,PI,MI,LS,CS,CM,LM,CFG,SYNC rw;
+    class LI,TRX,AUD remote;
 ```
 
-For the full database picture see [DB overview](../db/README.md), and for the wire-level layout see [S3 layout](../infra/s3-layout.md).
+`LibraryItem` rows physically land in the user DB like the rest, but they are drawn apart because the device only ever *reads* them — the sync engine writes them through `ISyncApplyRepository` from the server's version.
+
+For the full database picture see [DB overview](../db/README.md), for the replication mechanics see [Profile sync](../architecture/profile-sync.md) and [Personal library](../architecture/personal-library.md), and for the wire-level layout see [S3 layout](../infra/s3-layout.md).

@@ -116,13 +116,16 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
         error: state === 'failed' ? message : undefined,
       };
       this.setTask(failedTask);
-      if (state === 'failed') {
-        this.emit<FailedEvent>('failed', {
-          id: options.id,
-          error: message,
-          retryable: true,
-        });
-      }
+      // An abort is terminal for the caller too — it awaits `completed` /
+      // `failed`, so staying silent leaves it pending forever. Report it as
+      // a failure carrying the `cancelled` code, which the caller uses to
+      // tell a deliberate abort from a genuine error.
+      this.emit<FailedEvent>('failed', {
+        id: options.id,
+        error: isAbort ? 'cancelled' : message,
+        retryable: !isAbort,
+        ...(isAbort ? { code: 'cancelled' as const } : {}),
+      });
     } finally {
       this.aborts.delete(options.id);
     }

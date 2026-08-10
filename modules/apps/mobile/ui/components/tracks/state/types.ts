@@ -6,6 +6,7 @@
  * - "playing"    — track is actively playing; radial with playback progress.
  * - "completed"  — track listened to the end; two checkmarks.
  * - "downloading" — radial with download progress.
+ * - "pending"    — tap accepted, outcome unknown yet; shimmer.
  * - "failed"     — download failed; warning icon.
  * - "none"       — neutral.
  */
@@ -15,5 +16,6 @@ export type UiTrackState =
   | "added"
   | "queued"
   | "completed"
+  | "pending"
   | "downloading"
   | "playing"

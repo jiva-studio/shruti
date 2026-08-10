@@ -41,6 +41,9 @@ export interface UseTrackUiStateMapperReturn {
  * journey?" derivation that all track-list views share.
  *
  * State precedence (highest first):
+ *  - "pending"                 — the tap has been accepted and nothing is
+ *    known yet. Highest of all: it exists precisely to answer a tap on a
+ *    row that already carries some other state.
  *  - "downloading" / "failed"  — active download flips to a download
  *    indicator regardless of playlist state.
  *  - "playing"                 — currently-open player track AND playback
@@ -67,6 +70,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   const player = usePlayerStore()
 
   function toUiState(trackId: string, downloadState: DownloadState): UiTrackState {
+    if (downloadState === "pending") return "pending"
     if (downloadState === "downloading") return "downloading"
     if (downloadState === "failed") return "failed"
 
@@ -101,6 +105,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
    * re-render the whole Search page during playback.
    */
   function toDiscoveryState(trackId: string, downloadState: DownloadState): UiTrackState {
+    if (downloadState === "pending") return "pending"
     if (downloadState === "downloading") return "downloading"
     if (downloadState === "failed") return "failed"
     // Currently-playing track → "playing", which folds to added/completed here.

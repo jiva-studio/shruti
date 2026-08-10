@@ -32,6 +32,18 @@ export interface CreateAppRepositoriesDeps {
    */
   readonly getDeviceId?: () => Promise<string>
   /**
+   * Resolves the account that owns the device right now. Stamped on every
+   * journaled row so the push path can scope the outbox to its own account
+   * (#1497). Wired from the auth session at the composition root, so an
+   * account switch is reflected on the next write without rebuilding repos.
+   *
+   * **Required**, unlike the infra-level dep it forwards to. Nothing observable
+   * breaks when this goes missing — rows just journal unowned and the whole
+   * ownership mechanism degrades, silently, to the watermark scheme it
+   * replaced. The type is the guard: dropping the wiring fails the build.
+   */
+  readonly getOwnerId: () => string | null
+  /**
    * Device-local "Sync chats" gate (default ON). Gates chat journaling only.
    * Wired from `useSyncChatsEnabled` at the composition root so a runtime
    * toggle flip is reflected on the next chat write without rebuilding repos.
@@ -45,6 +57,7 @@ export function createAppRepositories(deps: CreateAppRepositoriesDeps): AppRepos
     userDb: deps.userDb,
     getActiveLanguage: deps.getActiveLanguage,
     getDeviceId: deps.getDeviceId,
+    getOwnerId: deps.getOwnerId,
     isChatSyncEnabled: deps.isChatSyncEnabled,
   })
   return {
