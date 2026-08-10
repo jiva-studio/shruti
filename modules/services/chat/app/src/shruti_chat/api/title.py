@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request  # noqa: F401
 from pydantic import BaseModel, Field
 
 from shruti_chat.agent import llm

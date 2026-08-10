@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from shruti_chat.research.caption_generator import generate_captions, _CaptionResult
+from shruti_chat.research.caption_generator import generate_captions, _CaptionResult  # noqa: F401
 
 
 @dataclass

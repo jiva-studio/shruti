@@ -16,7 +16,7 @@ from pathlib import Path
 
 from shruti_chat.research.models import (
     AttributionMatch,
-    AttributionRef,
+    AttributionRef,  # noqa: F401
     MemoryResolution,
     QueryPlan,
     ResearchResult,
