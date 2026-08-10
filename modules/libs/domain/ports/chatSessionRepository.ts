@@ -1,5 +1,6 @@
 import type { ChatSession } from "../chatSession.js"
 import type { ChatSessionId, TrackId } from "../core.js"
+import type { ITransaction } from "./unitOfWork.js"
 
 export interface CreateChatSessionInput {
   readonly id: ChatSessionId
@@ -27,14 +28,14 @@ export interface IChatSessionRepository {
   create(input: CreateChatSessionInput): Promise<ChatSession>
 
   /** Apply the LLM rephrase. */
-  updateTitle(id: ChatSessionId, title: string): Promise<void>
+  updateTitle(id: ChatSessionId, title: string, tx?: ITransaction): Promise<void>
 
   /** Bump `updatedAt = now` — sorts the session to the top of the list. */
   touch(id: ChatSessionId, updatedAtMs: number): Promise<void>
 
   /** Hard-delete a session and all its messages (caller handles cascade
    *  via the message repo or a transaction). */
-  delete(id: ChatSessionId): Promise<void>
+  delete(id: ChatSessionId, tx?: ITransaction): Promise<void>
 
   /** Wipe every session — used by the "Clear history" danger zone. */
   clearAll(): Promise<void>

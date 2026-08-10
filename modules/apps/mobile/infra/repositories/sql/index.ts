@@ -152,9 +152,10 @@ export interface CreateSqlAppRepositoriesDeps {
 export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): SqlAppRepositories {
   // One reentrant unit-of-work is shared between the bundle and the
   // sync-journal decorator so a journal entry can join the caller's open
-  // transaction (see reentrantUnitOfWork.sql.ts). It's a strict superset of
-  // the plain unit-of-work's behaviour (identical when un-nested), so it is
-  // safe for every existing caller.
+  // transaction — but only when the caller hands its transaction HANDLE down
+  // (see reentrantUnitOfWork.sql.ts). It's a strict superset of the plain
+  // unit-of-work's behaviour (identical without a handle), so it is safe for
+  // every existing caller.
   const unitOfWork = createReentrantUnitOfWork(deps.userDb)
 
   // The synced user-data repositories. When a device id is available they are
@@ -163,17 +164,20 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
   const baseSynced = {
     notes: createSqlNoteRepository(deps.userDb),
     playlistItems: createSqlPlaylistItemRepository(deps.userDb),
-    listeningSessions: createSqlListeningSessionRepository(deps.userDb),
+    // Takes the shared unit of work: its writes are timer-driven (the player's
+    // progress cadence), so a bare `execute` would land inside whatever
+    // transaction happened to be open and vanish with its rollback (#1494).
+    listeningSessions: createSqlListeningSessionRepository(deps.userDb, unitOfWork),
     chatSessions: createSqlChatSessionRepository(deps.userDb),
-    // Its own PLAIN unit of work, deliberately not the shared reentrant one:
-    // the chat-message `meta` read-modify-writes must be isolated from every
-    // other transaction, and `createReentrantUnitOfWork`'s depth counter is a
-    // plain closure with no execution-context binding — it stays raised for
-    // the whole of any top-level `run` (a `pullAndMerge` page, the entire
-    // first-sign-in `backfillLocal`), so a concurrent write from an unrelated
-    // stack would be misread as nested, spliced into that foreign transaction
-    // and silently discarded when it rolls back. Switch to `unitOfWork` once
-    // #1493 binds the counter to the execution context.
+    // Its own PLAIN unit of work (#1531's workaround): the chat-message `meta`
+    // read-modify-writes must be isolated from every other transaction, and
+    // the shared reentrant instance used to decide "nested" from a bare depth
+    // counter that stayed raised for the whole of any top-level `run` — so a
+    // concurrent write from an unrelated stack was misread as nested and
+    // discarded with that foreign transaction's rollback. #1493 replaced the
+    // counter with an explicit transaction handle, so the two instances now
+    // behave identically for a caller that passes no handle; switching this
+    // back to `unitOfWork` is a one-liner, left for its own PR.
     chatMessages: createSqlChatMessageRepository(deps.userDb, createSqlUnitOfWork(deps.userDb)),
     libraryMemberships: createSqlLibraryMembershipRepository(deps.userDb),
   }

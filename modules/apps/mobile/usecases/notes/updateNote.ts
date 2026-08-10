@@ -37,7 +37,7 @@ export async function updateNote(
   input: UpdateNoteInput,
   deps: UpdateNoteDeps
 ): Promise<Result<Note, UpdateNoteError>> {
-  return deps.unitOfWork.run(async () => {
+  return deps.unitOfWork.run(async (tx) => {
     const existing = await deps.notes.getById(input.id)
     if (!existing) return err("not-found")
     const merged = {
@@ -47,17 +47,22 @@ export async function updateNote(
     }
     const validated = validateNoteFields(merged)
     if (!validated.ok) return err(validated.error)
-    const updated = await deps.notes.update({
-      id: input.id,
-      // Patch payload still uses the per-field "undefined means don't
-      // touch" convention, but the *text* slot writes the trimmed value
-      // when supplied — otherwise the column would drift between the
-      // domain (always trimmed) and a sloppy caller (untrimmed update).
-      text: input.text !== undefined ? validated.value.text : undefined,
-      timeStart: input.timeStart,
-      timeEnd: input.timeEnd,
-      meta: input.meta,
-    })
+    const updated = await deps.notes.update(
+      {
+        id: input.id,
+        // Patch payload still uses the per-field "undefined means don't
+        // touch" convention, but the *text* slot writes the trimmed value
+        // when supplied — otherwise the column would drift between the
+        // domain (always trimmed) and a sloppy caller (untrimmed update).
+        text: input.text !== undefined ? validated.value.text : undefined,
+        timeStart: input.timeStart,
+        timeEnd: input.timeEnd,
+        meta: input.meta,
+      },
+      // Hand the transaction's handle down so the write and the sync-journal
+      // entry the decorator adds land inside THIS transaction.
+      tx
+    )
     return ok(updated)
   })
 }

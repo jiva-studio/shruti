@@ -5,7 +5,10 @@ import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 
-const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
+/** Hands the callback a transaction handle, like a real unit of work, so a
+ *  test can pin that the use case threads it down to the repository. */
+const TX = { kind: "transaction" } as const
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn(TX) }
 
 function makeRepo(overrides: Partial<IPlaylistItemRepository> = {}): IPlaylistItemRepository {
   return {
@@ -42,7 +45,7 @@ describe("addTrackToPlaylist", () => {
     )
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.value.id).toBe("pi-new")
-    expect(add).toHaveBeenCalledWith("t-new", null)
+    expect(add).toHaveBeenCalledWith("t-new", null, TX)
   })
 
   it("forwards the source collectionId to the repo", async () => {
@@ -53,7 +56,7 @@ describe("addTrackToPlaylist", () => {
       { trackId: "t-new" as TrackId, collectionId: "col-1" },
       { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
-    expect(add).toHaveBeenCalledWith("t-new", "col-1")
+    expect(add).toHaveBeenCalledWith("t-new", "col-1", TX)
   })
 
   it("returns already-in-playlist for active duplicates", async () => {

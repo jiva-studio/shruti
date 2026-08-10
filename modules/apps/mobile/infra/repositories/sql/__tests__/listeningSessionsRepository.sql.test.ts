@@ -6,7 +6,11 @@ import {
   startOfNextLocalDay,
   useListeningSessionTracker,
 } from "@lectorium/composables/useListeningSessionTracker.js"
+import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { createSqlListeningSessionRepository } from "../listeningSessionsRepository.sql.js"
+import { createReentrantUnitOfWork } from "../reentrantUnitOfWork.sql.js"
+import { createSqlUnitOfWork } from "../unitOfWork.sql.js"
 import { applyUserSchemaForTests, createInMemoryTestDatabase } from "./testDb.js"
 
 const ITEM_A = "pi-a" as PlaylistItemId
@@ -40,7 +44,7 @@ describe("listeningSessionsRepository.sql", () => {
   })
 
   it("start() records from_position = position when there is no prior session", async () => {
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const id = await repo.start({ itemId: ITEM_A, position: 0 })
     const session = await repo.getLastSessionForItem(ITEM_A)
     expect(session?.id).toBe(id)
@@ -57,7 +61,7 @@ describe("listeningSessionsRepository.sql", () => {
       fromPosition: 0,
       toPosition: 300,
     })
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     await repo.start({ itemId: ITEM_A, position: 5400 })
     const sessions = await db.query<{ from_position: number; to_position: number }>(
       "SELECT from_position, to_position FROM listening_sessions ORDER BY ended_at"
@@ -91,7 +95,7 @@ describe("listeningSessionsRepository.sql", () => {
         toPosition: to,
       })
     }
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     // 1000 (real) + 50 (deduped storm), NOT 1000 + 150 (raw double-count).
     expect(await repo.getTotalListenedSeconds()).toBe(1050)
   })
@@ -108,7 +112,7 @@ describe("listeningSessionsRepository.sql", () => {
       fromPosition: 0,
       toPosition: 1467,
     })
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     await repo.start({ itemId: ITEM_A, position: 1 })
     const sessions = await db.query<{ from_position: number; to_position: number }>(
       "SELECT from_position, to_position FROM listening_sessions ORDER BY ended_at"
@@ -127,7 +131,7 @@ describe("listeningSessionsRepository.sql", () => {
       fromPosition: 0,
       toPosition: 300,
     })
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     await repo.forceStart({ itemId: ITEM_A, position: 600 })
     const sessions = await db.query<{ from_position: number; to_position: number }>(
       "SELECT from_position, to_position FROM listening_sessions ORDER BY ended_at"
@@ -137,7 +141,7 @@ describe("listeningSessionsRepository.sql", () => {
   })
 
   it("tick() and finish() advance to_position and ended_at", async () => {
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const id = await repo.start({ itemId: ITEM_A, position: 0 })
     await repo.tick(id, { position: 30 })
     let session = await repo.getLastSessionForItem(ITEM_A)
@@ -153,7 +157,7 @@ describe("listeningSessionsRepository.sql", () => {
     // backward position event (fast scrub to 23s) arrived as a plain tick/finish
     // — NOT through seek(). Without the monotonic guard this wrote from=775,
     // to=23 (delta -752). MAX(to_position, ?) must hold `to` at 775.
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const id = await repo.forceStart({ itemId: ITEM_A, position: 775 })
 
     await repo.tick(id, { position: 23 })
@@ -193,7 +197,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 5,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const progress = await repo.getProgressForItems([ITEM_A, ITEM_B])
     expect(progress.get(ITEM_A)?.position).toBe(250)
     expect(progress.get(ITEM_A)?.updatedAtSec).toBe(400)
@@ -220,7 +224,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 30,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const progress = await repo.getProgressForItems([ITEM_A])
     expect(progress.get(ITEM_A)?.position).toBe(250)
   })
@@ -243,7 +247,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 300, // rewound to 5:00 and stopped
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     expect(await repo.getResumePositionForItem(ITEM_A)).toBe(2400)
     expect(await repo.getResumePositionForItem(ITEM_B)).toBeNull()
   })
@@ -268,7 +272,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 100,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const last = await repo.getLastSessionForItem(ITEM_A)
     expect(last?.id).toBe("a2")
   })
@@ -295,7 +299,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 1000,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const result = await repo.getCompletedAtForItems(
       [ITEM_A, ITEM_B],
       new Map([
@@ -329,7 +333,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 300,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const result = await repo.getCompletedAtForItems([ITEM_A], new Map([[ITEM_A, 1000]]))
     expect(result.get(ITEM_A)).toBeNull()
   })
@@ -355,7 +359,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 50,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     await repo.clearAll()
 
     const rows = await db.query<{ c: number }>("SELECT COUNT(*) AS c FROM listening_sessions")
@@ -395,7 +399,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 400,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const fromMs = new Date("2026-04-14T00:00:00Z").getTime()
     const toMs = new Date("2026-04-17T00:00:00Z").getTime()
     const totals = await repo.getDailyTotals(fromMs, toMs)
@@ -434,7 +438,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 400,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const totals = await repo.getDailyTotalsByDayOffset(fromMs, toMs)
     const byOffset = new Map(totals.map((t) => [t.dayOffset, t.listenedSeconds]))
     expect(byOffset.get(0)).toBe(600)
@@ -465,7 +469,7 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 1,
     })
 
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     // Lifetime total: 600 (good) + 0 (bad clamped), not 600 + (-1466).
     expect(await repo.getTotalListenedSeconds()).toBe(600)
 
@@ -499,7 +503,7 @@ describe("useListeningSessionTracker cross-midnight split", () => {
   }
 
   it("splits a session that crosses local midnight so each day keeps its share", async () => {
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const tracker = useListeningSessionTracker({ getRepo: () => repo })
 
     // Anchor on a local-midnight so the split boundary is unambiguous,
@@ -546,7 +550,7 @@ describe("useListeningSessionTracker cross-midnight split", () => {
   })
 
   it("does not split a session that stays within one local day", async () => {
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const tracker = useListeningSessionTracker({ getRepo: () => repo })
 
     const t = new Date(2026, 3, 16, 10, 0, 0, 0).getTime()
@@ -560,7 +564,7 @@ describe("useListeningSessionTracker cross-midnight split", () => {
   })
 
   it("splits EVERY crossed midnight for a multi-day background gap (no day left at zero)", async () => {
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const tracker = useListeningSessionTracker({ getRepo: () => repo })
 
     // Session opens at 23:50 on day 0 and the next event (finish) only lands
@@ -611,7 +615,7 @@ describe("useListeningSessionTracker cross-midnight split", () => {
   })
 
   it("splits a one-midnight background gap when only finish fires (no tick)", async () => {
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const tracker = useListeningSessionTracker({ getRepo: () => repo })
 
     // Open at 23:55, then the only event is a finish at 00:05 the next day —
@@ -698,7 +702,7 @@ describe("useListeningSessionTracker finish() failure", () => {
   })
 
   it("restores the active-session handle when finish() fails so a retry still closes it", async () => {
-    const real = createSqlListeningSessionRepository(db)
+    const real = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     let failOnce = true
     const repo = {
       ...real,
@@ -756,7 +760,7 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
   }
 
   it("a burst of progress events opens exactly one session, not one per event", async () => {
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const tracker = useListeningSessionTracker({ getRepo: () => repo })
 
     // 300 progress frames delivered in one synchronous burst (position marching
@@ -778,7 +782,7 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
   })
 
   it("does not deduplicate a genuine replay after the session is finished", async () => {
-    const repo = createSqlListeningSessionRepository(db)
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     const tracker = useListeningSessionTracker({ getRepo: () => repo })
 
     // Listen 0→600, finish, then replay from 0→600 again. Both count.
@@ -911,7 +915,7 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
         ["pi-5" as PlaylistItemId, 0],
       ])
 
-      const repo = createSqlListeningSessionRepository(db)
+      const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
       const batched = await repo.getCompletedAtForItems(itemIds, durations)
       const expected = await perItemCompletedAt(db, itemIds, durations)
 
@@ -941,7 +945,10 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
         })
       }
       const counting = countingDb(db)
-      const repo = createSqlListeningSessionRepository(counting.db)
+      const repo = createSqlListeningSessionRepository(
+        counting.db,
+        createSqlUnitOfWork(counting.db)
+      )
       const result = await repo.getCompletedAtForItems(itemIds, durations)
 
       expect(counting.queries()).toBe(1)
@@ -967,7 +974,10 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
         toPosition: 1000,
       })
       const counting = countingDb(db)
-      const repo = createSqlListeningSessionRepository(counting.db)
+      const repo = createSqlListeningSessionRepository(
+        counting.db,
+        createSqlUnitOfWork(counting.db)
+      )
       const result = await repo.getCompletedAtForItems(itemIds, durations)
 
       expect(counting.queries()).toBe(3)
@@ -990,7 +1000,7 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
       const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)]
       const idShapes = ["pi-{n}", "PI_{n}", "item.{n}", "{n}", "z{n}z", "pi-00{n}"]
 
-      const repo = createSqlListeningSessionRepository(db)
+      const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
       for (let trial = 0; trial < 150; trial++) {
         await db.execute("DELETE FROM listening_sessions")
         const itemCount = Math.floor(rnd() * 8)
@@ -1042,5 +1052,88 @@ describe("useListeningSessionTracker reentrancy (progress-event storm)", () => {
         expect([...batched.values()]).toEqual([...expected.values()])
       }
     })
+  })
+})
+
+/** Serialises `transaction()` callers through a promise chain, the way both
+ *  real adapters do. `execute()` deliberately bypasses that queue in the
+ *  adapters, which is exactly what #1494 is about, so it bypasses it here too. */
+function withTxQueue(db: IDatabase): IDatabase {
+  let queue: Promise<unknown> = Promise.resolve()
+  return {
+    ...db,
+    transaction(fn: () => Promise<void>): Promise<void> {
+      const next = queue.then(() => db.transaction(fn))
+      queue = next.then(
+        () => undefined,
+        () => undefined
+      )
+      return next
+    },
+  }
+}
+
+describe("listeningSessionsRepository.sql — writes issued during a foreign transaction", () => {
+  let queued: IDatabase
+  let unitOfWork: IUnitOfWork
+  let repo: IListeningSessionRepository
+
+  beforeEach(async () => {
+    const raw = await createInMemoryTestDatabase()
+    await applyUserSchemaForTests(raw)
+    queued = withTxQueue(raw)
+    unitOfWork = createReentrantUnitOfWork(queued)
+    repo = createSqlListeningSessionRepository(queued, unitOfWork)
+  })
+
+  /** Opens a transaction that stays open until `release()`, then throws. Stands
+   *  in for a `pullAndMerge` page — one transaction across a whole run of
+   *  `applyRemote` awaits — that fails and rolls back. */
+  function openFailingTransaction() {
+    let open!: () => void
+    let release!: () => void
+    const opened = new Promise<void>((resolve) => (open = resolve))
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const running = unitOfWork.run(async () => {
+      open()
+      await gate
+      throw new Error("pull failed")
+    })
+    return { opened, release, running }
+  }
+
+  it("keeps a tick out of the transaction it overlaps", async () => {
+    // #1494: `tick` fires off the player's progress cadence, i.e. on a timer,
+    // so it lands squarely inside a sync pull's transaction window. As a bare
+    // `execute` it joined that transaction on the shared connection, reported
+    // success to the caller and vanished on the rollback.
+    const id = await repo.forceStart({ itemId: ITEM_A, position: 0 })
+    const { opened, release, running } = openFailingTransaction()
+    await opened
+
+    const ticked = repo.tick(id, { position: 42 })
+    release()
+    await expect(running).rejects.toThrow("pull failed")
+    await ticked
+
+    const session = await repo.getLastSessionForItem(ITEM_A)
+    expect(session?.toPosition).toBe(42)
+  })
+
+  it("keeps a newly started session out of the transaction it overlaps", async () => {
+    // Same window, the `forceStart` half of #1494: the row inserted for a seek
+    // used to disappear with the foreign rollback, so every later tick updated
+    // a session that no longer existed.
+    const { opened, release, running } = openFailingTransaction()
+    await opened
+
+    const started = repo.forceStart({ itemId: ITEM_B, position: 7 })
+    release()
+    await expect(running).rejects.toThrow("pull failed")
+    const id = await started
+
+    const session = await repo.getLastSessionForItem(ITEM_B)
+    expect(session?.id).toBe(id)
+    expect(session?.fromPosition).toBe(7)
   })
 })

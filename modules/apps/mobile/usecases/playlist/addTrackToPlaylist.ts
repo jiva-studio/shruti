@@ -32,11 +32,12 @@ export async function addTrackToPlaylist(
   deps: AddTrackToPlaylistDeps
 ): Promise<Result<PlaylistItem, AddTrackToPlaylistError>> {
   try {
-    return await deps.unitOfWork.run(async () => {
+    return await deps.unitOfWork.run(async (tx) => {
       const active = await deps.playlistItems.listActive()
       const existing = active.find((item) => item.trackId === input.trackId)
       if (existing) return err("already-in-playlist")
-      const created = await deps.playlistItems.add(input.trackId, input.collectionId ?? null)
+      // The handle keeps the insert and its journal entry in THIS transaction.
+      const created = await deps.playlistItems.add(input.trackId, input.collectionId ?? null, tx)
       return ok(created)
     })
   } catch {
