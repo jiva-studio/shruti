@@ -23,6 +23,9 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := backfillCombinedFtsRows(ctx, db); err != nil {
 		return fmt.Errorf("backfill combined fts: %w", err)
 	}
+	if err := foldExistingFtsRows(ctx, db); err != nil {
+		return fmt.Errorf("fold fts rows: %w", err)
+	}
 	if err := ensureAuthorProfileColumns(ctx, db); err != nil {
 		return fmt.Errorf("ensure author profile columns: %w", err)
 	}
@@ -570,6 +573,37 @@ func backfillCombinedFtsRows(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// foldExistingFtsRows rewrites already-indexed `tracks_search` content into
+// the folded form the writer now emits (see searchfold.go). current.db is a
+// binary snapshot mutated in place, so without this only tracks re-saved
+// after the change would carry folded terms and a search for "ученые" would
+// keep missing every title spelled "учёные".
+//
+// Content-only, so no scheme bump — the NULL scheme keeps this row out of the
+// version both the publisher and the mobile scheme-validator read.
+func foldExistingFtsRows(ctx context.Context, db *sql.DB) error {
+	var applied int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM migrations WHERE name = '007_fold_fts_yo'`).Scan(&applied); err != nil {
+		return fmt.Errorf("read migration row: %w", err)
+	}
+	if applied > 0 {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, `
+		UPDATE tracks_search
+		   SET content = replace(replace(content, 'ё', 'е'), 'Ё', 'Е')
+		 WHERE content LIKE '%ё%' OR content LIKE '%Ё%'`); err != nil {
+		return fmt.Errorf("fold tracks_search content: %w", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO migrations (name, scheme, applied_at)
+		 VALUES ('007_fold_fts_yo', NULL, CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))`); err != nil {
+		return fmt.Errorf("record migration row: %w", err)
+	}
+	return nil
 }
 
 // SeededKindTags is the canonical, fixed set of recording-type tags. The
