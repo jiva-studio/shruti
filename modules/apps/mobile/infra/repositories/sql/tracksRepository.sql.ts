@@ -110,6 +110,17 @@ const REFERENCE_PATTERN = /^\d+(?:\.\d+)+$/
  */
 const SCORE_CAP = 500
 
+/**
+ * Hard cap on the match set the SQL-sorted branch pages over. Unlike
+ * SCORE_CAP this one is applied *after* the sort, so the rows it keeps are
+ * the first N in the order the user asked for rather than an arbitrary
+ * FTS-docid slice — the cap can only cost the tail of a very broad query,
+ * never the head of page 1. A hundred pages of 50; the bound is what keeps
+ * SQLite's sorter (and the id set the outer query scans) from growing with
+ * the corpus on every page fetch.
+ */
+const SORTED_CAP = 5000
+
 interface QueryPiece {
   phrase: boolean
   text: string
@@ -132,21 +143,38 @@ function splitQueryPieces(raw: string): QueryPiece[] {
 }
 
 /**
- * Fold a string into the form the catalog indexes: NFC, lower case, and
- * Cyrillic `ё` → `е`. The catalog writer folds identically
- * (`lectorium-mcp/internal/infra/catalog/sqlite/searchfold.go`), so either
- * spelling of a word finds either spelling in the index.
+ * Fold a string into the form the catalog indexes: lower case, no combining
+ * marks, Cyrillic `ё` → `е`.
+ *
+ * A combining mark belongs to its word, not between two of them: the index's
+ * `unicode61 "remove_diacritics=2"` keeps `Кри́шна` whole and drops the
+ * accent, so `кришна` is the indexed term. Lower-casing runs first because
+ * `İ`.toLowerCase() manufactures a mark of its own.
+ *
+ * Latin and Greek marks go the way `unicode61` takes them — deleted, so
+ * `gītā` folds to `gita`. Everything else is re-composed first, which keeps
+ * Cyrillic `й ё ї ў` as themselves and strips only the marks with no
+ * precomposed form: a stress accent, a Devanagari matra. The catalog writer
+ * folds identically (`lectorium-mcp/internal/infra/catalog/sqlite/searchfold.go`),
+ * so query and index land on the same term either way round.
  */
-function foldSearchText(raw: string): string {
-  return raw.normalize("NFC").toLowerCase().replace(/ё/gu, "е")
+export function foldSearchText(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/([\p{Script=Latin}\p{Script=Greek}])\p{M}+/gu, "$1")
+    .normalize("NFC")
+    .replace(/\p{M}+/gu, "")
+    .replace(/ё/gu, "е")
 }
 
 /**
  * Split a folded string into index tokens. Token characters are letters
  * and digits of any script — the classes `unicode61` itself tokenises on
  * — so Ukrainian `і ї є ґ` and Serbian `ј љ њ ћ ђ џ` survive instead of
- * being deleted by an `a-z`/`а-я` deny-list. Tokens stay alphanumeric,
- * so no FTS operator or quote can leak into the MATCH expression.
+ * being deleted by an `a-z`/`а-я` deny-list. Marks are gone by now, so no
+ * accent can cut a word in two. Tokens stay alphanumeric, so no FTS
+ * operator or quote can leak into the MATCH expression.
  */
 function sanitizeTokens(raw: string): string[] {
   return foldSearchText(raw)
@@ -519,22 +547,31 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       // so this hands the whole job to SQL exactly as `list()` does, with FTS
       // membership as one more condition.
       //
-      // No SCORE_CAP on the membership subquery: capping there hands the
-      // ORDER BY an arbitrary FTS-docid slice of the matches, so page 1 of
-      // a broad query ("бг*", 1637 matches) started at the oldest of the
-      // first 500 rows the index happened to yield, not at the oldest match.
+      // The cap sits *inside* the sort, not before it. A SCORE_CAP on the
+      // bare membership subquery handed the ORDER BY an arbitrary FTS-docid
+      // slice, so page 1 of a broad query ("бг*", 1637 matches) started at
+      // the oldest of the first 500 rows the index happened to yield rather
+      // than at the oldest match. Dropping the bound instead put the whole
+      // match set through the outer LIMIT/OFFSET once per page — the cost
+      // the scored branch below was written to escape. Sorting first and
+      // taking SORTED_CAP keeps the head of the order exact and the work per
+      // page bounded.
       if (query.sortBy) {
         const sort = sortOrderClause(query.sortBy, getActiveLanguage())
         const rows = await contentDb.query<TrackRow>(
-          `SELECT t.* FROM tracks t
-           WHERE t.id IN (
-                   SELECT track_id FROM tracks_search
-                   WHERE tracks_search MATCH ? AND kind = 'combined'
-                 )
-             AND t.hidden = 0${filterSql}
+          `SELECT * FROM (
+             SELECT t.* FROM tracks t
+              WHERE t.id IN (
+                      SELECT track_id FROM tracks_search
+                      WHERE tracks_search MATCH ? AND kind = 'combined'
+                    )
+                AND t.hidden = 0${filterSql}
+              ${sort.clause}
+              LIMIT ?
+           ) t
            ${sort.clause}
            LIMIT ? OFFSET ?`,
-          [fts, ...filterParts.params, ...sort.params, limit, offset]
+          [fts, ...filterParts.params, ...sort.params, SORTED_CAP, ...sort.params, limit, offset]
         )
         return hydrate(contentDb, rows)
       }
