@@ -8,6 +8,7 @@ import { createInMemoryTestDatabase } from "@infra/repositories/sql/__tests__/te
 import { userMigrations } from "@infra/persistence/migrations/user/index.js"
 import { pushLocal } from "@usecases/sync/pushLocal.js"
 import type { Lectorium } from "../../lectorium.js"
+import { DEFAULT_APP_CONFIG } from "../app.config.js"
 import { wipeLocalUserData } from "../dataWipe.js"
 
 /**
@@ -24,6 +25,7 @@ let repos: SqlAppRepositories
 let app: Lectorium
 let stopped: number
 let refreshed: string[]
+let deletedDbPaths: string[]
 
 vi.mock("../../stores/usePlayerStore.js", () => ({
   usePlayerStore: () => ({
@@ -112,9 +114,17 @@ describe("wipeLocalUserData", () => {
     })
     stopped = 0
     refreshed = []
+    deletedDbPaths = []
     app = {
+      appConfig: DEFAULT_APP_CONFIG,
       repositories: () => repos,
       filesStorage: { clearAll: async () => undefined },
+      databaseFetcher: {
+        list: async () => ["lectorium.7.db", "lectorium.42.db", "user.db"],
+        delete: async (path: string) => {
+          deletedDbPaths.push(path)
+        },
+      },
       preferences: {
         get: async () => null,
         set: async () => undefined,
@@ -200,5 +210,17 @@ describe("wipeLocalUserData", () => {
     })
     expect(pending).toHaveLength(1)
     expect(pending[0]!.collection).toBe("notes")
+  })
+
+  it("deletes the content catalog but not the user DB file (#1630)", async () => {
+    await wipeLocalUserData(app)
+
+    expect(deletedDbPaths).toEqual([
+      "lectorium/databases/lectorium.7.db",
+      "lectorium/databases/lectorium.42.db",
+    ])
+    // `user.db` is wiped row-by-row; dropping the file would rewind the pull
+    // cursor the test above pins.
+    expect(deletedDbPaths).not.toContain("lectorium/databases/user.db")
   })
 })

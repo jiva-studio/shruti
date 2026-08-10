@@ -35,6 +35,7 @@ import router from "./router/index.js"
 import { bootLocaleReady, i18n } from "./i18n/index.js"
 import { initLectorium } from "./lectorium.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
+import { DATABASES_DIR } from "./services/contentDatabase.js"
 import { findRegion, getRegions, hydrateRegions } from "@lectorium/services/regionsRegistry.js"
 import { readPreferredServerId } from "@lectorium/services/preferredServer.js"
 import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
@@ -201,7 +202,9 @@ initLectorium({
   persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
   databaseFetcher: isNative ? useDatabaseToFsFetcher() : useDatabaseToIndexedDbFetcher(),
   filesStorage: isNative
-    ? useCapacitorRemoteFilesStorage({ cacheDir: "lectorium" })
+    ? // `databases/` holds the content catalog and the user DB, not cache —
+      // see `resetContentDatabase` for the path that is allowed to drop it.
+      useCapacitorRemoteFilesStorage({ cacheDir: "lectorium", keep: [DATABASES_DIR] })
     : useWebRemoteFilesStorage({ cacheName: "lectorium" }),
   preferences,
   // Capacitor plugin selects native vs its own web fallback automatically.
