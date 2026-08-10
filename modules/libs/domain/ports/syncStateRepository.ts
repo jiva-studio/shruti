@@ -20,7 +20,12 @@ export interface ISyncStateRepository {
   getAckedSeq(): Promise<number>
   setAckedSeq(seq: number): Promise<void>
 
-  /** Highest local `outbox.id` confirmed pushed. */
+  /**
+   * The outbox watermark: rows at or below this `id` are retired and never
+   * pushed again. It advances as rows are confirmed pushed, and jumps to the
+   * whole journal's tail when the owning identity changes — which is what
+   * keeps a previous account's un-pushed rows off the new identity.
+   */
   getPushedOutboxId(): Promise<number>
   setPushedOutboxId(id: number): Promise<void>
 }

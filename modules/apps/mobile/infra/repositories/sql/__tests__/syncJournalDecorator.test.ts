@@ -20,6 +20,7 @@ interface OutboxRow {
   op: string
   data: string | null
   hlc: string
+  owner_id: string | null
 }
 
 /** Minimal in-memory IDatabase covering exactly what the decorator queries:
@@ -58,6 +59,7 @@ function makeFakeDb(
           op: String(p[2]),
           data: p[3] === null ? null : String(p[3]),
           hlc: String(p[4]),
+          owner_id: p[6] == null ? null : String(p[6]),
         })
       }
     },
@@ -210,8 +212,11 @@ describe("withSyncJournaling", () => {
   let db: IDatabase
   let outbox: OutboxRow[]
   let repos: ReturnType<typeof withSyncJournaling>
+  /** The account journaling now — the decorator reads it per write. */
+  let owner: string | null
 
   beforeEach(() => {
+    owner = null
     sessions = new Map()
     playlist = new Map()
     const fake = makeFakeDb(sessions, playlist)
@@ -226,8 +231,29 @@ describe("withSyncJournaling", () => {
         chatMessages: stubChatMessages(),
         libraryMemberships: stubLibraryMemberships(),
       },
-      { userDb: db, unitOfWork: passthroughUow, getDeviceId: async () => "dev-test" }
+      {
+        userDb: db,
+        unitOfWork: passthroughUow,
+        getDeviceId: async () => "dev-test",
+        getOwnerId: () => owner,
+      }
     )
+  })
+
+  it("stamps each row with the account that journaled it", async () => {
+    owner = "user-1"
+    await repos.notes.create({ trackId: "t1", text: "before", timeStart: 0, timeEnd: 5 })
+    // Account deleted → the device is a fresh anonymous identity; the journal
+    // survives, so only the stamp separates the two owners (#1497).
+    owner = "anon-2"
+    await repos.notes.create({ trackId: "t1", text: "after", timeStart: 0, timeEnd: 5 })
+
+    expect(outbox.map((r) => r.owner_id)).toEqual(["user-1", "anon-2"])
+  })
+
+  it("journals a row unowned while no identity is resolved yet", async () => {
+    await repos.notes.create({ trackId: "t1", text: "hi", timeStart: 0, timeEnd: 5 })
+    expect(outbox[0]!.owner_id).toBeNull()
   })
 
   it("journals a note create as an upsert keyed on the note id", async () => {
