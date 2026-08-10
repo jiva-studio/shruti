@@ -46,13 +46,19 @@ const icon = computed<StateIcon>(() => {
   if (props.state === "failed") return "failed"
   if (props.state === "completed") return "completed"
   if (props.state === "added") return "added"
+  if (props.state === "deferred") return "deferred"
   return "none"
 })
 
 const mode = computed<"pending" | "downloading" | "icon" | "progress" | undefined>(() => {
   if (props.state === "pending") return "pending"
   if (props.state === "downloading") return "downloading"
-  if (props.state === "failed" || props.state === "completed" || props.state === "added")
+  if (
+    props.state === "failed" ||
+    props.state === "completed" ||
+    props.state === "added" ||
+    props.state === "deferred"
+  )
     return "icon"
   if (props.state === "playing" || props.state === "queued") return "progress"
   return undefined
