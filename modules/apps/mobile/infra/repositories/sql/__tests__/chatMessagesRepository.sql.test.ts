@@ -3,11 +3,16 @@ import type {
   ChatChapterBody,
   ChatCiteSnippet,
   ChatCommentaryBody,
+  ChatMessage,
   ChatVerseBody,
 } from "@lib/domain/chatMessage.js"
-import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
+import type { ChatMessageId, ChatSessionId, LanguageCode } from "@lib/domain/core.js"
+import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { IDatabase } from "@ports/app/index.js"
+import { createSqlAppRepositories } from "../index.js"
 import { createSqlChatMessageRepository } from "../chatMessagesRepository.sql.js"
+import { createSqlUnitOfWork } from "../unitOfWork.sql.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
 
 /**
@@ -77,7 +82,7 @@ describe("chatMessagesRepository — listBySession proactive visibility gate", (
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
     await setupSchema(db)
-    repo = createSqlChatMessageRepository(db)
+    repo = createSqlChatMessageRepository(db, createSqlUnitOfWork(db))
   })
 
   it("admits regular (non-proactive) messages — no sidecar row", async () => {
@@ -152,7 +157,7 @@ describe("chatMessagesRepository — card-body meta round-trip", () => {
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
     await setupSchema(db)
-    repo = createSqlChatMessageRepository(db)
+    repo = createSqlChatMessageRepository(db, createSqlUnitOfWork(db))
   })
 
   async function createWithCards(): Promise<void> {
@@ -231,7 +236,7 @@ describe("chatMessagesRepository — settled conversation attributes", () => {
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
     await setupSchema(db)
-    repo = createSqlChatMessageRepository(db)
+    repo = createSqlChatMessageRepository(db, createSqlUnitOfWork(db))
   })
 
   it("survives create → listBySession so the switch outlives a cold start", async () => {
@@ -295,5 +300,157 @@ describe("chatMessagesRepository — settled conversation attributes", () => {
     await repo.updateFeedback(MSG, { state: "up" })
     const [row] = await repo.listBySession(SESSION)
     expect(row.attributes).toEqual(RU)
+  })
+})
+
+/**
+ * Wraps a test db so `transaction()` serialises callers through a promise
+ * chain, as the real sql.js / Capacitor adapters' `txQueue` does. Without it
+ * a second transaction opened while one is in flight would nest, and SQLite
+ * rejects that — the queue is what makes an unrelated concurrent write simply
+ * wait its turn.
+ */
+function withTxQueue(db: IDatabase): IDatabase {
+  let queue: Promise<unknown> = Promise.resolve()
+  return {
+    ...db,
+    transaction(fn: () => Promise<void>): Promise<void> {
+      const next = queue.then(() => db.transaction(fn))
+      queue = next.then(
+        () => undefined,
+        () => undefined
+      )
+      return next
+    },
+  }
+}
+
+/** Fake db recording the statement kinds it sees, so a test can pin how many
+ *  transactions a single repository call opens. */
+function makeSerialisingDb() {
+  const events: string[] = []
+  const db: IDatabase = {
+    async query<T>(): Promise<T[]> {
+      events.push("SELECT")
+      return [{ meta: null }] as unknown as T[]
+    },
+    async execute(sql: string): Promise<void> {
+      events.push(sql.split(" ")[0])
+    },
+    async transaction(fn: () => Promise<void>): Promise<void> {
+      events.push("BEGIN")
+      try {
+        await fn()
+        events.push("COMMIT")
+      } catch (e) {
+        events.push("ROLLBACK")
+        throw e
+      }
+    },
+    async save(): Promise<void> {},
+    async close(): Promise<void> {},
+  }
+  return { db, events }
+}
+
+describe("chatMessagesRepository — unit-of-work participation", () => {
+  let db: IDatabase
+  let unitOfWork: IUnitOfWork
+  let repo: IChatMessageRepository
+  const SESSION = "session-uow" as ChatSessionId
+  const MSG = "m-uow" as ChatMessageId
+
+  // The three read-modify-writes of the `meta` envelope. Each used to open a
+  // transaction of its own with `runInTransaction`, bypassing the injected
+  // unit of work entirely.
+  const CASES = [
+    {
+      name: "updateFollowups",
+      write: (r: IChatMessageRepository) => r.updateFollowups(MSG, ["next?"]),
+      read: (m: ChatMessage): unknown => m.followups,
+      written: ["next?"],
+    },
+    {
+      name: "updateActionStates",
+      write: (r: IChatMessageRepository) => r.updateActionStates(MSG, { a1: "done" }),
+      read: (m: ChatMessage): unknown => m.actionStates,
+      written: { a1: "done" },
+    },
+    {
+      name: "updateFeedback",
+      write: (r: IChatMessageRepository) => r.updateFeedback(MSG, { state: "down" as const }),
+      read: (m: ChatMessage): unknown => m.feedbackState,
+      written: "down",
+    },
+  ]
+
+  beforeEach(async () => {
+    const raw = await createInMemoryTestDatabase()
+    await setupSchema(raw)
+    db = withTxQueue(raw)
+    // Built through the real composition root, not by hand: which unit of work
+    // each repository gets is exactly what these tests are pinning.
+    const repos = createSqlAppRepositories({
+      contentDb: db,
+      userDb: db,
+      getActiveLanguage: () => "en" as LanguageCode,
+    })
+    unitOfWork = repos.unitOfWork
+    repo = repos.chatMessages
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "answer",
+      createdAt: 1000,
+    })
+  })
+
+  it.each(CASES)("$name commits when called standalone", async ({ write, read, written }) => {
+    await write(repo)
+    const [row] = await repo.listBySession(SESSION)
+    expect(read(row)).toEqual(written)
+  })
+
+  it.each(CASES)(
+    "$name survives an unrelated transaction that rolls back",
+    async ({ write, read, written }) => {
+      // `createReentrantUnitOfWork`'s depth counter is a plain closure with no
+      // execution-context binding, raised for the whole of any top-level run.
+      // Give the chat-message repository that same instance and this write is
+      // misread as nested, spliced into the pull's transaction and discarded
+      // with it — the user's 👍 resolves fine and the row never changes.
+      let open: (() => void) | undefined
+      let release: (() => void) | undefined
+      const opened = new Promise<void>((resolve) => (open = resolve))
+      const gate = new Promise<void>((resolve) => (release = resolve))
+
+      // A sync pull holds one transaction across a whole page of `applyRemote`
+      // awaits (`backfillLocal` holds one across the entire first-sign-in walk),
+      // then fails.
+      const pull = unitOfWork.run(async () => {
+        open!()
+        await gate
+        throw new Error("pull failed")
+      })
+      await opened
+
+      // The user taps mid-pull: `submitChatFeedback` awaits its network POST
+      // first, so the local write lands squarely inside that window.
+      const local = write(repo)
+      release!()
+      await expect(pull).rejects.toThrow("pull failed")
+      await local
+
+      const [row] = await repo.listBySession(SESSION)
+      expect(read(row)).toEqual(written)
+    }
+  )
+
+  it("opens exactly one transaction per standalone meta write", async () => {
+    const { db: recording, events } = makeSerialisingDb()
+    const standalone = createSqlChatMessageRepository(recording, createSqlUnitOfWork(recording))
+    await standalone.updateFollowups(MSG, ["next?"])
+    expect(events).toEqual(["BEGIN", "SELECT", "UPDATE", "COMMIT"])
   })
 })
