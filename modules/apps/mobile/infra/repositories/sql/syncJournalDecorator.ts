@@ -54,11 +54,11 @@ import {
  *   stays out of sync.
  * - `clearAll` is the local data-wipe path (delete account / reset) — it is not
  *   journaled, because a wipe is meant to be device-local, not a command to
- *   erase the account's data everywhere. NOTE: that only holds once the wipe
- *   also drops the sync state. Today `wipeLocalUserData` touches neither
- *   `outbox` nor `sync_doc_hlc` (#1496), so on the same-identity wipe path the
- *   stale upserts stay pending and the next pull re-materialises the wiped
- *   chat. Clearing the sync tables belongs to that fix, not to the decorator.
+ *   erase the account's data everywhere. That holds because `wipeLocalUserData`
+ *   clears `outbox` and `sync_doc_hlc` itself (#1496): the pending upserts for
+ *   the wiped rows are dropped rather than pushed, which is what keeps a
+ *   same-identity wipe from re-creating the data server-side. Clearing the sync
+ *   tables lives there, not in the decorator.
  * - Every decorated repository is built as an EXPLICIT member-by-member
  *   mapping, never `{ ...base.x, … }`. A spread satisfies the port
  *   structurally, so a mutating method left un-intercepted compiles silently
@@ -230,6 +230,7 @@ export function withSyncJournaling(
     // newly added mutation slip through un-journaled without a type error.
     start: (args) => base.listeningSessions.start(args),
     forceStart: (args) => base.listeningSessions.forceStart(args),
+    forceStartOnce: (args) => base.listeningSessions.forceStartOnce(args),
     tick: (id, args) => base.listeningSessions.tick(id, args),
     getLastSessionForItem: (itemId) => base.listeningSessions.getLastSessionForItem(itemId),
     getResumePositionForItem: (itemId) => base.listeningSessions.getResumePositionForItem(itemId),
@@ -317,8 +318,8 @@ export function withSyncJournaling(
     //   user-initiated message (see `ensureSessionJournaled`); a
     //   proactive-only session must never be pushed.
     // - `touch` — bumps `updated_at` for local list ordering only.
-    // - `clearAll` — the local data-wipe path, deliberately device-local (see
-    //   the file header, and #1496 for the sync state the wipe still leaves).
+    // - `clearAll` — the local data-wipe path, deliberately device-local; the
+    //   wipe drops the outbox rows itself, so nothing is pushed (file header).
     create: (input) => base.chatSessions.create(input),
     touch: (id, updatedAtMs) => base.chatSessions.touch(id, updatedAtMs),
     clearAll: () => base.chatSessions.clearAll(),
@@ -412,8 +413,8 @@ export function withSyncJournaling(
     //   feedback itself travels over `/chat/feedback`, not through sync.
     // - `clearAll` — the local data-wipe path (delete account / reset), which
     //   is device-local by design: it must not tombstone the account's chat on
-    //   every other device. Reconciling the sync tables the wipe leaves behind
-    //   is #1496's job (see the file header).
+    //   every other device. The wipe clears the outbox and `sync_doc_hlc` in
+    //   the same pass, so nothing stale is left to push (see the file header).
     updateFeedback: (id, feedback) => base.chatMessages.updateFeedback(id, feedback),
     clearAll: () => base.chatMessages.clearAll(),
 

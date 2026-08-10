@@ -23,8 +23,10 @@ import type { Migration } from "./types.js"
  * A side-table (rather than a new column on every synced collection table) is
  * the least-invasive option: it leaves Lane B's `notes` / `playlist_items` /
  * `listening_sessions` schemas untouched, survives a row being tombstoned
- * (a delete still needs a base for the next write), and is trivially wiped by
- * the data-reset path alongside `outbox` / `sync_state`.
+ * (a delete still needs a base for the next write), and is cleared wholesale by
+ * the data-reset path (`wipeLocalUserData`) alongside `outbox`. `sync_state` is
+ * NOT cleared there — rewinding its `pull_cursor` would re-pull everything the
+ * wipe deleted; see that function's header.
  *
  * Additive `CREATE TABLE IF NOT EXISTS` — no existing table is touched.
  */
