@@ -95,6 +95,15 @@ jobs:
   image:
     name: image build (chat)
     runs-on: ubuntu-latest
+    # On a pull_request event `paths-filter` asks the API which files the
+    # PR touches, which the workflow-level `contents: read` alone does not
+    # allow (an explicit block zeroes every other scope). The push-only
+    # copy in services-ghcr.yml diffs against `before` locally and needs
+    # no token, which is why only this job hit it. Job-scoped so the rest
+    # of the workflow keeps the narrower default.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v5
 
