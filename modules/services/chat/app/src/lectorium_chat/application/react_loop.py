@@ -28,6 +28,7 @@ from typing import Any, AsyncIterator, Callable, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
+from lectorium_chat.agent.tool_executor import parse_tool_args
 from lectorium_chat.agent.tools._registry import ToolFn
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.domain.entities import CompletionChunk, Message
@@ -147,16 +148,9 @@ async def _dispatch_tool_call(
     fn = tools.get(name)
     if fn is None:
         return {"error": f"unknown tool {name!r}"}
-    try:
-        args = json.loads(arguments_json or "{}")
-    except json.JSONDecodeError as exc:
-        return {"error": f"bad JSON in tool args: {exc}"}
-    # Valid JSON that isn't an object (`null`, `[]`, a bare string or
-    # number) is what a weak model emits for a call it means to make
-    # with no arguments. Treat it as "no arguments" instead of letting
-    # the item-assignment / `.items()` below blow up the whole turn.
-    if not isinstance(args, dict):
-        args = {}
+    args, args_error = parse_tool_args(arguments_json, tool=name)
+    if args is None:
+        return {"error": args_error}
     if name in EMITS_EVENTS and yield_event is not None:
         args["yield_event"] = yield_event
     # Lazy import to avoid circular dep on agent boot path.
@@ -337,6 +331,11 @@ async def run_react_loop(
             try:
                 args = json.loads(tc["arguments"] or "{}")
             except json.JSONDecodeError:
+                args = {}
+            # History echo only — AIMessage(tool_calls=...) validates
+            # `args` as an object, so unusable args become `{}` here. The
+            # model still learns what went wrong from the tool result.
+            if not isinstance(args, dict):
                 args = {}
             parsed_tool_calls.append(
                 {"id": tc["id"], "name": tc["name"], "args": args}
