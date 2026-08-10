@@ -69,14 +69,24 @@ func (r *Repo) SaveTx(ctx context.Context, t ports.Tx, j *job.Job) error {
 	return r.update(ctx, r.q(t), j)
 }
 
+// insert creates the job idempotently: a concurrent submit of the same
+// (deterministic) run id conflicts away rather than raising a primary-key
+// violation, and is reported as ports.ErrJobExists for the caller to dedup.
 func (r *Repo) insert(ctx context.Context, q querier, j *job.Job) error {
-	_, err := q.Exec(ctx, `
+	tag, err := q.Exec(ctx, `
 		INSERT INTO orchestrator.jobs (id, kind, op, membership_id, owner_id, state, spec, result, track_id, error, attempts, generation)
-		VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::jsonb,'{}'::jsonb),$8::jsonb,$9,$10,$11,$12)`,
+		VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::jsonb,'{}'::jsonb),$8::jsonb,$9,$10,$11,$12)
+		ON CONFLICT (id) DO NOTHING`,
 		j.ID, string(j.Kind), j.Op, nullStr(j.MembershipID), nullUUID(j.OwnerID), string(j.State),
 		jsonbOrNil(j.Spec), jsonbOrNil(j.Result), nullStr(j.TrackID), nullStr(j.Err), j.Attempts, j.Generation,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.ErrJobExists
+	}
+	return nil
 }
 
 func (r *Repo) update(ctx context.Context, q querier, j *job.Job) error {
