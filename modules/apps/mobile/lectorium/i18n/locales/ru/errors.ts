@@ -11,4 +11,5 @@ export default {
   noAudioForLecture: "У этой лекции нет аудио.",
   downloadStorageFull:
     "Достигнут лимит хранилища. Удалите прослушанные лекции или увеличьте лимит в настройках.",
+  downloadStorageFullAction: "Всё равно скачать",
 }

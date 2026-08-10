@@ -82,12 +82,21 @@ export const useDownloadStore = defineStore("downloads", () => {
   const queuedTrackIds = new Set<TrackId>()
   let queueDraining = false
   let hydrated = false
-  // Rate-limit for the "storage budget is full" notice. A draining queue
-  // hits the same wall once per remaining job, and the playback path hits
-  // it on every tap of a deferred row — the user needs to be told once,
-  // not N times in a row.
-  let lastBudgetNoticeAt = 0
-  const BUDGET_NOTICE_COOLDOWN_MS = 60_000
+  // The "storage budget is full" notice carries a "Download anyway" button,
+  // so it stays on screen long enough to be read AND acted on. There is no
+  // time-based cooldown behind it: only one budget notice is ever on screen
+  // (`budgetNoticeVisible`), which is what keeps a draining queue from
+  // turning into a toast storm — while still answering every deliberate tap
+  // the moment the previous notice is gone.
+  const BUDGET_NOTICE_DURATION_MS = 20_000
+  let budgetNoticeVisible = false
+  // One-off permissions to overshoot the budget, granted ONLY by pressing
+  // "Download anyway" on the notice above. Each entry is consumed by the
+  // very next budget decision for that track and dropped again when the task
+  // it was granted for settles, so it cannot widen into a general bypass:
+  // nothing outside this store can add to the set, no exported action takes
+  // an "ignore the budget" flag, and the configured limit is never written.
+  const budgetExceptions = new Set<TrackId>()
   // Same rate-limit for the "couldn't download" notice, but for QUEUE-origin
   // failures only (see `noticeDownloadFailed`): in airplane mode a draining
   // queue fails every job in a row, and the user needs to be told once, not
@@ -143,15 +152,44 @@ export const useDownloadStore = defineStore("downloads", () => {
 
   /**
    * Tell the user why a lecture stays grey / didn't save offline, and what
-   * to do about it — free space by removing listened lectures, or raise
-   * the limit in Settings. Suppressed for a minute after the last notice
-   * so a full queue doesn't turn into a toast storm.
+   * to do about it — free space by removing listened lectures, or raise the
+   * limit in Settings.
+   *
+   * `downloadAnyway` turns the notice into an actionable one: a button that,
+   * pressed inside the 20s window, lets THIS one track through. It is passed
+   * only where a specific track is being waited on by the user; the prefetch
+   * FIFO's wall gets the plain notice, because a background queue must not be
+   * handed a way past a limit the user set.
+   *
+   * At most one budget notice is on screen at a time — a second one would be
+   * an unreadable stack, and the button on the first would no longer refer to
+   * what the user is looking at.
    */
-  function noticeBudgetFull(): void {
-    const now = Date.now()
-    if (now - lastBudgetNoticeAt < BUDGET_NOTICE_COOLDOWN_MS) return
-    lastBudgetNoticeAt = now
-    void toast.error(t("errors.downloadStorageFull"))
+  function noticeBudgetFull(downloadAnyway?: () => void): void {
+    if (budgetNoticeVisible) return
+    budgetNoticeVisible = true
+    const message = t("errors.downloadStorageFull")
+    if (!downloadAnyway) {
+      void toast.error(message, { durationMs: BUDGET_NOTICE_DURATION_MS })
+      setTimeout(() => {
+        budgetNoticeVisible = false
+      }, BUDGET_NOTICE_DURATION_MS)
+      return
+    }
+    void (async () => {
+      try {
+        const outcome = await toast.action(message, {
+          color: "danger",
+          durationMs: BUDGET_NOTICE_DURATION_MS,
+          buttons: [{ text: t("errors.downloadStorageFullAction") }],
+        })
+        // Only a press grants the exception. An expired or swiped-away toast
+        // leaves the track deferred — the limit holds by default.
+        if (outcome.kind === "pressed") downloadAnyway()
+      } finally {
+        budgetNoticeVisible = false
+      }
+    })()
   }
 
   /**
@@ -321,7 +359,10 @@ export const useDownloadStore = defineStore("downloads", () => {
    *
    * A cache hit is always served, but starting a NEW transfer requires
    * budget: over the limit this returns `null` (playback then streams
-   * from the CDN instead) and tells the user why.
+   * from the CDN instead) and tells the user why. The notice carries a
+   * "Download anyway" button, which starts a SEPARATE call for that track
+   * holding a single-use exception — this call still returns `null` right
+   * away rather than staying open for the length of a toast.
    *
    * Every OTHER `null` — offline, all CDN candidates exhausted, an
    * unexpected throw — is a real failure and says so. The budget case is
@@ -442,10 +483,23 @@ export const useDownloadStore = defineStore("downloads", () => {
         const quota = useDownloadQuotaStore()
         await quota.ensureMeasured()
         const sizeBytes = quota.sizeOf(filesize)
-        if (!quota.hasRoomFor(sizeBytes, trackId)) {
+        // A "Download anyway" press grants this track exactly one pass, and
+        // this is where it is spent — deleted whether or not the budget would
+        // have refused, so the grant can never outlive the decision it was
+        // made for. The limit itself is untouched: the next track is measured
+        // against it as before, now with these bytes counted in.
+        const exempt = budgetExceptions.delete(trackId)
+        if (!exempt && !quota.hasRoomFor(sizeBytes, trackId)) {
           if (fresh()) {
             markDeferred(trackId)
-            noticeBudgetFull()
+            noticeBudgetFull(
+              claimedOrigin.current === "user"
+                ? () => {
+                    budgetExceptions.add(trackId)
+                    void ensureDownloaded(trackId, path, filesize, "user")
+                  }
+                : undefined
+            )
           }
           return null
         }
@@ -523,6 +577,11 @@ export const useDownloadStore = defineStore("downloads", () => {
         }
         return null
       } finally {
+        // Drop a grant this task never reached the gate to spend (a cache
+        // hit, the offline guard, a throw). Together with the delete AT the
+        // gate this bounds a "Download anyway" press to the single call it
+        // started: it is never left lying around for a later download.
+        budgetExceptions.delete(trackId)
         // Release any reservation this task still holds — a cache hit, an
         // early return, or a throw all land here. No-op once the success
         // branch has already promoted it into `usedBytes`.
@@ -574,8 +633,10 @@ export const useDownloadStore = defineStore("downloads", () => {
           batch.push(head)
         }
         if (batch.length === 0) {
-          // Budget spent. Paint the whole waiting tail as deferred (grey,
-          // no spinner) and tell the user once what to do about it.
+          // Budget spent. Paint the whole waiting tail as deferred (grey, no
+          // spinner) and say what to do about it — once, and without an
+          // override button: nobody is waiting on a particular one of these,
+          // and letting the FIFO past the limit is what the limit is for.
           for (const job of prefetchQueue) markDeferred(job.trackId)
           noticeBudgetFull()
           return
@@ -800,6 +861,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     inFlightUrls.clear()
     inFlightOrigins.clear()
     pendingClaims.clear()
+    budgetExceptions.clear()
     states.value = new Map()
     progress.value = new Map()
     hydrationError.value = null

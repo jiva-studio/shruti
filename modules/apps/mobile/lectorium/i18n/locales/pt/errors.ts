@@ -12,4 +12,5 @@ export default {
   noAudioForLecture: "Esta palestra não tem áudio.",
   downloadStorageFull:
     "Limite de armazenamento atingido. Remova as palestras já ouvidas ou aumente o limite nas configurações.",
+  downloadStorageFullAction: "Baixar mesmo assim",
 }

@@ -14,4 +14,5 @@ export default {
   noAudioForLecture: "Diese Vorlesung hat kein Audio.",
   downloadStorageFull:
     "Speichergrenze erreicht. Entferne gehörte Vorträge oder erhöhe das Limit in den Einstellungen.",
+  downloadStorageFullAction: "Trotzdem laden",
 }
