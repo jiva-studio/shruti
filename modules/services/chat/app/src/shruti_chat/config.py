@@ -321,6 +321,11 @@ class Settings(BaseSettings):
     title_per_day: int = 500
     questions_per_day: int = 500
     feedback_per_day: int = 500
+    # DELETE /chat/turn. Each call SETs a 180s Redis flag even for a trace
+    # id that never existed, so an uncapped route lets any JWT holder mint
+    # unbounded keys. A real user issues one Stop per turn, well under the
+    # chat cap itself.
+    turn_cancel_per_day: int = 500
     # DEPRECATED: legacy per-tier caps kept so prod .env overrides don't
     # fail boot. Read by nothing — see `_user_limit_for` (flat now).
     title_anon_per_day: int = 10
