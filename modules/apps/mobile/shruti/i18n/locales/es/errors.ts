@@ -11,4 +11,5 @@ export default {
   noAudioForLecture: "Esta conferencia no tiene audio.",
   downloadStorageFull:
     "Límite de almacenamiento alcanzado. Elimina las conferencias escuchadas o aumenta el límite en Ajustes.",
+  downloadStorageFullAction: "Descargar igualmente",
 }

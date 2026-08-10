@@ -370,6 +370,39 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return commitTokenResponse((await res.json()) as TokenResponseBody)
   }
 
+  /**
+   * Call `/auth/refresh` and return the new access token, coalescing
+   * concurrent callers behind a single round-trip. The ONLY place tokens are
+   * rotated: the lazy path in `getAccessToken`, the tier-driven
+   * `refreshTokens`, and the 401 interceptor's `refreshAccessToken` all end
+   * up here, so they share one mutex instead of three.
+   */
+  function forceRefresh(): Promise<string | null> {
+    if (!stored) return Promise.resolve(null)
+    if (!refreshInFlight) {
+      refreshInFlight = (async () => {
+        try {
+          const r = await callRefresh(stored!.refreshToken)
+          if (!r.ok) {
+            // Only a genuine rejection drops the session; a transient
+            // failure leaves `stored` intact so the next call retries.
+            if (r.rejected) await clearTokens()
+            return null
+          }
+          // Return the freshly-minted token from the response, not a
+          // re-read of module-level `stored` — a concurrent clearTokens()
+          // could null `stored` between the await and the read, rejecting
+          // every coalesced caller with a TypeError.
+          await commitTokenResponse(r.body)
+          return r.body.accessToken
+        } finally {
+          refreshInFlight = null
+        }
+      })()
+    }
+    return refreshInFlight
+  }
+
   // ─── AuthPort ─────────────────────────────────────────────────────────
 
   async function initialize(): Promise<AuthSession> {
@@ -407,29 +440,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     if (stored.accessTokenExpiresAt - now > 60_000) {
       return stored.accessToken
     }
-    // Coalesce concurrent callers behind a single refresh.
-    if (!refreshInFlight) {
-      refreshInFlight = (async () => {
-        try {
-          const r = await callRefresh(stored!.refreshToken)
-          if (!r.ok) {
-            // Only a genuine rejection drops the session; a transient
-            // failure leaves `stored` intact so the next call retries.
-            if (r.rejected) await clearTokens()
-            return null
-          }
-          // Return the freshly-minted token from the response, not a
-          // re-read of module-level `stored` — a concurrent clearTokens()
-          // could null `stored` between the await and the read, rejecting
-          // every coalesced caller with a TypeError.
-          await commitTokenResponse(r.body)
-          return r.body.accessToken
-        } finally {
-          refreshInFlight = null
-        }
-      })()
-    }
-    return refreshInFlight
+    return forceRefresh()
   }
 
   async function signInWithGoogle(): Promise<AuthSession | null> {
@@ -556,33 +567,18 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
   }
 
   async function refreshTokens(): Promise<AuthSession | null> {
-    if (!stored) return null
-    // Coalesce with the lazy-refresh path so a foreground sync that
-    // races a getAccessToken() doesn't fire /auth/refresh twice.
-    if (!refreshInFlight) {
-      refreshInFlight = (async () => {
-        try {
-          const r = await callRefresh(stored!.refreshToken)
-          if (!r.ok) {
-            // Transient failure keeps the session; only a rejection clears.
-            if (r.rejected) await clearTokens()
-            return null
-          }
-          // See getAccessToken: return the response's token, never a
-          // re-read of `stored`, which a concurrent clearTokens() can null.
-          await commitTokenResponse(r.body)
-          return r.body.accessToken
-        } finally {
-          refreshInFlight = null
-        }
-      })()
-    }
-    const tok = await refreshInFlight
+    // Coalesces with the lazy-refresh path so a foreground sync that races a
+    // getAccessToken() doesn't fire /auth/refresh twice.
+    const tok = await forceRefresh()
     // `session` is the just-committed session unless a concurrent
     // clearTokens() raced in and nulled it — return it as-is (null = the
     // session was cleared, which the caller handles gracefully).
     if (!tok) return null
     return session
+  }
+
+  function refreshAccessToken(): Promise<string | null> {
+    return forceRefresh()
   }
 
   async function fetchMe(): Promise<MeView | null> {
@@ -607,6 +603,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     getSession,
     getAccessToken,
     refreshTokens,
+    refreshAccessToken,
     fetchMe,
     onSessionChange,
   }

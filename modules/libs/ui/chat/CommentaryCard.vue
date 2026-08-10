@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
-import type { ChatCommentaryBody } from "@lib/domain/chatMessage.js"
+import type { UiChatCommentaryBody } from "./types.js"
 import { ExcerptCard } from "@lib/ui/excerpt/index.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
@@ -51,7 +51,7 @@ const props = withDefaults(
   defineProps<{
     /** Commentary quote from the owning message's `commentaries` map (keyed
      *  by the `[commentary:N]` ref). Absent ⇒ the marker renders nothing. */
-    body?: ChatCommentaryBody
+    body?: UiChatCommentaryBody
     /** Comment text pre-rendered to HTML by the host (renderExcerptHtml over
      *  the active translation). Consumed by `ExcerptCard` → `HighlightText`. */
     bodyHtml?: string

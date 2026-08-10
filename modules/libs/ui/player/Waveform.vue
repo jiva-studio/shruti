@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef } from 'vue'
+import { computed, useTemplateRef } from "vue"
 
 interface Chapter {
   title: string
@@ -51,11 +51,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   seek: [event: MouseEvent]
-  'chapter-seek': [ms: number]
-  'chapter-hover': [title: string | null]
+  "chapter-seek": [ms: number]
+  "chapter-hover": [title: string | null]
 }>()
 
-const waveformEl = useTemplateRef<HTMLDivElement>('waveformEl')
+const waveformEl = useTemplateRef<HTMLDivElement>("waveformEl")
 defineExpose({ waveformEl })
 
 const sepByIndex = computed(() => {
@@ -131,7 +131,7 @@ const sepByIndex = computed(() => {
 }
 
 .bar.sep::after {
-  content: '';
+  content: "";
   position: absolute;
   top: -6px;
   bottom: -6px;

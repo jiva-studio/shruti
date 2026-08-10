@@ -10,7 +10,7 @@
     "build": "vue-tsc && vite build",
     "build+sync": "npm run build && npx cap sync",
     "preview": "vite preview",
-    "lint": "eslint .",
+    "lint": "eslint . submodules/ui",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",

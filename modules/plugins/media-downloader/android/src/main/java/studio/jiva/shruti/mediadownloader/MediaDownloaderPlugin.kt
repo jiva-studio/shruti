@@ -312,11 +312,9 @@ class MediaDownloaderPlugin : Plugin() {
                     }
                     WorkInfo.State.FAILED -> {
                         val message = info.outputData.getString(DownloadWorker.OUTPUT_ERROR) ?: "failed"
-                        val retryable = info.runAttemptCount < 3
                         val payload = JSObject().apply {
                             put("id", id)
                             put("error", message)
-                            put("retryable", retryable)
                         }
                         notifyListeners("failed", payload)
                         detach(workerId)
@@ -347,7 +345,6 @@ class MediaDownloaderPlugin : Plugin() {
         val payload = JSObject().apply {
             put("id", id)
             put("error", "cancelled")
-            put("retryable", false)
             put("code", "cancelled")
         }
         notifyListeners("failed", payload)
@@ -365,7 +362,6 @@ class MediaDownloaderPlugin : Plugin() {
         val payload = JSObject().apply {
             put("id", id)
             put("error", "download was removed")
-            put("retryable", false)
             put("code", "removed")
         }
         notifyListeners("failed", payload)

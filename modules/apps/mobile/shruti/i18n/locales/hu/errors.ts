@@ -11,4 +11,5 @@ export default {
   noAudioForLecture: "Ehhez az előadáshoz nincs hang.",
   downloadStorageFull:
     "Elérted a tárhelykorlátot. Törölj meghallgatott előadásokat, vagy növeld a korlátot a beállításokban.",
+  downloadStorageFullAction: "Mégis letöltöm",
 }
