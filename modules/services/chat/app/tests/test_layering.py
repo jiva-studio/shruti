@@ -8,7 +8,7 @@ orchestrates ports and must not touch adapters, the web framework or a driver;
 `research/` mirrors `application/`; `infra/` holds driven adapters, which are
 imported by the layers above and import only `domain/`. On top of those sit a few
 narrower rules: no cross-package private (`_`-prefixed) imports, `langgraph` only
-inside `agent/graph/`, `litellm` only behind the two modules that wrap it, and no
+inside `agent/graph/`, `litellm` only behind the module that wraps it, and no
 relative imports (there are none today, and the AST walk below would not resolve
 them, so the hole is nailed shut rather than left open).
 
@@ -68,6 +68,37 @@ def _imported_modules(py_file: Path) -> frozenset[str]:
     return frozenset(names)
 
 
+def _is_package_module(dotted: str) -> bool:
+    """True if `shruti_chat.a.b` names a module or package on disk."""
+    parts = dotted.split(".")
+    if parts[0] != _PKG or len(parts) < 2:
+        return False
+    base = _SRC.joinpath(*parts[1:])
+    return base.with_suffix(".py").is_file() or (base / "__init__.py").is_file()
+
+
+@cache
+def _imported_packages(py_file: Path) -> frozenset[str]:
+    """`_imported_modules` plus `from pkg import submodule` resolved to `pkg.submodule`.
+
+    `from shruti_chat import infra` records only `shruti_chat` at module
+    granularity, so a rule keyed on the `shruti_chat.infra` prefix never sees
+    it and the whole directional table is bypassed by an import style. Aliases
+    that name a real module on disk are promoted to their full dotted path;
+    anything else (a class, a function, a constant) is left alone, so allowlist
+    entries still read as module names.
+    """
+    names: set[str] = set(_imported_modules(py_file))
+    for node in ast.walk(_tree(py_file)):
+        if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            names.update(
+                candidate
+                for alias in node.names
+                if _is_package_module(candidate := f"{node.module}.{alias.name}")
+            )
+    return frozenset(names)
+
+
 @cache
 def _imported_targets(py_file: Path) -> frozenset[str]:
     """Import targets at *name* granularity: `from a.b import c` yields `a.b.c` too.
@@ -117,7 +148,7 @@ class _Rule:
 
 def _forbids(prefixes: tuple[str, ...]) -> Callable[[Path], set[str]]:
     def detect(py_file: Path) -> set[str]:
-        return {mod for mod in _imported_modules(py_file) if mod.startswith(prefixes)}
+        return {mod for mod in _imported_packages(py_file) if mod.startswith(prefixes)}
 
     return detect
 
@@ -288,16 +319,23 @@ _LANGGRAPH_ALLOWED: dict[str, set[str]] = {
     "agent/cards.py": {"langgraph.config"},
 }
 
-# The only modules allowed to know which vendor SDK answers a completion.
-_LITELLM_HOMES = ("agent/llm.py",)
-_LITELLM_HOME_DIRS = ("infra/llm_provider/",)
+def _litellm_imports(py_file: Path) -> set[str]:
+    """Every file that names the vendor SDK, homes included.
 
-
-def _litellm_outside_home(py_file: Path) -> set[str]:
-    rel = _rel(py_file)
-    if rel in _LITELLM_HOMES or rel.startswith(_LITELLM_HOME_DIRS):
-        return set()
+    The home is expressed as an allowlist entry rather than an exemption baked
+    into `detect`, so `test_no_stale_allowlist` polices it: a home that stops
+    importing litellm — or one written down before it ever did — is a stale
+    entry and fails. An exemption inside `detect` is invisible to that check,
+    which is how `infra/llm_provider/` came to be waved through while importing
+    zero litellm.
+    """
     return {mod for mod in _imported_modules(py_file) if mod.split(".")[0] == "litellm"}
+
+
+_LITELLM_ALLOWED: dict[str, set[str]] = {
+    # The single wrapper around `litellm.acompletion`.
+    "agent/llm.py": {"litellm"},
+}
 
 
 def _acompletion_calls(py_file: Path) -> set[str]:
@@ -389,11 +427,11 @@ _RULES: tuple[_Rule, ...] = (
     _Rule(
         name="litellm-confined-to-its-wrappers",
         files=_ALL_FILES,
-        detect=_litellm_outside_home,
-        allowed={},
+        detect=_litellm_imports,
+        allowed=_LITELLM_ALLOWED,
         reason=(
-            "only agent/llm.py and infra/llm_provider/ may name the vendor SDK; "
-            "everything else goes through those wrappers."
+            "only agent/llm.py may name the vendor SDK; everything else goes "
+            "through that wrapper."
         ),
     ),
     _Rule(
@@ -438,6 +476,39 @@ def test_no_stale_allowlist(rule: _Rule) -> None:
     assert not stale, (
         f"[{rule.name}] allowlist entries no longer needed — delete them: {stale}"
     )
+
+
+def test_package_imports_are_visible_to_directional_rules(tmp_path: Path) -> None:
+    """`from shruti_chat import infra` must count as importing `infra`.
+
+    At module granularity that statement records only `shruti_chat`, so every
+    prefix-keyed rule above would wave it through. There are no live hits today;
+    this pins the hole shut before one appears.
+    """
+    bare = tmp_path / "bare.py"
+    bare.write_text("from shruti_chat import infra\n", encoding="utf-8")
+    assert _forbids(_APP_FORBIDDEN)(bare) == {f"{_PKG}.infra"}
+
+    nested = tmp_path / "nested.py"
+    nested.write_text("from shruti_chat.infra import repositories\n", encoding="utf-8")
+    assert _forbids(_APP_FORBIDDEN)(nested) == {
+        f"{_PKG}.infra",
+        f"{_PKG}.infra.repositories",
+    }
+
+
+def test_non_module_aliases_are_not_promoted(tmp_path: Path) -> None:
+    """Only aliases that name a module on disk get their dotted path recorded.
+
+    Promoting every `from x import y` to `x.y` would turn class and function
+    names into fake modules, and each allowlist entry would have to spell out
+    the symbol rather than the module it came from.
+    """
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "from shruti_chat.application.cache_helpers import TTL_30D\n", encoding="utf-8"
+    )
+    assert _imported_packages(probe) == {f"{_PKG}.application.cache_helpers"}
 
 
 def test_no_relative_imports() -> None:
