@@ -26,6 +26,30 @@ export default {
     },
     signInWithGoogle: "Google से जारी रखें",
     signInWithApple: "Apple से जारी रखें",
+    signInWithEmail: "ईमेल से जारी रखें",
+    email: {
+      title: "ईमेल से साइन इन",
+      emailStep: "हम आपके ईमेल पर एक बार का कोड भेजेंगे — पासवर्ड की ज़रूरत नहीं।",
+      emailLabel: "ईमेल",
+      emailPlaceholder: "you{'@'}example.com",
+      sendCode: "कोड भेजें",
+      codeStep: "{email} पर भेजा गया 6 अंकों का कोड दर्ज करें।",
+      codeLabel: "कोड",
+      codePlaceholder: "6 अंकों का कोड",
+      verify: "साइन इन करें",
+      resend: "कोड फिर भेजें",
+      resendIn: "{seconds} सेकंड में फिर भेजें",
+      changeEmail: "ईमेल बदलें",
+      errors: {
+        invalidEmail: "कृपया मान्य ईमेल पता दर्ज करें।",
+        invalidCode: "यह कोड अमान्य है या इसकी अवधि समाप्त हो गई है।",
+        throttled: "नया कोड माँगने से पहले थोड़ी देर रुकें।",
+        disabled: "ईमेल से साइन इन अभी उपलब्ध नहीं है।",
+        network: "कोई कनेक्शन नहीं। अपना इंटरनेट जाँचें और फिर कोशिश करें।",
+        server: "हमारी ओर से कुछ गड़बड़ हो गई। कृपया थोड़ी देर बाद फिर कोशिश करें।",
+        generic: "कुछ गड़बड़ हो गई। कृपया फिर कोशिश करें।",
+      },
+    },
     signedIn: "आप साइन इन हैं",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -59,6 +83,7 @@ export default {
     trialDisclaimer: "कभी भी रद्द करें। ट्रायल के बाद सदस्यता अपने आप नवीनीकृत हो जाएगी।",
     disclaimer: "कभी भी रद्द करें। सदस्यता अपने आप नवीनीकृत हो जाएगी।",
     subscribed: "सब्सक्रिप्शन पूरा हुआ",
+    loading: "सदस्यता विकल्प लोड हो रहे हैं…",
     unavailable: "इन-ऐप खरीदारी इस डिवाइस पर उपलब्ध नहीं है।",
     manage: "सब्सक्रिप्शन प्रबंधित करें",
     restore: "पुनर्स्थापित करें",
@@ -287,6 +312,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "हमारे स्टूडियो पर जाएँ और हमारे दूसरे ऐप देखें",
+    },
     email: {
       title: "हमें ईमेल भेजें",
       description: "कोई प्रश्न या सुझाव हैं?",
@@ -332,6 +361,12 @@ export default {
     viewLogs: {
       title: "लॉग देखें",
       description: "ऐप के भीतर इवेंट लॉग · {count} प्रविष्टियाँ",
+    },
+    email: {
+      title: "डायग्नोस्टिक्स भेजें",
+      description: "लॉग और सिस्टम की स्थिति सहायता को भेजें",
+      emailSubject: "डायग्नोस्टिक्स रिपोर्ट",
+      emailIntro: "कृपया इस पंक्ति के ऊपर अपना प्रश्न या समस्या लिखें।",
     },
   },
 

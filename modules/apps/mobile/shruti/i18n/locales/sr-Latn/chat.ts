@@ -270,6 +270,10 @@ export default {
   proactiveSessionTitleUnfinishedLecture: "Nedovršeno predavanje",
   proactiveSessionTitleInactivity: "Vratite se svojoj praksi",
   proactiveSessionTitleWeeklyDigest: "Vaša nedelja",
+  proactiveSessionTitleDailyWisdom: "Dnevna mudrost",
+
+  proactiveDailyWisdomBody: "Misao iz predavanja za danas:",
+
   proactiveInactivityWelcomeBody:
     "Dugo vas nije bilo. Sveža predavanja vas čekaju — otvorite biblioteku i nastavite odakle ste stali.",
 
@@ -330,6 +334,12 @@ export default {
   actionQueueNextTrackConfirm: "Dodaj",
   actionQueueNextTrackDone: "Dodato u biblioteku.",
   actionQueueNextTrackError: "Nije moguće dodati ovo predavanje.",
+
+  actionAddToLibraryTitle: "Dodaj u moju biblioteku",
+  actionAddToLibraryConfirm: "Dodaj u biblioteku",
+  actionAddToLibraryDone: "Dodato — u obradi je.",
+  actionAddToLibraryError: "Nije moguće dodati ovo predavanje.",
+  addByLinkCommand: "Dodaj predavanje sa ovog linka: {url}",
 
   citationSaveAsNote: "Sačuvaj kao belešku",
   citationOpenInStudio: "Otvori u Studiju",

@@ -178,6 +178,17 @@ export const i18n = createI18n({
   messages: { en } as Record<SupportedLocale, LocaleBundle>,
 })
 
+/**
+ * Mirror the UI language onto `<html lang>`. `index.html` ships a hardcoded
+ * `lang="en"`, so without this TalkBack / VoiceOver announce a fully
+ * translated screen in an English voice (#1607).
+ */
+function syncDocumentLang(locale: SupportedLocale): void {
+  if (typeof document !== "undefined") document.documentElement.lang = locale
+}
+
+syncDocumentLang(BOOT_LOCALE)
+
 const loaded = new Set<SupportedLocale>(["en"])
 
 /**
@@ -246,6 +257,7 @@ export async function setLocale(locale: SupportedLocale): Promise<SetLocaleResul
   }
   if (requested !== locale) return "superseded"
   i18n.global.locale.value = locale
+  syncDocumentLang(locale)
   return "applied"
 }
 

@@ -27,6 +27,30 @@ export default {
     },
     signInWithGoogle: "Folytatás Google-fiókkal",
     signInWithApple: "Folytatás Apple-fiókkal",
+    signInWithEmail: "Folytatás e-maillel",
+    email: {
+      title: "Bejelentkezés e-maillel",
+      emailStep: "Egyszer használatos kódot küldünk e-mailben — jelszó nem kell.",
+      emailLabel: "E-mail",
+      emailPlaceholder: "you{'@'}example.com",
+      sendCode: "Kód küldése",
+      codeStep: "Írd be a 6 jegyű kódot, amelyet erre küldtünk: {email}.",
+      codeLabel: "Kód",
+      codePlaceholder: "6 jegyű kód",
+      verify: "Bejelentkezés",
+      resend: "Kód újraküldése",
+      resendIn: "Újraküldés {seconds} mp múlva",
+      changeEmail: "E-mail módosítása",
+      errors: {
+        invalidEmail: "Adj meg egy érvényes e-mail-címet.",
+        invalidCode: "Ez a kód érvénytelen vagy lejárt.",
+        throttled: "Várj egy kicsit, mielőtt új kódot kérsz.",
+        disabled: "Az e-mailes bejelentkezés jelenleg nem érhető el.",
+        network: "Nincs kapcsolat. Ellenőrizd az internetet, és próbáld újra.",
+        server: "Valami hiba történt nálunk. Próbáld újra egy pillanat múlva.",
+        generic: "Valami hiba történt. Próbáld újra.",
+      },
+    },
     signedIn: "Be vagy jelentkezve",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -62,6 +86,7 @@ export default {
       "Bármikor lemondható. A próbaidőszak után az előfizetés automatikusan megújul.",
     disclaimer: "Bármikor lemondható. Az előfizetés automatikusan megújul.",
     subscribed: "Az előfizetés megtörtént",
+    loading: "Előfizetési lehetőségek betöltése…",
     unavailable: "Az alkalmazáson belüli vásárlások nem érhetők el ezen az eszközön.",
     manage: "Előfizetés kezelése",
     restore: "Visszaállítás",
@@ -291,6 +316,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "Látogass el a stúdiónkba, és fedezd fel a többi alkalmazásunkat",
+    },
     email: {
       title: "Írj nekünk e-mailt",
       description: "Kérdésed vagy javaslatod van?",
@@ -336,6 +365,12 @@ export default {
     viewLogs: {
       title: "Naplók megtekintése",
       description: "Alkalmazáson belüli eseménynapló · {count} bejegyzés",
+    },
+    email: {
+      title: "Diagnosztika küldése",
+      description: "Naplók és rendszerállapot küldése a támogatásnak",
+      emailSubject: "Diagnosztikai jelentés",
+      emailIntro: "Kérlek, írd le a kérdésedet vagy problémádat e fölött a sor fölött.",
     },
   },
 

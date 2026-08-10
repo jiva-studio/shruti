@@ -27,6 +27,8 @@ export default {
   },
   paywall: {
     title: "Più funzioni con Pro",
+    subtitle:
+      "Tutte le lezioni sono gratuite. L'abbonamento ci aiuta a continuare a sviluppare l'app, aggiungendo nuove funzioni e lezioni.",
     later: "Più tardi",
   },
   finish: "Inizia ad ascoltare",

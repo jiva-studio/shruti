@@ -26,6 +26,30 @@ export default {
     },
     signInWithGoogle: "Google দিয়ে চালিয়ে যান",
     signInWithApple: "Apple দিয়ে চালিয়ে যান",
+    signInWithEmail: "ইমেল দিয়ে চালিয়ে যান",
+    email: {
+      title: "ইমেল দিয়ে সাইন ইন",
+      emailStep: "আমরা আপনার ইমেলে একটি এককালীন কোড পাঠাব — পাসওয়ার্ড লাগবে না।",
+      emailLabel: "ইমেল",
+      emailPlaceholder: "you{'@'}example.com",
+      sendCode: "কোড পাঠান",
+      codeStep: "{email}-এ পাঠানো ৬ সংখ্যার কোডটি লিখুন।",
+      codeLabel: "কোড",
+      codePlaceholder: "৬ সংখ্যার কোড",
+      verify: "সাইন ইন করুন",
+      resend: "আবার কোড পাঠান",
+      resendIn: "{seconds} সেকেন্ড পরে আবার পাঠান",
+      changeEmail: "ইমেল পরিবর্তন করুন",
+      errors: {
+        invalidEmail: "একটি সঠিক ইমেল ঠিকানা লিখুন।",
+        invalidCode: "কোডটি ভুল বা মেয়াদোত্তীর্ণ।",
+        throttled: "নতুন কোড চাওয়ার আগে একটু অপেক্ষা করুন।",
+        disabled: "ইমেল দিয়ে সাইন ইন এখন উপলব্ধ নয়।",
+        network: "সংযোগ নেই। আপনার ইন্টারনেট পরীক্ষা করে আবার চেষ্টা করুন।",
+        server: "আমাদের দিকে কিছু একটা ভুল হয়েছে। অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।",
+        generic: "কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।",
+      },
+    },
     signedIn: "আপনি সাইন ইন করেছেন",
     // Subtitle for the signed-in row when the auth provider didn't
     // expose email/picture (RU region: no personal data by design;
@@ -60,6 +84,7 @@ export default {
       "যেকোনো সময় বাতিল করুন। ট্রায়াল শেষে সাবস্ক্রিপশন স্বয়ংক্রিয়ভাবে নবায়ন হবে।",
     disclaimer: "যেকোনো সময় বাতিল করুন। সাবস্ক্রিপশন স্বয়ংক্রিয়ভাবে নবায়ন হবে।",
     subscribed: "সাবস্ক্রিপশন সম্পন্ন হয়েছে",
+    loading: "সাবস্ক্রিপশনের বিকল্প লোড হচ্ছে…",
     unavailable: "এই ডিভাইসে ইন-অ্যাপ কেনাকাটা উপলব্ধ নয়।",
     manage: "সাবস্ক্রিপশন পরিচালনা করুন",
     restore: "পুনরুদ্ধার করুন",
@@ -288,6 +313,10 @@ export default {
   },
 
   contacts: {
+    studio: {
+      title: "Jiva Studio",
+      description: "আমাদের স্টুডিও দেখুন এবং আমাদের অন্যান্য অ্যাপ ঘুরে দেখুন",
+    },
     email: {
       title: "আমাদের ইমেল করুন",
       description: "কোনও প্রশ্ন বা পরামর্শ আছে?",
@@ -333,6 +362,12 @@ export default {
     viewLogs: {
       title: "লগ দেখুন",
       description: "অ্যাপের ইন-অ্যাপ ইভেন্ট লগ · {count}টি এন্ট্রি",
+    },
+    email: {
+      title: "ডায়াগনস্টিকস পাঠান",
+      description: "লগ ও সিস্টেমের অবস্থা সাপোর্টে পাঠান",
+      emailSubject: "ডায়াগনস্টিকস রিপোর্ট",
+      emailIntro: "এই লাইনের উপরে অনুগ্রহ করে আপনার প্রশ্ন বা সমস্যা বর্ণনা করুন।",
     },
   },
 
