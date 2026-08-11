@@ -259,6 +259,8 @@ export function withSyncJournaling(
     getProgressForItems: (itemIds) => base.listeningSessions.getProgressForItems(itemIds),
     getCompletedAtForItems: (itemIds, durations) =>
       base.listeningSessions.getCompletedAtForItems(itemIds, durations),
+    listEverCompletedItems: (itemIds, durations) =>
+      base.listeningSessions.listEverCompletedItems(itemIds, durations),
     getDailyTotals: (fromMs, toMs) => base.listeningSessions.getDailyTotals(fromMs, toMs),
     getDailyTotalsByDayOffset: (fromMs, toMs) =>
       base.listeningSessions.getDailyTotalsByDayOffset(fromMs, toMs),

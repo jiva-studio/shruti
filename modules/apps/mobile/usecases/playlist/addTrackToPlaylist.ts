@@ -26,6 +26,11 @@ export interface AddTrackToPlaylistDeps {
  * The check and the insert run inside one unit-of-work so that two
  * concurrent callers (fast double-tap on the Add button) can't both
  * pass the duplicate check and end up with two active rows.
+ *
+ * A track that is present but ARCHIVED is not "already in the playlist": it is
+ * re-added, and `add` resurrects its existing row rather than inserting a
+ * second one for the same `track_id` (migration 027). That second row used to
+ * be where cross-device progress went to die (#1736).
  */
 export async function addTrackToPlaylist(
   input: AddTrackToPlaylistInput,
