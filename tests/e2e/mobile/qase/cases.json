@@ -3684,5 +3684,27 @@
       "chat",
       "e2e"
     ]
+  },
+  "200": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "A lecture titled with ё is found by either spelling",
+    "description": "SQLite folds Latin diacritics by itself but leaves Cyrillic `ё` as a term of its own, so this is the one spelling pair the app has to settle on both sides: shruti-mcp folds the index (`008_fold_fts_marks`) and the query builder folds identically. The corpus spells the search word BOTH ways, so one query has to reach both titles — that is what makes the check sharp. Against a catalog predating the migration the query reaches only the `е`-spelled title however it is typed, and a bare \"the two spellings agree\" comparison would pass while half the corpus stayed unreachable (#1684). Offline, against the committed catalog fixture.",
+    "preconditions": "Offline boot on a clean Russian user db, on the search tab. The catalog fixture carries one lecture titled \"Душа остаётся загадкой для нас\" and another titled \"Душа всегда остается личностью\", both within the seeded Bhagavad-gita source filter.",
+    "steps": [
+      {
+        "action": "Search a word spelled with ё (\"остаётся\").",
+        "expected": "Lectures are listed, and they include BOTH a title spelled with ё and one spelled with е."
+      },
+      {
+        "action": "Search the same word spelled with е (\"остается\") — what a Russian keyboard actually produces.",
+        "expected": "Exactly the same lectures are listed."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
   }
 }
