@@ -3331,7 +3331,7 @@
     "suite_id": 10,
     "automation": 2,
     "title": "A cancelled download releases the track, so it can be added again",
-    "description": "Offline. A transfer is hung, the track cancelled mid-download, then the same lecture added again. Before the settle fix the cancelled promise was never resolved, so the track in-flight slot stayed occupied and the second add silently joined the abandoned transfer without ever asking for the file. The guard is that the re-add really reaches the network.",
+    "description": "Offline. A transfer is hung, the track cancelled mid-download, then the same lecture added again. Before the settle fix the cancelled promise was never resolved, so the track in-flight slot stayed occupied and the second add silently joined the abandoned transfer without ever asking for the file. The guard is that the re-add really reaches the network and finishes.",
     "preconditions": "Offline fixtures with a clean user db; the audio route hangs until the spec releases it.",
     "steps": [
       {
@@ -3344,7 +3344,7 @@
       },
       {
         "action": "Add the same lecture again, with audio now served.",
-        "expected": "It is added to the queue and a fresh transfer is requested."
+        "expected": "It is added to the queue, a fresh transfer is requested, and the lecture reaches the downloaded state."
       },
       {
         "action": "Open Home.",
@@ -3391,7 +3391,7 @@
     "suite_id": 10,
     "automation": 2,
     "title": "A silent CDN costs seconds: the download hedges to a live region",
-    "description": "Offline, with a two-region config. The preferred region accepts the audio request and never answers — the shape a dead region actually takes. The walk must not park on it: the other region is asked and serves the bytes, and not before the hedge interval, or the hedge is a fan-out that doubles CDN load. Completion of the row is covered by issue 1682, not here.",
+    "description": "Offline, with a two-region config. The preferred region accepts the audio request and never answers — the shape a dead region actually takes. The walk must not park on it: the other region is asked and serves the bytes, the download is reported done while the silent region is still hanging, and the second candidate is not asked before the hedge interval, or the hedge is a fan-out that doubles CDN load.",
     "preconditions": "Offline fixtures with a clean user db; config.json publishes edge-a (silent for audio) and edge-b (serving).",
     "steps": [
       {
@@ -3400,7 +3400,7 @@
       },
       {
         "action": "Watch the download while the preferred region stays silent.",
-        "expected": "The other region is asked and serves the audio."
+        "expected": "The other region is asked, serves the audio, and the lecture reaches the downloaded state."
       },
       {
         "action": "Check when the second candidate was first asked.",
