@@ -8,6 +8,7 @@ import type {
   UiTranscriptBlocksGroup,
 } from "@ui/features/transcript/index.js"
 import { formatReference, formatReferenceFull } from "@lib/domain/services/references.js"
+import { timeRangesIntersect } from "@ui/features/transcript/timeRange.js"
 
 /**
  * One saved note's time range, in **milliseconds** — same unit as the
@@ -46,9 +47,11 @@ export interface BuildTranscriptViewDataOpts {
   /** Active UI language code used to pick the right localised name. */
   readonly lang?: LanguageCode
   /**
-   * Saved notes for the current track. Any block whose `[start..end]`
-   * (ms) overlaps any note range (also ms — see `NoteRange`) is rendered
-   * with `bookmarked: true`, which drives the highlight underline.
+   * Saved notes for the current track. Any block whose `[start, end)`
+   * (ms) intersects any note range (also ms — see `NoteRange`) is rendered
+   * with `bookmarked: true`, which drives the highlight underline. The
+   * intervals are half-open, so a block that merely touches a note's edge
+   * is NOT part of it — see `timeRangesIntersect`.
    * Omitted / empty means no historic highlights — used in preview mode.
    */
   readonly notes?: readonly NoteRange[]
@@ -226,8 +229,10 @@ function groupLangBlocks(
     let bookmarked = false
     let ids: NoteId[] | null = null
     for (const r of noteRangesMs) {
-      // Standard interval overlap: not disjoint on either side.
-      if (blockStart <= r.end && blockEnd >= r.start) {
+      // Same predicate the live drag-selection highlight uses, so a saved
+      // bookmark underlines exactly the blocks that were highlighted when it
+      // was taken (issue #1731).
+      if (timeRangesIntersect({ start: blockStart, end: blockEnd }, r)) {
         bookmarked = true
         if (r.id !== undefined) {
           if (ids === null) ids = []
