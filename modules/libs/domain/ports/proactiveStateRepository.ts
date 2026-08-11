@@ -19,12 +19,7 @@ import type { ProactiveRuleId } from "../config.js"
  *   visibility (user already granted permission, already subscribed,
  *   returned from inactivity). Hidden from the chat UI.
  */
-export type ProactivePrepState =
-  | "pending"
-  | "ready"
-  | "degraded"
-  | "dismissed"
-  | "superseded"
+export type ProactivePrepState = "pending" | "ready" | "degraded" | "dismissed" | "superseded"
 
 /**
  * Snapshot of a proactive message — sidecar state joined with the
@@ -109,9 +104,7 @@ export interface IProactiveStateRepository {
 
   /** All sidecar rows in the listed prep states, joined with the
    *  visible chat_messages columns. */
-  listByPrepStates(
-    states: readonly ProactivePrepState[]
-  ): Promise<readonly ProactiveStateEntry[]>
+  listByPrepStates(states: readonly ProactivePrepState[]): Promise<readonly ProactiveStateEntry[]>
 
   /** Session ids that have at least one proactive message in `ready` or
    *  `degraded` with `seen_at IS NULL`. Drives both the per-session dot

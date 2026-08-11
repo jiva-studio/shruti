@@ -32,9 +32,7 @@ describe("pickPlayableVariant", () => {
     const track = {
       variants: [variant({ audio: null }), variant()],
     } as unknown as Track
-    expect(pickPlayableVariant(track)?.audio?.path).toBe(
-      "public/tracks/track_X/audio/clean.mp3"
-    )
+    expect(pickPlayableVariant(track)?.audio?.path).toBe("public/tracks/track_X/audio/clean.mp3")
   })
 
   it("returns null for a translation-only track", () => {
