@@ -3538,5 +3538,63 @@
       "free",
       "e2e"
     ]
+  },
+  "195": {
+    "suite_id": 5,
+    "automation": 2,
+    "title": "Smart Library remembers the archive schedule across an off/on cycle",
+    "description": "Offline, Pro. Switching Smart Library off stops archiving (the live schedule reads \"Never\"), but switching it back on restores the schedule the user picked instead of losing it. An explicitly chosen \"Never\" stays \"Never\" rather than being replaced by the earlier choice.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber.",
+    "steps": [
+      {
+        "action": "Open the Smart Library dialog, enable it and set the archive schedule to \"After 1 day\".",
+        "expected": "\"After 1 day\" is the checked schedule."
+      },
+      {
+        "action": "Switch Smart Library off.",
+        "expected": "The toggle is off and the live schedule reads \"Never\"."
+      },
+      {
+        "action": "Switch Smart Library back on.",
+        "expected": "\"After 1 day\" is checked again."
+      },
+      {
+        "action": "Pick \"Never\" deliberately, then switch the feature off and on again.",
+        "expected": "\"Never\" is still checked; \"After 1 day\" is not restored over it."
+      }
+    ],
+    "tags": [
+      "library",
+      "smart-library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "196": {
+    "suite_id": 5,
+    "automation": 2,
+    "title": "Smart Library topic filter survives a restart",
+    "description": "Offline, Pro. A topic picked in the Smart Library filter sheet is persisted, not just shown: after a full reload the Filter row still summarises it and the sheet still shows it checked.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber.",
+    "steps": [
+      {
+        "action": "Open the Smart Library dialog, enable it and pick a topic in the filter sheet.",
+        "expected": "The Filter row lists the chosen topic instead of \"All lectures\"."
+      },
+      {
+        "action": "Reload the app and return to the library.",
+        "expected": "The app boots to the tab bar."
+      },
+      {
+        "action": "Reopen the Smart Library dialog and its filter sheet.",
+        "expected": "The Filter row still lists the topic and the Topics facet still counts 1."
+      }
+    ],
+    "tags": [
+      "library",
+      "smart-library",
+      "pro",
+      "e2e"
+    ]
   }
 }
