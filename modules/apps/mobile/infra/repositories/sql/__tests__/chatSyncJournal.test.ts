@@ -316,10 +316,12 @@ describe("chat sync journaling", () => {
       createdAt: 1,
     })
     chatSyncEnabled = true
+    // A real server stamp: the journal seeds the next HLC from these too, so a
+    // placeholder that is not wire-format would not survive parsing.
     await db.execute("INSERT INTO sync_doc_hlc (collection, doc_id, server_hlc) VALUES (?, ?, ?)", [
       "chat_messages",
       "m1",
-      "1-0-srv",
+      "000000000000001:00000:srv",
     ])
     await repos.chatMessages.deleteBySession(sid)
 

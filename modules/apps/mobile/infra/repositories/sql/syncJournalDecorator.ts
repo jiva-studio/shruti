@@ -124,8 +124,9 @@ export function withSyncJournaling(
   const { userDb, unitOfWork, getDeviceId } = deps
   const isChatSyncEnabled = deps.isChatSyncEnabled ?? (() => true)
 
-  /** Append one outbox row, computing the next HLC from the last journaled
-   *  one so stamps stay monotonic. Runs inside the caller's transaction. */
+  /** Append one outbox row, computing the next HLC from the highest stamp this
+   *  device has issued or observed so stamps stay monotonic against BOTH.
+   *  Runs inside the caller's transaction. */
   async function journal(
     collection: string,
     docId: string,
@@ -133,10 +134,25 @@ export function withSyncJournaling(
     data: unknown | null
   ): Promise<void> {
     const deviceId = await getDeviceId()
-    const rows = await userDb.query<{ hlc: string }>(
-      "SELECT hlc FROM outbox ORDER BY id DESC LIMIT 1"
+    // The outbox tail alone is only what this device has ISSUED. A remote
+    // stamp already pulled in (`sync_doc_hlc`) is just as much part of the
+    // clock: skip it and a device whose wall clock trails another's stamps its
+    // edit BELOW the change that edit descends from — the server accepts the
+    // push (it gates on `base_hlc`, not on ordering), and every device that
+    // pulls both then resolves LWW in favour of the older text (#1628).
+    //
+    // Plain MAX over the union: `hlcToString` zero-pads both numeric
+    // components, so SQLite's lexicographic order is the order `compareHlc`
+    // defines.
+    const rows = await userDb.query<{ hlc: string | null }>(
+      `SELECT MAX(hlc) AS hlc FROM (
+         SELECT (SELECT hlc FROM outbox ORDER BY id DESC LIMIT 1) AS hlc
+         UNION ALL
+         SELECT (SELECT MAX(server_hlc) FROM sync_doc_hlc)
+       )`
     )
-    const lastSeen = rows.length > 0 ? parseHlc(rows[0]!.hlc) : null
+    const seed = rows[0]?.hlc ?? null
+    const lastSeen = seed === null ? null : parseHlc(seed)
     const hlc = hlcToString(hlcNow(deviceId, lastSeen))
     await userDb.execute(
       `INSERT INTO outbox
