@@ -20,6 +20,10 @@ export interface LoadedTranscript {
 export interface UseTranscriptLoaderReturn {
   transcripts: Ref<readonly LoadedTranscript[]>
   isLoading: Ref<boolean>
+  /** Set only when the transcript DOCUMENT failed to load — the reader swaps
+   *  itself for an error state on it. Action failures (bookmark, ask, translate,
+   *  chapter tap) belong in the controller's toast channel instead, or the whole
+   *  text disappears under the user (issue #1583). */
   error: Ref<string | null>
   /** Loads (or clears) the transcripts for a track's active languages. Each is
    *  fetched in parallel; a monotonic token ensures stale responses are dropped.
@@ -45,6 +49,9 @@ export function useTranscriptLoader(
     trackId: TrackId | undefined,
     languages: readonly LanguageCode[]
   ): Promise<void> {
+    // A load starts from a clean slate: without this the reader stays stuck on
+    // the previous failure's error state even after a successful re-read.
+    error.value = null
     if (!trackId || languages.length === 0) {
       transcripts.value = []
       return

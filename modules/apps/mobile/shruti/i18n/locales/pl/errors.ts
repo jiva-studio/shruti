@@ -10,6 +10,8 @@ export default {
   dictionariesUnavailable: "Nie udało się załadować nazw — niektóre etykiety mogą być niedostępne.",
   playbackFailed: "Nie udało się odtworzyć tego wykładu. Sprawdź połączenie i spróbuj ponownie.",
   noAudioForLecture: "Ten wykład nie ma audio.",
+  translationFailed: "Nie udało się przetłumaczyć wykładu. Spróbuj później.",
+  translationStillRunning: "Tłumaczenie trwa dłużej niż zwykle — pojawi się, gdy będzie gotowe.",
   downloadStorageFull:
     "Osiągnięto limit pamięci. Usuń wysłuchane wykłady lub zwiększ limit w ustawieniach.",
   downloadStorageFullAction: "Pobierz mimo to",
