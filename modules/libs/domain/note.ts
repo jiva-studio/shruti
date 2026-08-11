@@ -40,11 +40,7 @@ export const MAX_NOTE_LENGTH = 4000
  * (e.g. createNote folds time-shape into a single `invalid-timestamps`
  * umbrella) without losing information at the validator boundary.
  */
-export type NoteValidationError =
-  | "empty-text"
-  | "text-too-long"
-  | "invalid-time"
-  | "invalid-range"
+export type NoteValidationError = "empty-text" | "text-too-long" | "invalid-time" | "invalid-range"
 
 export interface NoteFields {
   readonly text: string
@@ -65,9 +61,7 @@ export interface NoteFields {
  * update; tomorrow an "import notes" flow shouldn't have to know the
  * length cap to stay correct.
  */
-export function validateNoteFields(
-  input: NoteFields
-): Result<NoteFields, NoteValidationError> {
+export function validateNoteFields(input: NoteFields): Result<NoteFields, NoteValidationError> {
   const text = input.text.trim()
   if (!text) return err("empty-text")
   if (text.length > MAX_NOTE_LENGTH) return err("text-too-long")
