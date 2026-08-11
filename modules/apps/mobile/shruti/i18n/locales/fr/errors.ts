@@ -9,6 +9,9 @@ export default {
   dictionariesUnavailable: "Impossible de charger les noms — certaines étiquettes peuvent manquer.",
   playbackFailed: "Impossible de lire ce cours. Vérifiez votre connexion et réessayez.",
   noAudioForLecture: "Ce cours n'a pas d'audio.",
+  translationFailed: "La traduction a échoué. Réessayez plus tard.",
+  translationStillRunning:
+    "La traduction prend plus de temps que d'habitude — elle apparaîtra dès qu'elle sera prête.",
   downloadStorageFull:
     "Limite de stockage atteinte. Supprimez les cours écoutés ou augmentez la limite dans les réglages.",
   downloadStorageFullAction: "Télécharger quand même",

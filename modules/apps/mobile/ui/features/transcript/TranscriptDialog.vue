@@ -50,7 +50,7 @@
         :groups="blockGroups"
         :position="position"
         :duration="duration"
-        :display-speaker-icons="allowMultipleLanguages"
+        :multi-speaker-languages="multiSpeakerLanguages"
         :should-highlight-current-sentence="
           enableActiveProminence !== false && shouldHighlightCurrentSentence
         "
@@ -90,6 +90,13 @@ const props = defineProps<{
   position: number
   duration: number
   allowMultipleLanguages: boolean
+  /**
+   * Languages whose transcript holds a dialogue (two or more speakers). Only
+   * those get the per-line speaker icon and the speaker-change dash/newline —
+   * this used to be wired to `allowMultipleLanguages`, which counts languages
+   * and says nothing about speakers.
+   */
+  multiSpeakerLanguages: ReadonlySet<string>
   shouldHighlightCurrentSentence: boolean
   /**
    * Pro-gated continuous-follow flag. When true, the dialog scrolls to
