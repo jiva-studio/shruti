@@ -75,12 +75,47 @@ export interface RegionFailoverOptions {
   now?: () => number
 }
 
+/**
+ * Whether a region's base URL for this service is something the WebView can
+ * actually fetch.
+ *
+ * Not every region serves every door: `orchestratorBaseUrl` and friends are
+ * optional (a published config.json predating the field omits it, and
+ * `isValidRegion` deliberately does not require it), so `pickBaseUrl` returns
+ * `""` for them. `joinUrl("", "/orchestrator/ingest/x")` is a PATH, and the
+ * WebView resolves a path against its own origin — `capacitor://localhost` —
+ * which answers 404. kit reads that 404 as non-transient, stops walking and
+ * returns it, so a job that exists is reported "not found".
+ *
+ * A region that cannot serve this door is not a candidate at all.
+ */
+export function servesBaseUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
 /** kit's failover client, fed a candidate list with duplicate doors removed. */
 export function createRegionFailoverClient(opts: RegionFailoverOptions): FailoverClient {
-  return createFailoverClient<CdnServer>({
-    ...opts,
-    getServers: () => distinctByBaseUrl(opts.getServers(), opts.pickBaseUrl, opts.getPreferredId()),
-  })
+  const candidates = (): CdnServer[] =>
+    distinctByBaseUrl(
+      opts.getServers().filter((s) => servesBaseUrl(opts.pickBaseUrl(s))),
+      opts.pickBaseUrl,
+      opts.getPreferredId()
+    )
+  const client = createFailoverClient<CdnServer>({ ...opts, getServers: candidates })
+
+  // With no region serving this door there is nothing to fetch. Answering with
+  // a scheme-less URL would hand the caller a local 404 dressed as the
+  // backend's verdict; throwing lands in the same path a dead edge does, so the
+  // UI reports a transient failure the user can retry.
+  return {
+    resolveUrl: (path) => (candidates().length === 0 ? "" : client.resolveUrl(path)),
+    request: (path, init) => {
+      if (candidates().length === 0) {
+        return Promise.reject(new Error(`failover: no region serves ${path}`))
+      }
+      return client.request(path, init)
+    },
+  }
 }
 
 /**

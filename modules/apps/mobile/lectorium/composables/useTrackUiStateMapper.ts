@@ -131,6 +131,24 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     return "none"
   }
 
+  /**
+   * How much of the lecture the user has listened to, read from the listening
+   * data alone — a completed item is 100, anything else its saved position.
+   * Deliberately blind to the download state: a row showing "pending" or
+   * "downloading" has lost none of its listening history, and a collection
+   * ring that scores from `state` discards it the instant the user taps
+   * (issue #1615).
+   */
+  function listenedPctFor(track: Track): number {
+    const entry = playlist.getEntryByTrackId(track.id)
+    if (!entry) return 0
+    if (playlist.getCompletedAt(entry.item.id) != null) return 100
+    const duration = maxAudioDurationMs(track)
+    if (duration <= 0) return 0
+    const progress = playlist.getProgressMs(entry.item.id)
+    return Math.min(100, Math.max(0, (progress / duration) * 100))
+  }
+
   function progressPctFor(track: Track, state: UiTrackState): number {
     if (state === "downloading") return downloads.getProgress(track.id)
     // "playing" takes the SAVED progress like "queued" does: the live
@@ -138,19 +156,14 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     // lays over this value for the one track the player is on. The saved
     // value is what the radial shows until the first tick lands, and what a
     // surface without the overlay (Search shelves) keeps showing.
-    if (state === "playing" || state === "queued") {
-      const duration = maxAudioDurationMs(track)
-      const entry = playlist.getEntryByTrackId(track.id)
-      const progress = entry ? playlist.getProgressMs(entry.item.id) : 0
-      if (duration <= 0) return 0
-      return Math.min(100, Math.max(0, (progress / duration) * 100))
-    }
+    if (state === "playing" || state === "queued") return listenedPctFor(track)
     return 0
   }
 
   function toUiRow(track: Track): UiTrackRow {
     const state = toUiState(track.id, downloads.getState(track.id))
     const progressPct = progressPctFor(track, state)
+    const listenedPct = listenedPctFor(track)
     // Search/Library are discovery surfaces — rows always render at full
     // opacity. State is communicated by the indicator alone (radial /
     // red X / check). Dim treatment is reserved for player-context views
@@ -166,6 +179,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       formatDuration: (ms) => formatListeningDuration(ms / 1000, t),
       state,
       progressPct,
+      listenedPct,
     })
   }
 

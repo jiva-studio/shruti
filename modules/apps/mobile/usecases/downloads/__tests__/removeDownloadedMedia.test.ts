@@ -11,6 +11,8 @@ function makeRepo(overrides: Partial<IMediaItemRepository> = {}): IMediaItemRepo
     upsert: async () => {
       throw new Error("upsert not stubbed")
     },
+    markEvictPending: async () => {},
+    listEvictPending: async () => [],
     deleteByTrack: async () => {},
     deleteById: async () => {},
     clearAll: async () => {},

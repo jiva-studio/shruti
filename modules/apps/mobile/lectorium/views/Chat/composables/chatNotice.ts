@@ -13,6 +13,10 @@ export interface ChatNoticeInput {
   readonly isOffline: boolean
   /** A `rate_limited` error whose `tier` is a string we don't recognise. */
   readonly isUnknownTier: boolean
+  /** A `rate_limited` error whose `retryAfterAt` deadline has already
+   *  passed — the window has rolled over and the question can be asked
+   *  again. Always false for anything other than a quota 429. */
+  readonly quotaExpired: boolean
   /** Whether a plain retry is allowed (false for http_401/403/protocol). */
   readonly retryAllowed: boolean
 }
@@ -36,7 +40,7 @@ export interface ChatNoticeClass {
  * the `cta` kind to its action + disabled state.
  */
 export function classifyChatNotice(input: ChatNoticeInput): ChatNoticeClass {
-  const { code, tier, isOffline, isUnknownTier, retryAllowed } = input
+  const { code, tier, isOffline, isUnknownTier, quotaExpired, retryAllowed } = input
 
   // Not a `failed` error → the bubble shows no notice. The caller guards on
   // this; return a stable default.
@@ -84,6 +88,16 @@ export function classifyChatNotice(input: ChatNoticeInput): ChatNoticeClass {
       bodyKey: null,
       cta: retryAllowed ? "retry" : "none",
     }
+  }
+
+  // Quota 429 whose reset deadline has already passed. The limit has lifted,
+  // so the tier ladder below is moot — upselling someone whose window just
+  // rolled over is noise, and every other branch here ends in a CTA the user
+  // can't act on. This is the only branch that reaches the `retry` CTA for a
+  // quota failure, and therefore the only thing that makes the
+  // `failedRetryEnabled` deadline flip observable.
+  if (quotaExpired) {
+    return { kind: "info", titleKey: null, bodyKey: null, cta: "retry" }
   }
 
   // Quota 429 with a tier we don't recognise — warn, no CTA, body is generic.

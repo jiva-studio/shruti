@@ -3,6 +3,7 @@ import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import {
   AUTO_ARCHIVE_DELAY_KEY,
+  AUTO_ARCHIVE_LAST_DELAY_KEY,
   type AutoArchiveDelay,
 } from "@lectorium/composables/useAutoArchiveSweep.js"
 import { useToast } from "@kit/composables"
@@ -60,6 +61,7 @@ export interface SettingsControllerReturn {
   showPlayerOnNotes: Ref<boolean>
   showActivityTracker: Ref<boolean>
   autoArchiveDelay: Ref<AutoArchiveDelay>
+  autoArchiveLastDelay: Ref<AutoArchiveDelay>
   highlightCurrentSentence: Ref<boolean>
   autoScroll: Ref<boolean>
   autoPlayNext: Ref<boolean>
@@ -132,6 +134,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
   const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
   const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
+  const autoArchiveLastDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_LAST_DELAY_KEY, "off")
   const notificationsEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
   const notificationsTime = useConfig<[number, number] | undefined>(
     "settings.notificationsTime",
@@ -213,6 +216,7 @@ export function useSettingsController(): SettingsControllerReturn {
     showPlayerOnNotes,
     showActivityTracker,
     autoArchiveDelay,
+    autoArchiveLastDelay,
     highlightCurrentSentence,
     autoScroll,
     autoPlayNext,

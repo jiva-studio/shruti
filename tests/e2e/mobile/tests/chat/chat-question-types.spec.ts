@@ -40,6 +40,44 @@ const CHAPTER = action({
   },
 })
 
+// Same locate answer, but with citation translation on: the server ships each
+// title machine-translated with the source-language one on `title_original`,
+// plus a payload-level `mt`. (Issue #1611 part 2.)
+const CHAPTER_MT = action({
+  kind: "chapter",
+  id: "ch2",
+  payload: {
+    source_id: "source_sb",
+    region_token: "c5",
+    region_label: "Песнь 5",
+    mt: true,
+    chapters: [
+      {
+        tokens: "5.5",
+        title: "Наставления Господа Ришабхадевы",
+        title_original: "Lord Ṛṣabhadeva's Teachings to His Sons",
+      },
+      { tokens: "5.6", title: "Игры Господа Ришабхадевы", title_original: "Lord Ṛṣabhadeva's Pastimes" },
+    ],
+  },
+})
+
+// A media clip card. `title` is the curated clip title and `speaker` / `date`
+// are the two halves of the attribution line under it. (Issue #1611 part 1.)
+const MEDIA = action({
+  kind: "media",
+  id: "m1",
+  payload: {
+    id: "clip1",
+    url: "public/media/clip1.mp4",
+    type: "video",
+    title: "Are you all right?",
+    speaker: "Gopalasyapriya dasi",
+    date: "1975",
+    text: "A short exchange from the morning walk.",
+  },
+})
+
 const sharePdf = (id: string, title: string, track: string) =>
   action({
     kind: "share_pdf",
@@ -103,5 +141,64 @@ test(qase(86, caseTitle(86)), { tag: ["@offline", "@chat"] }, async ({ page }) =
     const row = page.locator(".pdf-row").first()
     await expect(row).toBeVisible({ timeout: 20_000 })
     await expect(row).toBeEnabled()
+  })
+})
+
+// media intent: a "show me the clip" answer renders the media card with the
+// CURATED clip title on the bold line and "speaker · date" as the attribution
+// under it — not the same name printed twice with the title lost. (#1611)
+test(qase(198, caseTitle(198)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
+  await mockChatAuth(page)
+  await mockChatStream(page, [
+    MEDIA,
+    delta("Here is the moment:\n\n[media:clip1|Are you all right?]"),
+    done(),
+  ])
+  await boot(page, "en", { userDb: "clean" })
+  await gotoTab(page, "chat")
+  await step(page, 198, 0, async () => {
+    await askChat(page, "Show me that clip")
+    const title = page.locator(".media-card-title").first()
+    await expect(title).toBeVisible({ timeout: 20_000 })
+    await expect(title).toHaveText("Are you all right?")
+  })
+  await step(page, 198, 1, async () => {
+    // `date` used to be dropped by the parser whitelist, collapsing the
+    // attribution to the speaker alone — under a "title" that was itself the
+    // server's "<speaker> · <date>" label.
+    const attribution = page.locator(".media-card-attribution").first()
+    await expect(attribution).toBeVisible({ timeout: 20_000 })
+    await expect(attribution).toHaveText("Gopalasyapriya dasi · 1975")
+    // The attribution is not a second copy of the title.
+    await expect(page.locator(".media-card-title").first()).not.toHaveText(
+      "Gopalasyapriya dasi · 1975"
+    )
+  })
+})
+
+// locate intent with citation translation on: the chapter list is machine
+// translated, so the card must carry the same "translated automatically"
+// disclosure + view-original toggle its four sibling cards have. (#1611)
+test(qase(199, caseTitle(199)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
+  await mockChatAuth(page)
+  await mockChatStream(page, [
+    CHAPTER_MT,
+    delta("Эта история здесь:\n\n[chapter:source_sb/c5|Песнь 5]"),
+    done(),
+  ])
+  await boot(page, "en", { userDb: "clean" })
+  await gotoTab(page, "chat")
+  await step(page, 199, 0, async () => {
+    await askChat(page, "Где рассказана история Ришабхадевы?")
+    await expect(page.locator(".chapter-card-list").first()).toBeVisible({ timeout: 20_000 })
+    await expect(page.locator(".chapter-card-title").first()).toContainText("Ришабхадевы")
+    // ChapterCard had no TranslationNotice at all — MT'd canto titles shipped
+    // as if they were the book's own wording.
+    await expect(page.locator(".translation-notice").first()).toBeVisible({ timeout: 20_000 })
+  })
+  await step(page, 199, 1, async () => {
+    // …and the toggle actually reaches the source-language title.
+    await page.locator(".translation-notice__toggle").first().click()
+    await expect(page.locator(".chapter-card-title").first()).toContainText("Ṛṣabhadeva")
   })
 })

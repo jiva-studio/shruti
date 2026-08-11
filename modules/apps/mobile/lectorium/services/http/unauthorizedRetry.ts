@@ -17,6 +17,14 @@ export interface UnauthorizedRetryDeps {
    *  access token, or `null` when the session is unrecoverable (refresh
    *  rejected) or the refresh itself failed transiently. */
   refreshAccessToken: () => Promise<string | null>
+  /**
+   * Subscribe to sign-in / sign-out / session-swap. The cooldown below is a
+   * verdict about ONE session's token; a new session invalidates it, so the
+   * factory resets its state here instead of making the next user serve out
+   * the previous one's backoff. Returns an unsubscribe (unused — the factory
+   * lives for the process).
+   */
+  onSessionChange?: (listener: () => void) => () => void
   /** Test seam — defaults to `Date.now`. */
   now?: () => number
 }
@@ -79,9 +87,25 @@ export function createUnauthorizedRetry(
   let refreshInFlight: Promise<string | null> | null = null
   let cooldownUntil = 0
 
+  // Subscribed on first use, not at construction: the composition root builds
+  // this factory at module scope, before `initLectorium()` has run, so reaching
+  // for the auth port any earlier would touch a null singleton.
+  let sessionSubscribed = false
+  function watchSession(): void {
+    if (sessionSubscribed || !deps.onSessionChange) return
+    sessionSubscribed = true
+    deps.onSessionChange(() => {
+      cooldownUntil = 0
+      latestToken = null
+    })
+  }
+
   async function tokenFor(capturedGeneration: number): Promise<string | null> {
+    // Someone else already refreshed and the token is in hand — no round-trip
+    // to make, so the cooldown (which exists only to stop a refresh per
+    // request) has nothing to guard here and must not veto the replay.
+    if (tokenGeneration > capturedGeneration && latestToken) return latestToken
     if (now() < cooldownUntil) return null
-    if (tokenGeneration > capturedGeneration) return latestToken
     const inFlight = (refreshInFlight ??= deps
       .refreshAccessToken()
       .then((token) => {
@@ -100,6 +124,7 @@ export function createUnauthorizedRetry(
 
   return (request: RequestFn): RequestFn =>
     async (path, init) => {
+      watchSession()
       const capturedGeneration = tokenGeneration
       const response = await request(path, init)
       if (response.status !== 401) return response

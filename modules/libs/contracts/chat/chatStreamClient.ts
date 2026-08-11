@@ -193,7 +193,17 @@ export interface ChatChapterPayloadWire {
   readonly source_id: string
   readonly region_token: string
   readonly region_label: string
-  readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
+  readonly chapters: readonly {
+    readonly tokens: string
+    readonly title: string
+    /** The verbatim source-language title, present only when the server
+     *  machine-translated `title` into the answer language. */
+    readonly title_original?: string
+  }[]
+  /** True when at least one `title` is a machine translation. Drives the
+   *  card's "translated automatically" footnote + original toggle.
+   *  Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
 }
 
 /** Media result (video / audio file + transcript) shipped ahead of the
@@ -210,6 +220,10 @@ export interface ChatMediaPayloadWire {
   readonly type: "video" | "audio"
   readonly title: string
   readonly speaker?: string
+  /** Recording date as the server has it (a free-form label like "1975",
+   *  not a parsable timestamp). The card joins it with `speaker` into the
+   *  attribution line under the title. */
+  readonly date?: string
   readonly text: string
   /** True when `text` is a machine translation into the answer language.
    *  The card shows a "translated automatically" footnote with a toggle

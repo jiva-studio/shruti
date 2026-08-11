@@ -74,6 +74,7 @@ import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
 import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
 import { runStartupBootstrap } from "./services/startup.js"
+import { startRegionWatch } from "./services/regionWatch.js"
 import { readOnboardingCompleted, ONBOARDING_COMPLETED_KEY } from "./stores/useOnboardingStore.js"
 import { installConsoleCapture } from "./services/logger/index.js"
 import { initMonitoring } from "./services/monitoring/index.js"
@@ -133,6 +134,7 @@ const chatHttp = createRegionFailoverClient({
 // answer (the refresh token is dead), and retrying it would recurse.
 const withUnauthorizedRetry = createUnauthorizedRetry({
   refreshAccessToken: () => useLectorium().auth.refreshAccessToken(),
+  onSessionChange: (listener) => useLectorium().auth.onSessionChange(listener),
 })
 
 // Shared by the SSE turn stream and the proactive service — one decorated fn
@@ -381,6 +383,11 @@ async function start(): Promise<void> {
   if (!startup.ready) {
     reportError("startup", new Error(startup.error ?? "content database failed to open"))
   }
+
+  // The bootstrap probe above is the only one the app ever ran. Keep the region
+  // following the device from here on — a relocation or a VPN flip must not
+  // wait for the next cold start, which on mobile can be days away.
+  startRegionWatch()
 
   // Skip first-launch onboarding for established users: the explicit
   // `onboarding.completed` flag (set at the end of the flow), OR any prior

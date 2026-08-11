@@ -431,6 +431,71 @@ async function readWithStallTimeout<T>(
 }
 
 /**
+ * Give up on a `POST /chat` that has not produced RESPONSE HEADERS this long.
+ *
+ * {@link SSE_STALL_TIMEOUT_MS} only starts once we hold a `Response` — an edge
+ * that completes the TCP/TLS handshake and then never writes a status line
+ * leaves `fetch` pending forever (it has no default timeout, and the failover
+ * client adds none). The chat service flushes SSE headers before the model
+ * runs, so headers are a fast handshake even on a slow answer; the budget here
+ * only has to cover the request upload (up to 20 turns of history) on a poor
+ * radio. Shorter than the stall window on purpose — nothing is streaming yet,
+ * so there is nothing to lose by re-dialling.
+ */
+export const CHAT_HEADERS_TIMEOUT_MS = 30_000
+
+/** A `POST /chat` that outlived {@link CHAT_HEADERS_TIMEOUT_MS} before sending
+ *  headers. Distinct from an `AbortError` so the retry loop treats it as a
+ *  transient network failure (its own `lastErr`) rather than the caller's
+ *  Stop. */
+class ChatHeadersTimeoutError extends Error {
+  readonly kind = "headers_timeout"
+  constructor(timeoutMs: number) {
+    super(`POST /chat sent no response headers for ${timeoutMs}ms`)
+    this.name = "ChatHeadersTimeoutError"
+  }
+}
+
+/**
+ * One `POST /chat` attempt under a header deadline.
+ *
+ * The deadline ABORTS the request rather than racing it — a bare
+ * `Promise.race` would resolve the caller while the socket stayed open,
+ * leaking a connection per attempt. So each attempt gets its own controller,
+ * bridged to the caller's signal (Stop still kills the request, and still
+ * kills the body read afterwards: the bridge is deliberately left attached
+ * for the lifetime of the response). The timer is cleared the moment headers
+ * land, so a long-running answer streams unimpeded.
+ */
+async function requestWithHeadersTimeout(
+  request: ChatRequest,
+  init: RequestInit,
+  callerSignal: AbortSignal | undefined,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController()
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort()
+    else callerSignal.addEventListener("abort", () => controller.abort(), { once: true })
+  }
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+  try {
+    return await request("/chat", { ...init, signal: controller.signal })
+  } catch (err) {
+    // Our own deadline fired: the abort surfaces as an AbortError, which the
+    // caller would otherwise read as the user pressing Stop.
+    if (timedOut && !callerSignal?.aborted) throw new ChatHeadersTimeoutError(timeoutMs)
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * Stream a chat reply from the backend. Yields typed SSE events in the
  * order they arrive; consumers should treat `done` / `error` as
  * terminal and stop iterating after the first one of either.
@@ -487,7 +552,12 @@ export async function* streamChat(
   for (let attempt = 0; attempt < 3; attempt++) {
     if (opts.signal?.aborted) return
     try {
-      response = await opts.request("/chat", requestInit)
+      response = await requestWithHeadersTimeout(
+        opts.request,
+        requestInit,
+        opts.signal,
+        CHAT_HEADERS_TIMEOUT_MS
+      )
     } catch (err) {
       if ((err as { name?: string })?.name === "AbortError") return
       lastErr = err
@@ -1164,24 +1234,39 @@ function parseChapterPayload(p: Record<string, unknown>): ChapterPayload | null 
   const regionToken = typeof p.region_token === "string" ? p.region_token : null
   if (!sourceId || regionToken === null) return null
   const regionLabel = typeof p.region_label === "string" ? p.region_label : ""
-  const chapters: { tokens: string; title: string }[] = []
+  const chapters: { tokens: string; title: string; title_original?: string }[] = []
   if (Array.isArray(p.chapters)) {
     for (const c of p.chapters) {
       if (c && typeof c === "object") {
-        const tokens =
-          typeof (c as Record<string, unknown>).tokens === "string"
-            ? (c as Record<string, string>).tokens
-            : ""
-        const title =
-          typeof (c as Record<string, unknown>).title === "string"
-            ? (c as Record<string, string>).title
-            : ""
-        if (tokens) chapters.push({ tokens, title })
+        const entry = c as Record<string, unknown>
+        const tokens = typeof entry.tokens === "string" ? entry.tokens : ""
+        const title = typeof entry.title === "string" ? entry.title : ""
+        // Only present when the server machine-translated the title; keep it
+        // so ChapterCard can offer the "view original" flip every other
+        // translated card in the same bubble already has.
+        const titleOriginal =
+          typeof entry.title_original === "string" && entry.title_original.trim()
+            ? entry.title_original
+            : undefined
+        if (tokens) {
+          chapters.push({
+            tokens,
+            title,
+            ...(titleOriginal ? { title_original: titleOriginal } : {}),
+          })
+        }
       }
     }
   }
   if (chapters.length === 0) return null
-  return { source_id: sourceId, region_token: regionToken, region_label: regionLabel, chapters }
+  const mt = p.mt === true
+  return {
+    source_id: sourceId,
+    region_token: regionToken,
+    region_label: regionLabel,
+    chapters,
+    ...(mt ? { mt: true } : {}),
+  }
 }
 
 function parseMediaPayload(p: Record<string, unknown>): MediaPayload | null {
@@ -1195,6 +1280,10 @@ function parseMediaPayload(p: Record<string, unknown>): MediaPayload | null {
   const title = typeof p.title === "string" ? p.title : ""
   const text = typeof p.text === "string" ? p.text : ""
   const speaker = typeof p.speaker === "string" && p.speaker ? p.speaker : undefined
+  // Half the attribution line. Dropping it here is what made MediaCard fall
+  // back to rendering the server's "<speaker> · <date>" label as BOTH the
+  // title and the attribution.
+  const date = typeof p.date === "string" && p.date ? p.date : undefined
   const mt = p.mt === true
   const textOriginal =
     mt && typeof p.text_original === "string" && p.text_original.trim()
@@ -1207,6 +1296,7 @@ function parseMediaPayload(p: Record<string, unknown>): MediaPayload | null {
     title,
     text,
     ...(speaker ? { speaker } : {}),
+    ...(date ? { date } : {}),
     ...(mt ? { mt: true } : {}),
     ...(textOriginal ? { text_original: textOriginal } : {}),
   }

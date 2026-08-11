@@ -120,6 +120,7 @@ const emptyImage = "/playlist-empty.png"
 
 const player = usePlayerStore()
 const {
+  onScreen,
   rows,
   isLoading,
   error,
@@ -249,11 +250,11 @@ function onDismissSubscriptionNag(): void {
 }
 
 // Ionic hides but never unmounts a tab page, so Home keeps rendering while the
-// user is on Search or Chat. `onScreen` gates the live playback overlay: off
-// the tab it stops reading the position entirely, so a playing lecture does no
+// user is on Search or Chat. `onScreen` (owned by the controller, which gates
+// the heatmap poll on the same flag) gates the live playback overlay: off the
+// tab it stops reading the position entirely, so a playing lecture does no
 // per-tick work here at all (issue #1504). The rows themselves are already
 // position-free, so nothing else on this page ticks.
-const onScreen = ref(true)
 const playback = usePlaybackRowProgress(onScreen)
 
 onIonViewWillEnter(() => {

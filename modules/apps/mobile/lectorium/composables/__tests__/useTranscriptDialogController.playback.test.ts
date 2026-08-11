@@ -4,6 +4,9 @@ import type { Track } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 const openTrack = vi.fn()
+const toastError = vi.fn()
+const submit = vi.fn()
+const status = vi.fn()
 const TRACK_ID = "t1" as TrackId
 
 const track = {
@@ -19,9 +22,17 @@ const loaderError = ref<string | null>(null)
 vi.mock("vue-i18n", () => ({
   useI18n: () => ({ t: (k: string) => `translated:${k}` }),
 }))
-vi.mock("@lectorium/lectorium.js", () => ({
-  useLectorium: () => ({ repositories: () => ({}), shareService: {} }),
+vi.mock("@kit/composables", () => ({
+  useToast: () => ({ error: toastError, show: vi.fn(), info: vi.fn(), action: vi.fn() }),
 }))
+vi.mock("@lectorium/lectorium.js", () => ({
+  useLectorium: () => ({
+    repositories: () => ({}),
+    shareService: {},
+    ingestClient: { submit, status },
+  }),
+}))
+vi.mock("@lectorium/services/syncEvents.js", () => ({ requestSync: vi.fn() }))
 vi.mock("@lectorium/router/index.js", () => ({ default: { push: vi.fn() } }))
 vi.mock("@lectorium/stores/useTranscriptStore.js", () => ({
   useTranscriptStore: () => ({ trackId: TRACK_ID, isOpen: false, close: vi.fn(), show: vi.fn() }),
@@ -41,7 +52,11 @@ vi.mock("@lectorium/stores/usePlaylistStore.js", () => ({
   usePlaylistStore: () => ({ getEntryByTrackId: () => ({ item: { id: "i1" } }) }),
 }))
 vi.mock("@lectorium/stores/useLibraryStore.js", () => ({
-  useLibraryStore: () => ({ items: [] }),
+  // A personal-library membership for the open track — the precondition for the
+  // ghost language chip that requests an on-demand translation.
+  useLibraryStore: () => ({
+    items: [{ id: "m1", trackId: TRACK_ID, titleRaw: "T", variants: [{ language: "en" }] }],
+  }),
 }))
 vi.mock("@lectorium/stores/useDictionariesStore.js", () => ({
   useDictionariesStore: () => ({
@@ -90,21 +105,33 @@ vi.mock("../transcript/useTranscriptSelectionActions.js", () => ({
 
 import { useTranscriptDialogController } from "../useTranscriptDialogController.js"
 
+/**
+ * A failed ACTION must not take the transcript off the screen.
+ *
+ * These cases used to assert the opposite — that a failed chapter tap landed in
+ * `loader.error` — and called that "the banner". There is no banner:
+ * `TranscriptDialog` renders `<TranscriptText v-if="statusState === null">`, so
+ * a non-null `loader.error` REPLACES the whole reader with an error state, and
+ * `reload()` never cleared it. The user lost the text they were reading and
+ * only closing and re-opening the dialog brought it back (issue #1583). The
+ * assertions below are inverted on purpose: `loader.error` stays the load
+ * channel, and the failure is reported through the toast.
+ */
 describe("useTranscriptDialogController.onChapterSeek — preview mode", () => {
   beforeEach(() => {
     loaderError.value = null
     openTrack.mockReset()
+    toastError.mockReset()
   })
 
-  it("shows a translated message when openTrack refuses, not a raw error code", async () => {
+  it("reports a refused openTrack with a translated message, not a raw error code", async () => {
     openTrack.mockResolvedValue({ ok: false, error: "engine-failed" })
 
     await useTranscriptDialogController().onChapterSeek(12000)
 
     // The regression this guards: the site used to render the hardcoded
     // English `Could not start playback: engine-failed`.
-    expect(loaderError.value).toBe("translated:errors.playbackFailed")
-    expect(loaderError.value).not.toContain("engine-failed")
+    expect(toastError).toHaveBeenCalledWith("translated:errors.playbackFailed")
   })
 
   it("uses the permanent message for a transcript-only lecture", async () => {
@@ -114,15 +141,87 @@ describe("useTranscriptDialogController.onChapterSeek — preview mode", () => {
 
     await useTranscriptDialogController().onChapterSeek(12000)
 
-    expect(loaderError.value).toBe("translated:errors.noAudioForLecture")
+    expect(toastError).toHaveBeenCalledWith("translated:errors.noAudioForLecture")
   })
 
-  it("leaves the banner clear when playback starts", async () => {
+  it("leaves the transcript on screen when the chapter tap fails", async () => {
+    openTrack.mockResolvedValue({ ok: false, error: "no-audio-available" })
+
+    await useTranscriptDialogController().onChapterSeek(12000)
+
+    // `loader.error` is what swaps the reader for an error state — an action
+    // failure must never write to it.
+    expect(loaderError.value).toBeNull()
+  })
+
+  it("says nothing when playback starts", async () => {
     openTrack.mockResolvedValue({ ok: true, value: undefined })
 
     await useTranscriptDialogController().onChapterSeek(12000)
 
     expect(openTrack).toHaveBeenCalledOnce()
+    expect(toastError).not.toHaveBeenCalled()
     expect(loaderError.value).toBeNull()
+  })
+})
+
+/**
+ * A translate run that never produces a variant used to end in silence: the
+ * ghost chip spun for up to six minutes and then simply stopped, with no way to
+ * tell a failure from a run still going (issue #1589).
+ */
+describe("useTranscriptDialogController.onTranslateLanguage", () => {
+  beforeEach(() => {
+    loaderError.value = null
+    toastError.mockReset()
+    submit.mockReset()
+    status.mockReset()
+    submit.mockResolvedValue({ run_id: "run-1" })
+  })
+
+  it("reports a failed run", async () => {
+    status.mockResolvedValue({ state: "failed" })
+    vi.useFakeTimers()
+    try {
+      const done = useTranscriptDialogController().onTranslateLanguage("ru")
+      await vi.advanceTimersByTimeAsync(3000)
+      await done
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toastError).toHaveBeenCalledWith("translated:errors.translationFailed")
+    expect(loaderError.value).toBeNull()
+  })
+
+  it("reports a cancelled run the same way", async () => {
+    status.mockResolvedValue({ state: "cancelled" })
+    vi.useFakeTimers()
+    try {
+      const done = useTranscriptDialogController().onTranslateLanguage("ru")
+      await vi.advanceTimersByTimeAsync(3000)
+      await done
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toastError).toHaveBeenCalledWith("translated:errors.translationFailed")
+  })
+
+  it("tells the user a run that outlives the poll is still going, not failed", async () => {
+    // Never leaves `running`: the poll gives up, the RUN does not.
+    status.mockResolvedValue({ state: "running" })
+    vi.useFakeTimers()
+    try {
+      const done = useTranscriptDialogController().onTranslateLanguage("ru")
+      // 120 polls, 3s apart.
+      await vi.advanceTimersByTimeAsync(120 * 3000)
+      await done
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toastError).toHaveBeenCalledWith("translated:errors.translationStillRunning")
+    expect(toastError).not.toHaveBeenCalledWith("translated:errors.translationFailed")
   })
 })

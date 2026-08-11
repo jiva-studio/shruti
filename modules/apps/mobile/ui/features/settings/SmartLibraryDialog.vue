@@ -117,6 +117,15 @@ const archiveDelay = defineModel<AutoArchiveDelay>("archiveDelay", {
   required: true,
   default: "off",
 })
+/**
+ * The last schedule picked while the feature was on, persisted alongside the
+ * live value. `archiveDelay` is forced to `"off"` whenever the master switch
+ * goes off, so it cannot double as the memory (#1663).
+ */
+const lastArchiveDelay = defineModel<AutoArchiveDelay>("lastArchiveDelay", {
+  required: true,
+  default: "off",
+})
 
 const emit = defineEmits<{
   "update:open": [open: boolean]
@@ -133,12 +142,19 @@ const isEnabled = computed<boolean>(() =>
   isSmartLibraryEnabled({ targetSeconds: targetSeconds.value, archiveDelay: archiveDelay.value })
 )
 
-// Heal builds that persisted a live delay behind the off switch (#1624), so
-// re-enabling can't resurrect an archive schedule the user never picked.
 watch(
   () => props.open,
   (isOpen) => {
-    if (isOpen && !isEnabled.value) archiveDelay.value = "off"
+    if (!isOpen) return
+    // Heal builds that persisted a live delay behind the off switch (#1624),
+    // so re-enabling can't resurrect an archive schedule the user never picked.
+    if (!isEnabled.value) {
+      archiveDelay.value = "off"
+      return
+    }
+    // Seed the memory from a schedule chosen before it existed, so the first
+    // off/on cycle after the upgrade doesn't lose it.
+    lastArchiveDelay.value = archiveDelay.value
   }
 )
 
@@ -152,7 +168,8 @@ function onToggleEnabled(ev: CustomEvent): void {
   const next = smartLibraryToggled(
     checked,
     { targetSeconds: targetSeconds.value, archiveDelay: archiveDelay.value },
-    lastNonZeroSeconds.value
+    lastNonZeroSeconds.value,
+    lastArchiveDelay.value
   )
   targetSeconds.value = next.targetSeconds
   archiveDelay.value = next.archiveDelay
@@ -170,6 +187,9 @@ function onArchiveChange(ev: CustomEvent): void {
   const value = (ev.detail as { value?: AutoArchiveDelay }).value
   if (!value) return
   archiveDelay.value = value
+  // Only an explicit pick becomes the memory — the master switch's fail-closed
+  // "off" must not overwrite it.
+  if (isEnabled.value) lastArchiveDelay.value = value
 }
 
 function onClose(): void {

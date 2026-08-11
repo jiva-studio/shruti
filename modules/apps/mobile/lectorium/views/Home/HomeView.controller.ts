@@ -1,4 +1,4 @@
-import { computed, onMounted, toRef, type ComputedRef, type Ref } from "vue"
+import { computed, onMounted, ref, toRef, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useActivityHeatmap } from "@lectorium/composables/useActivityHeatmap.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
@@ -14,6 +14,15 @@ import type { HeatmapDay } from "@usecases/activity/buildHeatmapDays.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 
 export interface HomeControllerReturn {
+  /**
+   * Whether Home is the visible tab. Owned here rather than by the view
+   * because two things hang off it — the live playback overlay's freeze and
+   * the heatmap poll — and they must not be able to disagree. Starts FALSE:
+   * a deep link or a notification can boot straight past Home, and a page
+   * that has never been entered is not on screen (issue #1615). The view
+   * flips it in `onIonViewWillEnter` / `onIonViewDidLeave`.
+   */
+  onScreen: Ref<boolean>
   rows: ComputedRef<readonly UiTrackRow[]>
   isLoading: ComputedRef<boolean>
   error: ComputedRef<string | null>
@@ -46,6 +55,7 @@ export function useHomeController(): HomeControllerReturn {
   const toast = useToast()
   const { t } = useI18n()
   const heatmap = useActivityHeatmap()
+  const onScreen = ref(false)
 
   const { rows, queueCount, queueTotalSeconds } = useHomeRowBuilder()
 
@@ -73,8 +83,10 @@ export function useHomeController(): HomeControllerReturn {
   // the screen. While playback is in progress, also poll every minute so
   // the user sees today's cell tick up in near-real-time during long
   // listens — session writes happen every 15s, but a UI reload that
-  // often would be wasteful.
-  useReloadOnPlayback(toRef(player, "playing"), heatmap.reload)
+  // often would be wasteful. The poll is gated on Home being the visible tab:
+  // Ionic keeps this page mounted behind Search/Chat, and a hidden heatmap
+  // nobody can see is not worth a read a minute for the length of a lecture.
+  useReloadOnPlayback(toRef(player, "playing"), heatmap.reload, undefined, onScreen)
 
   const isLoading = computed(() => playlist.isLoading)
   const error = computed(() => playlist.error)
@@ -132,6 +144,7 @@ export function useHomeController(): HomeControllerReturn {
   }
 
   return {
+    onScreen,
     rows,
     isLoading,
     error,
