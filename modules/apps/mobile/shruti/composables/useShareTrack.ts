@@ -35,14 +35,6 @@ type Produced =
 // The web route param is the track id without the `track_` prefix it strips.
 const TRACK_ID_PREFIX = /^track_/
 
-// Filesystem-unsafe across Android / iOS / Windows share targets.
-// eslint-disable-next-line no-control-regex
-const BAD_FNAME = /[\\/:*?"<>|\x00-\x1f]/g
-
-function safeBase(name: string, fallback: string): string {
-  return name.replace(BAD_FNAME, "").trim().slice(0, 80) || fallback
-}
-
 /**
  * Flatten transcript blocks into readable plain text: one line per
  * sentence / verse, a blank line at paragraph boundaries.
@@ -325,11 +317,12 @@ export function useShareTrack(): UseShareTrackReturn {
 
       const cover = await resolveCover(trackId, lang)
       const title = cover.title ?? trackId
-      const filename = `${safeBase(title, trackId)}${cover.date ? ` (${cover.date})` : ""}.pdf`
-      const localUri = await shareTranscript.prepareLocalPdf(
-        { trackId, lang, transcriptKey, ...cover },
-        filename
-      )
+      const localUri = await shareTranscript.prepareLocalPdf({
+        trackId,
+        lang,
+        transcriptKey,
+        ...cover,
+      })
       return {
         ok: true,
         options: { url: localUri, title, dialogTitle: t("search.share.dialogPdf") },
