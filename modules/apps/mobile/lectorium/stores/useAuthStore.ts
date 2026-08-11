@@ -403,6 +403,10 @@ export const useAuthStore = defineStore("auth", () => {
   async function signOut(): Promise<void> {
     const auth = useLectorium().auth
     await auth.signOut()
+    // The previous account's in-flight chat turns cannot be resumed under the
+    // next token — re-polling one 404s and its stale record keeps re-arming a
+    // "Sadhu replied" notification for 24h (#1733).
+    await useChatStore().clearPendingTurns()
     applySession(null)
     // After sign-out we drop to anonymous via a fresh bootstrap so the
     // user can keep using the app (same UX as Spotify free).
