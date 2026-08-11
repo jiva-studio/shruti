@@ -365,13 +365,70 @@ describe("buildTranscriptViewData — saved-note overlay", () => {
     expect(blocks.every((b) => b.noteIds.length === 0)).toBe(true)
   })
 
-  it("treats touching boundaries as overlap (inclusive)", () => {
+  it("treats touching boundaries as disjoint (half-open)", () => {
     const t = makeTranscript([sentence(2000, 3000, "edge")])
     const groups = buildTranscriptViewData(t, {
       paragraphChars: 9999,
       notes: [{ timeStart: 0, timeEnd: 2000 }],
     })
-    expect(groups[0]!.blocks[0]!.bookmarked).toBe(true)
+    expect(groups[0]!.blocks[0]!.bookmarked).toBe(false)
+  })
+
+  /**
+   * Issue #1731. Sentence blocks in this corpus are commonly contiguous
+   * (`end_i === start_{i+1}`), so an inclusive-on-both-ends overlap test made a
+   * one-sentence bookmark underline its two neighbours the moment it was saved
+   * — and bled `noteIds` onto them, so tapping either opened that note's Delete
+   * popover. Real timings from the issue.
+   */
+  it("marks ONLY the noted sentence when its neighbours are exactly contiguous", () => {
+    const t = makeTranscript([
+      sentence(560, 19440, "before"),
+      sentence(19440, 30880, "noted"),
+      sentence(30880, 64959, "after"),
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      notes: [{ id: "note-a" as NoteId, timeStart: 19440, timeEnd: 30880 }],
+    })
+    const blocks = groups.flatMap((g) => g.blocks)
+    expect(blocks.map((b) => b.bookmarked)).toEqual([false, true, false])
+    expect(blocks.map((b) => Array.from(b.noteIds))).toEqual([[], ["note-a"], []])
+  })
+
+  /**
+   * A zero-length note range IS representable: `validateNoteFields` only
+   * rejects `timeEnd < timeStart`, and a bookmark taken on a zero-length block
+   * (verse chips carry `start === end`) produces exactly one. A point range
+   * marks the block that contains the instant — and nothing else.
+   */
+  it("resolves a zero-length note range to the block that contains the instant", () => {
+    const t = makeTranscript([
+      sentence(560, 19440, "before"),
+      sentence(19440, 30880, "noted"),
+      sentence(30880, 64959, "after"),
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      notes: [{ id: "note-a" as NoteId, timeStart: 25000, timeEnd: 25000 }],
+    })
+    const blocks = groups.flatMap((g) => g.blocks)
+    expect(blocks.map((b) => b.bookmarked)).toEqual([false, true, false])
+  })
+
+  /** Zero-length BLOCKS (verse chips) still take the underline of a note that
+   *  covers their instant — a half-open test alone would never match them. */
+  it("keeps a zero-length block bookmarked when a note covers its instant", () => {
+    const t = makeTranscript([
+      { type: "verse:translation", start: 10840, end: 10840, text: "verse" },
+      sentence(19440, 30880, "noted"),
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      notes: [{ id: "note-a" as NoteId, timeStart: 5000, timeEnd: 19440 }],
+    })
+    const blocks = groups.flatMap((g) => g.blocks)
+    expect(blocks.map((b) => b.bookmarked)).toEqual([true, false])
   })
 
   it("collects overlapping note ids onto each block's `noteIds`", () => {
