@@ -101,6 +101,14 @@ test(qase(185, caseTitle(185)), { tag: ["@offline", "@library"] }, async ({ page
     await expect
       .poll(() => audioHits - before, { timeout: 30_000 })
       .toBeGreaterThan(0)
+
+    // And it finishes. Read on the Library row: the Home queue draws a
+    // PLAYBACK radial for a queued track, so the state icon is absent there
+    // whether the file arrived or not — which is what made the tail of this
+    // look stuck (#1680).
+    await expect(
+      trackRows(page).filter({ hasText: title }).first().locator('[data-testid="track-state"]')
+    ).toHaveAttribute("data-state", /added|completed/, { timeout: 45_000 })
   })
 
   await step(page, 185, 3, async () => {
