@@ -1,5 +1,6 @@
 {
-  "bytes": 4366336,
+  "audioless_track": "track_zOW8GLEPw07K",
+  "bytes": 4358144,
   "generator": "scripts/build-catalog-fixture.py",
   "rows": {
     "asset_hashes": 1001,
@@ -12,12 +13,12 @@
     "daily_wisdom": 20,
     "languages": 14,
     "locations": 594,
-    "migrations": 6,
+    "migrations": 7,
     "settings": 1,
     "sources": 38,
     "tags": 24,
     "topics": 48,
-    "track_audio": 1553,
+    "track_audio": 1552,
     "track_references": 2013,
     "track_tags": 242,
     "track_topics": 1547,
@@ -25,10 +26,10 @@
     "tracks": 1001,
     "tracks_search": 2082
   },
-  "sha256": "c3f26c38bf0479cff4621ac6c7859150754f61c421ab6c08c230b1f1a5f48527",
+  "sha256": "8a5b37049841951b0618114eb667973729c93e0ade46bf0d7c0afa60a056b65d",
   "source": {
-    "file": "snapshot.20260804125921.db",
-    "sha256": "6a1b944974ee206662d49febff84b9f968080b439319cd9fd046ae76e5f075f1",
+    "file": "snapshot.20260804125921.folded.db",
+    "sha256": "8cb6b69836434292760838a32d19ec7649bccbc7f1e2b4bbe5328830b3720b5b",
     "version": 20260804125921
   }
 }
