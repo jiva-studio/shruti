@@ -19,4 +19,14 @@ export default {
   downloadStorageFull:
     "Speichergrenze erreicht. Entferne gehörte Vorträge oder erhöhe das Limit in den Einstellungen.",
   downloadStorageFullAction: "Trotzdem laden",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "Deine Daten konnten nicht geöffnet werden",
+    description:
+      "Die Datenbank mit deinen Notizen, deiner Playlist und deinem Hörverlauf ließ sich nicht öffnen, daher kann die App deine Bibliothek nicht anzeigen.",
+    advice:
+      "Starte die App neu und versuche es erneut. Wenn es weiterhin auftritt, gib Speicherplatz frei oder installiere die App neu.",
+    retry: "Erneut versuchen",
+  },
 }
