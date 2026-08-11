@@ -54,6 +54,7 @@ export function useSmartLibraryBinding(
       locations: [...store.locationIds],
       sources: [...store.sourceIds],
       tags: [...store.tagIds],
+      topics: [...store.topicIds],
       duration: store.duration[0],
       sort: store.sort,
       dateFrom: store.dateFrom,
@@ -78,6 +79,7 @@ export function useSmartLibraryBinding(
       void store.setLocations(next.locations ?? [])
       void store.setSources(next.sources ?? [])
       void store.setTags(next.tags ?? [])
+      void store.setTopics(next.topics ?? [])
       void store.setDuration(next.duration ? [next.duration as DurationFilterId] : [])
       void store.setSort(next.sort as SortMethod | undefined)
       void store.setDateFrom(next.dateFrom)
@@ -94,6 +96,7 @@ export function useSmartLibraryBinding(
       (f.locations?.length ?? 0) +
       (f.sources?.length ?? 0) +
       (f.tags?.length ?? 0) +
+      (f.topics?.length ?? 0) +
       (f.duration !== undefined && f.duration !== "" ? 1 : 0) +
       (f.sort !== undefined && f.sort !== "" ? 1 : 0) +
       (f.dateFrom !== undefined || f.dateTo !== undefined ? 1 : 0)
@@ -136,6 +139,7 @@ export function useSmartLibraryBinding(
       locations: [],
       sources: [],
       tags: [],
+      topics: [],
       duration: undefined,
       sort: undefined,
       dateFrom: undefined,
