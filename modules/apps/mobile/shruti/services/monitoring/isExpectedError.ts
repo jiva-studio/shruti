@@ -22,6 +22,17 @@
  * plugin rejections, RevenueCat numeric codes, platform network/WebKit strings).
  */
 
+// A failed dynamic import means a broken deploy — a rotated chunk hash, a
+// stale CDN edge — white-screening a lazy route, and must ALWAYS stay visible.
+// Checked before the deny-list because the engines word it differently and two
+// of those wordings sit inside benign network signatures: Chromium says
+// `TypeError: Failed to fetch dynamically imported module: <url>`, which the
+// bare `Failed to fetch` below matches as a substring. Anchoring that entry
+// instead would be fragile — engines prepend/append their own context, and the
+// non-Chromium wordings would still need listing here. WebKit's bare
+// `Load failed` needs no entry: it is deliberately absent from the deny-list.
+const DYNAMIC_IMPORT_FAILURE = /dynamically imported module|importing a module script failed/i
+
 // Message signatures that are always expected/benign across the app's adapters.
 // The network signatures (`Failed to fetch`, `unreachable`, iOS "connection
 // lost / offline") are expected on flaky mobile networks — every HTTP call site
@@ -30,8 +41,16 @@
 // do NOT list the bare WebKit "Load failed": our own fetches already rewrap to
 // NetworkError, and "Load failed" would also mask a failed dynamic-import (a
 // broken deploy white-screening iOS users) — which must stay visible.
+//
+// NB: "not open yet" is deliberately NOT here. It was added for SHRUTI-6
+// ("repositories(): content DB is not open yet"), but the same commit fixed
+// that noise at its source — the auto-download refill loop now logs the catch
+// at warn level, which captureConsole never escalates. Every other caller that
+// can race the DB open swallows the throw without logging. What the entry did
+// keep suppressing is the signal itself: `repositories()` throwing IS a
+// boot-ordering regression, and deny-listing it made those invisible.
 const EXPECTED_MESSAGE =
-  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|not open yet|Seek operation failed/i
+  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|Seek operation failed/i
 
 // Error class names that are control-flow, not faults: request cancellation,
 // user-cancelled IAP, and a store-refused purchase (IAP disabled on this build
@@ -88,5 +107,6 @@ export function isExpectedError(error: unknown): boolean {
             typeof (error as { message?: unknown }).message === "string"
           ? (error as { message: string }).message
           : ""
+  if (DYNAMIC_IMPORT_FAILURE.test(message)) return false
   return EXPECTED_MESSAGE.test(message)
 }
