@@ -1614,16 +1614,24 @@
     "suite_id": 26,
     "automation": 2,
     "title": "Quota reset auto-unlocks the composer",
-    "description": "Verifies the WIDGET, not the answer prose: after a quota 429 locks the composer, it auto-unlocks once the reset deadline passes (a near-future reset stands in for UTC midnight). Offline — auth mocked as free, /chat mocked to return a 429 with a reset a few seconds out.",
-    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to return 429 with a reset epoch ~4 seconds in the future.",
+    "description": "Verifies the WIDGET, not the answer prose: after a quota 429 locks the composer, it auto-unlocks once the reset deadline passes (a near-future reset stands in for UTC midnight), the upsell card is REMOVED rather than left as an empty row holding a screenful of reserved scroll room, and the question the quota swallowed is re-sent under the lifted limit. Offline — auth mocked as free, /chat mocked to return a 429 with a reset a few seconds out and then to stream a real answer.",
+    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to return 429 with a reset epoch ~4 seconds in the future on the first ask and an SSE answer on every ask after that.",
     "steps": [
       {
         "action": "Send a question that hits the quota limit (429).",
-        "expected": "The composer textarea is disabled (locked)."
+        "expected": "The composer textarea is disabled (locked) and the quota upsell card is shown."
       },
       {
         "action": "Wait for the reset deadline to pass.",
         "expected": "The composer textarea auto-unlocks (no longer disabled)."
+      },
+      {
+        "action": "Inspect the conversation where the upsell card was.",
+        "expected": "The upsell notice is gone and no blank assistant row is left behind holding a screenful of scroll."
+      },
+      {
+        "action": "Wait for the turn that follows the reset.",
+        "expected": "The original question was re-sent and its answer is rendered."
       }
     ],
     "tags": [
@@ -3444,6 +3452,48 @@
       "account",
       "auth",
       "free",
+      "e2e"
+    ]
+  },
+  "191": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Media clip card shows the clip title and a speaker · date attribution",
+    "description": "Verifies the WIDGET: a mocked media `action` body (curated title + speaker + date) plus a `[media:…]` marker must render the curated clip title on the card's title line and \"speaker · date\" as the attribution beneath it. Guards the parser whitelist, which dropped `date` and made the card print the attribution twice — once clipped — with the clip title lost.",
+    "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a video media body with title \"Are you all right?\", speaker and date.",
+    "steps": [
+      {
+        "action": "Ask chat to show a media clip.",
+        "expected": "A media card renders and its title line is the curated clip title, not the attribution."
+      },
+      {
+        "action": "Read the attribution line under the title.",
+        "expected": "It reads \"speaker · date\" and is not a duplicate of the title."
+      }
+    ],
+    "tags": [
+      "chat",
+      "e2e"
+    ]
+  },
+  "192": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "Machine-translated chapter card discloses the translation",
+    "description": "Verifies the WIDGET: a mocked chapter `action` body carrying `mt` plus per-row `title_original` must render the chapter list WITH the shared translation notice, and its toggle must swap the titles to the source language. Guards the parser whitelist, which rebuilt each row as {tokens,title} so machine-translated canto titles shipped with no disclosure.",
+    "preconditions": "Chat reachable offline (mocked auth + mocked SSE). The stream ships a chapter body with mt=true and a title_original on each row.",
+    "steps": [
+      {
+        "action": "Ask a locate question whose chapter titles are machine translated.",
+        "expected": "The chapter list renders with translated titles and the \"translated automatically\" notice is visible."
+      },
+      {
+        "action": "Tap the notice's view-original toggle.",
+        "expected": "The chapter titles switch to their source-language originals."
+      }
+    ],
+    "tags": [
+      "chat",
       "e2e"
     ]
   }

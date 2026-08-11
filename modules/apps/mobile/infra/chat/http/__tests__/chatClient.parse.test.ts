@@ -90,6 +90,103 @@ describe("parseStoredFrame — card-action validators", () => {
     ).toBeNull()
   })
 
+  // Issue #1611 part 2: the server ships per-chapter `title_original` and a
+  // payload-level `mt` when citation translation is on. The validator used to
+  // rebuild each row as `{tokens, title}` and throw both away, so a RU/UK/SR
+  // user got machine-translated canto titles with none of the disclosure every
+  // sibling card in the same bubble carries.
+  it("keeps a chapter's mt flag and per-row title_original", () => {
+    const ev = parse("action", {
+      kind: "chapter",
+      id: "a1",
+      payload: {
+        source_id: "sb",
+        region_token: "5",
+        region_label: "Песнь 5",
+        mt: true,
+        chapters: [
+          {
+            tokens: "5.5",
+            title: "Наставления Ришабхадевы",
+            title_original: "Lord Ṛṣabhadeva's Teachings",
+          },
+          { tokens: "5.6", title: "Игры Ришабхадевы" },
+        ],
+      },
+    })
+    expect(ev).toMatchObject({
+      payload: {
+        payload: {
+          mt: true,
+          chapters: [
+            {
+              tokens: "5.5",
+              title: "Наставления Ришабхадевы",
+              title_original: "Lord Ṛṣabhadeva's Teachings",
+            },
+            { tokens: "5.6", title: "Игры Ришабхадевы" },
+          ],
+        },
+      },
+    })
+  })
+
+  it("omits a chapter's mt / title_original when the server didn't translate", () => {
+    const ev = parse("action", {
+      kind: "chapter",
+      id: "a1",
+      payload: {
+        source_id: "bg",
+        region_token: "3",
+        chapters: [{ tokens: "3.1", title: "Karma-linux-client", title_original: "   " }],
+      },
+    })
+    // A blank original is no original — offering a toggle that changes
+    // nothing is worse than no badge at all.
+    expect(ev).toMatchObject({ payload: { payload: { chapters: [{ tokens: "3.1" }] } } })
+    const payload = (ev as { payload: { payload: Record<string, unknown> } }).payload.payload
+    expect(payload.mt).toBeUndefined()
+    expect((payload.chapters as Record<string, unknown>[])[0].title_original).toBeUndefined()
+  })
+
+  // Issue #1611 part 1: `date` was missing from the whitelist, so MediaCard's
+  // `[speaker, date]` attribution collapsed to the speaker alone — printed
+  // under a "title" that was itself the server's "<speaker> · <date>" label.
+  it("keeps a media clip's speaker AND date", () => {
+    const ev = parse("action", {
+      kind: "media",
+      id: "a1",
+      payload: {
+        id: "m1",
+        url: "public/media/m1.mp4",
+        type: "video",
+        title: "Are you all right?",
+        speaker: "Гопаласьяприя даси",
+        date: "1975",
+        text: "transcript",
+      },
+    })
+    expect(ev).toMatchObject({
+      payload: {
+        payload: {
+          title: "Are you all right?",
+          speaker: "Гопаласьяприя даси",
+          date: "1975",
+        },
+      },
+    })
+  })
+
+  it("omits a media clip's date when the server sent none / an empty one", () => {
+    const ev = parse("action", {
+      kind: "media",
+      id: "a1",
+      payload: { id: "m1", url: "u.mp4", type: "video", title: "T", text: "", date: "" },
+    })
+    const payload = (ev as { payload: { payload: Record<string, unknown> } }).payload.payload
+    expect(payload.date).toBeUndefined()
+  })
+
   it("drops media of unknown type / missing url", () => {
     expect(
       parse("action", { kind: "media", id: "a1", payload: { id: "m", url: "u", type: "gif" } })
