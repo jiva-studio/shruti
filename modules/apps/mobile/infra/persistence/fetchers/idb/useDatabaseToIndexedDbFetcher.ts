@@ -1,5 +1,5 @@
 import type { IDatabaseFetcher, ProgressCallback } from "@ports/app/index.js"
-import { saveBlob, keyExists, deleteBlob } from "@kit/infra"
+import { saveBlob, keyExists, deleteBlob, getAllKeys } from "@kit/infra"
 import { downloadWithProgress } from "./streamDownloader.js"
 
 /**
@@ -61,12 +61,30 @@ export function useDatabaseToIndexedDbFetcher(): IDatabaseFetcher {
   }
 
   /**
-   * IndexedDB adapter doesn't support filesystem-style directory listing:
-   * blobs live under arbitrary (dbName, storeName, key) tuples and we don't
-   * enumerate them. Callers treat an empty list as "no local DB available"
-   * and fall back to a CDN download, which is the correct web behaviour.
+   * Enumerate the cached blobs under `directory` — the "dbName/storeName"
+   * prefix of the path format above — as full `dbName/storeName/key` paths, so
+   * callers can match them against the same templates they hand `delete()`.
+   *
+   * This used to return `[]` unconditionally ("IndexedDB can't list"), which
+   * quietly turned `resetContentDatabase` — and every other
+   * `pruneContentDatabases` sweep — into a no-op on the web build: a wipe or a
+   * "delete database" left the ~54 MB catalog sitting in IndexedDB, and each
+   * published version added another dead copy beside it (#1663). An object
+   * store enumerates perfectly well; nothing but the stub stood in the way.
+   *
+   * An unopenable store still means "nothing cached here", so a failure keeps
+   * the old empty answer rather than breaking startup.
    */
-  const list = async (): Promise<string[]> => []
+  const list = async (directory: string): Promise<string[]> => {
+    const [dbName, storeName] = directory.split("/")
+    if (!dbName || !storeName) return []
+    try {
+      const keys = await getAllKeys(dbName, storeName)
+      return keys.map((key) => `${directory}/${key}`)
+    } catch {
+      return []
+    }
+  }
 
   return {
     download,

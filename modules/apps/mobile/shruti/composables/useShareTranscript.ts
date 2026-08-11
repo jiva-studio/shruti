@@ -1,6 +1,7 @@
 import type { RenderTranscriptRequest } from "@ports/app/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
+import { transcriptPdfCacheKey } from "@shruti/services/shareArtifactKeys.js"
 import { SHORT_POLL_TIMEOUT_MS } from "@lib/chat/utils/pollUntilReady.js"
 
 export interface UseShareTranscriptReturn {
@@ -11,13 +12,13 @@ export interface UseShareTranscriptReturn {
    * without ever calling the service. Shared by the Library share menu and
    * the chat share card.
    */
-  prepareLocalPdf: (req: RenderTranscriptRequest, filename: string) => Promise<string>
+  prepareLocalPdf: (req: RenderTranscriptRequest) => Promise<string>
 }
 
 export function useShareTranscript(): UseShareTranscriptReturn {
   const app = useShruti()
 
-  async function prepareLocalPdf(req: RenderTranscriptRequest, filename: string): Promise<string> {
+  async function prepareLocalPdf(req: RenderTranscriptRequest): Promise<string> {
     // The PDF lands at a deterministic public key; probing it lets a warm
     // copy skip the render call entirely. The service writes to (and the
     // CDN serves) this exact URL, so probe + download target the same one.
@@ -26,7 +27,9 @@ export function useShareTranscript(): UseShareTranscriptReturn {
     )
     return resolveShareArtifact({
       cache: app.excerptCache,
-      filename,
+      // Keyed like the public URL — by track and language, never by the
+      // display title, which two languages of one lecture can share.
+      filename: transcriptPdfCacheKey(req.trackId, req.lang),
       predictedUrl,
       cut: () => app.shareTranscriptService.renderPdf(req),
       // A transcript PDF renders in seconds; a dead URL must fail fast

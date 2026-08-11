@@ -2,7 +2,8 @@ import { test, expect } from "../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
 import { gotoTab } from "../../support/nav.js"
-import { mockChatAuth, askChat } from "../../support/chat-mock.js"
+import { askChat } from "../../support/chat-mock.js"
+import { mockChatAuth } from "../../support/auth-mock.js"
 import { step, caseTitle } from "../../support/steps.js"
 
 // When the chat backend is down, sending surfaces an inline notice (with Retry)

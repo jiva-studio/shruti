@@ -3,7 +3,8 @@ import { qase } from "playwright-qase-reporter"
 import { boot } from "../../support/bootstrap.js"
 import { gotoTab } from "../../support/nav.js"
 import { step, caseTitle } from "../../support/steps.js"
-import { mockChatAuth, mockChatStream, askChat, delta, action, done } from "../../support/chat-mock.js"
+import { mockChatStream, askChat, delta, action, done } from "../../support/chat-mock.js"
+import { mockChatAuth } from "../../support/auth-mock.js"
 
 // What these verify is the rendered WIDGET, not the answer prose. Each chat
 // request type is driven entirely by a mocked SSE stream: an `action` side-event

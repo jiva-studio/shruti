@@ -10,8 +10,9 @@ export default {
   dictionariesUnavailable: "Није могуће учитати називе — неке ознаке можда недостају.",
   playbackFailed: "Није могуће репродуковати ово предавање. Проверите везу и покушајте поново.",
   noAudioForLecture: "Ово предавање нема аудио.",
-  translationFailed: "Превод није успео. Покушајте касније.",
-  translationStillRunning: "Превод траје дуже него обично — појавиће се чим буде готов.",
+  translationFailed: "Превод на {language} није успео. Покушајте касније.",
+  translationStillRunning:
+    "Превод на {language} траје дуже него обично — појавиће се чим буде готов.",
   downloadStorageFull:
     "Достигнут је лимит меморије. Уклоните преслушана предавања или повећајте лимит у подешавањима.",
   downloadStorageFullAction: "Ипак преузми",

@@ -154,15 +154,15 @@ describe("listeningSessionsRepository.sql", () => {
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
     // … and the native journal re-presents the WHOLE [resume point → end]
     // span of the run that ended at 3400.
-    const id = await repo.forceStartOnce({
+    const first = await repo.forceStartOnce({
       itemId: ITEM_A,
       position: 0,
       endPosition: 2400,
       sourceKey: "queue:1:pi-a:1784000000000",
       runWindow: { fromSec: 1000, toSec: 3460 },
     })
-    expect(id).not.toBeNull()
-    await repo.finish(id!, { position: 2400 })
+    expect(first.created).toBe(true)
+    await repo.finish(first.id, { position: 2400 })
 
     const [journaled] = await db.query<{ from_position: number; to_position: number }>(
       "SELECT from_position, to_position FROM listening_sessions WHERE source_key IS NOT NULL"
@@ -179,7 +179,7 @@ describe("listeningSessionsRepository.sql", () => {
     })
     const [ahead] = await db.query<{ from_position: number }>(
       "SELECT from_position FROM listening_sessions WHERE id = ?",
-      [later!]
+      [later.id]
     )
     expect(ahead?.from_position).toBe(3000)
   })
@@ -197,19 +197,46 @@ describe("listeningSessionsRepository.sql", () => {
       toPosition: 2400,
     })
     const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
-    const id = await repo.forceStartOnce({
+    const replayed = await repo.forceStartOnce({
       itemId: ITEM_A,
       position: 0,
       endPosition: 2400,
       sourceKey: "queue:9:pi-a:1786000000000",
       runWindow: { fromSec: 1_800_000, toSec: 1_802_460 },
     })
-    await repo.finish(id!, { position: 2400 })
+    await repo.finish(replayed.id, { position: 2400 })
 
     const [replay] = await db.query<{ from_position: number; to_position: number }>(
       "SELECT from_position, to_position FROM listening_sessions WHERE source_key IS NOT NULL"
     )
     expect(replay).toMatchObject({ from_position: 0, to_position: 2400 })
+  })
+
+  it("forceStartOnce() hands a replay the existing row so a half-written one can be closed", async () => {
+    // The key is stamped by the INSERT, so a row whose `finish` never landed
+    // (app suspended, contended DB) is on disk claiming zero seconds. The
+    // replay must be able to reach it — returning nothing froze it there
+    // forever (#1593).
+    const repo = createSqlListeningSessionRepository(db, createSqlUnitOfWork(db))
+    const args = {
+      itemId: ITEM_A,
+      position: 0,
+      endPosition: 2400,
+      sourceKey: "queue:3:pi-a:1784000000000",
+      runWindow: { fromSec: 1000, toSec: 3460 },
+    }
+    const half = await repo.forceStartOnce(args)
+    // …finish never ran.
+
+    const again = await repo.forceStartOnce(args)
+    expect(again).toEqual({ id: half.id, created: false })
+    await repo.finish(again.id, { position: 2400 })
+
+    const rows = await db.query<{ from_position: number; to_position: number }>(
+      "SELECT from_position, to_position FROM listening_sessions WHERE source_key IS NOT NULL"
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ from_position: 0, to_position: 2400 })
   })
 
   it("tick() and finish() advance to_position and ended_at", async () => {

@@ -9,8 +9,9 @@ export default {
   playbackFailed:
     "Nem sikerült lejátszani ezt az előadást. Ellenőrizd a kapcsolatot, és próbáld újra.",
   noAudioForLecture: "Ehhez az előadáshoz nincs hang.",
-  translationFailed: "A fordítás nem sikerült. Próbáld meg később.",
-  translationStillRunning: "A fordítás a szokásosnál tovább tart — megjelenik, amint elkészül.",
+  translationFailed: "A(z) {language} fordítás nem sikerült. Próbáld meg később.",
+  translationStillRunning:
+    "A(z) {language} fordítás a szokásosnál tovább tart — megjelenik, amint elkészül.",
   downloadStorageFull:
     "Elérted a tárhelykorlátot. Törölj meghallgatott előadásokat, vagy növeld a korlátot a beállításokban.",
   downloadStorageFullAction: "Mégis letöltöm",
