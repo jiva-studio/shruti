@@ -41,6 +41,13 @@ export interface DayOffsetListeningTotal {
   readonly listenedSeconds: number
 }
 
+/** Outcome of `forceStartOnce`: the row holding the source key, plus whether
+ *  this call is the one that inserted it. */
+export interface ForceStartOnceResult {
+  readonly id: ListeningSessionId
+  readonly created: boolean
+}
+
 export interface IListeningSessionRepository {
   /**
    * Open a new session that *continues* the item's listening history.
@@ -66,9 +73,17 @@ export interface IListeningSessionRepository {
   /**
    * `forceStart` for a session replayed from an external, durable log — today
    * the native queue's transition journal (#1495). `sourceKey` is the identity
-   * of the source record; the insert happens at most once per key and returns
-   * `null` when that key was already folded in, so a log entry whose ack never
-   * landed can be replayed for free instead of counting its minutes twice.
+   * of the source record; the insert happens at most once per key, so a log
+   * entry whose ack never landed can be replayed for free instead of counting
+   * its minutes twice.
+   *
+   * Always returns the row's id — the one just inserted (`created: true`) or
+   * the one already holding the key (`created: false`). The key is stamped by
+   * the INSERT, i.e. BEFORE the session is closed, so a replay is the only
+   * chance to repair a row whose `finish` never landed; returning nothing left
+   * it frozen at zero seconds forever (#1593). `created` says whether this call
+   * is the one that opened the row, which is what a caller gates its
+   * "first time seen" side effects on.
    *
    * Sessions opened by the ordinary player path carry no key and are never
    * deduped against each other — replaying a lecture is legitimately a second
@@ -98,7 +113,7 @@ export interface IListeningSessionRepository {
      * clamps the new one.
      */
     runWindow: { fromSec: number; toSec: number }
-  }): Promise<ListeningSessionId | null>
+  }): Promise<ForceStartOnceResult>
 
   /** Update `ended_at = now` and `to_position = position` of an open session. */
   tick(
