@@ -1,7 +1,7 @@
 import { test as base, expect } from "@playwright/test"
 import { fixturesReady, missingFixtures } from "./fixtures.js"
 import { installNetworkGuard } from "./network-guard.js"
-import { installDefaultAnonymousAuth } from "./chat-mock.js"
+import { installDefaultAnonymousAuth } from "./auth-mock.js"
 import { installProfileSyncMock } from "./sync-mock.js"
 
 /**
@@ -19,7 +19,7 @@ import { installProfileSyncMock } from "./sync-mock.js"
  *   1. the network guard blocks anything that would leave the machine, and
  *      fails the test when it was aimed at production (`network-guard.ts`),
  *   2. `POST /auth/anonymous` gets a canned session, so no spec can mint a real
- *      account (`chat-mock.ts`),
+ *      account (`auth-mock.ts`),
  *   3. `**​/profile/sync/*` gets a deterministic empty answer (`sync-mock.ts`).
  *
  * All three are CONTEXT-level routes, which Playwright matches after page-level
