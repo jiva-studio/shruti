@@ -50,6 +50,22 @@ describe("downloadTranscripts", () => {
     expect(transfer).toHaveBeenCalledWith("t-1", "ru")
   })
 
+  it("keeps the first advertised language when the allow-list matches nothing", async () => {
+    // Otherwise a lecture saved for offline in a language nobody in this
+    // install reads would have NO transcript at all — worse than a spare one.
+    const transfer = vi
+      .fn<(trackId: TrackId, language: LanguageCode) => Promise<void>>()
+      .mockResolvedValue(undefined)
+    const repo = makeRepo(["es", "pt"] as readonly LanguageCode[])
+    const result = await downloadTranscripts(
+      { trackId: "t-1" as TrackId, languages: ["ru", "en"] as readonly LanguageCode[] },
+      { transcripts: repo, transfer }
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.cached).toEqual(["es"])
+    expect(transfer).toHaveBeenCalledTimes(1)
+  })
+
   it("treats an empty languages list as 'no allow-list' (downloads everything)", async () => {
     const transfer = vi
       .fn<(trackId: TrackId, language: LanguageCode) => Promise<void>>()
