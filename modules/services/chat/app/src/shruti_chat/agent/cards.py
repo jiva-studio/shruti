@@ -247,7 +247,13 @@ async def build_media_payload(ctx: TurnContext, mref: MediaRef) -> dict[str, Any
         "id": mref.item_id,
         "url": row["url"],
         "type": row["type"],
-        "title": mref.label,
+        # The alias label is `_media_addr`'s "<speaker> · <date>" whenever the
+        # meta has both — the ATTRIBUTION line, which the card already builds
+        # itself from `speaker` + `date` below. Sending it as the title made
+        # the card print the same name twice and never show the curated clip
+        # title. Prefer the row's own title; fall back to the label only when
+        # the row has none.
+        "title": row["title"] or mref.label,
         "text": mref.text,
     }
     media_lang = mref.lang or row.get("lang") or None

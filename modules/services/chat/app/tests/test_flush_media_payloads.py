@@ -57,6 +57,7 @@ def _seed_media(
     url: str,
     mtype: str,
     meta: str | None,
+    title: str = "title",
 ) -> None:
     """Write one `library_media` row into a temp SQLite library.db."""
     with sqlite3.connect(str(path)) as conn:
@@ -70,7 +71,7 @@ def _seed_media(
         )
         conn.execute(
             "INSERT INTO library_media VALUES (?,?,?,?,?,?,?,?,?)",
-            (media_id, "ru", "title", "body", "ctx", "embed", url, mtype, meta),
+            (media_id, "ru", title, "body", "ctx", "embed", url, mtype, meta),
         )
         conn.commit()
 
@@ -92,6 +93,7 @@ async def test_flush_resolves_full_payload_via_fetch_media(
         url="media/clips/abc.mp4",
         mtype="video",
         meta='{"speaker": "Хари Шаури", "date": "1976"}',
+        title="Кто такой гуру?",
     )
     ctx = TurnContext(library_db_path=db)
     ctx.aliases.alias_media(
@@ -112,11 +114,59 @@ async def test_flush_resolves_full_payload_via_fetch_media(
     # url / type / speaker are resolved from library_media, not the chunk.
     assert payload["url"] == "media/clips/abc.mp4"   # relative path
     assert payload["type"] == "video"
-    assert payload["title"] == "Хари Шаури · 1976"   # label from the alias
+    # The alias label is `_media_addr`'s "<speaker> · <date>" — the ATTRIBUTION,
+    # which the card composes itself from `speaker` + `date`. Sending it as the
+    # title made the card print the same name twice and lose the curated clip
+    # title, so the row's own title wins (issue #1611).
+    assert payload["title"] == "Кто такой гуру?"
     assert payload["speaker"] == "Хари Шаури"
+    assert payload["date"] == "1976"
     # text is the display string carried on the alias (envelope time).
     assert payload["text"] == "Я помню, как Шрила Прабхупада..."
     assert ("media", ("media_abc",)) in ctx.emitted_card_keys
+
+
+async def test_flush_falls_back_to_the_alias_label_when_the_row_has_no_title(
+    capture_writer, tmp_path: Path
+) -> None:
+    db = tmp_path / "library.db"
+    _seed_media(
+        db,
+        media_id="media_untitled",
+        url="media/clips/u.mp4",
+        mtype="video",
+        meta='{"speaker": "Хари Шаури", "date": "1976"}',
+        title="",
+    )
+    ctx = TurnContext(library_db_path=db)
+    ctx.aliases.alias_media("media_untitled", label="Хари Шаури · 1976")
+
+    await flush_card_payloads(ctx)
+
+    payload = capture_writer[0]["data"]["payload"]
+    # No curated title to prefer — a labelled card still beats a blank one.
+    assert payload["title"] == "Хари Шаури · 1976"
+
+
+async def test_flush_omits_date_when_absent(
+    capture_writer, tmp_path: Path
+) -> None:
+    db = tmp_path / "library.db"
+    _seed_media(
+        db,
+        media_id="media_nodate",
+        url="media/clips/n.mp4",
+        mtype="video",
+        meta='{"speaker": "Хари Шаури"}',
+    )
+    ctx = TurnContext(library_db_path=db)
+    ctx.aliases.alias_media("media_nodate", label="Хари Шаури")
+
+    await flush_card_payloads(ctx)
+
+    payload = capture_writer[0]["data"]["payload"]
+    assert payload["speaker"] == "Хари Шаури"
+    assert "date" not in payload
 
 
 async def test_flush_omits_speaker_when_absent(
