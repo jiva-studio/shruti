@@ -1,14 +1,18 @@
 import type { IOutboxRepository } from "@lib/domain/ports/outboxRepository.js"
+import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { ISyncBackfillRepository } from "@lib/domain/ports/syncBackfillRepository.js"
 import type { ISyncStateRepository } from "@lib/domain/ports/syncStateRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import { hlcNow, hlcToString, parseHlc, type Hlc } from "@lib/domain"
+import { hlcNow, hlcToString, maxHlcString, parseHlc, type Hlc } from "@lib/domain"
 
 export interface BackfillLocalDeps {
   /** Reader over the un-journaled rows in the synced collections. */
   readonly backfill: ISyncBackfillRepository
   /** The local journal the backfilled rows are enqueued into. */
   readonly outbox: IOutboxRepository
+  /** Source of the highest server HLC this device has OBSERVED — the other
+   *  half of the stamp seed, see below. */
+  readonly apply: Pick<ISyncApplyRepository, "latestServerHlc">
   /** Source of this device's stable id (the HLC tiebreak). */
   readonly syncState: ISyncStateRepository
   /** Reentrant unit-of-work — enumeration + enqueue run in one transaction. */
@@ -56,10 +60,15 @@ export async function backfillLocal(deps: BackfillLocalDeps): Promise<BackfillLo
     if (candidates.length === 0) return { enqueued: 0, collections: [] }
 
     const deviceId = await deps.syncState.getDeviceId()
-    // Seed the HLC chain from the newest journaled stamp so backfilled clocks
-    // are strictly monotonic with any prior local writes.
+    // Seed the HLC chain from the highest stamp this device has ISSUED or
+    // OBSERVED — the outbox tail and the recorded server pointers. The tail
+    // alone leaves a device whose clock trails another one stamping below the
+    // remote changes it already holds, which loses the LWW comparison against
+    // them (#1628).
     const tail = await deps.outbox.latestHlc()
-    let lastSeen: Hlc | null = tail === null ? null : parseHlc(tail)
+    const observed = await deps.apply.latestServerHlc()
+    const seed = maxHlcString(tail, observed)
+    let lastSeen: Hlc | null = seed === null ? null : parseHlc(seed)
 
     const collections = new Set<string>()
     for (const c of candidates) {

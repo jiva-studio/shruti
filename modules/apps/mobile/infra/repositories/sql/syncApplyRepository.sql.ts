@@ -1,7 +1,7 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { ISyncApplyRepository } from "@lib/domain/ports/syncApplyRepository.js"
 import type { SyncDoc } from "@lib/domain"
-import { compareHlcString } from "@lib/domain"
+import { maxHlcString } from "@lib/domain"
 import type {
   NoteRow,
   PlaylistItemRow,
@@ -60,11 +60,7 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
       "SELECT server_hlc FROM sync_doc_hlc WHERE collection = ? AND doc_id = ?",
       [collection, docId]
     )
-    const outboxHlc = outboxRows[0]?.hlc ?? null
-    const serverHlc = serverRows[0]?.server_hlc ?? null
-    if (outboxHlc === null) return serverHlc
-    if (serverHlc === null) return outboxHlc
-    return compareHlcString(outboxHlc, serverHlc) >= 0 ? outboxHlc : serverHlc
+    return maxHlcString(outboxRows[0]?.hlc ?? null, serverRows[0]?.server_hlc ?? null)
   }
 
   async function readLocalRow(collection: string, docId: string): Promise<unknown | null> {
@@ -411,6 +407,15 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
         [collection, docId]
       )
       return rows[0]?.server_hlc ?? null
+    },
+
+    latestServerHlc: async () => {
+      // Plain MAX: `hlcToString` zero-pads both numeric components, so SQLite's
+      // lexicographic ordering is the same total order as `compareHlc`.
+      const rows = await db.query<{ hlc: string | null }>(
+        "SELECT MAX(server_hlc) AS hlc FROM sync_doc_hlc"
+      )
+      return rows[0]?.hlc ?? null
     },
 
     recordServerHlc,

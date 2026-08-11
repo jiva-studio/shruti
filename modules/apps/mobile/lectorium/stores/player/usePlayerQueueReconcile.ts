@@ -165,19 +165,25 @@ export function usePlayerQueueReconcile(): PlayerQueueReconcileReturn {
       // losing one history row shouldn't also lose the resume position.
       let firstTime = true
       try {
-        const id = await repo.forceStartOnce({
+        const session = await repo.forceStartOnce({
           itemId: e.finishedItemId,
           position: msToSec(e.fromPositionMs),
           endPosition: msToSec(e.finishedAtMs),
           sourceKey: sourceKey(e),
           runWindow: window,
         })
-        if (id === null) firstTime = false
+        firstTime = session.created
+        // Closed on EVERY pass, replay included. The source key is stamped by
+        // the insert, so a row whose finish never landed the first time is on
+        // disk claiming zero seconds and this is the only path that still
+        // reaches it; `finish` is `MAX(to_position, ?)`, so a row already
+        // closed at or beyond this point is left as it is (#1593).
+        //
         // `ended_at` ends up as "now" rather than the original `e.at` —
         // the repo stamps server-less wall-clock. Completion detection
         // uses to_position vs duration, which is correct; only the exact
         // completion timestamp is approximate for long-backgrounded play.
-        else await repo.finish(id, { position: msToSec(e.finishedAtMs) })
+        await repo.finish(session.id, { position: msToSec(e.finishedAtMs) })
       } catch (err) {
         // Best-effort: a failed journal write shouldn't block the ack —
         // losing one history row is better than reprocessing forever.

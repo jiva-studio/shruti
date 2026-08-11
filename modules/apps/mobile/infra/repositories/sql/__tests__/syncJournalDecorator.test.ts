@@ -10,7 +10,7 @@ import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionReposi
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
 import type { ILibraryMembershipRepository } from "@lib/domain/ports/libraryMembershipRepository.js"
 import type { ListeningSessionRow } from "@lib/persistence/user"
-import { compareHlcString } from "@lib/domain"
+import { compareHlcString, hlcToString } from "@lib/domain"
 import { withSyncJournaling } from "../syncJournalDecorator.js"
 
 interface OutboxRow {
@@ -24,16 +24,34 @@ interface OutboxRow {
 }
 
 /** Minimal in-memory IDatabase covering exactly what the decorator queries:
- *  the last-outbox-hlc read, a listening-session-by-id read, and the outbox
- *  INSERT. */
+ *  the HLC seed (outbox tail ∪ recorded server stamps), a
+ *  listening-session-by-id read, and the outbox INSERT. */
 function makeFakeDb(
   sessions: Map<string, ListeningSessionRow>,
-  playlist: Map<string, { id: string; track_id: string }> = new Map()
+  playlist: Map<string, { id: string; track_id: string }> = new Map(),
+  /** `sync_doc_hlc`: the server HLC of every doc this device has pulled,
+   *  keyed `${collection} ${docId}`. */
+  docHlc: Map<string, string> = new Map()
 ) {
   const outbox: OutboxRow[] = []
   let seq = 0
   const db: IDatabase = {
     async query<T>(sql: string, params?: QueryParams): Promise<T[]> {
+      // The stamp seed reads BOTH tables — what this device issued and what it
+      // observed — so the fake has to answer from both too.
+      if (sql.includes("MAX(hlc)")) {
+        const last = outbox[outbox.length - 1]
+        const seen = [...(last ? [last.hlc] : []), ...docHlc.values()]
+        const max = seen.reduce<string | null>(
+          (best, h) => (best === null || h > best ? h : best),
+          null
+        )
+        return [{ hlc: max }] as T[]
+      }
+      if (sql.includes("FROM sync_doc_hlc")) {
+        const key = `${String(params?.[0])} ${String(params?.[1])}`
+        return (docHlc.has(key) ? [{ one: 1 }] : []) as T[]
+      }
       if (sql.includes("FROM outbox")) {
         const last = outbox[outbox.length - 1]
         return (last ? [{ hlc: last.hlc }] : []) as T[]
@@ -209,6 +227,8 @@ function stubLibraryMemberships(): ILibraryMembershipRepository {
 describe("withSyncJournaling", () => {
   let sessions: Map<string, ListeningSessionRow>
   let playlist: Map<string, { id: string; track_id: string }>
+  /** Server HLCs this device has already pulled and recorded. */
+  let docHlc: Map<string, string>
   let db: IDatabase
   let outbox: OutboxRow[]
   let repos: ReturnType<typeof withSyncJournaling>
@@ -219,7 +239,8 @@ describe("withSyncJournaling", () => {
     owner = null
     sessions = new Map()
     playlist = new Map()
-    const fake = makeFakeDb(sessions, playlist)
+    docHlc = new Map()
+    const fake = makeFakeDb(sessions, playlist, docHlc)
     db = fake.db
     outbox = fake.outbox
     repos = withSyncJournaling(
@@ -338,6 +359,43 @@ describe("withSyncJournaling", () => {
     expect(outbox).toHaveLength(3)
     expect(compareHlcString(outbox[1]!.hlc, outbox[0]!.hlc)).toBeGreaterThan(0)
     expect(compareHlcString(outbox[2]!.hlc, outbox[1]!.hlc)).toBeGreaterThan(0)
+  })
+
+  it("stamps above a remote HLC already pulled, even from a doc it never touched", async () => {
+    // The other phone's clock runs ten minutes fast. Its edit was pulled and
+    // its stamp recorded, so this device has OBSERVED a clock that far ahead —
+    // and `hlcNow`'s seed is "issued or observed". Seeding from the outbox tail
+    // alone stamps the edit below the change it descends from; the server takes
+    // the push anyway (it gates on `base_hlc`, not on ordering), and pull-side
+    // LWW then keeps the older text on every device (#1628).
+    const remote = hlcToString({
+      physical: Date.now() + 600_000,
+      counter: 0,
+      deviceId: "dev-ahead",
+    })
+    docHlc.set("notes note_remote", remote)
+
+    await repos.notes.create({ trackId: "t1", text: "local edit", timeStart: 0, timeEnd: 1 })
+
+    expect(outbox).toHaveLength(1)
+    expect(compareHlcString(outbox[0]!.hlc, remote)).toBeGreaterThan(0)
+  })
+
+  it("keeps stamping above the observed clock on the writes that follow", async () => {
+    // The seed is re-read per write, so the second stamp must clear the remote
+    // one too — not fall back to the wall clock once an outbox tail exists.
+    const remote = hlcToString({
+      physical: Date.now() + 600_000,
+      counter: 0,
+      deviceId: "dev-ahead",
+    })
+    docHlc.set("notes note_remote", remote)
+
+    await repos.notes.create({ trackId: "t1", text: "a", timeStart: 0, timeEnd: 1 })
+    await repos.notes.create({ trackId: "t1", text: "b", timeStart: 0, timeEnd: 1 })
+
+    expect(compareHlcString(outbox[1]!.hlc, remote)).toBeGreaterThan(0)
+    expect(compareHlcString(outbox[1]!.hlc, outbox[0]!.hlc)).toBeGreaterThan(0)
   })
 
   it("does not journal clearAll (local data-wipe path)", async () => {

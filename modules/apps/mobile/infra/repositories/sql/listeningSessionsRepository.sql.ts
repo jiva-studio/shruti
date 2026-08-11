@@ -159,17 +159,22 @@ export function createSqlListeningSessionRepository(
       // tracker writes on the player's tick cadence, straight through this
       // drain's window.
       return unitOfWork.run(async () => {
-        // Read first so a replay is an ordinary no-op rather than a caught
+        // Read first so a replay inserts nothing rather than raising a caught
         // constraint violation; the UNIQUE index (migration 025) still stands
         // behind it as the guarantee, and turns a genuine race into a throw the
         // caller reports instead of a silently doubled total.
+        //
+        // The existing id is handed back, not swallowed: the key is stamped by
+        // the INSERT, so a row whose `finish` never landed sits on disk at zero
+        // seconds and the replay is the only thing that can still close it
+        // (#1593).
         const existing = await queryOne<{ id: string }, ListeningSessionId>(
           db,
           "SELECT id FROM listening_sessions WHERE source_key = ? LIMIT 1",
           [sourceKey],
           (r) => r.id as ListeningSessionId
         )
-        if (existing !== null) return null
+        if (existing !== null) return { id: existing, created: false }
         // Capped at `endPosition`, because the clamp may only shrink this run's
         // interval from the LEFT — never push its start past where the run
         // actually ended. Uncapped, a rewind-then-skip (the live row closed
@@ -181,7 +186,8 @@ export function createSqlListeningSessionRepository(
         // `tick` / `finish` all maintain, so the row credits zero instead.
         const claimed = await claimedInWindow(itemId, runWindow.fromSec, runWindow.toSec)
         const fromPosition = Math.min(Math.max(claimed ?? position, position), endPosition)
-        return insert(itemId, fromPosition, fromPosition, sourceKey)
+        const id = await insert(itemId, fromPosition, fromPosition, sourceKey)
+        return { id, created: true }
       })
     },
 
