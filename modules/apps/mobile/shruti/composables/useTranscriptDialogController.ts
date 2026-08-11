@@ -1,5 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
+import { useToast } from "@kit/composables"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { TrackOutlineChapter } from "@lib/domain/trackVariant.js"
 import type { Note } from "@lib/domain/note.js"
@@ -16,7 +17,10 @@ import { requestSync } from "@shruti/services/syncEvents.js"
 import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import router from "@shruti/router/index.js"
-import { buildMergedTranscriptViewData } from "@shruti/composables/buildTranscriptViewData.js"
+import {
+  buildMergedTranscriptViewData,
+  multiSpeakerLanguages,
+} from "@shruti/composables/buildTranscriptViewData.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import { resolveLocalizedName } from "@lib/domain/services/localizedName.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
@@ -52,6 +56,13 @@ export interface TranscriptDialogState {
   readonly error: Ref<string | null>
   readonly hasNoTranscripts: ComputedRef<boolean>
   readonly allowMultipleLanguages: Ref<boolean>
+  /**
+   * Languages whose transcript actually holds a dialogue — i.e. more than one
+   * distinct speaker. Drives the per-line speaker icon and the speaker-change
+   * dash/newline, which are noise on a monologue. Evaluated per language, so a
+   * single-speaker English side stays clean beside a multi-speaker Russian one.
+   */
+  readonly multiSpeakerLanguages: ComputedRef<ReadonlySet<string>>
   readonly highlightCurrentSentence: Ref<boolean>
   readonly autoScrollCfg: Ref<boolean>
   /**
@@ -86,6 +97,7 @@ export function useTranscriptDialogController(
 ): TranscriptDialogState {
   const app = useShruti()
   const { t } = useI18n()
+  const toast = useToast()
   const transcriptStore = useTranscriptStore()
   const library = useLibraryStore()
   // Languages currently being translated on demand (drives the ghost chip's
@@ -130,6 +142,18 @@ export function useTranscriptDialogController(
   const loader = useTranscriptLoader({
     getTranscripts: () => app.repositories().transcripts,
   })
+
+  /**
+   * Report a failed ACTION (bookmark, ask, translate, chapter tap) without
+   * touching `loader.error`. That ref means "the transcript document failed to
+   * load" and the reader swaps the whole text for an error state on it, so
+   * routing an action failure there blanked the page the user was reading and
+   * nothing but closing the dialog brought it back (issue #1583). A toast
+   * floats over the reader and leaves the text in place.
+   */
+  function reportActionError(message: string): void {
+    void toast.error(message)
+  }
 
   async function refreshNotesForTrack(): Promise<void> {
     const id = transcriptStore.trackId
@@ -183,9 +207,7 @@ export function useTranscriptDialogController(
       void refreshNotesForTrack()
       void notesStore.refresh()
     },
-    onError: (message) => {
-      loader.error.value = message
-    },
+    onError: reportActionError,
     onAskRequested: async ({ trackId, text, timeStart, timeEnd }) => {
       // Build focus payload — pin all bibliographic context at insert
       // time so a later catalog rename / dictionary swap doesn't
@@ -241,7 +263,7 @@ export function useTranscriptDialogController(
         transcriptStore.close()
       } catch (err) {
         console.warn("[transcript] ask-sadhu dispatch failed:", err)
-        loader.error.value = err instanceof Error ? err.message : String(err)
+        reportActionError(err instanceof Error ? err.message : String(err))
       }
     },
   })
@@ -385,11 +407,22 @@ export function useTranscriptDialogController(
         // overview is generated from the translated blocks on the worker).
         title: item.titleRaw ?? undefined,
       })
-      const ok = await pollRun(res.run_id)
+      const outcome = await pollRun(res.run_id)
+      // Whatever happens, say so: the ghost chip only spins, so a run that ends
+      // in "failed" — or one still going after six minutes of polling — used to
+      // leave the user with no way to tell the two apart (issue #1589).
+      if (outcome === "pending") {
+        reportActionError(t("errors.translationStillRunning"))
+        return
+      }
+      if (outcome !== "ready") {
+        reportActionError(t("errors.translationFailed"))
+        return
+      }
       // The run is ready, but the produced variant reaches THIS device through the
       // normal sync — request a pull, then wait (reactively) for the library item
       // to carry the new language and re-hydrate so it becomes a real chip.
-      if (ok && transcriptStore.trackId === trackId) {
+      if (transcriptStore.trackId === trackId) {
         requestSync()
         await waitForSyncedVariant(trackId, code)
       }
@@ -399,7 +432,7 @@ export function useTranscriptDialogController(
         usePaywallStore().requestOpen()
         return
       }
-      loader.error.value = err instanceof Error ? err.message : "Translation failed"
+      reportActionError(err instanceof Error ? err.message : t("errors.translationFailed"))
     } finally {
       const next = new Set(translating.value)
       next.delete(code)
@@ -439,24 +472,34 @@ export function useTranscriptDialogController(
 
   // Poll a translate run to completion. Bounded so a stuck run can't spin
   // forever; sync remains the authoritative fallback for the produced variant.
-  async function pollRun(runId: string): Promise<boolean> {
+  // "pending" (we gave up before the run did) is kept apart from "failed": the
+  // messages the user gets are opposites — one says try again, the other says
+  // wait.
+  async function pollRun(runId: string): Promise<"ready" | "failed" | "pending"> {
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 3000))
       try {
         const s = await app.ingestClient.status(runId)
-        if (s.state === "ready") return true
-        if (s.state === "failed" || s.state === "cancelled") return false
+        if (s.state === "ready") return "ready"
+        if (s.state === "failed" || s.state === "cancelled") return "failed"
       } catch {
         // Transient poll failure — retry next tick.
       }
     }
-    return false
+    return "pending"
   }
 
   // Multi-select (flags) only makes sense when the track has more than one
   // transcript language; a single-language track shows no selector.
   const allowMultipleLanguages = computed<boolean>(
     () => hydration.availableLanguages.value.length > 1
+  )
+
+  // Which of the displayed transcripts are dialogues. The dialogue affordances
+  // used to hang off `allowMultipleLanguages`, which counts LANGUAGES and has
+  // nothing to say about speakers (issue #412).
+  const dialogueLanguages = computed<ReadonlySet<string>>(() =>
+    multiSpeakerLanguages(blockGroups.value)
   )
 
   // True only after hydration settles — i.e. we know the track has zero
@@ -533,7 +576,7 @@ export function useTranscriptDialogController(
     // Chapter rows render off the outline alone, with no audio gate, so a
     // transcript-only lecture reaches this with "no-audio-available" —
     // permanent, and told apart from the retryable engine failure.
-    if (!result.ok) loader.error.value = t(playbackErrorKey(result.error))
+    if (!result.ok) reportActionError(t(playbackErrorKey(result.error)))
   }
 
   // Selection lifecycle. The two events are mutually exclusive — opening
@@ -583,6 +626,7 @@ export function useTranscriptDialogController(
     error: loader.error,
     hasNoTranscripts,
     allowMultipleLanguages,
+    multiSpeakerLanguages: dialogueLanguages,
     highlightCurrentSentence,
     autoScrollCfg,
     mirrorsActivePlayer,

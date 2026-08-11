@@ -3446,5 +3446,43 @@
       "free",
       "e2e"
     ]
+  },
+  "191": {
+    "suite_id": 7,
+    "automation": 2,
+    "title": "A monologue reads as prose — no speaker-change marks",
+    "description": "Offline. The fixture transcript is served with every sentence attributed to the same speaker. The reader breaks the text into paragraphs, and the grouper resets its running speaker at each break, so the speaker-change flag fires at the top of every paragraph. Gated only on that flag, a lecture by one person opened every paragraph with a stray dash. The dialogue affordances must be off entirely when there is one speaker.",
+    "preconditions": "Offline fixtures, single-track user db; the transcript route serves a single-speaker transcript and the HTTP cache is cleared so the reader reads it.",
+    "steps": [
+      {
+        "action": "Open the transcript of a lecture whose transcript has one speaker.",
+        "expected": "The text renders with no speaker-change dash anywhere."
+      }
+    ],
+    "tags": [
+      "player",
+      "transcript",
+      "free",
+      "e2e"
+    ]
+  },
+  "192": {
+    "suite_id": 7,
+    "automation": 2,
+    "title": "A dialogue keeps its speaker-change dash",
+    "description": "Offline, the counterpart of case 191: the same fixture is served with the sentences alternating between two speakers. Hiding the dialogue affordances on a monologue must not hide them on an actual conversation — the dash is how a reader tells who is talking when the recording is a lecture plus questions from the floor.",
+    "preconditions": "Offline fixtures, single-track user db; the transcript route serves a two-speaker transcript and the HTTP cache is cleared so the reader reads it.",
+    "steps": [
+      {
+        "action": "Open the transcript of a lecture whose transcript has two speakers.",
+        "expected": "The speaker-change dash renders."
+      }
+    ],
+    "tags": [
+      "player",
+      "transcript",
+      "free",
+      "e2e"
+    ]
   }
 }

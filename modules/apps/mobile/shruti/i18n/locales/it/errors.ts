@@ -8,6 +8,9 @@ export default {
   dictionariesUnavailable: "Impossibile caricare i nomi — alcune etichette potrebbero mancare.",
   playbackFailed: "Impossibile riprodurre questa lezione. Controlla la connessione e riprova.",
   noAudioForLecture: "Questa lezione non ha audio.",
+  translationFailed: "Traduzione non riuscita. Riprova più tardi.",
+  translationStillRunning:
+    "La traduzione sta richiedendo più tempo del solito: apparirà appena sarà pronta.",
   downloadStorageFull:
     "Limite di spazio raggiunto. Rimuovi le lezioni ascoltate o aumenta il limite nelle impostazioni.",
   downloadStorageFullAction: "Scarica comunque",
