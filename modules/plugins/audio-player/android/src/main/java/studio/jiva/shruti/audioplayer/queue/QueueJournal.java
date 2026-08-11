@@ -6,11 +6,12 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -165,9 +166,16 @@ public final class QueueJournal {
         if (!file.exists()) {
             return new JSONObject();
         }
-        try {
-            byte[] bytes = Files.readAllBytes(file.toPath());
-            String text = new String(bytes, StandardCharsets.UTF_8);
+        // Not java.nio.file.Files: it and File.toPath() are API 26, minSdk is
+        // 23, and NoClassDefFoundError is an Error the catch below never sees.
+        try (FileInputStream fis = new FileInputStream(file)) {
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int read;
+            while ((read = fis.read(chunk)) != -1) {
+                buffer.write(chunk, 0, read);
+            }
+            String text = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
             if (text.isEmpty()) {
                 return new JSONObject();
             }
