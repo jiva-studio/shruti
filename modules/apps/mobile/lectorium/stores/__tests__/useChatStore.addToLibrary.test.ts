@@ -57,7 +57,7 @@ vi.mock("@lectorium/services/syncEvents.js", () => ({
 
 // Chat is discovery only now — a candidate confirm delegates to the library
 // store's ingest-API path (which owns the PRO gate + paywall), never a chat turn.
-const addByUrl = vi.fn().mockResolvedValue(undefined)
+const addByUrl = vi.fn<(...args: unknown[]) => Promise<string>>().mockResolvedValue("added")
 vi.mock("@lectorium/stores/useLibraryStore.js", () => ({
   useLibraryStore: () => ({ addByUrl }),
 }))
@@ -136,6 +136,10 @@ function seedAddToLibraryAction() {
   return store
 }
 
+function actionState(store: ReturnType<typeof useChatStore>): string | undefined {
+  return store.messages[0]?.actionStates?.a1
+}
+
 describe("useChatStore.executeAction — add_to_library candidate", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -144,7 +148,7 @@ describe("useChatStore.executeAction — add_to_library candidate", () => {
     requestSync.mockClear()
     runChatTurn.mockClear()
     updateActionStates.mockClear()
-    addByUrl.mockClear()
+    addByUrl.mockClear().mockResolvedValue("added")
   })
 
   afterEach(() => {
@@ -161,5 +165,42 @@ describe("useChatStore.executeAction — add_to_library candidate", () => {
     expect(addByUrl).toHaveBeenCalledTimes(1)
     expect(addByUrl.mock.calls[0]?.[0]).toBe(CANDIDATE_URL)
     expect(runChatTurn).not.toHaveBeenCalled()
+  })
+
+  it("marks the action done once the submit really happened", async () => {
+    const store = seedAddToLibraryAction()
+
+    await store.executeAction("m1", "a1")
+
+    expect(actionState(store)).toBe("done")
+  })
+
+  // #1727: the PRO gate is the DESIGNED path for a non-subscriber — it opens
+  // the paywall and returns without submitting anything. A `done` here is the
+  // bug: the tile drops its Add control for a lecture that was never fetched,
+  // and the state is persisted, so it survives a restart.
+  it("leaves the card confirmable when the PRO gate bounced the user to the paywall", async () => {
+    addByUrl.mockResolvedValue("paywalled")
+    const store = seedAddToLibraryAction()
+
+    await store.executeAction("m1", "a1")
+
+    expect(actionState(store)).not.toBe("done")
+    expect(actionState(store)).toBe("pending")
+    // …and back at "pending" the guard lets a second tap through, so a user who
+    // subscribes can act on the same card.
+    addByUrl.mockResolvedValue("added")
+    await store.executeAction("m1", "a1")
+    expect(addByUrl).toHaveBeenCalledTimes(2)
+    expect(actionState(store)).toBe("done")
+  })
+
+  it("marks a refused submit as an error, which the card renders as a retry", async () => {
+    addByUrl.mockResolvedValue("failed")
+    const store = seedAddToLibraryAction()
+
+    await store.executeAction("m1", "a1")
+
+    expect(actionState(store)).toBe("error")
   })
 })
