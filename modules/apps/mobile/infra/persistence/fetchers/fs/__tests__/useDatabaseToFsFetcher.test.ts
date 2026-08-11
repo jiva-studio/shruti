@@ -74,3 +74,40 @@ describe("useDatabaseToFsFetcher — exists() integrity validation", () => {
     expect(ok).toBe(false)
   })
 })
+
+describe("useDatabaseToFsFetcher — delete() reclaims the partial sibling (#1663)", () => {
+  beforeEach(() => {
+    deleteFileMock.mockReset()
+    deleteFileMock.mockResolvedValue(undefined)
+  })
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("drops the `.download` temp along with the database file", async () => {
+    await useDatabaseToFsFetcher().delete("lectorium/databases/lectorium.8.db")
+
+    expect(deleteFileMock).toHaveBeenCalledWith({
+      path: "lectorium/databases/lectorium.8.db",
+      directory: "DATA",
+    })
+    expect(deleteFileMock).toHaveBeenCalledWith({
+      path: "lectorium/databases/lectorium.8.db.download",
+      directory: "DATA",
+    })
+  })
+
+  it("still takes the partial when the database file itself is already gone", async () => {
+    // The case the `download()` catch cannot cover: a process killed mid-
+    // transfer never reaches it, so all that is left on disk is the temp.
+    deleteFileMock.mockRejectedValueOnce(new Error("File does not exist"))
+
+    await expect(
+      useDatabaseToFsFetcher().delete("lectorium/databases/lectorium.8.db")
+    ).resolves.toBeUndefined()
+    expect(deleteFileMock).toHaveBeenCalledWith({
+      path: "lectorium/databases/lectorium.8.db.download",
+      directory: "DATA",
+    })
+  })
+})

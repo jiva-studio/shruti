@@ -9,6 +9,7 @@ import {
   type PersistingTestDatabase,
 } from "@infra/repositories/sql/__tests__/testDb.js"
 import { userMigrations } from "@infra/persistence/migrations/user/index.js"
+import { useDatabaseToIndexedDbFetcher } from "@infra/persistence/fetchers/idb/index.js"
 import { pushLocal } from "@usecases/sync/pushLocal.js"
 import type { Lectorium } from "../../lectorium.js"
 import { DEFAULT_APP_CONFIG } from "../app.config.js"
@@ -27,6 +28,30 @@ import { wipeLocalUserData } from "../dataWipe.js"
  */
 
 const OWNER = "user-1"
+
+/**
+ * IndexedDB stand-in for the web build's blob store, keyed `dbName/storeName`.
+ * Only the four entry points the web database fetcher uses are replaced; the
+ * rest of `@kit/infra` stays real (`ports/app` re-exports values from it).
+ */
+const idb = vi.hoisted(() => new Map<string, Map<string, Uint8Array>>())
+
+vi.mock("@kit/infra", async (importOriginal) => {
+  const store = (dbName: string, storeName: string): Map<string, Uint8Array> => {
+    const key = `${dbName}/${storeName}`
+    let bucket = idb.get(key)
+    if (!bucket) idb.set(key, (bucket = new Map()))
+    return bucket
+  }
+  return {
+    ...(await importOriginal<Record<string, unknown>>()),
+    getAllKeys: async (d: string, s: string) => [...store(d, s).keys()],
+    keyExists: async (d: string, s: string, k: string) => store(d, s).has(k),
+    deleteBlob: async (d: string, s: string, k: string) => {
+      store(d, s).delete(k)
+    },
+  }
+})
 
 let store: PersistingTestDatabase
 let db: IDatabase
@@ -136,6 +161,7 @@ describe("wipeLocalUserData", () => {
     stopped = 0
     refreshed = []
     deletedDbPaths = []
+    idb.clear()
     app = {
       appConfig: DEFAULT_APP_CONFIG,
       repositories: () => repos,
@@ -260,5 +286,29 @@ describe("wipeLocalUserData", () => {
     // `user.db` is wiped row-by-row; dropping the file would rewind the pull
     // cursor the test above pins.
     expect(deletedDbPaths).not.toContain("lectorium/databases/user.db")
+  })
+
+  it("deletes the catalog on the WEB build too, where nothing could list it", async () => {
+    // The fetcher above is a stub whose `list()` answers — which is exactly why
+    // this went unnoticed: the real web adapter's `list()` was `async () => []`,
+    // so `resetContentDatabase` swept nothing and every published catalog left
+    // another ~54 MB copy in IndexedDB, surviving both "Delete database" and
+    // account deletion (#1663). Run the wipe over the REAL web fetcher.
+    const blobs = new Map<string, Uint8Array>([
+      ["lectorium.7.db", new Uint8Array([1])],
+      ["lectorium.42.db", new Uint8Array([2])],
+      ["user.db", new Uint8Array([3])],
+    ])
+    idb.set("lectorium/databases", blobs)
+    const webApp = { ...app, databaseFetcher: useDatabaseToIndexedDbFetcher() } as Lectorium
+
+    await wipeLocalUserData(webApp)
+
+    // Only the versioned catalog blobs go; the user DB file stays (its rows
+    // were wiped above, and dropping it would rewind the pull cursor).
+    expect([...blobs.keys()]).toEqual(["user.db"])
+    // …and the row wipe itself is durable, not just committed in memory.
+    expect(await countPersistedRows("notes")).toBe(0)
+    expect(await countPersistedRows("library_items")).toBe(0)
   })
 })
