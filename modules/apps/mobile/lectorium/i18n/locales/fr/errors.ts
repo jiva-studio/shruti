@@ -15,4 +15,14 @@ export default {
   downloadStorageFull:
     "Limite de stockage atteinte. Supprimez les cours écoutés ou augmentez la limite dans les réglages.",
   downloadStorageFullAction: "Télécharger quand même",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "Impossible d'ouvrir vos données",
+    description:
+      "La base de données contenant vos notes, votre playlist et votre historique d'écoute ne s'est pas ouverte, l'application ne peut donc pas afficher votre bibliothèque.",
+    advice:
+      "Redémarrez l'application et réessayez. Si cela persiste, libérez de l'espace sur l'appareil ou réinstallez l'application.",
+    retry: "Réessayer",
+  },
 }

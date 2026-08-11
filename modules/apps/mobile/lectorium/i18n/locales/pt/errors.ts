@@ -16,4 +16,14 @@ export default {
   downloadStorageFull:
     "Limite de armazenamento atingido. Remova as palestras já ouvidas ou aumente o limite nas configurações.",
   downloadStorageFullAction: "Baixar mesmo assim",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "Não foi possível abrir os seus dados",
+    description:
+      "O banco de dados com suas notas, playlist e histórico de audição não abriu, então o aplicativo não consegue mostrar sua biblioteca.",
+    advice:
+      "Reinicie o aplicativo e tente de novo. Se continuar acontecendo, libere espaço no dispositivo ou reinstale o aplicativo.",
+    retry: "Tentar de novo",
+  },
 }
