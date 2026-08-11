@@ -107,11 +107,18 @@ test(qase(187, caseTitle(187)), { tag: ["@offline", "@library"] }, async ({ page
     await gotoTab(page, "home")
     const queued = playlistRows(page).filter({ hasText: title }).first()
     await expect(queued).toBeVisible({ timeout: 20_000 })
-    // The live region is asked and serves the bytes. That the row then reaches
-    // the downloaded state does NOT hold while a candidate is still hanging —
-    // see #1682; asserting it here would fail for a reason this spec is not
-    // about.
+    // The live region is asked and serves the bytes.
     await expect.poll(() => edgeBHits, { timeout: 45_000 }).toBeGreaterThan(0)
+
+    // And the download is reported done, with edge-a's request still hanging.
+    // Read on the Library row: the Home queue draws a PLAYBACK radial for a
+    // queued track, so the state icon is absent there whether the file arrived
+    // or not — which is what made #1682 look like a stuck download. The search
+    // tab still holds the query from step 0, so going back to it is enough.
+    await gotoTab(page, "search")
+    await expect(
+      trackRows(page).filter({ hasText: title }).first().locator('[data-testid="track-state"]')
+    ).toHaveAttribute("data-state", /added|completed/, { timeout: 45_000 })
   })
 
   await step(page, 187, 2, async () => {
