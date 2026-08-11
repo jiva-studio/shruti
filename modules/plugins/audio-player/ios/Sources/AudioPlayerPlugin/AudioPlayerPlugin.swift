@@ -849,9 +849,15 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Playback controls
 
     @objc func play(_ call: CAPPluginCall? = nil) {
-        player?.play()
-        if let p = player, p.rate != 0 {
-            p.rate = targetPlaybackRate
+        // Nothing loaded — a remote/headset play command arriving after
+        // `stop()` must not arm the persist timer for an engine with no item.
+        guard let player = player else {
+            call?.resolve()
+            return
+        }
+        player.play()
+        if player.rate != 0 {
+            player.rate = targetPlaybackRate
         }
         updatePlaybackInfo()
         startPlaybackPersistTimer()
@@ -891,10 +897,32 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// Tear the engine down for good — not a pause-and-rewind. Both callers
+    /// are destructive (clear user data / delete account, and database
+    /// import), so nothing may survive that could put the old lecture back on
+    /// the lock screen: a paused AVQueuePlayer with a live now-playing entry
+    /// is still a playable track for an account that no longer exists (#1728).
+    /// Counterpart of Android's `controller.stop() + clearMediaItems()`.
+    ///
+    /// JS journals the final position itself (`finishCurrent`) before calling
+    /// this, so there is nothing left worth snapshotting here.
     @objc func stop(_ call: CAPPluginCall) {
-        player?.pause()
-        player?.seek(to: .zero)
-        persistCurrentPosition()
+        teardownPlayer()
+        entries.removeAll()
+        queueIndex = 0
+        currentItemId = ""
+        fromPositionByItemId.removeAll()
+        fromAtByItemId.removeAll()
+        failureRetries.removeAll()
+        wasPlayingBeforeInterruption = false
+        // Drop the in-flight snapshot the way the queue-ran-dry path does: it
+        // names an item that is about to be deleted (wipe) or replaced
+        // (import). The transition journal itself is deliberately left alone —
+        // only `ackEvents` retires those, and after an import JS reloads and
+        // still has to drain the listening events recorded before it.
+        journal.savePosition(itemId: nil, positionSec: 0)
+        updateRemoteSkipCommands()
+        clearNowPlayingInfo()
         call.resolve()
     }
 
@@ -1030,6 +1058,16 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+    }
+
+    /// Dismiss the lock-screen / Control Center transport entirely. Assigning
+    /// `nil` is the only thing that removes us from the now-playing surface;
+    /// a stale dictionary keeps a live play button for a track we no longer
+    /// hold. Deliberately NOT part of `teardownPlayer()`, which also runs
+    /// between queue rebuilds (skipToPrevious, refill of a dry queue) where
+    /// blanking the now-playing UI would flicker mid-playback.
+    private func clearNowPlayingInfo() {
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     private func updatePlaybackInfo() {
