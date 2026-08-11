@@ -4048,5 +4048,27 @@
       "free",
       "e2e"
     ]
+  },
+  "214": {
+    "suite_id": 21,
+    "automation": 2,
+    "title": "A topic shelf folds playback progress like the shelves beside it",
+    "description": "The Search landing is a discovery surface end to end, but its personalized topic shelves built their rows without saying so — so a lecture being played showed a progress radial there while \"Recommended for you\" a few sections up showed the flat added/completed badge for the same track (#1615). Offline, on the seeded English profile whose listening history is what produces the shelves at all.",
+    "preconditions": "Offline boot (mocked content + silent mp3) on the seeded English user db, so the landing derives topic shelves from listening history. A shelf lecture is not yet in the queue — discovery never resurfaces a queued or completed one.",
+    "steps": [
+      {
+        "action": "On the Search tab, add the first lecture of a topic shelf to the queue, then play it from the Home queue.",
+        "expected": "The player opens on that lecture."
+      },
+      {
+        "action": "Return to the Search tab and look at the same lecture's row in its topic shelf.",
+        "expected": "The row shows the flat added/completed state badge — the same one the other shelves show — not a progress radial."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
   }
 }
