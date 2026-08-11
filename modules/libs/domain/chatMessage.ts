@@ -233,12 +233,7 @@ export interface ChatCommentaryBody {
  * The legacy `"dismissed"` value some older sessions hold collapses
  * to `"pending"` at render time — the renderer's whitelist gates this.
  */
-export type ChatActionState =
-  | "pending"
-  | "executing"
-  | "done"
-  | "error"
-  | "dismissed"
+export type ChatActionState = "pending" | "executing" | "done" | "error" | "dismissed"
 
 /**
  * Why a streamed assistant message ended without `event: done`. JSON-
@@ -293,7 +288,7 @@ export class ProtocolVersionMismatchError extends Error {
   readonly kind = "protocol_version_mismatch"
   constructor(
     public readonly serverSupported: number[] | undefined,
-    public readonly clientSent: number | undefined,
+    public readonly clientSent: number | undefined
   ) {
     super("Chat protocol version mismatch")
     this.name = "ProtocolVersionMismatchError"

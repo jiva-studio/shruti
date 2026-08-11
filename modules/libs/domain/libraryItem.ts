@@ -1,19 +1,7 @@
-import type {
-  AuthorId,
-  IsoDate,
-  LanguageCode,
-  LocationId,
-  TrackId,
-  UnixMs,
-} from "./core.js"
+import type { AuthorId, IsoDate, LanguageCode, LocationId, TrackId, UnixMs } from "./core.js"
 import type { Reference } from "./reference.js"
 import type { Track } from "./track.js"
-import type {
-  TrackAudio,
-  TrackOutlineChapter,
-  TrackTranscriptRef,
-  TrackVariant,
-} from "./trackVariant.js"
+import type { TrackAudio, TrackOutlineChapter, TrackVariant } from "./trackVariant.js"
 import { pickPlayableAudio } from "./trackVariant.js"
 
 /** Ingest lifecycle of a personal-library item. Server-authored; the client
