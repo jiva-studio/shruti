@@ -12,6 +12,15 @@ export interface IMediaItemRepository {
     localPath: string | null,
     kind?: MediaAudioKind
   ): Promise<MediaItem>
+  /**
+   * Record that a track's cached audio is owed an eviction — the lecture was
+   * archived while the native engine could still reach the file. A no-op for a
+   * track with no cache row. Cleared by the next `upsert` (a re-download owes
+   * nothing) and by the delete that finally reclaims the file.
+   */
+  markEvictPending(trackId: TrackId): Promise<void>
+  /** Cached rows still owing an eviction, across every version. */
+  listEvictPending(): Promise<readonly MediaItem[]>
   /** Remove ALL versions (original + clean) of a track. */
   deleteByTrack(trackId: TrackId): Promise<void>
   deleteById(id: MediaItemId): Promise<void>

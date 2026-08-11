@@ -110,6 +110,9 @@ export interface MediaItemRow {
   readonly state: string
   readonly local_path: string | null
   readonly created_at: number
+  /** 1 while the file is owed an eviction that could not be performed yet
+   *  (026 migration). Rows written before it have no value. */
+  readonly evict_pending?: number | null
 }
 
 export interface UserConfigRow {
