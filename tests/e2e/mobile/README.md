@@ -126,7 +126,7 @@ npm test                        # offline   (or: npm run test:headed)
 ./scripts/run-all.sh            # offline + live (auto-starts the stack)
 ```
 
-`npm test` boots a Vite dev server on `E2E_PORT` (default 11097) and runs the
+`npm test` boots a Vite dev server on `E2E_PORT` (default: derived from this checkout's path, 11100-11999) and runs the
 `@offline` specs against it. A system Chrome is auto-detected; set `CHROME_PATH`
 to override.
 
@@ -153,8 +153,16 @@ path; an empty corpus still streams an ungrounded reply, enough for the
 send/receive smoke test.
 
 > **Worktree note** — when running from a `git worktree`, the mobile app needs
-> its `node_modules` and the `modules/kit` submodule. Symlink both from a fully
-> set-up checkout, e.g.
+> its `node_modules`, the `modules/kit` submodule, and **both in-house plugins
+> built** (`npm run build` in `modules/plugins/media-downloader` *and*
+> `audio-player`) — without the second one the dev server will not boot and
+> `vue-tsc` reports errors that look pre-existing but are not.
+>
+> The dev-server port is derived from the checkout path, so parallel worktrees
+> no longer collide. They used to: `reuseExistingServer` on a fixed port meant
+> the second run attached to the first tree's server and tested its code (#1671).
+>
+> Symlink the rest from a fully set-up checkout, e.g.
 > `ln -s <main>/modules/apps/mobile/node_modules modules/apps/mobile/node_modules`
 > and `ln -s <main>/modules/kit modules/kit`.
 
