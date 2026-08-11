@@ -280,6 +280,102 @@ export async function openTranscript(page: Page): Promise<void> {
 }
 
 /**
+ * One touch point per on-screen transcript sentence, in document order.
+ *
+ * Each sentence renders as two nested elements that both carry its time
+ * attributes (`$attrs` falls through to SentenceBlock's root AND is re-bound on
+ * the text span), so ranges are de-duplicated. The point is the centre of the
+ * element's FIRST line box — an inline span's bounding box spans the whole
+ * column and covers its neighbours' text, so a point inside it can hit-test to
+ * another sentence. Verse chips (`start === end`) are skipped: they carry no
+ * selectable text.
+ */
+export async function transcriptSentencePoints(
+  page: Page
+): Promise<{ start: number; end: number; x: number; y: number }[]> {
+  const spans = page.locator(".transcript-text [data-time-start][data-time-end]")
+  await spans.first().waitFor({ state: "visible", timeout: 10_000 })
+  // The transcript sits below a description + outline overview, so its first
+  // sentences can start below the fold. Centre one so its neighbours on both
+  // sides are on screen (a drag endpoint off screen never extends anything).
+  const anchorIdx = Math.min(await spans.count(), 6) - 1
+  await spans.nth(Math.max(anchorIdx, 0)).evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await page.waitForTimeout(300)
+  return spans.evaluateAll((els) => {
+    const byRange = new Map<string, { start: number; end: number; x: number; y: number }>()
+    for (const el of els) {
+      const start = Number(el.getAttribute("data-time-start"))
+      const end = Number(el.getAttribute("data-time-end"))
+      if (!(end > start)) continue
+      const r = el.getClientRects()[0]
+      if (!r || r.width < 60 || r.top < 0 || r.bottom > window.innerHeight) continue
+      byRange.set(`${start}-${end}`, {
+        start,
+        end,
+        x: Math.round(r.x + r.width / 2),
+        y: Math.round(r.y + r.height / 2),
+      })
+    }
+    return [...byRange.values()].sort((a, b) => a.start - b.start)
+  })
+}
+
+/**
+ * Long-press and drag WITHIN a single sentence, so the selection is exactly one
+ * transcript block — the shape a user gets when bookmarking one sentence, and
+ * the case where a saved note used to underline its neighbours (#1731). The
+ * touchMove stays inside the span's own first line box, so it re-resolves to the
+ * same sentence and neither edge extends; it is still required, because
+ * start→hold→release alone never opens the popover.
+ *
+ * Returns the selected sentence's `[start, end)` so the caller can assert the
+ * underline lands on that block and no other.
+ */
+export async function selectOneTranscriptSentence(
+  page: Page
+): Promise<{ start: number; end: number }> {
+  const spans = page.locator(".transcript-text [data-time-start][data-time-end]")
+  await spans.first().waitFor({ state: "visible", timeout: 10_000 })
+  const n = await spans.count()
+  const viewport = page.viewportSize()
+  const maxY = viewport ? viewport.height : Number.POSITIVE_INFINITY
+
+  for (let i = 0; i < Math.min(n, 6); i++) {
+    const span = spans.nth(i)
+    const times = await span.evaluate((el) => ({
+      start: Number(el.getAttribute("data-time-start")),
+      end: Number(el.getAttribute("data-time-end")),
+    }))
+    // Verse chips carry start === end and contribute no selectable text.
+    if (!(times.end > times.start)) continue
+
+    await span.evaluate((el) => el.scrollIntoView({ block: "center" }))
+    await page.waitForTimeout(200)
+    // The FIRST line box, not the bounding box: an inline span's union rect
+    // spans the full column width and covers its neighbours' text, so a point
+    // inside it can hit-test to another sentence.
+    const rect = await span.evaluate((el) => {
+      const r = el.getClientRects()[0]
+      return r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null
+    })
+    if (!rect || rect.width < 60 || rect.y < 0 || rect.y + rect.height > maxY) continue
+
+    const y = Math.round(rect.y + rect.height / 2)
+    const p1 = { x: Math.round(rect.x + rect.width * 0.25), y }
+    const p2 = { x: Math.round(rect.x + rect.width * 0.75), y }
+    const cdp = await page.context().newCDPSession(page)
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [p1] })
+    await page.waitForTimeout(650)
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [p2] })
+    await page.waitForTimeout(250)
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+    await expect(page.locator(".selection-actions").first()).toBeVisible({ timeout: 10_000 })
+    return times
+  }
+  throw new Error("no on-screen transcript sentence wide enough to select")
+}
+
+/**
  * Long-press drag-select across two transcript sentences via CDP touch, then wait
  * for the selection popover. The touchMove is essential — start→hold→release
  * alone never opens it.
