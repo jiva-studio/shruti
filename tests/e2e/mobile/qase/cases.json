@@ -3917,5 +3917,136 @@
       "pro",
       "e2e"
     ]
+  },
+  "209": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Sign in with an emailed code",
+    "description": "Offline. The full email OTP journey from an anonymous app: Settings account row → provider sheet → email modal → request a code → enter it → land signed in. /auth/signin/email/request and /auth/signin/email/verify are mocked, and /auth/me answers as the anonymous user before the verify and as the reader's profile after it.",
+    "preconditions": "Offline fixtures with a clean user db; the app booted as an anonymous user; the email OTP endpoints and /auth/me mocked.",
+    "steps": [
+      {
+        "action": "From Settings, tap the account row and choose \"Continue with email\".",
+        "expected": "The email sign-in modal opens on its first step, asking for an address."
+      },
+      {
+        "action": "Enter an email address and tap \"Send code\".",
+        "expected": "The request is sent for that address and the form advances to the 6-digit code step."
+      },
+      {
+        "action": "Enter the code and tap \"Sign in\".",
+        "expected": "The modal closes, the Settings account row shows the signed-in profile, and the persisted session is no longer anonymous."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "210": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Email sign-in upgrades the anonymous account in place",
+    "description": "Offline. Everyone starts as an anonymous account that already owns their history, notes and chats. Signing in with an emailed code must claim THAT account rather than mint a second one — which works because the client attaches the anonymous access token as a Bearer to the verify call. The verify mock echoes the user id out of the bearer it is handed (and answers with a fresh id when handed none), so the assertion fails if the header goes missing.",
+    "preconditions": "Offline fixtures with a clean user db; the app booted as an anonymous user; the email OTP endpoints and /auth/me mocked.",
+    "steps": [
+      {
+        "action": "Read the persisted session before signing in.",
+        "expected": "The app holds an anonymous session with a user id."
+      },
+      {
+        "action": "Sign in with an emailed code (address, then code).",
+        "expected": "The modal completes and closes."
+      },
+      {
+        "action": "Inspect the verify request and the persisted session.",
+        "expected": "The verify carried the anonymous bearer, and the stored session is the SAME user id — now non-anonymous and carrying the address."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "211": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "A wrong or expired code is reported without losing the form",
+    "description": "Offline. /auth/signin/email/verify answers 401 (invalid or expired code). The modal must show the reason inline and stay on the code step so the user can correct one digit, and no session may be granted.",
+    "preconditions": "Offline fixtures with a clean user db; the app booted as an anonymous user; the code request succeeds and the verify is mocked to 401.",
+    "steps": [
+      {
+        "action": "From Settings, open the email sign-in modal and request a code.",
+        "expected": "The form advances to the code step."
+      },
+      {
+        "action": "Enter a code the server rejects.",
+        "expected": "The modal shows \"That code is invalid or has expired.\" inline."
+      },
+      {
+        "action": "Check what the user is left with.",
+        "expected": "Still on the code step with the submit button live, and the session is still anonymous — nothing was granted."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "212": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "A throttled code request is reported, not swallowed",
+    "description": "Offline. /auth/signin/email/request answers 429 with Retry-After (a code was just sent, or the per-IP budget burst). The modal must surface the throttle and stay on the email step — advancing to a code step for a code that was never sent would leave the user waiting for mail that is not coming.",
+    "preconditions": "Offline fixtures with a clean user db; the app booted as an anonymous user; the code request is mocked to 429.",
+    "steps": [
+      {
+        "action": "From Settings, open the email sign-in modal, enter an address and tap \"Send code\" while the server throttles.",
+        "expected": "The modal shows \"Please wait a moment before requesting another code.\" inline."
+      },
+      {
+        "action": "Check what the user is left with.",
+        "expected": "Still on the email step: the address is still in the field, \"Send code\" is live again, and no verify was attempted."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "213": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "A backend outage does not sign the user out",
+    "description": "Offline. A signed-in session whose access token sits inside the 60s refresh window runs while /auth/refresh answers 503 — the shape of an auth deploy or DB blip. A refresh failure has three outcomes, not two: only a 401/403 rejection may drop the session; a transient failure must keep it so a later attempt recovers. What is asserted is not that the session looks intact right after the 503 (that read races the client's own handling and passes either way) but that the next authed call recovers by REFRESHING the same session, with no anonymous identity minted along the way — a client that mistook the outage for a rejection would have thrown the account away, bootstrapped a stranger, and answered the chat just the same. Cases 114 and 188 only ever see the refresh succeed, so this branch was never executed by a test.",
+    "preconditions": "Offline fixtures with a clean user db; a signed-in session seeded with an access token expiring in ~30s; /auth/refresh, /auth/anonymous, /auth/me and the chat stream mocked.",
+    "steps": [
+      {
+        "action": "Boot the signed-in session while auth refuses every refresh with 503.",
+        "expected": "At least one refresh is attempted and refused."
+      },
+      {
+        "action": "Bring auth back, then send a chat message — an authed call that needs a token.",
+        "expected": "The answer streams back, and the token came from a further REFRESH of the same session: no new anonymous account was minted."
+      },
+      {
+        "action": "Inspect the persisted session and open Settings.",
+        "expected": "Still non-anonymous, and the account row still shows the signed-in profile rather than the anonymous “Sign in” call to action."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
   }
 }
