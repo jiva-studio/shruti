@@ -54,4 +54,16 @@ final class MediaDownloaderPluginTests: XCTestCase {
         store.put(decoded)
         XCTAssertNotNil(store.findByFileKey("/public/tracks/t-2/audio/original.mp3"))
     }
+
+    /// URLSession reports a 403/404/502 through the *success* callback, where
+    /// the body is the CDN's error document. Only a 2xx may become a lecture.
+    func testOnlyASuccessfulStatusMayBeSaved() {
+        XCTAssertTrue(DownloadDelegate.isSuccessful(statusCode: 200))
+        XCTAssertTrue(DownloadDelegate.isSuccessful(statusCode: 206))
+        XCTAssertTrue(DownloadDelegate.isSuccessful(statusCode: 299))
+        XCTAssertFalse(DownloadDelegate.isSuccessful(statusCode: 304))
+        XCTAssertFalse(DownloadDelegate.isSuccessful(statusCode: 403))
+        XCTAssertFalse(DownloadDelegate.isSuccessful(statusCode: 404))
+        XCTAssertFalse(DownloadDelegate.isSuccessful(statusCode: 502))
+    }
 }

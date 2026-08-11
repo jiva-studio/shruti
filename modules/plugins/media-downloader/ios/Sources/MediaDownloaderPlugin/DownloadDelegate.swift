@@ -40,6 +40,13 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         idByTaskIdentifier.removeValue(forKey: taskIdentifier)
     }
 
+    /// Which HTTP statuses may become a saved file. Same window as OkHttp's
+    /// `isSuccessful` on the Android side; redirects never reach here, since
+    /// URLSession follows them and reports the final response.
+    static func isSuccessful(statusCode: Int) -> Bool {
+        (200...299).contains(statusCode)
+    }
+
     // ── URLSessionDownloadDelegate ────────────────────────────────────────
 
     func urlSession(
@@ -75,7 +82,29 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         guard let id = idByTaskIdentifier[downloadTask.taskIdentifier],
               let entry = metadataStore.get(id: id) else { return }
 
-        let destinationUrl = URL(fileURLWithPath: entry.localPath)
+        // URLSession delivers this callback for ANY completed response, 4xx and
+        // 5xx included, where the temp file holds the CDN's error document and
+        // not the lecture. Same rejection as Android's `HTTP <code>`, so the JS
+        // layer reads one vocabulary and fails the attempt over to a sibling.
+        if let http = downloadTask.response as? HTTPURLResponse,
+           !Self.isSuccessful(statusCode: http.statusCode) {
+            // Only the entry goes. Nothing of ours is at the destination — we
+            // never moved anything there — and a sibling CDN candidate writes to
+            // that same path, so deleting it could take away its finished file.
+            metadataStore.remove(id: id)
+            plugin?.emit(event: "failed", data: [
+                "id": id,
+                "error": "HTTP \(http.statusCode)",
+            ])
+            return
+        }
+
+        // Re-anchor as every other consumer of a stored path does: a background
+        // download can also COMPLETE after an app update, and the move into a
+        // dead container's path fails — discarding bytes already fetched in
+        // full. Mirrors the failure branch below.
+        let path = plugin?.resolvedPath(entry.localPath) ?? entry.localPath
+        let destinationUrl = URL(fileURLWithPath: path)
         do {
             let parent = destinationUrl.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
