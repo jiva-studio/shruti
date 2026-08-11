@@ -27,7 +27,7 @@ async function openDialog(page: Page): Promise<Locator> {
 
 const filterRow = (d: Locator) => d.locator("ion-item", { hasText: "Filter" }).first()
 
-test(qase(196, caseTitle(192)), { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(196, caseTitle(196)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "en", { pro: true, userDb: "clean" })
   await gotoTab(page, "search")
 

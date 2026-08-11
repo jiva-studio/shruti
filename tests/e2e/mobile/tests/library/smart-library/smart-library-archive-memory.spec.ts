@@ -26,7 +26,7 @@ async function openDialog(page: Page): Promise<Locator> {
 const schedule = (d: Locator, label: string) =>
   d.locator("ion-radio", { hasText: new RegExp(`^${label}$`) }).first()
 
-test(qase(195, caseTitle(191)), { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(195, caseTitle(195)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await boot(page, "en", { pro: true, userDb: "clean" })
   await gotoTab(page, "search")
 
