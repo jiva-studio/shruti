@@ -3,7 +3,7 @@ import { compareHlcString } from "@lib/domain"
 import type { BackfillCandidate } from "@lib/domain/ports/syncBackfillRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { backfillLocal } from "../backfillLocal.js"
-import { FakeBackfill, FakeOutbox, FakeSyncState, fakeUnitOfWork, hlc } from "./fakes.js"
+import { FakeApply, FakeBackfill, FakeOutbox, FakeSyncState, fakeUnitOfWork, hlc } from "./fakes.js"
 
 /** Canonical pre-sync rows in the three synced collections, shaped exactly as
  *  the sync-journal decorator would write them into `outbox.data`. */
@@ -44,9 +44,10 @@ const SESSION: BackfillCandidate = {
 function deps() {
   const backfill = new FakeBackfill()
   const outbox = new FakeOutbox()
+  const apply = new FakeApply()
   const syncState = new FakeSyncState()
   backfill.outbox = outbox // model the adapter's anti-join (idempotency guard)
-  return { backfill, outbox, syncState, unitOfWork: fakeUnitOfWork }
+  return { backfill, outbox, apply, syncState, unitOfWork: fakeUnitOfWork }
 }
 
 describe("backfillLocal", () => {
@@ -94,6 +95,45 @@ describe("backfillLocal", () => {
       expect(compareHlcString(row.hlc, prev)).toBeGreaterThan(0)
       prev = row.hlc
     }
+  })
+
+  it("stamps above a server HLC this device has observed but never issued", async () => {
+    const d = deps()
+    // Another device with a fast clock wrote note_9; this one pulled it and
+    // recorded the stamp. `hlcNow`'s seed is "issued OR observed", so a stamp
+    // minted here has to clear it — otherwise the backfilled rows lose the LWW
+    // comparison against changes this device already holds (#1628).
+    const remote = hlc(Date.now() + 600_000, 0, "dev-ahead")
+    d.apply.setServerHlc("notes", "note_9", remote)
+    d.backfill.candidates = [NOTE, PLAYLIST, SESSION]
+
+    await backfillLocal(d)
+
+    const appended = await d.outbox.listPending()
+    expect(appended).toHaveLength(3)
+    let prev = remote
+    for (const row of appended) {
+      expect(compareHlcString(row.hlc, prev)).toBeGreaterThan(0)
+      prev = row.hlc
+    }
+  })
+
+  it("takes the outbox tail when it is the higher of the two seeds", async () => {
+    const d = deps()
+    // The observed stamp is old news — the device's own journal is further
+    // ahead, and the seed must be the MAX, not whichever source is consulted
+    // last.
+    const tail = hlc(Date.now() + 600_000, 0, "dev-1")
+    d.outbox.seed([
+      { collection: "notes", docId: "note_0", op: "upsert", data: {}, hlc: tail, baseHlc: null },
+    ])
+    d.apply.setServerHlc("notes", "note_9", hlc(5_000, 0, "dev-ahead"))
+    d.backfill.candidates = [NOTE]
+
+    await backfillLocal(d)
+
+    const appended = (await d.outbox.listPending()).filter((r) => r.docId !== "note_0")
+    expect(compareHlcString(appended[0]!.hlc, tail)).toBeGreaterThan(0)
   })
 
   it("is idempotent: a second run enqueues nothing (candidates now have outbox rows)", async () => {

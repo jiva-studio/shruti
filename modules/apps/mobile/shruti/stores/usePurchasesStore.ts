@@ -211,12 +211,18 @@ export const usePurchasesStore = defineStore("purchases", () => {
   function trackReconcile(p: Promise<void>): void {
     loginPromise = p
     reconciling.value = true
-    void p.finally(() => {
-      if (loginPromise === p) {
-        loginPromise = null
-        reconciling.value = false
-      }
-    })
+    void p
+      .finally(() => {
+        if (loginPromise === p) {
+          loginPromise = null
+          reconciling.value = false
+        }
+      })
+      // Bookkeeping only. `p`'s own rejection is warned about at the call site
+      // and surfaced through `waitForLogin`; without this the promise `finally`
+      // derives from it rejects with no handler, i.e. an unhandled rejection
+      // every time RC.logIn fails.
+      .catch(() => undefined)
   }
 
   async function refresh(): Promise<void> {
@@ -343,15 +349,27 @@ export const usePurchasesStore = defineStore("purchases", () => {
       // purchases the user made while anonymous.
       const auth = useAuthStore()
       stopAuthWatch = watch(
-        () => auth.userId,
-        (newId, oldId) => {
+        // Both fields, because `userId` alone cannot tell the two transitions
+        // below apart: an anonymous session carries a real `auth.users` id, so
+        // the id ALWAYS changes on sign-in. `anonymous` is what says whether
+        // the id left behind was this same person's.
+        () => ({ userId: auth.userId, anonymous: auth.anonymous }),
+        (next, prev) => {
+          const newId = next.userId
+          const oldId = prev?.userId ?? null
+          // The anonymous id being replaced by the account it was linked to:
+          // same device, same person, and any Pro bought at the onboarding
+          // paywall is theirs. Dropping the cache here renders them free until
+          // `logIn` lands — for the whole session if it rejects, since the
+          // watcher will not fire again (#1628).
+          const crossLink =
+            prev !== undefined && prev.userId !== null && prev.anonymous && !next.anonymous
           if (newId && newId !== oldId) {
-            // Account switch (a real `oldId` → different `newId`): drop the
-            // optimistic cache so the previous account's Pro can't linger
-            // until logIn lands. The fresh entitlement re-populates it via
-            // applyState below. (The anon → first sign-in transition has no
-            // `oldId` and keeps the cache so an anon purchase stays usable.)
-            if (oldId) {
+            // Account switch (a real `oldId` → a different account's `newId`):
+            // drop the optimistic cache so the previous account's Pro can't
+            // linger until logIn lands. The fresh entitlement re-populates it
+            // via applyState below.
+            if (oldId && !crossLink) {
               void clearCache()
               activePackageId.value = undefined
             }

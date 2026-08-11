@@ -124,3 +124,11 @@ export function compareHlc(a: Hlc, b: Hlc): number {
 export function compareHlcString(a: string, b: string): number {
   return compareHlc(parseHlc(a), parseHlc(b))
 }
+
+/** The greater of two wire HLCs, treating `null` as "nothing on record".
+ *  `null` only when both sides are. */
+export function maxHlcString(a: string | null, b: string | null): string | null {
+  if (a === null) return b
+  if (b === null) return a
+  return compareHlcString(a, b) >= 0 ? a : b
+}
