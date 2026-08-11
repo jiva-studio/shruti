@@ -139,6 +139,7 @@ const downloads = {
   clearPending: vi.fn(),
   ensureDownloaded: async () => "file:///a.mp3",
   evict: vi.fn(async () => true),
+  markEvictPending: vi.fn(async () => {}),
 }
 vi.mock("@shruti/stores/useDownloadStore.js", () => ({
   useDownloadStore: () => downloads,
@@ -217,6 +218,7 @@ describe("usePlayerStore — the live native queue", () => {
     progressListener = null
     finishCurrent.mockClear()
     downloads.evict.mockClear()
+    downloads.markEvictPending.mockClear()
     playlist.buildQueueFrom.mockClear()
     for (const fn of Object.values(audioPlayer)) {
       if (typeof fn === "function" && "mockClear" in fn) fn.mockClear()
@@ -246,22 +248,50 @@ describe("usePlayerStore — the live native queue", () => {
       expect(audioPlayer.setQueue).not.toHaveBeenCalled()
     })
 
-    it("leaves the engine alone for an item behind the playhead", async () => {
+    it("keeps the audio of an item behind the playhead, which skipping back reaches", async () => {
+      const player = await playQueueFromA()
+      // Advance onto B. A is now behind the playhead — and still in the queue
+      // the engine is running, with the `file://` URL resolved when it was built.
+      queueState = { ...queueState, currentItemId: "i-b", positionMs: 1_000 }
+      await player.playNext()
+      emitProgress({ itemId: "i-b", playing: true, position: 1_000, duration: 60_000 })
+      audioPlayer.setQueue.mockClear()
+      downloads.evict.mockClear()
+
+      // The auto-archive sweep archives FINISHED lectures mid-playback; a
+      // rewrite for those would restart the current one every time. So the
+      // engine is left alone — but that is exactly why the file has to stay.
+      expect(await releaseFromNativeQueue("i-a" as PlaylistItemId)).toBe(true)
+      expect(audioPlayer.setQueue).not.toHaveBeenCalled()
+
+      // Nothing auto-advances backwards, but the user does: `skipToPrevious`
+      // from the lock screen, a Bluetooth remote, or this. The entry is still
+      // in the engine's queue, so the audio must still be on disk (issue #1667).
+      await player.playPrevious()
+
+      expect(audioPlayer.skipToPrevious).toHaveBeenCalled()
+      expect(downloads.evict).not.toHaveBeenCalled()
+    })
+
+    it("gives the behind-the-playhead file back once a rewrite has landed", async () => {
       const player = await playQueueFromA()
       queueState = { ...queueState, currentItemId: "i-b", positionMs: 1_000 }
       await player.playNext()
       emitProgress({ itemId: "i-b", playing: true, position: 1_000, duration: 60_000 })
       audioPlayer.setQueue.mockClear()
+      downloads.evict.mockClear()
 
-      // The auto-archive sweep archives FINISHED lectures mid-playback; a
-      // rewrite for those would restart the current one every time.
-      expect(await releaseFromNativeQueue("i-a" as PlaylistItemId)).toBe(false)
-      expect(audioPlayer.setQueue).not.toHaveBeenCalled()
+      await releaseFromNativeQueue("i-a" as PlaylistItemId)
+      expect(downloads.evict).not.toHaveBeenCalled()
 
-      // It is still dropped, so the next rewrite doesn't put it back.
+      // Archiving C rewrites the queue for its own sake — no restart of the
+      // current lecture is added by A's debt, and A is out of the engine's
+      // reach the moment that rewrite lands.
       await releaseFromNativeQueue("i-c" as PlaylistItemId)
+
       const [items] = audioPlayer.setQueue.mock.calls[0]!
       expect(items.map((q) => q.itemId)).toEqual(["i-b"])
+      expect(downloads.evict).toHaveBeenCalledWith("t-a" as TrackId)
     })
 
     it("does nothing for a lecture the engine never had", async () => {
@@ -314,6 +344,18 @@ describe("usePlayerStore — the live native queue", () => {
       await player.togglePause()
 
       expect(downloads.evict).toHaveBeenCalledWith("t-c")
+    })
+
+    it("writes the debt down, so a kill in the window doesn't strand the file", async () => {
+      await playQueueFromA()
+
+      // Kept because the engine is on it. The in-memory set that remembers to
+      // reclaim it dies with the process — the media row does not (issue #1666).
+      expect(await releaseFromNativeQueue("i-a" as PlaylistItemId)).toBe(true)
+
+      await vi.waitFor(() =>
+        expect(downloads.markEvictPending).toHaveBeenCalledWith("t-a" as TrackId)
+      )
     })
 
     it("reclaims what it kept when playback stops", async () => {

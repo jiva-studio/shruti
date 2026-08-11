@@ -4,6 +4,7 @@ import {
   createRegionFailoverClient,
   distinctByBaseUrl,
   isReplayableAuthPath,
+  servesBaseUrl,
   withCrossServerReplay,
 } from "../regionFailover.js"
 
@@ -131,5 +132,81 @@ describe("createRegionFailoverClient", () => {
       "https://ru.test/auth/search",
       "https://api.test/auth/search",
     ])
+  })
+})
+
+// The ingest control plane is the door not every region publishes:
+// `orchestratorBaseUrl` is optional (a config.json predating the ingest API
+// omits it, and `isValidRegion` deliberately does not require it), so a mixed
+// list is a supported state.
+const ORCHESTRATOR_REGIONS = [
+  { id: "ru", orchestratorBaseUrl: "https://ru.test" },
+  { id: "global" },
+  { id: "legacy", orchestratorBaseUrl: "https://api.test" },
+] as unknown as readonly CdnServer[]
+
+const orchestratorUrl = (s: CdnServer): string => s.orchestratorBaseUrl ?? ""
+
+describe("servesBaseUrl", () => {
+  it("accepts an absolute http(s) base and rejects what the WebView resolves locally", () => {
+    expect(servesBaseUrl("https://api.test")).toBe(true)
+    expect(servesBaseUrl("http://localhost:11080")).toBe(true)
+    // Everything below leaves `joinUrl` returning a PATH, which the WebView
+    // resolves against `capacitor://localhost`.
+    expect(servesBaseUrl("")).toBe(false)
+    expect(servesBaseUrl("/orchestrator")).toBe(false)
+    expect(servesBaseUrl("api.test")).toBe(false)
+  })
+})
+
+describe("createRegionFailoverClient — regions that do not serve the door", () => {
+  /** What a WebView does with a scheme-less URL: resolves it against its own
+   *  origin and answers 404 — which kit reads as the backend's verdict and
+   *  returns, so a job that exists is reported "not found". */
+  function webView(fetchImpl: (url: string) => Response): typeof fetch {
+    return vi.fn(async (url: string | URL | Request) => {
+      const u = String(url)
+      return u.startsWith("http") ? fetchImpl(u) : new Response("", { status: 404 })
+    }) as unknown as typeof fetch
+  }
+
+  it("skips a region without a base url instead of asking the WebView origin", async () => {
+    const seen: string[] = []
+    const fetchImpl = webView((u) => {
+      seen.push(u)
+      return u.startsWith("https://ru.test/") ? unavailable() : ok()
+    })
+    const client = createRegionFailoverClient({
+      getServers: () => ORCHESTRATOR_REGIONS,
+      getPreferredId: () => "ru",
+      pickBaseUrl: orchestratorUrl,
+      fetchImpl,
+    })
+
+    const response = await client.request("/orchestrator/ingest/job-1")
+
+    // The preferred edge 502s, `global` cannot serve this door at all, and the
+    // walk carries on to `legacy` rather than stopping at a local 404.
+    expect(response.status).toBe(200)
+    expect(seen).toEqual([
+      "https://ru.test/orchestrator/ingest/job-1",
+      "https://api.test/orchestrator/ingest/job-1",
+    ])
+  })
+
+  it("surfaces a transient error when no region serves the door at all", async () => {
+    const fetchImpl = webView(() => ok())
+    const client = createRegionFailoverClient({
+      getServers: () => [{ id: "ru" }, { id: "global" }] as unknown as readonly CdnServer[],
+      getPreferredId: () => "ru",
+      pickBaseUrl: orchestratorUrl,
+      fetchImpl,
+    })
+
+    // A throw lands where a dead edge lands, so the UI offers a retry. A 404
+    // would tell the user their job does not exist.
+    await expect(client.request("/orchestrator/ingest/job-1")).rejects.toThrow(/no region serves/)
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(client.resolveUrl("/orchestrator/ingest/job-1")).toBe("")
   })
 })

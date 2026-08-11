@@ -33,6 +33,15 @@ export interface UiTrackRow {
    */
   readonly progressPct: number
   /**
+   * 0..100 of the lecture the user has actually listened to — 100 once it is
+   * completed. Unlike `progressPct` this carries no transfer meaning, so it
+   * survives a row whose `state` is a download state. Collection rings score
+   * from it: a finished lecture must not read as unlisted the moment its row
+   * flips to "pending" on a tap (issue #1615). Absent on surfaces with no
+   * listening data to report.
+   */
+  readonly listenedPct?: number
+  /**
    * 1-based place in the set the row is being shown as part of — a lecture
    * inside a collection. Absent everywhere else: a search hit or a topic
    * listing has no running order to state.

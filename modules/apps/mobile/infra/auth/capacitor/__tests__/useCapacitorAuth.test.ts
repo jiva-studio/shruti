@@ -223,3 +223,113 @@ describe("useCapacitorAuth — refreshAccessToken", () => {
     expect(auth.getSession()?.userId).toBe("user-1")
   })
 })
+
+describe("useCapacitorAuth — a /me blip must not erase the profile", () => {
+  beforeEach(() => prefs.clear())
+  afterEach(() => vi.restoreAllMocks())
+
+  const signedIn = {
+    accessToken: jwt({ sub: "user-1" }),
+    refreshToken: "refresh-1",
+    userId: "user-1",
+    email: "reader@example.com",
+    name: "Reader",
+    picture: "https://cdn.test/reader.png",
+    anonymous: false,
+    accessTokenExpiresAt: Date.now() + 3_600_000,
+    tier: "free",
+    tierExpiresAt: null,
+    quotaId: "q1",
+  }
+
+  const refreshedFor = (userId: string) => ({
+    accessToken: jwt({ sub: userId }),
+    refreshToken: "refresh-2",
+    userId,
+    anonymous: false,
+  })
+
+  /** A stored signed-in session plus a /refresh that succeeds and a /me that
+   *  answers however the case needs. */
+  function makeCfg(
+    me: ReturnType<typeof resp> | "throws",
+    refreshed = refreshedFor("user-1")
+  ): AuthConfig {
+    prefs.set("auth.tokens", JSON.stringify(signedIn))
+    const request = vi.fn(async (path: string) => {
+      if (path === "/refresh") return resp(200, refreshed)
+      if (path === "/me") {
+        if (me === "throws") throw new Error("network")
+        return me
+      }
+      throw new Error(`unexpected request ${path}`)
+    })
+    return { request, googleWebClientId: "x", googleIOSClientId: "y" } as unknown as AuthConfig
+  }
+
+  const persisted = () => JSON.parse(prefs.get("auth.tokens") ?? "{}")
+
+  it("keeps email, name and avatar when /me 502s", async () => {
+    const auth = useCapacitorAuth(makeCfg(resp(502, {})))
+    await auth.initialize()
+
+    const session = await auth.refreshTokens()
+
+    // `fetchMeBody` cannot tell a 502 from "no profile" — so a blip must not
+    // be read as "this account has no name". And it is PERSISTED, so getting
+    // this wrong survives a restart.
+    expect(session?.email).toBe("reader@example.com")
+    expect(session?.name).toBe("Reader")
+    expect(session?.picture).toBe("https://cdn.test/reader.png")
+    expect(persisted().email).toBe("reader@example.com")
+    expect(persisted().name).toBe("Reader")
+    expect(persisted().picture).toBe("https://cdn.test/reader.png")
+  })
+
+  it("keeps them when /me throws outright", async () => {
+    const auth = useCapacitorAuth(makeCfg("throws"))
+    await auth.initialize()
+
+    const session = await auth.refreshTokens()
+
+    expect(session?.email).toBe("reader@example.com")
+    expect(session?.name).toBe("Reader")
+  })
+
+  it("keeps a field /me omits and takes the ones it does return", async () => {
+    const auth = useCapacitorAuth(
+      makeCfg(
+        resp(200, {
+          userId: "user-1",
+          email: "renamed@example.com",
+          name: null,
+          pictureUrl: null,
+          anonymous: false,
+          tier: "free",
+        })
+      )
+    )
+    await auth.initialize()
+
+    const session = await auth.refreshTokens()
+
+    // A partial body is the same failure in a 200 wrapper.
+    expect(session?.email).toBe("renamed@example.com")
+    expect(session?.name).toBe("Reader")
+    expect(session?.picture).toBe("https://cdn.test/reader.png")
+  })
+
+  it("does NOT carry the profile across an account swap", async () => {
+    const auth = useCapacitorAuth(makeCfg(resp(502, {}), refreshedFor("user-2")))
+    await auth.initialize()
+
+    const session = await auth.refreshTokens()
+
+    // A different subject is a different person — inheriting the previous
+    // account's name would be worse than showing none.
+    expect(session?.userId).toBe("user-2")
+    expect(session?.email).toBeNull()
+    expect(session?.name).toBeNull()
+    expect(session?.picture).toBeNull()
+  })
+})

@@ -147,6 +147,72 @@ describe("createUnauthorizedRetry", () => {
     expect(refreshAccessToken).toHaveBeenCalledTimes(2)
   })
 
+  it("clears the cooldown when a new session arrives", async () => {
+    let t = 0
+    // Default no-op so the UNFIXED factory (which never subscribes) fails on
+    // the assertion below rather than on a missing callback.
+    let announceSession = (): void => {}
+    const refreshAccessToken = vi
+      .fn()
+      // The first refresh hands back a token the server still rejects — that
+      // is what opens the 60s cooldown.
+      .mockResolvedValueOnce("still-rejected")
+      .mockResolvedValue("signed-in")
+    const inner = vi.fn(
+      async (_path: string, init?: RequestInit) =>
+        new Response(null, { status: bearerOf(init) === "Bearer signed-in" ? 200 : 401 })
+    )
+    const wrapped = createUnauthorizedRetry({
+      refreshAccessToken,
+      now: () => t,
+      onSessionChange: (listener) => {
+        announceSession = listener
+        return () => {}
+      },
+    })(inner)
+
+    expect((await wrapped("/a", authed("stale"))).status).toBe(401)
+    expect(refreshAccessToken).toHaveBeenCalledOnce()
+
+    // Well inside the cooldown, the user signs in with Google: a brand-new
+    // session and a brand-new token. The previous session's verdict says
+    // nothing about it, so the next 401 must still be recoverable.
+    t = 5_000
+    announceSession()
+
+    expect((await wrapped("/b", authed("stale"))).status).toBe(200)
+    expect(refreshAccessToken).toHaveBeenCalledTimes(2)
+  })
+
+  it("replays a late 401 with the token in hand even while the cooldown is open", async () => {
+    let releaseB!: () => void
+    const bLanded = new Promise<void>((resolve) => {
+      releaseB = resolve
+    })
+    const refreshAccessToken = vi.fn().mockResolvedValue("fresh")
+    const inner = vi.fn(async (path: string, init?: RequestInit) => {
+      const bearer = bearerOf(init)
+      // `/b` left with the stale bearer alongside `/a`, but its 401 only comes
+      // back after `/a` has already opened the cooldown.
+      if (path === "/b" && bearer === "Bearer stale") await bLanded
+      // `/a` is forbidden for this user whatever the token — a route verdict,
+      // not a stale token. `/b` is fine once the bearer is fresh.
+      if (path === "/a") return new Response(null, { status: 401 })
+      return new Response(null, { status: bearer === "Bearer fresh" ? 200 : 401 })
+    })
+    const wrapped = createUnauthorizedRetry({ refreshAccessToken, now: () => 0 })(inner)
+
+    const a = wrapped("/a", authed("stale"))
+    const b = wrapped("/b", authed("stale"))
+    expect((await a).status).toBe(401)
+    releaseB()
+
+    // The cooldown exists to stop a refresh per request. `/b` needs no
+    // refresh — the token is already in hand — so it must not be blocked.
+    expect((await b).status).toBe(200)
+    expect(refreshAccessToken).toHaveBeenCalledOnce()
+  })
+
   it("surfaces the 401 without replaying when the session is unrecoverable", async () => {
     const refreshAccessToken = vi.fn().mockResolvedValue(null)
     const inner = vi.fn().mockResolvedValue(new Response(null, { status: 401 }))

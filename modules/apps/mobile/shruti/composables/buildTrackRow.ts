@@ -39,6 +39,9 @@ export interface BuildTrackRowDeps {
    * "playing"/"queued" → playback %. Controller picks the right value per state.
    */
   readonly progressPct?: number
+  /** 0..100 of the lecture the user has listened to, independent of any
+   *  transfer state the row is showing. See `UiTrackRow.listenedPct`. */
+  readonly listenedPct?: number
   /**
    * Render the row as visibly disabled and non-interactive. Controllers
    * set this while a track is mid-load (e.g. `player.openTrack` in
@@ -106,6 +109,7 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
     duration,
     state: deps.state ?? "none",
     progressPct: deps.progressPct ?? 0,
+    listenedPct: deps.listenedPct,
     disabled: deps.disabled ?? false,
     dimmed: deps.dimmed ?? false,
   }

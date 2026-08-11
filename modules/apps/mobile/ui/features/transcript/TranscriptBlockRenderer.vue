@@ -4,8 +4,8 @@
     :text="block.block.text"
     :icon="displaySpeakerIcon ? block.icon : undefined"
     :reference="block.block.reference"
-    :show-dash="block.block.speakerChanged"
-    :new-line="block.block.speakerChanged && !isFirstInGroup"
+    :show-dash="displaySpeakerIcon && block.block.speakerChanged"
+    :new-line="displaySpeakerIcon && block.block.speakerChanged && !isFirstInGroup"
     :reference-visible="referenceVisible"
     :lang="block.language"
     :class="stateClasses"
@@ -70,7 +70,13 @@ const props = defineProps<{
   block: UiTranscriptBlockView
   /** Current playhead position in milliseconds (matches block.start/end units). */
   position: number
-  /** When true, renders the speaker icon for sentence blocks. */
+  /**
+   * True when this block's transcript is a dialogue. Gates every dialogue
+   * affordance on a sentence block: the speaker icon, and the dash + line break
+   * at a speaker change. On a monologue `speakerChanged` still fires at each
+   * paragraph start (the grouper resets its running speaker), so without this
+   * gate every paragraph opened with a stray "–".
+   */
   displaySpeakerIcon: boolean
   /** When true, applies the `current` highlight class to the active block. */
   shouldHighlightCurrent: boolean

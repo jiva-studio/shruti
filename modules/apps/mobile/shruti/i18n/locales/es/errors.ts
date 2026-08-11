@@ -9,6 +9,9 @@ export default {
   playbackFailed:
     "No se pudo reproducir esta conferencia. Verifica tu conexión e inténtalo de nuevo.",
   noAudioForLecture: "Esta conferencia no tiene audio.",
+  translationFailed: "No se pudo traducir la conferencia. Inténtalo más tarde.",
+  translationStillRunning:
+    "La traducción está tardando más de lo habitual: aparecerá en cuanto esté lista.",
   downloadStorageFull:
     "Límite de almacenamiento alcanzado. Elimina las conferencias escuchadas o aumenta el límite en Ajustes.",
   downloadStorageFullAction: "Descargar igualmente",

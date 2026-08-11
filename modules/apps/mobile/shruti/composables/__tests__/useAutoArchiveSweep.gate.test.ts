@@ -175,7 +175,12 @@ describe("useAutoArchiveSweep — master switch", () => {
     expect(ctx.playlist.archive).toHaveBeenCalledOnce()
 
     // Exactly what the dialog persists when the user flips the switch off.
-    const next = smartLibraryToggled(false, { targetSeconds: 30 * 60, archiveDelay: "1d" }, 30 * 60)
+    const next = smartLibraryToggled(
+      false,
+      { targetSeconds: 30 * 60, archiveDelay: "1d" },
+      30 * 60,
+      "1d"
+    )
     setConfig(next.targetSeconds, next.archiveDelay)
     ctx.listActive.mockClear()
     ctx.playlist.archive.mockClear()
@@ -207,6 +212,42 @@ describe("useAutoArchiveSweep — master switch", () => {
     const { app } = mountSweep()
     await flush()
     expect(ctx.playlist.archive).not.toHaveBeenCalled()
+
+    setConfig(30 * 60, "immediate")
+    await flush()
+
+    expect(ctx.playlist.archive).toHaveBeenCalledWith(ITEM_ID, { refresh: false })
+    app.unmount()
+  })
+})
+
+/**
+ * The queue length and the archive schedule are separate halves of the feature.
+ * Sweeping on a queue-length change made "I moved the slider" delete finished
+ * lectures the user never asked to lose (#1663).
+ */
+describe("useAutoArchiveSweep — queue length", () => {
+  it("does not archive when only the queue-length preset changes", async () => {
+    setConfig(30 * 60, "1d")
+    const { app } = mountSweep()
+    await flush()
+    // The mount sweep is expected; what follows must add nothing to it.
+    ctx.playlist.archive.mockClear()
+    ctx.listActive.mockClear()
+
+    setConfig(3 * 60 * 60, "1d")
+    await flush()
+
+    expect(ctx.listActive).not.toHaveBeenCalled()
+    expect(ctx.playlist.archive).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it("still archives when the schedule itself changes", async () => {
+    setConfig(30 * 60, "3d")
+    const { app } = mountSweep()
+    await flush()
+    ctx.playlist.archive.mockClear()
 
     setConfig(30 * 60, "immediate")
     await flush()

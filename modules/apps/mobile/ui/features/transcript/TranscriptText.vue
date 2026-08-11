@@ -30,7 +30,7 @@
             <TranscriptBlockRenderer
               :block="block"
               :position="position"
-              :display-speaker-icon="displaySpeakerIcons"
+              :display-speaker-icon="multiSpeakerLanguages.has(block.language)"
               :should-highlight-current="shouldHighlightCurrentSentence"
               :is-first-in-group="true"
               :selection-range="selectionRange"
@@ -51,7 +51,7 @@
             :key="blockIdx"
             :block="block"
             :position="position"
-            :display-speaker-icon="displaySpeakerIcons"
+            :display-speaker-icon="multiSpeakerLanguages.has(block.language)"
             :should-highlight-current="shouldHighlightCurrentSentence"
             :is-first-in-group="blockIdx === 0"
             :selection-range="selectionRange"
@@ -82,7 +82,10 @@ export interface NoteTappedEvent {
 }
 
 const props = defineProps<{
-  displaySpeakerIcons: boolean
+  /** Languages whose transcript has more than one speaker — see
+   *  `TranscriptBlockRenderer.displaySpeakerIcon`. Evaluated per language so a
+   *  monologue stays clean beside a dialogue in the other one. */
+  multiSpeakerLanguages: ReadonlySet<string>
   groups: readonly UiTranscriptBlocksGroup[]
   position: number
   duration: number
