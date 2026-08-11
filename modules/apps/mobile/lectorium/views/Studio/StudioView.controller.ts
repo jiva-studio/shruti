@@ -16,6 +16,10 @@ import {
 import { useLectorium } from "@lectorium/lectorium.js"
 import { reportError } from "@lectorium/services/monitoring/reportError.js"
 import { resolveShareArtifact } from "@lectorium/services/resolveShareArtifact.js"
+import {
+  studioVideoArtifact,
+  type StudioVideoSubject,
+} from "@lectorium/services/shareArtifactKeys.js"
 import { useToast } from "@kit/composables"
 import { withProgressLabels } from "@lectorium/services/withProgressLabels.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
@@ -198,28 +202,6 @@ export function useStudioController(): StudioControllerReturn {
     return studio as { text?: string; title?: string }
   }
 
-  function localVideoFilename(id: string): string {
-    return `share-video-note-${id}.mp4`
-  }
-
-  function citationVideoFilename(videoId: string): string {
-    return `share-video-cit-${videoId}.mp4`
-  }
-
-  /**
-   * Stable opaque idempotency key for a citation-mode render. The service
-   * uses it as both S3-cache key and request dedupe key, so it must be
-   * deterministic in (trackId, startMs, endMs). SHA-256 → 28 hex chars
-   * (+ `cit_` prefix = 32 total) fits the server's 64-char regex.
-   */
-  async function citationVideoId(c: CitationContext): Promise<string> {
-    const input = `${c.trackId}|${c.startMs}|${c.endMs}`
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input))
-    const bytes = Array.from(new Uint8Array(buf))
-    const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("")
-    return `cit_${hex.slice(0, 28)}`
-  }
-
   /**
    * Persist editor text + title into `note.meta.studio`. Only writes
    * when at least one value actually changed. No-op in citation mode.
@@ -265,23 +247,32 @@ export function useStudioController(): StudioControllerReturn {
       return
     }
 
-    let videoId: string
-    let filename: string
+    // The key carries the edited caption and title: the render depends on
+    // them, and `resolveShareArtifact` answers from the local cache before
+    // it asks anyone. Without them an edit re-shares the old video forever.
+    let subject: StudioVideoSubject
     let startMs: number
     let endMs: number
     if (isCitationMode.value && citation.value) {
-      videoId = await citationVideoId(citation.value)
-      filename = citationVideoFilename(videoId)
+      subject = {
+        kind: "citation",
+        trackId: citation.value.trackId,
+        startMs: citation.value.startMs,
+        endMs: citation.value.endMs,
+      }
       startMs = citation.value.startMs
       endMs = citation.value.endMs
     } else if (note.value) {
-      videoId = note.value.id
-      filename = localVideoFilename(note.value.id)
+      subject = { kind: "note", noteId: note.value.id }
       startMs = note.value.timeStart
       endMs = note.value.timeEnd
     } else {
       return
     }
+    const { videoId, filename } = await studioVideoArtifact(subject, {
+      text: trimmed,
+      title: trimmedTitle,
+    })
 
     if (!shareJob.tryStart("video", videoId)) {
       await toast.info(t("notes.shareAlreadyInProgress"))

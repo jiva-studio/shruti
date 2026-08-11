@@ -82,23 +82,6 @@ function refCaption(r: SharePdfRefPayload): string {
   return r.tokens ? `${label} ${r.tokens}`.trim() : label
 }
 
-// Filesystem-unsafe across Android / iOS / Windows shares. Control
-// chars in user-facing track titles are nonsense in practice; we strip
-// them belt-and-suspenders so a malformed catalog entry can't produce
-// a filename Android refuses to share.
-// eslint-disable-next-line no-control-regex
-const BAD_FNAME = /[\\/:*?"<>|\x00-\x1f]/g
-
-function localFilename(item: SharePdfItemPayload): string {
-  // Two filenames in play: this one (what the user sees in Telegram /
-  // WhatsApp / Files) and a stable cache key. We derive the cache key
-  // from trackId+lang so a re-tap is an instant local-cache hit; the
-  // user-visible filename comes from the lecture title with the date.
-  const base = (item.title || item.trackId).replace(BAD_FNAME, "").trim().slice(0, 80)
-  const dateSuffix = item.date ? ` (${item.date})` : ""
-  return `${base || item.trackId}${dateSuffix}.pdf`
-}
-
 async function onShare(item: SharePdfItemPayload): Promise<void> {
   if (rowState(item.trackId) === "sharing") return
   // Legacy card persisted before the share-transcript migration carried a
@@ -121,20 +104,17 @@ async function onShare(item: SharePdfItemPayload): Promise<void> {
   try {
     // Render on demand via share-transcript (resolveShareArtifact reuses a
     // warm CDN copy when present), then hand the local file to the sheet.
-    const localUri = await shareTranscript.prepareLocalPdf(
-      {
-        trackId: item.trackId,
-        lang: item.lang || "ru",
-        transcriptKey: item.transcriptKey,
-        title: item.title,
-        author: item.author,
-        date: item.date,
-        location: item.location,
-        references: item.references,
-        tags: item.tags,
-      },
-      localFilename(item)
-    )
+    const localUri = await shareTranscript.prepareLocalPdf({
+      trackId: item.trackId,
+      lang: item.lang || "ru",
+      transcriptKey: item.transcriptKey,
+      title: item.title,
+      author: item.author,
+      date: item.date,
+      location: item.location,
+      references: item.references,
+      tags: item.tags,
+    })
     await shareService.share({
       url: localUri,
       title: item.title,

@@ -514,3 +514,87 @@ describe("usePlayerQueueReconcile — a live session already covers the item", (
     expect(await repo.getTotalListenedSeconds()).toBe(4800)
   })
 })
+
+/**
+ * The gap that let #1593 ship: every replay case above re-presents a batch
+ * whose first pass ran to completion, so the row on disk is already closed and
+ * the dedup guard correctly skips it. The interesting state is the one in
+ * between — the insert landed, the `finish` did not, and the replay is the only
+ * thing that can still close the row.
+ */
+describe("usePlayerQueueReconcile — a half-written session from an interrupted drain", () => {
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await runMigrations(db, userMigrations)
+    repo = createSqlAppRepositories({
+      contentDb: db,
+      userDb: db,
+      getActiveLanguage: () => "en",
+      getDeviceId: async () => "dev-1",
+      getOwnerId: () => "user-1",
+    }).listeningSessions
+    prefs = new Map()
+    acked = []
+    ackFails = false
+    completedAt = new Map()
+    patched = []
+  })
+
+  /** The repository with `finish` broken — the app suspended between the two
+   *  writes, or the write threw on a contended DB. */
+  function repoWithBrokenFinish(base: IListeningSessionRepository): IListeningSessionRepository {
+    return {
+      ...base,
+      finish: async () => {
+        throw new Error("suspended before the write landed")
+      },
+    }
+  }
+
+  it("closes a session whose `finish` never landed on the first drain", async () => {
+    const e = transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000 })
+    const real = repo
+
+    // First drain: the row is inserted with `from == to`, then the process is
+    // gone before it can be closed — and before the watermark is persisted, so
+    // native still holds the entry and re-presents it next launch.
+    repo = repoWithBrokenFinish(real)
+    ackFails = true
+    await usePlayerQueueReconcile().reconcileAndAck([e])
+    expect(await sessionCount()).toBe(1)
+    expect(await real.getTotalListenedSeconds()).toBe(0)
+
+    // Next launch, healthy DB, same journal entry.
+    repo = real
+    prefs.clear()
+    ackFails = false
+    patched = []
+    await usePlayerQueueReconcile().reconcileAndAck([e])
+
+    // Repaired in place: still one row, now claiming the 40 minutes it always
+    // described. Before #1593 the source key made this replay a no-op and the
+    // row stayed at zero seconds for good.
+    expect(await sessionCount()).toBe(1)
+    expect(await real.getTotalListenedSeconds()).toBe(2400)
+    // A repair is not a first sighting — the progress map is not re-patched.
+    expect(patched).toEqual([])
+    expect(acked).toEqual([1])
+  })
+
+  it("leaves an already-closed session untouched when the same entry replays", async () => {
+    const e = transition({ seq: 1, reason: "auto", fromPositionMs: 0, finishedAtMs: 2_400_000 })
+    ackFails = true
+    await usePlayerQueueReconcile().reconcileAndAck([e])
+    expect(await repo.getTotalListenedSeconds()).toBe(2400)
+
+    // The replay finishes the row a second time; `finish` is
+    // `MAX(to_position, ?)`, so a row already at or beyond this point does not
+    // move and the total cannot double.
+    prefs.clear()
+    ackFails = false
+    await usePlayerQueueReconcile().reconcileAndAck([e])
+
+    expect(await sessionCount()).toBe(1)
+    expect(await repo.getTotalListenedSeconds()).toBe(2400)
+  })
+})

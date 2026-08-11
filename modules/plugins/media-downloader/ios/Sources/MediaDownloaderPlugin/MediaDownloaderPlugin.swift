@@ -1,4 +1,6 @@
 import Foundation
+// Explicit for `rmdir(2)`, which Foundation only re-exports.
+import Darwin
 import Capacitor
 
 /**
@@ -263,13 +265,44 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
             return call.reject("'fileKey' is required")
         }
         if let entry = metadataStore.findByFileKey(fileKey) {
-            try? FileManager.default.removeItem(atPath: resolvedPath(entry.localPath))
+            let path = resolvedPath(entry.localPath)
+            try? FileManager.default.removeItem(atPath: path)
+            pruneEmptyParents(of: path)
             metadataStore.remove(id: entry.id)
         }
         call.resolve()
     }
 
     // ── Internals ─────────────────────────────────────────────────────────
+
+    /// Drop the directories the deleted file leaves behind (#160).
+    ///
+    /// A destination mirrors the URL path, so every track owns a chain of
+    /// directories that nothing else writes to; removing the file emptied
+    /// them but left them on disk.
+    ///
+    /// `rmdir(2)`, never `removeItem` — the latter is recursive, and asking
+    /// `contentsOfDirectory` first would leave a window between "looks empty"
+    /// and the removal. `rmdir` refuses anything but an empty directory in one
+    /// step, so a file that arrives meanwhile is never taken with it.
+    ///
+    /// A background transfer for a sibling CDN candidate keeps its bytes in
+    /// the session's own temp file and only moves them here on completion, so
+    /// unlike Android there is nothing in the directory to protect it — it
+    /// doesn't need protecting: `DownloadDelegate` creates the parent chain
+    /// with intermediates right before the move.
+    ///
+    /// Walks up while each level came away, and never past Documents /
+    /// Caches — the bases themselves stay.
+    private func pruneEmptyParents(of path: String) {
+        let bases = [FileManager.SearchPathDirectory.documentDirectory, .cachesDirectory]
+            .compactMap { FileManager.default.urls(for: $0, in: .userDomainMask).first?.path }
+        var dir = (path as NSString).deletingLastPathComponent
+        while bases.contains(where: { dir.hasPrefix($0 + "/") }) {
+            if rmdir(dir) != 0 { return }
+            dir = (dir as NSString).deletingLastPathComponent
+        }
+    }
 
     private func resolveLocalPath(destination: JSObject) -> String? {
         guard let filename = destination["filename"] as? String, !filename.isEmpty else {

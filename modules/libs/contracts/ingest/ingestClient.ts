@@ -1,7 +1,7 @@
 /**
  * Ingest control-plane **wire protocol** — the transport contract between the
  * mobile / web clients and the orchestrator Go service (`POST
- * /orchestrator/ingest`, `GET /orchestrator/ingest/{id}`).
+ * /orchestrator/run`, `GET /orchestrator/run/{id}`).
  *
  * These types are hand-authored and mirror the Go handler exactly, in the JSON
  * shape the server emits (snake_case). They live in `@lib/contracts` (the
@@ -49,7 +49,7 @@ export interface IngestSubmitResponse {
   readonly state: IngestState
 }
 
-/** `GET /orchestrator/ingest/{id}` response — the job's live status. */
+/** `GET /orchestrator/run/{id}` response — the job's live status. */
 export interface IngestStatusResponse {
   readonly state: IngestState
   readonly attempts: number

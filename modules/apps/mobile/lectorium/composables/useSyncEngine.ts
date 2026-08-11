@@ -299,13 +299,14 @@ export function useSyncEngine(): void {
     } catch {
       return
     }
-    const { syncBackfill, syncOutbox, syncState, unitOfWork } = repos
-    if (!syncBackfill || !syncOutbox || !syncState) return
+    const { syncBackfill, syncOutbox, syncState, syncApply, unitOfWork } = repos
+    if (!syncBackfill || !syncOutbox || !syncState || !syncApply) return
 
     try {
       await backfillLocal({
         backfill: syncBackfill,
         outbox: syncOutbox,
+        apply: syncApply,
         syncState,
         unitOfWork,
         ownerId: userId,

@@ -238,8 +238,10 @@ class MediaDownloaderPlugin : Plugin() {
         val fileKey = call.getString("fileKey") ?: return call.reject("'fileKey' is required")
         val entry = store.findByFileKey(fileKey)
         if (entry != null) {
-            File(entry.localPath).delete()
+            val file = File(entry.localPath)
+            file.delete()
             File(entry.localPath + ".download").delete()
+            pruneEmptyParents(file)
             store.remove(entry.id)
         }
         call.resolve()
@@ -395,6 +397,36 @@ class MediaDownloaderPlugin : Plugin() {
         return store.all().mapNotNull { entry ->
             val info = wm.getWorkInfoById(entry.workerId).get() ?: return@mapNotNull null
             TrackedWork(entry.id, entry.localPath, info.state.isFinished)
+        }
+    }
+
+    /**
+     * Drop the directories the deleted file leaves behind (#160).
+     *
+     * A destination mirrors the URL path, so every track owns a chain of
+     * directories that nothing else writes to; removing the file emptied
+     * them but left them on disk.
+     *
+     * `File.delete()` on a directory is the entire guard: it removes an empty
+     * one and refuses every other, so there is no "check then remove" window
+     * a sibling could lose a file in. That is what protects a hedged CDN
+     * candidate still filling the shared `.download` temp — the temp sits in
+     * this very directory, which therefore isn't empty. A candidate that has
+     * not opened its temp yet leaves nothing to see, but `DownloadWorker`
+     * mkdirs the parent chain before it does, so pruning ahead of it costs
+     * nothing.
+     *
+     * Walks up while each level came away, and never past `filesDir` /
+     * `cacheDir` — the bases themselves stay.
+     */
+    private fun pruneEmptyParents(file: File) {
+        val bases = listOf(context.filesDir.absolutePath, context.cacheDir.absolutePath)
+        var dir: File? = file.parentFile
+        while (dir != null) {
+            val path = dir.absolutePath
+            if (bases.none { path.startsWith("$it/") }) return
+            if (!dir.delete()) return
+            dir = dir.parentFile
         }
     }
 
