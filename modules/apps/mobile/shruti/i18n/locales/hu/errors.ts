@@ -15,4 +15,14 @@ export default {
   downloadStorageFull:
     "Elérted a tárhelykorlátot. Törölj meghallgatott előadásokat, vagy növeld a korlátot a beállításokban.",
   downloadStorageFullAction: "Mégis letöltöm",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "Nem sikerült megnyitni az adataidat",
+    description:
+      "A jegyzeteidet, a lejátszási listádat és a hallgatási előzményeidet tároló adatbázis nem nyílt meg, ezért az alkalmazás nem tudja megjeleníteni a könyvtáradat.",
+    advice:
+      "Indítsd újra az alkalmazást, és próbáld meg ismét. Ha továbbra is előfordul, szabadíts fel helyet az eszközön, vagy telepítsd újra az alkalmazást.",
+    retry: "Újrapróbálkozás",
+  },
 }

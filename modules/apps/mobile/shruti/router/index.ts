@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "@ionic/vue-router"
 import type { RouteRecordRaw } from "vue-router"
 import { isShrutiInitialized, useShruti } from "@shruti/shruti.js"
+import { resolveDatabaseRedirect, STORAGE_ERROR_PATH } from "./databaseGuard.js"
 
 const routes: RouteRecordRaw[] = [
   // Startup picks the real entry (onboarding vs Home) and replaces this before
@@ -10,6 +11,14 @@ const routes: RouteRecordRaw[] = [
     path: "/onboarding",
     name: "onboarding",
     component: () => import("@shruti/views/Onboarding/OnboardingView.vue"),
+  },
+  {
+    // Terminal screen for "the databases this app runs on are not open".
+    // Deliberately outside /tabs — the tab bar's surfaces all read through
+    // `repositories()`, which is exactly what is unavailable here.
+    path: STORAGE_ERROR_PATH,
+    name: "storage-error",
+    component: () => import("@shruti/views/StorageError/StorageErrorView.vue"),
   },
   {
     path: "/tabs/",
@@ -143,16 +152,17 @@ router.go = function patchedGo(delta: number): ReturnType<typeof originalGo> {
 
 // Deep-linking guard: every tabs route depends on both databases being open.
 // Startup (`main.ts`) opens them headlessly before mount, so this is normally a
-// no-op. As a defence against a stray deep link arriving before startup
-// settles, bounce to "/onboarding" (which itself tolerates the not-yet-open
-// case) rather than the deleted "/welcome".
+// no-op. When they are not open — a stray deep link arriving before startup
+// settles, or a user DB that genuinely failed to open — the navigation lands on
+// the storage-error screen, which is terminal and says what happened. See
+// `databaseGuard.ts` for why it is not "/onboarding".
 router.beforeEach((to, _from, next) => {
-  if (to.path === "/" || to.path === "/onboarding") return next()
-  if (!isShrutiInitialized()) return next()
-  const app = useShruti()
-  if (!app.databases.content || !app.databases.user) {
-    return next("/onboarding")
-  }
+  const redirect = resolveDatabaseRedirect(to.path, {
+    initialized: isShrutiInitialized(),
+    content: isShrutiInitialized() && !!useShruti().databases.content,
+    user: isShrutiInitialized() && !!useShruti().databases.user,
+  })
+  if (redirect) return next(redirect)
   next()
 })
 
