@@ -47,8 +47,15 @@ else
   echo "!! no $SECRETS — chat won't answer without OPENROUTER_API_KEY (see README)" >&2
 fi
 
-echo ">> make stack-up"
-make stack-up
+# Only the services the @live tier talks to. `make stack-up` starts the whole
+# `origin` profile — a dozen services the browser never reaches, each built from
+# source. (Compose still interpolates every service's env, so the vars they
+# demand must exist in .env.dev even here — see README.)
+echo ">> starting core stack (postgres, redis, migrator, auth, chat)"
+( cd infra/app/compose \
+  && COMPOSE_PROFILES=origin docker compose -p shruti \
+       -f docker-compose.yml -f docker-compose.dev.yml --env-file ../.env.dev \
+       up -d postgres redis migrator auth chat )
 
 echo ">> waiting for chat /readyz …"
 for i in $(seq 1 60); do
