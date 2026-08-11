@@ -14,8 +14,6 @@ export type UiTrackState =
   | "none"
   | "failed"
   | "added"
-  /** In the playlist, but the storage budget refused to save it offline. */
-  | "deferred"
   | "queued"
   | "completed"
   | "pending"
