@@ -10,6 +10,9 @@ export default {
   playbackFailed:
     "Não foi possível reproduzir esta palestra. Verifique sua conexão e tente novamente.",
   noAudioForLecture: "Esta palestra não tem áudio.",
+  translationFailed: "Não foi possível traduzir a palestra. Tente mais tarde.",
+  translationStillRunning:
+    "A tradução está demorando mais que o normal — ela aparecerá assim que estiver pronta.",
   downloadStorageFull:
     "Limite de armazenamento atingido. Remova as palestras já ouvidas ou aumente o limite nas configurações.",
   downloadStorageFullAction: "Baixar mesmo assim",
