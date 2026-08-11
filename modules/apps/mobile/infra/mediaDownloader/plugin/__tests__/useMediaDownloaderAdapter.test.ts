@@ -59,6 +59,9 @@ const URL_B = "https://other.example.com/public/tracks/t-1/audio/original.mp3"
 const FILE_KEY = "/public/tracks/t-1/audio/original.mp3"
 const ID_A = `${FILE_KEY}#cdn.example.com`
 const ID_B = `${FILE_KEY}#other.example.com`
+// A second track, same host — for the destinations two tracks must not share.
+const URL_C = "https://cdn.example.com/public/tracks/t-2/audio/original.mp3"
+const ID_C = "/public/tracks/t-2/audio/original.mp3#cdn.example.com"
 
 describe("useMediaDownloaderAdapter — terminal events", () => {
   beforeEach(() => {
@@ -171,6 +174,30 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
     emit("completed", { id: ID_A, localUrl: "file:///data/original.mp3", bytesDownloaded: 1 })
     emit("completed", { id: ID_B, localUrl: "file:///data/original.mp3", bytesDownloaded: 1 })
     await Promise.all([a, b])
+  })
+
+  it("gives two tracks separate directories", async () => {
+    // What lets the native side remove the directory a deleted file emptied
+    // (#160): the destination mirrors the URL path, so a track's directory
+    // chain holds that track's files and nothing else. Flatten the layout —
+    // one directory for many tracks — and pruning after a delete would be
+    // reaching into storage the deleted track never owned.
+    const downloader = useMediaDownloaderAdapter({ cacheDir: "lectorium" })
+    const a = downloader.download(URL_A)
+    const c = downloader.download(URL_C)
+    await vi.waitFor(() => expect(downloadMock).toHaveBeenCalledTimes(2))
+
+    const [first, second] = downloadMock.mock.calls.map(([o]) => o) as {
+      id: string
+      destination: { subdir: string; filename: string }
+    }[]
+    expect(first!.destination.subdir).toBe("lectorium/public/tracks/t-1/audio")
+    expect(second!.destination.subdir).toBe("lectorium/public/tracks/t-2/audio")
+    expect(first!.destination.filename).toBe("original.mp3")
+
+    emit("completed", { id: ID_A, localUrl: "file:///data/t-1.mp3", bytesDownloaded: 1 })
+    emit("completed", { id: ID_C, localUrl: "file:///data/t-2.mp3", bytesDownloaded: 1 })
+    await Promise.all([a, c])
   })
 
   it("keeps two candidates on ONE host apart instead of superseding", async () => {
