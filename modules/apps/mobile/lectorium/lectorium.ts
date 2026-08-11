@@ -131,8 +131,8 @@ export interface Lectorium {
    */
   readonly syncClient: ISyncClient
   /**
-   * Orchestrator ingest control-plane transport (POST /orchestrator/ingest,
-   * GET /orchestrator/ingest/{id}). The library store drives it for direct
+   * Orchestrator ingest control-plane transport (POST /orchestrator/run,
+   * GET /orchestrator/run/{id}). The library store drives it for direct
    * add/retry and live status polling.
    */
   readonly ingestClient: IIngestClient

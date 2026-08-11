@@ -82,7 +82,7 @@ export interface RegionFailoverOptions {
  * Not every region serves every door: `orchestratorBaseUrl` and friends are
  * optional (a published config.json predating the field omits it, and
  * `isValidRegion` deliberately does not require it), so `pickBaseUrl` returns
- * `""` for them. `joinUrl("", "/orchestrator/ingest/x")` is a PATH, and the
+ * `""` for them. `joinUrl("", "/orchestrator/run/x")` is a PATH, and the
  * WebView resolves a path against its own origin — `capacitor://localhost` —
  * which answers 404. kit reads that 404 as non-transient, stops walking and
  * returns it, so a job that exists is reported "not found".

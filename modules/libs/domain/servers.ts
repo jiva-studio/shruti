@@ -80,7 +80,7 @@ export interface CdnServer extends KitCdnServer {
    *  field before sync is enabled for the region. */
   readonly profileBaseUrl?: string
   /** Base URL of the lectorium `orchestrator` ingest control plane for this
-   *  region. The ingest HTTP client appends `/orchestrator/ingest[/{id}]` to it.
+   *  region. The ingest HTTP client appends `/orchestrator/run[/{id}]` to it.
    *  The orchestrator is origin-only, reached over the same Caddy edge as chat
    *  but on its own `/orchestrator/*` routes — a distinct service. Read through a
    *  getter at call time, like `chatBaseUrl`, so a region flip routes ingest
