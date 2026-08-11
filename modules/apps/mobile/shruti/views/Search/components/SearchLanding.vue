@@ -99,6 +99,7 @@
       <SmartLibraryDialog
         v-model:target-seconds="autoDownloadTargetSeconds"
         v-model:archive-delay="autoArchiveDelay"
+        v-model:last-archive-delay="autoArchiveLastDelay"
         :open="smartLibraryDialogOpen"
         :filter-summary="smartLibrary.filterSummary.value"
         @update:open="smartLibraryDialogOpen = $event"
@@ -145,6 +146,7 @@ import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import {
   AUTO_ARCHIVE_DELAY_KEY,
+  AUTO_ARCHIVE_LAST_DELAY_KEY,
   type AutoArchiveDelay,
 } from "@shruti/composables/useAutoArchiveSweep.js"
 import { useSmartLibraryBinding } from "@shruti/views/Settings/composables/useSmartLibraryBinding.js"
@@ -178,6 +180,7 @@ void landing.ensureLoaded()
 // tapping while unsubscribed opens the paywall instead of the dialog.
 const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
 const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
+const autoArchiveLastDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_LAST_DELAY_KEY, "off")
 const isSubscribed = computed(() => purchases.isSubscribed)
 const smartLibrary = useSmartLibraryBinding(
   autoDownloadTargetSeconds,
