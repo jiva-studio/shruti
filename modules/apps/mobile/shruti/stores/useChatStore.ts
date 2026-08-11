@@ -83,6 +83,23 @@ export type OutlinePayload = ChatOutlinePayload
 export type ActionState = ChatActionState
 export type { ChatMessageError }
 
+/**
+ * What an action's side effect actually accomplished. Some of them return
+ * normally without doing anything — a PRO gate bounces the user to the paywall
+ * and comes back — so "did not throw" cannot stand in for success: it left the
+ * card an inert checkmark over a lecture nobody submitted (#1727).
+ *   - `applied`  — the effect happened → `done`
+ *   - `deferred` — nothing happened, the user may act and retry → `pending`
+ *   - `failed`   — the effect was attempted and refused → `error` (card retries)
+ */
+type ActionOutcome = "applied" | "deferred" | "failed"
+
+const ACTION_STATE_FOR_OUTCOME: Record<ActionOutcome, ActionState> = {
+  applied: "done",
+  deferred: "pending",
+  failed: "error",
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                  Helpers                                   */
 /* -------------------------------------------------------------------------- */
@@ -875,6 +892,16 @@ export const useChatStore = defineStore("chat", () => {
     // and buffers the turn — so we suppress the error, keep the pending record
     // + thinking placeholder, and recover via the resume poll (see `finally`).
     let resumableDrop = false
+    // Whether a lifecycle event already settled this turn (finalised / error).
+    // The `finally` settles whatever is left, so a turn that dies by EXCEPTION
+    // — or by an abort, which yields no event at all — still drops its pending
+    // record and cancels its pre-armed "Sadhu replied" notification (#1733).
+    let settled = false
+    // The record write is fire-and-forget so it can't delay the stream, but the
+    // `finally` has to join it: an exception thrown in the same tick would
+    // otherwise remove from a list the write hasn't landed in yet, and the
+    // record would reappear a microtask later.
+    let pendingWrite: Promise<void> = Promise.resolve()
 
     // Registered immediately before the `try` whose `finally` deregisters it:
     // anything that throws between registration and the loop would otherwise
@@ -946,14 +973,16 @@ export const useChatStore = defineStore("chat", () => {
         // user navigates away from the session.
         if (event.kind === "assistant-placeholder") {
           assistantMsgId = event.messageId
-          void addPending(event.messageId, sessionId)
+          pendingWrite = addPending(event.messageId, sessionId)
           emitTurnStarted({ assistantMessageId: event.messageId, sessionId })
         }
         if (event.kind === "finalised") {
+          settled = true
           void removePending(event.message.id)
           emitTurnSettled({ assistantMessageId: event.message.id, sessionId, ok: true })
         }
         if (event.kind === "error" && assistantMsgId) {
+          settled = true
           void removePending(assistantMsgId)
           emitTurnSettled({ assistantMessageId: assistantMsgId, sessionId, ok: false })
         }
@@ -1039,6 +1068,18 @@ export const useChatStore = defineStore("chat", () => {
         // streaming-id handle so a stray late event can't reattach to a
         // bubble that's no longer streaming.
         if (streamingMessageId === assistantMsgId) streamingMessageId = null
+      }
+      // Whatever the turn did, it is over unless it was deliberately handed to
+      // the resume poll. A turn that died by exception (426 / 503 / an
+      // unexpected throw) or by an abort yields neither `finalised` nor
+      // `error`, so nothing above cleared its pending record — and a stranded
+      // record is not inert: `openSession` re-raises the thinking placeholder
+      // from it for the record's whole 24h TTL, and every backgrounding
+      // re-arms its "Sadhu replied" notification at now+2s. Settle it here.
+      if (assistantMsgId && !resumableDrop && !settled) {
+        await pendingWrite.catch(() => undefined)
+        await removePending(assistantMsgId)
+        emitTurnSettled({ assistantMessageId: assistantMsgId, sessionId, ok: false })
       }
     }
   }
@@ -1331,6 +1372,26 @@ export const useChatStore = defineStore("chat", () => {
   const readPending = pendingTurns.read
   const addPending = pendingTurns.add
   const removePending = pendingTurns.remove
+
+  /**
+   * Forget every in-flight turn — called on sign-out / account switch. The
+   * records were minted under the previous identity: resuming one under the
+   * new token 404s, which leaves a thinking bubble spinning and re-arms the
+   * "Sadhu replied" notification on every backgrounding until the 24h TTL
+   * expires (#1733). Each is settled as failed so its pre-armed OS
+   * notification is cancelled rather than merely orphaned.
+   */
+  async function clearPendingTurns(): Promise<void> {
+    const list = await readPending()
+    await pendingTurns.clear()
+    for (const p of list) {
+      emitTurnSettled({
+        assistantMessageId: p.assistantMessageId,
+        sessionId: p.sessionId,
+        ok: false,
+      })
+    }
+  }
 
   /** Replay a completed turn's buffered events into its session, rebuilding
    *  the assistant message through the `replayChatTurn` use-case (same fold
@@ -1658,12 +1719,13 @@ export const useChatStore = defineStore("chat", () => {
 
     await setActionState(messageId, actionId, "executing")
     try {
+      let outcome: ActionOutcome = "applied"
       if (action.kind === "enable_daily_reminder") {
         // Card lets the user pick a time before tapping Confirm; if
         // they did, the chosen value rides in via `override.time`.
         await applyProactiveDailyReminder(override?.time ?? action.time)
       } else if (action.kind === "configure_smart_library") {
-        await applyProactiveSmartLibrary(action.filters)
+        outcome = await applyProactiveSmartLibrary(action.filters)
       } else if (action.kind === "upgrade_to_pro") {
         const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
         usePaywallStore().requestOpen()
@@ -1673,9 +1735,9 @@ export const useChatStore = defineStore("chat", () => {
           throw new Error(`queue next failed: ${r.error}`)
         }
       } else if (action.kind === "add_to_library") {
-        await applyAddToLibrary(action)
+        outcome = await applyAddToLibrary(action)
       }
-      await setActionState(messageId, actionId, "done")
+      await setActionState(messageId, actionId, ACTION_STATE_FOR_OUTCOME[outcome])
     } catch (err) {
       console.warn("chat: action execution failed", err)
       await setActionState(messageId, actionId, "error")
@@ -1733,15 +1795,18 @@ export const useChatStore = defineStore("chat", () => {
     )
   }
 
-  async function applyProactiveSmartLibrary(filters: SmartLibraryFiltersPayload): Promise<void> {
+  async function applyProactiveSmartLibrary(
+    filters: SmartLibraryFiltersPayload
+  ): Promise<ActionOutcome> {
     const { usePurchasesStore } = await import("@shruti/stores/usePurchasesStore.js")
     const purchases = usePurchasesStore()
     if (!purchases.isSubscribed) {
-      // Not subscribed → bounce through the paywall. The user can
-      // re-tap the same card after they upgrade.
+      // Not subscribed → bounce through the paywall. Reported as `deferred` so
+      // the card stays confirmable: re-tapping it after the upgrade is exactly
+      // what the user is meant to do, and a `done` card cannot be tapped.
       const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
       usePaywallStore().requestOpen("smartLibrary")
-      return
+      return "deferred"
     }
     const { useAutoDownloadFiltersStore } =
       await import("@shruti/stores/useAutoDownloadFiltersStore.js")
@@ -1752,6 +1817,7 @@ export const useChatStore = defineStore("chat", () => {
     if (filters.sourceIds) await store.setSources(filters.sourceIds)
     if (filters.locationIds) await store.setLocations(filters.locationIds)
     if (filters.languageCodes) await store.setLanguages(filters.languageCodes)
+    return "applied"
   }
 
   /**
@@ -1759,17 +1825,23 @@ export const useChatStore = defineStore("chat", () => {
    * trigger ingest of the external lecture. Chat is DISCOVERY ONLY — it never
    * ingests; the actual submit goes through the orchestrator ingest API in the
    * library store (which PRO-gates and bounces a non-subscriber to the paywall).
+   *
+   * The paywall bounce is the DESIGNED path for every non-subscriber, so its
+   * outcome is reported rather than swallowed: the card must stay tappable for
+   * a user who then subscribes.
    */
   async function applyAddToLibrary(
     action: Extract<ChatActionPayload, { kind: "add_to_library" }>
-  ): Promise<void> {
+  ): Promise<ActionOutcome> {
     const { useLibraryStore } = await import("@shruti/stores/useLibraryStore.js")
     // Pass the candidate's title/author as hints so the pre-ready card (and the
     // worker's metadata fallback) has a real title, not "Untitled".
-    await useLibraryStore().addByUrl(action.url, {
+    const result = await useLibraryStore().addByUrl(action.url, {
       title: action.title,
       author: action.author ?? undefined,
     })
+    if (result === "paywalled") return "deferred"
+    return result === "added" ? "applied" : "failed"
   }
 
   async function deleteSession(id: string): Promise<void> {
@@ -1893,6 +1965,7 @@ export const useChatStore = defineStore("chat", () => {
     sending,
     resumePendingTurns,
     listPendingTurns: readPending,
+    clearPendingTurns,
     sessionTitleFor,
     markAnswerUnread,
     getLastSeenMessageId,
