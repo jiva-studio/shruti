@@ -149,12 +149,17 @@ jobs:
       # `apply from:`s; without it the root project fails to configure. Unlike
       # `cap sync` it does not copy web assets, so no dist/ is needed here.
       - name: generate native capacitor project files
-        # `cap update` writes app/src/main/assets/capacitor.plugins.json but,
-        # unlike `cap sync`, does not create that gitignored dir itself.
+        # `cap sync` writes the gitignored pieces the app project needs to
+        # configure: capacitor-cordova-android-plugins/ (which app/build.gradle
+        # `apply from:`s) and app/src/main/assets/capacitor.plugins.json.
+        # It insists on a webDir, but lint never reads the web bundle — so a
+        # stub index.html, not the real mobile-web-dist artifact, which would
+        # serialise this lane behind build-web for no lint coverage.
         run: |
           cd modules/apps/mobile
-          mkdir -p android/app/src/main/assets
-          npx cap update android
+          mkdir -p dist android/app/src/main/assets
+          [ -f dist/index.html ] || echo '<!doctype html>' > dist/index.html
+          npx cap sync android
       - name: lint native plugin modules
         # Gradle project names come from capacitor.settings.gradle — the
         # `lectorium-plugin-` prefix is Capacitor's, not the npm dir name.
