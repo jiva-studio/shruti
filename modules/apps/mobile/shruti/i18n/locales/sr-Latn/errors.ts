@@ -8,8 +8,9 @@ export default {
   dictionariesUnavailable: "Nije moguće učitati nazive — neke oznake možda nedostaju.",
   playbackFailed: "Nije moguće reprodukovati ovo predavanje. Proverite vezu i pokušajte ponovo.",
   noAudioForLecture: "Ovo predavanje nema audio.",
-  translationFailed: "Prevod nije uspeo. Pokušajte kasnije.",
-  translationStillRunning: "Prevod traje duže nego obično — pojaviće se čim bude gotov.",
+  translationFailed: "Prevod na {language} nije uspeo. Pokušajte kasnije.",
+  translationStillRunning:
+    "Prevod na {language} traje duže nego obično — pojaviće se čim bude gotov.",
   downloadStorageFull:
     "Dostignut je limit memorije. Uklonite preslušana predavanja ili povećajte limit u podešavanjima.",
   downloadStorageFullAction: "Ipak preuzmi",

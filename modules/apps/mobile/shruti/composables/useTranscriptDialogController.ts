@@ -356,6 +356,36 @@ export function useTranscriptDialogController(
   // exist on disk for the worker to read).
   const sourceLanguage = computed<string | undefined>(() => hydration.availableLanguages.value[0])
 
+  /**
+   * The languages a personal-library track can be translated INTO — one ghost
+   * chip each, so the user picks the target instead of being handed the single
+   * implicit one (the interface language) the chip used to hardcode.
+   *
+   * The offer is the user's library content languages plus the interface
+   * language: the set they have already declared they read. Deliberately not
+   * every locale the app ships — fifteen chips in an inline row is a wall, and
+   * most of them are languages this user will never open. The interface
+   * language stays in the union so the offer is never narrower than before.
+   *
+   * A language already on this track is filtered out — the source it would be
+   * translated from, and every stored transcript — so nothing can be requested
+   * twice and land as a duplicate variant. Candidates are de-duplicated against
+   * each other too: the interface language is usually a library language as well.
+   * Interface language first, being the likeliest target.
+   */
+  const translationTargets = computed<readonly string[]>(() => {
+    const source = sourceLanguage.value
+    if (!libraryItem.value || !source) return []
+    const taken = new Set<string>([source, ...hydration.availableLanguages.value])
+    const targets: string[] = []
+    for (const code of [appLanguage.value, ...libraryLanguages.value]) {
+      if (!code || taken.has(code)) continue
+      taken.add(code)
+      targets.push(code)
+    }
+    return targets
+  })
+
   const availableLanguages = computed<readonly UiTranscriptLanguage[]>(() => {
     const chips: UiTranscriptLanguage[] = hydration.availableLanguages.value.map((code) => ({
       code,
@@ -363,24 +393,15 @@ export function useTranscriptDialogController(
       icon: languageFlag(code),
       available: true,
     }))
-    // On a personal-library track, always offer the interface language: if it
-    // isn't a stored transcript yet, add it as a ghost chip that translates on
-    // tap. Skip when it IS the source or already present.
-    const appLang = appLanguage.value
-    const source = sourceLanguage.value
-    if (
-      libraryItem.value &&
-      appLang &&
-      source &&
-      appLang !== source &&
-      !hydration.availableLanguages.value.includes(appLang)
-    ) {
+    for (const code of translationTargets.value) {
       chips.push({
-        code: appLang,
-        name: appLang.toUpperCase(),
-        icon: languageFlag(appLang),
+        code,
+        name: code.toUpperCase(),
+        icon: languageFlag(code),
         available: false,
-        busy: translating.value.has(appLang),
+        // Per-language, so one running translation spins its own chip and
+        // leaves the other targets tappable.
+        busy: translating.value.has(code),
       })
     }
     return chips
@@ -392,7 +413,17 @@ export function useTranscriptDialogController(
     const trackId = transcriptStore.trackId
     const item = libraryItem.value
     const source = sourceLanguage.value
-    if (!trackId || !item || !source || code === source || translating.value.has(code)) {
+    // `translationTargets` is the authority on what may be requested, not just
+    // what is drawn: it already excludes the source and every stored language,
+    // so an offer the UI no longer shows (the run finished and synced while the
+    // chip was on screen) can't still spend a run producing a duplicate variant.
+    if (
+      !trackId ||
+      !item ||
+      !source ||
+      !translationTargets.value.includes(code) ||
+      translating.value.has(code)
+    ) {
       return
     }
     translating.value = new Set(translating.value).add(code)
@@ -410,13 +441,15 @@ export function useTranscriptDialogController(
       const outcome = await pollRun(res.run_id)
       // Whatever happens, say so: the ghost chip only spins, so a run that ends
       // in "failed" — or one still going after six minutes of polling — used to
-      // leave the user with no way to tell the two apart (issue #1589).
+      // leave the user with no way to tell the two apart (issue #1589). Both
+      // messages name the language now that the user picks it and can have two
+      // runs going at once; unnamed, a toast said nothing about which one it was.
       if (outcome === "pending") {
-        reportActionError(t("errors.translationStillRunning"))
+        reportActionError(t("errors.translationStillRunning", { language: languageLabel(code) }))
         return
       }
       if (outcome !== "ready") {
-        reportActionError(t("errors.translationFailed"))
+        reportActionError(t("errors.translationFailed", { language: languageLabel(code) }))
         return
       }
       // The run is ready, but the produced variant reaches THIS device through the
@@ -432,7 +465,11 @@ export function useTranscriptDialogController(
         usePaywallStore().requestOpen()
         return
       }
-      reportActionError(err instanceof Error ? err.message : t("errors.translationFailed"))
+      reportActionError(
+        err instanceof Error
+          ? err.message
+          : t("errors.translationFailed", { language: languageLabel(code) })
+      )
     } finally {
       const next = new Set(translating.value)
       next.delete(code)
@@ -641,6 +678,13 @@ export function useTranscriptDialogController(
     onSelectionDismissed,
     onPickStart,
   }
+}
+
+/** How a language is named back to the user in a message. The same token the
+ *  chip carries, so the toast refers to the thing that was tapped rather than
+ *  introducing a second vocabulary for it. */
+function languageLabel(code: string): string {
+  return code.toUpperCase()
 }
 
 /** Country-flag emoji for a transcript language code (the corpus languages);
