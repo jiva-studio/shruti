@@ -154,4 +154,27 @@ describe("pullAndMerge — routing", () => {
     expect(state.pullCursor).toBe(2)
     expect(state.ackedSeq).toBe(2)
   })
+
+  it("swallows a failing cursor ack — the merge stands, acked_seq does not move", async () => {
+    const gateway = new FakeSyncClient()
+    const state = new FakeSyncState()
+    const apply = new FakeApply()
+    gateway.pullPages = [
+      {
+        changes: [{ server_seq: 1, collection: "notes", doc_id: "n1", op: "delete", hlc: hlc(1) }],
+        cursor: 1,
+        has_more: false,
+      },
+    ]
+    gateway.ackHandler = () => {
+      throw new Error("sync cursor failed: 500 Internal Server Error")
+    }
+
+    const result = await pullAndMerge(deps(gateway, state, apply))
+
+    expect(result.applied).toBe(1)
+    expect(result.changedCollections).toEqual(["notes"])
+    expect(state.pullCursor).toBe(1)
+    expect(state.ackedSeq).toBe(0)
+  })
 })
