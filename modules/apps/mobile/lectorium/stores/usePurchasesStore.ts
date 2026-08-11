@@ -5,7 +5,11 @@ import { Preferences } from "@capacitor/preferences"
 import { useLectorium } from "@lectorium/lectorium.js"
 import type { CustomerState, PurchasePackage } from "@ports/app/purchases.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
-import { devSubscriptionOverride, isDevBuild } from "@lectorium/services/devSubscription.js"
+import {
+  devSubscriptionOverride,
+  isSubscriptionOverridable,
+  subscriptionFromOverride,
+} from "@lectorium/services/devSubscription.js"
 import { reportWarning } from "@lectorium/services/monitoring/reportError.js"
 
 const CACHE_KEY = "purchases.lastState"
@@ -107,9 +111,10 @@ export const usePurchasesStore = defineStore("purchases", () => {
   const available = computed(() => useLectorium().purchases.available)
   // Dev/preview builds (dev binary or *.pages.dev) unlock Pro by default so
   // paywalled surfaces are explorable without a real RevenueCat purchase (RC
-  // isn't available on web at all). That's now configurable via the dev
-  // controller — Settings → Debug → Subscription, or the e2e forceFreeTier
-  // escape hatch (see services/devSubscription.ts). A real purchase
+  // isn't available on web at all). Which tier the app runs as is chosen via
+  // the dev controller — Settings → Debug → Subscription — or, before boot, by
+  // the e2e suite; `subscriptionFromOverride` decides whether this build honours
+  // that choice (see services/devSubscription.ts). A real purchase
   // (`activePackageId`) always wins; the override never grants Pro on prod.
   const isSubscribed = computed(() => {
     if (activePackageId.value !== undefined) return true
@@ -117,10 +122,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     // mirrored into the auth `tier` claim, so the JWT tier is the source of
     // truth for every client-side Pro gate here.
     if (__OFFSTORE_BUILD__) return useAuthStore().isPro
-    const ov = devSubscriptionOverride.value
-    if (ov === "free") return false
-    if (ov === "pro") return isDevBuild
-    return isDevBuild // default: dev/preview unlocks Pro so paywalls are explorable
+    return subscriptionFromOverride(devSubscriptionOverride.value)
   })
 
   function applyState(s: CustomerState): void {
@@ -262,10 +264,11 @@ export const usePurchasesStore = defineStore("purchases", () => {
     const purchases = useLectorium().purchases
     if (!purchases.available) {
       // RevenueCat is native-only, so the web/dev preview has no real
-      // offerings. Seed sample packages on dev/preview builds so the paywall
-      // (incl. onboarding) renders real plan cards when the dev controller is
-      // set to "free". Production web (RC unavailable) keeps an empty list.
-      if (isDevBuild) packages.value = devMockPackages()
+      // offerings. Seed sample packages on dev/preview and test builds so the
+      // paywall (incl. onboarding) renders real plan cards when the override is
+      // set to "free" — the e2e bundle needs the same plan cards the dev server
+      // shows. Production web (RC unavailable) keeps an empty list.
+      if (isSubscriptionOverridable) packages.value = devMockPackages()
       ready.value = true
       return
     }

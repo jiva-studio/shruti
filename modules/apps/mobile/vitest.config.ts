@@ -15,6 +15,10 @@ export default defineConfig({
     // Off-store flag referenced at module top-level (onboarding controller);
     // tests build the normal variant.
     __OFFSTORE_BUILD__: JSON.stringify(false),
+    // Same for the test-build seam: unit tests compile the SHIPPED variant, so
+    // devSubscription's prod-safety assertions are made against the real thing
+    // (`__BUILD_ID__` is "test" above, i.e. not a dev build either).
+    __E2E_BUILD__: JSON.stringify(false),
   },
   resolve: {
     preserveSymlinks: true,
