@@ -5,9 +5,10 @@ import {
   type ResolveContentDatabaseOptions,
 } from "@kit/bootstrap"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { bootstrapUserDatabaseFromApp } from "@lectorium/services/bootstrap.js"
+import { bootstrapUserDatabaseOrClose } from "@lectorium/services/bootstrap.js"
 import { PREFERRED_SERVER_KEY } from "@lectorium/services/preferredServer.js"
 import { findRegion, getRegions, setRegions } from "@lectorium/services/regionsRegistry.js"
+import { recordStorageFailure } from "@lectorium/services/storageHealth.js"
 import type { RemoteAppConfig } from "@lib/domain/config.js"
 
 /**
@@ -76,17 +77,17 @@ export function createLectoriumBootstrap(): BootstrapController<unknown> {
       lectorium.filesStorage.delete(
         lectorium.storagePublicUrl.get(lectorium.appConfig.publicRemoteConfigPath)
       ),
-    // Open the user DB + run pending user migrations. Never let a user-DB
-    // failure brick the app — the catalog is fully browsable without it; the
-    // playlist / notes / chat-history stores degrade on their own.
+    // Open the user DB + run pending user migrations. A user-DB failure must
+    // not take the whole bootstrap down — but it is not survivable in silence
+    // either: every user-facing surface reads through `repositories()`, which
+    // needs this database. Record the reason so `/storage-error` can name it,
+    // and let the bootstrap finish so the app still mounts and can say so.
     runUserDatabaseMigrations: async () => {
       try {
-        await bootstrapUserDatabaseFromApp(lectorium)
+        await bootstrapUserDatabaseOrClose(lectorium)
       } catch (err) {
-        console.error(
-          "[lectorium] user-DB bootstrap/migration failed; continuing in a degraded state:",
-          err
-        )
+        console.error("[lectorium] user-DB bootstrap/migration failed:", err)
+        recordStorageFailure(err)
       }
     },
     onBackgroundRefreshComplete: () => {
@@ -114,7 +115,11 @@ export async function runStartupBootstrap(): Promise<StartupResult> {
   try {
     await controller.start()
   } catch (err) {
+    recordStorageFailure(err)
     return { ready: false, error: err instanceof Error ? err.message : String(err) }
+  }
+  if (!controller.isReady.value) {
+    recordStorageFailure(controller.error.value ?? "content database failed to open")
   }
   return {
     ready: controller.isReady.value,

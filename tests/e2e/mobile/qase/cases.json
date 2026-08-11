@@ -2559,12 +2559,12 @@
     "suite_id": 35,
     "automation": 2,
     "title": "A failed content-DB load degrades gracefully (no infinite splash)",
-    "description": "Offline. The content-DB download is forced to fail. Since the Welcome screen was removed and the bootstrap runs headless (DB bundled, failure non-fatal), there is no error/Retry page anymore; the guarantee is that the launch never hangs on a splash — a brand-new user still reaches the onboarding carousel.",
+    "description": "Offline. The content-DB download is forced to fail. Since the Welcome screen was removed and the bootstrap runs headless, there is no error/Retry page anymore; the guarantee is that the launch never hangs on a splash. The app mounts and says what happened on the storage-error screen — it no longer opens an onboarding flow whose Finish would bounce off the database guard forever.",
     "preconditions": "Brand-new install (onboarding.completed unset, clean user DB with no listening history); every content-DB request is aborted.",
     "steps": [
       {
         "action": "Launch the app while every content-DB request fails.",
-        "expected": "No endless \"Downloading…\" splash: the app still mounts and a fresh user lands on the onboarding carousel (/onboarding, no tab bar, primary button visible)."
+        "expected": "No endless \"Downloading…\" splash: the app mounts on the storage-error screen (/storage-error, no tab bar, no onboarding carousel), with the underlying failure quoted."
       }
     ],
     "tags": [
@@ -4067,6 +4067,55 @@
     ],
     "tags": [
       "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "220": {
+    "suite_id": 35,
+    "automation": 2,
+    "title": "A user database that cannot be opened shows an error screen, not an onboarding loop",
+    "description": "Offline. Seeds a corrupt user.db so opening it fails while the catalog opens fine, and asserts the app lands on a terminal storage-error screen that names the failure — instead of bouncing every route to onboarding, whose Finish navigates straight back into the guard.",
+    "preconditions": "Seeded offline fixtures. The user database in IndexedDB is replaced with bytes that are not a SQLite file; no onboarding.completed flag is set.",
+    "steps": [
+      {
+        "action": "Launch the app with a user database that cannot be opened.",
+        "expected": "The storage-error screen is shown with the underlying failure quoted; onboarding is not shown."
+      },
+      {
+        "action": "Navigate directly to a tab route (deep link to Home).",
+        "expected": "The app stays on the storage-error screen and never redirects to onboarding."
+      },
+      {
+        "action": "Tap \"Try again\" while the database is still unreadable.",
+        "expected": "The app reloads and returns to the same error screen — no blank screen and no loop."
+      }
+    ],
+    "tags": [
+      "startup",
+      "free",
+      "e2e"
+    ]
+  },
+  "221": {
+    "suite_id": 35,
+    "automation": 2,
+    "title": "Startup still signs the device in when the user database fails to open",
+    "description": "Offline. The listening-history probe used to throw synchronously past its catch and abort the rest of startup, leaving the run with no session and every authenticated call returning 401. Asserts the anonymous sign-in still happens when the user database is unreadable.",
+    "preconditions": "Seeded offline fixtures. The user database in IndexedDB is replaced with bytes that are not a SQLite file. POST /auth/anonymous is mocked and recorded.",
+    "steps": [
+      {
+        "action": "Launch the app with a user database that cannot be opened, recording POST /auth/anonymous.",
+        "expected": "The storage-error screen is shown."
+      },
+      {
+        "action": "Wait for the anonymous session request.",
+        "expected": "The app minted a session — startup continued past the failed database probe."
+      }
+    ],
+    "tags": [
+      "startup",
+      "auth",
       "free",
       "e2e"
     ]
