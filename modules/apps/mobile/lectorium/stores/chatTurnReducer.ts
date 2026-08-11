@@ -187,7 +187,11 @@ export function applyStreamingTurnEvent(
         ...cur,
         chapters: {
           ...(cur.chapters ?? {}),
-          [key]: { regionLabel: event.regionLabel, chapters: event.chapters },
+          [key]: {
+            regionLabel: event.regionLabel,
+            chapters: event.chapters,
+            ...(event.mt ? { mt: true } : {}),
+          },
         },
       }
       messages.value = next

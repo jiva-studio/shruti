@@ -226,6 +226,14 @@ export function useChatFailureNotice(opts: {
     { immediate: true }
   )
 
+  /** The quota window has rolled over while the card was on screen —
+   *  `now` ticks once a second until the deadline, so this flips live. */
+  const isQuotaExpired = computed<boolean>(() => {
+    const e = failedError.value
+    if (!e || e.code !== "rate_limited") return false
+    return typeof e.retryAfterAt === "number" && now.value >= e.retryAfterAt
+  })
+
   // The kind/title/body/cta branching is the pure `classifyChatNotice`; this
   // composable only resolves the i18n keys, fills the rate-limit countdown,
   // and binds the cta kind to an action.
@@ -235,6 +243,7 @@ export function useChatFailureNotice(opts: {
       tier: effectiveQuotaTier.value,
       isOffline: isOfflineFailure.value,
       isUnknownTier: isUnknownQuotaTier.value,
+      quotaExpired: isQuotaExpired.value,
       retryAllowed: failedRetryAllowed.value,
     })
   )

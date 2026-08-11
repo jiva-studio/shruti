@@ -252,22 +252,68 @@ export const useChatStore = defineStore("chat", () => {
   const isComposeBlocked = computed<boolean>(
     () => composeBlockedUntil.value !== null && now.value.getTime() < composeBlockedUntil.value
   )
-  /** Drop the inline "limit exhausted" failed bubble from the current
+  function isRateLimitedBubble(m: ChatMessage): boolean {
+    return m.role === "assistant" && m.error?.kind === "failed" && m.error.code === "rate_limited"
+  }
+
+  /** Drop the inline "limit exhausted" failed bubbles from the current
    *  message list. Shared by `resetComposeLock` (identity flip) and the
    *  expiry watcher below (wall-clock crossed the deadline) — the bubble
    *  must die in lockstep with `composeBlockedUntil`, otherwise the
    *  upsell card lingers indefinitely after the limit has lifted and
    *  the user has no idea why the composer is back but the warning
-   *  isn't. */
-  function clearRateLimitedBubble(): void {
-    const idx = messages.value.findIndex(
-      (m) => m.role === "assistant" && m.error?.kind === "failed" && m.error.code === "rate_limited"
-    )
-    if (idx < 0) return
-    const next = [...messages.value]
-    next[idx] = { ...next[idx], error: undefined }
-    messages.value = next
+   *  isn't.
+   *
+   *  The row is REMOVED, not stripped of its `error`: a failed bubble
+   *  carries `content: ""`, so an error-less one renders nothing at all
+   *  while `ChatMessageList` still reserves a full screen of scroll room
+   *  for it as the tail slot — the user watched the card they just acted
+   *  on turn into a screenful of blank. And ALL of them go, not the
+   *  oldest one `findIndex` used to find: with two on screen, clearing
+   *  the first left the current upsell standing.
+   *
+   *  The newest one is re-ASKED rather than dropped where that is
+   *  possible: `retryLast` owns that row (it holds it on screen until the
+   *  replacement turn's user message lands, exactly like a manual Retry)
+   *  so it must survive the sweep.
+   *
+   *  Returns whether a re-send was actually kicked off. */
+  function clearRateLimitedBubbles(opts: { resend: boolean }): boolean {
+    const all = messages.value
+    let newestIdx = -1
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (isRateLimitedBubble(all[i])) {
+        newestIdx = i
+        break
+      }
+    }
+    if (newestIdx < 0) return false
+    // Re-asking needs a prompt to re-ask and an idle store; without either,
+    // every rate-limited row simply goes.
+    const resend =
+      opts.resend && !sending.value && all.slice(0, newestIdx).some((m) => m.role === "user")
+    const keep = resend ? all[newestIdx].id : null
+    messages.value = all.filter((m) => !isRateLimitedBubble(m) || m.id === keep)
+    if (!resend || keep === null) return false
+    // `retryLast` walks back to the user prompt, drops the failed pair and
+    // re-sends under the new entitlement — the whole point of the upsell CTA
+    // the user just acted on. Best-effort: a failure leaves them with a
+    // working composer, which is still better than the blank screen.
+    void retryLast(keep).catch((err) => {
+      console.warn("chat: failed to re-send the question after the quota lifted", err)
+    })
+    return true
   }
+
+  /** Shortest gap between two automatic quota re-sends. The lift that
+   *  triggers one can be wrong (clock skew, a server bucket that hasn't
+   *  rolled over yet), and the re-send then earns a fresh 429 with a fresh
+   *  deadline — which arms the watcher again. Without a floor that is a
+   *  self-feeding loop on the user's own quota. An identity change bypasses
+   *  it: a new account is a genuinely new entitlement, not a re-try of the
+   *  same one. */
+  const QUOTA_RESEND_MIN_GAP_MS = 60_000
+  let lastQuotaResendAt = 0
 
   /** Clear the composer lockdown and wipe any stale rate_limit error
    *  bubble in the current message list. Called from `useAuthStore`'s
@@ -278,7 +324,6 @@ export const useChatStore = defineStore("chat", () => {
    *  one. */
   function resetComposeLock(): void {
     composeBlockedUntil.value = null
-    clearRateLimitedBubble()
     // Per-identity hydration for the usage chip — each quota_id has
     // its own daily counter on the server, so the previous identity's
     // snapshot shouldn't bleed into this one's chip. Empty qid (pre-
@@ -286,6 +331,11 @@ export const useChatStore = defineStore("chat", () => {
     // inside `hydrateChatUsage`.
     const nextQuotaId = useAuthStore().quotaId
     void hydrateChatUsage(nextQuotaId)
+    // Stamped only when a re-send really happened. This runs on EVERY
+    // identity settle, including the anonymous session minted at boot — a
+    // blanket stamp there would put the throttle in front of the first real
+    // deadline the user hits.
+    if (clearRateLimitedBubbles({ resend: true })) lastQuotaResendAt = Date.now()
   }
 
   /** Watch the wall-clock against the live deadline and drop the
@@ -298,7 +348,9 @@ export const useChatStore = defineStore("chat", () => {
     (expired, wasExpired) => {
       if (!expired || wasExpired) return
       composeBlockedUntil.value = null
-      clearRateLimitedBubble()
+      const at = Date.now()
+      const resend = at - lastQuotaResendAt >= QUOTA_RESEND_MIN_GAP_MS
+      if (clearRateLimitedBubbles({ resend })) lastQuotaResendAt = at
     }
   )
   /** Auto-derived ChatSession bound to `activeSessionId`. Drives the
@@ -784,8 +836,6 @@ export const useChatStore = defineStore("chat", () => {
       void toast.error(t("chat.errUnknown"))
       return
     }
-    const controller = new AbortController()
-    turnControllers.set(sessionId, controller)
     const repos = chatRepos()
 
     // Snapshot history BEFORE we add the new turn so the server doesn't
@@ -825,6 +875,14 @@ export const useChatStore = defineStore("chat", () => {
     // and buffers the turn — so we suppress the error, keep the pending record
     // + thinking placeholder, and recover via the resume poll (see `finally`).
     let resumableDrop = false
+
+    // Registered immediately before the `try` whose `finally` deregisters it:
+    // anything that throws between registration and the loop would otherwise
+    // strand the controller in `turnControllers`, and a stranded controller
+    // keeps `syncComposeBusy` reporting `sending = true` for the session
+    // forever — a dead composer until relaunch.
+    const controller = new AbortController()
+    turnControllers.set(sessionId, controller)
 
     try {
       const isFirst = visible.filter((m) => m.role === "assistant" && !m.streaming).length === 0
