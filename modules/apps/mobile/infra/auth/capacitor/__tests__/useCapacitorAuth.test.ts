@@ -26,6 +26,8 @@ vi.mock("@capgo/capacitor-social-login", () => ({
   SocialLogin: { initialize: vi.fn(), login: vi.fn(), logout: vi.fn() },
 }))
 
+import { SocialLogin } from "@capgo/capacitor-social-login"
+
 import { useCapacitorAuth } from "../useCapacitorAuth.js"
 
 // Access token expiring an hour out so getAccessToken() doesn't try to refresh.
@@ -221,6 +223,144 @@ describe("useCapacitorAuth — refreshAccessToken", () => {
 
     expect(await auth.refreshAccessToken()).toBeNull()
     expect(auth.getSession()?.userId).toBe("user-1")
+  })
+})
+
+describe("useCapacitorAuth — sign-in must carry a bearer the server can verify", () => {
+  /**
+   * The anonymous bearer on the sign-in calls is what tells the server to
+   * upgrade THIS device's user in place. An expired one fails verification, so
+   * the server skips the upgrade branch and mints a stranger — orphaning the
+   * anonymous account's library. The app being offline for days is enough to
+   * get there: `callRefresh` deliberately keeps the session on a network
+   * error, so the stored token goes stale but stays present (#1737).
+   */
+
+  const REFRESHED = jwt({ sub: "anon-1" })
+
+  const staleSession = (expiresInSec: number) => ({
+    accessToken: jwt({ sub: "anon-1", exp: Math.floor(Date.now() / 1000) + expiresInSec }),
+    refreshToken: "refresh-1",
+    userId: "anon-1",
+    email: null,
+    name: null,
+    picture: null,
+    anonymous: true,
+    accessTokenExpiresAt: Date.now() + expiresInSec * 1000,
+    tier: "free",
+    tierExpiresAt: null,
+    quotaId: "q1",
+  })
+
+  /** A stored session `expiresInSec` from now, plus a /refresh that mints
+   *  {@link REFRESHED} for the same subject. */
+  function makeCfg(expiresInSec: number): {
+    cfg: AuthConfig
+    request: ReturnType<typeof vi.fn>
+    storedToken: string
+  } {
+    const session = staleSession(expiresInSec)
+    prefs.set("auth.tokens", JSON.stringify(session))
+    const request = vi.fn(async (path: string) => {
+      if (path === "/refresh")
+        return resp(200, {
+          accessToken: REFRESHED,
+          refreshToken: "refresh-2",
+          userId: "anon-1",
+          anonymous: true,
+        })
+      if (path === "/me") return resp(200, meBody)
+      if (path === "/signin/email/request") return resp(200, {})
+      if (path === "/signin/email/verify")
+        return resp(200, {
+          accessToken: jwt({ sub: "anon-1" }),
+          refreshToken: "refresh-3",
+          userId: "anon-1",
+          anonymous: false,
+        })
+      if (path === "/signin/google")
+        return resp(200, {
+          accessToken: jwt({ sub: "anon-1" }),
+          refreshToken: "refresh-3",
+          userId: "anon-1",
+          anonymous: false,
+        })
+      throw new Error(`unexpected request ${path}`)
+    })
+    return {
+      request: request as ReturnType<typeof vi.fn>,
+      cfg: { request, googleWebClientId: "x", googleIOSClientId: "y" } as unknown as AuthConfig,
+      storedToken: session.accessToken,
+    }
+  }
+
+  /** The Authorization header the client attached to `path`. */
+  const bearerFor = (request: ReturnType<typeof vi.fn>, path: string): string | undefined => {
+    const call = request.mock.calls.find((c) => c[0] === path)
+    return (call?.[1] as { headers?: Record<string, string> } | undefined)?.headers?.Authorization
+  }
+
+  const STALE_SEC = -60
+
+  beforeEach(() => prefs.clear())
+  afterEach(() => vi.restoreAllMocks())
+
+  it("refreshes an expired token before the email verify", async () => {
+    const { cfg, request } = makeCfg(STALE_SEC)
+    const auth = useCapacitorAuth(cfg)
+    await auth.initialize()
+
+    await auth.verifyEmailOtp("reader@example.com", "123456")
+
+    expect(bearerFor(request, "/signin/email/verify")).toBe(`Bearer ${REFRESHED}`)
+  })
+
+  it("refreshes it before the OTP request too", async () => {
+    const { cfg, request } = makeCfg(STALE_SEC)
+    const auth = useCapacitorAuth(cfg)
+    await auth.initialize()
+
+    await auth.requestEmailOtp("reader@example.com")
+
+    expect(bearerFor(request, "/signin/email/request")).toBe(`Bearer ${REFRESHED}`)
+  })
+
+  it("refreshes it before a social sign-in", async () => {
+    const { cfg, request } = makeCfg(STALE_SEC)
+    vi.mocked(SocialLogin.login).mockResolvedValue({
+      provider: "google",
+      result: { responseType: "online", idToken: "google-id-token" },
+    } as unknown as Awaited<ReturnType<typeof SocialLogin.login>>)
+    const auth = useCapacitorAuth(cfg)
+    await auth.initialize()
+
+    await auth.signInWithGoogle()
+
+    expect(bearerFor(request, "/signin/google")).toBe(`Bearer ${REFRESHED}`)
+  })
+
+  it("leaves a token nowhere near expiry alone", async () => {
+    const { cfg, request, storedToken } = makeCfg(3600)
+    const auth = useCapacitorAuth(cfg)
+    await auth.initialize()
+
+    await auth.verifyEmailOtp("reader@example.com", "123456")
+
+    // Still the stored one, and no /refresh spent getting there.
+    expect(bearerFor(request, "/signin/email/verify")).toBe(`Bearer ${storedToken}`)
+    expect(request.mock.calls.filter((c) => c[0] === "/refresh")).toHaveLength(0)
+  })
+
+  it("sends no bearer at all when there is no session to upgrade", async () => {
+    const { cfg, request } = makeCfg(STALE_SEC)
+    prefs.clear()
+    const auth = useCapacitorAuth(cfg)
+
+    await auth.requestEmailOtp("reader@example.com")
+
+    // A sign-in must not mint an anonymous identity just to decorate itself.
+    expect(bearerFor(request, "/signin/email/request")).toBeUndefined()
+    expect(request.mock.calls.filter((c) => c[0] === "/anonymous")).toHaveLength(0)
   })
 })
 
