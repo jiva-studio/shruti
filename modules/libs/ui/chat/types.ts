@@ -38,7 +38,15 @@ export interface UiChatCiteSnippet {
 /** Mirror of the domain `ChatChapterBody` — `ChapterCard.vue`. */
 export interface UiChatChapterBody {
   readonly regionLabel: string
-  readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
+  readonly chapters: readonly {
+    readonly tokens: string
+    readonly title: string
+    /** Source-language title, present only when `mt` is true. */
+    readonly titleOriginal?: string
+  }[]
+  /** At least one title is machine-translated — gates the card's
+   *  TranslationNotice and its view-original toggle. */
+  readonly mt?: boolean
 }
 
 /** Mirror of the domain `ChatCommentaryBody` — `CommentaryCard.vue` renders the
