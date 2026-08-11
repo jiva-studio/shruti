@@ -15,8 +15,14 @@ import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.
 export type RowContext = "playlist" | "discovery"
 
 export interface UseTrackUiStateMapperReturn {
-  /** Convert a single domain `Track` into the UI row used by lists. */
-  toUiRow: (track: Track) => UiTrackRow
+  /**
+   * Convert a single domain `Track` into the UI row used by lists. Takes the
+   * same `context` as {@link UseTrackUiStateMapperReturn.mapRows} and means
+   * exactly the same thing by it — a row built one at a time is still a row on
+   * some surface, and a shelf that omits it renders the same track with a
+   * progress radial two sections below a checkmark (#1615).
+   */
+  toUiRow: (track: Track, options?: { context?: RowContext }) => UiTrackRow
   /**
    * Map a list of domain tracks reactively. Recomputes when downloads,
    * playlist membership, the open player track, or the UI language change —
@@ -160,7 +166,8 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     return 0
   }
 
-  function toUiRow(track: Track): UiTrackRow {
+  function toUiRow(track: Track, options?: { context?: RowContext }): UiTrackRow {
+    if (options?.context === "discovery") return toDiscoveryRow(track)
     const state = toUiState(track.id, downloads.getState(track.id))
     const progressPct = progressPctFor(track, state)
     const listenedPct = listenedPctFor(track)
@@ -219,7 +226,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       void playlist.completedAtMap
       void playlist.completedTrackIds
       void player.trackId
-      return tracks().map(discovery ? toDiscoveryRow : toUiRow)
+      return tracks().map((track) => (discovery ? toDiscoveryRow(track) : toUiRow(track)))
     })
   }
 

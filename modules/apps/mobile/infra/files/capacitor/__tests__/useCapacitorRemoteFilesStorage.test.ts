@@ -174,3 +174,66 @@ describe("useCapacitorRemoteFilesStorage — clearAll scope (#1630)", () => {
     expect(deleteFileMock).not.toHaveBeenCalled()
   })
 })
+
+describe("useCapacitorRemoteFilesStorage — partials inside a kept dir (#1663)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    readdirMock.mockImplementation(async (o: unknown) => {
+      const { path } = o as { path: string }
+      if (path === "shruti") {
+        return {
+          files: [
+            { name: "databases", type: "directory" },
+            { name: "media", type: "directory" },
+          ],
+        }
+      }
+      if (path === "shruti/databases") {
+        return {
+          files: [
+            { name: "shruti.8.db.download", type: "file" },
+            { name: "config.json.tmp", type: "file" },
+            { name: "shruti.9.db", type: "file" },
+            { name: "user.db", type: "file" },
+            { name: "nested", type: "directory" },
+          ],
+        }
+      }
+      return { files: [] }
+    })
+  })
+
+  it("reclaims the download leftovers the kept directory used to hide", async () => {
+    const storage = useCapacitorRemoteFilesStorage({ cacheDir: "shruti", keep: ["databases"] })
+
+    await storage.clearAll()
+
+    // An interrupted transfer's temp is never a usable file, and `keep` was the
+    // only thing standing between it and an uninstall.
+    expect(deleteFileMock).toHaveBeenCalledWith({
+      path: "shruti/databases/shruti.8.db.download",
+      directory: "DATA",
+    })
+    expect(deleteFileMock).toHaveBeenCalledWith({
+      path: "shruti/databases/config.json.tmp",
+      directory: "DATA",
+    })
+    // …while the catalog, the user DB and any subdirectory are untouched —
+    // that is what `keep` is for (#1630).
+    expect(deleteFileMock).toHaveBeenCalledTimes(2)
+    expect(rmdirMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ path: "shruti/databases" })
+    )
+    expect(rmdirMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ path: "shruti/databases/nested" })
+    )
+  })
+
+  it("keeps sweeping the kept dir when one partial can't be deleted", async () => {
+    deleteFileMock.mockRejectedValueOnce(new Error("locked"))
+    const storage = useCapacitorRemoteFilesStorage({ cacheDir: "shruti", keep: ["databases"] })
+
+    await expect(storage.clearAll()).resolves.toBeUndefined()
+    expect(deleteFileMock).toHaveBeenCalledTimes(2)
+  })
+})
