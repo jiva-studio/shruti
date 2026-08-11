@@ -8,8 +8,8 @@ import type {
 /**
  * HTTP adapter for the orchestrator's ingest control plane — the infrastructure
  * implementation of the `IIngestClient` transport port. It hits
- * `POST {orchestratorBaseUrl}/orchestrator/ingest` and
- * `GET {orchestratorBaseUrl}/orchestrator/ingest/{id}`, attaching the shared
+ * `POST {orchestratorBaseUrl}/orchestrator/run` and
+ * `GET {orchestratorBaseUrl}/orchestrator/run/{id}`, attaching the shared
  * RS256 JWT via the same auth/token port the sync + chat clients use.
  *
  * Scope is **pure transport**: serialize → call → deserialize. The "should we
@@ -23,7 +23,7 @@ export type AccessTokenProvider = () => Promise<string | null>
 
 /**
  * Failover-aware HTTP call to the orchestrator. `path` is relative (e.g.
- * `/orchestrator/ingest`); the implementation prepends the active region's
+ * `/orchestrator/run`); the implementation prepends the active region's
  * `orchestratorBaseUrl`. Wired by the composition root via `createFailoverClient`,
  * exactly like the sync / chat / auth clients.
  */
