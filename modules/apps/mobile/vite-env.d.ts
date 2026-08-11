@@ -25,3 +25,7 @@ declare const __SENTRY_RELEASE__: string
  *  services: email-only sign-in, no in-app purchase, subscription managed
  *  on the website. */
 declare const __OFFSTORE_BUILD__: boolean
+/** True only in a build made for the automated tests (`SHRUTI_E2E_BUILD=1`).
+ *  Lets the e2e suite run the app as Pro on purpose; false in every artifact
+ *  that reaches a user, so it can never be a way to fake a subscription. */
+declare const __E2E_BUILD__: boolean

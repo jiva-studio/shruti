@@ -18,6 +18,12 @@ const buildId =
   rawBuildId && /^\d+$/.test(rawBuildId)
     ? String(Number(rawBuildId) + (pkg.versionCodeOffset ?? 0))
     : (rawBuildId ?? "dev")
+// A build made for the automated tests. It is what lets the subscription
+// override grant Pro at all (see shruti/services/devSubscription.ts), and it
+// comes from the build environment — so the e2e artifact carries the seam that
+// lets a spec pick its tier, and release artifacts, built without it, do not.
+const e2eBuild = process.env.SHRUTI_E2E_BUILD === "1"
+
 // Short git commit hash (CI passes github.sha), so the version line reveals
 // exactly which commit a build came from. Empty locally / when not provided.
 const commitSha = (process.env.COMMIT_SHA ?? "").slice(0, 7)
@@ -112,6 +118,7 @@ export default defineConfig({
     __OFFSTORE_BUILD__: JSON.stringify(
       process.env.SHRUTI_OFFSTORE === "1" || process.env.SHRUTI_OFFSTORE === "true"
     ),
+    __E2E_BUILD__: JSON.stringify(e2eBuild),
   },
   build: {
     minify: true,
@@ -130,6 +137,23 @@ export default defineConfig({
   },
   plugins: [
     shrutiAlias,
+    // Leave a mark in `dist/` saying the bundle was built with the test seam
+    // compiled in. `E2E_USE_BUNDLE=1` serves a PREBUILT dist, so the suite
+    // otherwise has no way to tell a test build from a release one — and the
+    // failure it can't tell apart is the silent one: every `pro: true` spec
+    // running as a free user (#1633). The e2e globalSetup refuses to start
+    // without this file. Emitted only under the flag, and `emptyOutDir` clears
+    // it on the next ordinary build.
+    ...(e2eBuild
+      ? [
+          {
+            name: "shruti-e2e-build-marker",
+            generateBundle(this: { emitFile(f: unknown): void }) {
+              this.emitFile({ type: "asset", fileName: "e2e-build", source: "1" })
+            },
+          },
+        ]
+      : []),
     kitVitePlugin(path.resolve(__dirname, "../../kit/src")),
     vue(),
     // Upload JS source maps to Sentry so minified stack traces are
