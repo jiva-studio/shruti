@@ -14,4 +14,14 @@ export default {
   downloadStorageFull:
     "Dostignut je limit memorije. Uklonite preslušana predavanja ili povećajte limit u podešavanjima.",
   downloadStorageFullAction: "Ipak preuzmi",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "Nije moguće otvoriti vaše podatke",
+    description:
+      "Baza sa vašim beleškama, plejlistom i istorijom slušanja nije otvorena, pa aplikacija ne može da prikaže biblioteku.",
+    advice:
+      "Ponovo pokrenite aplikaciju i pokušajte opet. Ako se ponavlja, oslobodite prostor na uređaju ili ponovo instalirajte aplikaciju.",
+    retry: "Pokušaj ponovo",
+  },
 }

@@ -15,4 +15,14 @@ export default {
   downloadStorageFull:
     "Límite de almacenamiento alcanzado. Elimina las conferencias escuchadas o aumenta el límite en Ajustes.",
   downloadStorageFullAction: "Descargar igualmente",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "No se pudieron abrir tus datos",
+    description:
+      "La base de datos con tus notas, tu lista y tu historial de escucha no se abrió, así que la aplicación no puede mostrar tu biblioteca.",
+    advice:
+      "Reinicia la aplicación e inténtalo de nuevo. Si sigue ocurriendo, libera espacio en el dispositivo o reinstala la aplicación.",
+    retry: "Intentar de nuevo",
+  },
 }

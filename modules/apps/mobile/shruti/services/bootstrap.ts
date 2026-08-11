@@ -43,3 +43,27 @@ export function bootstrapUserDatabaseFromApp(app: ReturnType<typeof useShruti>):
     userDatabase: (): IDatabase | undefined => app.databases.user ?? undefined,
   })
 }
+
+/**
+ * The same bootstrap, leaving NO handle behind when it fails.
+ *
+ * Opening and being usable are not the same thing. sql.js accepts a file whose
+ * header is not SQLite's and only fails when a statement reaches the schema —
+ * so `openUserDatabase` resolves, `databases.user` is set, and the app carries
+ * on with a database every write will fail against. A half-applied migration is
+ * the same story with a smaller blast radius.
+ *
+ * Dropping the handle turns that into a state the app can see: `repositories()`
+ * refuses, the router sends the user to `/storage-error`, and the failure gets
+ * said out loud instead of turning into notes that quietly never save.
+ */
+export async function bootstrapUserDatabaseOrClose(
+  app: ReturnType<typeof useShruti>
+): Promise<void> {
+  try {
+    await bootstrapUserDatabaseFromApp(app)
+  } catch (err) {
+    await app.closeUserDatabase().catch(() => undefined)
+    throw err
+  }
+}
