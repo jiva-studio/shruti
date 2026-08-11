@@ -78,12 +78,19 @@ export async function pullAndMerge(deps: PullAndMergeDeps): Promise<PullAndMerge
 
   // Acknowledge the applied cursor once, for compaction. Best-effort ordering:
   // the network ack happens outside the DB transaction; the local `acked_seq`
-  // is only advanced after the server confirms.
+  // is only advanced after the server confirms. A failed ack is swallowed — it
+  // is a compaction hint, not a correctness requirement, and throwing here
+  // discarded the merge this cycle already did (#1725). `acked_seq` stays put,
+  // so a later cycle re-acks at the then-current cursor.
   const cursor = await deps.syncState.getPullCursor()
   const acked = await deps.syncState.getAckedSeq()
   if (cursor > acked) {
-    await deps.gateway.ackCursor({ device_id: deviceId, acked_seq: cursor })
-    await deps.unitOfWork.run(() => deps.syncState.setAckedSeq(cursor))
+    try {
+      await deps.gateway.ackCursor({ device_id: deviceId, acked_seq: cursor })
+      await deps.unitOfWork.run(() => deps.syncState.setAckedSeq(cursor))
+    } catch {
+      // Deliberately ignored — see above.
+    }
   }
 
   return { applied, changedCollections: [...changed] }
