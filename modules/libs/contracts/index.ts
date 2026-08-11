@@ -84,8 +84,8 @@ export type {
 } from "./sync/syncClient.js"
 
 /* -------------------------------------------------------------------------- */
-/*  Ingest control-plane wire protocol (POST /orchestrator/ingest,            */
-/*  GET /orchestrator/ingest/{id}). Mirrored from the orchestrator Go handler; */
+/*  Ingest control-plane wire protocol (POST /orchestrator/run,            */
+/*  GET /orchestrator/run/{id}). Mirrored from the orchestrator Go handler; */
 /*  the `IIngestClient` transport port is consumed by the library store /      */
 /*  retry flow and implemented by an @infra HTTP adapter.                      */
 /* -------------------------------------------------------------------------- */

@@ -3760,5 +3760,163 @@
       "pro",
       "e2e"
     ]
+  },
+
+  "203": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "The personal library lists what was added, and the field narrows it",
+    "description": "Offline, with the orchestrator stubbed (support/ingest-mock.ts) and two `library_items` rows delivered over profile-sync. The \"My library\" shelf on the Search landing leads to the full list, and the docked search field filters that list by title — down to its own \"nothing found\" state, which is NOT the empty-library state.",
+    "preconditions": "Offline fixtures with a clean user db; the ingest mock seeds a ready and a processing personal-library item.",
+    "steps": [
+      {
+        "action": "Open the Search tab.",
+        "expected": "The \"My library\" shelf shows the added lectures as cover tiles."
+      },
+      {
+        "action": "Tap the shelf's \"See all\" chevron.",
+        "expected": "The full \"My library\" page opens and lists both lectures."
+      },
+      {
+        "action": "Type part of one lecture's title into the docked search field.",
+        "expected": "Only the matching lecture is left in the list."
+      },
+      {
+        "action": "Replace the query with something no title carries.",
+        "expected": "The list shows \"Nothing found\" — the narrowed-to-nothing state, not the empty-library invitation."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "e2e"
+    ]
+  },
+  "204": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "An empty personal library still offers its way in",
+    "description": "Offline, orchestrator stubbed, no `library_items` rows. With nothing added the shelf collapses to the entry banner the other library rows use, and the page behind it explains what the library is for instead of showing a bare list.",
+    "preconditions": "Offline fixtures with a clean user db and an empty personal library.",
+    "steps": [
+      {
+        "action": "Open the Search tab.",
+        "expected": "In place of the shelf there is the \"My library\" entry banner."
+      },
+      {
+        "action": "Tap the banner.",
+        "expected": "The \"My library\" page opens on its empty state, inviting the user to add a lecture."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "e2e"
+    ]
+  },
+  "205": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "A subscriber adds a lecture found on the web and watches it through the pipeline",
+    "description": "Offline, Pro, orchestrator stubbed. The plus on a web-lane hit submits the lecture's URL to the orchestrator, and the same tile then reports the run: an unnamed \"Processing\" the moment the submit returns, then the stages the status poll names — Downloading (with its ring) → Transcribing — and finally nothing at all, because a finished lecture is just a lecture. Covers useIngestStatusFor + useIngestStatusPolling end to end.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber (pro: true); the ingest mock scripts downloading → transcribing → ready.",
+    "steps": [
+      {
+        "action": "Search the library and tap the plus on the first web-lane result.",
+        "expected": "The submit reaches the orchestrator carrying that result's URL, and the tile's corner starts reporting progress."
+      },
+      {
+        "action": "Let the first status heartbeat land.",
+        "expected": "The corner names the stage: \"Downloading\"."
+      },
+      {
+        "action": "Let the run move on to the next stage.",
+        "expected": "The corner now reads \"Transcribing\"."
+      },
+      {
+        "action": "Let the run finish.",
+        "expected": "The progress badge is gone and the tile no longer offers to add — it is a lecture the user has."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "206": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "A dead-lettered lecture is retried in place",
+    "description": "Offline, Pro, orchestrator stubbed. A failed personal-library item shows why it failed and offers Retry; the retry re-submits the SAME source URL, and the orchestrator maps it back to the same run — so the tile recovers failed → processing → ready without the list growing a second copy.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber; the ingest mock seeds one failed item carrying a source URL.",
+    "steps": [
+      {
+        "action": "Open the \"My library\" page.",
+        "expected": "The failed lecture states its reason and its corner offers Retry."
+      },
+      {
+        "action": "Tap Retry.",
+        "expected": "A submit goes out for the same source URL and the tile goes back to reporting progress."
+      },
+      {
+        "action": "Let the restarted run finish.",
+        "expected": "The tile is ready, and the library still holds exactly one copy of the lecture."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "207": {
+    "suite_id": 4,
+    "automation": 2,
+    "title": "The server's Pro gate bounces the add to the paywall",
+    "description": "Offline, orchestrator stubbed to answer 402 `not_pro`. The client-side tier gate is not the only one: a client that believes it is a subscriber still has to be told no by the server, and that answer must reach the paywall rather than a silent failure or a progress badge for a run that was never accepted.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber so the client-side gate passes; the ingest mock rejects the submit with 402 not_pro.",
+    "steps": [
+      {
+        "action": "Search the library and tap the plus on the first web-lane result.",
+        "expected": "The submit is rejected and the subscription page opens."
+      },
+      {
+        "action": "Look at the tile the plus belonged to.",
+        "expected": "It still offers to add, with no progress badge — nothing pretends a run is in flight."
+      }
+    ],
+    "tags": [
+      "library",
+      "personal-library",
+      "subscription",
+      "e2e"
+    ]
+  },
+  "208": {
+    "suite_id": 24,
+    "automation": 2,
+    "title": "The chat's add-to-library card starts the fetch",
+    "description": "Offline, Pro, orchestrator stubbed. An `add_to_library` action card is the chat's half of the personal library: chat is discovery-only, so confirming the candidate must submit through the orchestrator with the candidate's own URL and title, and the card must then show the same ingest badge the library tiles use.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber; the chat SSE stream is mocked with an add_to_library action and its marker.",
+    "steps": [
+      {
+        "action": "Ask the chat a question whose mocked answer carries an add-to-library candidate.",
+        "expected": "The answer renders the candidate as a tile with its title and a plus."
+      },
+      {
+        "action": "Tap the plus.",
+        "expected": "A submit reaches the orchestrator with the candidate's URL and title, and the card's corner turns into the ingest progress badge."
+      }
+    ],
+    "tags": [
+      "chat",
+      "library",
+      "personal-library",
+      "pro",
+      "e2e"
+    ]
   }
 }
