@@ -4193,5 +4193,36 @@
       "free",
       "e2e"
     ]
+  },
+  "240": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Email sign-in refreshes a stale token before claiming the anonymous account",
+    "description": "Offline. Days without a network leave the stored access token expired but present — the adapter keeps the session on a network error rather than signing the user out. The sign-in call must therefore rotate the token before attaching it: an expired bearer fails server-side verification, so the server skips the in-place upgrade and creates a brand-new account, orphaning the anonymous user's library (#1737). The verify mock rejects an expired bearer the way the real verifier does.",
+    "preconditions": "Offline fixtures with a clean user db; a persisted ANONYMOUS session whose access token expired an hour ago; /auth/refresh answers 503 (transient — the adapter keeps the session) until the code is submitted, so the token is still stale when sign-in begins; /auth/me and the email OTP endpoints mocked.",
+    "steps": [
+      {
+        "action": "Read the persisted session before signing in.",
+        "expected": "The app holds the anonymous account, on an access token that has already expired."
+      },
+      {
+        "action": "Sign in with an emailed code (address, then code).",
+        "expected": "The modal completes and closes."
+      },
+      {
+        "action": "Inspect the token rotation and the bearer the verify carried.",
+        "expected": "The client refreshed the stale token first, and the bearer it sent has an expiry in the future."
+      },
+      {
+        "action": "Read the persisted session after signing in.",
+        "expected": "It is the SAME user id, now non-anonymous — the anonymous account was upgraded, not orphaned."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
   }
 }

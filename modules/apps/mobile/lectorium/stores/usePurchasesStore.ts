@@ -441,12 +441,14 @@ export const usePurchasesStore = defineStore("purchases", () => {
       await waitForLogin(5000)
       const state = await purchases.purchase(packageId)
       applyState(state)
-      // RC sends the INITIAL_PURCHASE webhook almost immediately; by the
-      // time we get back here the server-side tier has likely flipped to
-      // 'pro'. Force a token refresh now so the new claim lands in the
-      // access JWT — otherwise the chat rate-limiter sees the old tier
-      // for up to 15 min.
-      await useAuthStore().refreshTokens()
+      // RC sends the INITIAL_PURCHASE webhook almost immediately, but
+      // "almost" is the whole problem: a bare refreshTokens() rotates the
+      // JWT and leaves the 5-minute /auth/me cache exactly as the sign-in
+      // stamped it, so the chat composer's own ensureFresh() short-circuits
+      // straight through the window the webhook lands in — sending as
+      // tier=free seconds after payment (#1734). Drop that cache and probe
+      // until the flip shows up instead.
+      useAuthStore().invalidateAndSyncTier()
     } finally {
       purchasing.value = false
     }
@@ -462,7 +464,9 @@ export const usePurchasesStore = defineStore("purchases", () => {
       await waitForLogin(5000)
       const state = await purchases.restore()
       applyState(state)
-      await useAuthStore().refreshTokens()
+      // Same cache hazard as `purchase()`: the server-side tier may still
+      // be catching up with the receipts we just handed RC.
+      useAuthStore().invalidateAndSyncTier()
     } finally {
       restoring.value = false
     }
