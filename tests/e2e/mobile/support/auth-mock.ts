@@ -289,13 +289,26 @@ export type OtpVerifyReply =
   | { ok: false; status: number }
 
 /**
+ * True when the mock, standing in for `s.Verifier.Verify(bearer)`, can identify
+ * a user from this token. Presence is not enough: an EXPIRED bearer fails
+ * verification server-side, which is what drops the request out of the
+ * "anonymous bearer in play → upgrade that user" branch (#1737).
+ */
+function verifiableSubject(bearer: string | null): string | null {
+  const claims = claimsOf(bearer)
+  if (typeof claims.sub !== "string") return null
+  if (typeof claims.exp !== "number" || claims.exp * 1000 <= Date.now()) return null
+  return claims.sub
+}
+
+/**
  * `POST /auth/signin/email/verify`.
  *
  * On success it models the server's in-place upgrade: the session it returns
  * belongs to the user id in the anonymous bearer the client attached, now
- * non-anonymous. A client that forgot the bearer therefore gets a DIFFERENT id
- * back — which is what makes "the upgrade preserved my userId" an assertion
- * that can fail.
+ * non-anonymous. A client that forgot the bearer — or sent one the server
+ * cannot verify — therefore gets a DIFFERENT id back, which is what makes "the
+ * upgrade preserved my userId" an assertion that can fail.
  */
 export function mockEmailOtpVerify(
   page: Page,
@@ -303,8 +316,7 @@ export function mockEmailOtpVerify(
 ): Promise<Recorder> {
   return serve(page, "**/auth/signin/email/verify", reply, (route, answer, seen) => {
     if (!answer.ok) return err(route, answer.status, "otp_invalid")
-    const sub = claimsOf(seen.bearer).sub
-    const upgraded = typeof sub === "string" ? sub : "u-fresh-account"
+    const upgraded = verifiableSubject(seen.bearer) ?? "u-fresh-account"
     json(route, 200, tokenBody({ userId: upgraded, ...answer.tokens, anonymous: false }))
   })
 }
