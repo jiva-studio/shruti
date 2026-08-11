@@ -71,7 +71,11 @@ vi.mock("@shruti/stores/useNotesStore.js", () => ({
 vi.mock("@shruti/stores/useChatStore.js", () => ({ useChatStore: () => ({}) }))
 vi.mock("@shruti/composables/useAppLanguage.js", () => ({ useAppLanguage: () => ref("en") }))
 vi.mock("@shruti/composables/useLibraryLanguages.js", () => ({
-  useLibraryLanguages: () => ref(["en"]),
+  // `ru` is a library language of this user, which is what makes it an
+  // offerable translation target below — the controller refuses a target it
+  // never offered, so a track+library pair that can't reach `ru` would make
+  // these cases assert against an unreachable call.
+  useLibraryLanguages: () => ref(["en", "ru"]),
 }))
 vi.mock("@shruti/composables/useConfig.js", () => ({
   useConfig: (_key: string, fallback: unknown) => ref(fallback),
