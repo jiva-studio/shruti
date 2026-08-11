@@ -5,6 +5,7 @@ import {
   archiveOptionKey,
   isSmartLibraryEnabled,
   smartLibraryToggled,
+  type AutoArchiveDelay,
   type SmartLibraryState,
 } from "../smartLibrary.js"
 
@@ -28,7 +29,7 @@ describe("smartLibraryToggled", () => {
   const on: SmartLibraryState = { targetSeconds: 3600, archiveDelay: "1d" }
 
   it("clears the archive delay too when switched off", () => {
-    expect(smartLibraryToggled(false, on, 3600)).toEqual({
+    expect(smartLibraryToggled(false, on, 3600, "1d")).toEqual({
       targetSeconds: 0,
       archiveDelay: "off",
     })
@@ -38,7 +39,8 @@ describe("smartLibraryToggled", () => {
     const next = smartLibraryToggled(
       false,
       { targetSeconds: 1800, archiveDelay: "immediate" },
-      1800
+      1800,
+      "immediate"
     )
     expect(isSmartLibraryEnabled(next)).toBe(false)
     expect(next.archiveDelay).toBe("off")
@@ -46,7 +48,7 @@ describe("smartLibraryToggled", () => {
 
   it("restores the last queue length when switched back on", () => {
     const off: SmartLibraryState = { targetSeconds: 0, archiveDelay: "off" }
-    expect(smartLibraryToggled(true, off, 7200)).toEqual({
+    expect(smartLibraryToggled(true, off, 7200, "off")).toEqual({
       targetSeconds: 7200,
       archiveDelay: "off",
     })
@@ -54,16 +56,72 @@ describe("smartLibraryToggled", () => {
 
   it("falls back to the default queue length when there is no previous one", () => {
     const off: SmartLibraryState = { targetSeconds: 0, archiveDelay: "off" }
-    expect(smartLibraryToggled(true, off, 0).targetSeconds).toBe(DEFAULT_TARGET_SECONDS)
+    expect(smartLibraryToggled(true, off, 0, "off").targetSeconds).toBe(DEFAULT_TARGET_SECONDS)
   })
 
   it("never turns archiving on by itself", () => {
     const off: SmartLibraryState = { targetSeconds: 0, archiveDelay: "off" }
-    expect(smartLibraryToggled(true, off, 3600).archiveDelay).toBe("off")
+    expect(smartLibraryToggled(true, off, 3600, "off").archiveDelay).toBe("off")
+  })
+})
+
+/**
+ * The dialog as a state machine, so an off/on cycle can be driven the way a
+ * user drives it. The previous version of the test below asserted the same
+ * thing by handing `smartLibraryToggled` a state that had an archive delay AND
+ * a live target — a state the off branch can never produce, since it writes
+ * `"off"` — so it passed against the very bug it named (#1663).
+ */
+function dialog(initial: SmartLibraryState): {
+  pickArchive: (value: AutoArchiveDelay) => void
+  toggle: (checked: boolean) => void
+  state: () => SmartLibraryState
+} {
+  let state = { ...initial }
+  let lastTargetSeconds = state.targetSeconds
+  // Mirrors the dialog: only a pick made while the feature is on is remembered.
+  let lastArchiveDelay: AutoArchiveDelay = isSmartLibraryEnabled(state) ? state.archiveDelay : "off"
+  return {
+    pickArchive(value) {
+      state = { ...state, archiveDelay: value }
+      if (isSmartLibraryEnabled(state)) lastArchiveDelay = value
+    },
+    toggle(checked) {
+      state = smartLibraryToggled(checked, state, lastTargetSeconds, lastArchiveDelay)
+      if (state.targetSeconds > 0) lastTargetSeconds = state.targetSeconds
+    },
+    state: () => state,
+  }
+}
+
+describe("the archive schedule across an off/on cycle", () => {
+  it("comes back after the master switch is cycled", () => {
+    const d = dialog({ targetSeconds: 3600, archiveDelay: "off" })
+    d.pickArchive("2d")
+
+    d.toggle(false)
+    expect(d.state()).toEqual({ targetSeconds: 0, archiveDelay: "off" })
+
+    d.toggle(true)
+    expect(d.state()).toEqual({ targetSeconds: 3600, archiveDelay: "2d" })
   })
 
-  it("keeps an explicitly chosen delay across an off/on cycle of the dialog", () => {
-    const chosen: SmartLibraryState = { targetSeconds: 3600, archiveDelay: "2d" }
-    expect(smartLibraryToggled(true, chosen, 3600).archiveDelay).toBe("2d")
+  it("keeps an explicit 'Never' distinguishable from a forgotten schedule", () => {
+    const d = dialog({ targetSeconds: 3600, archiveDelay: "off" })
+    d.pickArchive("2d")
+    // The user changes their mind and asks for no archiving at all.
+    d.pickArchive("off")
+
+    d.toggle(false)
+    d.toggle(true)
+
+    expect(d.state().archiveDelay).toBe("off")
+  })
+
+  it("does not invent a schedule for someone who never picked one", () => {
+    const d = dialog({ targetSeconds: 3600, archiveDelay: "off" })
+    d.toggle(false)
+    d.toggle(true)
+    expect(d.state().archiveDelay).toBe("off")
   })
 })

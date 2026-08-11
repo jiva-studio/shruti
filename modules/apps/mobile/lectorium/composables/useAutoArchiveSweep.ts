@@ -13,6 +13,15 @@ import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
  */
 export const AUTO_ARCHIVE_DELAY_KEY = "settings.autoArchiveDelay"
 
+/**
+ * The last delay the user picked while Smart Library was on. Kept apart from
+ * {@link AUTO_ARCHIVE_DELAY_KEY}, which the master switch forces to `"off"`,
+ * so an off/on cycle can restore the schedule instead of forgetting it
+ * (#1663). Read and written by the Settings dialog only — the sweep itself
+ * never consults it.
+ */
+export const AUTO_ARCHIVE_LAST_DELAY_KEY = "settings.autoArchiveLastDelay"
+
 export type AutoArchiveDelay = "off" | "immediate" | "8h" | "1d" | "2d" | "3d"
 
 const DAY_MS = 86_400_000
@@ -181,10 +190,17 @@ export function useAutoArchiveSweep(): {
   })
 
   // Re-sweep when the user flips the delay (e.g. `off → immediate` or
-  // `1d → immediate`) or turns Smart Library back on. Without this the
-  // previous completions sit until the next fresh finish triggers the
-  // completion-watcher below.
-  watch([delay, targetSeconds], () => void sweep())
+  // `1d → immediate`). Without this the previous completions sit until the
+  // next fresh finish triggers the completion-watcher below.
+  watch(delay, () => void sweep())
+
+  // The queue length is the OTHER half of the feature and says nothing about
+  // archiving, so moving between two presets must not delete anything (#1663).
+  // Only the master switch coming back on re-sweeps — that lifts the gate in
+  // `isAutoArchiveActive`, and the backlog behind it is what needs the pass.
+  watch(targetSeconds, (next, previous) => {
+    if (next > 0 && previous <= 0) void sweep()
+  })
 
   // Run a sweep right after the user subscribes (they may have a backlog
   // of long-finished items waiting for the gate to lift).
