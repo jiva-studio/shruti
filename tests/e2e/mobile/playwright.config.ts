@@ -72,10 +72,15 @@ function findChrome(): string | undefined {
   }
 }
 
+// `LECTORIUM_E2E_BUILD=1` is what makes `boot({ pro: true })` mean anything:
+// the app honours the subscription override only on a build that opted in at
+// compile time (see modules/apps/mobile/lectorium/services/devSubscription.ts).
+// The dev server gets it here; the bundle has to be BUILT with it
+// (`npm run build:bundle`), which globalSetup checks before the run starts.
 const offlineCommand = USE_BUNDLE
   ? `node scripts/serve-dist.mjs ../../../modules/apps/mobile/dist ${PORT}`
-  : `cd ../../../modules/apps/mobile && npm run dev -- --port ${PORT} --strictPort`
-const liveCommand = `cd ../../../modules/apps/mobile && VITE_DEV_REGION=true npm run dev -- --port ${LIVE_PORT} --strictPort`
+  : `cd ../../../modules/apps/mobile && LECTORIUM_E2E_BUILD=1 npm run dev -- --port ${PORT} --strictPort`
+const liveCommand = `cd ../../../modules/apps/mobile && VITE_DEV_REGION=true LECTORIUM_E2E_BUILD=1 npm run dev -- --port ${LIVE_PORT} --strictPort`
 
 const QASE = process.env.QASE_MODE === "testops"
 

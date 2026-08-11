@@ -42,6 +42,7 @@ One run, one report: `npm run test:all` runs `mocked` + `stack` into a single
 | `settings-language-failure` | a UI language whose chunk fails leaves the setting where it was |
 | `chat-render` | the chat composer + suggestions render |
 | `share-menu` | the track share menu offers a PDF export |
+| `track-info-layout` | the track-list layout is a subscriber's to change, and a free user's paywall |
 
 ### `@live` journeys (need the local stack)
 
@@ -99,6 +100,58 @@ matches after page-level routes, so a spec's own `page.route` still wins.
 
 Set `E2E_NET_LOG=<file>` to append a JSONL record of every blocked outbound
 attempt — that is how the leak is measured.
+
+### Running as Pro or free
+
+A spec says which tier it runs as, and the app obeys:
+
+```ts
+await boot(page, "en")                  // free  — Pro gates lead to the paywall
+await boot(page, "en", { pro: true })   // Pro   — Pro surfaces are open
+```
+
+That takes two levels, and both have to be in place:
+
+- **The build decides whether the seam exists.** `__E2E_BUILD__` is compiled in
+  from `LECTORIUM_E2E_BUILD=1` (`modules/apps/mobile/vite.config.ts`). Only a
+  build carrying it lets anything grant Pro without a real purchase; a release
+  build ignores the whole mechanism, and a real purchase outranks it everywhere.
+- **The spec picks the tier**, per test, at boot: `boot()` writes
+  `dev.subscriptionOverride` = `pro` or the legacy `e2e.forceFreeTier` key
+  before the app starts (`support/bootstrap.ts`).
+
+`playwright.config.ts` passes `LECTORIUM_E2E_BUILD=1` to the dev server, so
+`npm test` needs nothing extra.
+
+> **The `E2E_USE_BUNDLE=1` caveat.** Bundle mode serves a **prebuilt**
+> `modules/apps/mobile/dist`, which the suite does not build — so an ordinary
+> `npm run build` produces a dist with the seam compiled out. Every
+> `pro: true` spec then runs as a **free** user against the wrong UI. That is
+> what #1633 was: CI builds with `BUILD_ID=<run number>`, which is not `dev`,
+> and the tier every Pro spec asked for was silently inverted.
+>
+> Build the bundle with the flag:
+>
+> ```bash
+> npm run build:bundle                       # or: npm run test:bundle
+> E2E_USE_BUNDLE=1 npm test
+> ```
+>
+> `build:bundle` leaves a `dist/e2e-build` marker, and `globalSetup` refuses to
+> start a bundle run without it — the inversion is now a refusal to run, not a
+> green report against the wrong tier.
+
+Cases **200 / 201** (`tests/settings/track-info-layout.spec.ts`) are the pair
+that checks this: the same Settings row opens the layout editor for a
+subscriber and the paywall for a free user, so neither result can be produced
+by the other tier's app.
+
+Six specs boot `pro: true`. Run against a bundle without the seam, the four
+Smart Library ones (`smart-library-dialog`, `-off`, `-archive-memory`,
+`-topics-persist`) and `pro-expiry` fail — but they fail as if the feature
+broke, not as if the tier was wrong. `share-menu` is the quiet one: the export
+sheet opens for a free user too (tapping an entry is what bounces to the
+paywall), so it stayed green while covering nothing about Pro.
 
 Everything is driven through the rendered UI; the suite never touches the
 `window.__lectorium.debug` bridge (the screenshot pipeline does). That bridge
@@ -189,8 +242,8 @@ Two CI paths run this suite:
   ~15-minute browser suite and it is worth running deliberately.
 
   (`E2E_USE_BUNDLE=1` makes `playwright.config.ts` serve the prebuilt `dist/`
-  instead of the dev server — note the `pro: true` caveat below before relying
-  on it.)
+  instead of the dev server — build it with `npm run build:bundle`, see
+  "Running as Pro or free" above.)
 
 Follow-up before the auto job does real testing: run `prepare-fixtures.sh` in
 it. The catalog no longer stands in the way — it is committed — so all that is

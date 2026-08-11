@@ -5,6 +5,8 @@
   "type": "module",
   "description": "End-to-end (Playwright) tests for the Lectorium mobile web app.",
   "scripts": {
+    "build:bundle": "cd ../../../modules/apps/mobile && LECTORIUM_E2E_BUILD=1 npm run build",
+    "test:bundle": "npm run build:bundle && E2E_USE_BUNDLE=1 playwright test --project=mocked",
     "test": "playwright test --project=mocked",
     "test:offline": "playwright test --project=mocked",
     "test:live": "E2E_INCLUDE_LIVE=1 playwright test --project=stack",

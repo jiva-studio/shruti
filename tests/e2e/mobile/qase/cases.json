@@ -1102,7 +1102,7 @@
     "automation": 2,
     "title": "Share offers Transcript PDF, text and Audio",
     "description": "Offline, Pro-booted. Opens a library track sheet and taps Share; asserts the export action sheet appears with a PDF option. The actual server-side render is a @live concern not exercised here.",
-    "preconditions": "Seeded offline fixture, booted as Pro (dev/web build is treated as subscribed). A library track with a transcript.",
+    "preconditions": "Seeded offline fixture, booted as a subscriber (pro: true). A library track with a transcript.",
     "steps": [
       {
         "action": "Open the first library track's sheet.",
@@ -1110,7 +1110,7 @@
       },
       {
         "action": "Tap Share.",
-        "expected": "The export action sheet lists Transcript (PDF), Transcript (text), and Audio."
+        "expected": "The export action sheet lists Transcript (PDF), Transcript (text) and Audio, and PDF is offered as an included format rather than a locked (Pro) one."
       }
     ],
     "tags": [
@@ -3682,6 +3682,60 @@
     ],
     "tags": [
       "chat",
+      "e2e"
+    ]
+  },
+  "200": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "A subscriber lays out the track list and the lists follow",
+    "description": "Offline, Pro. Settings → \"Track info\" opens the layout editor (not the paywall) for a subscriber; switching the Reference field off removes it from every track row's metadata line while the rest of the line stays. Also the check that a `pro: true` boot really is a subscriber — the paired free case is 201.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a subscriber (pro: true).",
+    "steps": [
+      {
+        "action": "Open the library and read the first row's metadata line.",
+        "expected": "The line under the title carries a scripture reference."
+      },
+      {
+        "action": "On the Settings tab, tap the \"Track info\" (Pro) row.",
+        "expected": "The Track Info layout dialog opens; no paywall."
+      },
+      {
+        "action": "Switch the \"Reference\" field off in the bottom line and close the dialog.",
+        "expected": "The toggle reads off and the dialog dismisses."
+      },
+      {
+        "action": "Return to the library list.",
+        "expected": "The rows no longer show the reference; the metadata line is still rendered with its remaining fields."
+      }
+    ],
+    "tags": [
+      "settings",
+      "library",
+      "pro",
+      "e2e"
+    ]
+  },
+  "201": {
+    "suite_id": 16,
+    "automation": 2,
+    "title": "Track list layout is closed to a free user",
+    "description": "Offline, free. Settings → \"Track info\" opens the subscription page instead of the layout editor, and the track list keeps the default layout. The paired Pro case is 200; together they are how the suite proves it can run the app as either tier on purpose.",
+    "preconditions": "Offline fixtures with a clean user db, booted as a free user (the default).",
+    "steps": [
+      {
+        "action": "On the Settings tab, tap the \"Track info\" (Pro) row.",
+        "expected": "The subscription paywall opens; the layout dialog does not."
+      },
+      {
+        "action": "Go back and open the library list.",
+        "expected": "Rows keep the default layout — the reference is in the line under the title."
+      }
+    ],
+    "tags": [
+      "settings",
+      "library",
+      "pro",
       "e2e"
     ]
   }
