@@ -25,7 +25,13 @@ Usage:
     scripts/build-catalog-fixture.py [--source PATH] [--out PATH]
 
 The source defaults to the local lake output. Any version-addressed published
-catalog works: `public/db/lectorium.{version}.db` is immutable per version.
+catalog works: `public/db/lectorium.{version}.db` is immutable per version —
+but it has to carry lectorium-mcp's `008_fold_fts_marks` first. That migration
+runs when lectorium-mcp OPENS a catalog, not when one is published, so a
+freshly downloaded `.db` still indexes `ё` as its own term while the app folds
+it away in the query: search answers nothing to either spelling, and a spec
+comparing the two passes on 0 == 0 (#1684). `verify` refuses such a source.
+Fold one by opening it once with lectorium-mcp.
 """
 
 from __future__ import annotations
@@ -157,6 +163,24 @@ def pick(rows, key, quota):
     return out
 
 
+def pick_audioless(src: sqlite3.Connection, tracks: list[str]) -> str | None:
+    """The one kept lecture that ships with NO `track_audio` row.
+
+    The "no audio available" refusal (#1533) is reachable at three ungated
+    call sites, and every track in the corpus is playable — so the fixture
+    could not reproduce any of them. One silent lecture fixes that.
+
+    Chosen by rule rather than by hand: the last kept lecture that no seeded
+    playlist, collection or daily-wisdom row points at, so nothing a spec
+    reaches by position lands on it. Its variant (and therefore its row, its
+    title and its transcript) stays; only the audio goes.
+    """
+    spoken = set(PINNED_TRACKS)
+    spoken.update(t for (t,) in src.execute("SELECT DISTINCT track_id FROM collection_tracks"))
+    spoken.update(t for (t,) in src.execute("SELECT DISTINCT track_id FROM daily_wisdom"))
+    return next((t for t in reversed(tracks) if t not in spoken), None)
+
+
 def select_tracks(src: sqlite3.Connection) -> tuple[list[str], list[str]]:
     """Return (track ids, topic ids) to keep — deterministic, fully ordered."""
 
@@ -263,7 +287,7 @@ def select_tracks(src: sqlite3.Connection) -> tuple[list[str], list[str]]:
     return sorted(keep), topics
 
 
-def build(source: Path, out: Path) -> dict:
+def build(source: Path, out: Path) -> tuple[dict, str | None]:
     src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     src.execute("PRAGMA query_only = 1")
 
@@ -312,12 +336,18 @@ def build(source: Path, out: Path) -> dict:
     for table, column in (
         ("tracks", "id"),
         ("track_variants", "track_id"),
-        ("track_audio", "track_id"),
         ("track_references", "track_id"),
         ("track_tags", "track_id"),
         ("collection_tracks", "track_id"),
     ):
         counts[table] = copy(table, f"WHERE {column} IN {ids}", tuple(tracks))
+
+    audioless = pick_audioless(src, tracks)
+    counts["track_audio"] = copy(
+        "track_audio",
+        f"WHERE track_id IN {ids} AND track_id IS NOT ?",
+        tuple(tracks) + (audioless,),
+    )
 
     topic_ids = "(" + ", ".join("?" * len(topics)) + ")"
     counts["topics"] = copy("topics", f"WHERE id IN {topic_ids}", tuple(topics))
@@ -382,7 +412,7 @@ def build(source: Path, out: Path) -> dict:
         counts[table] = dst.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
 
     dst.commit()
-    verify(dst, tracks, topics)
+    verify(dst, tracks, topics, audioless)
     dst.execute("VACUUM")
     dst.commit()
     dst.close()
@@ -391,10 +421,12 @@ def build(source: Path, out: Path) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(tmp, out)
     shutil.rmtree(tmp.parent, ignore_errors=True)
-    return {"tracks": len(tracks), "topics": len(topics), **counts}
+    return {"tracks": len(tracks), "topics": len(topics), **counts}, audioless
 
 
-def verify(dst: sqlite3.Connection, tracks: list[str], topics: list[str]) -> None:
+def verify(
+    dst: sqlite3.Connection, tracks: list[str], topics: list[str], audioless: str | None
+) -> None:
     """The properties the specs depend on. A rebuild that loses one fails here,
     where it is cheap, instead of in an 11-minute suite run."""
     for topic in topics:
@@ -447,6 +479,49 @@ def verify(dst: sqlite3.Connection, tracks: list[str], topics: list[str]) -> Non
         ).fetchone()[0]
         assert n > 0, f"no seeded {language} playlist lecture kept a topic"
 
+    # Exactly one silent lecture, and it still renders: a row with no title
+    # would be a trimming bug rather than the "no audio available" case.
+    silent = [
+        t for (t,) in dst.execute(
+            "SELECT id FROM tracks WHERE id NOT IN (SELECT track_id FROM track_audio)"
+        )
+    ]
+    assert silent == [audioless], f"expected exactly {audioless} without audio, got {silent}"
+    assert dst.execute(
+        "SELECT count(*) FROM track_variants WHERE track_id = ?", (audioless,)
+    ).fetchone()[0] > 0, f"{audioless} lost its variant along with its audio"
+
+    # The search index also folds `ё`, so a query typed either way reaches the
+    # same lectures. An unfolded row means the source predates lectorium-mcp's
+    # `008_fold_fts_marks` and the fixture would answer nothing to either
+    # spelling — a spec comparing the two would pass on 0 == 0 (#1684).
+    unfolded = dst.execute(
+        "SELECT count(*) FROM tracks_search WHERE content LIKE '%ё%' OR content LIKE '%Ё%'"
+    ).fetchone()[0]
+    assert unfolded == 0, (
+        f"{unfolded} tracks_search rows still spell `ё`: the source catalog has not had "
+        "lectorium-mcp's 008_fold_fts_marks applied"
+    )
+
+    # Qase 200 types one word both ways and expects the single query to reach
+    # BOTH spellings in the corpus. Keeping only one of them would leave the
+    # spec comparing two identical halves — green, and proving nothing.
+    spellings = {
+        "ё" if "ё" in title else "е"
+        for (title,) in dst.execute(
+            """SELECT v.title FROM track_variants v
+                WHERE v.language = 'ru'
+                  AND v.track_id IN (SELECT track_id FROM track_references
+                                      WHERE source_id = 'source_dsicuBsFvinZ')
+                  AND v.track_id IN (SELECT track_id FROM tracks_search
+                                      WHERE tracks_search MATCH 'остается*' AND kind = 'combined')"""
+        )
+    }
+    assert spellings == {"ё", "е"}, (
+        f"Qase 200 needs a Bhagavad-gita lecture titled `остаётся` AND one titled "
+        f"`остается`; the trim kept {sorted(spellings)}"
+    )
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -462,7 +537,7 @@ def main() -> None:
             "Pass --source with a published catalog (public/db/lectorium.<version>.db)."
         )
 
-    counts = build(args.source, args.out)
+    counts, audioless = build(args.source, args.out)
     digest = sha256(args.out)
     version = re.search(r"\d{14}", args.source.name)
     meta = {
@@ -476,6 +551,9 @@ def main() -> None:
         "generator": "scripts/build-catalog-fixture.py",
         "sha256": digest,
         "bytes": args.out.stat().st_size,
+        # The one lecture with no `track_audio` row — what a spec reaches for
+        # when it needs the "no audio available" refusal (#1533).
+        "audioless_track": audioless,
         "rows": counts,
     }
     meta_path = args.out.with_suffix(".db.json")

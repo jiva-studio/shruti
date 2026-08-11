@@ -203,7 +203,9 @@ is comparable with a run on another):
 
 - `content.db` — a trimmed catalog, ~1000 lectures carved out of a published
   snapshot. `content.db.json` records the snapshot it came from, its digest and
-  the row counts.
+  the row counts, plus `audioless_track`: the one lecture deliberately shipped
+  with no `track_audio` row, so the "no audio available" refusal (#1533) is
+  reachable at all.
 - `silent.mp3` / `cover-sample.png` / `transcript.json` — small media stubs.
 
 Rebuilt locally, gitignored:
@@ -234,6 +236,14 @@ git add fixtures/content.db fixtures/content.db.json
 version-addressed published catalog — `public/db/lectorium.{version}.db` is
 immutable per version, so the build is reproducible from what the metadata
 records.
+
+Whichever you take, it has to carry lectorium-mcp's `008_fold_fts_marks` first.
+That migration runs when lectorium-mcp **opens** a catalog, not when one is
+published, so a freshly downloaded `.db` still indexes `ё` as a term of its own
+while the app folds it away in the query — search then answers nothing to
+either spelling, and a spec comparing the two passes on `0 == 0` (#1684). Open
+the file once with lectorium-mcp to fold it; the builder refuses a source that
+has not been.
 
 The trim is not just a size cut. The Search landing shuffles its topic tiles, so
 a spec that opens "the first tile" opens a *random* topic; against the full
