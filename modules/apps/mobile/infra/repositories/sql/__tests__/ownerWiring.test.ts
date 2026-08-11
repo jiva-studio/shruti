@@ -45,6 +45,16 @@ describe("createSqlAppRepositories — owner wiring", () => {
          owner_id TEXT
        )`
     )
+    // The journal seeds its stamp from the outbox tail AND the recorded server
+    // pointers, so the side-table (014) belongs in this fixture too.
+    await db.execute(
+      `CREATE TABLE sync_doc_hlc (
+         collection TEXT NOT NULL,
+         doc_id     TEXT NOT NULL,
+         server_hlc TEXT NOT NULL,
+         PRIMARY KEY (collection, doc_id)
+       )`
+    )
     owner = "user-1"
   })
 

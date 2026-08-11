@@ -111,7 +111,7 @@ export default defineConfigWithVueTs(
 
   // Domain: pure, imports nothing external
   {
-    files: ["submodules/domain/**/*.ts"],
+    files: ["submodules/domain/**/*.ts", "../../libs/domain/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -434,9 +434,10 @@ export default defineConfigWithVueTs(
   //
   // `eslint .` walks the tree itself and does NOT descend through a symlinked
   // directory, so a block keyed on submodules/** only ever runs when the path
-  // is named explicitly — which is why the `lint` script passes `submodules/ui`
-  // as a second target. The sibling blocks above (contracts, domain,
-  // persistence) are still unenforced for that reason.
+  // is named explicitly — which is why the `lint` script lists every symlinked
+  // root under submodules/ as an extra target. Adding a block for a new
+  // symlinked package means adding that package to the script too, or the
+  // block is dead on arrival (#1551).
   {
     files: ["submodules/ui/**/*.{ts,vue}", "../../libs/ui/**/*.{ts,vue}"],
     rules: {
@@ -470,6 +471,49 @@ export default defineConfigWithVueTs(
             {
               group: ["@ionic/*"],
               message: "@lib/ui must not import Ionic — the web app renders these components too",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // @lib/chat: headless chat composables (marker parsing, excerpt audio) built
+  // on plain Vue. Same bar as @lib/ui — it sits below the app layers and must
+  // stay renderer-agnostic, so no Ionic and no app-local @ui/*.
+  {
+    files: ["submodules/chat/**/*.ts", "../../libs/chat/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@ports/*"], message: "@lib/chat must not import technical ports" },
+            { group: ["@infra/*"], message: "@lib/chat must not import infrastructure" },
+            {
+              group: ["@lib/domain/*", "@lib/domain"],
+              message: "@lib/chat must not import domain — use mirror types",
+            },
+            {
+              group: ["@lib/persistence/*"],
+              message: "@lib/chat must not import persistence row types",
+            },
+            {
+              group: ["@usecases", "@usecases/**"],
+              message: "@lib/chat must not import application layer",
+            },
+            { group: ["@shruti/*"], message: "@lib/chat must not import composition root" },
+            {
+              group: ["@capacitor/*"],
+              message: "@lib/chat must not import Capacitor SDKs — use a @ports/app port instead",
+            },
+            {
+              group: ["@ui/*"],
+              message: "@lib/chat must not import the app-local UI layer — it sits below it",
+            },
+            {
+              group: ["@ionic/*"],
+              message: "@lib/chat must not import Ionic — it stays renderer-agnostic",
             },
           ],
         },

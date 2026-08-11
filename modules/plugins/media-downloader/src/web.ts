@@ -26,13 +26,31 @@ const CACHE_NAME = 'shruti';
  */
 export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlugin {
   private tasks = new Map<string, DownloadTask>();
-  private aborts = new Map<string, AbortController>();
+  /**
+   * The transfer currently speaking for a task id: its abort handle and the
+   * token that identifies it. An id with no entry here has no live transfer,
+   * whatever `tasks` still says — that is the difference `download()` and
+   * `runDownload()` are decided on.
+   */
+  private runs = new Map<string, { seq: number; abort: AbortController }>();
+  private seq = 0;
+
+  /** Is `seq` still the run that owns `id`, or has it been cancelled/replaced? */
+  private isCurrent(id: string, seq: number): boolean {
+    return this.runs.get(id)?.seq === seq;
+  }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   async download(options: DownloadOptions): Promise<DownloadTask> {
     const existing = this.tasks.get(options.id);
-    if (existing && existing.state === 'running') return existing;
+    // Idempotent only while a transfer is actually live. A `running` entry
+    // whose run is gone is a corpse — the fetch was cancelled, or it never
+    // answered the abort — and handing it back would answer with a task that
+    // can no longer emit anything, leaving the caller pending forever. That is
+    // what stranded a re-added lecture after a cancel (#1680): the second
+    // download joined the dead one instead of opening its own request.
+    if (existing && existing.state === 'running' && this.runs.has(options.id)) return existing;
 
     const cacheKey = options.fileKey;
 
@@ -44,18 +62,29 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
     };
     this.setTask(initial);
 
+    const seq = ++this.seq;
     const abort = new AbortController();
-    this.aborts.set(options.id, abort);
+    this.runs.set(options.id, { seq, abort });
 
-    void this.runDownload(options, cacheKey, abort.signal);
+    void this.runDownload(options, cacheKey, abort.signal, seq);
     return initial;
   }
 
+  /**
+   * `seq` is this transfer's claim on `options.id`. A fetch cannot be forced
+   * to settle — an aborted request may answer late, or never — so every write
+   * and every event is gated on the claim still being current. A run that lost
+   * it says nothing at all: it must not report progress, overwrite the cache
+   * entry a successor is writing, or settle a caller that is waiting on
+   * someone else.
+   */
   private async runDownload(
     options: DownloadOptions,
     cacheKey: string,
     signal: AbortSignal,
+    seq: number,
   ): Promise<void> {
+    const current = (): boolean => this.isCurrent(options.id, seq);
     try {
       const response = await fetch(options.url, {
         signal,
@@ -73,6 +102,7 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
+          if (!current()) return;
           chunks.push(value);
           received += value.length;
           this.emitProgress(options.id, received, total);
@@ -84,9 +114,12 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
         this.emitProgress(options.id, received, received);
       }
 
+      if (!current()) return;
       const blob = new Blob(chunks as BlobPart[]);
       const cache = await caches.open(CACHE_NAME);
+      if (!current()) return;
       await cache.put(cacheKey, new Response(blob));
+      if (!current()) return;
 
       const localUrl = URL.createObjectURL(blob);
       const completedTask: DownloadTask = {
@@ -104,6 +137,7 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
         bytesDownloaded: received,
       });
     } catch (err) {
+      if (!current()) return;
       const isAbort = (err as { name?: string })?.name === 'AbortError';
       const state: TaskState = isAbort ? 'cancelled' : 'failed';
       const message = err instanceof Error ? err.message : String(err);
@@ -120,14 +154,16 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
       // An abort is terminal for the caller too — it awaits `completed` /
       // `failed`, so staying silent leaves it pending forever. Report it as
       // a failure carrying the `cancelled` code, which the caller uses to
-      // tell a deliberate abort from a genuine error.
+      // tell a deliberate abort from a genuine error. `cancel()` has already
+      // settled its own; what lands here is an abort from outside (the page
+      // tearing the request down), which is terminal all the same.
       this.emit<FailedEvent>('failed', {
         id: options.id,
         error: isAbort ? 'cancelled' : message,
         ...(isAbort ? { code: 'cancelled' as const } : {}),
       });
     } finally {
-      this.aborts.delete(options.id);
+      if (current()) this.runs.delete(options.id);
     }
   }
 
@@ -139,14 +175,33 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
     throw this.unimplemented('resume is not supported on Web');
   }
 
+  /**
+   * Stop a transfer, and be terminal about it.
+   *
+   * Aborting the controller is a request, not an outcome: a request stalled on
+   * a server that accepted the connection and went quiet can answer the abort
+   * late, or not at all, and until it does the task would sit `running` with
+   * nobody transferring — a state no later call could get out of. So the task
+   * is settled here rather than in whatever the fetch eventually decides to
+   * do, and dropping the run makes that decision moot (see `runDownload`).
+   */
   async cancel(options: { id: string; deletePartial?: boolean }): Promise<void> {
-    const abort = this.aborts.get(options.id);
-    abort?.abort();
-    this.aborts.delete(options.id);
-    if (options.deletePartial) {
-      const task = this.tasks.get(options.id);
-      if (task?.localUrl) URL.revokeObjectURL(task.localUrl);
-    }
+    const run = this.runs.get(options.id);
+    run?.abort.abort();
+    this.runs.delete(options.id);
+
+    const task = this.tasks.get(options.id);
+    if (options.deletePartial && task?.localUrl) URL.revokeObjectURL(task.localUrl);
+    if (!task || task.state !== 'running') return;
+
+    this.setTask({ ...task, state: 'cancelled', error: undefined });
+    // The caller awaits `completed` / `failed`; staying silent leaves it
+    // pending forever. `code` is what tells a deliberate abort from a fault.
+    this.emit<FailedEvent>('failed', {
+      id: options.id,
+      error: 'cancelled',
+      code: 'cancelled',
+    });
   }
 
   // ── Snapshot ──────────────────────────────────────────────────────────

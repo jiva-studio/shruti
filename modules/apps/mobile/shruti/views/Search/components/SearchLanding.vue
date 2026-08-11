@@ -211,7 +211,13 @@ const topicShelves = computed(() =>
   recommendations.shelves.map((s) => ({
     topicId: s.topicId,
     name: dictionaries.topicNamesById.get(s.topicId) ?? s.topicId,
-    rows: s.tracks.slice(0, SHELF_PREVIEW).map((tr) => mapper.toUiRow(tr)),
+    // Same `context` as every other shelf on this page — the landing is a
+    // discovery surface end to end. Without it the shelves read row state from
+    // the playlist context, so one track could show a progress radial here and
+    // a checkmark in "Recommended for you" two sections up (#1615).
+    rows: s.tracks
+      .slice(0, SHELF_PREVIEW)
+      .map((tr) => mapper.toUiRow(tr, { context: "discovery" })),
   }))
 )
 

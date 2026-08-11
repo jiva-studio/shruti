@@ -39,6 +39,20 @@ export async function openLibrary(page: Page, query: string = BROAD_QUERY): Prom
 }
 
 /**
+ * Search tab → the "My library" shelf's chevron → the full personal-library
+ * page. The shelf only renders once the store has rows, so this is the entry
+ * for a library that HAS something in it; an empty one collapses to a banner
+ * and the spec that cares about that taps the banner itself.
+ */
+export async function openMyLibrary(page: Page): Promise<void> {
+  await gotoTab(page, "search")
+  const chevron = page.locator(".my-library-shelf .section-more")
+  await chevron.waitFor({ state: "visible", timeout: 60_000 })
+  await chevron.click()
+  await page.waitForURL("**/search/my-library", { timeout: 15_000 })
+}
+
+/**
  * Empty the search field and wait for the browsing landing to come back.
  *
  * The field keeps what was typed while you are on the tab, so leaving and
