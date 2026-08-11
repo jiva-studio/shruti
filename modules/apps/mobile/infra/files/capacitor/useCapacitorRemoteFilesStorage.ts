@@ -4,6 +4,13 @@ import { MediaDownloader, type DownloadDestination } from "@shruti/plugin-media-
 import type { IRemoteFilesStorage } from "@ports/app/index.js"
 
 /**
+ * Names ending in one of these are a transfer that never finished: the
+ * media-downloader plugin's temp (`<name>.download`) and `getText`'s
+ * write-then-rename sibling (`<name>.tmp`). Neither is ever readable content.
+ */
+const PARTIAL_SUFFIXES = [".download", ".tmp"] as const
+
+/**
  * `IRemoteFilesStorage` over the `@shruti/plugin-media-downloader`
  * plugin. Used for the "fetch on first access, then cache" flow that
  * powers transcripts and any other small remote assets the app needs to
@@ -85,6 +92,40 @@ export function useCapacitorRemoteFilesStorage({
       cleanup: () => {
         for (const h of handles) void h.remove()
       },
+    }
+  }
+
+  /**
+   * Reclaim the download leftovers inside a KEPT directory.
+   *
+   * `keep` spares `databases/` from "Clear cache" so a ~54 MB catalog isn't
+   * collateral (#1630) — but it spared the junk beside it too. A transfer the
+   * OS kills mid-flight leaves the plugin's `<name>.download` temp (and
+   * `getText`'s `.tmp` sibling) behind: nothing in the kept subtree is ever
+   * enumerated again, so those partials were unreclaimable short of an
+   * uninstall (#1663). They are never a usable file — only a *finished*
+   * transfer is — so "free up space" may take them.
+   *
+   * The one thing this can hit is a partial being written RIGHT NOW by a
+   * background content refresh; that download then fails and the next launch
+   * re-fetches it, which is the same outcome as the storage pressure the user
+   * ran this action to relieve.
+   */
+  async function sweepPartials(dir: string): Promise<void> {
+    const entries = await Filesystem.readdir({ path: dir, directory: Directory.Data })
+      .then((r) => r.files)
+      .catch(() => null)
+    if (!entries) return
+
+    for (const entry of entries) {
+      if (entry.type === "directory" || !PARTIAL_SUFFIXES.some((s) => entry.name.endsWith(s))) {
+        continue
+      }
+      try {
+        await Filesystem.deleteFile({ path: `${dir}/${entry.name}`, directory: Directory.Data })
+      } catch {
+        // Already gone or locked — the rest of the sweep still runs.
+      }
     }
   }
 
@@ -197,17 +238,21 @@ export function useCapacitorRemoteFilesStorage({
 
     async clearAll(): Promise<void> {
       // Per-file deletion via the plugin would require an enumeration API we
-      // don't expose, so go through Filesystem. One level of readdir is enough:
-      // everything below a non-kept entry goes with the recursive rmdir. A
-      // readdir failure means the root is absent or already cleared.
+      // don't expose, so go through Filesystem. One level of readdir is enough
+      // for the entries we delete outright: everything below a non-kept entry
+      // goes with the recursive rmdir. A readdir failure means the root is
+      // absent or already cleared.
       const entries = await Filesystem.readdir({ path: cacheDir, directory: Directory.Data })
         .then((r) => r.files)
         .catch(() => null)
       if (!entries) return
 
       for (const entry of entries) {
-        if (keepNames.has(entry.name)) continue
         const path = `${cacheDir}/${entry.name}`
+        if (keepNames.has(entry.name)) {
+          if (entry.type === "directory") await sweepPartials(path)
+          continue
+        }
         try {
           if (entry.type === "directory") {
             await Filesystem.rmdir({ path, directory: Directory.Data, recursive: true })
