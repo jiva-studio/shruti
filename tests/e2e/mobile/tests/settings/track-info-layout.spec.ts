@@ -25,12 +25,12 @@ const dialog = (page: Page): Locator => page.locator("ion-modal.track-info-dialo
  *  distinguishable from the date / duration / location segments beside it). */
 const lineReference = (row: Locator): Locator => row.locator(".details .reference")
 
-test(qase(202, caseTitle(200)), { tag: ["@offline", "@settings"] }, async ({ page }) => {
+test(qase(201, caseTitle(201)), { tag: ["@offline", "@settings"] }, async ({ page }) => {
   await boot(page, "en", { pro: true, userDb: "clean" })
 
   let reference = ""
 
-  await step(page, 202, 0, async () => {
+  await step(page, 201, 0, async () => {
     await openLibrary(page)
     const first = trackRows(page).first()
     await expect(lineReference(first)).toBeVisible({ timeout: 20_000 })
@@ -38,7 +38,7 @@ test(qase(202, caseTitle(200)), { tag: ["@offline", "@settings"] }, async ({ pag
     expect(reference.length).toBeGreaterThan(0)
   })
 
-  await step(page, 202, 1, async (capture) => {
+  await step(page, 201, 1, async (capture) => {
     await gotoTab(page, "settings")
     await settingsRow(page).scrollIntoViewIfNeeded()
     await settingsRow(page).click()
@@ -49,7 +49,7 @@ test(qase(202, caseTitle(200)), { tag: ["@offline", "@settings"] }, async ({ pag
     await capture()
   })
 
-  await step(page, 202, 2, async () => {
+  await step(page, 201, 2, async () => {
     const referenceToggle = dialog(page)
       .locator("ion-item", { hasText: "Reference" })
       .locator("ion-toggle")
@@ -61,7 +61,7 @@ test(qase(202, caseTitle(200)), { tag: ["@offline", "@settings"] }, async ({ pag
     await expect(dialog(page)).toBeHidden({ timeout: 10_000 })
   })
 
-  await step(page, 202, 3, async () => {
+  await step(page, 201, 3, async () => {
     await gotoTab(page, "search")
     const first = trackRows(page).first()
     // The reference is gone from the line, and the line itself is still there —
@@ -72,7 +72,7 @@ test(qase(202, caseTitle(200)), { tag: ["@offline", "@settings"] }, async ({ pag
   })
 })
 
-test(qase(202, caseTitle(201)), { tag: ["@offline", "@settings"] }, async ({ page }) => {
+test(qase(202, caseTitle(202)), { tag: ["@offline", "@settings"] }, async ({ page }) => {
   await boot(page, "en", { userDb: "clean" })
 
   await step(page, 202, 0, async (capture) => {
