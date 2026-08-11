@@ -53,7 +53,7 @@ async function serveTranscript(page: Page, speakers: string[]): Promise<void> {
 }
 
 test(
-  qase(193, caseTitle(191)),
+  qase(193, caseTitle(193)),
   { tag: ["@offline", "@transcript"] },
   async ({ page }) => {
     await boot(page, "en", { userDb: "single" })
@@ -72,7 +72,7 @@ test(
 )
 
 test(
-  qase(194, caseTitle(192)),
+  qase(194, caseTitle(194)),
   { tag: ["@offline", "@transcript"] },
   async ({ page }) => {
     await boot(page, "en", { userDb: "single" })

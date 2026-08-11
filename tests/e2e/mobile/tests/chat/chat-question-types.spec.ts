@@ -147,7 +147,7 @@ test(qase(86, caseTitle(86)), { tag: ["@offline", "@chat"] }, async ({ page }) =
 // media intent: a "show me the clip" answer renders the media card with the
 // CURATED clip title on the bold line and "speaker · date" as the attribution
 // under it — not the same name printed twice with the title lost. (#1611)
-test(qase(198, caseTitle(191)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
+test(qase(198, caseTitle(198)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [
     MEDIA,
@@ -179,7 +179,7 @@ test(qase(198, caseTitle(191)), { tag: ["@offline", "@chat"] }, async ({ page })
 // locate intent with citation translation on: the chapter list is machine
 // translated, so the card must carry the same "translated automatically"
 // disclosure + view-original toggle its four sibling cards have. (#1611)
-test(qase(199, caseTitle(192)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
+test(qase(199, caseTitle(199)), { tag: ["@offline", "@chat"] }, async ({ page }) => {
   await mockChatAuth(page)
   await mockChatStream(page, [
     CHAPTER_MT,

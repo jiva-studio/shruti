@@ -71,7 +71,7 @@ async function relaunch(page: Page): Promise<void> {
   await page.locator("ion-tab-bar").first().waitFor({ state: "visible", timeout: 30_000 })
 }
 
-test(qase(197, caseTitle(191)), { tag: ["@offline", "@library"] }, async ({ page }) => {
+test(qase(197, caseTitle(197)), { tag: ["@offline", "@library"] }, async ({ page }) => {
   await interceptContent(page)
   await preseedOnboardingDone(page)
   await preseedUserDbOnce(page, "en", "clean")
