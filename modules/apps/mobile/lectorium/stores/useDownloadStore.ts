@@ -8,6 +8,7 @@ import { removeDownloadedTranscripts } from "@usecases/downloads/removeDownloade
 import type { TrackId } from "@lib/domain/core.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
+import { useWantedTranscriptLanguages } from "@lectorium/composables/useWantedTranscriptLanguages.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useDownloadQuotaStore } from "./useDownloadQuotaStore.js"
 import { useServerFallback } from "./downloads/useServerFallback.js"
@@ -117,6 +118,32 @@ export const useDownloadStore = defineStore("downloads", () => {
   const transcriptPrefetch = useTranscriptPrefetch()
   const { t } = useI18n()
   const toast = useToast()
+
+  // Transcripts are prefetched only in the languages the user reads, so
+  // picking up a NEW one would otherwise leave every already-saved lecture
+  // without it. Watched here — the store is the app's single instance,
+  // unlike the per-view composables that also prefetch — and only on a
+  // WIDENING: dropping a language needs no fetch, and the transcripts it
+  // leaves behind are kilobytes the next "remove from offline" sweeps.
+  //
+  // `wanted.ready` gates the very first comparison: the set starts as a
+  // guess from the UI locale and only becomes the user's own once the
+  // persisted selection is read back, and that transition is not a choice
+  // anyone made.
+  const wanted = useWantedTranscriptLanguages()
+  let wantedBaseline: readonly string[] | null = null
+  watch(
+    () => (wanted.ready.value ? wanted.languages.value : null),
+    (next) => {
+      if (!next) return
+      const previous = wantedBaseline
+      wantedBaseline = next
+      if (!previous) return
+      if (next.every((language) => previous.includes(language))) return
+      void transcriptPrefetch.backfillDownloaded()
+    },
+    { immediate: true }
+  )
 
   const states = ref<Map<TrackId, DownloadState>>(new Map())
   // Per-track download progress 0..100. Populated only while a download

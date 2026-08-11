@@ -6,8 +6,13 @@ export interface DownloadTranscriptsInput {
   readonly trackId: TrackId
   /**
    * Optional language allow-list. When omitted (or empty), every advertised
-   * language is downloaded — the most conservative default for offline-mode
-   * because the Track view lets the user switch languages on the fly.
+   * language is downloaded — the conservative default, used while the caller
+   * does not yet KNOW what the user reads (the persisted selection has not
+   * been read back). Once it does, it passes the set and we skip the rest.
+   *
+   * An allow-list that matches nothing advertised still yields one language
+   * (the first advertised — the language the lecture was recorded in), so a
+   * lecture saved for offline is never left with no transcript at all.
    */
   readonly languages?: readonly LanguageCode[]
 }
@@ -59,10 +64,13 @@ export async function downloadTranscripts(
     return err("list-failed")
   }
 
-  const requested =
-    input.languages && input.languages.length > 0
-      ? advertised.filter((l) => input.languages!.includes(l))
-      : advertised
+  const allowList = input.languages ?? []
+  const wanted = allowList.length > 0 ? advertised.filter((l) => allowList.includes(l)) : advertised
+  // Nothing the user reads is on offer (a Spanish lecture for a ru/en
+  // reader). Keep the source language anyway: the dialog opens on it, and
+  // the alternative — a downloaded lecture whose transcript is blank
+  // offline — is worse than a few kilobytes.
+  const requested = wanted.length > 0 ? wanted : advertised.slice(0, 1)
 
   const cached: LanguageCode[] = []
   const failed: LanguageCode[] = []
