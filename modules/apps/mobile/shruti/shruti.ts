@@ -181,6 +181,13 @@ export interface Shruti {
   openContentDatabase(path: string): Promise<IDatabase>
   closeContentDatabase(): Promise<void>
   openUserDatabase(path: string): Promise<IDatabase>
+  /**
+   * Drop the user database handle (and the repositories built over it).
+   * Used when its bootstrap failed: a handle onto a database the app could
+   * not migrate — or could not read at all — is worse than none, because
+   * `repositories()` would hand it out and every write would fail silently.
+   */
+  closeUserDatabase(): Promise<void>
 
   /**
    * Lazily constructed bundle of domain-facing repositories. Callable only
@@ -370,6 +377,15 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
       const db = await seed.persistence.open(path)
       databases.user = db
       return db
+    },
+
+    async closeUserDatabase() {
+      const db = databases.user
+      databases.user = null
+      // Repositories close over the handle we just dropped; the next
+      // `repositories()` must rebuild rather than serve the dead one.
+      cachedRepos = null
+      if (db) await db.close()
     },
 
     repositories() {

@@ -15,6 +15,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@shruti/composables/useLibraryLanguages.js"
 import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
+import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { useTrackSheetStore } from "@shruti/stores/useTrackSheetStore.js"
@@ -375,6 +376,13 @@ export function useShareTrack(): UseShareTrackReturn {
             )
           }
         }))
+      // The bytes landed in durable app storage under the same key an offline
+      // save uses, so the lecture IS downloaded now — register it as one.
+      // Without this the file is invisible to everything that rebuilds from
+      // `media_items`: it is not charged to the storage budget, shows no
+      // offline badge after a relaunch, and archiving never reclaims it, so it
+      // survives until uninstall (#1739).
+      await useDownloadStore().adoptCachedFile(trackId, localUri, variant.audio.filesize)
 
       const lang =
         preferredContentLanguage(track, libraryLanguages.value, appLanguage.value) ??

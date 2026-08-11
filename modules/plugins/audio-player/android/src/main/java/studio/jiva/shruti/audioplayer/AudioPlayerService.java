@@ -19,6 +19,7 @@ import androidx.media3.session.DefaultMediaNotificationProvider;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 import androidx.media3.session.SessionCommand;
+import androidx.media3.session.SessionError;
 import androidx.media3.session.SessionResult;
 
 import com.google.common.collect.ImmutableList;
@@ -307,7 +308,7 @@ public final class AudioPlayerService extends MediaSessionService {
                 skip(args.getBoolean("next", true));
                 return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
             }
-            return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED));
+            return Futures.immediateFuture(new SessionResult(SessionError.ERROR_NOT_SUPPORTED));
         }
     }
 }
