@@ -6,6 +6,7 @@ const base: ChatNoticeInput = {
   tier: undefined,
   isOffline: false,
   isUnknownTier: false,
+  quotaExpired: false,
   retryAllowed: true,
 }
 
@@ -106,5 +107,49 @@ describe("classifyChatNotice", () => {
 
   it("offline wins over a rate_limited code", () => {
     expect(classifyChatNotice({ ...base, tier: "free", isOffline: true }).kind).toBe("info")
+  })
+
+  /* Issue #1609: `rate_limited` never reached the `retry` CTA, so the
+   * `failedRetryEnabled` deadline flip in useChatFailureNotice was
+   * unreachable — the card offered an upsell for a limit that had already
+   * lifted, and nothing on it re-asked the question. */
+  describe("a quota window that has already rolled over", () => {
+    it("offers Retry instead of an upsell for an expired anonymous quota", () => {
+      expect(classifyChatNotice({ ...base, tier: "anonymous", quotaExpired: true })).toEqual({
+        kind: "info",
+        titleKey: null,
+        bodyKey: null,
+        cta: "retry",
+      })
+    })
+
+    it("offers Retry for an expired free quota too", () => {
+      expect(classifyChatNotice({ ...base, tier: "free", quotaExpired: true }).cta).toBe("retry")
+    })
+
+    it("gives a pro user — who has no other CTA at all — the deadline escape", () => {
+      expect(classifyChatNotice({ ...base, tier: "pro", quotaExpired: true }).cta).toBe("retry")
+    })
+
+    it("gives an unrecognised tier the same escape", () => {
+      expect(
+        classifyChatNotice({ ...base, tier: undefined, isUnknownTier: true, quotaExpired: true })
+          .cta
+      ).toBe("retry")
+    })
+
+    it("does not fire for a non-quota failure", () => {
+      // `quotaExpired` is only ever true for a 429; a stray true must not
+      // rewrite an http_5xx notice.
+      expect(classifyChatNotice({ ...base, code: "http_503", quotaExpired: true })).toMatchObject({
+        titleKey: "chat.errServer.title",
+      })
+    })
+
+    it("still upsells while the window is open", () => {
+      expect(classifyChatNotice({ ...base, tier: "anonymous", quotaExpired: false }).cta).toBe(
+        "signin"
+      )
+    })
   })
 })

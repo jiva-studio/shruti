@@ -12,7 +12,7 @@
     <ul class="chapter-card-list">
       <li v-for="c in body.chapters" :key="c.tokens" class="chapter-card-item">
         <span class="chapter-card-num">{{ chapterNumber(c.tokens) }}</span>
-        <span class="chapter-card-title">{{ c.title }}</span>
+        <span class="chapter-card-title">{{ chapterTitle(c) }}</span>
       </li>
     </ul>
   </ScriptureBlock>
@@ -23,6 +23,8 @@
     caption-max-width="22ch"
     @tap="onTap"
   />
+
+  <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
 </template>
 
 <script setup lang="ts">
@@ -36,11 +38,18 @@
  * the `chapter_payload` SSE event during the turn and persisted). Titles
  * are read verbatim from the payload (server-side from `library_titles`) —
  * never composed on-device.
+ *
+ * When citation translation is on the server machine-translates each title
+ * into the answer language and ships the source-language one on
+ * `titleOriginal`. The card discloses that with the same TranslationNotice
+ * its four sibling cards use — an MT'd canto title must never be presented
+ * as the book's own wording.
  */
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import type { UiChatChapterBody } from "./types.js"
 import ScriptureChip from "./ScriptureChip.vue"
 import ScriptureBlock from "./ScriptureBlock.vue"
+import TranslationNotice from "./TranslationNotice.vue"
 
 const props = defineProps<{
   sourceId: string
@@ -56,6 +65,18 @@ const displayCaption = computed(
   () => props.caption?.trim() || body.value?.regionLabel || props.regionToken
 )
 const ariaLabel = computed(() => `Scripture location ${displayCaption.value}`)
+
+// The badge earns its place only when there is an original to flip TO —
+// `mt` alone (with every `titleOriginal` dropped) would offer a toggle that
+// changes nothing.
+const isMt = computed<boolean>(
+  () => !!body.value?.mt && !!body.value.chapters.some((c) => !!c.titleOriginal)
+)
+const showOriginal = ref(false)
+
+function chapterTitle(c: UiChatChapterBody["chapters"][number]): string {
+  return showOriginal.value && c.titleOriginal ? c.titleOriginal : c.title
+}
 
 // Chapter number = the last dot-segment of the token ("7.5" → "5",
 // "2" → "2"). Language-neutral, so no i18n needed for the row prefix.

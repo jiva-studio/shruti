@@ -123,6 +123,37 @@ export function buildMergedTranscriptViewData(
   )
 }
 
+/**
+ * Which of the built languages actually hold a dialogue — more than one distinct
+ * speaker across their blocks. The reader's dialogue affordances (per-line
+ * speaker icon, speaker-change dash + line break) are noise on a monologue,
+ * which is what almost every lecture is.
+ *
+ * Counted per LANGUAGE, not over the whole view: in a lecturer+translator
+ * recording each side is its own transcript, so a single-speaker English side
+ * stays clean even when the Russian one is a conversation. A block with no
+ * speaker contributes nothing — "no speaker info at all" reads as one speaker.
+ */
+export function multiSpeakerLanguages(
+  groups: readonly UiTranscriptBlocksGroup[]
+): ReadonlySet<string> {
+  const byLanguage = new Map<string, Set<string>>()
+  for (const group of groups) {
+    for (const { block, language } of group.blocks) {
+      const speaker = "speaker" in block ? block.speaker : undefined
+      if (!speaker) continue
+      const seen = byLanguage.get(language)
+      if (seen) seen.add(speaker)
+      else byLanguage.set(language, new Set([speaker]))
+    }
+  }
+  const out = new Set<string>()
+  for (const [language, speakers] of byLanguage) {
+    if (speakers.size > 1) out.add(language)
+  }
+  return out
+}
+
 /** Post-pass for the sentence-paired layout: the grouper emitted one sentence per
  *  group in (time, language) order, so — because the transcripts are aligned 1:1
  *  — every N consecutive groups are the SAME sentence in the N languages. Merge

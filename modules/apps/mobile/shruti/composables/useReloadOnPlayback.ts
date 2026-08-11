@@ -10,11 +10,19 @@ const DEFAULT_INTERVAL_MS = 60_000
  * Useful for surfaces (Home activity, Settings stats preview) that want
  * a near-real-time view of session-derived data without reading from a
  * shared cache more often than necessary.
+ *
+ * `onScreen` is the off-screen switch. Ionic hides but does not unmount a tab
+ * page, so a minute-by-minute poll on a hidden surface keeps reading the DB
+ * and re-rendering a widget nobody can see, for as long as the lecture plays
+ * (issue #1615). Polling stops while it is false and resumes on return; the
+ * running ↔ stopped reload is left alone, since it costs one read and is what
+ * keeps the surface correct for the next time it is shown.
  */
 export function useReloadOnPlayback(
   playing: Ref<boolean>,
   reload: () => void | Promise<void>,
-  intervalMs: number = DEFAULT_INTERVAL_MS
+  intervalMs: number = DEFAULT_INTERVAL_MS,
+  onScreen?: Ref<boolean>
 ): void {
   let pollHandle: ReturnType<typeof setInterval> | null = null
 
@@ -23,6 +31,12 @@ export function useReloadOnPlayback(
       clearInterval(pollHandle)
       pollHandle = null
     }
+  }
+
+  function startPolling(): void {
+    stopPolling()
+    if (onScreen !== undefined && !onScreen.value) return
+    pollHandle = setInterval(() => void reload(), intervalMs)
   }
 
   // `immediate` so a mount while playback is already active (the floating
@@ -36,16 +50,22 @@ export function useReloadOnPlayback(
         stopPolling()
         void reload()
       } else if (!prev && next) {
-        stopPolling()
         // Load once immediately (covers mounting while playback is already
         // active — otherwise the surface shows stale data until the first
         // interval tick) and then poll.
         void reload()
-        pollHandle = setInterval(() => void reload(), intervalMs)
+        startPolling()
       }
     },
     { immediate: true }
   )
+
+  if (onScreen !== undefined) {
+    watch(onScreen, (visible) => {
+      if (!visible) stopPolling()
+      else if (playing.value) startPolling()
+    })
+  }
 
   onBeforeUnmount(stopPolling)
 }

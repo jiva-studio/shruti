@@ -6,10 +6,15 @@ import type { Transcript, TranscriptBlock } from "@lib/domain/transcript.js"
 import {
   buildTranscriptViewData,
   buildMergedTranscriptViewData,
+  multiSpeakerLanguages,
 } from "../buildTranscriptViewData.js"
 
 function sentence(start: number, end: number, text: string): TranscriptBlock {
   return { type: "sentence", start, end, text }
+}
+
+function spoken(start: number, end: number, text: string, speaker?: string): TranscriptBlock {
+  return { type: "sentence", start, end, text, speaker }
 }
 
 function makeTranscript(blocks: TranscriptBlock[]): Transcript {
@@ -415,5 +420,87 @@ describe("buildTranscriptViewData — saved-note overlay", () => {
     const block = groups[0]!.blocks[0]!
     expect(block.bookmarked).toBe(true)
     expect(block.noteIds).toEqual([])
+  })
+})
+
+/**
+ * Which transcripts are dialogues. The reader hangs its dialogue affordances —
+ * the per-line speaker icon and the speaker-change dash + line break — off this,
+ * having previously hung them off the LANGUAGE count (issue #412).
+ */
+describe("multiSpeakerLanguages", () => {
+  it("reports nothing for a transcript with no speaker info at all", () => {
+    const groups = buildTranscriptViewData(
+      makeTranscript([sentence(0, 1000, "A"), sentence(1000, 2000, "B")]),
+      { paragraphChars: 9999 }
+    )
+    expect(multiSpeakerLanguages(groups)).toEqual(new Set())
+  })
+
+  it("reports nothing for a monologue — one speaker is not a dialogue", () => {
+    const groups = buildTranscriptViewData(
+      makeTranscript([spoken(0, 1000, "A", "Prabhupāda"), spoken(1000, 2000, "B", "Prabhupāda")]),
+      { paragraphChars: 9999 }
+    )
+    expect(multiSpeakerLanguages(groups)).toEqual(new Set())
+  })
+
+  it("ignores blocks with no speaker beside a single named one", () => {
+    const groups = buildTranscriptViewData(
+      makeTranscript([spoken(0, 1000, "A", "Prabhupāda"), sentence(1000, 2000, "B")]),
+      { paragraphChars: 9999 }
+    )
+    expect(multiSpeakerLanguages(groups)).toEqual(new Set())
+  })
+
+  it("reports the language once two distinct speakers appear", () => {
+    const groups = buildTranscriptViewData(
+      makeTranscript([spoken(0, 1000, "A", "Prabhupāda"), spoken(1000, 2000, "B", "Guest")]),
+      { paragraphChars: 9999 }
+    )
+    // `makeTranscript` builds a ru transcript.
+    expect(multiSpeakerLanguages(groups)).toEqual(new Set([RU]))
+  })
+
+  it("still reports a dialogue split across paragraphs", () => {
+    // A paragraph break resets the grouper's running speaker, so the count has
+    // to survive the flush rather than be read per group.
+    const groups = buildTranscriptViewData(
+      makeTranscript([
+        spoken(0, 1000, "A", "Prabhupāda"),
+        { type: "paragraph", start: 1000, end: 1000 } as TranscriptBlock,
+        spoken(1000, 2000, "B", "Guest"),
+      ]),
+      { paragraphChars: 9999 }
+    )
+    expect(groups.length).toBeGreaterThan(1)
+    expect(multiSpeakerLanguages(groups)).toEqual(new Set([RU]))
+  })
+
+  it("evaluates each language on its own — a monologue stays clean beside a dialogue", () => {
+    const groups = buildMergedTranscriptViewData(
+      [
+        {
+          language: EN,
+          transcript: transcriptIn(EN, [
+            spoken(0, 900, "One", "Prabhupāda"),
+            spoken(2000, 2900, "Two", "Prabhupāda"),
+          ]),
+        },
+        {
+          language: RU,
+          transcript: transcriptIn(RU, [
+            spoken(1000, 1900, "Раз", "Прабхупада"),
+            spoken(3000, 3900, "Два", "Гость"),
+          ]),
+        },
+      ],
+      { paragraphChars: 9999, breakOnLanguageChange: true }
+    )
+    expect(multiSpeakerLanguages(groups)).toEqual(new Set([RU]))
+  })
+
+  it("returns nothing for an empty view", () => {
+    expect(multiSpeakerLanguages([])).toEqual(new Set())
   })
 })

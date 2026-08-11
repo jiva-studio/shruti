@@ -63,6 +63,7 @@
     <SmartLibraryDialog
       v-model:target-seconds="autoDownloadTargetSeconds"
       v-model:archive-delay="autoArchiveDelay"
+      v-model:last-archive-delay="autoArchiveLastDelay"
       :open="smartLibraryDialogOpen"
       :filter-summary="smartLibrary.filterSummary.value"
       @update:open="smartLibraryDialogOpen = $event"
@@ -175,6 +176,7 @@ const {
   showPlayerOnNotes,
   showActivityTracker,
   autoArchiveDelay,
+  autoArchiveLastDelay,
   highlightCurrentSentence,
   autoScroll,
   autoPlayNext,

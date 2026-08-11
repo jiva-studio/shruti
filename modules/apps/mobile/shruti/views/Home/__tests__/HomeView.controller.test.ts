@@ -81,6 +81,7 @@ const downloads = {
   ensureDownloaded: vi.fn().mockResolvedValue(null),
 }
 
+import { useReloadOnPlayback } from "@shruti/composables/useReloadOnPlayback.js"
 import { useHomeController } from "../HomeView.controller.js"
 
 describe("useHomeController.onSelect", () => {
@@ -144,6 +145,23 @@ describe("useHomeController.onSelect", () => {
     await useHomeController().onSelect(TRACK_ID)
 
     expect(downloads.ensureDownloaded).toHaveBeenCalledWith(TRACK_ID, "a.mp3", 12_000_000)
+  })
+
+  it("does not call Home on-screen until it has been entered", () => {
+    // `onScreen` used to start true, so a deep link or a notification that
+    // boots straight past Home left the live playback overlay ticking and the
+    // heatmap polling for the whole session — the freeze engaged only after
+    // one visit AND one leave (issue #1615). A page never entered is not on
+    // screen, and both consumers of the flag now read the same answer.
+    const { onScreen } = useHomeController()
+
+    expect(onScreen.value).toBe(false)
+    expect(vi.mocked(useReloadOnPlayback)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Function),
+      undefined,
+      onScreen
+    )
   })
 
   // A masked row — stored state "failed" behind a held claim, so `getState`
