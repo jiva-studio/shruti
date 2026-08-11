@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test"
 import { execSync } from "child_process"
 import { readFileSync, existsSync } from "fs"
+import { createHash } from "crypto"
 import { fileURLToPath } from "url"
 
 // Load a gitignored .env.local into process.env so secrets persist across runs
@@ -28,7 +29,28 @@ import { fileURLToPath } from "url"
  * the default `npm test` (offline) stays fast and CI-safe. `npm run test:all`
  * sets it and runs both into the same playwright-report/.
  */
-const PORT = Number(process.env.E2E_PORT ?? 11097)
+/**
+ * One port per checkout, derived from this file's own path.
+ *
+ * A fixed port plus `reuseExistingServer` means the second checkout to start a
+ * run does not start a server — it silently attaches to the FIRST one, and
+ * then tests that other tree's code while reporting against this one's specs.
+ * Two agents lost time to false red runs that way (#1671); the dangerous
+ * direction is the quiet one, where a spec passes against a sibling's
+ * not-yet-broken build.
+ *
+ * The derivation is stable, so a repeated run in the same checkout still
+ * reuses its own server — which is the convenience the fixed port was for.
+ * `E2E_PORT` still wins; CI sets it explicitly.
+ */
+function portForCheckout(): number {
+  const digest = createHash("sha1").update(fileURLToPath(import.meta.url)).digest()
+  // 11100..11999 — above the suite's own reserved 11097 and clear of the local
+  // stack (11080/11081) and the screenshot pipeline (11099).
+  return 11100 + (digest.readUInt16BE(0) % 900)
+}
+
+const PORT = Number(process.env.E2E_PORT ?? portForCheckout())
 // The live app must be served from an origin the chat service's CORS allows
 // (CORS_ALLOW_ORIGINS in .env.dev: 8080 / 11001). An arbitrary port gets its
 // preflight rejected (400) and the chat POST is silently blocked → answers hang
