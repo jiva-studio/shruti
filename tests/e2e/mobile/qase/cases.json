@@ -813,8 +813,8 @@
   "49": {
     "suite_id": 5,
     "automation": 2,
-    "title": "Smart Library dialog: open, toggle Enable, open the filter sheet",
-    "description": "Verifies the Smart Library dialog (Pro): a subscriber taps the banner to open the dialog, flips the Enable toggle on and back off, and opens the Filter row → the search-filters sheet. Offline (treated as subscribed).",
+    "title": "Smart Library dialog: open, toggle Enable, filter by Topic",
+    "description": "Verifies the Smart Library dialog (Pro): a subscriber taps the banner to open the dialog, flips the Enable toggle on and back off, opens the Filter row → the search-filters sheet, and picks a Topic. The chosen topic is counted (so Reset is available) and summarised on the Filter row. Offline (treated as subscribed).",
     "preconditions": "Offline; Pro boot (subscribed).",
     "steps": [
       {
@@ -827,7 +827,15 @@
       },
       {
         "action": "With the feature enabled, open the Filter row.",
-        "expected": "The search-filters sheet opens."
+        "expected": "The search-filters sheet opens with nothing filtered, so Reset is disabled."
+      },
+      {
+        "action": "Open the Topics facet and pick the first topic.",
+        "expected": "The topic is checked, the facet shows a count of 1 and Reset becomes available."
+      },
+      {
+        "action": "Close the filter sheet.",
+        "expected": "The dialog's Filter row lists the chosen topic instead of \"All lectures\"."
       }
     ],
     "tags": [
@@ -1614,16 +1622,24 @@
     "suite_id": 26,
     "automation": 2,
     "title": "Quota reset auto-unlocks the composer",
-    "description": "Verifies the WIDGET, not the answer prose: after a quota 429 locks the composer, it auto-unlocks once the reset deadline passes (a near-future reset stands in for UTC midnight). Offline — auth mocked as free, /chat mocked to return a 429 with a reset a few seconds out.",
-    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to return 429 with a reset epoch ~4 seconds in the future.",
+    "description": "Verifies the WIDGET, not the answer prose: after a quota 429 locks the composer, it auto-unlocks once the reset deadline passes (a near-future reset stands in for UTC midnight), the upsell card is REMOVED rather than left as an empty row holding a screenful of reserved scroll room, and the question the quota swallowed is re-sent under the lifted limit. Offline — auth mocked as free, /chat mocked to return a 429 with a reset a few seconds out and then to stream a real answer.",
+    "preconditions": "Chat reachable offline; mocked auth (free tier); /chat mocked to return 429 with a reset epoch ~4 seconds in the future on the first ask and an SSE answer on every ask after that.",
     "steps": [
       {
         "action": "Send a question that hits the quota limit (429).",
-        "expected": "The composer textarea is disabled (locked)."
+        "expected": "The composer textarea is disabled (locked) and the quota upsell card is shown."
       },
       {
         "action": "Wait for the reset deadline to pass.",
         "expected": "The composer textarea auto-unlocks (no longer disabled)."
+      },
+      {
+        "action": "Inspect the conversation where the upsell card was.",
+        "expected": "The upsell notice is gone and no blank assistant row is left behind holding a screenful of scroll."
+      },
+      {
+        "action": "Wait for the turn that follows the reset.",
+        "expected": "The original question was re-sent and its answer is rendered."
       }
     ],
     "tags": [
