@@ -74,13 +74,16 @@ export async function getActivityOverview(
     const ms = maxAudioDurationMs(track)
     if (ms > 0) durations.set(item.id, Math.floor(ms / 1000))
   }
-  const completedMap = await deps.listeningSessions.getCompletedAtForItems(itemIds, durations)
+  // Lifetime, not per-pass: "lectures completed" is a career total. Re-adding
+  // a finished lecture starts a fresh pass on Home, but it must not decrement
+  // this counter until the user finishes it again (#1736).
+  const everCompleted = await deps.listeningSessions.listEverCompletedItems(itemIds, durations)
 
   const { days } = buildHeatmapDays(input.totalDays, input.nowMs, totals)
   return {
     days,
     currentStreak: computeCurrentStreak(days),
-    completedCount: Array.from(completedMap.values()).filter((v) => v !== null).length,
+    completedCount: everCompleted.size,
     totalListenedSeconds: totalSec,
   }
 }
