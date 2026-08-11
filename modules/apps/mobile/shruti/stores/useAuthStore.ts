@@ -162,22 +162,31 @@ export const useAuthStore = defineStore("auth", () => {
   async function restore(): Promise<void> {
     const auth = useShruti().auth
     status.value = "restoring"
-    try {
-      const session = await auth.initialize()
-      applySession(session)
-      sessionUnsub?.()
-      sessionUnsub = auth.onSessionChange(applySession)
-      // Foreground-resume tier sync. Webhook-driven tier flips (purchase
-      // on another device, subscription expired, refund) reach the server
-      // immediately but the running JWT carries the stale value until
-      // natural rotation (~15 min). On resume, ask /auth/me for the
-      // canonical tier; if it diverges, force a refresh now.
-      if (!resumeHandle) {
+    // Both registrations happen BEFORE the awaited bootstrap, and neither
+    // depends on it succeeding. A first launch offline makes initialize()
+    // throw after ~5s of retries; subscribing afterwards left the store
+    // detached from the port for the whole run, so the anonymous identity
+    // getAccessToken() later self-heals into never reached Pinia — no sync,
+    // no RC binding, free tier until the next cold start (#1735).
+    sessionUnsub?.()
+    sessionUnsub = auth.onSessionChange(applySession)
+    // Foreground-resume tier sync. Webhook-driven tier flips (purchase
+    // on another device, subscription expired, refund) reach the server
+    // immediately but the running JWT carries the stale value until
+    // natural rotation (~15 min). On resume, ask /auth/me for the
+    // canonical tier; if it diverges, force a refresh now.
+    if (!resumeHandle) {
+      try {
         resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
           if (!state.isActive) return
           void syncTierOnResume()
         })
+      } catch (e) {
+        console.warn("[auth] appStateChange listener registration failed", e)
       }
+    }
+    try {
+      applySession(await auth.initialize())
     } catch (e) {
       console.error("[auth] restore failed:", e)
       status.value = "error"
@@ -266,11 +275,19 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   /**
-   * Post-signin tier sync. The session we just got back may still
-   * carry a pre-purchase tier claim — the RC webhook can land seconds
-   * AFTER the SSO provider returns, so the freshly-minted JWT may say
-   * "free" while the server already knows the user is Pro (purchase
-   * made earlier under another device, or another anon user upgraded).
+   * Drop the tier cache and chase the server's view of it. Used by the
+   * two moments where the JWT we hold can be behind a tier flip the
+   * server is about to learn about: sign-in and a purchase.
+   *
+   * Sign-in: the session we just got back may still carry a pre-purchase
+   * tier claim — the RC webhook can land seconds AFTER the SSO provider
+   * returns, so the freshly-minted JWT may say "free" while the server
+   * already knows the user is Pro (purchase made earlier under another
+   * device, or another anon user upgraded).
+   *
+   * Purchase / restore: the RC webhook is exactly the thing being waited
+   * on, so the window is the same one.
+   *
    * Without this, the user's next chat send goes out under the stale
    * claim → server 429s with tier=free even though the subscription is
    * active, and the only way out is an app restart that re-bootstraps
@@ -284,14 +301,14 @@ export const useAuthStore = defineStore("auth", () => {
    * webhook gets a chance to catch up before we freeze the cache.
    * Fire-and-forget; never throws.
    */
-  function invalidateAndSyncAfterSignin(): void {
+  function invalidateAndSyncTier(): void {
     lastSyncAt = 0
-    void syncTierAfterSignin()
+    void syncTierUntilSettled()
   }
 
   /**
-   * Bounded retry loop for the post-signin tier sync. Probes /auth/me
-   * up to `ATTEMPTS` times, refreshing tokens the first time the
+   * Bounded retry loop behind {@link invalidateAndSyncTier}. Probes
+   * /auth/me up to `ATTEMPTS` times, refreshing tokens the first time the
    * server's tier (or expiry) diverges from the cached JWT view. Exits
    * early once we observe non-free or detect a flip. `lastSyncAt` is
    * only stamped at exit, so the chat composer's `ensureFresh()`
@@ -299,7 +316,7 @@ export const useAuthStore = defineStore("auth", () => {
    * retry window — if the user taps Send during that window, the
    * composer's own probe coalesces with the webhook landing path.
    */
-  async function syncTierAfterSignin(): Promise<void> {
+  async function syncTierUntilSettled(): Promise<void> {
     const ATTEMPTS = 5
     const DELAY_MS = 3000
     const auth = useShruti().auth
@@ -322,7 +339,7 @@ export const useAuthStore = defineStore("auth", () => {
           return
         }
       } catch (e) {
-        console.warn("[auth] post-signin tier sync attempt failed", e)
+        console.warn("[auth] tier sync attempt failed", e)
       }
       if (i < ATTEMPTS - 1) {
         await new Promise((r) => setTimeout(r, DELAY_MS))
@@ -342,7 +359,7 @@ export const useAuthStore = defineStore("auth", () => {
         return false
       }
       applySession(session)
-      invalidateAndSyncAfterSignin()
+      invalidateAndSyncTier()
       return true
     } catch (e) {
       console.error("[auth] google sign-in failed:", e)
@@ -361,7 +378,7 @@ export const useAuthStore = defineStore("auth", () => {
         return false
       }
       applySession(session)
-      invalidateAndSyncAfterSignin()
+      invalidateAndSyncTier()
       return true
     } catch (e) {
       console.error("[auth] apple sign-in failed:", e)
@@ -392,7 +409,7 @@ export const useAuthStore = defineStore("auth", () => {
     try {
       const session = await auth.verifyEmailOtp(email, code)
       applySession(session)
-      invalidateAndSyncAfterSignin()
+      invalidateAndSyncTier()
       return true
     } catch (e) {
       applySession(auth.getSession())
@@ -473,6 +490,7 @@ export const useAuthStore = defineStore("auth", () => {
     signOut,
     deleteAccount,
     refreshTokens,
+    invalidateAndSyncTier,
     ensureFresh,
   }
 })
