@@ -193,6 +193,24 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return sess
   }
 
+  /**
+   * The `Authorization` header the sign-in endpoints carry. It is what
+   * tells the server to UPGRADE this device's user in place instead of
+   * minting a stranger, so it has to be a token the server can still
+   * verify: read it through `getAccessToken()`, which rotates at
+   * `exp - 60s`. Sending `stored.accessToken` raw forked a new account
+   * whenever the app had been offline past the token's lifetime, orphaning
+   * the anonymous user's library (#1737).
+   *
+   * Absent a session we send nothing, as before — deliberately NOT
+   * bootstrapping an anonymous identity just to decorate a sign-in.
+   */
+  async function signinAuthHeader(): Promise<Record<string, string>> {
+    if (!stored) return {}
+    const token = await getAccessToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
   async function ensureSocialInit(): Promise<void> {
     if (socialInitialized) return
     socialInitialized = true
@@ -215,6 +233,8 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Raw, not `signinAuthHeader()`: getAccessToken() bootstraps through
+        // here, so reading it back would recurse.
         ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
       },
       body: JSON.stringify({ deviceId, platform }),
@@ -301,7 +321,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+        ...(await signinAuthHeader()),
       },
       body: JSON.stringify({ idToken, ...(fullName ? { fullName } : {}) }),
     })
@@ -347,7 +367,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
           "Content-Type": "application/json",
           // An anonymous bearer lets the server upgrade THIS device's user
           // in place on the subsequent verify (same userId / progress).
-          ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+          ...(await signinAuthHeader()),
         },
         body: JSON.stringify({ email, locale: cfg.getLocale?.() ?? "" }),
       })
@@ -366,7 +386,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+          ...(await signinAuthHeader()),
         },
         body: JSON.stringify({ email, code, deviceId }),
       })

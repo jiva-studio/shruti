@@ -21,5 +21,7 @@ export type {
   UiTranscriptVerseTextBlock,
   UiTranscriptVerseTranslationBlock,
 } from "./types.js"
+export { timeRangesIntersect } from "./timeRange.js"
+export type { UiTimeRange } from "./timeRange.js"
 export type { TextSelectedEvent, NoteTappedEvent } from "./TranscriptText.vue"
 export type { SelectionAction, ExistingNoteSelection } from "./TranscriptSelectionPopover.vue"

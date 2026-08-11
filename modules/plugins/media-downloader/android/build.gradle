@@ -37,8 +37,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-    lintOptions {
-        abortOnError false
+    // Fatal, not advisory — see audio-player/android/build.gradle.
+    lint {
+        abortOnError true
+        xmlReport true
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21

@@ -60,6 +60,7 @@ const quota = {
   hasRoomFor: () => true,
   reserve: vi.fn(),
   settle: vi.fn(),
+  adopt: vi.fn(),
   uncharge: vi.fn(),
   forget: vi.fn(),
   refresh: vi.fn(async () => {}),

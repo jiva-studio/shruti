@@ -127,12 +127,23 @@ function onTouchMove(event: TouchEvent) {
   const { clientX: touchX, clientY: touchY } = event.touches[0]
   const [timeStart, timeEnd] = readTimesFrom(resolveSentenceAt(touchX, touchY))
 
+  // Both branches emit the RUNNING pair, never the fixed anchor: `selected`
+  // (below) is built from `currentTime*`, so mixing one running edge with one
+  // anchor edge made the highlight disagree with what a release actually saved
+  // as soon as the drag crossed the anchor — the note, the "Ask Sadhu" text and
+  // the share payload then covered a span the user never saw (#1732).
+  //
+  // Retraction is deliberately kept as it is: the edge being dragged follows the
+  // finger back toward the anchor (both comparisons are against `initialTime*`),
+  // but crossing the anchor extends the OTHER edge instead of collapsing this
+  // one — a touch drag has no grab handles, so a selection already made on the
+  // far side is not thrown away by a move across the start sentence.
   if (timeStart !== -1 && timeStart < initialTimeStart.value) {
     currentTimeStart.value = timeStart
-    emit("selecting", currentTimeStart.value, initialTimeEnd.value)
+    emit("selecting", currentTimeStart.value, currentTimeEnd.value)
   } else if (timeEnd !== -1 && timeEnd > initialTimeEnd.value) {
     currentTimeEnd.value = timeEnd
-    emit("selecting", initialTimeStart.value, currentTimeEnd.value)
+    emit("selecting", currentTimeStart.value, currentTimeEnd.value)
   }
 }
 

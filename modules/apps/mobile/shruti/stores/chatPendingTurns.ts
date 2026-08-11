@@ -21,6 +21,7 @@ export function createPendingTurnStore(preferences: IPreferences): {
   read: () => Promise<PendingTurn[]>
   add: (assistantMessageId: string, sessionId: string) => Promise<void>
   remove: (assistantMessageId: string) => Promise<void>
+  clear: () => Promise<void>
 } {
   async function read(): Promise<PendingTurn[]> {
     try {
@@ -55,5 +56,11 @@ export function createPendingTurnStore(preferences: IPreferences): {
     if (next.length !== list.length) await write(next)
   }
 
-  return { read, add, remove }
+  /** Drop every record — the previous identity's in-flight turns mean nothing
+   *  under a new token, and re-polling them 404s forever. */
+  async function clear(): Promise<void> {
+    await write([])
+  }
+
+  return { read, add, remove, clear }
 }

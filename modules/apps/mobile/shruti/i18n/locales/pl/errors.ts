@@ -16,4 +16,14 @@ export default {
   downloadStorageFull:
     "Osiągnięto limit pamięci. Usuń wysłuchane wykłady lub zwiększ limit w ustawieniach.",
   downloadStorageFullAction: "Pobierz mimo to",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "Nie udało się otworzyć Twoich danych",
+    description:
+      "Baza danych z notatkami, playlistą i historią słuchania nie otworzyła się, więc aplikacja nie może pokazać Twojej biblioteki.",
+    advice:
+      "Uruchom aplikację ponownie i spróbuj jeszcze raz. Jeśli problem się powtarza, zwolnij miejsce w pamięci urządzenia lub zainstaluj aplikację ponownie.",
+    retry: "Spróbuj ponownie",
+  },
 }

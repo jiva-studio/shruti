@@ -12,4 +12,14 @@ export default {
     "{language}-এ অনুবাদে স্বাভাবিকের চেয়ে বেশি সময় লাগছে — প্রস্তুত হলেই এটি দেখা যাবে।",
   downloadStorageFull: "সঞ্চয়ের সীমা শেষ। শোনা বক্তৃতাগুলি সরান বা সেটিংসে সীমা বাড়ান।",
   downloadStorageFullAction: "তবুও ডাউনলোড করুন",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "আপনার ডেটা খোলা যায়নি",
+    description:
+      "আপনার নোট, প্লেলিস্ট এবং শোনার ইতিহাস রাখা ডেটাবেসটি খোলেনি, তাই অ্যাপ আপনার লাইব্রেরি দেখাতে পারছে না।",
+    advice:
+      "অ্যাপটি পুনরায় চালু করে আবার চেষ্টা করুন। যদি বারবার হয়, ডিভাইসে জায়গা খালি করুন বা অ্যাপটি আবার ইনস্টল করুন।",
+    retry: "আবার চেষ্টা করুন",
+  },
 }

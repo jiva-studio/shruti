@@ -31,6 +31,31 @@ function nowSec(): number {
   return Math.floor(Date.now() / 1000)
 }
 
+/**
+ * Restricts a session scan to the item's **current pass** — the listening it
+ * has accumulated since it was last added to the playlist.
+ *
+ * A pass used to be delimited by the row itself: archiving left the row alone
+ * and re-adding INSERTed a second one, so the fresh item id had no history by
+ * construction, which is what made a re-added lecture read as unlistened on
+ * Home (SHRUTI-18/19). `playlist_items` now holds one row per `track_id`
+ * (migration 027) and a re-add resurrects it with a new `added_at`, so the
+ * boundary has to be read off `added_at` instead of inferred from an id that
+ * no longer churns.
+ *
+ * `added_at` is unix MILLIseconds, `ended_at` unix seconds.
+ *
+ * LEFT JOIN, and NULL-tolerant: a session can be keyed on an item id that has
+ * no playlist row — playback outside the playlist writes a synthetic
+ * `track:<id>` item id (`playTrack.ts`), and removing an item leaves its
+ * sessions behind. Those have no pass boundary to speak of, so they stay in
+ * scope exactly as before.
+ */
+const CURRENT_PASS = {
+  join: "LEFT JOIN playlist_items pass_item ON pass_item.id = ls.item_id",
+  where: "(pass_item.added_at IS NULL OR ls.ended_at >= pass_item.added_at / 1000)",
+}
+
 function chunked<T>(items: readonly T[], size: number): T[][] {
   const chunks: T[][] = []
   for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size))
@@ -69,7 +94,10 @@ export function createSqlListeningSessionRepository(
     // pick an arbitrary row.
     return queryOne<{ to_position: number }, TrackPositionSec>(
       db,
-      "SELECT to_position FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC, id DESC LIMIT 1",
+      `SELECT ls.to_position AS to_position
+         FROM listening_sessions ls ${CURRENT_PASS.join}
+        WHERE ls.item_id = ? AND ${CURRENT_PASS.where}
+        ORDER BY ls.ended_at DESC, ls.id DESC LIMIT 1`,
       [itemId],
       (r) => r.to_position
     )
@@ -247,11 +275,14 @@ export function createSqlListeningSessionRepository(
     },
 
     async getResumePositionForItem(itemId): Promise<TrackPositionSec | null> {
-      // High-water mark: the furthest point ever reached, NOT the latest
-      // session's end. Rewinding then stopping must not throw away progress.
+      // High-water mark of the CURRENT PASS, NOT the latest session's end.
+      // Rewinding then stopping must not throw away progress; re-adding the
+      // lecture must, because that is the user asking to hear it again.
       return queryOne<{ hwm: number | null }, TrackPositionSec | null>(
         db,
-        "SELECT MAX(to_position) AS hwm FROM listening_sessions WHERE item_id = ?",
+        `SELECT MAX(ls.to_position) AS hwm
+           FROM listening_sessions ls ${CURRENT_PASS.join}
+          WHERE ls.item_id = ? AND ${CURRENT_PASS.where}`,
         [itemId],
         (r) => r.hwm
       )
@@ -265,12 +296,12 @@ export function createSqlListeningSessionRepository(
       // ring never rewinds when the user seeks back and stops; `updatedAtSec`
       // is the item's latest `ended_at` for any recency display.
       const rows = await db.query<{ item_id: string; to_position: number; ended_at: number }>(
-        `SELECT item_id AS item_id,
-                MAX(to_position) AS to_position,
-                MAX(ended_at) AS ended_at
-           FROM listening_sessions
-          WHERE item_id IN (${placeholders})
-          GROUP BY item_id`,
+        `SELECT ls.item_id AS item_id,
+                MAX(ls.to_position) AS to_position,
+                MAX(ls.ended_at) AS ended_at
+           FROM listening_sessions ls ${CURRENT_PASS.join}
+          WHERE ls.item_id IN (${placeholders}) AND ${CURRENT_PASS.where}
+          GROUP BY ls.item_id`,
         [...itemIds]
       )
       for (const row of rows) {
@@ -323,9 +354,9 @@ export function createSqlListeningSessionRepository(
            SELECT s.item_id AS item_id, s.ended_at AS ended_at, s.to_position AS to_position
              FROM ids
              JOIN listening_sessions s
-               ON s.id = (SELECT t.id FROM listening_sessions t
-                           WHERE t.item_id = ids.item_id
-                           ORDER BY t.ended_at DESC, t.id DESC
+               ON s.id = (SELECT ls.id FROM listening_sessions ls ${CURRENT_PASS.join}
+                           WHERE ls.item_id = ids.item_id AND ${CURRENT_PASS.where}
+                           ORDER BY ls.ended_at DESC, ls.id DESC
                            LIMIT 1)`,
           [...chunk]
         )
@@ -334,6 +365,36 @@ export function createSqlListeningSessionRepository(
           if (typeof dur !== "number" || dur <= 0) continue
           const threshold = Math.max(0, dur - COMPLETION_THRESHOLD_SEC)
           if (row.to_position >= threshold) result.set(row.item_id, row.ended_at)
+        }
+      }
+      return result
+    },
+
+    async listEverCompletedItems(itemIds, durations) {
+      const result = new Set<PlaylistItemId>()
+      if (itemIds.length === 0) return result
+      // Lifetime, so NOT pass-scoped and NOT read off the latest session: the
+      // question is whether the item's listening EVER reached the end, which
+      // makes it monotonic — it survives a rewind, an archive and a re-add.
+      // `MAX(to_position)` over every session of the item answers exactly that
+      // in one grouped index scan.
+      const wanted = [...new Set(itemIds)].filter((id) => {
+        const dur = durations.get(id)
+        return typeof dur === "number" && dur > 0
+      })
+      for (const chunk of chunked(wanted, ID_CHUNK_SIZE)) {
+        const placeholders = chunk.map(() => "?").join(",")
+        const rows = await db.query<{ item_id: string; hwm: number }>(
+          `SELECT item_id AS item_id, MAX(to_position) AS hwm
+             FROM listening_sessions
+            WHERE item_id IN (${placeholders})
+            GROUP BY item_id`,
+          [...chunk]
+        )
+        for (const row of rows) {
+          const dur = durations.get(row.item_id)
+          if (typeof dur !== "number" || dur <= 0) continue
+          if (row.hwm >= Math.max(0, dur - COMPLETION_THRESHOLD_SEC)) result.add(row.item_id)
         }
       }
       return result

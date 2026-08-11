@@ -70,12 +70,10 @@ import {
   isReplayableAuthPath,
   withCrossServerReplay,
 } from "./services/regionFailover.js"
-import { usePurchasesStore } from "./stores/usePurchasesStore.js"
-import { useAuthStore } from "./stores/useAuthStore.js"
-import { useLibraryLandingStore } from "./stores/useLibraryLandingStore.js"
 import { runStartupBootstrap } from "./services/startup.js"
 import { startRegionWatch } from "./services/regionWatch.js"
-import { readOnboardingCompleted, ONBOARDING_COMPLETED_KEY } from "./stores/useOnboardingStore.js"
+import { resolveInitialRoute } from "./services/startupRoute.js"
+import { runPostMountWork } from "./services/postMount.js"
 import { installConsoleCapture } from "./services/logger/index.js"
 import { initMonitoring } from "./services/monitoring/index.js"
 import { reportError } from "./services/monitoring/reportError.js"
@@ -389,22 +387,10 @@ async function start(): Promise<void> {
   // wait for the next cold start, which on mobile can be days away.
   startRegionWatch()
 
-  // Skip first-launch onboarding for established users: the explicit
-  // `onboarding.completed` flag (set at the end of the flow), OR any prior
-  // listening session — the reliable signal for someone upgrading from a
-  // pre-onboarding build, where the flag was never written. Stamp the flag
-  // once inferred so later launches skip the DB probe.
-  const completedFlag = await readOnboardingCompleted(preferences).catch(() => false)
-  let hasHistory = false
-  if (!completedFlag && startup.ready) {
-    hasHistory = await useShruti()
-      .repositories()
-      .listeningSessions.hasAny()
-      .catch(() => false)
-    if (hasHistory) await preferences.set(ONBOARDING_COMPLETED_KEY, "true").catch(() => undefined)
-  }
-  const onboarded = completedFlag || hasHistory
-  const target = onboarded ? "/tabs/home" : "/onboarding"
+  // Onboarding vs Home vs the storage-error screen. Never rejects — see
+  // `resolveInitialRoute`, whose whole point is that the listening-history
+  // probe can't take the rest of startup with it.
+  const target = await resolveInitialRoute(useShruti(), preferences, startup.ready)
 
   await router.isReady()
   if (router.currentRoute.value.path !== target) {
@@ -419,23 +405,21 @@ async function start(): Promise<void> {
   // a locale that fails to load leaves the app in `en` and mounts anyway.
   await Promise.all([bootLocaleReady, uiLanguageReady])
   mountApp()
-
-  // Fire-and-forget post-mount work. Failures must not block startup.
-  void usePurchasesStore()
-    .init()
-    .catch((e) => reportError("purchases", e))
-  void useAuthStore()
-    .restore()
-    .catch((e) => reportError("auth", e))
-  void useLibraryLandingStore()
-    .ensureLoaded()
-    .catch((e) => console.warn("library landing preload failed", e))
+  runPostMountWork()
 }
 
 // Nothing in `start()` is allowed to cost the user the app. Whatever blew up,
 // mount anyway: a degraded Home beats the blank WebView a bare `void start()`
 // left behind when an await rejected (issue #1605).
+//
+// Loud on purpose. This handler used to mount and stop there, so a run that
+// never got a session — no anonymous bootstrap, every authenticated call a 401 —
+// looked exactly like a healthy one from the inside (#1738). `console.error`
+// reaches the in-app debug buffer AND Sentry's captureConsole bridge; the
+// post-mount work runs anyway, because an identity is not optional.
 void start().catch((e) => {
+  console.error("[shruti] startup did not finish; mounting in a degraded state", e)
   reportError("startup", e)
   mountApp()
+  runPostMountWork()
 })
