@@ -25,6 +25,7 @@ import { CONTENT_DB_PATH, E2E_ROOT, missingFixtures } from "./fixtures.js"
 
 const PREPARE_SCRIPT = path.resolve(E2E_ROOT, "scripts/prepare-fixtures.sh")
 const CONTENT_DB_META = `${CONTENT_DB_PATH}.json`
+const CASES_PATH = path.resolve(E2E_ROOT, "qase/cases.json")
 
 function verifyCatalogFixture(): void {
   if (!fs.existsSync(CONTENT_DB_PATH) || !fs.existsSync(CONTENT_DB_META)) return
@@ -41,8 +42,65 @@ function verifyCatalogFixture(): void {
   }
 }
 
+
+/**
+ * The registry and the specs must agree, or a green run reports the wrong thing.
+ *
+ * Every result is filed under the id in `qase(id, …)` and displayed under the
+ * name `caseTitle(n)` returns, and nothing makes those two the same number. A
+ * renumbering pass that rewrote one and not the other produced five specs that
+ * reported against their own case while showing another case's title — with
+ * every test passing, which is why it has to be checked rather than noticed.
+ *
+ * Also checked: an id no entry describes (`caseTitle` throws mid-run, after the
+ * suite has already spent minutes booting), and a `step()` index past the end
+ * of its case's steps.
+ */
+function verifyCaseRegistry(): void {
+  const registry = JSON.parse(fs.readFileSync(CASES_PATH, "utf-8")) as Record<
+    string,
+    { steps?: unknown[] }
+  >
+  const problems: string[] = []
+
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name)
+      if (e.isDirectory()) return walk(full)
+      return e.isFile() && e.name.endsWith(".spec.ts") ? [full] : []
+    })
+
+  for (const file of walk(path.resolve(E2E_ROOT, "tests"))) {
+    const src = fs.readFileSync(file, "utf-8")
+    const where = path.relative(E2E_ROOT, file)
+
+    for (const [, id, titleId] of src.matchAll(/qase\(\s*(\d+)\s*,\s*caseTitle\(\s*(\d+)\s*\)/g)) {
+      if (id !== titleId) {
+        problems.push(`${where}: reports as case ${id} but displays case ${titleId}'s title`)
+      }
+    }
+    for (const [, id] of src.matchAll(/qase\(\s*(\d+)\s*,/g)) {
+      if (!registry[id]) problems.push(`${where}: case ${id} is in no registry entry`)
+    }
+    for (const [, id, index] of src.matchAll(/step\(\s*page\s*,\s*(\d+)\s*,\s*(\d+)\s*,/g)) {
+      const steps = registry[id]?.steps?.length ?? 0
+      if (Number(index) >= steps) {
+        problems.push(`${where}: case ${id} step ${index} — the entry describes ${steps}`)
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      `Qase registry and specs disagree:\n  ${problems.join("\n  ")}\n` +
+        "Every result would be filed or labelled wrong. Fix qase/cases.json or the spec."
+    )
+  }
+}
+
 export default function globalSetup(): void {
   verifyCatalogFixture()
+  verifyCaseRegistry()
 
   try {
     if (missingFixtures().length > 0) {
