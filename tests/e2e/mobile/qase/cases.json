@@ -1429,7 +1429,7 @@
     "suite_id": 11,
     "automation": 2,
     "title": "Empty state shows starter suggestion chips",
-    "description": "Verifies the WIDGET, not the answer prose: the chat empty state renders the composer (ready for input) and a row of starter suggestion chips, and tapping a chip starts a session. Covered offline (the chat surface renders, the textarea is enabled, suggestion chips are visible) and @live (tapping a chip opens a session: a user bubble appears and the URL carries the new session id).",
+    "description": "Verifies the WIDGET, not the answer prose: the chat empty state renders the composer (ready for input) and a row of starter suggestion chips, and tapping a chip starts a session. Covered offline only (the chat surface renders, the textarea is enabled, suggestion chips are visible); a chip starting a real turn against the local stack is not automated.",
     "preconditions": "Chat reachable. Offline: mocked boot, no backend needed. Live: local stack up, chat tab opened.",
     "steps": [
       {
