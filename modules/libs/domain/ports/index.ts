@@ -24,14 +24,8 @@ export type {
   RecentTrackProgress,
 } from "./listeningSessionRepository.js"
 export type { IMediaItemRepository } from "./mediaItemRepository.js"
-export type {
-  IChatSessionRepository,
-  CreateChatSessionInput,
-} from "./chatSessionRepository.js"
-export type {
-  IChatMessageRepository,
-  CreateChatMessageInput,
-} from "./chatMessageRepository.js"
+export type { IChatSessionRepository, CreateChatSessionInput } from "./chatSessionRepository.js"
+export type { IChatMessageRepository, CreateChatMessageInput } from "./chatMessageRepository.js"
 export type {
   IProactiveStateRepository,
   ProactivePrepState,
