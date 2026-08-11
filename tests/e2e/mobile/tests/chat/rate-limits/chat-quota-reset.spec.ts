@@ -2,7 +2,8 @@ import { test, expect } from "../../../support/test.js"
 import { qase } from "playwright-qase-reporter"
 import { boot } from "../../../support/bootstrap.js"
 import { gotoTab } from "../../../support/nav.js"
-import { mockChatAuth, askChat, delta, done } from "../../../support/chat-mock.js"
+import { askChat, delta, done } from "../../../support/chat-mock.js"
+import { mockChatAuth } from "../../../support/auth-mock.js"
 import { step, caseTitle } from "../../../support/steps.js"
 
 // The composer locks on a quota 429, then unlocks itself once the reset deadline
