@@ -10,7 +10,7 @@
     "build": "vue-tsc && vite build",
     "build+sync": "npm run build && npx cap sync",
     "preview": "vite preview",
-    "lint": "eslint . submodules/ui",
+    "lint": "eslint . submodules/chat submodules/contracts submodules/domain submodules/persistence-main submodules/persistence-user submodules/ui",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
