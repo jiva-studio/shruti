@@ -1,9 +1,13 @@
 package studio.jiva.shruti.audioplayer.audioprocessor;
 
+import android.annotation.SuppressLint;
+
+import androidx.annotation.OptIn;
 import androidx.media3.common.C;
 import androidx.media3.common.audio.AudioProcessor.AudioFormat;
 import androidx.media3.common.audio.AudioProcessor.UnhandledAudioFormatException;
 import androidx.media3.common.audio.BaseAudioProcessor;
+import androidx.media3.common.util.UnstableApi;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -41,6 +45,7 @@ import java.nio.ByteOrder;
  * mix does not require recreating the player; in passthrough mode
  * the queueInput path just copies bytes through.
  */
+@OptIn(markerClass = UnstableApi.class)
 public final class StereoMixAudioProcessor extends BaseAudioProcessor {
 
     private volatile boolean enabled = false;
@@ -77,6 +82,9 @@ public final class StereoMixAudioProcessor extends BaseAudioProcessor {
         return inputAudioFormat;
     }
 
+    // Deliberately does not call super.isActive(), which reports active only
+    // once onConfigure's output format has been committed by flush().
+    @SuppressLint("MissingSuperCall")
     @Override
     public boolean isActive() {
         // Stay in chain whenever the configured stream is one we

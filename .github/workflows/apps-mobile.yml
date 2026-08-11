@@ -163,9 +163,11 @@ jobs:
       - name: lint native plugin modules
         # Gradle project names come from capacitor.settings.gradle — the
         # `shruti-plugin-` prefix is Capacitor's, not the npm dir name.
+        # --continue so a failure in the first module still lints the second:
+        # one run reports every offender instead of one per push.
         run: |
           cd modules/apps/mobile/android
-          ./gradlew --no-daemon \
+          ./gradlew --no-daemon --continue \
             :shruti-plugin-audio-player:lintRelease \
             :shruti-plugin-media-downloader:lintRelease
       - name: assert lint reports carry no errors
