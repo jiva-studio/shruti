@@ -26,6 +26,30 @@ import { CONTENT_DB_PATH, E2E_ROOT, missingFixtures } from "./fixtures.js"
 const PREPARE_SCRIPT = path.resolve(E2E_ROOT, "scripts/prepare-fixtures.sh")
 const CONTENT_DB_META = `${CONTENT_DB_PATH}.json`
 const CASES_PATH = path.resolve(E2E_ROOT, "qase/cases.json")
+const DIST_DIR = path.resolve(E2E_ROOT, "../../../modules/apps/mobile/dist")
+
+/**
+ * In bundle mode the suite serves a PREBUILT `dist/`, and a dist built the
+ * ordinary way has no test seam in it: the subscription override is compiled
+ * out, so every `boot({ pro: true })` spec runs as a FREE user against the
+ * wrong UI — passing or failing for reasons that have nothing to do with the
+ * behaviour under test (#1633).
+ *
+ * The build leaves a `dist/e2e-build` marker when (and only when) it was made
+ * with `SHRUTI_E2E_BUILD=1`. Refuse to start without it, rather than let a
+ * whole run report against a tier nobody chose.
+ */
+function verifyBundleIsTestBuild(): void {
+  if (process.env.E2E_USE_BUNDLE !== "1") return
+  if (fs.existsSync(path.join(DIST_DIR, "e2e-build"))) return
+  throw new Error(
+    `E2E_USE_BUNDLE=1 but ${DIST_DIR} was not built for the tests.\n` +
+      "Its subscription seam is compiled out, so every `pro: true` spec would " +
+      "silently run as a free user.\n" +
+      "Build it with `npm run build:bundle` (from tests/e2e/mobile), or drop " +
+      "E2E_USE_BUNDLE to use the dev server."
+  )
+}
 
 function verifyCatalogFixture(): void {
   if (!fs.existsSync(CONTENT_DB_PATH) || !fs.existsSync(CONTENT_DB_META)) return
@@ -100,6 +124,7 @@ function verifyCaseRegistry(): void {
 
 export default function globalSetup(): void {
   verifyCatalogFixture()
+  verifyBundleIsTestBuild()
   verifyCaseRegistry()
 
   try {
