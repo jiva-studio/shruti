@@ -147,38 +147,62 @@ export interface IListeningSessionRepository {
 
   /**
    * Resume position for one item: the *high-water mark* — the furthest
-   * `to_position` ever reached across all of the item's sessions, not the
-   * latest session's end. Rewinding (e.g. 40:00 → 5:00) and stopping must
+   * `to_position` reached in the item's CURRENT PASS, not the latest
+   * session's end. Rewinding (e.g. 40:00 → 5:00) and stopping must
    * not lose the user's place; resume returns the furthest point reached.
-   * `null` when the item has no sessions. The caller still clamps against
-   * duration, so a completed track's high-water mark resets to 0 on replay.
+   * `null` when the pass has no sessions — so a re-added lecture starts from
+   * the beginning. The caller still clamps against duration, so a completed
+   * track's high-water mark resets to 0 on replay.
    */
   getResumePositionForItem(itemId: PlaylistItemId): Promise<TrackPositionSec | null>
 
   /**
-   * Batch resolve the resume position (high-water mark — MAX `to_position`)
-   * for each item id. Used by the playlist to render progress rings without
-   * N+1 queries. `updatedAtSec` carries the latest `ended_at` for the item.
+   * Batch resolve the CURRENT PASS's resume position (high-water mark — MAX
+   * `to_position`) for each item id. Used by the playlist to render progress
+   * rings without N+1 queries. `updatedAtSec` carries the latest `ended_at`
+   * for the item.
    */
   getProgressForItems(
     itemIds: readonly PlaylistItemId[]
   ): Promise<Map<PlaylistItemId, ProgressEntry>>
 
   /**
-   * For each item id, decide completion from the *latest* session only.
-   * Returns that session's `ended_at` (unix seconds) when its
-   * `to_position >= duration - 2`, else null. Evaluating the latest
-   * session (rather than "any session that ever crossed the threshold")
+   * For each item id, decide completion of its CURRENT PASS from the *latest*
+   * session of that pass only. Returns that session's `ended_at` (unix
+   * seconds) when its `to_position >= duration - 2`, else null. Evaluating the
+   * latest session (rather than "any session that ever crossed the threshold")
    * keeps completion consistent with the resume/progress position: after
    * the user replays a finished track and rewinds, the track becomes
    * in-progress again and is not re-archived until the latest session
    * reaches the threshold once more. `durations` is keyed by item id and
    * expresses seconds.
+   *
+   * A pass begins when the item was (re-)added, so re-adding a finished
+   * lecture yields `null` here — a fresh pass — while
+   * {@link listEverCompletedItems} still reports it as listened. See
+   * {@link listEverCompletedItems} for why the two must disagree.
    */
   getCompletedAtForItems(
     itemIds: readonly PlaylistItemId[],
     durations: ReadonlyMap<PlaylistItemId, number>
   ): Promise<Map<PlaylistItemId, number | null>>
+
+  /**
+   * Items whose listening history EVER reached the end, over every pass —
+   * the LIFETIME "listened" badge, which is deliberately not the same
+   * question as {@link getCompletedAtForItems} (LECTORIUM-18/19). Home shows
+   * the current pass, so a re-added lecture reads as fresh and starts a new
+   * listen; Library/Search show the lifetime badge, so the user can still see
+   * they have heard this lecture before. Unlike the per-pass rule this one is
+   * monotonic: it asks whether the high-water mark over ALL of the item's
+   * sessions crossed the threshold, so it survives archiving, re-adding and
+   * rewinding. `durations` is keyed by item id and expresses seconds; an item
+   * with no known duration is never reported.
+   */
+  listEverCompletedItems(
+    itemIds: readonly PlaylistItemId[],
+    durations: ReadonlyMap<PlaylistItemId, number>
+  ): Promise<ReadonlySet<PlaylistItemId>>
 
   /**
    * Sum `to_position - from_position` per local-timezone date, restricted

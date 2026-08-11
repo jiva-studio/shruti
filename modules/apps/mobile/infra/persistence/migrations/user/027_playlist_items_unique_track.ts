@@ -36,6 +36,12 @@ import type { Migration } from "./types.js"
  * (`MAX(to_position)`), completion (latest session) and the heatmap all read
  * per `item_id`, so the union is exactly the history the track really has.
  *
+ * The fold does NOT hand the survivor the shadow's completed badge: the
+ * survivor takes the newest `added_at`, and per-item progress / completion are
+ * scoped to sessions at or after it (`CURRENT_PASS` in the listening-sessions
+ * repository). So a folded track reads exactly as it did before — a fresh pass
+ * on Home, its lifetime "listened" badge intact in Library.
+ *
  * Sync-safe and NOT journaled, like migration 016:
  *   - `playlist_items` docs are keyed by `track_id`, so folding two rows into
  *     one changes no document identity — the outbox and `sync_doc_hlc` rows

@@ -104,7 +104,10 @@ const repositories = {
     getById: async (id: string) => tracksById.get(id) ?? null,
   },
   authors: { getById: async () => null },
-  listeningSessions: { getCompletedAtForItems: async () => new Map() },
+  listeningSessions: {
+    getCompletedAtForItems: async () => new Map(),
+    listEverCompletedItems: async () => new Set(),
+  },
   unitOfWork: { run: async (fn: (tx: unknown) => unknown) => fn({}) },
 }
 
