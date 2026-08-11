@@ -1,5 +1,6 @@
 import { ref, type Ref } from "vue"
 import type { UiTranscriptBlocksGroup, UiTranscriptBlockView } from "../types.js"
+import { timeRangesIntersect } from "../timeRange.js"
 
 /** Block kinds whose text contributes to the selected-text payload. */
 export const SELECTABLE_BLOCK_TYPES = ["sentence", "verse:translation"] as const
@@ -16,7 +17,8 @@ export interface TextSelectedPayload {
   event: TouchEvent
 }
 
-/** Inclusive time-range that defines what is currently selected. */
+/** Half-open time-range `[start, end)` that defines what is currently
+ *  selected — see `timeRangesIntersect`. */
 export interface SelectionRange {
   start: number
   end: number
@@ -73,7 +75,7 @@ export function useTranscriptSelection(
   ): TextSelectedPayload | null {
     const text = options.groups.value
       .flatMap((group) => group.blocks)
-      .filter((block) => block.block.start >= start && block.block.end <= end)
+      .filter((block) => timeRangesIntersect(block.block, { start, end }))
       .filter((block) => (SELECTABLE_BLOCK_TYPES as readonly string[]).includes(block.block.type))
       .map((block) =>
         block.block.type === "sentence" || block.block.type === "verse:translation"
@@ -89,7 +91,7 @@ export function useTranscriptSelection(
   function isSelected(block: UiTranscriptBlockView): boolean {
     const r = selectionRange.value
     if (!r) return false
-    return block.block.start >= r.start && block.block.end <= r.end
+    return timeRangesIntersect(block.block, r)
   }
 
   function isCurrent(block: UiTranscriptBlockView): boolean {
