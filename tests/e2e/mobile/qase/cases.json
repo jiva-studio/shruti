@@ -4070,5 +4070,51 @@
       "free",
       "e2e"
     ]
+  },
+  "235": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "A saved bookmark underlines only the sentence it was taken on",
+    "description": "Offline. Sentence blocks in this corpus are commonly contiguous (end_i === start_{i+1}), and the saved-note pass treated a shared endpoint as an overlap, so a one-sentence bookmark painted the wavy underline across its neighbours and bled the note id onto them (#1731). Long-presses inside ONE sentence, bookmarks it, and asserts exactly one underlined span, on that sentence's own time range.",
+    "preconditions": "Offline boot (mocked content + silent mp3) on the single-track user.db, which carries no seeded notes. A queued track can be played and its transcript opened.",
+    "steps": [
+      {
+        "action": "Open a queued track's transcript, long-press and drag inside a single sentence, then tap the bookmark action in the selection popover.",
+        "expected": "The note is saved and the selection popover closes."
+      },
+      {
+        "action": "Inspect the wavy underlines painted over the transcript.",
+        "expected": "Exactly one span is underlined, and its time range is the selected sentence's own."
+      }
+    ],
+    "tags": [
+      "notes",
+      "transcript",
+      "free",
+      "e2e"
+    ]
+  },
+  "236": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "A transcript drag saves exactly the span it highlighted",
+    "description": "Offline. While dragging, each branch emitted a range built from the fixed anchor while the release emitted the running pair, so a drag that crossed the anchor one way and back the other collapsed the highlight while the far edge stayed extended - the saved note, the Ask Sadhu text and the share payload then covered a span the user never saw selected (#1732). Drags past the anchor in both directions, reads the live highlight before releasing, and compares it with the underline the saved note paints.",
+    "preconditions": "Offline boot (mocked content + silent mp3) on the single-track user.db, which carries no seeded notes. The open transcript shows at least three sentences on screen.",
+    "steps": [
+      {
+        "action": "In an open transcript, long-press a sentence, drag past its end, drag back past its start, note the highlighted span, release and tap the bookmark action.",
+        "expected": "The selection popover opens on release and the note is saved."
+      },
+      {
+        "action": "Compare the underline painted by the saved note with the highlight shown at the moment of release.",
+        "expected": "They cover exactly the same sentences."
+      }
+    ],
+    "tags": [
+      "notes",
+      "transcript",
+      "free",
+      "e2e"
+    ]
   }
 }
