@@ -149,7 +149,12 @@ jobs:
       # `apply from:`s; without it the root project fails to configure. Unlike
       # `cap sync` it does not copy web assets, so no dist/ is needed here.
       - name: generate native capacitor project files
-        run: cd modules/apps/mobile && npx cap update android
+        # `cap update` writes app/src/main/assets/capacitor.plugins.json but,
+        # unlike `cap sync`, does not create that gitignored dir itself.
+        run: |
+          cd modules/apps/mobile
+          mkdir -p android/app/src/main/assets
+          npx cap update android
       - name: lint native plugin modules
         # Gradle project names come from capacitor.settings.gradle — the
         # `shruti-plugin-` prefix is Capacitor's, not the npm dir name.
