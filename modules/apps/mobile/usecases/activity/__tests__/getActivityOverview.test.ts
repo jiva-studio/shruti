@@ -33,6 +33,10 @@ function makeListeningSessions(
       for (const id of itemIds) out.set(id, completed.has(id) ? 1 : null)
       return out
     },
+    listEverCompletedItems: async (itemIds) => {
+      const completed = new Set<string>(completedItemIds)
+      return new Set(itemIds.filter((id) => completed.has(id)))
+    },
     getDailyTotals: async () =>
       Object.entries(totalsByDate).map(([date, listenedSeconds]) => ({
         date,

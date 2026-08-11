@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import type { IDatabase } from "@ports/app/index.js"
+import type { PlaylistItemId } from "@lib/domain/core.js"
+import { createSqlListeningSessionRepository } from "../../../../repositories/sql/listeningSessionsRepository.sql.js"
 import {
   applyUserSchemaForTests,
   createInMemoryTestDatabase,
@@ -224,5 +226,47 @@ describe("migration 027 — one playlist_items row per track_id", () => {
       "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'playlist_items'"
     )
     expect(indexes.map((i) => i.name)).toContain("idx_playlist_items_track_scan")
+  })
+
+  it("does not hand the survivor the shadow's completed badge", async () => {
+    // The fold carries the old pass's sessions over, but the survivor's
+    // `added_at` is the newest add — so per-item progress, which is scoped to
+    // the current pass, still reads the re-queued lecture as fresh.
+    const addedAt = Date.now()
+    await addItem(db, {
+      id: "pl_1",
+      track_id: "trk",
+      added_at: addedAt - 7_200_000,
+      archived_at: addedAt - 3_600_000,
+      collection_id: null,
+    })
+    await addItem(db, {
+      id: "pl_2",
+      track_id: "trk",
+      added_at: addedAt,
+      archived_at: null,
+      collection_id: null,
+    })
+    // A full listen on the shadow, an hour and a half before the re-add.
+    const endedAt = Math.floor((addedAt - 5_400_000) / 1000)
+    await db.execute(
+      `INSERT INTO listening_sessions
+         (id, item_id, started_at, ended_at, from_position, to_position)
+       VALUES ('ls_old', 'pl_1', ?, ?, 0, 1800)`,
+      [endedAt - 1800, endedAt]
+    )
+
+    await migration_027_playlist_items_unique_track.up(db)
+
+    const sessions = createSqlListeningSessionRepository(db, {
+      run: <T>(fn: () => Promise<T>) => fn(),
+    })
+    const id = "pl_2" as PlaylistItemId
+    const durations = new Map([[id, 1800]])
+    // Fresh pass…
+    expect(await sessions.getResumePositionForItem(id)).toBeNull()
+    expect((await sessions.getCompletedAtForItems([id], durations)).get(id) ?? null).toBeNull()
+    // …but the listen was preserved, so the lifetime badge still stands.
+    expect(await sessions.listEverCompletedItems([id], durations)).toContain(id)
   })
 })
