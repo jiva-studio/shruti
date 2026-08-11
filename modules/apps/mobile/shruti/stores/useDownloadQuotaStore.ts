@@ -169,6 +169,23 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
   }
 
   /**
+   * Charge a track for bytes that are already on disk, with no transfer of
+   * ours behind them. `settle()` makes the same ledger entry for a transfer we
+   * ran; this one is for a file the native cache turned out to be holding
+   * already — shared audio, a row lost to a failed migration — which the
+   * budget has to start counting the moment it is adopted (#1739).
+   *
+   * A track that already carries a charge keeps it: that number came from the
+   * catalog measurement and is the better of the two.
+   */
+  function adopt(trackId: TrackId, bytes: number): void {
+    if (chargedBytes.value.has(trackId)) return
+    const next = new Map(chargedBytes.value)
+    next.set(trackId, bytes)
+    chargedBytes.value = next
+  }
+
+  /**
    * Credit back what a track was charged, if anything. Takes no byte count
    * on purpose — the ledger already knows. A caller passing its own number
    * is how the budget leaked: a track charged the 40 MB estimate and
@@ -206,6 +223,7 @@ export const useDownloadQuotaStore = defineStore("downloadQuota", () => {
     ensureMeasured,
     reserve,
     settle,
+    adopt,
     uncharge,
     forget,
     reset,
