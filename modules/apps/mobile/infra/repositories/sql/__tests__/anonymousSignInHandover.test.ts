@@ -223,6 +223,7 @@ describe("anonymous sign-in handover (#1627)", () => {
     return backfillLocal({
       backfill: r.backfill,
       outbox: r.outbox,
+      apply: r.apply,
       syncState,
       unitOfWork: fakeUnitOfWork,
       ownerId,

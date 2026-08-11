@@ -44,6 +44,16 @@ export interface ISyncApplyRepository {
   /** Last server-known HLC for a doc (the `base_hlc` source), or `null`. */
   lastServerHlc(collection: string, docId: string): Promise<string | null>
 
+  /**
+   * The highest server HLC recorded for ANY document, or `null` when this
+   * device has never pulled one. This is the "observed" half of an HLC's
+   * `lastSeen` seed (`hlcNow`): a stamp issued by another device with a faster
+   * clock has to push this one's clock forward, or the next local edit is
+   * stamped BELOW the change it descends from and loses the LWW comparison on
+   * every device that pulls both (#1628).
+   */
+  latestServerHlc(): Promise<string | null>
+
   /** Record `hlc` as the doc's last server-known HLC (push apply / conflict). */
   recordServerHlc(collection: string, docId: string, hlc: string): Promise<void>
 
