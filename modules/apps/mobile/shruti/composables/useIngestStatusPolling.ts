@@ -8,7 +8,7 @@ import type { IngestState } from "@lib/contracts"
 
 /**
  * Live status polling for in-flight personal-library items. While a library view
- * is mounted, this polls `GET /orchestrator/ingest/{jobId}` for each item still
+ * is mounted, this polls `GET /orchestrator/run/{jobId}` for each item still
  * ingesting (`queued` / `processing`) and patches its status into the store —
  * so the card shows a real-time queued → processing → ready flip without waiting
  * out the sync cadence. On a terminal transition it fires `requestSync` once to
