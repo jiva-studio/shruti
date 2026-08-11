@@ -4,7 +4,10 @@ import type { IDatabase } from "@ports/app/index.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { runMigrations } from "@kit/persistence"
 import { createSqlAppRepositories, type SqlAppRepositories } from "@infra/repositories/sql/index.js"
-import { createInMemoryTestDatabase } from "@infra/repositories/sql/__tests__/testDb.js"
+import {
+  createPersistingTestDatabase,
+  type PersistingTestDatabase,
+} from "@infra/repositories/sql/__tests__/testDb.js"
 import { userMigrations } from "@infra/persistence/migrations/user/index.js"
 import { pushLocal } from "@usecases/sync/pushLocal.js"
 import type { Lectorium } from "../../lectorium.js"
@@ -16,10 +19,16 @@ import { wipeLocalUserData } from "../dataWipe.js"
  * bundle (journal decorator included). Covers #1496: the wipe has to take the
  * personal library and the sync journal with it, or it leaves the device
  * showing removed items and pushing changes for rows that no longer exist.
+ *
+ * The database is the web adapter over an export sink (#1631), so "the wipe
+ * cleared it" is asserted against the image a reload would find — the wipe's
+ * last SQL write is a raw-`execute` transaction, and on the web build that used
+ * to commit in memory and never reach IndexedDB.
  */
 
 const OWNER = "user-1"
 
+let store: PersistingTestDatabase
 let db: IDatabase
 let repos: SqlAppRepositories
 let app: Lectorium
@@ -101,9 +110,21 @@ async function countRows(table: string): Promise<number> {
   return Number(rows[0]!.n)
 }
 
+/** Row count in the persisted image — what survives a reload. */
+async function countPersistedRows(table: string): Promise<number> {
+  const reloaded = await store.reload()
+  try {
+    const rows = await reloaded.query<{ n: number }>(`SELECT count(*) AS n FROM ${table}`)
+    return Number(rows[0]!.n)
+  } finally {
+    await reloaded.close()
+  }
+}
+
 describe("wipeLocalUserData", () => {
   beforeEach(async () => {
-    db = await createInMemoryTestDatabase()
+    store = await createPersistingTestDatabase()
+    db = store.db
     await runMigrations(db, userMigrations)
     repos = createSqlAppRepositories({
       contentDb: db,
@@ -147,6 +168,9 @@ describe("wipeLocalUserData", () => {
     await repos.syncApply!.recordServerHlc("notes", "n-remote", "1|0|dev-2")
     await repos.syncState!.setPullCursor(42)
     await repos.syncState!.setAckedSeq(42)
+    // The seeded state is what a reload would find, so the wipe is measured
+    // against a durable image rather than an empty one.
+    await db.save()
   })
 
   it("takes the personal library with it, so removed items cannot come back", async () => {
@@ -184,6 +208,20 @@ describe("wipeLocalUserData", () => {
 
     expect(gateway.pushRequests).toEqual([])
     expect(result.pushed).toBe(0)
+  })
+
+  it("clears the journal DURABLY, so a reload cannot resurrect the deleted docs", async () => {
+    expect(await countPersistedRows("outbox")).toBeGreaterThan(0)
+    expect(await countPersistedRows("sync_doc_hlc")).toBe(1)
+
+    await wipeLocalUserData(app)
+
+    // The journal clear is the wipe's LAST SQL write and it goes through raw
+    // `execute` inside one transaction. On web that used to commit in memory
+    // only: the next launch reopened an image still holding the full outbox and
+    // pushed it, re-creating server-side everything the user just deleted.
+    expect(await countPersistedRows("outbox")).toBe(0)
+    expect(await countPersistedRows("sync_doc_hlc")).toBe(0)
   })
 
   it("leaves the pull cursor alone — rewinding it would re-pull the wiped data", async () => {
