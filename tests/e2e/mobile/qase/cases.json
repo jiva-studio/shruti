@@ -4119,5 +4119,33 @@
       "free",
       "e2e"
     ]
+  },
+  "225": {
+    "suite_id": 24,
+    "automation": 2,
+    "title": "The chat's add-to-library card survives a paywall bounce",
+    "description": "Offline, FREE tier, orchestrator stubbed. Adding a lecture is Pro, so a non-subscriber tapping the chat candidate's plus is bounced to the subscription page and nothing is submitted — the designed path for every free user. The card must therefore still be an offer when they come back: it used to record the tap as done, drop its plus, and persist that, leaving an inert tile over a lecture nobody ever fetched (#1727).",
+    "preconditions": "Offline fixtures with a clean user db, booted as a FREE user; the chat SSE stream is mocked with an add_to_library action and its marker, and the orchestrator ingest API is stubbed so a submit would be recorded if one happened.",
+    "steps": [
+      {
+        "action": "Ask the chat a question whose mocked answer carries an add-to-library candidate.",
+        "expected": "The answer renders the candidate as a tile with its title and a plus."
+      },
+      {
+        "action": "Tap the plus as a free user.",
+        "expected": "The subscription page opens and no submit reaches the orchestrator."
+      },
+      {
+        "action": "Dismiss the subscription page and return to the conversation.",
+        "expected": "The candidate tile still offers its plus, so the lecture can be added after subscribing."
+      }
+    ],
+    "tags": [
+      "chat",
+      "library",
+      "personal-library",
+      "free",
+      "e2e"
+    ]
   }
 }

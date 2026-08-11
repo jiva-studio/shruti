@@ -8,6 +8,18 @@ import { requestSync } from "@shruti/services/syncEvents.js"
 import { IngestGatewayError } from "@infra/ingest/http/ingestClient.js"
 
 /**
+ * What an `addByUrl` call actually accomplished. "Returned without throwing"
+ * is not an outcome: the PRO gate and a rejected submit both return normally,
+ * and a caller that reads them as success marks the lecture added when nothing
+ * was submitted (#1727).
+ *   - `added`     — submitted to ingest, un-archived, or already present
+ *   - `paywalled` — bounced to the paywall; nothing was submitted, retry after
+ *                   the user subscribes
+ *   - `failed`    — the submit was attempted and rejected
+ */
+export type AddByUrlResult = "added" | "paywalled" | "failed"
+
+/**
  * Single source of truth for the user's **personal library** — lectures the
  * user added that are not in the shared corpus (epic #1236).
  *
@@ -169,13 +181,17 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
    *   - present but failed         → submit (the orchestrator restarts the job)
    *   - present and not failed      → no-op (already in the library / in progress)
    * PRO-gated; a non-subscriber (or a server not_pro) is bounced to the paywall.
+   * Reports which of those happened — see {@link AddByUrlResult}.
    */
-  async function addByUrl(url: string, hints?: { title?: string; author?: string }): Promise<void> {
-    if (!url.trim()) return
+  async function addByUrl(
+    url: string,
+    hints?: { title?: string; author?: string }
+  ): Promise<AddByUrlResult> {
+    if (!url.trim()) return "failed"
     const { usePurchasesStore } = await import("@shruti/stores/usePurchasesStore.js")
     if (!usePurchasesStore().isSubscribed) {
       await openPaywall()
-      return
+      return "paywalled"
     }
     const existing = findBySource(url)
     if (existing) {
@@ -186,21 +202,22 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
         await refresh()
       }
       // A failed item still needs a re-run; a healthy present item is done.
-      if (existing.status !== "failed") return
+      if (existing.status !== "failed") return "added"
     }
-    await submitIngest(url, hints)
+    return submitIngest(url, hints)
   }
 
   async function submitIngest(
     url: string,
     hints?: { title?: string; author?: string }
-  ): Promise<void> {
+  ): Promise<AddByUrlResult> {
     const key = normalizeSource(url)
     // A second tap while the first request is still on the wire is a no-op —
     // findBySource can't see it yet (the row hasn't synced down), so without this
     // both taps submit the same run. Bounded by the ingest client's request
     // timeout, so a hung connection can't leave the button silently dead.
-    if (inFlightSources.has(key)) return
+    // The first tap owns the outcome; this one reports the submit it joined.
+    if (inFlightSources.has(key)) return "added"
     inFlightSources.add(key)
     try {
       const res = await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
@@ -208,12 +225,14 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
       next.set(key, res.membership_id)
       submittedIngestIds.value = next
       requestSync()
+      return "added"
     } catch (err) {
       if (err instanceof IngestGatewayError && err.code === "not_pro") {
         await openPaywall()
-        return
+        return "paywalled"
       }
       error.value = err instanceof Error ? err.message : "Failed to add lecture"
+      return "failed"
     } finally {
       inFlightSources.delete(key)
     }
