@@ -15,6 +15,7 @@ import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useLibraryLanguages } from "@lectorium/composables/useLibraryLanguages.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
+import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { useTrackSheetStore } from "@lectorium/stores/useTrackSheetStore.js"
@@ -375,6 +376,13 @@ export function useShareTrack(): UseShareTrackReturn {
             )
           }
         }))
+      // The bytes landed in durable app storage under the same key an offline
+      // save uses, so the lecture IS downloaded now — register it as one.
+      // Without this the file is invisible to everything that rebuilds from
+      // `media_items`: it is not charged to the storage budget, shows no
+      // offline badge after a relaunch, and archiving never reclaims it, so it
+      // survives until uninstall (#1739).
+      await useDownloadStore().adoptCachedFile(trackId, localUri, variant.audio.filesize)
 
       const lang =
         preferredContentLanguage(track, libraryLanguages.value, appLanguage.value) ??

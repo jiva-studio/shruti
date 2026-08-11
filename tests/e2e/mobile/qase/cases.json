@@ -3301,7 +3301,7 @@
     "suite_id": 10,
     "automation": 2,
     "title": "At the storage limit: the queue stays silent, the tap is answered",
-    "description": "Offline, with the download limit set below one lecture. The background queue must refuse silently — its toast used to fire on every launch of a library already at the cap — and the refused row must report itself as not kept offline instead of rendering like a saved one. A deliberate tap is always answered, with a button that lets that one lecture through.",
+    "description": "Offline, with the download limit set below one lecture. The background queue must refuse silently — its toast used to fire on every launch of a library already at the cap — and the refused row must render like any other queued lecture, with no badge of its own (the crossed-out cloud added by #1681 was never asked for; see #1744). A deliberate tap is always answered, with a button that lets that one lecture through.",
     "preconditions": "Offline fixtures with a clean user db; settings.downloadLimitBytes preseeded to 1 MB.",
     "steps": [
       {
@@ -3310,7 +3310,7 @@
       },
       {
         "action": "Open Home and look at the row and the screen.",
-        "expected": "The row reports it is not kept offline, and no toast was shown."
+        "expected": "The row renders as a plain queued lecture — no crossed-out cloud and no failure icon — and no toast was shown."
       },
       {
         "action": "Tap the row to play it.",
@@ -3318,7 +3318,7 @@
       },
       {
         "action": "Press 'Download anyway'.",
-        "expected": "That one lecture leaves the refused state."
+        "expected": "The lecture is downloaded despite the limit: the storage figure in Settings stops reading zero."
       }
     ],
     "tags": [
