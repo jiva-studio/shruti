@@ -164,13 +164,20 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       const parsed = Date.parse(me.tierExpiresAt)
       tierExpiresAt = Number.isFinite(parsed) ? parsed : null
     }
+    // `/me` is best-effort — `fetchMeBody` returns null for a 502, an offline
+    // blip and a genuinely empty profile alike — so a failed or partial answer
+    // must not erase the account's display identity. Carry the stored values
+    // forward, but ONLY for the same user: a sign-in that swaps accounts
+    // (anonymous → Google, or one Google account to another) must not inherit
+    // the previous account's email, name or avatar.
+    const prior = stored?.userId === body.userId ? stored : null
     const next: StoredTokens = {
       accessToken: body.accessToken,
       refreshToken: body.refreshToken,
       userId: body.userId,
-      email: me?.email ?? null,
-      name: me?.name ?? null,
-      picture: me?.pictureUrl ?? null,
+      email: me?.email ?? prior?.email ?? null,
+      name: me?.name ?? prior?.name ?? null,
+      picture: me?.pictureUrl ?? prior?.picture ?? null,
       anonymous: body.anonymous,
       accessTokenExpiresAt: claims.expMs,
       // Trust the JWT claim primarily — /me is best-effort, JWT is what
