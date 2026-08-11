@@ -310,8 +310,8 @@ initShruti({
   // is the transport the `useSyncEngine` composable drives when enabled.
   getDeviceId,
   syncClient,
-  // Orchestrator ingest control plane (POST /orchestrator/ingest, GET
-  // /orchestrator/ingest/{id}) — the direct add/retry + live-status transport
+  // Orchestrator ingest control plane (POST /orchestrator/run, GET
+  // /orchestrator/run/{id}) — the direct add/retry + live-status transport
   // the library store drives; nil-URL regions fall back to the chat path.
   ingestClient,
   discoveryClient,

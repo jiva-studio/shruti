@@ -27,7 +27,7 @@
   "4": {
     "title": "📚 Library",
     "parent_id": null,
-    "description": "Library landing page, scripture/verse search, content-language scoping, original-script text / prose / recitation display. Child suites: Collections, Topics, Smart Library."
+    "description": "Library landing page, scripture/verse search, content-language scoping, original-script text / prose / recitation display. Also the PERSONAL library: adding a lecture found on the web, the ingest progress badge (queued → downloading → transcribing → ready), retry of a failed item, the Pro gate. Child suites: Collections, Topics, Smart Library."
   },
   "5": {
     "title": "✨ Smart Library",
