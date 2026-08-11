@@ -68,7 +68,7 @@ vi.mock("vue-i18n", () => ({
   useI18n: () => ({ t: (k: string) => k }),
 }))
 vi.mock("@ionic/vue", () => ({
-  toastController: { create: vi.fn() },
+  toastController: { create: vi.fn().mockResolvedValue({ present: vi.fn() }) },
 }))
 
 const runChatTurn = vi.fn()
@@ -80,6 +80,8 @@ vi.mock("@usecases", () => ({
 }))
 
 import { useChatStore } from "../useChatStore.js"
+import { onTurnSettled, type TurnSettledEvent } from "@shruti/chat/turnNotificationEvents.js"
+import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
 
 /* --------------------------------------------------------------------- */
 /*                               Helpers                                  */
@@ -291,5 +293,83 @@ describe("useChatStore.retryLast — no blank frame (issue #1610)", () => {
     expect(store.messages.some((m) => m.role === "user" && m.content === "who is Krishna?")).toBe(
       true
     )
+  })
+})
+
+/* --------------------------------------------------------------------- */
+/*      3. A turn that dies by exception must not strand its record       */
+/* --------------------------------------------------------------------- */
+
+describe("useChatStore.sendMessage — a turn that dies by exception (issue #1733)", () => {
+  /** Every `turnSettled` the bus carried during one test. */
+  function recordSettles(): { events: TurnSettledEvent[]; stop: () => void } {
+    const events: TurnSettledEvent[] = []
+    const stop = onTurnSettled((e) => events.push(e))
+    return { events, stop }
+  }
+
+  /** A turn that opens its placeholder — which arms the forward notification
+   *  and writes the pending record — and then throws instead of finishing. */
+  function mockTurnThatThrows(err: Error): void {
+    runChatTurn.mockImplementation(async function* () {
+      yield { kind: "assistant-placeholder", messageId: "a1" as ChatMessageId }
+      throw err
+    })
+  }
+
+  it.each([
+    ["a protocol mismatch (426)", new ProtocolVersionMismatchError([2], 1)],
+    ["a backend outage (503)", new BackendUnavailableError()],
+    ["an unexpected throw", new Error("boom")],
+  ])("clears the pending record and settles the turn as failed after %s", async (_name, err) => {
+    const settles = recordSettles()
+    mockTurnThatThrows(err)
+
+    const store = useChatStore()
+    store.activeSessionId = "s1"
+
+    await store.sendMessage("who is Krishna?")
+
+    // Left behind, this record re-raises a thinking placeholder on every
+    // openSession for 24h and re-arms "Sadhu replied" at now+2s on every
+    // backgrounding.
+    expect(await store.listPendingTurns()).toEqual([])
+    // …and only an `ok: false` settle cancels the notification already armed
+    // at turn start.
+    expect(settles.events).toEqual([{ assistantMessageId: "a1", sessionId: "s1", ok: false }])
+    settles.stop()
+  })
+
+  it("still leaves a resumable drop alone — its record is the recovery handle", async () => {
+    const settles = recordSettles()
+    getTurn.mockResolvedValue({ state: "running", events: [] })
+    // A dropped socket after the placeholder: the server keeps generating and
+    // buffers the turn, so the record must SURVIVE for the resume poll.
+    runChatTurn.mockImplementation(async function* () {
+      yield { kind: "assistant-placeholder", messageId: "a1" as ChatMessageId }
+      yield { kind: "error", code: "stream", message: "connection lost" }
+    })
+
+    const store = useChatStore()
+    store.activeSessionId = "s1"
+
+    await store.sendMessage("who is Krishna?")
+
+    expect(await store.listPendingTurns()).toHaveLength(1)
+    expect(settles.events).toEqual([])
+    settles.stop()
+  })
+
+  it("forgets every in-flight turn on sign-out", async () => {
+    const settles = recordSettles()
+    seedPending(Date.now())
+
+    const store = useChatStore()
+    await store.clearPendingTurns()
+
+    // Under the next identity these records only 404 — and keep notifying.
+    expect(await store.listPendingTurns()).toEqual([])
+    expect(settles.events).toEqual([{ assistantMessageId: "a1", sessionId: "s1", ok: false }])
+    settles.stop()
   })
 })
