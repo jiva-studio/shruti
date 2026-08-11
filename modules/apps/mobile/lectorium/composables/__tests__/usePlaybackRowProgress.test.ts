@@ -63,24 +63,40 @@ describe("usePlaybackRowProgress", () => {
     expect(playback.state).toBe("completed")
   })
 
-  it("stops reading the position while the page is off-screen", () => {
+  it("freezes the whole overlay while the page is off-screen", () => {
     const onScreen = ref(true)
     const playback = usePlaybackRowProgress(onScreen)
     const seen = watchProgress(playback)
 
     player.positionMs = 100
+    // Every row reads `trackId` on every render to find out whether it is the
+    // playing one — that read is what the freeze has to capture.
+    expect(playback.trackId).toBe("t1")
+
     onScreen.value = false
-    // A whole lecture's worth of ticks lands while the user is on another tab.
+    // A whole lecture's worth of ticks lands while the user is on another tab…
     for (let i = 2; i <= 10; i++) player.positionMs = i * 100
+    // …and then it ends, and continuous playback moves on to the next lecture,
+    // which starts from the beginning.
+    player.trackId = "t2"
+    player.positionMs = 30
 
     // Two runs total: the first render and the 10% tick. Going off-screen
     // recomputes to the same frozen value, and the nine ticks after it are
     // never even read.
     expect(seen).toEqual([0, 10])
     expect(playback.progressPct).toBe(10)
+    // The frozen 10% and "playing" describe t1. Handing them out under t2
+    // paints the next lecture's row with the previous lecture's radial: the
+    // three fields only mean anything together, so they freeze together
+    // (issue #1615).
+    expect(playback.trackId).toBe("t1")
 
     onScreen.value = true
 
-    expect(playback.progressPct).toBe(100)
+    // Back on screen they thaw together, all three now describing t2.
+    expect(playback.trackId).toBe("t2")
+    expect(playback.progressPct).toBe(3)
+    expect(playback.state).toBe("playing")
   })
 })

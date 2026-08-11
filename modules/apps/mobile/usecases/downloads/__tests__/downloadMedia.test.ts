@@ -40,6 +40,8 @@ function makeRepo(overrides: Partial<IMediaItemRepository> = {}): IMediaItemRepo
       localPath,
       createdAt: 1000,
     }),
+    markEvictPending: async () => {},
+    listEvictPending: async () => [],
     deleteByTrack: async () => {},
     deleteById: async () => {},
     clearAll: async () => {},

@@ -3596,5 +3596,35 @@
       "pro",
       "e2e"
     ]
+  },
+  "197": {
+    "suite_id": 10,
+    "automation": 2,
+    "title": "Audio owed an eviction is reclaimed, even across a relaunch",
+    "description": "Offline, with a clean user db and two downloaded lectures. Archiving a lecture nothing is holding gives its space straight back — the control that proves the storage meter moves. Archiving the lecture that is PLAYING cannot: the engine holds a file:// URL, so the delete is deferred. That deferral used to live only in memory, so a relaunch lost it and nothing else in the app ever collected the orphan — the budget charged the user for that space until uninstall. The relaunch must settle the debt.",
+    "preconditions": "Offline fixtures with a clean user db; the default 8 GB download limit.",
+    "steps": [
+      {
+        "action": "Add two lectures to the queue and let both download.",
+        "expected": "Both are queued and the storage figure in Settings accounts for them."
+      },
+      {
+        "action": "Archive the first lecture, which nothing is playing.",
+        "expected": "Its row goes and the storage figure drops on the spot."
+      },
+      {
+        "action": "Play the remaining lecture, then archive it while it plays.",
+        "expected": "Its row goes, but the storage figure holds — the file cannot be deleted while the engine holds it."
+      },
+      {
+        "action": "Force-close and relaunch the app.",
+        "expected": "The launch reclaims the deferred file and the storage figure drops."
+      }
+    ],
+    "tags": [
+      "downloads",
+      "free",
+      "e2e"
+    ]
   }
 }

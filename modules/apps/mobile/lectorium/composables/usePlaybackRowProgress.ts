@@ -26,6 +26,7 @@ export function usePlaybackRowProgress(active?: Ref<boolean>): UiPlaybackProgres
 
   // Last values computed while active — what a frozen (off-screen) overlay
   // reports, so returning to the tab doesn't flash a zeroed radial.
+  let frozenTrackId: string | null = null
   let frozenPct = 0
   let frozenState: UiTrackState = "playing"
 
@@ -33,7 +34,17 @@ export function usePlaybackRowProgress(active?: Ref<boolean>): UiPlaybackProgres
   const isActive = (): boolean => active === undefined || active.value
 
   return reactive({
-    trackId: computed(() => player.trackId),
+    // Frozen alongside the other two, and for the same reason. A track
+    // finishing while the page is hidden moves `player.trackId` onto the next
+    // lecture; an ungated read would hand the PREVIOUS lecture's frozen
+    // `progressPct`/`state` to the new row, which is a wrong radial on a row
+    // that never played. The three fields only mean anything together, so
+    // they freeze and thaw together (issue #1615).
+    trackId: computed(() => {
+      if (!isActive()) return frozenTrackId
+      frozenTrackId = player.trackId
+      return frozenTrackId
+    }),
 
     progressPct: computed(() => {
       if (!isActive()) return frozenPct

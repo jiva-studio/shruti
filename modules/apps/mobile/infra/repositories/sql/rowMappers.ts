@@ -187,6 +187,7 @@ export function rowToMediaItem(row: MediaItemRow): MediaItem {
     state: narrowMediaState(row.state),
     localPath: row.local_path,
     createdAt: row.created_at,
+    evictPending: row.evict_pending === 1,
   }
 }
 

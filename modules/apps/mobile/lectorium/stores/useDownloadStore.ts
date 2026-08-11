@@ -331,6 +331,10 @@ export const useDownloadStore = defineStore("downloads", () => {
         hydrated = true
         hydrationError.value = null
         lastHydrateFailAt = 0
+        // Only now, with the ledger measured, can a reclaim credit the right
+        // number back. Deliberately not awaited by hydrate's callers: a sweep
+        // is housekeeping, not something a screen should wait on.
+        void collectOrphans()
       } catch (err) {
         console.error("[downloads] hydrate failed:", err)
         hydrationError.value = err instanceof Error ? err.message : String(err)
@@ -853,6 +857,49 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   /**
+   * Record that a track's cached audio is owed an eviction the app could not
+   * perform yet, because the native engine could still reach the file. The
+   * player holds the same debt in memory for this session; this is the copy
+   * that survives the process.
+   */
+  async function markEvictPending(trackId: TrackId): Promise<void> {
+    await app
+      .repositories()
+      .mediaItems.markEvictPending(trackId)
+      .catch((err: unknown) => {
+        console.warn("[downloads] could not record pending eviction:", err)
+      })
+  }
+
+  /**
+   * Reclaim the audio of lectures that were archived while the engine held
+   * them and never got their eviction — the app was killed before the queue
+   * let go. Their `media_items` row is still "ready", so `usedBytes` keeps
+   * charging the user for a file no playlist row points at, and the budget
+   * refuses new downloads for space nothing is using (issue #1666).
+   *
+   * Skipped while the engine has a queue loaded: a queue restored from a
+   * previous session still holds `file://` URLs, and deleting one out from
+   * under it is exactly the failure this defers to the player, which can see
+   * the queue and reclaims on its own (`flushPendingEvictions`). The debt is
+   * durable, so a skipped sweep is postponed, not lost.
+   *
+   * Reconciling the other direction — files on disk with no row at all — is
+   * not attempted here.
+   */
+  async function collectOrphans(): Promise<void> {
+    try {
+      const owed = await app.repositories().mediaItems.listEvictPending()
+      if (owed.length === 0) return
+      const queue = await app.audioPlayer.getQueueState().catch(() => null)
+      if (queue?.currentItemId) return
+      for (const item of new Set(owed.map((i) => i.trackId))) await evict(item)
+    } catch (err) {
+      console.warn("[downloads] orphan collection failed:", err)
+    }
+  }
+
+  /**
    * Drop a track from the prefetch FIFO before its turn starts. Called
    * by `playlist.archive` so archiving a track that the auto-download
    * loop (or "add to playlist") has just queued does not waste bandwidth
@@ -947,6 +994,8 @@ export const useDownloadStore = defineStore("downloads", () => {
     clearStartingDownload,
     remove,
     evict,
+    markEvictPending,
+    collectOrphans,
     reset,
   }
 })
