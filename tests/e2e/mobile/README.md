@@ -11,7 +11,8 @@ groups naturally.
 - **`@offline`** — deterministic, fast, no backend (intercepted fixtures). Runs in
   the `mocked` project. This is what `npm test` runs.
 - **`@live`** — drives the real backend (local stack: chat + auth). Runs in the
-  `stack` project via `npm run test:live` (needs the stack up — see "Live tier").
+  `stack` project via `npm run test:live` (needs the stack up). **One spec** —
+  see "Live tier" below.
 
 **Area tag** (which part of the app): `@home` · `@library` · `@player` ·
 `@transcript` · `@notes` · `@settings` · `@chat`. Filter with e.g.
@@ -20,35 +21,16 @@ groups naturally.
 One run, one report: `npm run test:all` runs `mocked` + `stack` into a single
 `playwright-report/` (open with `npm run report`).
 
-### `@offline` journeys
+### What is covered
 
-| Spec | Journey |
-| --- | --- |
-| `launch` | app boots past Welcome to a populated Home |
-| `launch-locale-chunk` | a boot-locale chunk that fails to load still yields a usable app |
-| `search` | the library search box filters the catalog list |
-| `track-card` | tapping a track opens its detail card |
-| `add-track` | adding from the card grows the playlist |
-| `delete-track` | swipe-delete shrinks the queue |
-| `play` | tapping a queued track activates the player |
-| `transcript` | starting a track reveals its transcript |
-| `notes` | the Notes tab lists the saved bookmarks |
-| `settings` | flipping a setting changes app behaviour |
-| `library-language` | the library content language seeds + filters the catalog per locale |
-| `topic-language` | a topic lists only lectures in the library language |
-| `collection-language` | a collection lists only lectures in the library language |
-| `settings-library-language` | the Settings library-language picker re-filters discovery |
-| `settings-language-race` | two quick UI-language switches settle on the one picked last |
-| `settings-language-failure` | a UI language whose chunk fails leaves the setting where it was |
-| `chat-render` | the chat composer + suggestions render |
-| `share-menu` | the track share menu offers a PDF export |
-| `track-info-layout` | the track-list layout is a subscriber's to change, and a free user's paywall |
-
-### `@live` journeys (need the local stack)
-
-| Spec | Journey |
-| --- | --- |
-| `chat-send.live` | send a chat message → receive a streamed reply |
+Every spec but one is `@offline`. The journey list — with the Qase case id of
+each, so a row survives specs being renamed, split or merged — is
+**`TESTPLAN.md`**; `qase/cases.json` is the full case inventory. The specs
+themselves are grouped by area under `tests/`: `account/` · `chat/` ·
+`downloads/` · `help/` · `home/` · `library/` · `onboarding/` · `player/` ·
+`search/` · `settings/` · `subscription/`. This file deliberately does not
+repeat that list — the table that used to live here named specs that no longer
+exist and a `@live` journey that was never written.
 
 ## How it works
 
@@ -141,12 +123,13 @@ That takes two levels, and both have to be in place:
 > start a bundle run without it — the inversion is now a refusal to run, not a
 > green report against the wrong tier.
 
-Cases **200 / 201** (`tests/settings/track-info-layout.spec.ts`) are the pair
+Cases **201 / 202** (`tests/settings/track-info-layout.spec.ts`) are the pair
 that checks this: the same Settings row opens the layout editor for a
 subscriber and the paywall for a free user, so neither result can be produced
 by the other tier's app.
 
-Six specs boot `pro: true`. Run against a bundle without the seam, the four
+Seven specs boot `pro: true` — that pair and five more. Run against a bundle
+without the seam, the four
 Smart Library ones (`smart-library-dialog`, `-off`, `-archive-memory`,
 `-topics-persist`) and `pro-expiry` fail — but they fail as if the feature
 broke, not as if the tier was wrong. `share-menu` is the quiet one: the export
@@ -193,10 +176,19 @@ send/receive (and, later, auth / PDF). The app is served with
 `VITE_DEV_REGION=true` so it points at the local stack (`localhost:11080` chat /
 `:11081` auth) while content still loads from the prod CDN.
 
+**One spec lives here**: `tests/chat/chat-send.live.spec.ts` — type a question,
+get a streamed answer out of the real chat service (the live half of case 82).
+It asserts the answer's shape, not its words: a real model's prose is not
+something to match on. A live test costs minutes and real tokens, so this tier
+is meant to stay small — the offline suite is where coverage grows.
+
 ```bash
 ./scripts/live-up.sh             # make stack-setup (first run) + stack-up + wait /readyz
-npm run test:live                # playwright.live.config.ts → @live specs
+npm run test:live                # E2E_INCLUDE_LIVE=1 + the `stack` project → @live specs
 ```
+
+There is no `playwright.live.config.ts`; the live project and its dev server are
+part of `playwright.config.ts`, gated on `E2E_INCLUDE_LIVE=1`.
 
 `live-up.sh` needs, in `../../../infra/app/.env.dev`: `OPENROUTER_API_KEY` (chat
 can't answer without it — `/readyz` stays false), `AWS_*` (corpus indexing), and
@@ -204,6 +196,18 @@ a `SHRUTI_TS_IP` (only the search-mcp service; a dummy is fine). For grounded
 answers, seed a **small curated corpus** via the chat service's index/import
 path; an empty corpus still streams an ungrounded reply, enough for the
 send/receive smoke test.
+
+Two things `gen-dev-env.sh` does not write, and compose refuses to start
+without — it interpolates the whole file, so a service you never wanted takes
+the run down at parse time:
+
+- `SHRUTI_STORAGE_KEY`, `SHRUTI_YC_ACCESS_KEY_ID`,
+  `SHRUTI_YC_SECRET_ACCESS_KEY` — `storage-sync` only. Dummies are fine; the
+  `@live` tier never touches it.
+- the JWT keypair must be **readable by the auth container's user**. The keys
+  `gen-jwt-keys.sh` symlinks are mode 600, and auth then dies in a restart loop
+  on `jwt_signer_init_failed: /secrets/private.pem: permission denied`. Point
+  `SHRUTI_JWT_KEYS_DIR` at a copy the container can read.
 
 > **Worktree note** — when running from a `git worktree`, the mobile app needs
 > its `node_modules`, the `modules/kit` submodule, and **both in-house plugins
