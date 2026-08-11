@@ -44,6 +44,7 @@
       :position="dialog.position.value"
       :duration="dialog.duration.value"
       :allow-multiple-languages="dialog.allowMultipleLanguages.value"
+      :multi-speaker-languages="dialog.multiSpeakerLanguages.value"
       :should-highlight-current-sentence="dialog.highlightCurrentSentence.value"
       :auto-scroll="
         dialog.autoScrollCfg.value && dialog.mirrorsActivePlayer.value && purchases.isSubscribed
