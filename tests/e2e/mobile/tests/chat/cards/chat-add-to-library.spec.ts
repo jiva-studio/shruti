@@ -4,14 +4,8 @@ import { boot } from "../../../support/bootstrap.js"
 import { gotoTab } from "../../../support/nav.js"
 import { step, caseTitle } from "../../../support/steps.js"
 import { installIngestMock } from "../../../support/ingest-mock.js"
-import {
-  mockChatAuth,
-  mockChatStream,
-  askChat,
-  delta,
-  action,
-  done,
-} from "../../../support/chat-mock.js"
+import { mockChatStream, askChat, delta, action, done } from "../../../support/chat-mock.js"
+import { mockChatAuth } from "../../../support/auth-mock.js"
 
 // Chat is discovery-only: the card it renders offers a lecture, and confirming
 // it goes out over the orchestrator's ingest API like every other add. Both
