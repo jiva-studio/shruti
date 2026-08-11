@@ -71,8 +71,10 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
       }
       case "playlist_items": {
         // doc_id is the natural key track_id, not the local surrogate id.
+        // `id DESC` breaks an `added_at` tie deterministically — see
+        // {@link canonicalItemId}, which every write here resolves through.
         const rows = await db.query<PlaylistItemRow>(
-          "SELECT * FROM playlist_items WHERE track_id = ? ORDER BY added_at DESC LIMIT 1",
+          "SELECT * FROM playlist_items WHERE track_id = ? ORDER BY added_at DESC, id DESC LIMIT 1",
           [docId]
         )
         return rows[0] ? playlistRowToWire(rows[0]) : null
@@ -206,18 +208,38 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     )
   }
 
+  /**
+   * The local `playlist_items.id` for a track, or `null` when the track isn't
+   * on this device.
+   *
+   * Migration 027 makes the row unique per `track_id`, so there is normally
+   * exactly one. The ORDER BY is what makes the answer well-defined on a
+   * device that still carries a pre-027 duplicate (or landed on the fallback
+   * index): an unordered `LIMIT 1` is a rowid scan and returns the OLDEST row
+   * — the one archive-then-re-add left behind — while `readLocalRow` merges
+   * from the newest. Read and write then disagreed, so a pulled change
+   * resurrected the archived row and re-keyed the track's sessions onto it,
+   * silently losing resume position and cross-device progress (#1736). Every
+   * `track_id` lookup on this path goes through here so they cannot drift
+   * apart again.
+   */
+  async function canonicalItemId(trackId: string): Promise<string | null> {
+    const rows = await db.query<{ id: string }>(
+      "SELECT id FROM playlist_items WHERE track_id = ? ORDER BY added_at DESC, id DESC LIMIT 1",
+      [trackId]
+    )
+    return rows[0]?.id ?? null
+  }
+
   async function upsertPlaylist(docId: string, wire: PlaylistWire): Promise<void> {
     // Keyed on the natural sync key track_id (= docId), not the wire's local
     // surrogate id (which is the *writing* device's, meaningless here). Reuse
     // the existing local row's id when the track is already present.
-    const existing = await db.query<{ id: string }>(
-      "SELECT id FROM playlist_items WHERE track_id = ? LIMIT 1",
-      [docId]
-    )
-    if (existing[0]) {
+    const existingId = await canonicalItemId(docId)
+    if (existingId !== null) {
       await db.execute(
         "UPDATE playlist_items SET added_at = ?, archived_at = ?, collection_id = ? WHERE id = ?",
-        [wire.added_at, wire.archived_at, wire.collection_id, existing[0].id]
+        [wire.added_at, wire.archived_at, wire.collection_id, existingId]
       )
       return
     }
@@ -239,11 +261,8 @@ export function createSqlSyncApplyRepository(db: IDatabase): ISyncApplyRepositor
     // ahead under the single cursor, so this is rare).
     let itemId = wire.item_id
     if (wire.track_id) {
-      const local = await db.query<{ id: string }>(
-        "SELECT id FROM playlist_items WHERE track_id = ? LIMIT 1",
-        [wire.track_id]
-      )
-      if (local[0]) itemId = local[0].id
+      const local = await canonicalItemId(wire.track_id)
+      if (local !== null) itemId = local
     }
     // In-place UPSERT listing only the synced columns, NOT `INSERT OR REPLACE`
     // (a DELETE+INSERT): the row also carries the local-only `source_key`

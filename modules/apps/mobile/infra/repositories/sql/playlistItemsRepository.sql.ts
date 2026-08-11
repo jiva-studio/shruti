@@ -38,9 +38,40 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
       )
     },
 
+    /**
+     * Upsert by track: one row per `track_id` (migration 027), because
+     * `track_id` is the sync doc id and a second row is a document no server
+     * can see. Re-adding a track that was archived earlier RESURRECTS that
+     * row — clearing `archived_at` and taking the new `added_at` — instead of
+     * inserting a duplicate, which is both what the add-wins merge rule
+     * resolves to and what the unique index now requires.
+     */
     async add(trackId: TrackId, collectionId: string | null = null): Promise<PlaylistItem> {
-      const id = newPlaylistItemId()
       const now = Date.now()
+      const existing = await queryOne<PlaylistItemRow, PlaylistItem>(
+        db,
+        "SELECT * FROM playlist_items WHERE track_id = ? ORDER BY added_at DESC, id DESC LIMIT 1",
+        [trackId],
+        rowToPlaylistItem
+      )
+      if (existing) {
+        // Provenance follows the newest add, keeping a non-null when the row
+        // already had one — same rule as `mergePlaylistItem`.
+        const nextCollectionId = collectionId ?? existing.collectionId
+        await mutate(
+          db,
+          "UPDATE playlist_items SET added_at = ?, archived_at = NULL, collection_id = ? WHERE id = ?",
+          [now, nextCollectionId, existing.id]
+        )
+        return {
+          id: existing.id,
+          trackId,
+          addedAt: now,
+          archivedAt: null,
+          collectionId: nextCollectionId,
+        }
+      }
+      const id = newPlaylistItemId()
       await mutate(
         db,
         `INSERT INTO playlist_items (id, track_id, added_at, archived_at, collection_id)

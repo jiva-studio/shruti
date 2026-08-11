@@ -92,7 +92,7 @@ export async function createPersistingTestDatabase(): Promise<PersistingTestData
 /**
  * Applies the minimal user-DB schema the repositories tests need.
  * Kept inline here so infra tests don't reach up into `@lectorium/*`.
- * Mirrors `infra/persistence/migrations/user/{000,001,002,003,004,005,006,025}_*.ts` —
+ * Mirrors `infra/persistence/migrations/user/{000,001,002,003,004,005,006,012,025}_*.ts` —
  * if a migration changes schema-visible shape, update this too.
  */
 export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
@@ -121,12 +121,16 @@ export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
   )
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_notes_track ON notes(track_id, time_start)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC)`)
+  // Pre-027 shape on purpose — no UNIQUE index on `track_id`, so a test can
+  // seed the duplicate rows real devices carry and run migration 027 over
+  // them. Tests that need the constraint apply that migration themselves.
   await db.execute(
     `CREATE TABLE IF NOT EXISTS playlist_items (
-       id           TEXT PRIMARY KEY,
-       track_id     TEXT NOT NULL,
-       added_at     INTEGER NOT NULL,
-       archived_at  INTEGER
+       id            TEXT PRIMARY KEY,
+       track_id      TEXT NOT NULL,
+       added_at      INTEGER NOT NULL,
+       archived_at   INTEGER,
+       collection_id TEXT
      )`
   )
   await db.execute(
