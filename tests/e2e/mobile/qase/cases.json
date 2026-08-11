@@ -3446,5 +3446,59 @@
       "free",
       "e2e"
     ]
+  },
+  "191": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "A failed /me does not erase the signed-in profile",
+    "description": "Offline, with a signed-in session about to expire. The next authed call refreshes the token, and the /me lookup that follows it returns 502. /me is best-effort — the client cannot tell a blip from a genuinely empty profile — so the account's email, name and avatar must be carried forward rather than written to null. They are persisted, so getting this wrong outlives the blip and the app restart: the signed-in user simply stops having a name until some later refresh happens to catch /me working.",
+    "preconditions": "Offline fixtures with a clean user db; a stored non-anonymous session (name, email, avatar) whose access token expires within the refresh threshold; /auth/refresh succeeds and /auth/me returns 502.",
+    "steps": [
+      {
+        "action": "Send a chat message so the near-expiry token is refreshed, with /me failing.",
+        "expected": "The answer streams back — the refresh itself succeeded."
+      },
+      {
+        "action": "Open Settings and look at the account row.",
+        "expected": "The account still shows the user's name, not a blank or anonymous row."
+      },
+      {
+        "action": "Inspect the persisted session.",
+        "expected": "Email, name and avatar are still stored, so a restart does not inherit the blip."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "192": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "The region follows the device without a cold start",
+    "description": "Offline, with a two-region config. The app boots settled on edge-a. The device then relocates: edge-a stops answering and edge-b takes over, and the app is resumed and reports itself back online. The region must be re-detected there and then. Before this, probe() ran from exactly one place — the cold-start bootstrap — so a user who travelled, toggled a VPN or switched networks kept a stale region for as long as the process lived, which on mobile is days. That is the entry condition for the auth outage: API calls go to the wrong door, and the media layer's own walk corrupts and persists the region.",
+    "preconditions": "Offline fixtures with a clean user db; config.json publishes edge-a and edge-b, both probing successfully at boot, with edge-a preferred.",
+    "steps": [
+      {
+        "action": "Launch the app and confirm the active region settled on edge-a.",
+        "expected": "edge-a is the persisted preferred region."
+      },
+      {
+        "action": "Take edge-a offline, then resume the app and fire an online transition.",
+        "expected": "The app re-probes instead of waiting for the next cold start."
+      },
+      {
+        "action": "Inspect the persisted preferred region.",
+        "expected": "It has moved to edge-b, so the next launch already starts on the right door."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
+      "free",
+      "e2e"
+    ]
   }
 }
