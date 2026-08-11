@@ -129,14 +129,20 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
                     self.delegate.unbind(taskIdentifier: task.taskIdentifier)
                     task.cancel()
                 }
-                self.startNewDownload(call: call, id: id, url: url, localPath: localPath)
+                self.startNewDownload(call: call, id: id, fileKey: fileKey, url: url, localPath: localPath)
             }
         } else {
-            startNewDownload(call: call, id: id, url: url, localPath: localPath)
+            startNewDownload(call: call, id: id, fileKey: fileKey, url: url, localPath: localPath)
         }
     }
 
-    private func startNewDownload(call: CAPPluginCall, id: String, url: URL, localPath: String) {
+    private func startNewDownload(
+        call: CAPPluginCall,
+        id: String,
+        fileKey: String,
+        url: URL,
+        localPath: String
+    ) {
         var request = URLRequest(url: url)
         // Explicit rather than inheriting `URLRequest`'s 60 s default, which
         // outlives the JS candidate loop's whole ceiling.
