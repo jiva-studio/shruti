@@ -92,7 +92,9 @@ export type RunChatTurnEvent =
       readonly sourceId: string
       readonly regionToken: string
       readonly regionLabel: string
-      readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
+      readonly chapters: ChatChapterBody["chapters"]
+      /** At least one title is machine-translated — the card discloses it. */
+      readonly mt?: boolean
     }
   /** Transcript snippet for one `[cite:track@start-end|caption]`
    *  fragment, streamed ahead of its marker. The store caches it so
@@ -514,16 +516,27 @@ export async function* runChatTurn(
           }
           if (event.payload.kind === "chapter") {
             const p = event.payload.payload
+            // snake_case → camelCase per entry, same as the verse / cite /
+            // media branches. `title_original` rides along so the card can
+            // disclose the machine translation instead of passing MT'd
+            // canto titles off as the book's own.
+            const entries = p.chapters.map((c) => ({
+              tokens: c.tokens,
+              title: c.title,
+              ...(c.title_original ? { titleOriginal: c.title_original } : {}),
+            }))
             chapters[`${p.source_id}|${p.region_token}`] = {
               regionLabel: p.region_label,
-              chapters: p.chapters,
+              chapters: entries,
+              ...(p.mt ? { mt: true } : {}),
             }
             yield {
               kind: "chapter-payload",
               sourceId: p.source_id,
               regionToken: p.region_token,
               regionLabel: p.region_label,
-              chapters: p.chapters,
+              chapters: entries,
+              ...(p.mt ? { mt: true } : {}),
             }
             break
           }
@@ -543,6 +556,7 @@ export async function* runChatTurn(
               title: w.title,
               text: w.text,
               ...(w.speaker ? { speaker: w.speaker } : {}),
+              ...(w.date ? { date: w.date } : {}),
               ...(w.mt ? { mt: true } : {}),
               ...(w.text_original ? { textOriginal: w.text_original } : {}),
             }
