@@ -103,11 +103,14 @@ export const usePlaylistStore = defineStore("playlist", () => {
       const next = await derived.loadFor(entries.value)
       progressMap.value = next.progress
       completedAtMap.value = next.completed
-      // Union active + archived items, then run the same completion check
-      // (`getCompletedAtForItems`) used for the active page. The archive
+      // Union active + archived items, then ask the LIFETIME question —
+      // deliberately not the per-pass one the active page uses. The archive
       // action sets `archived_at` but does NOT touch listening_sessions,
       // so we can still tell which tracks the user has finished — the
-      // listened/completed badge has to survive archive (issue #470).
+      // listened/completed badge has to survive archive (issue #470) AND a
+      // re-add, which now resurrects the same row rather than minting a
+      // fresh id (#1736). Home shows the current pass, Library the lifetime
+      // badge; they are meant to disagree (LECTORIUM-18/19).
       const archivedItems = await repos.playlistItems.listArchived()
       const allUnionItems = [...allItems, ...archivedItems]
       if (allUnionItems.length === 0) {
@@ -122,14 +125,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
           const ms = maxAudioDurationMs(t)
           if (ms > 0) durationsSec.set(item.id, Math.floor(ms / 1000))
         }
-        const completedSecMap = await repos.listeningSessions.getCompletedAtForItems(
+        const everCompleted = await repos.listeningSessions.listEverCompletedItems(
           allUnionItems.map((i) => i.id),
           durationsSec
         )
         const completedSet = new Set<string>()
         for (const item of allUnionItems) {
-          const sec = completedSecMap.get(item.id)
-          if (sec !== null && sec !== undefined) completedSet.add(item.trackId)
+          if (everCompleted.has(item.id)) completedSet.add(item.trackId)
         }
         completedTrackIds.value = completedSet
       }

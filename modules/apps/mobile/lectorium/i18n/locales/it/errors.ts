@@ -14,4 +14,14 @@ export default {
   downloadStorageFull:
     "Limite di spazio raggiunto. Rimuovi le lezioni ascoltate o aumenta il limite nelle impostazioni.",
   downloadStorageFullAction: "Scarica comunque",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "Impossibile aprire i tuoi dati",
+    description:
+      "Il database con le tue note, la playlist e la cronologia di ascolto non si è aperto, quindi l'app non può mostrare la tua libreria.",
+    advice:
+      "Riavvia l'app e riprova. Se il problema persiste, libera spazio sul dispositivo o reinstalla l'app.",
+    retry: "Riprova",
+  },
 }

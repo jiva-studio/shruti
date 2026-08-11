@@ -14,4 +14,14 @@ export default {
   downloadStorageFull:
     "संग्रहण सीमा पूरी हो गई। सुनी हुई व्याख्यान हटाएँ या सेटिंग्स में सीमा बढ़ाएँ।",
   downloadStorageFullAction: "फिर भी डाउनलोड करें",
+  // The storage-error screen (`views/StorageError`) — shown when the local
+  // databases could not be opened at all.
+  storage: {
+    title: "आपका डेटा नहीं खोला जा सका",
+    description:
+      "आपके नोट्स, प्लेलिस्ट और सुनने के इतिहास वाला डेटाबेस नहीं खुला, इसलिए ऐप आपकी लाइब्रेरी नहीं दिखा सकता।",
+    advice:
+      "ऐप को दोबारा शुरू करके फिर कोशिश करें। अगर यह बार-बार हो, तो डिवाइस पर जगह खाली करें या ऐप फिर से इंस्टॉल करें।",
+    retry: "फिर कोशिश करें",
+  },
 }

@@ -2559,12 +2559,12 @@
     "suite_id": 35,
     "automation": 2,
     "title": "A failed content-DB load degrades gracefully (no infinite splash)",
-    "description": "Offline. The content-DB download is forced to fail. Since the Welcome screen was removed and the bootstrap runs headless (DB bundled, failure non-fatal), there is no error/Retry page anymore; the guarantee is that the launch never hangs on a splash — a brand-new user still reaches the onboarding carousel.",
+    "description": "Offline. The content-DB download is forced to fail. Since the Welcome screen was removed and the bootstrap runs headless, there is no error/Retry page anymore; the guarantee is that the launch never hangs on a splash. The app mounts and says what happened on the storage-error screen — it no longer opens an onboarding flow whose Finish would bounce off the database guard forever.",
     "preconditions": "Brand-new install (onboarding.completed unset, clean user DB with no listening history); every content-DB request is aborted.",
     "steps": [
       {
         "action": "Launch the app while every content-DB request fails.",
-        "expected": "No endless \"Downloading…\" splash: the app still mounts and a fresh user lands on the onboarding carousel (/onboarding, no tab bar, primary button visible)."
+        "expected": "No endless \"Downloading…\" splash: the app mounts on the storage-error screen (/storage-error, no tab bar, no onboarding carousel), with the underlying failure quoted."
       }
     ],
     "tags": [
@@ -3301,7 +3301,7 @@
     "suite_id": 10,
     "automation": 2,
     "title": "At the storage limit: the queue stays silent, the tap is answered",
-    "description": "Offline, with the download limit set below one lecture. The background queue must refuse silently — its toast used to fire on every launch of a library already at the cap — and the refused row must report itself as not kept offline instead of rendering like a saved one. A deliberate tap is always answered, with a button that lets that one lecture through.",
+    "description": "Offline, with the download limit set below one lecture. The background queue must refuse silently — its toast used to fire on every launch of a library already at the cap — and the refused row must render like any other queued lecture, with no badge of its own (the crossed-out cloud added by #1681 was never asked for; see #1744). A deliberate tap is always answered, with a button that lets that one lecture through.",
     "preconditions": "Offline fixtures with a clean user db; settings.downloadLimitBytes preseeded to 1 MB.",
     "steps": [
       {
@@ -3310,7 +3310,7 @@
       },
       {
         "action": "Open Home and look at the row and the screen.",
-        "expected": "The row reports it is not kept offline, and no toast was shown."
+        "expected": "The row renders as a plain queued lecture — no crossed-out cloud and no failure icon — and no toast was shown."
       },
       {
         "action": "Tap the row to play it.",
@@ -3318,7 +3318,7 @@
       },
       {
         "action": "Press 'Download anyway'.",
-        "expected": "That one lecture leaves the refused state."
+        "expected": "The lecture is downloaded despite the limit: the storage figure in Settings stops reading zero."
       }
     ],
     "tags": [
@@ -4067,6 +4067,160 @@
     ],
     "tags": [
       "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "220": {
+    "suite_id": 35,
+    "automation": 2,
+    "title": "A user database that cannot be opened shows an error screen, not an onboarding loop",
+    "description": "Offline. Seeds a corrupt user.db so opening it fails while the catalog opens fine, and asserts the app lands on a terminal storage-error screen that names the failure — instead of bouncing every route to onboarding, whose Finish navigates straight back into the guard.",
+    "preconditions": "Seeded offline fixtures. The user database in IndexedDB is replaced with bytes that are not a SQLite file; no onboarding.completed flag is set.",
+    "steps": [
+      {
+        "action": "Launch the app with a user database that cannot be opened.",
+        "expected": "The storage-error screen is shown with the underlying failure quoted; onboarding is not shown."
+      },
+      {
+        "action": "Navigate directly to a tab route (deep link to Home).",
+        "expected": "The app stays on the storage-error screen and never redirects to onboarding."
+      },
+      {
+        "action": "Tap \"Try again\" while the database is still unreadable.",
+        "expected": "The app reloads and returns to the same error screen — no blank screen and no loop."
+      }
+    ],
+    "tags": [
+      "startup",
+      "free",
+      "e2e"
+    ]
+  },
+  "221": {
+    "suite_id": 35,
+    "automation": 2,
+    "title": "Startup still signs the device in when the user database fails to open",
+    "description": "Offline. The listening-history probe used to throw synchronously past its catch and abort the rest of startup, leaving the run with no session and every authenticated call returning 401. Asserts the anonymous sign-in still happens when the user database is unreadable.",
+    "preconditions": "Seeded offline fixtures. The user database in IndexedDB is replaced with bytes that are not a SQLite file. POST /auth/anonymous is mocked and recorded.",
+    "steps": [
+      {
+        "action": "Launch the app with a user database that cannot be opened, recording POST /auth/anonymous.",
+        "expected": "The storage-error screen is shown."
+      },
+      {
+        "action": "Wait for the anonymous session request.",
+        "expected": "The app minted a session — startup continued past the failed database probe."
+      }
+    ],
+    "tags": [
+      "startup",
+      "auth",
+      "free",
+      "e2e"
+    ]
+  },
+  "225": {
+    "suite_id": 24,
+    "automation": 2,
+    "title": "The chat's add-to-library card survives a paywall bounce",
+    "description": "Offline, FREE tier, orchestrator stubbed. Adding a lecture is Pro, so a non-subscriber tapping the chat candidate's plus is bounced to the subscription page and nothing is submitted — the designed path for every free user. The card must therefore still be an offer when they come back: it used to record the tap as done, drop its plus, and persist that, leaving an inert tile over a lecture nobody ever fetched (#1727).",
+    "preconditions": "Offline fixtures with a clean user db, booted as a FREE user; the chat SSE stream is mocked with an add_to_library action and its marker, and the orchestrator ingest API is stubbed so a submit would be recorded if one happened.",
+    "steps": [
+      {
+        "action": "Ask the chat a question whose mocked answer carries an add-to-library candidate.",
+        "expected": "The answer renders the candidate as a tile with its title and a plus."
+      },
+      {
+        "action": "Tap the plus as a free user.",
+        "expected": "The subscription page opens and no submit reaches the orchestrator."
+      },
+      {
+        "action": "Dismiss the subscription page and return to the conversation.",
+        "expected": "The candidate tile still offers its plus, so the lecture can be added after subscribing."
+      }
+    ],
+    "tags": [
+      "chat",
+      "library",
+      "personal-library",
+      "free",
+      "e2e"
+    ]
+  },
+  "235": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "A saved bookmark underlines only the sentence it was taken on",
+    "description": "Offline. Sentence blocks in this corpus are commonly contiguous (end_i === start_{i+1}), and the saved-note pass treated a shared endpoint as an overlap, so a one-sentence bookmark painted the wavy underline across its neighbours and bled the note id onto them (#1731). Long-presses inside ONE sentence, bookmarks it, and asserts exactly one underlined span, on that sentence's own time range.",
+    "preconditions": "Offline boot (mocked content + silent mp3) on the single-track user.db, which carries no seeded notes. A queued track can be played and its transcript opened.",
+    "steps": [
+      {
+        "action": "Open a queued track's transcript, long-press and drag inside a single sentence, then tap the bookmark action in the selection popover.",
+        "expected": "The note is saved and the selection popover closes."
+      },
+      {
+        "action": "Inspect the wavy underlines painted over the transcript.",
+        "expected": "Exactly one span is underlined, and its time range is the selected sentence's own."
+      }
+    ],
+    "tags": [
+      "notes",
+      "transcript",
+      "free",
+      "e2e"
+    ]
+  },
+  "236": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "A transcript drag saves exactly the span it highlighted",
+    "description": "Offline. While dragging, each branch emitted a range built from the fixed anchor while the release emitted the running pair, so a drag that crossed the anchor one way and back the other collapsed the highlight while the far edge stayed extended - the saved note, the Ask Sadhu text and the share payload then covered a span the user never saw selected (#1732). Drags past the anchor in both directions, reads the live highlight before releasing, and compares it with the underline the saved note paints.",
+    "preconditions": "Offline boot (mocked content + silent mp3) on the single-track user.db, which carries no seeded notes. The open transcript shows at least three sentences on screen.",
+    "steps": [
+      {
+        "action": "In an open transcript, long-press a sentence, drag past its end, drag back past its start, note the highlighted span, release and tap the bookmark action.",
+        "expected": "The selection popover opens on release and the note is saved."
+      },
+      {
+        "action": "Compare the underline painted by the saved note with the highlight shown at the moment of release.",
+        "expected": "They cover exactly the same sentences."
+      }
+    ],
+    "tags": [
+      "notes",
+      "transcript",
+      "free",
+      "e2e"
+    ]
+  },
+  "240": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Email sign-in refreshes a stale token before claiming the anonymous account",
+    "description": "Offline. Days without a network leave the stored access token expired but present — the adapter keeps the session on a network error rather than signing the user out. The sign-in call must therefore rotate the token before attaching it: an expired bearer fails server-side verification, so the server skips the in-place upgrade and creates a brand-new account, orphaning the anonymous user's library (#1737). The verify mock rejects an expired bearer the way the real verifier does.",
+    "preconditions": "Offline fixtures with a clean user db; a persisted ANONYMOUS session whose access token expired an hour ago; /auth/refresh answers 503 (transient — the adapter keeps the session) until the code is submitted, so the token is still stale when sign-in begins; /auth/me and the email OTP endpoints mocked.",
+    "steps": [
+      {
+        "action": "Read the persisted session before signing in.",
+        "expected": "The app holds the anonymous account, on an access token that has already expired."
+      },
+      {
+        "action": "Sign in with an emailed code (address, then code).",
+        "expected": "The modal completes and closes."
+      },
+      {
+        "action": "Inspect the token rotation and the bearer the verify carried.",
+        "expected": "The client refreshed the stale token first, and the bearer it sent has an expiry in the future."
+      },
+      {
+        "action": "Read the persisted session after signing in.",
+        "expected": "It is the SAME user id, now non-anonymous — the anonymous account was upgraded, not orphaned."
+      }
+    ],
+    "tags": [
+      "account",
+      "auth",
       "free",
       "e2e"
     ]

@@ -65,6 +65,7 @@ import VerseTextInlineBlock from "./VerseTextInlineBlock.vue"
 import VerseTranslationBlock from "./VerseTranslationBlock.vue"
 import MarkerBlock from "./MarkerBlock.vue"
 import type { UiTranscriptBlockView } from "./types.js"
+import { timeRangesIntersect } from "./timeRange.js"
 
 const props = defineProps<{
   block: UiTranscriptBlockView
@@ -111,7 +112,7 @@ const referenceVisible = computed(
 const isInSelection = computed(() => {
   const r = props.selectionRange
   if (!r) return false
-  return props.block.block.start >= r.start && props.block.block.end <= r.end
+  return timeRangesIntersect(props.block.block, r)
 })
 
 const stateClasses = computed(() => ({

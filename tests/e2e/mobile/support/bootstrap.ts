@@ -216,6 +216,33 @@ export async function preseedUserDbOnce(
 }
 
 /**
+ * Write GARBAGE where the user DB belongs, so opening it fails.
+ *
+ * The web adapter reads `(lectorium, databases, user.db)` out of IndexedDB and
+ * hands the bytes to sql.js, which rejects anything without a SQLite header —
+ * the same `SQLITE_NOTADB` a user gets from a truncated file or a bad database
+ * import (Settings → import is a user-reachable path to exactly this).
+ *
+ * That puts the app in the state both #1724 and #1738 are about: the bootstrap
+ * reports ready, and `databases.user` is null. Nothing else in the harness can
+ * produce it, and nothing in the app can be asked for it.
+ */
+export async function preseedCorruptUserDb(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const req = indexedDB.open("lectorium", 1)
+    req.onupgradeneeded = () => req.result.createObjectStore("databases")
+    req.onsuccess = () => {
+      const db = req.result
+      // Not a SQLite file: the header must read "SQLite format 3\0".
+      const junk = new Uint8Array(4096).fill(0x41)
+      const tx = db.transaction(["databases"], "readwrite")
+      tx.objectStore("databases").put(junk, "user.db")
+      tx.oncomplete = () => db.close()
+    }
+  })
+}
+
+/**
  * Pin the library (TracksView) to the Bhagavad-gita source so it shows a stable,
  * populated, reference-sorted list. Capacitor Preferences on web → localStorage
  * under the `CapacitorStorage.` prefix.

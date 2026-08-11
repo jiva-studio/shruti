@@ -84,6 +84,125 @@ jobs:
           path: modules/apps/mobile/dist
           retention-days: 3
 
+  # The workflow-level `paths:` filter also fires on e2e / libs / db-scheme
+  # changes that cannot affect the native plugin sources, and lint-android is a
+  # multi-minute Gradle run. Gate it on a real diff of the native trees.
+  # workflow_dispatch has no diff to compute, so the lane runs unconditionally
+  # there (see lint-android's `if`).
+  detect-native:
+    name: detect native changes
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: filter
+        if: github.event_name != 'workflow_dispatch'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            native:
+              - 'modules/plugins/*/android/**'
+              - 'modules/apps/mobile/android/**'
+              - 'modules/apps/mobile/package-lock.json'
+              - '.github/workflows/apps-mobile.yml'
+
+  # Android Lint over both in-house Capacitor plugins, failures fatal.
+  # Nothing else in CI compiles or lints the native halves, so an API-level
+  # mistake (a java.nio.file call at minSdk 23 — issue #1721) reached main and
+  # only died on real Android 6/7 devices. `NewApi` catches exactly that, and
+  # both modules now set `lint { abortOnError true }`.
+  lint-android:
+    name: lint (android native)
+    needs: [detect-native]
+    if: needs.detect-native.outputs.native == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
+      - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 21
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        # Same pin as kit's mobile-android-setup: compileSdk 36 per
+        # modules/apps/mobile/android/variables.gradle. No emulator/system
+        # images — lint never runs anything.
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
+      - uses: ./.github/actions/build-audio-player
+      - uses: ./.github/actions/build-media-downloader
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      # The plugins are not standalone Gradle builds — they are included by the
+      # app project via capacitor.settings.gradle. `cap update` regenerates the
+      # gitignored capacitor-cordova-android-plugins module that app/build.gradle
+      # `apply from:`s; without it the root project fails to configure. Unlike
+      # `cap sync` it does not copy web assets, so no dist/ is needed here.
+      - name: generate native capacitor project files
+        # `cap sync` writes the gitignored pieces the app project needs to
+        # configure: capacitor-cordova-android-plugins/ (which app/build.gradle
+        # `apply from:`s) and app/src/main/assets/capacitor.plugins.json.
+        # It insists on a webDir, but lint never reads the web bundle — so a
+        # stub index.html, not the real mobile-web-dist artifact, which would
+        # serialise this lane behind build-web for no lint coverage.
+        run: |
+          cd modules/apps/mobile
+          mkdir -p dist android/app/src/main/assets
+          [ -f dist/index.html ] || echo '<!doctype html>' > dist/index.html
+          npx cap sync android
+      - name: lint native plugin modules
+        # Gradle project names come from capacitor.settings.gradle — the
+        # `lectorium-plugin-` prefix is Capacitor's, not the npm dir name.
+        # --continue so a failure in the first module still lints the second:
+        # one run reports every offender instead of one per push.
+        run: |
+          cd modules/apps/mobile/android
+          ./gradlew --no-daemon --continue \
+            :lectorium-plugin-audio-player:lintRelease \
+            :lectorium-plugin-media-downloader:lintRelease
+      - name: assert lint reports carry no errors
+        # Belt and braces: if abortOnError is ever reverted (or the flag stops
+        # applying), the Gradle step above goes green with errors in the report.
+        # This step re-reads the XML so silencing lint cannot silence the lane.
+        run: |
+          set -u
+          fail=0
+          for module in audio-player media-downloader; do
+            dir="modules/plugins/$module/android/build/reports"
+            reports=$(find "$dir" -name 'lint-results*.xml' 2>/dev/null || true)
+            if [ -z "$reports" ]; then
+              echo "::error::no lint report under $dir — did lintRelease run?"
+              fail=1
+              continue
+            fi
+            for report in $reports; do
+              if grep -qE 'severity="(Error|Fatal)"' "$report"; then
+                echo "::error::lint errors in $module ($report)"
+                grep -E 'id=|severity="(Error|Fatal)"|message=' "$report" | head -60
+                fail=1
+              fi
+            done
+          done
+          exit $fail
+      - name: upload lint reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-lint-reports
+          path: modules/plugins/*/android/build/reports/lint-results*
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Shared web CI: lint, unit test, e2e, Cloudflare Pages preview + production.
   # Runs after build-web so its e2e/deploy jobs find the mobile-web-dist
   # artifact. `plugins` are built generically by the reusable before npm ci.

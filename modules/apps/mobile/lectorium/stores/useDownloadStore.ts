@@ -34,6 +34,71 @@ export type DownloadState = "idle" | "pending" | "downloading" | "deferred" | "c
 export type DownloadOrigin = "user" | "queue"
 
 /**
+ * How long a download attempt may go without a single byte before it is
+ * declared dead.
+ *
+ * A STALL deadline, deliberately not a cap on the whole transfer: a lecture is
+ * tens of megabytes and a slow mobile link can legitimately spend half an hour
+ * on one, so a total-duration limit would fail exactly the users who need
+ * offline most. What a live transfer never does is go two minutes without
+ * delivering anything — the native side reports every chunk — so silence is
+ * the honest signal, and it costs a slow connection nothing.
+ *
+ * Comfortably above `HEDGE_CEILING_MS` (15s), which already bounds the silence
+ * BEFORE the first byte, so this only ever fires on a transfer the hedge has
+ * already handed over to.
+ */
+export const DOWNLOAD_STALL_TIMEOUT_MS = 120_000
+
+/** How often the stall watch looks at the clock. */
+const STALL_CHECK_INTERVAL_MS = 5_000
+
+/** What the stall watch resolves with; distinct from any real result. */
+const STALLED = Symbol("stalled")
+
+/**
+ * Watch an attempt for total silence and settle when it lasts too long.
+ *
+ * Nothing else bounds one: the adapter's promise settles only on a native
+ * `completed` / `failed` event for its own id, and there are ways for neither
+ * to arrive (an entry removed from the metadata store mid-flight, a
+ * stalled-but-open connection that iOS holds until its one-hour resource
+ * timeout). One such attempt used to freeze auto-download for the rest of the
+ * process (#1730).
+ *
+ * Only FOREGROUND time counts. A webview suspended in the user's pocket stops
+ * delivering progress events and stops running timers, and reading that
+ * silence as death would kill a background transfer that is in fact still
+ * moving bytes. The clock restarts on resume, so a genuinely dead transfer is
+ * still caught — one deadline later, with the app in the user's hands.
+ */
+function startStallWatch(): {
+  readonly expired: Promise<typeof STALLED>
+  readonly touch: () => void
+  readonly stop: () => void
+} {
+  let lastByteAt = Date.now()
+  let timer: ReturnType<typeof setInterval> | undefined
+  const expired = new Promise<typeof STALLED>((resolve) => {
+    timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        lastByteAt = Date.now()
+        return
+      }
+      if (Date.now() - lastByteAt < DOWNLOAD_STALL_TIMEOUT_MS) return
+      resolve(STALLED)
+    }, STALL_CHECK_INTERVAL_MS)
+  })
+  return {
+    expired,
+    touch: () => {
+      lastByteAt = Date.now()
+    },
+    stop: () => clearInterval(timer),
+  }
+}
+
+/**
  * Per-track media download state. The source of truth is the user DB
  * (`IMediaItemRepository`) — this store hydrates once from `listReady()`
  * so the "downloaded" indicator survives app relaunches, and in-flight
@@ -94,7 +159,13 @@ export const useDownloadStore = defineStore("downloads", () => {
   const PREFETCH_CONCURRENCY = 1
   const prefetchQueue: Array<{ trackId: TrackId; path: string; sizeBytes: number }> = []
   const queuedTrackIds = new Set<TrackId>()
-  let queueDraining = false
+  /**
+   * How many prefetch jobs are transferring right now. A slot belongs to one
+   * job and is handed back when that job settles — see `pumpPrefetchQueue`.
+   */
+  let activeJobs = 0
+  /** Guards the tail walk, which is async and must not overlap itself. */
+  let settlingTail = false
   let hydrated = false
   // The "storage budget is full" notice carries a "Download anyway" button,
   // so it stays on screen long enough to be read AND acted on. There is no
@@ -350,6 +421,88 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   /**
+   * Tracks the disk was asked about and did not have. Memoised because
+   * `resolveLocalUrl` is a native round trip and the FIFO re-drains on every
+   * eviction and every limit change — an un-memoised probe would cost one
+   * bridge call per queued lecture per drain, which is what makes probing the
+   * whole tail unaffordable. Everything that PUTS a file there goes through
+   * this store and drops the entry.
+   */
+  const absentFromDisk = new Set<TrackId>()
+
+  /**
+   * Take ownership of audio the native cache is already holding: write the
+   * `media_items` row and charge the budget, exactly as a finished transfer
+   * does.
+   *
+   * A file can exist with nothing in the ledger pointing at it — sharing a
+   * lecture downloads the full audio through the same adapter and the same key
+   * as an offline save (#1739), and a row can be lost to a failed migration or
+   * an interrupted write. Everything that rebuilds from `listReady()` is blind
+   * to such a file: the offline badge disappears on the next launch, the
+   * storage budget under-counts by its size, and `evict()` refuses to reclaim
+   * it because the row it checks isn't there.
+   *
+   * Idempotent, and safe for a track that IS already tracked: the row is
+   * rewritten with the same values and the budget keeps the charge it has.
+   */
+  async function adoptCachedFile(
+    trackId: TrackId,
+    localPath: string,
+    filesize?: number | null
+  ): Promise<void> {
+    const epoch = storeEpoch
+    absentFromDisk.delete(trackId)
+    await app
+      .repositories()
+      .mediaItems.upsert(trackId, "ready", localPath)
+      .catch((err: unknown) => {
+        console.warn("[downloads] could not adopt a cached file:", err)
+      })
+    // A wipe landing while the row was being written owns the maps now.
+    if (epoch !== storeEpoch) return
+    const quota = useDownloadQuotaStore()
+    quota.adopt(trackId, quota.sizeOf(filesize))
+    setState(trackId, "completed")
+  }
+
+  /**
+   * Ask the disk whether this lecture is already saved, and adopt it if so.
+   *
+   * The state machine is otherwise derived from `media_items` plus budget
+   * arithmetic and never consults the disk, so a file present on disk but
+   * absent from the table is reported as "not downloaded" and painted as
+   * refused-for-space — while the player, which resolves the same file
+   * independently, plays it offline (#1744).
+   *
+   * A `failed` row is left alone: the file its last attempt left behind may be
+   * a CDN error page written to the lecture's own path (#1722), and adopting
+   * that would make a corrupt download permanent. Those rows keep their red X
+   * and their retry, which re-fetches rather than trusting what is there.
+   */
+  async function adoptIfOnDisk(
+    trackId: TrackId,
+    path: string,
+    filesize?: number | null
+  ): Promise<boolean> {
+    if (absentFromDisk.has(trackId)) return false
+    if (effectiveState(trackId) === "failed") return false
+    try {
+      const url = buildServerUrl(app.activeServer.value, path)
+      const cached = await app.mediaDownloader.resolveLocalUrl(url)
+      if (!cached) {
+        absentFromDisk.add(trackId)
+        return false
+      }
+      await adoptCachedFile(trackId, cached, filesize)
+      return true
+    } catch (err) {
+      console.warn("[downloads] disk probe failed:", err)
+      return false
+    }
+  }
+
+  /**
    * Ensure the track's audio is cached locally. Returns the local URL
    * (blob: on web, file:// on native). Concurrent calls for the same
    * track share one in-flight download. Returns `null` on failure.
@@ -432,12 +585,47 @@ export const useDownloadStore = defineStore("downloads", () => {
     inFlightOrigins.set(trackId, claimedOrigin)
 
     const taskEpoch = storeEpoch
-    const fresh = (): boolean => taskEpoch === storeEpoch
+    // Set when the stall watch gives up on this attempt. Nothing can force a
+    // native promise to settle, so an abandoned attempt may still be running:
+    // it is barred from writing state as though it were still the live one.
+    let abandoned = false
+    /** Still the generation this task started in (a wipe bumps it). */
+    const live = (): boolean => taskEpoch === storeEpoch
+    const fresh = (): boolean => live() && !abandoned
     // Created before the first await so a cancel arriving at any point in the
     // pre-transfer phase has something to abort.
     const aborter = new AbortController()
     inFlightAborts.set(trackId, aborter)
     const cancelled = (): boolean => aborter.signal.aborted
+    // Bounds the attempt. Armed for the whole task, not just the transfer:
+    // the probe and the native delete are platform calls too.
+    const stall = startStallWatch()
+
+    /**
+     * The stall watch gave up. The attempt is abandoned rather than awaited —
+     * that is the whole point, since waiting is what froze the queue — so the
+     * abort stops it at its next checkpoint and the native transfer is
+     * cancelled, and `abandoned` keeps it from painting over the failure if it
+     * settles after all.
+     */
+    function abandonStalled(): null {
+      if (fresh()) {
+        setState(trackId, "failed")
+        noticeDownloadFailed(claimedOrigin.current)
+      }
+      abandoned = true
+      aborter.abort()
+      const url = inFlightUrls.get(trackId)
+      if (url) void app.mediaDownloader.cancel(url).catch(() => {})
+      // The DB row goes with the state: one left at "downloading" makes
+      // `downloadMedia` refuse the next attempt with "already-in-progress"
+      // until a relaunch runs `failStaleDownloads()`.
+      void app
+        .repositories()
+        .mediaItems.upsert(trackId, "failed", null)
+        .catch(() => {})
+      return null
+    }
     // Token used so the task's finally only clears the inFlight slot
     // if it is still the one we put there — reset() may have wiped
     // and a newer task may already own this trackId.
@@ -455,10 +643,45 @@ export const useDownloadStore = defineStore("downloads", () => {
         // Record the url so a concurrent remove/archive/reset can cancel the
         // native transfer (keyed by url → pathname id, host-independent).
         inFlightUrls.set(trackId, probeUrl)
+        // Ask the disk FIRST, on every path including a retry. Two different
+        // questions hang off this one probe and the code used to conflate
+        // them:
+        //
+        //   "is there a file?"        — what the storage budget needs to know.
+        //   "is that file any good?"  — what a retry needs to know.
+        //
+        // A retry answers the second with "assume not" and re-fetches (see the
+        // eviction below): a failed attempt can leave a BAD file behind, and
+        // on iOS that is a CDN error page written to the lecture's own path
+        // (#1722). That is why the cache-hit shortcut stays gated on
+        // `!isRetryAfterFailure`. But it is not a reason to withhold the FIRST
+        // answer from the budget, and withholding it is what produced the
+        // reported "storage is full" popup over a lecture that was on disk and
+        // playing: a background URLSession finishes while the app is suspended,
+        // the next launch's unconditional `failStaleDownloads()` blanks the
+        // still-"downloading" row to `failed`, and from then on every tap took
+        // the retry path straight past the probe into the budget gate (#1744).
+        const cached = await Promise.race([
+          app.mediaDownloader.resolveLocalUrl(probeUrl),
+          stall.expired,
+        ])
+        if (cached === STALLED) return abandonStalled()
+        if (cancelled()) return null
+        // Keep the memoised answer honest for the queue's tail walk.
+        if (cached) absentFromDisk.delete(trackId)
+        else absentFromDisk.add(trackId)
         if (!isRetryAfterFailure) {
-          const cached = await app.mediaDownloader.resolveLocalUrl(probeUrl)
-          if (cancelled()) return null
           if (cached) {
+            // The file is on disk — but nothing may own it. Sharing a lecture
+            // downloads the full audio through the same adapter and the same
+            // key, so this branch is reached with no `media_items` row and
+            // nothing charged to the budget (#1739). Left that way the badge
+            // disappears on the next launch (`hydrate()` rebuilds from
+            // `listReady()`), `usedBytes` under-counts by everything the user
+            // has shared, and `evict()` refuses to reclaim the file — it
+            // survives until uninstall. Adopt it instead: the same bookkeeping
+            // a finished transfer does.
+            await adoptCachedFile(trackId, cached, filesize)
             if (fresh()) setState(trackId, "completed")
             // Even when audio is already on disk, make sure transcripts
             // are too — the user might have saved offline before the
@@ -517,7 +740,21 @@ export const useDownloadStore = defineStore("downloads", () => {
         // made for. The limit itself is untouched: the next track is measured
         // against it as before, now with these bytes counted in.
         const exempt = budgetExceptions.delete(trackId)
-        if (!exempt && !quota.hasRoomFor(sizeBytes, trackId)) {
+        // The bytes are already on disk and the re-fetch overwrites them in
+        // place, so this transfer asks the device for no new space — refusing
+        // it on storage grounds would be arithmetic about a file the disk
+        // already holds. Reachable only on the retry path (any other route
+        // served the cache hit above and never got here).
+        //
+        // A phantom iOS entry — written at download-start and not cleaned up
+        // on failure — can answer "yes" for a file that isn't there, so this
+        // can wave through one lecture the cap would have refused. That is the
+        // cheaper mistake: the alternative is telling a user their storage is
+        // full while the lecture in question plays offline. The eviction below
+        // clears the phantom, and the settled transfer charges the budget
+        // honestly either way.
+        const onDiskAlready = cached !== null
+        if (!exempt && !onDiskAlready && !quota.hasRoomFor(sizeBytes, trackId)) {
           if (fresh()) {
             markDeferred(trackId)
             // Only a request the user is waiting on gets a notice, and it
@@ -547,6 +784,7 @@ export const useDownloadStore = defineStore("downloads", () => {
           // failed download; without this delete, a follow-up probe
           // would hand back a localUrl pointing at nothing.
           await app.mediaDownloader.delete(probeUrl).catch(() => {})
+          absentFromDisk.add(trackId)
           // Demote any stale "ready" DB row before invoking `downloadMedia`.
           // The use case's cached branch trusts the DB (`state === "ready" &&
           // localPath`) without verifying the file is still on disk — so a row
@@ -563,27 +801,36 @@ export const useDownloadStore = defineStore("downloads", () => {
           // is untouched — it funds the bytes now on their way in.
           quota.uncharge(trackId)
         }
-        const result = await downloadMedia(
-          { trackId, path, candidates: fallback.candidates() },
-          {
-            mediaItems: app.repositories().mediaItems,
-            unitOfWork: app.repositories().unitOfWork,
-            transfer: (url, onProgress, signal) =>
-              app.mediaDownloader.download(
-                url,
-                (received, total) => {
-                  onProgress?.(received, total)
-                },
-                signal
-              ),
-          },
-          (pct) => {
-            if (fresh()) setProgress(trackId, pct)
-          }
-        )
+        const result = await Promise.race([
+          downloadMedia(
+            { trackId, path, candidates: fallback.candidates() },
+            {
+              mediaItems: app.repositories().mediaItems,
+              unitOfWork: app.repositories().unitOfWork,
+              transfer: (url, onProgress, signal) =>
+                app.mediaDownloader.download(
+                  url,
+                  (received, total) => {
+                    // Raw bytes, not the rounded percentage below: a server
+                    // that omits Content-Length reports no percentage at all,
+                    // and a transfer that IS delivering must never look stalled.
+                    stall.touch()
+                    onProgress?.(received, total)
+                  },
+                  signal
+                ),
+            },
+            (pct) => {
+              if (fresh()) setProgress(trackId, pct)
+            }
+          ),
+          stall.expired,
+        ])
+        if (result === STALLED) return abandonStalled()
         if (result.ok) {
           // Bytes are on disk — turn the reservation into real usage.
           quota.settle(trackId, true)
+          absentFromDisk.delete(trackId)
           if (fresh()) setState(trackId, "completed")
           // Promote the working CDN if it differs from the active
           // server when the download started. The activeServer watcher
@@ -618,6 +865,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         }
         return null
       } finally {
+        stall.stop()
         // Drop a grant this task never reached the gate to spend (a cache
         // hit, the offline guard, a throw). Together with the delete AT the
         // gate this bounds a "Download anyway" press to the single call it
@@ -631,7 +879,9 @@ export const useDownloadStore = defineStore("downloads", () => {
         // recorded must not leave the row shimmering forever. Epoch-gated
         // like the writes above — after a reset() our claim is already gone
         // and the trackId may carry a NEW one, which is not ours to release.
-        if (fresh()) clearPending(trackId)
+        // Deliberately NOT gated on `abandoned`: an attempt the stall watch
+        // gave up on still holds the claim it made, and only this releases it.
+        if (live()) clearPending(trackId)
         // Only delete our own slot. After a reset() the map was
         // cleared and a newer task may already own this trackId.
         if (inFlight.get(trackId) === ownership.current) {
@@ -656,47 +906,96 @@ export const useDownloadStore = defineStore("downloads", () => {
    * its own as the user finishes and clears lectures.
    */
   async function drainPrefetchQueue(): Promise<void> {
-    if (queueDraining) return
-    queueDraining = true
-    try {
-      const quota = useDownloadQuotaStore()
-      // Never budget against an unmeasured zero — on a cold start that
-      // would let the whole queue through before the first refresh lands.
-      await quota.ensureMeasured()
-      while (prefetchQueue.length > 0) {
-        const batch: Array<{ trackId: TrackId; path: string; sizeBytes: number }> = []
-        while (batch.length < PREFETCH_CONCURRENCY && prefetchQueue.length > 0) {
-          const head = prefetchQueue[0]!
-          if (!quota.hasRoomFor(head.sizeBytes)) break
-          // Reserve up front so a multi-job batch is measured against the
-          // budget as a whole, not job-by-job against a stale total.
-          quota.reserve(head.trackId, head.sizeBytes)
-          prefetchQueue.shift()
-          batch.push(head)
-        }
-        if (batch.length === 0) {
-          // Budget spent. Paint the whole waiting tail as deferred and say
-          // nothing: nobody is waiting on a particular one of these, the rows
-          // now carry the state themselves, and a notice here fired on every
-          // launch of a library already at the cap (#1578).
-          for (const job of prefetchQueue) markDeferred(job.trackId)
-          return
-        }
-        await Promise.allSettled(
-          batch.map(async (job) => {
-            queuedTrackIds.delete(job.trackId)
-            markStartingDownload(job.trackId)
-            try {
-              await ensureDownloaded(job.trackId, job.path, job.sizeBytes, "queue")
-            } catch {
-              // ensureDownloaded already records "failed"; don't break the queue.
-            }
-          })
-        )
+    // Never budget against an unmeasured zero — on a cold start that would let
+    // the whole queue through before the first refresh lands. Concurrent
+    // callers share the one measurement (`ensureMeasured` coalesces), so this
+    // needs no guard of its own.
+    await useDownloadQuotaStore().ensureMeasured()
+    pumpPrefetchQueue()
+  }
+
+  /**
+   * Admit jobs from the head of the FIFO up to `PREFETCH_CONCURRENCY`, and
+   * stop at the first one the budget can't fund.
+   *
+   * A slot is owned by ONE job and handed back when THAT job settles. The
+   * previous shape — a single `queueDraining` boolean held across a `while`
+   * loop that awaited each job inside it — meant a transfer that never settled
+   * kept the flag raised for the rest of the process: every later `prefetch()`
+   * and `resumeDeferred()` returned at the guard, and auto-download silently
+   * stopped working with no error and no state change on any row (#1730).
+   * Nothing here is held across an await.
+   */
+  function pumpPrefetchQueue(): void {
+    const quota = useDownloadQuotaStore()
+    while (activeJobs < PREFETCH_CONCURRENCY && prefetchQueue.length > 0) {
+      const head = prefetchQueue[0]!
+      if (!quota.hasRoomFor(head.sizeBytes)) {
+        if (!settlingTail) void settleUnfundedTail()
+        return
       }
-    } finally {
-      queueDraining = false
+      // Reserve up front so a multi-job batch is measured against the
+      // budget as a whole, not job-by-job against a stale total.
+      quota.reserve(head.trackId, head.sizeBytes)
+      prefetchQueue.shift()
+      queuedTrackIds.delete(head.trackId)
+      activeJobs += 1
+      void runPrefetchJob(head)
     }
+  }
+
+  async function runPrefetchJob(job: {
+    trackId: TrackId
+    path: string
+    sizeBytes: number
+  }): Promise<void> {
+    markStartingDownload(job.trackId)
+    try {
+      await ensureDownloaded(job.trackId, job.path, job.sizeBytes, "queue")
+    } catch {
+      // ensureDownloaded already records "failed"; don't break the queue.
+    } finally {
+      activeJobs -= 1
+      pumpPrefetchQueue()
+    }
+  }
+
+  /**
+   * The budget is spent. Before painting the waiting tail as "held back for
+   * space", ask the disk about each of them once: a lecture whose audio is
+   * already saved is downloaded no matter what `media_items` says, and the
+   * budget arithmetic that refused it never looked (#1744). Whatever the disk
+   * does have is adopted into the ledger and leaves the queue.
+   *
+   * The rest are painted and nothing is said: nobody is waiting on a
+   * particular one of these, the rows now carry the state themselves, and a
+   * notice here fired on every launch of a library already at the cap (#1578).
+   */
+  async function settleUnfundedTail(): Promise<void> {
+    settlingTail = true
+    try {
+      let adopted = false
+      for (const job of [...prefetchQueue]) {
+        if (await adoptIfOnDisk(job.trackId, job.path, job.sizeBytes)) {
+          dropFromQueue(job.trackId)
+          adopted = true
+          continue
+        }
+        markDeferred(job.trackId)
+      }
+      // Adopting shortens the queue, so the head may have changed — and it
+      // charges the budget, so re-running the gate is also what keeps the
+      // adopted bytes counted before the next job is measured.
+      if (adopted) pumpPrefetchQueue()
+    } finally {
+      settlingTail = false
+    }
+  }
+
+  function dropFromQueue(trackId: TrackId): void {
+    const idx = prefetchQueue.findIndex((j) => j.trackId === trackId)
+    if (idx >= 0) prefetchQueue.splice(idx, 1)
+    queuedTrackIds.delete(trackId)
   }
 
   /**
@@ -824,6 +1123,8 @@ export const useDownloadStore = defineStore("downloads", () => {
         },
       }
     )
+    // The file is provably gone, so the memoised disk answer is too.
+    absentFromDisk.add(trackId)
     clearDownloadState(trackId)
   }
 
@@ -918,9 +1219,7 @@ export const useDownloadStore = defineStore("downloads", () => {
       return
     }
     if (!queuedTrackIds.has(trackId)) return
-    const idx = prefetchQueue.findIndex((j) => j.trackId === trackId)
-    if (idx >= 0) prefetchQueue.splice(idx, 1)
-    queuedTrackIds.delete(trackId)
+    dropFromQueue(trackId)
     // Roll back the optimistic paint applied at enqueue time — "downloading"
     // when the budget had room, "deferred" when it didn't — but only if the
     // track hasn't started transferring yet.
@@ -960,6 +1259,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     inFlight.clear()
     prefetchQueue.length = 0
     queuedTrackIds.clear()
+    absentFromDisk.clear()
     useDownloadQuotaStore().reset()
     hydrated = false
     lastHydrateFailAt = 0
@@ -985,6 +1285,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     getProgress,
     hydrate,
     ensureDownloaded,
+    adoptCachedFile,
     prefetch,
     resumeDeferred,
     cancelPrefetch,

@@ -52,6 +52,7 @@ vi.mock("../useDownloadQuotaStore.js", () => ({
     hasRoomFor: () => hasRoom,
     reserve,
     settle,
+    adopt: vi.fn(),
     uncharge: vi.fn(),
     forget: vi.fn(),
     refresh: () => Promise.resolve(),

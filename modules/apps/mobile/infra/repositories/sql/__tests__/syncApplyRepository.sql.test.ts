@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import type { IDatabase } from "@ports/app/index.js"
 import type { SyncDoc } from "@lib/domain"
+import type { PlaylistItemId } from "@lib/domain/core.js"
+import type { IListeningSessionRepository } from "@lib/domain/ports/listeningSessionRepository.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
+import { createSqlListeningSessionRepository } from "../listeningSessionsRepository.sql.js"
 import { createSqlSyncApplyRepository } from "../syncApplyRepository.sql.js"
 
 /**
@@ -280,5 +283,110 @@ describe("createSqlSyncApplyRepository — chat + listening apply", () => {
     await apply.forgetDocHlcs([])
 
     expect(await apply.lastServerHlc("notes", "note-1")).toBe(HLC_A)
+  })
+})
+
+/**
+ * One `playlist_items` row per `track_id` is the invariant migration 027
+ * enforces, but a device that has not migrated yet — or that landed on the
+ * non-unique fallback index — still carries the archived shadow row that
+ * archive-then-re-add left behind. Read and write must agree on which of the
+ * two is canonical, or a pulled change lands on the wrong one and takes the
+ * track's listening history with it (#1736).
+ */
+describe("createSqlSyncApplyRepository — duplicate playlist rows for one track", () => {
+  let db: IDatabase
+  let apply: ReturnType<typeof createSqlSyncApplyRepository>
+  let sessions: IListeningSessionRepository
+
+  const TRACK = "track-dup"
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applySchema(db)
+    apply = createSqlSyncApplyRepository(db)
+    sessions = createSqlListeningSessionRepository(db, {
+      run: <T>(fn: () => Promise<T>) => fn(),
+    })
+
+    // The state device A ends up in: queue a lecture, finish it (the sweep
+    // archives it), re-queue it. `pl_archived` has the lower rowid, so an
+    // unordered `LIMIT 1` — a rowid scan — returns IT, while `readLocalRow`
+    // merges from `pl_active`.
+    await db.execute(
+      `INSERT INTO playlist_items (id, track_id, added_at, archived_at, collection_id)
+       VALUES ('pl_archived', ?, 100, 150, NULL)`,
+      [TRACK]
+    )
+    await db.execute(
+      `INSERT INTO playlist_items (id, track_id, added_at, archived_at, collection_id)
+       VALUES ('pl_active', ?, 200, NULL, NULL)`,
+      [TRACK]
+    )
+  })
+
+  it("applies a pulled playlist change to the row it merged FROM, not the archived shadow", async () => {
+    // `getLocalDoc` reads `pl_active` (newest add) — so the merge result must
+    // be written back to `pl_active` too.
+    const local = await apply.getLocalDoc("playlist_items", TRACK)
+    expect(local?.data).toMatchObject({ added_at: 200, archived_at: null })
+
+    await apply.applyRemote(
+      "playlist_items",
+      upsertDoc(TRACK, HLC_B, {
+        track_id: TRACK,
+        added_at: 300,
+        archived_at: null,
+        collection_id: null,
+      }),
+      HLC_B
+    )
+
+    const rows = await db.query<{ id: string; added_at: number; archived_at: number | null }>(
+      "SELECT id, added_at, archived_at FROM playlist_items WHERE track_id = ? ORDER BY id",
+      [TRACK]
+    )
+    expect(rows).toEqual([
+      // The shadow is left exactly as it was — untouched, still archived, so
+      // it cannot surface in `listActive()` alongside the live row.
+      { id: "pl_active", added_at: 300, archived_at: null },
+      { id: "pl_archived", added_at: 100, archived_at: 150 },
+    ])
+  })
+
+  it("keys a pulled listening session onto the canonical row, so progress still resolves", async () => {
+    // Local progress the user already has on the live row.
+    await db.execute(
+      `INSERT INTO listening_sessions (id, item_id, started_at, ended_at, from_position, to_position)
+       VALUES ('ls_local', 'pl_active', 10, 20, 0, 120)`
+    )
+
+    // A session for the same track pulled from another device, carrying THAT
+    // device's surrogate item id.
+    await apply.applyRemote(
+      "listening_sessions",
+      upsertDoc("ls_remote", HLC_A, {
+        id: "ls_remote",
+        item_id: "pl_other_device",
+        track_id: TRACK,
+        started_at: 30,
+        ended_at: 40,
+        from_position: 120,
+        to_position: 900,
+      }),
+      HLC_A
+    )
+
+    const [row] = await db.query<{ item_id: string }>(
+      "SELECT item_id FROM listening_sessions WHERE id = 'ls_remote'"
+    )
+    expect(row?.item_id).toBe("pl_active")
+
+    // …and the live row's resume position advanced to the pulled mark instead
+    // of being stranded on the archived shadow.
+    expect(await sessions.getResumePositionForItem("pl_active" as PlaylistItemId)).toBe(900)
+    expect(await sessions.getResumePositionForItem("pl_archived" as PlaylistItemId)).toBeNull()
+    const progress = await sessions.getProgressForItems(["pl_active" as PlaylistItemId])
+    expect(progress.get("pl_active" as PlaylistItemId)?.position).toBe(900)
   })
 })
