@@ -279,6 +279,28 @@ export async function preseedNonPro(page: Page): Promise<void> {
 }
 
 /**
+ * Force the app to run as a SUBSCRIBER, whichever way the app was built.
+ *
+ * This is the half that used to be missing: `pro: true` asked for nothing and
+ * relied on the build being Pro by default, which only the dev server is
+ * (`__BUILD_ID__ === "dev"`). Under `E2E_USE_BUNDLE=1` the same specs ran as
+ * free users against the wrong UI (#1633). Now the intent is written down.
+ *
+ * The app honours it only on a build made for the tests
+ * (`SHRUTI_E2E_BUILD=1`) — which `playwright.config.ts` passes to the dev
+ * server and `globalSetup` checks for in a prebuilt bundle.
+ */
+export async function preseedPro(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("CapacitorStorage.dev.subscriptionOverride", "pro")
+    } catch {
+      /* non-fatal */
+    }
+  })
+}
+
+/**
  * Seed a signed-in (non-anonymous) auth session so account / sign-out specs run
  * without a real backend. The token expires a year out, so the app never tries
  * to refresh (no `/auth/me` round-trip) and stays signed in offline. Call BEFORE
@@ -355,10 +377,11 @@ export async function boot(
   // Skip first-launch onboarding so we land on Home (the dedicated onboarding
   // spec omits this to exercise the flow).
   await preseedOnboardingDone(page)
-  // The dev build treats every user as Pro. For the e2e suite we flip that:
-  // boot NON-Pro by default (so paywalls / Pro gates are reproducible) and
-  // turn Pro on explicitly with `boot(page, locale, { pro: true })`.
-  if (!pro) await preseedNonPro(page)
+  // Which tier the app runs as is always stated, never inherited from how the
+  // build happened to be made: NON-Pro by default (so paywalls / Pro gates are
+  // reproducible), Pro with `boot(page, locale, { pro: true })`.
+  if (pro) await preseedPro(page)
+  else await preseedNonPro(page)
 
   await page.goto(`/?locale=${locale}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
