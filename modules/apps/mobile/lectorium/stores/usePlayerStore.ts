@@ -66,9 +66,20 @@ export const usePlayerStore = defineStore("player", () => {
   // Set when an item left the queue while the engine was paused: `setQueue`
   // restarts playback, so the rewrite waits for the next resume.
   let queueNeedsRewrite = false
+  // True while the queue the ENGINE is running still contains entries the JS
+  // mirror has dropped — the window in which their `file://` URLs are still
+  // reachable, by an auto-advance ahead of the playhead or a `skipToPrevious`
+  // behind it. Distinct from `queueNeedsRewrite`, which only says a rewrite is
+  // wanted: `pushQueue` clears that flag whether or not it managed to push,
+  // and a file must not be reclaimed on the strength of a rewrite that never
+  // landed. Cleared only by a `setQueue` that actually went through, or by the
+  // queue being released.
+  let queueHoldsDropped = false
   // Archived lectures whose audio `usePlaylistStore.archive` left on disk
   // because the engine could still reach them. Nothing else collects those,
-  // so the player owes them an evict once the engine has let go.
+  // so the player owes them an evict once the engine has let go — and the
+  // debt is written to the media row too, so a kill in that window doesn't
+  // strand the file forever (issue #1666).
   const pendingEvictions = new Set<PlaylistItemId>()
   // Single-flight guard for the native-state drain (init / resume /
   // foreground-advance can all trigger it near-simultaneously).
@@ -299,6 +310,9 @@ export const usePlayerStore = defineStore("player", () => {
     const s = state !== undefined ? state : await app.audioPlayer.getQueueState().catch(() => null)
     const at = s && s.currentItemId === itemId.value ? s.positionMs : positionMs.value
     await app.audioPlayer.setQueue(currentQueue, startIndex, at)
+    // The engine is now running the mirror, which carries none of the dropped
+    // entries — this is the moment their files stop being reachable.
+    queueHoldsDropped = false
     await flushPendingEvictions()
     return true
   }
@@ -320,24 +334,45 @@ export const usePlayerStore = defineStore("player", () => {
   }
 
   /**
+   * Remember that a lecture's audio is owed an eviction. The in-memory set is
+   * what this session acts on; the media row is what survives the session, so
+   * a kill inside the window still gets the file back (`collectOrphans`).
+   */
+  function rememberEviction(id: PlaylistItemId): void {
+    pendingEvictions.add(id)
+    void (async () => {
+      const track = await usePlaylistStore().resolveTrackForItemId(id)
+      if (track) await useDownloadStore().markEvictPending(track.id)
+    })().catch((e: unknown) => reportError("player", e))
+  }
+
+  /**
    * Give back the audio of lectures archived while the engine still held them.
    * `usePlaylistStore.archive` skips the evict for those (see `dropFromQueue`),
-   * and there is no orphan collection anywhere else, so without this the file
-   * stays against the storage budget for the life of the install.
+   * so without this the file stays against the storage budget until the durable
+   * sweep catches it on some later launch.
    *
-   * An item is reachable while it is playing or sits ahead of the playhead —
-   * and while a rewrite is still deferred, since the engine is then running the
-   * queue we haven't replaced yet.
+   * An item is reachable while it is playing, and for as long as the queue the
+   * engine is actually running still carries it — which is until a rewrite has
+   * landed, whichever side of the playhead it sat on.
    */
   async function flushPendingEvictions(force = false): Promise<void> {
     if (pendingEvictions.size === 0) return
-    if (!force && queueNeedsRewrite) return
-    const currentIdx = currentQueue.findIndex((q) => q.itemId === itemId.value)
     for (const id of [...pendingEvictions]) {
       if (!force) {
         if (id === itemId.value) continue
-        const idx = currentQueue.findIndex((q) => q.itemId === id)
-        if (idx >= 0 && (currentIdx < 0 || idx > currentIdx)) continue
+        // Archived while it was the one playing, and the engine has since moved
+        // off it. `dropFromQueue` left it in the mirror — taking out the item a
+        // rewrite has to start from would make that rewrite impossible. Now that
+        // it isn't current, take it out and arm the rewrite that puts it beyond
+        // the engine's reach; it lands on the next transition, where restarting
+        // the current item costs nothing (it is at position ~0).
+        if (currentQueue.some((q) => q.itemId === id)) {
+          currentQueue = currentQueue.filter((q) => q.itemId !== id)
+          queueNeedsRewrite = true
+          queueHoldsDropped = true
+        }
+        if (queueHoldsDropped) continue
       }
       pendingEvictions.delete(id)
       const track = await usePlaylistStore().resolveTrackForItemId(id)
@@ -346,19 +381,23 @@ export const usePlayerStore = defineStore("player", () => {
   }
 
   /**
-   * Take an item out of the live native queue, so the engine can't advance
-   * into a lecture whose audio is about to be deleted. Returns true when the
-   * file must be KEPT — the item is playing right now, or the rewrite had to
-   * be deferred and a lock-screen resume could still reach it. Every kept file
-   * is remembered so it can be reclaimed once the engine lets go.
+   * Take an item out of the live native queue, so the engine can't reach a
+   * lecture whose audio is about to be deleted. Returns true when the file must
+   * be KEPT — the item is playing right now, or the queue could not be rewritten
+   * on the spot and something could still reach it. Every kept file is
+   * remembered so it can be reclaimed once the engine lets go.
    *
-   * Only the unplayed tail is rewritten: the engine never auto-advances
-   * backwards, and re-pushing the queue for an item behind the playhead would
-   * restart the current lecture every time the sweep archives a finished one.
+   * Only the unplayed tail is rewritten. An item BEHIND the playhead is dropped
+   * from the mirror but its file is kept: rewriting for it would restart the
+   * current lecture every time the sweep archives a finished one, and until a
+   * rewrite lands the engine's queue still holds the entry. Nothing auto-advances
+   * backwards into it — but the user does, and `skipToPrevious` from the lock
+   * screen, a Bluetooth remote or `playPrevious` walks straight into a `file://`
+   * URL whose file we would have deleted (issue #1667).
    */
   async function dropFromQueue(id: PlaylistItemId): Promise<boolean> {
     if (id === itemId.value) {
-      pendingEvictions.add(id)
+      rememberEviction(id)
       return true
     }
     if (queueActive) await ensureQueueMirror(itemId.value)
@@ -366,14 +405,27 @@ export const usePlayerStore = defineStore("player", () => {
     if (idx < 0) return false
     const currentIdx = currentQueue.findIndex((q) => q.itemId === itemId.value)
     currentQueue = currentQueue.filter((q) => q.itemId !== id)
-    if (currentIdx < 0 || idx < currentIdx) return false
+    // Behind the playhead, or a mirror that can't place what is playing (so
+    // `pushQueue` would push nothing). The engine keeps running the queue it
+    // has, entry included, so the file has to stay. No rewrite is ARMED for it:
+    // a rewrite restarts the current lecture, and the auto-archive sweep
+    // archives a finished lecture behind the playhead every time one ends —
+    // arming it there makes every completion audibly restart what is playing.
+    // The file goes back on the next rewrite that happens anyway, on release of
+    // the queue, or — if the app dies first — on the next launch's sweep.
+    if (currentIdx < 0 || idx < currentIdx) {
+      queueHoldsDropped = true
+      rememberEviction(id)
+      return true
+    }
     // `playing.value` only moves on a progress tick (1 s in the foreground), so
     // for about a second after a pause tap it still reads true — and rewriting
     // a paused queue restarts playback by itself. Ask the engine instead.
     const state = await app.audioPlayer.getQueueState().catch(() => null)
     if (!(state?.playing ?? playing.value)) {
       queueNeedsRewrite = true
-      pendingEvictions.add(id)
+      queueHoldsDropped = true
+      rememberEviction(id)
       return true
     }
     await pushQueue(state)
@@ -435,6 +487,7 @@ export const usePlayerStore = defineStore("player", () => {
         playing.value = false
         queueActive = false
         queueNeedsRewrite = false
+        queueHoldsDropped = false
         currentQueue = []
         await flushPendingEvictions(true)
       }
@@ -630,6 +683,9 @@ export const usePlayerStore = defineStore("player", () => {
           queueActive = true
           queueNeedsRewrite = false
           await app.audioPlayer.setQueue(queue, startIndex, resumeMs)
+          // A queue built from the ACTIVE playlist carries no archived entry,
+          // so whatever the engine was holding is out of reach now.
+          queueHoldsDropped = false
           started = true
         }
       }
@@ -643,6 +699,7 @@ export const usePlayerStore = defineStore("player", () => {
           title: cmd.title,
           author: cmd.authorName,
         })
+        queueHoldsDropped = false
       }
       // Re-apply the user's mix and speed settings — a fresh native
       // MediaItem / AVPlayerItem loses both the processor binding and the
@@ -763,6 +820,7 @@ export const usePlayerStore = defineStore("player", () => {
     durationMs.value = 0
     queueActive = false
     queueNeedsRewrite = false
+    queueHoldsDropped = false
     currentQueue = []
     await flushPendingEvictions(true)
   }

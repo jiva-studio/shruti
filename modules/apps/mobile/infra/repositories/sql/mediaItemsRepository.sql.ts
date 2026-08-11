@@ -40,12 +40,26 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
     ): Promise<MediaItem> {
       const existing = await this.getByTrack(trackId, kind)
       if (existing) {
-        await mutate(db, "UPDATE media_items SET state = ?, local_path = ? WHERE id = ?", [
+        // Landing a fresh file clears the debt: a track that was owed an
+        // eviction and has since been downloaded again owes nothing, and a
+        // stale flag would have the next sweep delete the new file. Any other
+        // transition leaves it — `removeDownloadedMedia` demotes to "failed"
+        // BEFORE deleting the bytes, and losing the flag there would strand
+        // the file if that delete then throws.
+        const settled = state === "ready"
+        await mutate(
+          db,
+          `UPDATE media_items SET state = ?, local_path = ?,
+             evict_pending = CASE WHEN ? THEN 0 ELSE evict_pending END
+           WHERE id = ?`,
+          [state, localPath, settled ? 1 : 0, existing.id]
+        )
+        return {
+          ...existing,
           state,
           localPath,
-          existing.id,
-        ])
-        return { ...existing, state, localPath }
+          evictPending: settled ? false : existing.evictPending,
+        }
       }
       const id = newMediaItemId()
       const now = Date.now()
@@ -55,7 +69,27 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
          VALUES (?, ?, ?, ?, ?, ?)`,
         [id, trackId, kind, state, localPath, now]
       )
-      return { id, trackId, kind, state, localPath, createdAt: now }
+      return { id, trackId, kind, state, localPath, createdAt: now, evictPending: false }
+    },
+
+    async markEvictPending(trackId: TrackId): Promise<void> {
+      // Only a file that exists can be owed back. An UPDATE (never an insert)
+      // so a track with no cache row records no debt, and so a row deleted by
+      // an eviction that raced this write stays deleted.
+      await mutate(
+        db,
+        "UPDATE media_items SET evict_pending = 1 WHERE track_id = ? AND state = 'ready'",
+        [trackId]
+      )
+    },
+
+    async listEvictPending(): Promise<readonly MediaItem[]> {
+      return queryMany<MediaItemRow, MediaItem>(
+        db,
+        "SELECT * FROM media_items WHERE evict_pending = 1 ORDER BY created_at ASC",
+        [],
+        rowToMediaItem
+      )
     },
 
     async deleteByTrack(trackId: TrackId): Promise<void> {
