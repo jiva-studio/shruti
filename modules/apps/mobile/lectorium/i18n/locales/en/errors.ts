@@ -7,6 +7,9 @@ export default {
   dictionariesUnavailable: "Couldn’t load names — some labels may be missing.",
   playbackFailed: "Couldn’t play this lecture. Check your connection and try again.",
   noAudioForLecture: "This lecture has no audio.",
+  translationFailed: "Translation failed. Please try again later.",
+  translationStillRunning:
+    "The translation is taking longer than usual — it will appear once it's ready.",
   downloadStorageFull:
     "Storage limit reached. Remove listened lectures or raise the limit in Settings.",
   downloadStorageFullAction: "Download anyway",

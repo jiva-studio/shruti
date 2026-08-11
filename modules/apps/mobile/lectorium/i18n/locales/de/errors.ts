@@ -12,6 +12,9 @@ export default {
   playbackFailed:
     "Diese Vorlesung konnte nicht abgespielt werden. Prüfe deine Verbindung und versuche es erneut.",
   noAudioForLecture: "Diese Vorlesung hat kein Audio.",
+  translationFailed: "Die Übersetzung ist fehlgeschlagen. Versuche es später erneut.",
+  translationStillRunning:
+    "Die Übersetzung dauert länger als üblich — sie erscheint, sobald sie fertig ist.",
   downloadStorageFull:
     "Speichergrenze erreicht. Entferne gehörte Vorträge oder erhöhe das Limit in den Einstellungen.",
   downloadStorageFullAction: "Trotzdem laden",
