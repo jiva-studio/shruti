@@ -38,8 +38,6 @@ describe("isExpectedError", () => {
         message: "'stat' failed because file … does not exist.",
       })
     ).toBe(true)
-    // Auto-download loop racing the content-DB open on startup (SHRUTI-6).
-    expect(isExpectedError({ message: "repositories(): content DB is not open yet" })).toBe(true)
   })
 
   it("drops transient/environmental RevenueCat errors by numeric-string code", () => {
@@ -76,6 +74,37 @@ describe("isExpectedError", () => {
     expect(isExpectedError(new Error("Seek operation failed"))).toBe(true)
     // A concrete backend fault is a distinct signature and still pages.
     expect(isExpectedError(new Error("HTTP 500 Internal Server Error"))).toBe(false)
+  })
+
+  it("keeps failed dynamic imports visible on every engine", () => {
+    // A broken deploy (rotated chunk hashes, stale CDN edge) white-screens a
+    // lazy route. Each engine words it differently; none may be swallowed by
+    // the `Failed to fetch` / `abort` network signatures.
+    expect(
+      isExpectedError(new TypeError("Failed to fetch dynamically imported module: /assets/x.js"))
+    ).toBe(false)
+    expect(
+      isExpectedError(new TypeError("error loading dynamically imported module: /assets/x.js"))
+    ).toBe(false)
+    expect(isExpectedError(new TypeError("Importing a module script failed."))).toBe(false)
+    // `vite:preloadError` forwards the payload as a plain rejection value.
+    expect(
+      isExpectedError({ message: "Unable to preload CSS for /assets/ChatView-a1b2c3.css" })
+    ).toBe(false)
+    // …but a plain offline fetch is still benign — don't page on flaky radio.
+    expect(isExpectedError(new TypeError("Failed to fetch"))).toBe(true)
+    expect(isExpectedError(new TypeError("Failed to fetch: GET /catalog.json"))).toBe(true)
+  })
+
+  it("keeps the startup DB-open race visible", () => {
+    // `repositories()` throwing means a boot-ordering regression: the caller
+    // ran before the databases opened. The one benign source (the auto-download
+    // refill loop) logs at warn level, so nothing legitimate reaches Sentry.
+    expect(isExpectedError({ message: "repositories(): content DB is not open yet" })).toBe(false)
+    expect(isExpectedError(new Error("repositories(): user DB is not open yet"))).toBe(false)
+    expect(
+      isExpectedError(new Error("readContentSchemeVersion(): content DB is not open yet"))
+    ).toBe(false)
   })
 
   it("keeps real failures", () => {
