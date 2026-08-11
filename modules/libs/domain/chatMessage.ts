@@ -190,7 +190,18 @@ export interface ChatCiteReference {
  */
 export interface ChatChapterBody {
   readonly regionLabel: string
-  readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
+  readonly chapters: readonly {
+    readonly tokens: string
+    readonly title: string
+    /** The verbatim source-language title, present only when `mt` is true
+     *  so the user can flip back to what the book actually says. */
+    readonly titleOriginal?: string
+  }[]
+  /** True when at least one `title` is a machine translation into the answer
+   *  language. `ChapterCard.vue` shows a "translated automatically" footnote
+   *  and lets the user toggle to `titleOriginal`. Additive — absent ⇒ no
+   *  badge. */
+  readonly mt?: boolean
 }
 
 /**
