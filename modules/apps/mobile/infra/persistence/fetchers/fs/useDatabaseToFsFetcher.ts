@@ -169,6 +169,18 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
       } catch {
         // File doesn't exist — nothing to do.
       }
+      // …and its partial sibling. The `catch` above in `download()` is the only
+      // other place a `.download` temp is dropped, and a process killed
+      // mid-transfer (Android WorkManager / MIUI kill, force-quit) never
+      // reaches it — so the partial outlives every later attempt and holds tens
+      // of megabytes until uninstall (#1663). Deleting a DB means deleting the
+      // bytes that were going to become it, whether or not the final file was
+      // ever there.
+      try {
+        await Filesystem.deleteFile({ path: `${path}.download`, directory: Directory.Data })
+      } catch {
+        // No temp neighbour — fine.
+      }
     },
 
     async list(directory: string): Promise<string[]> {
