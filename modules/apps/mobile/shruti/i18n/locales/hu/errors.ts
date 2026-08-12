@@ -12,6 +12,7 @@ export default {
   translationFailed: "A(z) {language} fordítás nem sikerült. Próbáld meg később.",
   translationStillRunning:
     "A(z) {language} fordítás a szokásosnál tovább tart — megjelenik, amint elkészül.",
+  translationCancelled: "A(z) {language} fordítás megszakadt.",
   downloadStorageFull:
     "Elérted a tárhelykorlátot. Törölj meghallgatott előadásokat, vagy növeld a korlátot a beállításokban.",
   downloadStorageFullAction: "Mégis letöltöm",

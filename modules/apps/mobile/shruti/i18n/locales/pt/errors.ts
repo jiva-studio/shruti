@@ -13,6 +13,7 @@ export default {
   translationFailed: "Não foi possível traduzir a palestra para {language}. Tente mais tarde.",
   translationStillRunning:
     "A tradução para {language} está demorando mais que o normal — ela aparecerá assim que estiver pronta.",
+  translationCancelled: "A tradução para {language} foi cancelada.",
   downloadStorageFull:
     "Limite de armazenamento atingido. Remova as palestras já ouvidas ou aumente o limite nas configurações.",
   downloadStorageFullAction: "Baixar mesmo assim",

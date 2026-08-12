@@ -12,6 +12,7 @@ export default {
   translationFailed: "No se pudo traducir la conferencia a {language}. Inténtalo más tarde.",
   translationStillRunning:
     "La traducción a {language} está tardando más de lo habitual: aparecerá en cuanto esté lista.",
+  translationCancelled: "La traducción a {language} se canceló.",
   downloadStorageFull:
     "Límite de almacenamiento alcanzado. Elimina las conferencias escuchadas o aumenta el límite en Ajustes.",
   downloadStorageFullAction: "Descargar igualmente",
