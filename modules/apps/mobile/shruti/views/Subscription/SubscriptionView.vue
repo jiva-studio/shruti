@@ -23,6 +23,7 @@
           :packages="subscription.packages"
           :is-subscribed="subscription.isSubscribed"
           :ready="subscription.ready"
+          :reconciling="subscription.reconciling"
           :purchasing="subscription.purchasing"
           :restoring="subscription.restoring"
           :legal-documents="subscription.legalDocuments"
