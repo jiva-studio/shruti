@@ -12,6 +12,8 @@ export default {
   translationStillRunning:
     "Переклад на {language} триває довше, ніж зазвичай — він з'явиться, щойно буде готовий.",
   translationCancelled: "Переклад на {language} було скасовано.",
+  transcriptLanguageUnavailable:
+    "Не вдалося завантажити транскрипт мовою {language} — показано решту.",
   downloadStorageFull:
     "Досягнуто ліміт сховища. Видаліть прослухані лекції або збільште ліміт у налаштуваннях.",
   downloadStorageFullAction: "Все одно завантажити",

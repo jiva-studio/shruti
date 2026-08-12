@@ -14,6 +14,8 @@ export default {
   translationStillRunning:
     "A tradução para {language} está demorando mais que o normal — ela aparecerá assim que estiver pronta.",
   translationCancelled: "A tradução para {language} foi cancelada.",
+  transcriptLanguageUnavailable:
+    "Não foi possível carregar a transcrição em {language} — o restante é exibido.",
   downloadStorageFull:
     "Limite de armazenamento atingido. Remova as palestras já ouvidas ou aumente o limite nas configurações.",
   downloadStorageFullAction: "Baixar mesmo assim",

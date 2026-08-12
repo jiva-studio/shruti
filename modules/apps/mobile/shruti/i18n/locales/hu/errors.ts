@@ -13,6 +13,7 @@ export default {
   translationStillRunning:
     "A(z) {language} fordítás a szokásosnál tovább tart — megjelenik, amint elkészül.",
   translationCancelled: "A(z) {language} fordítás megszakadt.",
+  transcriptLanguageUnavailable: "A(z) {language} átirat nem töltődött be — a többi látható.",
   downloadStorageFull:
     "Elérted a tárhelykorlátot. Törölj meghallgatott előadásokat, vagy növeld a korlátot a beállításokban.",
   downloadStorageFullAction: "Mégis letöltöm",

@@ -13,6 +13,8 @@ export default {
   translationStillRunning:
     "La traducción a {language} está tardando más de lo habitual: aparecerá en cuanto esté lista.",
   translationCancelled: "La traducción a {language} se canceló.",
+  transcriptLanguageUnavailable:
+    "No se pudo cargar la transcripción en {language}: se muestra el resto.",
   downloadStorageFull:
     "Límite de almacenamiento alcanzado. Elimina las conferencias escuchadas o aumenta el límite en Ajustes.",
   downloadStorageFullAction: "Descargar igualmente",
