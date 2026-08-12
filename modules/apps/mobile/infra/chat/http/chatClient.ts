@@ -842,6 +842,14 @@ export function aggregateAttributes(messages: readonly ChatTurn[]): ChatAttribut
   return Object.keys(out).length > 0 ? out : undefined
 }
 
+/**
+ * How many turns the request body may carry — `ChatRequestDto.messages` is
+ * `max_length=20` server-side and pydantic REJECTS a longer list (422), it does
+ * not truncate. The client used to ship its whole local history, so a
+ * conversation was permanently unsendable from its 21st message on (#1771).
+ */
+export const CHAT_HISTORY_WINDOW = 20
+
 export function toWireTurns(messages: readonly ChatTurn[]): Record<string, unknown>[] {
   return messages.map((m) => {
     const out: Record<string, unknown> = { role: m.role, content: m.content }
@@ -875,7 +883,14 @@ function buildRequestBody(
   lang: string,
   opts: StreamChatRequestInit
 ): Record<string, unknown> {
-  const body: Record<string, unknown> = { messages: toWireTurns(messages), lang }
+  // Newest turns win: the tail is the live exchange, and the current user
+  // prompt is always last. Order matters below — the aggregate folds the FULL
+  // history, so the slice must not reach `aggregateAttributes`, otherwise a
+  // setting made early in a long conversation would drop off the wire with the
+  // messages that carried it.
+  const windowed =
+    messages.length > CHAT_HISTORY_WINDOW ? messages.slice(-CHAT_HISTORY_WINDOW) : messages
+  const body: Record<string, unknown> = { messages: toWireTurns(windowed), lang }
   // Turn metadata, not per-message state: what the conversation has settled so
   // far, folded over the client's FULL local history.
   const attributes = aggregateAttributes(messages)
