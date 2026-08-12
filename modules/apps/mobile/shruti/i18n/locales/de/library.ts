@@ -8,10 +8,10 @@ export default {
     failed: "Fehlgeschlagen",
     retry: "Erneut versuchen",
     stages: {
-      downloading: "Wird heruntergeladen",
-      transcribing: "Wird transkribiert",
+      downloading: "Download",
+      transcribing: "Transkription",
       reviewing: "Korrektur",
-      storing: "Wird gespeichert",
+      storing: "Speichern",
     },
     errors: {
       unauthorized: "Vorträge hinzuzufügen ist eine Pro-Funktion.",
