@@ -15,11 +15,14 @@ import router from "@shruti/router/index.js"
 const text = ref<string>("")
 
 /** The library tab and the two pages it pushes on top of itself. */
-const DOCK_ROUTES = new Set(["search", "web-results", "my-library"])
+export type DockRoute = "search" | "web-results" | "my-library"
+
+const DOCK_ROUTES = new Set<string>(["search", "web-results", "my-library"] satisfies DockRoute[])
 
 export interface SearchDock {
   text: Ref<string>
   visible: ComputedRef<boolean>
+  owns: (route: DockRoute) => ComputedRef<boolean>
 }
 
 export function useSearchDock(): SearchDock {
@@ -29,5 +32,14 @@ export function useSearchDock(): SearchDock {
   return {
     text,
     visible: computed(() => DOCK_ROUTES.has(String(currentRoute.value.name))),
+    /**
+     * Is this the dock page on top — the one being typed into?
+     *
+     * The field is one ref for three routes, and a page underneath a pushed
+     * one stays mounted and keeps watching it. Whoever searches on what it
+     * holds has to ask first, or every page that has ever been open searches
+     * at once and only the top one shows the answer.
+     */
+    owns: (route: DockRoute) => computed(() => String(currentRoute.value.name) === route),
   }
 }
