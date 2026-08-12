@@ -12,6 +12,7 @@ export default {
   translationFailed: "Не удалось перевести лекцию на {language}. Попробуйте позже.",
   translationStillRunning:
     "Перевод на {language} занимает больше времени, чем обычно — он появится, когда будет готов.",
+  translationCancelled: "Перевод на {language} был отменён.",
   downloadStorageFull:
     "Достигнут лимит хранилища. Удалите прослушанные лекции или увеличьте лимит в настройках.",
   downloadStorageFullAction: "Всё равно скачать",

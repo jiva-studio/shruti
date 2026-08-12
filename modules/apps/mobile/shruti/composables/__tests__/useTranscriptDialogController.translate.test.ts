@@ -4,6 +4,7 @@ import type { Track } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 const toastError = vi.fn()
+const toastInfo = vi.fn()
 const submit = vi.fn()
 const status = vi.fn()
 const TRACK_ID = "t1" as TrackId
@@ -33,7 +34,7 @@ vi.mock("vue-i18n", () => ({
   }),
 }))
 vi.mock("@kit/composables", () => ({
-  useToast: () => ({ error: toastError, show: vi.fn(), info: vi.fn(), action: vi.fn() }),
+  useToast: () => ({ error: toastError, show: vi.fn(), info: toastInfo, action: vi.fn() }),
 }))
 vi.mock("@shruti/shruti.js", () => ({
   useShruti: () => ({
@@ -254,6 +255,7 @@ describe("useTranscriptDialogController — choosing a translation target", () =
 describe("useTranscriptDialogController — reporting a chosen translation", () => {
   beforeEach(() => {
     toastError.mockReset()
+    toastInfo.mockReset()
     submit.mockReset()
     status.mockReset()
     submit.mockResolvedValue({ run_id: "run-1" })
@@ -289,8 +291,31 @@ describe("useTranscriptDialogController — reporting a chosen translation", () 
       vi.useRealTimers()
     }
 
-    expect(toastError).toHaveBeenCalledWith(
+    expect(toastInfo).toHaveBeenCalledWith(
       'translated:errors.translationStillRunning:{"language":"DE"}'
     )
+    // Not the error channel: nothing has gone wrong, and a red toast under a
+    // sentence that ends "it will appear once it's ready" contradicts itself.
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it("names the language when the run was cancelled, and does not call it a failure", async () => {
+    // A third outcome, not a shade of the second: a cancelled run was stopped
+    // deliberately, so "failed — try again later" is both wrong and an
+    // invitation to spend another run on something nobody wanted.
+    status.mockResolvedValue({ state: "cancelled" })
+    vi.useFakeTimers()
+    try {
+      const done = useTranscriptDialogController().onTranslateLanguage("de")
+      await vi.advanceTimersByTimeAsync(3000)
+      await done
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(toastInfo).toHaveBeenCalledWith(
+      'translated:errors.translationCancelled:{"language":"DE"}'
+    )
+    expect(toastError).not.toHaveBeenCalled()
   })
 })

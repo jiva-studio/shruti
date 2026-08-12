@@ -12,6 +12,7 @@ export default {
   translationFailed: "La traduction en {language} a échoué. Réessayez plus tard.",
   translationStillRunning:
     "La traduction en {language} prend plus de temps que d'habitude — elle apparaîtra dès qu'elle sera prête.",
+  translationCancelled: "La traduction en {language} a été annulée.",
   downloadStorageFull:
     "Limite de stockage atteinte. Supprimez les cours écoutés ou augmentez la limite dans les réglages.",
   downloadStorageFullAction: "Télécharger quand même",

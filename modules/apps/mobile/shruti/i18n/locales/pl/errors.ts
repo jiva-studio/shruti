@@ -13,6 +13,7 @@ export default {
   translationFailed: "Nie udało się przetłumaczyć wykładu na {language}. Spróbuj później.",
   translationStillRunning:
     "Tłumaczenie na {language} trwa dłużej niż zwykle — pojawi się, gdy będzie gotowe.",
+  translationCancelled: "Tłumaczenie na {language} zostało anulowane.",
   downloadStorageFull:
     "Osiągnięto limit pamięci. Usuń wysłuchane wykłady lub zwiększ limit w ustawieniach.",
   downloadStorageFullAction: "Pobierz mimo to",
