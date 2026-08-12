@@ -52,10 +52,23 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
+  // The single in-flight hydration. A second caller AWAITS it instead of
+  // returning early: callers read the dictionaries into plain refs right after
+  // awaiting (`CollectionView.load`), so resolving before anything was loaded
+  // renders a topic page with the raw id as its title and no cover — and
+  // permanently, because those are refs, not computeds.
+  let inFlight: Promise<void> | null = null
 
   async function ensureLoaded(): Promise<void> {
     if (loaded) return
-    if (isLoading.value) return
+    if (inFlight) return inFlight
+    inFlight = hydrate().finally(() => {
+      inFlight = null
+    })
+    return inFlight
+  }
+
+  async function hydrate(): Promise<void> {
     isLoading.value = true
     error.value = null
     try {

@@ -122,12 +122,20 @@ export interface ISqlCollectionRepository {
  * stays usable. Any other SQL error is rethrown so legitimate bugs surface.
  */
 export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollectionRepository {
+  /** Hidden tracks are excluded everywhere in `tracksRepository`, and
+   *  `tracks.getByIds` — which every caller feeds these ids into — drops them
+   *  anyway. Handing them out made the collection page render fewer rows than
+   *  it asked for and "Add all" queue fewer lectures than it implied. */
+  const VISIBLE_TRACK = `EXISTS (SELECT 1 FROM tracks tk
+                                  WHERE tk.id = ct.track_id AND tk.hidden = 0)`
+
   async function queryTrackIds(collectionId: string, locale: string): Promise<readonly string[]> {
     const rows = await contentDb.query<{ track_id: string }>(
-      `SELECT track_id
-         FROM collection_tracks
-        WHERE collection_id = ? AND collection_language = ?
-        ORDER BY position ASC, track_id ASC`,
+      `SELECT ct.track_id
+         FROM collection_tracks ct
+        WHERE ct.collection_id = ? AND ct.collection_language = ?
+          AND ${VISIBLE_TRACK}
+        ORDER BY ct.position ASC, ct.track_id ASC`,
       [collectionId, locale]
     )
     return rows.map((r) => r.track_id)
@@ -231,6 +239,7 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
              JOIN tracks t ON t.id = ctk.track_id
              JOIN authors a ON a.id = t.author_id AND a.language = ctk.collection_language
             WHERE ctk.collection_id = ? AND ctk.collection_language = ?
+              AND t.hidden = 0
             GROUP BY a.id
             ORDER BY COUNT(*) DESC, a.full_name ASC`,
           [collectionId, locale]
@@ -271,6 +280,8 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
                      FROM collection_tracks p
                     WHERE p.collection_id = ct.collection_id
                       AND p.collection_language = ct.collection_language
+                      AND EXISTS (SELECT 1 FROM tracks tk
+                                   WHERE tk.id = p.track_id AND tk.hidden = 0)
                       AND (p.position < ct.position
                            OR (p.position = ct.position AND p.track_id <= ct.track_id))
                   ) AS position,
@@ -278,6 +289,8 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
                      FROM collection_tracks a
                     WHERE a.collection_id = ct.collection_id
                       AND a.collection_language = ct.collection_language
+                      AND EXISTS (SELECT 1 FROM tracks tk
+                                   WHERE tk.id = a.track_id AND tk.hidden = 0)
                   ) AS total
              FROM collection_tracks ct
              JOIN collections c

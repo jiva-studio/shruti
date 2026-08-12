@@ -187,3 +187,52 @@ describe("topicsRepository — similarity is cosine, not raw overlap", () => {
     ])
   })
 })
+
+/**
+ * Issue #1741 (7): the topic queries never joined `tracks`, so a hidden track
+ * came back among the ids. `tracks.getByIds` — which every caller feeds them
+ * into — filters `hidden = 0`, so the page rendered fewer rows than it asked
+ * for and "Add all" queued fewer lectures than it implied.
+ */
+describe("topicsRepository — hidden tracks", () => {
+  let db: IDatabase
+  let repo: ReturnType<typeof createSqlTopicRepository>
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applySchema(db)
+    await seed(db)
+    // tH is on T1 with the highest weight — and hidden. tZ is the only track
+    // of topic T3, also hidden, so T3 opens onto nothing.
+    for (const id of ["tH", "tZ"]) {
+      await db.execute(`INSERT INTO tracks (id, hidden) VALUES (?, 1)`, [id])
+      await db.execute(`INSERT INTO track_variants (track_id, language) VALUES (?, 'en')`, [id])
+    }
+    await db.execute(`INSERT INTO track_topics (track_id, topic_id, weight) VALUES ('tH','T1',0.9)`)
+    await db.execute(`INSERT INTO track_topics (track_id, topic_id, weight) VALUES ('tZ','T3',0.9)`)
+    repo = createSqlTopicRepository(db)
+  })
+
+  it("topTrackIds leaves them out, with and without a language filter", async () => {
+    expect(await repo.topTrackIds("T1" as TopicId, [], 10)).toEqual(["tA", "tB", "tC"])
+    expect(await repo.topTrackIds("T1" as TopicId, en, 10)).toEqual(["tA", "tC"])
+  })
+
+  it("topTrackIds still fills the page it was asked for", async () => {
+    // Two visible tracks are wanted; handing back tH as one of them left the
+    // caller with one row after `getByIds` dropped it.
+    expect(await repo.topTrackIds("T1" as TopicId, [], 2)).toEqual(["tA", "tB"])
+  })
+
+  it("topicIdsWithTracksIn drops a topic whose only tracks are hidden", async () => {
+    expect([...(await repo.topicIdsWithTracksIn(en))].sort()).toEqual(["T1"])
+    expect([...(await repo.topicIdsWithTracksIn([]))].sort()).toEqual(["T1", "T2"])
+  })
+
+  it("similarTrackIds does not recommend them", async () => {
+    expect(await repo.similarTrackIds(["T1"] as TopicId[], "tA" as TrackId, [], 10)).toEqual([
+      "tB",
+      "tC",
+    ])
+  })
+})
