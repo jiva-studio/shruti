@@ -1647,8 +1647,25 @@ export const useChatStore = defineStore("chat", () => {
       // below, which every non-settling branch goes through. While `running`,
       // keep the thinking indicator up if its session is on screen.
       for (let attempt = 0; ; attempt++) {
-        // A live stream owns this session's turn — don't double-drive it.
-        if (turnControllers.has(entry.sessionId)) return
+        // A live turn owns this session's stream. It is never THIS turn — both
+        // entry points into the poll refuse to start one while a controller is
+        // registered for the session — so a controller here means a NEWER turn
+        // superseded the one we are following, and its answer is the one the
+        // thread is now building. Settle and drop rather than returning
+        // silently: a record left behind re-arms the "Sadhu replied"
+        // notification ~2 s after every backgrounding and re-raises a phantom
+        // thinking placeholder on every `openSession`, for the record's whole
+        // 24 h TTL (#1782).
+        //
+        // This deliberately does NOT go through `verdict` — the grace window
+        // there exists because a `missing`/`unreachable` reading says nothing
+        // about whether the answer is still coming, so those keep their record
+        // and poll on. A superseding turn is not a failed probe: it is local,
+        // certain evidence that nothing will deliver this turn any more.
+        if (turnControllers.has(entry.sessionId)) {
+          await giveUpOnPendingTurn(entry)
+          return
+        }
         let buffered
         try {
           buffered = await resumeService().getTurn(entry.assistantMessageId)
