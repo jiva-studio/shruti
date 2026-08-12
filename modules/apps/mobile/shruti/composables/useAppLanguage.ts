@@ -1,8 +1,8 @@
 import { type Ref } from "vue"
 import { useConfig } from "@shruti/composables/useConfig.js"
+import { markStoredAppLanguageApplied } from "@shruti/composables/appLanguageApplied.js"
 import {
   currentLocale,
-  detectLocale,
   setLocale,
   SUPPORTED_LOCALES,
   type SupportedLocale,
@@ -27,9 +27,18 @@ interface PreferencesLike {
  * Falls back to the device locale on first launch; the Settings
  * screen binds a chooser to the same `useConfig` key so changes
  * propagate reactively.
+ *
+ * Seeded from `currentLocale()` — the language actually on screen — rather
+ * than `detectLocale()`, the device one. `useConfig` hydrates asynchronously,
+ * so the seed is what every consumer reads for the first tens of milliseconds:
+ * `repositories()`' `getActiveLanguage`, the chat answer language, and the
+ * watcher in `useLocaleSync`. On a launch where `applyStoredAppLanguage`
+ * already put the stored choice on screen, the device locale is simply the
+ * wrong answer there (#1742). On a first launch the two are the same value,
+ * because i18n boots on `detectLocale()`.
  */
 export function useAppLanguage(): Ref<string> {
-  return useConfig<string>(APP_LANGUAGE_KEY, detectLocale())
+  return useConfig<string>(APP_LANGUAGE_KEY, currentLocale())
 }
 
 /** The persisted UI-language choice, or null when the user never made one.
@@ -65,7 +74,9 @@ export async function readStoredAppLanguage(
  */
 export async function applyStoredAppLanguage(preferences: PreferencesLike): Promise<void> {
   const stored = await readStoredAppLanguage(preferences)
-  if (stored === null || stored === currentLocale()) return
+  if (stored === null) return
+  markStoredAppLanguageApplied()
+  if (stored === currentLocale()) return
   if ((await setLocale(stored)) !== "failed") return
   await preferences.set(APP_LANGUAGE_KEY, JSON.stringify(currentLocale())).catch(() => undefined)
 }

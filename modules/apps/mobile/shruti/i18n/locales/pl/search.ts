@@ -1,5 +1,4 @@
 export default {
-  search: "Szukaj | Przeszukaj {count} wykład | Przeszukaj {count} wykładów",
   specifySearchCriteria: "Wpisz zapytanie lub wybierz filtry, aby znaleźć więcej.",
   filtersButton: "Filtry",
   filtersSheetTitle: "Filtry",

@@ -14,14 +14,20 @@ enum PlaybackPolicy {
     /// A one-item queue must not offer "next": iOS honours the button from
     /// the lock screen, Control Center and AVRCP, and advancing empties the
     /// AVQueuePlayer.
-    static func remoteNextEnabled(queueIndex: Int, entryCount: Int) -> Bool {
-        hasNext(queueIndex: queueIndex, entryCount: entryCount)
+    ///
+    /// `hasLiveItem` is false once the queue has run dry. The entries are still
+    /// there (an append refills from them), but there is nothing playing to
+    /// skip from, and a transport left live for a finished queue starts a
+    /// lecture with no in-app player to show for it.
+    static func remoteNextEnabled(queueIndex: Int, entryCount: Int, hasLiveItem: Bool) -> Bool {
+        hasLiveItem && hasNext(queueIndex: queueIndex, entryCount: entryCount)
     }
 
     /// "Previous" stays available for the whole queue — past the first few
-    /// seconds it restarts the current item — but is meaningless outside one.
-    static func remotePreviousEnabled(entryCount: Int) -> Bool {
-        entryCount > 1
+    /// seconds it restarts the current item — but is meaningless outside one,
+    /// and after the queue has run dry.
+    static func remotePreviousEnabled(entryCount: Int, hasLiveItem: Bool) -> Bool {
+        hasLiveItem && entryCount > 1
     }
 
     /// Resume after an interruption only if playback was actually running

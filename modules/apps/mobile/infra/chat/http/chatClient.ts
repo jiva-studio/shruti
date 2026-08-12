@@ -496,6 +496,51 @@ async function requestWithHeadersTimeout(
 }
 
 /**
+ * `Retry-After` as a positive number of seconds, or `undefined` when the
+ * header is absent or is not a delay-seconds value.
+ *
+ * `undefined` is the point. This used to fall back to a hard-coded 60, which
+ * left the store unable to tell a real `Retry-After` from a number the
+ * transport had invented — so the invented one could (and did) outrank the
+ * server's own `resets_at_epoch`, locking the composer for 60 s against a 12 s
+ * reset. Absence is reported as absence; deciding what to do without one is
+ * the store's business, not the transport's.
+ *
+ * The RFC's HTTP-date form is deliberately not accepted here: reading it needs
+ * a clock, and the whole purpose of this value is to be clock-free. It falls
+ * through to {@link serverMeasuredWaitSeconds}, which resolves an absolute
+ * instant properly.
+ */
+function parseRetryAfterSeconds(header: string | null): number | undefined {
+  if (header === null) return undefined
+  const seconds = Number(header.trim())
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined
+}
+
+/**
+ * The wait implied by `resets_at_epoch`, measured against the response's own
+ * `Date` header — an absolute server instant minus an absolute server instant,
+ * i.e. two readings of the same clock. The difference is therefore a pure
+ * server-side DURATION: whatever the device believes the time to be cancels
+ * out, because the device's clock never enters the subtraction.
+ *
+ * That is what makes it safe for the store to count down from its own `now`.
+ * Converting `resets_at_epoch` with `Date.now()` instead would put the device
+ * clock back into the arithmetic and reproduce the very skew this avoids — a
+ * device a day slow would compute a day-long wait from a 12-second reset.
+ */
+function serverMeasuredWaitSeconds(
+  dateHeader: string | null,
+  resetsAtEpoch: number | undefined
+): number | undefined {
+  if (dateHeader === null || resetsAtEpoch === undefined || resetsAtEpoch <= 0) return undefined
+  const serverNowMs = Date.parse(dateHeader)
+  if (!Number.isFinite(serverNowMs)) return undefined
+  const waitSeconds = resetsAtEpoch - Math.floor(serverNowMs / 1000)
+  return waitSeconds > 0 ? waitSeconds : undefined
+}
+
+/**
  * Stream a chat reply from the backend. Yields typed SSE events in the
  * order they arrive; consumers should treat `done` / `error` as
  * terminal and stop iterating after the first one of either.
@@ -615,8 +660,6 @@ export async function* streamChat(
       throw new ProtocolVersionMismatchError(supported, received)
     }
     if (response.status === 429) {
-      const retryHeader = response.headers.get("Retry-After")
-      const retryAfter = retryHeader ? Number(retryHeader) : 60
       // Phase 4 added `tier` and `resets_at_epoch` to the 429 JSON body
       // (under `detail`). Phase-7 (this PR) appends `current` / `limit`
       // / `key_type` so the chat usage chip can hydrate from the
@@ -649,11 +692,20 @@ export async function* streamChat(
       } catch {
         // Body wasn't JSON / detail missing — fall back to header-only.
       }
+      // How long to wait, as the SERVER measured it. Either source is a
+      // duration the server computed against its own clock, so it survives a
+      // device whose clock is wrong; the store counts it down from `now`.
+      // When neither is available the field is simply absent and the store
+      // falls back to the absolute `resets_at_epoch` — never to a number this
+      // layer made up.
+      const retryAfter =
+        parseRetryAfterSeconds(response.headers.get("Retry-After")) ??
+        serverMeasuredWaitSeconds(response.headers.get("Date"), resetsAtEpoch)
       yield {
         type: "error",
         code: "rate_limited",
         message: "Too many requests",
-        retryAfter: Number.isFinite(retryAfter) ? retryAfter : 60,
+        ...(retryAfter !== undefined ? { retryAfter } : {}),
         ...(tier !== undefined ? { tier } : {}),
         ...(resetsAtEpoch !== undefined ? { resetsAtEpoch } : {}),
         ...(current !== undefined ? { current } : {}),

@@ -165,7 +165,12 @@ export default defineConfigWithVueTs(
   {
     files: ["ports/**/*.ts"],
     rules: {
-      "no-restricted-imports": [
+      // The typescript-eslint variant of the rule: same options, plus
+      // `allowTypeImports` / `allowImportNames`, which is what lets the
+      // @kit/* entries below ban implementations without banning the port
+      // types kit owns. The base rule is off so the two cannot disagree.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -173,6 +178,25 @@ export default defineConfigWithVueTs(
             { group: ["@lib/*"], message: "Ports must not import domain/application" },
             { group: ["@ui/*"], message: "Ports must not import UI" },
             { group: ["@shruti/*"], message: "Ports must not import composition root" },
+            {
+              // "Zero imports" has to mean the shared toolkit too. `@kit/infra`
+              // is where the Capacitor adapters live, so a value import from it
+              // makes a port depend on an implementation — the exact inversion
+              // this block exists to prevent (#1742).
+              //
+              // Two carve-outs, both narrow and both named:
+              //  - type-only imports: kit OWNS these port interfaces
+              //    (`IPreferences`, `IShareService`, …) and the files here are
+              //    re-export shims for them. A type erases at compile time.
+              //  - `NotificationsDisabledError`: a plain Error subclass declared
+              //    in kit's port module next to `INotificationScheduler`, not in
+              //    an adapter. `notificationPlanner` needs `instanceof`, which a
+              //    type-only export cannot give it. Nothing else may be a value.
+              group: ["@kit/*"],
+              allowTypeImports: true,
+              allowImportNames: ["NotificationsDisabledError"],
+              message: "Ports must not import the shared toolkit's implementations",
+            },
           ],
         },
       ],
@@ -265,7 +289,12 @@ export default defineConfigWithVueTs(
   {
     files: ["ui/**/*.{ts,vue}"],
     rules: {
-      "no-restricted-imports": [
+      // The typescript-eslint variant of the rule: same options, plus
+      // `allowTypeImports` / `allowImportNames`, which is what lets the
+      // @kit/* entries below ban implementations without banning the port
+      // types kit owns. The base rule is off so the two cannot disagree.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -283,6 +312,18 @@ export default defineConfigWithVueTs(
             {
               group: ["@capacitor/*"],
               message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
+            {
+              // `@kit/infra` IS infrastructure — it is where the Capacitor
+              // adapters live (`useCapacitorShareService`, the local-notification
+              // scheduler, the IndexedDB blob store). The entry above only bans
+              // the SDK import; without this one, `@kit/infra` walks the same
+              // code straight into a view and lints clean (#1742). Type-only
+              // imports stay allowed: a port interface erases at compile time
+              // and brings no adapter with it.
+              group: ["@kit/infra", "@kit/infra/*"],
+              allowTypeImports: true,
+              message: "UI must not import infrastructure — use a @ports/app port instead",
             },
           ],
         },
@@ -294,7 +335,12 @@ export default defineConfigWithVueTs(
   {
     files: ["ui/primitives/**/*.{ts,vue}"],
     rules: {
-      "no-restricted-imports": [
+      // The typescript-eslint variant of the rule: same options, plus
+      // `allowTypeImports` / `allowImportNames`, which is what lets the
+      // @kit/* entries below ban implementations without banning the port
+      // types kit owns. The base rule is off so the two cannot disagree.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -312,6 +358,18 @@ export default defineConfigWithVueTs(
             {
               group: ["@capacitor/*"],
               message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
+            {
+              // `@kit/infra` IS infrastructure — it is where the Capacitor
+              // adapters live (`useCapacitorShareService`, the local-notification
+              // scheduler, the IndexedDB blob store). The entry above only bans
+              // the SDK import; without this one, `@kit/infra` walks the same
+              // code straight into a view and lints clean (#1742). Type-only
+              // imports stay allowed: a port interface erases at compile time
+              // and brings no adapter with it.
+              group: ["@kit/infra", "@kit/infra/*"],
+              allowTypeImports: true,
+              message: "UI must not import infrastructure — use a @ports/app port instead",
             },
             { group: ["@ui/components/*"], message: "Primitives must not import components" },
             { group: ["@ui/features/*"], message: "Primitives must not import features" },
@@ -326,7 +384,12 @@ export default defineConfigWithVueTs(
   {
     files: ["ui/icons/**/*.{ts,vue}"],
     rules: {
-      "no-restricted-imports": [
+      // The typescript-eslint variant of the rule: same options, plus
+      // `allowTypeImports` / `allowImportNames`, which is what lets the
+      // @kit/* entries below ban implementations without banning the port
+      // types kit owns. The base rule is off so the two cannot disagree.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -344,6 +407,18 @@ export default defineConfigWithVueTs(
             {
               group: ["@capacitor/*"],
               message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
+            {
+              // `@kit/infra` IS infrastructure — it is where the Capacitor
+              // adapters live (`useCapacitorShareService`, the local-notification
+              // scheduler, the IndexedDB blob store). The entry above only bans
+              // the SDK import; without this one, `@kit/infra` walks the same
+              // code straight into a view and lints clean (#1742). Type-only
+              // imports stay allowed: a port interface erases at compile time
+              // and brings no adapter with it.
+              group: ["@kit/infra", "@kit/infra/*"],
+              allowTypeImports: true,
+              message: "UI must not import infrastructure — use a @ports/app port instead",
             },
             { group: ["@ui/primitives/*"], message: "Icons must not import primitives" },
             { group: ["@ui/components/*"], message: "Icons must not import components" },
@@ -359,7 +434,12 @@ export default defineConfigWithVueTs(
   {
     files: ["ui/components/**/*.{ts,vue}"],
     rules: {
-      "no-restricted-imports": [
+      // The typescript-eslint variant of the rule: same options, plus
+      // `allowTypeImports` / `allowImportNames`, which is what lets the
+      // @kit/* entries below ban implementations without banning the port
+      // types kit owns. The base rule is off so the two cannot disagree.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -377,6 +457,18 @@ export default defineConfigWithVueTs(
             {
               group: ["@capacitor/*"],
               message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
+            {
+              // `@kit/infra` IS infrastructure — it is where the Capacitor
+              // adapters live (`useCapacitorShareService`, the local-notification
+              // scheduler, the IndexedDB blob store). The entry above only bans
+              // the SDK import; without this one, `@kit/infra` walks the same
+              // code straight into a view and lints clean (#1742). Type-only
+              // imports stay allowed: a port interface erases at compile time
+              // and brings no adapter with it.
+              group: ["@kit/infra", "@kit/infra/*"],
+              allowTypeImports: true,
+              message: "UI must not import infrastructure — use a @ports/app port instead",
             },
             {
               group: ["@ui/features/*"],
@@ -395,7 +487,12 @@ export default defineConfigWithVueTs(
   {
     files: ["ui/features/**/*.{ts,vue}"],
     rules: {
-      "no-restricted-imports": [
+      // The typescript-eslint variant of the rule: same options, plus
+      // `allowTypeImports` / `allowImportNames`, which is what lets the
+      // @kit/* entries below ban implementations without banning the port
+      // types kit owns. The base rule is off so the two cannot disagree.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -413,6 +510,18 @@ export default defineConfigWithVueTs(
             {
               group: ["@capacitor/*"],
               message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
+            {
+              // `@kit/infra` IS infrastructure — it is where the Capacitor
+              // adapters live (`useCapacitorShareService`, the local-notification
+              // scheduler, the IndexedDB blob store). The entry above only bans
+              // the SDK import; without this one, `@kit/infra` walks the same
+              // code straight into a view and lints clean (#1742). Type-only
+              // imports stay allowed: a port interface erases at compile time
+              // and brings no adapter with it.
+              group: ["@kit/infra", "@kit/infra/*"],
+              allowTypeImports: true,
+              message: "UI must not import infrastructure — use a @ports/app port instead",
             },
             {
               group: ["@ui/features/*"],
@@ -441,7 +550,12 @@ export default defineConfigWithVueTs(
   {
     files: ["submodules/ui/**/*.{ts,vue}", "../../libs/ui/**/*.{ts,vue}"],
     rules: {
-      "no-restricted-imports": [
+      // The typescript-eslint variant of the rule: same options, plus
+      // `allowTypeImports` / `allowImportNames`, which is what lets the
+      // @kit/* entries below ban implementations without banning the port
+      // types kit owns. The base rule is off so the two cannot disagree.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -465,6 +579,18 @@ export default defineConfigWithVueTs(
               message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
             },
             {
+              // `@kit/infra` IS infrastructure — it is where the Capacitor
+              // adapters live (`useCapacitorShareService`, the local-notification
+              // scheduler, the IndexedDB blob store). The entry above only bans
+              // the SDK import; without this one, `@kit/infra` walks the same
+              // code straight into a view and lints clean (#1742). Type-only
+              // imports stay allowed: a port interface erases at compile time
+              // and brings no adapter with it.
+              group: ["@kit/infra", "@kit/infra/*"],
+              allowTypeImports: true,
+              message: "UI must not import infrastructure — use a @ports/app port instead",
+            },
+            {
               group: ["@ui/*"],
               message: "@lib/ui must not import the app-local UI layer — it is shared across apps",
             },
@@ -484,7 +610,12 @@ export default defineConfigWithVueTs(
   {
     files: ["submodules/chat/**/*.ts", "../../libs/chat/**/*.ts"],
     rules: {
-      "no-restricted-imports": [
+      // The typescript-eslint variant of the rule: same options, plus
+      // `allowTypeImports` / `allowImportNames`, which is what lets the
+      // @kit/* entries below ban implementations without banning the port
+      // types kit owns. The base rule is off so the two cannot disagree.
+      "no-restricted-imports": "off",
+      "@typescript-eslint/no-restricted-imports": [
         "error",
         {
           patterns: [
@@ -506,6 +637,14 @@ export default defineConfigWithVueTs(
             {
               group: ["@capacitor/*"],
               message: "@lib/chat must not import Capacitor SDKs — use a @ports/app port instead",
+            },
+            {
+              // See the @lib/ui block: @kit/infra is the shared toolkit's
+              // Capacitor-backed adapter layer, so banning @capacitor/* alone
+              // leaves it reachable one alias over.
+              group: ["@kit/infra", "@kit/infra/*"],
+              allowTypeImports: true,
+              message: "@lib/chat must not import infrastructure — use a @ports/app port instead",
             },
             {
               group: ["@ui/*"],
