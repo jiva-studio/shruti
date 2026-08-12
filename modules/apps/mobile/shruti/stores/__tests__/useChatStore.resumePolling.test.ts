@@ -74,15 +74,18 @@ vi.mock("@ionic/vue", () => ({
 }))
 
 const replayChatTurn = vi.fn()
+const runChatTurn = vi.fn()
 vi.mock("@usecases", () => ({
-  runChatTurn: vi.fn(),
+  runChatTurn: (...args: unknown[]) => runChatTurn(...args),
   replayChatTurn: (...args: unknown[]) => replayChatTurn(...args),
   submitChatFeedback: vi.fn(),
   recordInlineHintCooldown: vi.fn(),
 }))
 
-import { useChatStore } from "../useChatStore.js"
+import { useChatStore, type ChatMessage } from "../useChatStore.js"
+import { RESUME_RECOVERY_GRACE_MS } from "../chatResumeRecovery.js"
 import { onTurnSettled, type TurnSettledEvent } from "@shruti/chat/turnNotificationEvents.js"
+import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 
 /* --------------------------------------------------------------------- */
 /*                               Helpers                                  */
@@ -104,6 +107,8 @@ beforeEach(() => {
   getTurn.mockReset()
   replayChatTurn.mockReset()
   replayChatTurn.mockImplementation(async function* () {})
+  runChatTurn.mockReset()
+  runChatTurn.mockImplementation(async function* () {})
   sessionsGetById.mockReset()
   sessionsGetById.mockResolvedValue({ id: "s1" })
   messagesClearAll.mockClear()
@@ -165,7 +170,86 @@ describe("useChatStore — resume polling for a long-running turn", () => {
 })
 
 /* --------------------------------------------------------------------- */
-/*        2. "Clear all chats" must not leave a turn to replay            */
+/*        2. A live turn taking the session over must settle the poll     */
+/* --------------------------------------------------------------------- */
+
+describe("useChatStore — a resume poll a live turn takes over (issue #1782)", () => {
+  function streamingBubble(): ChatMessage {
+    return {
+      id: "a1" as ChatMessageId,
+      sessionId: "s1" as ChatSessionId,
+      role: "assistant",
+      content: "",
+      createdAt: 1,
+      streaming: true,
+    }
+  }
+
+  it("drops the superseded record instead of stranding it", async () => {
+    vi.useFakeTimers()
+    seedPending(Date.now())
+    getTurn.mockResolvedValue({ state: "running", events: [] })
+    const settled: TurnSettledEvent[] = []
+    const stop = onTurnSettled((e) => settled.push(e))
+
+    const store = useChatStore()
+    store.activeSessionId = "s1"
+    store.messages = [streamingBubble()]
+    await store.resumePendingTurns()
+    await vi.advanceTimersByTimeAsync(3000)
+
+    // The user asks something else while the poll sleeps between rounds. The
+    // live turn is held open so its controller still owns the session when the
+    // poll wakes — the window the defect lives in is the whole 2.5–15 s cycle.
+    let release = (): void => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    runChatTurn.mockImplementation(async function* () {
+      yield { kind: "assistant-placeholder", messageId: "a2" as ChatMessageId }
+      await held
+    })
+    const live = store.sendMessage("and who is Balarama?")
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    // Left behind, the record arms a "Sadhu replied" notification ~2 s after
+    // every backgrounding and re-raises a thinking placeholder on every
+    // openSession, for 24 h. Only the live turn's own record may survive.
+    expect((await store.listPendingTurns()).map((p) => p.assistantMessageId)).toEqual(["a2"])
+    // Settled as failed, so the notification armed at turn start is cancelled
+    // rather than merely orphaned.
+    expect(settled).toEqual([{ assistantMessageId: "a1", sessionId: "s1", ok: false }])
+    // …and the superseded bubble stops spinning, carrying a Retry instead.
+    const bubble = store.messages.find((m) => m.id === "a1")
+    expect(bubble?.streaming).toBe(false)
+    expect(bubble?.error).toEqual({ kind: "failed", code: "stream" })
+
+    release()
+    await live
+    stop()
+  })
+
+  it("keeps the record when the poll merely could not reach the server", async () => {
+    vi.useFakeTimers()
+    seedPending(Date.now())
+    getTurn.mockRejectedValue(new Error("offline"))
+
+    const store = useChatStore()
+    store.activeSessionId = "s1"
+    store.messages = [streamingBubble()]
+    await store.resumePendingTurns()
+    await vi.advanceTimersByTimeAsync(RESUME_RECOVERY_GRACE_MS - 3000)
+
+    // No turn superseded this one: an unreachable server says nothing about
+    // whether the answer is still coming, so the record — the only handle on
+    // the recovery — survives its grace window.
+    expect(await store.listPendingTurns()).toHaveLength(1)
+    expect(store.messages.find((m) => m.id === "a1")?.streaming).toBe(true)
+  })
+})
+
+/* --------------------------------------------------------------------- */
+/*        3. "Clear all chats" must not leave a turn to replay            */
 /* --------------------------------------------------------------------- */
 
 describe("useChatStore.clearAll — pending turns (issue #1741)", () => {
