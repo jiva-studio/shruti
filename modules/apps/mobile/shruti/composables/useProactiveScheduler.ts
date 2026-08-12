@@ -18,6 +18,7 @@ import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShruti } from "@shruti/shruti.js"
 import { isEligible } from "@shruti/proactive/eligibility.js"
 import { isWithinCooldown } from "@shruti/proactive/cooldown.js"
+import { isPrepStale } from "@shruti/proactive/staleness.js"
 import { validateAndScrubActions } from "@shruti/proactive/markerValidator.js"
 import {
   arbitrate,
@@ -258,9 +259,8 @@ export function useProactiveScheduler(): void {
     ctx: ProactiveContext,
     repo: IProactiveStateRepository
   ): Promise<void> {
-    const refreshMs = rule.config.refresh_if_older_than_hours * 3_600_000
-    const isStale = entry.preparedAt === null || ctx.nowMs - entry.preparedAt > refreshMs
-    if (!isStale && entry.prepState === "ready") return
+    const stale = isPrepStale(entry, rule.config.refresh_if_older_than_hours, ctx.nowMs)
+    if (!stale && entry.prepState === "ready") return
 
     const key = mutexKey(entry.ruleKind, entry.ruleDate)
     if (inFlight.has(key)) return

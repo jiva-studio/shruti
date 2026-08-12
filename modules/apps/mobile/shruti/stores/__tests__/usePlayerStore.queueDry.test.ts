@@ -15,6 +15,7 @@ const queueState: AudioQueueState = {
   positionMs: 0,
   durationMs: 0,
   playing: false,
+  queueCount: 0,
   events: [],
 }
 
@@ -111,6 +112,7 @@ describe("usePlayerStore — native queue with no current item", () => {
     queueState.currentItemId = null
     queueState.positionMs = 0
     queueState.playing = false
+    queueState.queueCount = 0
     queueState.events = []
     playlist.buildQueueFrom.mockClear()
   })
@@ -146,11 +148,13 @@ describe("usePlayerStore — native queue with no current item", () => {
     expect(store.playing).toBe(false)
   })
 
-  /** The control: the same snapshot, but the engine is actually playing it. */
+  /** The control: the same snapshot, but the engine is actually playing it —
+   *  and its timeline really is a queue, not the single item `open()` loads. */
   it("adopts a restored queue the engine is playing", async () => {
     queueState.currentItemId = "i-1"
     queueState.positionMs = 42_000
     queueState.playing = true
+    queueState.queueCount = 3
 
     usePlayerStore()
     await settle()

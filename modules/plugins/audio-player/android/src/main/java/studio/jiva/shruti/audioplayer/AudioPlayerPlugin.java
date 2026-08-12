@@ -419,7 +419,9 @@ public final class AudioPlayerPlugin extends Plugin {
             double position = 0;
             double duration = 0;
             boolean playing = false;
+            int queueCount = 0;
             if (controller != null) {
+                queueCount = controller.getMediaItemCount();
                 MediaItem current = controller.getCurrentMediaItem();
                 if (current != null && current.mediaId != null && !current.mediaId.isEmpty()) {
                     currentItemId = current.mediaId;
@@ -446,6 +448,10 @@ public final class AudioPlayerPlugin extends Plugin {
             result.put("position", position);
             result.put("duration", duration);
             result.put("playing", playing);
+            // The live timeline, so JS can tell continuous playback from an
+            // open() — which goes through setQueue as a queue of length one.
+            // Zero when the snapshot above is all that is left of the queue.
+            result.put("queueCount", queueCount);
             result.put("events", eventsToJsArray(journal.readEvents()));
             call.resolve(result);
         });

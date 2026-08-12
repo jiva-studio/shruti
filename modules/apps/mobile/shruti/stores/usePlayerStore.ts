@@ -478,11 +478,21 @@ export const usePlayerStore = defineStore("player", () => {
         // the user paused after opening keeps `itemId.value` set, so this
         // never hides a legitimately-paused player.
         if (!s.playing && itemId.value === null) return
-        // There's a live native queue to mirror. Arm queue mode even on the
-        // cold-restore path where `openTrack` never ran — otherwise the dry
-        // handling and foreground advance detection stay disabled.
-        queueActive = true
-        await ensureQueueMirror(s.currentItemId)
+        // A live native item is NOT by itself continuous playback: `open()` is
+        // natively a queue of length one. Arming queue mode for it upgraded a
+        // single-track open into the whole playlist tail — `ensureQueueMirror`
+        // fabricated a mirror from the active playlist and the next archive
+        // pushed it into the engine, handing a non-subscriber a Pro feature and
+        // overriding auto-play-next for a subscriber who turned it off (#1775).
+        // Only a genuinely multi-item engine queue arms it. That still covers
+        // the cold-restore path where `openTrack` never ran (dry handling,
+        // foreground advance detection, and the accurate mirror #1667's file
+        // retention leans on) — the engine reports what it really holds.
+        //
+        // Armed here, never disarmed: a queue `loadTrack` legitimately handed
+        // over can hold a single entry (the last lecture of the playlist).
+        if (s.queueCount > 1) queueActive = true
+        if (queueActive) await ensureQueueMirror(s.currentItemId)
         if (s.currentItemId !== itemId.value) {
           await resyncTo(s.currentItemId, s.positionMs, s.durationMs, s.playing)
         }
@@ -583,6 +593,20 @@ export const usePlayerStore = defineStore("player", () => {
   }
 
   /**
+   * Is `id` still loaded in the engine? Our own identity says nothing about
+   * that: on iOS the last item of a queue leaves the player alive with no
+   * current item, and `play()` on it is a no-op — so a tap on the row of the
+   * lecture that just finished, or the mini-player button, went nowhere
+   * (#1793). Only ever consulted to decide against the re-tap fast path;
+   * a bridge failure keeps the old behaviour rather than forcing a reload
+   * of audio that is very probably still loaded.
+   */
+  async function engineHolds(id: PlaylistItemId): Promise<boolean> {
+    const s = await app.audioPlayer.getQueueState().catch(() => null)
+    return s === null || s.currentItemId === id
+  }
+
+  /**
    * Open a track for playback. The sheet only appears once the engine has
    * loaded (`open` follows `trackId`), and getting there costs a play plan,
    * a session hand-off, a resume lookup and possibly a whole download — so
@@ -622,13 +646,27 @@ export const usePlayerStore = defineStore("player", () => {
     const cmd = plan.value
 
     // Re-tap on the currently-loaded track/variant: don't reload audio,
-    // engine position would be reset to 0. Just resume playback if paused.
+    // engine position would be reset to 0. Just resume playback if paused,
+    // and honour an explicitly requested position.
     const sameItem =
       cmd.itemId === itemId.value &&
       cmd.trackId === trackId.value &&
       cmd.language === language.value
-    if (sameItem) {
+    if (sameItem && (await engineHolds(cmd.itemId))) {
+      if (stale()) return { ok: true, value: undefined }
       subscribeOnce()
+      // A caller that named a position means it — the chat outline card's
+      // chapter rows are the only producer, and dropping the seek here made
+      // tapping a chapter of the lecture already playing do nothing at all
+      // (#1794). `resolve` clamps it the same way the reload path does.
+      if (args.resumeFromMs !== undefined) {
+        const target = await resumePosition.resolve(
+          { itemId: args.itemId, resumeFromMs: args.resumeFromMs },
+          durationMs.value > 0 ? durationMs.value : (cmd.audio.duration ?? 0)
+        )
+        if (stale()) return { ok: true, value: undefined }
+        await seek(target)
+      }
       if (!playing.value) {
         try {
           await app.audioPlayer.play()

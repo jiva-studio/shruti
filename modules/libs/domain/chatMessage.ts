@@ -258,7 +258,16 @@ export type ChatActionState = "pending" | "executing" | "done" | "error" | "dism
 export type QuotaTier = "anonymous" | "free" | "pro"
 
 export type ChatMessageError =
-  | { kind: "truncated"; reason: "stream" | "turns" }
+  | {
+      kind: "truncated"
+      /** Why the reply stopped short. `"turns"` is the tool-turn ceiling and
+       *  `"stream"` a genuine transport drop — the ONLY value the store reads
+       *  as a resumable drop (the server kept generating, a resume poll can
+       *  still replay the turn). Anything else is the server's own error code
+       *  (`turn_timeout`, `agent_error`, `chat_unavailable`, …), which the
+       *  turn cannot recover from and must not be dressed up as a drop. */
+      reason: string
+    }
   | {
       kind: "failed"
       code: string

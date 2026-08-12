@@ -70,3 +70,51 @@ test(
     })
   }
 )
+
+/**
+ * A query nothing matches. `isEmpty` used to be computed from the UNFILTERED
+ * corpus while the list rendered the filtered rows, so the sticker was
+ * suppressed and the list had nothing to draw: a header over a blank page,
+ * with no way to tell a filter from a bug.
+ */
+test(
+  qase(298, caseTitle(298)),
+  { tag: ["@offline", "@notes"] },
+  async ({ page }) => {
+    await boot(page)
+
+    const notes = page.locator(".note[role=button]")
+    const sticker = page.locator(".page-sticker")
+    const input = notesSearchInput(page)
+    let total = 0
+
+    await step(page, 298, 0, async () => {
+      await gotoTab(page, "notes")
+      await expect(notes.first()).toBeVisible({ timeout: 20_000 })
+      total = await notes.count()
+
+      await expect(input).toBeVisible({ timeout: 10_000 })
+      // Not a word: no seeded note can contain it in any locale.
+      await input.fill("zqxjvwkbmpfhg")
+
+      await expect(notes).toHaveCount(0, { timeout: 15_000 })
+      await expect(sticker).toBeVisible({ timeout: 10_000 })
+      const header = sticker.locator(".sticker-header")
+      await expect(header).toHaveText(/nothing found/i)
+      // …and a line saying WHY, so the state is readable and not just empty.
+      const message = (await sticker.locator(".sticker-message").innerText()).trim()
+      expect(message.length).toBeGreaterThan(0)
+      // The onboarding copy belongs to a user with no notes at all — this one
+      // has plenty, they just don't match.
+      expect(message.toLowerCase()).not.toContain("add notes from lectures")
+      // The box has to stay reachable, or the state is a dead end.
+      await expect(input).toBeVisible()
+    })
+
+    await step(page, 298, 1, async () => {
+      await input.fill("")
+      await expect(sticker).toBeHidden({ timeout: 10_000 })
+      await expect.poll(() => notes.count(), { timeout: 15_000 }).toBe(total)
+    })
+  }
+)

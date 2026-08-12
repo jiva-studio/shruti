@@ -90,6 +90,34 @@ export interface OutboxReattribution {
 }
 
 /**
+ * Which acknowledged rows a compaction pass may drop (#1798).
+ *
+ * The journal was append-only for the life of the install: `markSent` flips a
+ * flag and only the data wipe ever deleted anything, so every closed listening
+ * session, playlist change, note and chat message left its full JSON snapshot
+ * behind forever. What it may NOT drop is set by who still reads a `sent` row:
+ * the HLC seed (the journal's tail), `wasJournaled` / the backfill's anti-join
+ * (any row for the document), and {@link IOutboxRepository.reattribute}'s
+ * replay (the document's newest row). Superseded revisions answer none of
+ * those — see {@link IOutboxRepository.prune}.
+ */
+export interface OutboxPrune {
+  /**
+   * `sync_state.pushed_outbox_id`. Only rows STRICTLY below it are dropped:
+   * at or above it a row may still be read back, and the watermark's own row
+   * is the one a `listPending` scope is measured against.
+   */
+  readonly watermark: number
+  /**
+   * The documents to compact — in practice the batch just acknowledged.
+   * Scoping the pass to them is what keeps it O(rows of those documents), via
+   * `idx_outbox_collection_doc` (024), instead of a scan of a journal whose
+   * whole problem is its size.
+   */
+  readonly docs: readonly SyncDocRef[]
+}
+
+/**
  * Read/write port over the local `outbox` journal (013 migration), consumed
  * by the sync engine's push path. Reads pending (unsent) changes, marks them
  * acknowledged once the server applies them, and appends re-merged changes.
@@ -108,6 +136,38 @@ export interface IOutboxRepository {
 
   /** Mark the given outbox rows acknowledged (`sent = 1`). Idempotent. */
   markSent(ids: readonly number[]): Promise<void>
+
+  /**
+   * Compact the acknowledged part of the journal (#1798): drop every
+   * `sent = 1` row of {@link OutboxPrune.docs} that sits strictly below the
+   * watermark AND is superseded by a newer row for the same
+   * `(collection, doc_id)`.
+   *
+   * "Superseded" is the whole rule, and it is what makes this safe rather than
+   * merely smaller. Dropping every acknowledged row — the obvious compaction —
+   * would silently re-open #1627: {@link reattribute} hands the anonymous
+   * period's journal to the account that signs in on top of it, and a document
+   * with no row left in the journal is not handed over at all. It would stay
+   * on the device, invisible to push (the new owner never journaled it) and
+   * invisible to the first-sync backfill (its `sync_doc_hlc` outlives the
+   * prune, so the anti-join skips it) — stranded on an account nobody can
+   * reach again. Keeping the newest row per document keeps the handover whole:
+   * the replay carries one row per document instead of every revision, which
+   * converges on the same server master (the server keeps one master per doc,
+   * and the push re-merges only the newest pending row per document anyway)
+   * over fewer conflict rounds.
+   *
+   * The same rule is what spares the journal's tail — nothing supersedes it —
+   * so `latestHlc` still seeds the HLC chain and `latestId` still names the id
+   * an identity change retires the journal at. And because every document
+   * keeps a row, `wasJournaled` and the backfill's anti-join answer exactly as
+   * they did before.
+   *
+   * Idempotent and interruption-safe: one `DELETE` per chunk, whose predicate
+   * is already false for every row it leaves behind, so a re-run drops nothing
+   * more and a pass cut short resumes on the next acknowledgement.
+   */
+  prune(scope: OutboxPrune): Promise<void>
 
   /** Append a new pending change (used to re-journal a conflict re-merge). */
   append(entry: NewOutboxEntry): Promise<void>

@@ -12,16 +12,36 @@ import { useSearchFiltersStore } from "../stores/useSearchFiltersStore.js"
 
 const PLAYER_STOP_TIMEOUT_MS = 5000
 
+/** What to do with the local copy of the public lecture catalog. */
+export interface WipeLocalUserDataOptions {
+  /**
+   * `"reset"` (default) deletes the downloaded catalog too — the departing
+   * user's device keeps nothing, and the next cold start re-resolves it from
+   * zero (welcome screen, foreground download, ~54 MB).
+   *
+   * `"keep"` spares it. The catalog is public content, byte-identical for
+   * every user and holding nothing personal, so a wipe whose purpose is
+   * privacy (sign-out, #1773) gains nothing by dropping it and costs the next
+   * person a full re-download — a bad surprise on a metered connection.
+   */
+  readonly contentCatalog?: "reset" | "keep"
+}
+
 /**
  * Wipe every byte of local user state — notes, playlist, listening
  * history, the personal library, downloaded audio + transcript files, the
  * local content catalog, chat history, search filters, the sync journal, and
  * every Pinia store that mirrors them.
  *
- * Shared between the debug "Clear user data" action and the user-facing
- * "Delete account" flow. Both want the same all-or-nothing effect; only
- * the confirm UX differs, so the dialog stays out of here and the caller
- * is responsible for getting consent.
+ * Shared between the debug "Clear user data" action, the user-facing "Delete
+ * account" flow and sign-out (#1773). They want the same all-or-nothing effect
+ * on USER data and differ only in the confirm UX — which stays out of here,
+ * the caller is responsible for getting consent — and in whether the public
+ * catalog goes with it (see {@link WipeLocalUserDataOptions}). Everything the
+ * wipe exists to remove is in the user database, the blob cache and the
+ * preferences it clears unconditionally; the catalog is the one thing a caller
+ * may spare, and it can be spared because the content databases hold nothing
+ * per-user (the personal library lives in `library_items`, in the USER db).
  *
  * **Sync-aware (#1496).** A wipe that clears only the domain tables is not a
  * wipe, it is a divergence:
@@ -59,7 +79,10 @@ const PLAYER_STOP_TIMEOUT_MS = 5000
  *   3. In-memory Pinia caches — without this, Home/Search/Notes keep
  *      rendering the pre-wipe lists until the next cold start.
  */
-export async function wipeLocalUserData(app: Shruti): Promise<void> {
+export async function wipeLocalUserData(
+  app: Shruti,
+  opts: WipeLocalUserDataOptions = {}
+): Promise<void> {
   const repos = app.repositories()
   const player = usePlayerStore()
   const playlist = usePlaylistStore()
@@ -101,8 +124,9 @@ export async function wipeLocalUserData(app: Shruti): Promise<void> {
   await repos.mediaItems.clearAll()
   await repos.listeningSessions.clearAll()
   // Chat sessions + messages live in the user DB; `chat.clearAll()`
-  // also aborts any in-flight SSE stream and resets the in-memory
-  // store, so no separate refresh is needed below.
+  // also aborts any in-flight SSE stream, drops the preference-backed unread
+  // badge + scroll anchors (#1784) and resets the in-memory store, so no
+  // separate refresh is needed below.
   await chat.clearAll()
   // The sync journal, once every domain row it describes is gone. Present only
   // when the engine was wired (`getDeviceId`); without it nothing was ever
@@ -121,8 +145,10 @@ export async function wipeLocalUserData(app: Shruti): Promise<void> {
   await app.filesStorage.clearAll()
   // …and the content catalog, which `clearAll()` deliberately spares (#1630).
   // A departing user's local copy genuinely should go; the next launch
-  // re-downloads it from zero.
-  await resetContentDatabase(app)
+  // re-downloads it from zero. Not on the sign-out path: nothing in it is the
+  // signed-out user's, so dropping it buys no privacy and bills the next
+  // person ~54 MB.
+  if ((opts.contentCatalog ?? "reset") === "reset") await resetContentDatabase(app)
   await app.preferences.remove("search.filters.v3")
   // Legacy key from before #411; harmless if it doesn't exist.
   await app.preferences.remove("search.filters.v2")

@@ -95,5 +95,9 @@ export default {
     partOf: "Vortrag {position} von {total}",
     seeAll: "Alle ansehen",
     seeAllNamed: "Alle ansehen: {name}",
+    missingTitle: "Sammlung nicht verfügbar",
+    missingMessage:
+      "Diese Sammlung ist in der Sprache deiner Bibliothek nicht veröffentlicht. Wähle in den Einstellungen eine andere Inhaltssprache.",
+    loadFailed: "Sammlung konnte nicht geladen werden. Bitte versuche es später erneut.",
   },
 }

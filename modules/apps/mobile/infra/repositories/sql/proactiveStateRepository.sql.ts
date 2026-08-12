@@ -2,6 +2,7 @@ import type { IDatabase } from "@ports/app/index.js"
 import type { ProactiveRuleId } from "@lib/domain/config.js"
 import type { ChatActionPayload, ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
+import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
 import type {
   CreateProactiveMessageInput,
   IProactiveStateRepository,
@@ -35,6 +36,17 @@ const PREP_STATES: ReadonlySet<ProactivePrepState> = new Set([
   "superseded",
 ])
 
+/** Anything below this reads as a year-1973 millisecond stamp, so it is a
+ *  seconds value — what `attach()` wrote before #1770. Migration 028 rescales
+ *  the stored rows; this keeps a read correct even if it has not run yet. */
+const MIN_PLAUSIBLE_EPOCH_MS = 100_000_000_000
+
+function preparedAtMs(raw: number | null): number | null {
+  if (raw == null) return null
+  const n = Number(raw)
+  return n > 0 && n < MIN_PLAUSIBLE_EPOCH_MS ? n * 1000 : n
+}
+
 function rowToEntry(r: ProactiveStateJoinRow): ProactiveStateEntry {
   return {
     chatMessageId: r.chat_message_id as ChatMessageId,
@@ -44,7 +56,7 @@ function rowToEntry(r: ProactiveStateJoinRow): ProactiveStateEntry {
     prepState: PREP_STATES.has(r.prep_state as ProactivePrepState)
       ? (r.prep_state as ProactivePrepState)
       : "pending",
-    preparedAt: r.prepared_at != null ? Number(r.prepared_at) : null,
+    preparedAt: preparedAtMs(r.prepared_at),
     bodyMd: r.content,
     visibleAt: r.visible_at != null ? Number(r.visible_at) : null,
     notify: r.notify === 1,
@@ -61,7 +73,18 @@ const SELECT_JOIN = `
     JOIN chat_messages m ON m.id = p.chat_message_id
 `
 
-export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStateRepository {
+export interface SqlProactiveStateRepositoryDeps {
+  /** The chat-message repository the app writes through — the JOURNALED one
+   *  when sync is wired. `sweepTerminal` deletes a scheduler-authored body
+   *  through it so a message that entered sync leaves a tombstone behind
+   *  instead of diverging silently from the server (#1770). */
+  readonly chatMessages: Pick<IChatMessageRepository, "delete">
+}
+
+export function createSqlProactiveStateRepository(
+  db: IDatabase,
+  deps: SqlProactiveStateRepositoryDeps
+): IProactiveStateRepository {
   return {
     async create(input: CreateProactiveMessageInput): Promise<ProactiveStateEntry | null> {
       if (input.notify && input.visibleAt === null) {
@@ -171,9 +194,16 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
     ): Promise<readonly ProactiveStateEntry[]> {
       if (states.length === 0) return []
       const placeholders = states.map(() => "?").join(",")
+      // `scheduler_authored = 1` only: the scheduler's prep loop treats every
+      // row it gets back as a body it owns — re-validating it, superseding it,
+      // rewriting its content. An inline-hint cooldown marker (`attach`) sits
+      // on an ordinary assistant answer, so handing one over here destroys
+      // real user content (#1770).
       return queryMany<ProactiveStateJoinRow, ProactiveStateEntry>(
         db,
-        `${SELECT_JOIN} WHERE p.prep_state IN (${placeholders}) ORDER BY m.created_at ASC`,
+        `${SELECT_JOIN}
+          WHERE p.scheduler_authored = 1 AND p.prep_state IN (${placeholders})
+          ORDER BY m.created_at ASC`,
         [...states],
         rowToEntry
       )
@@ -197,7 +227,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         `SELECT DISTINCT m.session_id
            FROM chat_messages_proactive_state p
            JOIN chat_messages m ON m.id = p.chat_message_id
-          WHERE p.prep_state IN ('ready', 'degraded')
+          WHERE p.scheduler_authored = 1
+            AND p.prep_state IN ('ready', 'degraded')
             AND p.seen_at IS NULL
             AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))`
       )
@@ -319,11 +350,9 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
     },
 
     async sweepTerminal(olderThanUnixSec: number): Promise<number> {
-      // chat_messages FK cascade pulls the corresponding proactive_state
-      // row out automatically; we drive deletion from chat_messages.
       const olderThanMs = olderThanUnixSec * 1000
-      const rows = await db.query<{ chat_message_id: string }>(
-        `SELECT p.chat_message_id
+      const rows = await db.query<{ chat_message_id: string; scheduler_authored: number }>(
+        `SELECT p.chat_message_id, p.scheduler_authored
            FROM chat_messages_proactive_state p
            JOIN chat_messages m ON m.id = p.chat_message_id
           WHERE p.prep_state IN ('dismissed','superseded')
@@ -331,12 +360,28 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         [olderThanMs]
       )
       if (rows.length === 0) return 0
-      const placeholders = rows.map(() => "?").join(",")
-      await mutate(
-        db,
-        `DELETE FROM chat_messages WHERE id IN (${placeholders})`,
-        rows.map((r) => r.chat_message_id)
-      )
+
+      // An inline-hint cooldown marker (`scheduler_authored = 0`) is attached
+      // to an ordinary assistant answer the user asked for. GC the marker; the
+      // host message is not ours to delete (#1770).
+      const markers = rows
+        .filter((r) => Number(r.scheduler_authored) !== 1)
+        .map((r) => r.chat_message_id)
+      if (markers.length > 0) {
+        const placeholders = markers.map(() => "?").join(",")
+        await mutate(
+          db,
+          `DELETE FROM chat_messages_proactive_state WHERE chat_message_id IN (${placeholders})`,
+          markers
+        )
+      }
+
+      // Scheduler-authored bodies go through the chat-message repository so a
+      // message that entered sync gets its tombstone. The FK cascade pulls the
+      // sidecar row out with it.
+      for (const row of rows.filter((r) => Number(r.scheduler_authored) === 1)) {
+        await deps.chatMessages.delete(row.chat_message_id as ChatMessageId)
+      }
       return rows.length
     },
   }

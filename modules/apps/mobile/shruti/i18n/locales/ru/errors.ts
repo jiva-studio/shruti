@@ -13,6 +13,8 @@ export default {
   translationStillRunning:
     "Перевод на {language} занимает больше времени, чем обычно — он появится, когда будет готов.",
   translationCancelled: "Перевод на {language} был отменён.",
+  transcriptLanguageUnavailable:
+    "Не удалось загрузить транскрипт на {language} — показано остальное.",
   downloadStorageFull:
     "Достигнут лимит хранилища. Удалите прослушанные лекции или увеличьте лимит в настройках.",
   downloadStorageFullAction: "Всё равно скачать",

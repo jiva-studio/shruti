@@ -13,6 +13,9 @@ export interface UseSearchQueryOptions {
   query: Ref<string>
   filters: Ref<FiltersModel>
   tracks: ITrackRepository
+  /** False while another page owns the shared field — what is typed into it
+   *  then is somebody else's to search. */
+  enabled: Ref<boolean>
 }
 
 export interface UseSearchQueryReturn {
@@ -184,7 +187,19 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   }
 
   const debouncedRun = useDebounceFn(() => runQuery(), 200)
-  watch(options.query, () => {
+
+  // The words this list was last asked for. The field is shared with the pages
+  // the view pushes on top of itself, and the view stays mounted under them, so
+  // typing over there would otherwise run a full-catalog FTS pass per pause
+  // that nothing renders. Comparing against what was searched — rather than
+  // just resuming — makes the return trip free when the words came back
+  // unchanged, and still re-runs the ones that were retyped elsewhere: the rows
+  // under the field are always for the words in it.
+  let searched = options.query.value
+
+  watch([options.query, options.enabled], () => {
+    if (!options.enabled.value || options.query.value === searched) return
+    searched = options.query.value
     void debouncedRun()
   })
 
