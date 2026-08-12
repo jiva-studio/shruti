@@ -4276,5 +4276,49 @@
       "free",
       "e2e"
     ]
+  },
+  "332": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "Only the search page on top asks the archives — one request per pause",
+    "description": "The docked search field is shared by the library tab and the pages it pushes on top of it, and the tab stays mounted underneath them. Typing on the full-results page must therefore issue exactly ONE search request — the page that is showing — not one from every page that has ever read the field. Offline, with the search service stubbed and its requests counted.",
+    "preconditions": "Offline boot on a clean user db. The discovery search endpoint is stubbed and every request body is recorded.",
+    "steps": [
+      {
+        "action": "Search the library tab, then tap the chevron on the \"found on the internet\" shelf.",
+        "expected": "The full set opens on its own page and lists its tiles."
+      },
+      {
+        "action": "With the arrival's own search settled and the counter cleared, type new words into the docked field and wait out both typing debounces.",
+        "expected": "Exactly one search request was sent, and no further one arrives."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
+  },
+  "333": {
+    "suite_id": 3,
+    "automation": 2,
+    "title": "The library tab searches the words typed on the page above it",
+    "description": "The field is shared, so it can be edited from a page pushed on top of the library tab. The tab does not search while it is covered; going back to it must therefore re-run the query for whatever the field now holds, rather than leaving the results of the previous words on screen. Offline.",
+    "preconditions": "Offline boot on a clean user db, with library results on screen for a broad query.",
+    "steps": [
+      {
+        "action": "Open the full internet-results page from the shelf's chevron and replace the query in the docked field with one the catalog cannot match.",
+        "expected": "The page above stays on screen with the field holding the new words."
+      },
+      {
+        "action": "Go back to the library tab.",
+        "expected": "The library lane shows its \"nothing matches\" empty state — the rows for the previous query are gone."
+      }
+    ],
+    "tags": [
+      "search",
+      "free",
+      "e2e"
+    ]
   }
 }
