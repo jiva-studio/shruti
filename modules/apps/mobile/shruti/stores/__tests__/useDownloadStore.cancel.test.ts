@@ -42,7 +42,7 @@ vi.mock("@shruti/shruti.js", () => ({
       resolveLocalUrl: (url: string) => resolveLocalUrl(url),
     },
     repositories: () => ({
-      mediaItems: { upsert, listReady: async () => [], failStaleDownloads: async () => {} },
+      mediaItems: { upsert, listReady: async () => [], failStaleDownloads: async () => [] },
       unitOfWork: { run: async (fn: () => unknown) => fn() },
       tracks: {},
       transcripts: {},
