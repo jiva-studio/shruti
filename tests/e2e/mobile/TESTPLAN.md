@@ -68,6 +68,11 @@ assertion meaningless.
 - ✅ library content language seeds + filters the catalog per locale — (35)
 - ✅ a topic lists only lectures in the library language — (45)
 - ✅ a collection lists only lectures in the library language — (41)
+- ✅ a collection that fails to load, or that this content language does not
+  hold, says so instead of reading as empty — (334); an empty track list draws
+  nothing rather than a blank row — (335). Both are component tests
+  (`npm test` in `modules/apps/mobile`), not Playwright: every collection in the
+  offline fixture exists in both languages, so the null path is unreachable here
 - ✅ a track row is three lines; the reference sits in the metadata line, not on
   the title line — (182)
 - ✅ the track sheet names the collection a lecture is part of and leads back to
