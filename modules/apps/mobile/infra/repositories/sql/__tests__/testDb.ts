@@ -92,7 +92,7 @@ export async function createPersistingTestDatabase(): Promise<PersistingTestData
 /**
  * Applies the minimal user-DB schema the repositories tests need.
  * Kept inline here so infra tests don't reach up into `@lectorium/*`.
- * Mirrors `infra/persistence/migrations/user/{000,001,002,003,004,005,006,012,025}_*.ts` —
+ * Mirrors `infra/persistence/migrations/user/{000,001,002,003,004,005,006,011,012,025,026}_*.ts` —
  * if a migration changes schema-visible shape, update this too.
  */
 export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
@@ -158,12 +158,17 @@ export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
   )
   await db.execute(
     `CREATE TABLE IF NOT EXISTS media_items (
-       id         TEXT PRIMARY KEY,
-       track_id   TEXT NOT NULL,
-       kind       TEXT NOT NULL DEFAULT 'original',
-       state      TEXT NOT NULL,
-       local_path TEXT,
-       created_at INTEGER NOT NULL
+       id            TEXT PRIMARY KEY,
+       track_id      TEXT NOT NULL,
+       kind          TEXT NOT NULL DEFAULT 'original',
+       state         TEXT NOT NULL,
+       local_path    TEXT,
+       created_at    INTEGER NOT NULL,
+       evict_pending INTEGER NOT NULL DEFAULT 0
      )`
+  )
+  await db.execute(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_track_kind
+       ON media_items(track_id, kind)`
   )
 }

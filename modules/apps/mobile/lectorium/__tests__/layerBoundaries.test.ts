@@ -32,8 +32,12 @@ async function messagesFor(filePath: string, code: string): Promise<string[]> {
 }
 
 describe("layer boundaries", () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     eslint = new ESLint({ cwd: APP_ROOT })
+    // Resolve the config and load its plugins here rather than letting the
+    // first `it` pay for it out of a per-test budget it grows past as the
+    // project does.
+    await messagesFor("ports/app/__probe__.ts", "export const warmup = 1\n")
   })
 
   it("refuses a value import from @kit/infra in a port", async () => {
