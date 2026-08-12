@@ -10,6 +10,7 @@
       :key="i"
       :role="ariaLabelKey ? 'listitem' : undefined"
       :aria-label="ariaLabelKey ? t(ariaLabelKey, { text: chip.label }) : undefined"
+      :disabled="disabled"
       @pick="$emit('pick', chip.query)"
     >
       {{ chip.label }}
@@ -37,6 +38,12 @@ const props = withDefaults(
     /** When set, each chip gets `t(ariaLabelKey, { text })` and the row
      *  becomes a list / listitem for screen readers. */
     ariaLabelKey?: string
+    /** Set while the chat quota lockout is open. Every chip in the row
+     *  dispatches a turn on tap, and `sendMessage` refuses one while the
+     *  lock is armed — so the row goes visibly dead rather than silently
+     *  eating taps. The reason is already on screen: the composer below is
+     *  dimmed and the usage chip above it carries the reset time. */
+    disabled?: boolean
   }>(),
   { align: "start" }
 )
