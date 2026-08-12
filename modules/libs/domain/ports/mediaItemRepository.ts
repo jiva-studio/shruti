@@ -26,10 +26,20 @@ export interface IMediaItemRepository {
   deleteById(id: MediaItemId): Promise<void>
   clearAll(): Promise<void>
   /**
-   * Flip every row in state="downloading" to "failed" with localPath=null.
-   * Called on app start to recover from a force-close or crash that left
-   * a download mid-flight — without this, `downloadMedia` would refuse to
-   * retry such rows with `already-in-progress`.
+   * Flip every row in state="downloading" to "failed" with localPath=null,
+   * and return the rows as they were BEFORE the demotion. Called on app start
+   * to recover from a force-close or crash that left a download mid-flight —
+   * without this, `downloadMedia` would refuse to retry such rows with
+   * `already-in-progress`.
+   *
+   * The demotion is a guess, and on iOS often the wrong one: a background
+   * `URLSession` goes on delivering while the app is suspended or killed, so
+   * the bytes routinely land while the row still says "downloading". Only the
+   * disk knows, and this layer cannot ask it — the native cache is addressed
+   * by the file's remote key, which is a catalog lookup away. So the rows are
+   * handed back for the caller to reconcile (see the download store's
+   * `hydrate`), and the pessimistic state is what a caller that does not
+   * reconcile is left with.
    */
-  failStaleDownloads(): Promise<void>
+  failStaleDownloads(): Promise<readonly MediaItem[]>
 }
