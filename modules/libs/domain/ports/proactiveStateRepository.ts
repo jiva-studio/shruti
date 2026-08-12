@@ -34,6 +34,9 @@ export interface ProactiveStateEntry {
    *  `ruleKind`. Pure idempotency key — NOT a visibility gate. */
   readonly ruleDate: string
   readonly prepState: ProactivePrepState
+  /** unix MILLISECONDS — when the body was last built. Compared against a
+   *  `Date.now()`-based clock by the scheduler's staleness check, so every
+   *  writer has to use the same unit. */
   readonly preparedAt: number | null
   /** chat_messages.content — the rendered markdown body. Empty string
    *  while `prepState === 'pending'`. */
@@ -93,6 +96,14 @@ export interface IProactiveStateRepository {
    * Returns `null` if `(ruleKind, ruleDate)` already exists OR the
    * `chat_message_id` already has a sidecar row — both are no-ops at
    * this level.
+   *
+   * The row is stamped `scheduler_authored = 0`: it is a cooldown MARKER on a
+   * message the scheduler does not own. Readers that act on proactive bodies
+   * (`listByPrepStates`, `sweepTerminal`, the thread's visibility gate) must
+   * leave those rows alone — treating one as a body hides, rewrites or deletes
+   * a real answer (#1770).
+   *
+   * `preparedAt` is unix milliseconds.
    */
   attach(
     chatMessageId: ChatMessageId,
@@ -102,8 +113,9 @@ export interface IProactiveStateRepository {
     preparedAt?: number
   ): Promise<void>
 
-  /** All sidecar rows in the listed prep states, joined with the
-   *  visible chat_messages columns. */
+  /** Scheduler-authored sidecar rows in the listed prep states, joined
+   *  with the visible chat_messages columns. Inline-hint cooldown markers
+   *  (`attach`) are never returned — see `attach`. */
   listByPrepStates(states: readonly ProactivePrepState[]): Promise<readonly ProactiveStateEntry[]>
 
   /** Session ids that have at least one proactive message in `ready` or
@@ -163,9 +175,11 @@ export interface IProactiveStateRepository {
   rearm(chatMessageId: ChatMessageId, visibleAtSec: number): Promise<void>
 
   /**
-   * Garbage-collect rows in terminal states older than
-   * `olderThanUnixSec`. The underlying chat_messages rows are deleted
-   * by the FK cascade. Returns the number of rows swept.
+   * Garbage-collect rows in terminal states older than `olderThanUnixSec`.
+   * A scheduler-authored row is dropped together with the message it owns
+   * (deleted through the chat-message repository, so a synced one leaves a
+   * tombstone); an inline-hint cooldown marker is dropped ON ITS OWN — its
+   * host is a real answer. Returns the number of sidecar rows swept.
    */
   sweepTerminal(olderThanUnixSec: number): Promise<number>
 }
