@@ -1,6 +1,7 @@
 export default {
   youMightLike: "Potrebbe piacerti",
   untitled: "Lezione senza titolo",
+  addError: "Impossibile aggiungere la lezione. Controlla la connessione e riprova.",
   remove: "Rimuovi dalla mia biblioteca",
   status: {
     processing: "Elaborazione",
@@ -28,6 +29,6 @@ export default {
     emptyTitle: "La tua biblioteca è vuota",
     emptyMessage:
       "Chiedi a Sadhu di trovare una lezione online e di aggiungerla alla tua biblioteca.",
-    loadError: "Impossibile caricare la biblioteca. Trascina verso il basso per aggiornare.",
+    loadError: "Impossibile caricare la biblioteca.",
   },
 }

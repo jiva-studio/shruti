@@ -53,7 +53,15 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
   // Normalized sources with a submit in flight — the double-tap guard.
   const inFlightSources = new Set<string>()
   const isLoading = ref<boolean>(false)
+  // The READ failed — the shelf has nothing trustworthy to show. Only `refresh`
+  // writes it, and only the empty-library notice reads it.
   const error = ref<string | null>(null)
+  // The last SUBMIT was rejected. Kept apart from `error` because the two are
+  // different sentences to different people: a rejected add says nothing about
+  // whether the library loaded, and a shelf that inherits it tells a user whose
+  // first `+` failed that their library is broken — permanently, since
+  // `ensureLoaded` sees a successful read and never re-runs `refresh` (#1778).
+  const submitError = ref<string | null>(null)
   let loaded = false
 
   /** Items the user has NOT removed — the visible library. */
@@ -219,6 +227,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     // The first tap owns the outcome; this one reports the submit it joined.
     if (inFlightSources.has(key)) return "added"
     inFlightSources.add(key)
+    submitError.value = null
     try {
       const res = await app.ingestClient.submit({ url, title: hints?.title, author: hints?.author })
       const next = new Map(submittedIngestIds.value)
@@ -231,7 +240,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
         await openPaywall()
         return "paywalled"
       }
-      error.value = err instanceof Error ? err.message : "Failed to add lecture"
+      submitError.value = err instanceof Error ? err.message : "Failed to add lecture"
       return "failed"
     } finally {
       inFlightSources.delete(key)
@@ -247,6 +256,7 @@ export const useLibraryStore = defineStore("personalLibrary", () => {
     items,
     isLoading,
     error,
+    submitError,
     pendingItems,
     hasPending,
     isEmpty,

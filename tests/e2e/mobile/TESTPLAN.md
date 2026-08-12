@@ -84,6 +84,8 @@ assertion meaningless.
 - ✅ an unreachable service leaves the library lane standing — (176)
 - ✅ an empty answer reads differently from a failure — (177)
 - ✅ typing searches the words as written, not via the model-read path — (178)
+- ✅ a submit the ingest service rejects is reported, and the tile stays an
+  offer — (301)
 - 🔜 the ingest stages on a tile's corner (needs an orchestrator stub — #1673)
 
 ## Account & auth
