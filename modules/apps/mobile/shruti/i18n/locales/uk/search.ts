@@ -1,5 +1,4 @@
 export default {
-  search: "Пошук | Пошук серед {count} треку | Пошук серед {count} треків",
   specifySearchCriteria:
     "Будь ласка, введіть пошуковий запит або виберіть фільтри, щоб знайти більше.",
   filtersButton: "Фільтри",

@@ -157,21 +157,32 @@ const BUNDLES = import.meta.glob<{ default: LocaleBundle }>("./bundles/*.ts")
 
 const BOOT_LOCALE = detectLocale()
 
+/**
+ * CLDR plural-rule selectors for the locales whose `|`-separated strings carry
+ * three forms (one/few/many). Locales absent from this map keep vue-i18n's
+ * default rule, which is correct for the Germanic / Romance / two-form locales
+ * in the bundle.
+ *
+ * Exported because it is a **contract on the message bundles**, not a private
+ * detail: a rule here returns 0..2 unconditionally and vue-i18n does not clamp,
+ * so a three-form rule indexing a two-form string throws
+ * `UNEXPECTED_RETURN_TYPE` inside the render — a dead screen in production, not
+ * an English fallback. `__tests__/pluralArity.test.ts` reads this map so the
+ * arity assertion can never drift from what is actually registered.
+ */
+export const PLURAL_RULES: Readonly<Record<string, (choice: number) => number>> = {
+  ru: slavicEastPluralRule,
+  uk: slavicEastPluralRule,
+  "sr-Latn": slavicEastPluralRule,
+  "sr-Cyrl": slavicEastPluralRule,
+  pl: polishPluralRule,
+}
+
 export const i18n = createI18n({
   legacy: false,
   locale: BOOT_LOCALE,
   fallbackLocale: "en",
-  // Register CLDR plural-rule selectors for the locales whose `|`-separated
-  // strings carry 3 forms (one/few/many). Locales absent from this map keep
-  // vue-i18n's default English binary rule, which is correct for the
-  // Germanic / Romance / two-form locales in the bundle.
-  pluralRules: {
-    ru: slavicEastPluralRule,
-    uk: slavicEastPluralRule,
-    "sr-Latn": slavicEastPluralRule,
-    "sr-Cyrl": slavicEastPluralRule,
-    pl: polishPluralRule,
-  },
+  pluralRules: PLURAL_RULES,
   // Only `en` is present at boot. It is both the fallback (so a key missing
   // from any locale still renders English rather than the raw key) and the
   // default for English devices, which therefore await nothing at all.

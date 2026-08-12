@@ -1,5 +1,4 @@
 export default {
-  search: "Search | Search through {count} track | Search through {count} tracks",
   specifySearchCriteria: "Please provide a search query or select filters to discover more.",
   filtersButton: "Filters",
   filtersSheetTitle: "Filters",

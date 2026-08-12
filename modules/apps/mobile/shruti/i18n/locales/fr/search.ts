@@ -1,5 +1,4 @@
 export default {
-  search: "Rechercher | Rechercher dans {count} conférence | Rechercher dans {count} conférences",
   specifySearchCriteria:
     "Veuillez saisir une requête ou choisir des filtres pour découvrir davantage.",
   filtersButton: "Filtres",

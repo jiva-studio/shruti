@@ -1,5 +1,4 @@
 export default {
-  search: "Keresés | Keresés {count} felvételben | Keresés {count} felvételben",
   specifySearchCriteria: "Adj meg egy keresési kifejezést, vagy válassz szűrőket a felfedezéshez.",
   filtersButton: "Szűrők",
   filtersSheetTitle: "Szűrők",
