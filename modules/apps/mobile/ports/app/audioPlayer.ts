@@ -87,6 +87,13 @@ export interface AudioQueueState {
   positionMs: number
   durationMs: number
   playing: boolean
+  /**
+   * Items on the engine's timeline. `open()` is natively a queue of length
+   * one, so a live `currentItemId` alone does not mean continuous playback is
+   * running — only `queueCount > 1` does. 0 when the engine holds nothing (the
+   * `currentItemId` then comes from the durable snapshot).
+   */
+  queueCount: number
   events: AudioQueueTransition[]
 }
 

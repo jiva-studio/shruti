@@ -62,11 +62,13 @@ const QUEUE: AudioQueueItem[] = [
 /* --------------------------------------------------------------------- */
 
 let progressListener: AudioProgressListener | null = null
+let appActiveListener: ((state: { isActive: boolean }) => void) | null = null
 let queueState: AudioQueueState = {
   currentItemId: null,
   positionMs: 0,
   durationMs: 0,
   playing: false,
+  queueCount: 0,
   events: [],
 }
 
@@ -128,8 +130,16 @@ const playlist = {
   getCompletedAt: () => null,
 }
 vi.mock("@lectorium/stores/usePlaylistStore.js", () => ({ usePlaylistStore: () => playlist }))
+/** Flipped by the tests that open a single track: without Pro (or with the
+ *  auto-play-next toggle off) `loadTrack` takes the `open()` path. */
+let isSubscribed = true
+let autoPlayNext = true
 vi.mock("@lectorium/stores/usePurchasesStore.js", () => ({
-  usePurchasesStore: () => ({ isSubscribed: true }),
+  usePurchasesStore: () => ({
+    get isSubscribed(): boolean {
+      return isSubscribed
+    },
+  }),
 }))
 vi.mock("@lectorium/stores/useTranscriptStore.js", () => ({
   useTranscriptStore: () => ({ trackId: null, show: vi.fn() }),
@@ -148,7 +158,7 @@ vi.mock("@lectorium/composables/useConfig.js", () => ({
   useConfig: (_key: string, initial: unknown) => ref(initial),
 }))
 vi.mock("@lectorium/composables/useAutoPlayNext.js", () => ({
-  useAutoPlayNext: () => ref(true),
+  useAutoPlayNext: () => ref(autoPlayNext),
 }))
 
 const finishCurrent = vi.fn(async () => {})
@@ -176,7 +186,14 @@ vi.mock("@lib/chat/audio/useAudioOrchestrator.js", () => ({
 }))
 vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock("@kit/composables", () => ({ useToast: () => ({ error: vi.fn() }) }))
-vi.mock("@capacitor/app", () => ({ App: { addListener: async () => ({ remove: vi.fn() }) } }))
+vi.mock("@capacitor/app", () => ({
+  App: {
+    addListener: async (_event: string, listener: (state: { isActive: boolean }) => void) => {
+      appActiveListener = listener
+      return { remove: vi.fn() }
+    },
+  },
+}))
 
 import { releaseFromNativeQueue } from "@lectorium/services/nativeQueue.js"
 import { usePlayerStore } from "../usePlayerStore.js"
@@ -198,6 +215,18 @@ async function playQueueFromA(): Promise<ReturnType<typeof usePlayerStore>> {
   return player
 }
 
+/** Let the un-awaited native drains run to completion. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+/** Come back from the background — the `appStateChange` drain. */
+async function resumeForeground(): Promise<void> {
+  await vi.waitFor(() => expect(appActiveListener).not.toBeNull())
+  appActiveListener?.({ isActive: true })
+  await settle()
+}
+
 /** Pause the engine and let the progress tick catch up with it. */
 function pauseEngine(): void {
   queueState = { ...queueState, playing: false }
@@ -213,9 +242,13 @@ describe("usePlayerStore — the live native queue", () => {
       positionMs: 7_000,
       durationMs: 60_000,
       playing: true,
+      queueCount: 3,
       events: [],
     }
+    isSubscribed = true
+    autoPlayNext = true
     progressListener = null
+    appActiveListener = null
     finishCurrent.mockClear()
     downloads.evict.mockClear()
     downloads.markEvictPending.mockClear()
@@ -379,6 +412,61 @@ describe("usePlayerStore — the live native queue", () => {
       expect(audioPlayer.setQueue).toHaveBeenCalledTimes(1)
       const [items] = audioPlayer.setQueue.mock.calls[0]!
       expect(items.map((q) => q.itemId)).toEqual(["i-a", "i-b"])
+    })
+  })
+
+  describe("a track opened on its own", () => {
+    /** Open A through the single-track `open()` path, play it, then come back
+     *  from the background — the resync that used to arm queue mode. */
+    async function openSingleTrackA(): Promise<ReturnType<typeof usePlayerStore>> {
+      // Nothing loaded natively yet, so the startup drain can't adopt anything
+      // before the open under test runs.
+      queueState = { ...queueState, currentItemId: null, playing: false, queueCount: 0 }
+      const player = usePlayerStore()
+      await player.openTrack({ track: TRACKS.get("t-a")!, itemId: "i-a" as PlaylistItemId })
+      // `open()` is natively a queue of length ONE.
+      queueState = { ...queueState, currentItemId: "i-a", playing: true, queueCount: 1 }
+      emitProgress({ itemId: "i-a", playing: true, position: 5_000, duration: 60_000 })
+      await resumeForeground()
+      return player
+    }
+
+    it("stays a single track for a non-subscriber when another lecture is archived", async () => {
+      isSubscribed = false
+      await openSingleTrackA()
+      expect(audioPlayer.open).toHaveBeenCalled()
+      expect(audioPlayer.setQueue).not.toHaveBeenCalled()
+
+      // This is where continuous playback used to appear out of nowhere: the
+      // resync armed queue mode off the live native item, the mirror was
+      // rebuilt from the whole playlist, and the archive pushed it into the
+      // engine — auto-advance and lock-screen next/prev, unpaid for (#1775).
+      activeItemIds.delete("i-c")
+
+      expect(await releaseFromNativeQueue("i-c" as PlaylistItemId)).toBe(false)
+      expect(audioPlayer.setQueue).not.toHaveBeenCalled()
+      expect(playlist.buildQueueFrom).not.toHaveBeenCalled()
+    })
+
+    it("honours a subscriber who turned auto-play-next off", async () => {
+      autoPlayNext = false
+      await openSingleTrackA()
+      activeItemIds.delete("i-b")
+
+      expect(await releaseFromNativeQueue("i-b" as PlaylistItemId)).toBe(false)
+      expect(audioPlayer.setQueue).not.toHaveBeenCalled()
+    })
+
+    it("is not fabricated into a queue by a cold restore either", async () => {
+      // Same cold-restore path as the real queue above — but the engine's
+      // timeline holds exactly one item, so there is no queue to protect.
+      queueState = { ...queueState, queueCount: 1 }
+      const player = usePlayerStore()
+      await vi.waitFor(() => expect(player.itemId).toBe("i-a"))
+      audioPlayer.setQueue.mockClear()
+
+      expect(await releaseFromNativeQueue("i-c" as PlaylistItemId)).toBe(false)
+      expect(audioPlayer.setQueue).not.toHaveBeenCalled()
     })
   })
 

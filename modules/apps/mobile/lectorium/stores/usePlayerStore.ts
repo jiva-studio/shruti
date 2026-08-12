@@ -478,11 +478,21 @@ export const usePlayerStore = defineStore("player", () => {
         // the user paused after opening keeps `itemId.value` set, so this
         // never hides a legitimately-paused player.
         if (!s.playing && itemId.value === null) return
-        // There's a live native queue to mirror. Arm queue mode even on the
-        // cold-restore path where `openTrack` never ran — otherwise the dry
-        // handling and foreground advance detection stay disabled.
-        queueActive = true
-        await ensureQueueMirror(s.currentItemId)
+        // A live native item is NOT by itself continuous playback: `open()` is
+        // natively a queue of length one. Arming queue mode for it upgraded a
+        // single-track open into the whole playlist tail — `ensureQueueMirror`
+        // fabricated a mirror from the active playlist and the next archive
+        // pushed it into the engine, handing a non-subscriber a Pro feature and
+        // overriding auto-play-next for a subscriber who turned it off (#1775).
+        // Only a genuinely multi-item engine queue arms it. That still covers
+        // the cold-restore path where `openTrack` never ran (dry handling,
+        // foreground advance detection, and the accurate mirror #1667's file
+        // retention leans on) — the engine reports what it really holds.
+        //
+        // Armed here, never disarmed: a queue `loadTrack` legitimately handed
+        // over can hold a single entry (the last lecture of the playlist).
+        if (s.queueCount > 1) queueActive = true
+        if (queueActive) await ensureQueueMirror(s.currentItemId)
         if (s.currentItemId !== itemId.value) {
           await resyncTo(s.currentItemId, s.positionMs, s.durationMs, s.playing)
         }

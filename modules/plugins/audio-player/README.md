@@ -401,7 +401,7 @@ background into `listening_sessions`, and (b) resync the now-playing
 UI. Reading does NOT clear the journal — call `ackEvents` after the
 events have been persisted so nothing is lost on a crash mid-drain.
 
-<code>{ currentItemId: string | null // Current position / duration of the now-playing item, in seconds. position: number duration: number playing: boolean events: QueueTransition[] }</code>
+<code>{ currentItemId: string | null // Current position / duration of the now-playing item, in seconds. position: number duration: number playing: boolean // How many items the engine's timeline holds right now. `open()` is a // queue of length one, so a live `currentItemId` says nothing about // whether continuous playback is running — this does. 0 when the engine // has no timeline at all (nothing loaded, or a `currentItemId` that came // from the durable snapshot after the process was killed). Optional: a // native build older than this field simply omits it. queueCount?: number events: QueueTransition[] }</code>
 
 
 #### QueueTransition
