@@ -105,6 +105,8 @@ Offline, against the mocked SSE stream and the seeded fixture sessions:
   account for ends in the same Retry instead of endless dots (271)
 - ✅ a service-down send keeps the question and shows a notice — (88)
 - ✅ chat history: open, resume, start a new session, delete one — (93)
+- ✅ a reply that lands while you are away lights the Sadhu tab dot, and
+  deleting that conversation unopened puts it out — (319)
 - ✅ question types render their card: show-verse (85) · make-PDF (86) ·
   locate-story (87) · media clip (198) · translated chapter (199)
 - ✅ markers render as cards: verse (89) · citation (90)

@@ -107,7 +107,11 @@ vi.mock("../../stores/useAutoDownloadFiltersStore.js", () => ({
   useAutoDownloadFiltersStore: () => ({ reset: () => undefined }),
 }))
 vi.mock("../../stores/useChatStore.js", () => ({
-  useChatStore: () => ({ clearAll: async () => undefined }),
+  useChatStore: () => ({
+    clearAll: async () => {
+      refreshed.push("chat")
+    },
+  }),
 }))
 
 /** Records every request; never applies anything. */
@@ -320,5 +324,14 @@ describe("wipeLocalUserData", () => {
     // …and the row wipe itself is durable, not just committed in memory.
     expect(await countPersistedRows("notes")).toBe(0)
     expect(await countPersistedRows("library_items")).toBe(0)
+  })
+
+  it("hands the chat state to the store, which owns its preference keys (#1784)", async () => {
+    await wipeLocalUserData(app)
+
+    // The unread-answer badge and the per-session scroll anchors are
+    // preference-backed, not rows: only `chat.clearAll()` knows those keys, so
+    // skipping it leaves the Sadhu tab dot lit over an empty chat list.
+    expect(refreshed).toContain("chat")
   })
 })
