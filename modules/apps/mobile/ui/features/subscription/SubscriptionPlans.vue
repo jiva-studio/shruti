@@ -3,7 +3,7 @@
     <!-- The purchase block: plan cards + the Subscribe CTA. Whoever can't buy
          (an existing subscriber) is handled by the host, which shows a Manage
          button instead of mounting this. -->
-    <template v-if="packages.length > 0">
+    <template v-if="resolved && packages.length > 0">
       <IonItem
         v-for="pkg in packages"
         :key="pkg.packageId"
@@ -35,11 +35,11 @@
       </IonButton>
     </template>
 
-    <!-- No purchase or manage branch applies: the store hasn't resolved its
-         first round-trip yet (transient), or this build simply has no IAP
-         (RU / web — permanent). Show a loading hint until `ready`, then a plain
-         "unavailable here" note, so the block never renders blank. -->
-    <IonNote v-else-if="!ready" class="footer-status">
+    <!-- No purchase or manage branch applies: the store hasn't resolved the
+         subscribed answer yet (transient), or this build simply has no IAP
+         (RU / web — permanent). Show a loading hint until `resolved`, then a
+         plain "unavailable here" note, so the block never renders blank. -->
+    <IonNote v-else-if="!resolved" class="footer-status">
       {{ $t("settings.subscription.loading") }}
     </IonNote>
     <IonNote v-else class="footer-status">
@@ -64,8 +64,21 @@ const props = defineProps<{
    * here" fallback shown when there are no packages.
    */
   ready: boolean
+  /**
+   * `true` while an RC.logIn/logOut is in flight. `ready` alone does not
+   * mean the store knows whether this user is subscribed — an
+   * account-tied entitlement only surfaces once that round-trip lands —
+   * so the purchase block stays behind the loading note until it clears,
+   * rather than offering a plan to someone who already pays (#1797).
+   * Optional: hosts that have no identity transition to wait on (the
+   * onboarding paywall) leave it unset.
+   */
+  reconciling?: boolean
   purchasing: boolean
 }>()
+
+/** The subscribed answer is final and the purchase block may be shown. */
+const resolved = computed(() => props.ready && !props.reconciling)
 
 const emit = defineEmits<{
   subscribe: [packageId: string]
