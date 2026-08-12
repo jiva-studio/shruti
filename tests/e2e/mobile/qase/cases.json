@@ -4224,5 +4224,57 @@
       "free",
       "e2e"
     ]
+  },
+  "270": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A stalled chat stream recovers the answer from the resume poll",
+    "description": "Offline. A HALF-OPEN stream — the server accepts the turn, writes a status frame and a delta, then goes quiet without closing — is the failure the 45 s stall timeout (#1547) exists for, and it cannot be expressed as a route mock: a fulfilled route delivers the whole body at once, so it is never mid-stream and never hanging. A real Node socket (support/sse-server.ts) is reached by pointing a region's chatBaseUrl at it via a config.json fixture. GET /chat/turn/* answers with the finished turn, so the stall must end in the buffered answer being replayed — with no failure surfaced to the user.",
+    "preconditions": "Offline fixtures with a clean user db and mocked auth. A one-region config whose chatBaseUrl points at a local SSE server that writes `status` + one `delta` and then stalls forever; GET /chat/turn/* mocked with a `done` turn carrying the full answer.",
+    "steps": [
+      {
+        "action": "Send a question to a chat endpoint that streams one status frame and one partial delta, then goes silent.",
+        "expected": "The partial prose renders and the thinking pill shows the server's own status label."
+      },
+      {
+        "action": "Wait out the stall timeout without any further bytes on the socket.",
+        "expected": "The resume poll is made and the full buffered answer replaces the partial text."
+      },
+      {
+        "action": "Inspect the conversation once the answer has landed.",
+        "expected": "No failed bubble and no inline notice — the recovered stall is invisible to the user, and the thinking pill is gone."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
+  },
+  "271": {
+    "suite_id": 11,
+    "automation": 2,
+    "title": "A stalled turn the server cannot account for offers a Retry",
+    "description": "Offline. The other outcome of a stall (#1677): the socket goes half-open before any prose and the server has no buffered turn, so every resume poll 404s. Recovery is attempted and comes back empty, and once the recovery window closes the thinking placeholder becomes the SAME inline notice + Retry the failed bubble uses (case 83) rather than spinning until the 24 h buffer TTL. Tapping Retry re-sends the question — a second POST /chat on the wire.",
+    "preconditions": "Offline fixtures with a clean user db and mocked auth. A one-region config whose chatBaseUrl points at a local SSE server that sends headers and then nothing at all; GET /chat/turn/* answers 404 on every poll.",
+    "steps": [
+      {
+        "action": "Send a question to a chat endpoint that answers with headers and then goes silent.",
+        "expected": "The question echoes into the thread and the answer shows as still generating."
+      },
+      {
+        "action": "Wait out the stall timeout and the resume-recovery window, with every turn poll answering 404.",
+        "expected": "The placeholder becomes an inline notice carrying a Retry button."
+      },
+      {
+        "action": "Tap Retry.",
+        "expected": "The same question is re-sent — a second POST /chat reaches the server."
+      }
+    ],
+    "tags": [
+      "chat",
+      "free",
+      "e2e"
+    ]
   }
 }
