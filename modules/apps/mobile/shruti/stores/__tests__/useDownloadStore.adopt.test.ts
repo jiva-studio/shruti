@@ -33,7 +33,7 @@ vi.mock("@shruti/shruti.js", () => ({
       mediaItems: {
         listReady: mocks.listReady,
         upsert: mocks.upsert,
-        failStaleDownloads: vi.fn(async () => {}),
+        failStaleDownloads: vi.fn(async () => []),
       },
       tracks: {
         getAudioSizesBytes: mocks.getAudioSizesBytes,
@@ -228,6 +228,12 @@ describe("useDownloadStore — the budget decision consults the disk", () => {
    * iOS is a CDN error page written to the lecture's own path (#1722) — but it
    * answers the wrong question. "Is there a file" belongs to the budget; "is
    * that file any good" belongs to the retry.
+   *
+   * This is the consumer end. The demotion that starts the chain is now
+   * reconciled against the disk at launch (#1755, see
+   * `useDownloadStore.stale.test.ts`), so the row itself stops lying — but the
+   * budget must hold the line on its own regardless, since a row can be wrong
+   * for reasons no reconciliation covers.
    */
   it("does not claim storage is full for a retry whose bytes are on disk", async () => {
     mocks.limitBytes.value = 200 * MB
