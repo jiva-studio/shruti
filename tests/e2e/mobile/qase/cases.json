@@ -4276,5 +4276,32 @@
       "free",
       "e2e"
     ]
+  },
+  "286": {
+    "suite_id": 27,
+    "automation": 2,
+    "title": "Signing out wipes the account's data from the device",
+    "description": "Offline. A signed-in account signs out; the local user data (notes, playlist, listening history, chat) is wiped silently — no confirmation dialog — while the public lecture catalog is spared, and a toast tells the user the data stays in the account and comes back on the next sign-in. An unclaimed anonymous session is deliberately exempt (it has nothing to restore from), which this case does not cover.",
+    "preconditions": "Signed in via preseeded auth tokens (profile \"E2E Tester\"); seeded user DB with notes; app booted offline with /auth/signout mocked.",
+    "steps": [
+      {
+        "action": "Open the Notes tab.",
+        "expected": "The account's seeded notes are listed."
+      },
+      {
+        "action": "Open Settings, tap the account row and choose Sign out.",
+        "expected": "No confirmation is asked; a toast says the data stays in the account and returns on the next sign-in."
+      },
+      {
+        "action": "Reopen the Notes tab.",
+        "expected": "No notes remain on the device, and searching the library still lists lectures (the public catalog was not dropped)."
+      }
+    ],
+    "tags": [
+      "auth",
+      "free",
+      "smoke",
+      "e2e"
+    ]
   }
 }
