@@ -27,7 +27,7 @@ const resolveLocalUrlMock = vi.fn(async (o: { fileKey: string }) => {
   return { localUrl: null as string | null }
 })
 const deleteFileMock = vi.fn(async (o: { fileKey: string }) => void o)
-const listTasksMock = vi.fn(async () => ({ tasks: [] as { id: string }[] }))
+const listTasksMock = vi.fn(async () => ({ tasks: [] as { id: string; state?: string }[] }))
 
 vi.mock("@lectorium/plugin-media-downloader", () => ({
   MediaDownloader: {
@@ -357,5 +357,27 @@ describe("useMediaDownloaderAdapter — hedged candidates", () => {
     expect(cancelMock).toHaveBeenCalledWith({ id: ID_B, deletePartial: true })
     expect(cancelMock).toHaveBeenCalledWith({ id: FILE_KEY, deletePartial: true })
     expect(cancelMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("leaves a finished download alone when cancelling by url", async () => {
+    // The eviction path (`remove`) cancels before it deletes, and by then the
+    // download is long finished — so the platform lists it as the entry that
+    // maps the file key to the saved file, not as a transfer. Cancelling it
+    // carries `deletePartial: true`, which on the native side unlinks that
+    // saved file: a cancel would be doing a delete's work, and would do it
+    // for every candidate the file was raced under.
+    listTasksMock.mockResolvedValue({
+      tasks: [
+        { id: ID_A, state: "completed" },
+        { id: ID_B, state: "failed" },
+        { id: FILE_KEY, state: "running" },
+      ],
+    })
+    const downloader = useMediaDownloaderAdapter({ cacheDir: "lectorium" })
+
+    await downloader.cancel(URL_A)
+
+    expect(cancelMock).toHaveBeenCalledWith({ id: FILE_KEY, deletePartial: true })
+    expect(cancelMock).toHaveBeenCalledTimes(1)
   })
 })
