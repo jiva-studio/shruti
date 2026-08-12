@@ -305,7 +305,13 @@ export const useDownloadStore = defineStore("downloads", () => {
     return pendingClaims.get(trackId)?.previous
   }
 
-  /** Paint a track as "waiting for space" without touching a terminal state. */
+  /**
+   * Paint a track as "waiting for space" without touching a terminal state.
+   *
+   * Deliberately NOT guarded on `inFlight`: the running task calls this on
+   * itself when the budget gate refuses it. Whether a transfer is this
+   * caller's to repaint is the caller's question — see `settleUnfundedTail`.
+   */
   function markDeferred(trackId: TrackId): void {
     const current = effectiveState(trackId)
     if (current === "completed" || current === "failed") return
@@ -1047,13 +1053,21 @@ export const useDownloadStore = defineStore("downloads", () => {
    * The rest are painted and nothing is said: nobody is waiting on a
    * particular one of these, the rows now carry the state themselves, and a
    * notice here fired on every launch of a library already at the cap (#1578).
+   *
+   * The walk is over a SNAPSHOT with an await per entry, and the pump can admit
+   * one of those entries meanwhile (an eviction or a raised limit frees room).
+   * Such an entry is a live transfer, not tail — hence the ownership check on
+   * both sides of the probe (#1792).
    */
   async function settleUnfundedTail(): Promise<void> {
     settlingTail = true
     try {
       let adopted = false
       for (const job of [...prefetchQueue]) {
-        if (await adoptIfOnDisk(job.trackId, job.path, job.sizeBytes)) {
+        if (!awaitingFunding(job.trackId)) continue
+        const onDisk = await adoptIfOnDisk(job.trackId, job.path, job.sizeBytes)
+        if (!awaitingFunding(job.trackId)) continue
+        if (onDisk) {
           dropFromQueue(job.trackId)
           adopted = true
           continue
@@ -1067,6 +1081,11 @@ export const useDownloadStore = defineStore("downloads", () => {
     } finally {
       settlingTail = false
     }
+  }
+
+  /** Still the tail walk's to settle: waiting in the FIFO, not transferring. */
+  function awaitingFunding(trackId: TrackId): boolean {
+    return queuedTrackIds.has(trackId) && !inFlight.has(trackId)
   }
 
   function dropFromQueue(trackId: TrackId): void {
