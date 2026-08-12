@@ -12,6 +12,8 @@ export default {
   translationStillRunning:
     "La traduzione in {language} sta richiedendo più tempo del solito: apparirà appena sarà pronta.",
   translationCancelled: "La traduzione in {language} è stata annullata.",
+  transcriptLanguageUnavailable:
+    "Impossibile caricare la trascrizione in {language}: viene mostrato il resto.",
   downloadStorageFull:
     "Limite di spazio raggiunto. Rimuovi le lezioni ascoltate o aumenta il limite nelle impostazioni.",
   downloadStorageFullAction: "Scarica comunque",

@@ -607,6 +607,20 @@ export function useTranscriptDialogController(
     if (transcriptStore.trackId) await loader.reload(transcriptStore.trackId, langs)
   })
 
+  // One language of a multi-language reader failed while another one loaded.
+  // The text that did load stays on screen — routing this through `loader.error`
+  // would swap the whole reader for an error state and throw away the language
+  // the user can actually read (issue #1785). Nothing went wrong with what they
+  // are looking at, so it is a notice rather than an error toast.
+  watch(loader.failedLanguages, (langs) => {
+    if (langs.length === 0) return
+    reportActionNotice(
+      t("errors.transcriptLanguageUnavailable", {
+        language: langs.map(languageLabel).join(", "),
+      })
+    )
+  })
+
   function onClose(): void {
     transcriptStore.close()
   }

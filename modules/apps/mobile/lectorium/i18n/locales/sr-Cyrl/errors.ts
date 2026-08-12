@@ -14,6 +14,8 @@ export default {
   translationStillRunning:
     "Превод на {language} траје дуже него обично — појавиће се чим буде готов.",
   translationCancelled: "Превод на {language} је отказан.",
+  transcriptLanguageUnavailable:
+    "Није успело учитавање транскрипта на језику {language} — приказано је остало.",
   downloadStorageFull:
     "Достигнут је лимит меморије. Уклоните преслушана предавања или повећајте лимит у подешавањима.",
   downloadStorageFullAction: "Ипак преузми",
