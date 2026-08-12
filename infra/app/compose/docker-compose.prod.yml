@@ -54,6 +54,18 @@ services:
       # On proxy: real global host name (lectorium.example.com), set
       # by the operator in /opt/lectorium/.env.
       LECTORIUM_GLOBAL_HOST: ${LECTORIUM_GLOBAL_HOST:-global.invalid}
+      # Whose X-Forwarded-For Caddy may believe. Every rate-limit zone
+      # keys on {client_ip}; without this Caddy falls back to {remote_ip}
+      # and the origin sees all RU-forwarded traffic as one client, so a
+      # single RU user can exhaust a zone for every RU user.
+      #
+      # Same CIDR the chat service already trusts for X-Lectorium-Region,
+      # so "our own edge" has one definition. The `:-` default matters:
+      # the var is present-but-empty on dev / single-region hosts, and an
+      # empty argument to `trusted_proxies static` is a parse error that
+      # would stop Caddy from starting at all. Loopback trusts nothing
+      # real, which is the correct behaviour when there is no edge.
+      LECTORIUM_TRUSTED_PROXIES: ${LECTORIUM_REGION_HEADER_TRUSTED_SOURCES:-127.0.0.1/32}
       # Public hostname for the static website (Caddy serves /srv/web here
       # and auto-issues Let's Encrypt). Set on origin (an <ip>.sslip.io for
       # first tests, the real domain later). Defaults to an internal-only
