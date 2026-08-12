@@ -1,6 +1,8 @@
 <template>
   <IonList :class="{ flush }">
-    <IonItem v-if="rows.length === 0" lines="none">
+    <!-- Only when there is something to say. Without a message the row was a
+         blank full-height item that reads as content the list does not have. -->
+    <IonItem v-if="rows.length === 0 && emptyMessage" lines="none">
       <IonLabel color="medium">{{ emptyMessage }}</IonLabel>
     </IonItem>
     <template v-for="(row, index) in rows" :key="row.id">

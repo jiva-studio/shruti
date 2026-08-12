@@ -95,5 +95,9 @@ export default {
     partOf: "Predavanje {position} od {total}",
     seeAll: "Prikaži sve",
     seeAllNamed: "Prikaži sve: {name}",
+    missingTitle: "Kolekcija nije dostupna",
+    missingMessage:
+      "Ova kolekcija nije objavljena na jeziku tvoje biblioteke. Probaj drugi jezik sadržaja u podešavanjima.",
+    loadFailed: "Nije moguće učitati kolekciju. Pokušaj ponovo kasnije.",
   },
 }

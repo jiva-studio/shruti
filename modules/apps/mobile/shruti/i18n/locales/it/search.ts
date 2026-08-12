@@ -96,5 +96,9 @@ export default {
     partOf: "Lezione {position} di {total}",
     seeAll: "Vedi tutto",
     seeAllNamed: "Vedi tutto: {name}",
+    missingTitle: "Raccolta non disponibile",
+    missingMessage:
+      "Questa raccolta non è pubblicata nella lingua della tua biblioteca. Prova un'altra lingua dei contenuti nelle impostazioni.",
+    loadFailed: "Impossibile caricare la raccolta. Riprova più tardi.",
   },
 }
