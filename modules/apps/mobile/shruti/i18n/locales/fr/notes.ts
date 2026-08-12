@@ -2,6 +2,11 @@ export default {
   noteAction: "Note",
   notesAreEmpty: "Aucune note",
   addMoreNotes: "Ajoutez des notes à partir des conférences et elles apparaîtront ici",
+  notFoundTitle: "Aucun résultat",
+  notFoundMessage: "Aucune note ne correspond à votre recherche. Essayez d'autres mots.",
+  loadFailedTitle: "Impossible de charger les notes",
+  loadFailedMessage:
+    "Une erreur est survenue pendant la lecture de vos notes. Réessayez plus tard.",
   copyText: "Copier le texte",
   share: "Partager",
   shareText: "Partager le texte",
