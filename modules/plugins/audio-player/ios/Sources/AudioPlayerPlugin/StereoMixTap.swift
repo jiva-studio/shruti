@@ -1,4 +1,5 @@
 import AVFoundation
+import Foundation
 import MediaToolbox
 
 /// Stereo→mono blender hooked into AVPlayer via MTAudioProcessingTap.
@@ -34,6 +35,29 @@ final class StereoMixTap {
 
     private let contextPointer: UnsafeMutablePointer<Context>
 
+    /// Where an asset's track list is read. For a lecture that isn't
+    /// downloaded yet this is a blocking network fetch of the asset header, so
+    /// it must never happen on the Capacitor bridge queue (it stalled every
+    /// other plugin call in the app — SQLite, Preferences, downloads — for as
+    /// long as the fetch took, once per queued item) nor on the main queue.
+    ///
+    /// Two serial queues rather than one: the item that is about to play must
+    /// not wait behind the twenty prefetches a previous queue left behind.
+    /// Serial on purpose — the point is to be off the caller's thread, not to
+    /// open twenty sockets at once.
+    private let nowLoadQueue = DispatchQueue(
+        label: "com.lectorium.audioplayer.mixload.now", qos: .userInitiated)
+    private let aheadLoadQueue = DispatchQueue(
+        label: "com.lectorium.audioplayer.mixload.ahead", qos: .utility)
+
+    /// Which of the two loading lanes a request belongs in.
+    enum LoadPriority {
+        /// The item playback is waiting on.
+        case now
+        /// An item further down the queue, minutes away from its turn.
+        case ahead
+    }
+
     init() {
         contextPointer = UnsafeMutablePointer<Context>.allocate(capacity: 1)
         contextPointer.initialize(to: Context(enabled: false, ratio: 0.5))
@@ -53,8 +77,34 @@ final class StereoMixTap {
         contextPointer.pointee.ratio = clamped
     }
 
+    /// Build an AVAudioMix for `asset` off the caller's thread and hand it
+    /// back on an arbitrary queue. `nil` means "play the source unchanged".
+    ///
+    /// The asset's track list is what has to be read, and reading it is the
+    /// blocking part; everything after it is cheap and thread-agnostic.
+    func loadAudioMix(
+        for asset: AVAsset,
+        priority: LoadPriority,
+        completion: @escaping (AVAudioMix?) -> Void
+    ) {
+        let queue = priority == .now ? nowLoadQueue : aheadLoadQueue
+        queue.async { [weak self] in
+            guard let self = self else {
+                // The tap context is gone with the instance; a mix pointed at
+                // freed storage must never reach an AVPlayerItem.
+                completion(nil)
+                return
+            }
+            completion(self.makeAudioMix(for: asset))
+        }
+    }
+
     /// Build an AVAudioMix that routes the asset's first audio track
     /// through a fresh MTAudioProcessingTap pointed at our context.
+    ///
+    /// Blocking: reading `tracks` loads the asset header. Call it through
+    /// `loadAudioMix(for:priority:completion:)`, never on the bridge or main
+    /// queue.
     ///
     /// Returns nil when:
     ///   - the asset has no audio track (shouldn't happen for our
@@ -62,7 +112,7 @@ final class StereoMixTap {
     ///   - tap creation fails — notably on HLS streams on some iOS
     ///     versions where MTAudioProcessingTap is unsupported. The
     ///     caller falls back to playing the source unchanged.
-    func makeAudioMix(for asset: AVAsset) -> AVAudioMix? {
+    private func makeAudioMix(for asset: AVAsset) -> AVAudioMix? {
         let audioTracks = asset.tracks(withMediaType: .audio)
         guard let audioTrack = audioTracks.first else { return nil }
 

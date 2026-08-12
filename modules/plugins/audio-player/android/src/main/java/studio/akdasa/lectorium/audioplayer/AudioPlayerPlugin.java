@@ -73,11 +73,14 @@ public final class AudioPlayerPlugin extends Plugin {
      */
     private int pendingJsSeeks = 0;
     private QueueJournal journal;
+    /** Whether a tick is already posted, so state changes can't stack them. */
+    private boolean progressTickPosted = false;
     private final Runnable progressTick = new Runnable() {
         @Override
         public void run() {
+            progressTickPosted = false;
             emitProgress();
-            mainHandler.postDelayed(this, progressIntervalMs);
+            scheduleProgressTick();
         }
     };
 
@@ -103,6 +106,26 @@ public final class AudioPlayerPlugin extends Plugin {
                     @Override
                     public void onMediaItemTransition(MediaItem item, int reason) {
                         pushLatestTransition();
+                        // A new item is loaded (or the queue just went empty):
+                        // start the progress stream, or let it lapse.
+                        emitProgress();
+                        scheduleProgressTick();
+                    }
+
+                    @Override
+                    public void onIsPlayingChanged(boolean isPlaying) {
+                        // The tick only runs while playback is actually moving,
+                        // so every start/stop has to re-evaluate it — including
+                        // a pause from the notification, which JS learns about
+                        // from the emit below.
+                        emitProgress();
+                        scheduleProgressTick();
+                    }
+
+                    @Override
+                    public void onPlaybackStateChanged(int playbackState) {
+                        emitProgress();
+                        scheduleProgressTick();
                     }
 
                     @Override
@@ -110,6 +133,10 @@ public final class AudioPlayerPlugin extends Plugin {
                             Player.PositionInfo oldPosition,
                             Player.PositionInfo newPosition,
                             int reason) {
+                        // A scrub from the notification moves the position
+                        // without moving the playback state; push it so a
+                        // paused player's UI doesn't sit on the old position.
+                        emitProgress();
                         if (reason != Player.DISCONTINUITY_REASON_SEEK) return;
                         // A seek ACROSS items is a queue transition, journaled
                         // natively and drained through getQueueState().
@@ -124,7 +151,7 @@ public final class AudioPlayerPlugin extends Plugin {
                                 newPosition.positionMs);
                     }
                 });
-                mainHandler.post(progressTick);
+                scheduleProgressTick();
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -134,6 +161,7 @@ public final class AudioPlayerPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         mainHandler.removeCallbacks(progressTick);
+        progressTickPosted = false;
         if (controllerFuture != null) {
             MediaController.releaseFuture(controllerFuture);
             controllerFuture = null;
@@ -315,10 +343,10 @@ public final class AudioPlayerPlugin extends Plugin {
         // only governs the WebView push (unchanged contract from #828).
         progressIntervalMs = Math.max(MIN_PROGRESS_INTERVAL_MS, intervalMs.longValue());
         mainHandler.post(() -> {
-            if (progressCall != null) {
-                mainHandler.removeCallbacks(progressTick);
-                mainHandler.post(progressTick);
-            }
+            mainHandler.removeCallbacks(progressTick);
+            progressTickPosted = false;
+            emitProgress();
+            scheduleProgressTick();
         });
         call.resolve();
     }
@@ -328,6 +356,9 @@ public final class AudioPlayerPlugin extends Plugin {
         call.setKeepAlive(true);
         getBridge().saveCall(call);
         progressCall = call;
+        // A queue restored from a previous session may already be playing by
+        // the time JS registers, and the tick will not start on its own.
+        mainHandler.post(this::scheduleProgressTick);
     }
 
     /* -------------------------------------------------------------------------- */
@@ -462,6 +493,27 @@ public final class AudioPlayerPlugin extends Plugin {
     /* -------------------------------------------------------------------------- */
     /*                              Progress emission                             */
     /* -------------------------------------------------------------------------- */
+
+    /**
+     * Post the next progress tick — but only while there is something to
+     * report. The tick used to re-post itself unconditionally from the moment
+     * the controller connected, so an app that never played anything still
+     * woke the main looper twice a second for the whole process lifetime and
+     * resolved a JS callback with an empty payload (issue #1740). iOS has no
+     * equivalent: its periodic time observer only exists alongside a player.
+     *
+     * <p>Every playback-state change re-evaluates this, so a lock-screen
+     * resume restarts the stream and a pause stops it after one final emit —
+     * which is what tells JS about a pause it did not initiate.
+     */
+    private void scheduleProgressTick() {
+        if (progressTickPosted) return;
+        if (progressCall == null || controller == null) return;
+        if (controller.getCurrentMediaItem() == null) return;
+        if (!controller.isPlaying()) return;
+        progressTickPosted = true;
+        mainHandler.postDelayed(progressTick, progressIntervalMs);
+    }
 
     private void emitProgress() {
         if (progressCall == null || controller == null) {
