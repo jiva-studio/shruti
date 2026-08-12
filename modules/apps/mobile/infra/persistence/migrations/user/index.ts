@@ -27,6 +27,7 @@ import { migration_025_listening_sessions_source_key } from "./025_listening_ses
 import { migration_026_media_items_evict_pending } from "./026_media_items_evict_pending.js"
 import { migration_027_playlist_items_unique_track } from "./027_playlist_items_unique_track.js"
 import { migration_028_proactive_state_units_and_authorship } from "./028_proactive_state_units_and_authorship.js"
+import { migration_029_outbox_compaction } from "./029_outbox_compaction.js"
 
 /**
  * Ordered list of user-DB migrations. Append new migrations at the end —
@@ -61,4 +62,5 @@ export const userMigrations: readonly Migration[] = [
   migration_026_media_items_evict_pending,
   migration_027_playlist_items_unique_track,
   migration_028_proactive_state_units_and_authorship,
+  migration_029_outbox_compaction,
 ]
