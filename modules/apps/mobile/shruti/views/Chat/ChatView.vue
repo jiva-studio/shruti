@@ -40,6 +40,7 @@
           v-if="hasMessages"
           :messages="messages"
           :loading-focus-ids="loadingFocusIds"
+          :quota-locked="isComposeBlocked"
           @pick-chapter="onPickChapter"
           @pick-followup="onSend"
           @send-suggestion="onSend"
@@ -51,6 +52,7 @@
               class="suggestions"
               :items="suggestionChips"
               align="center"
+              :disabled="isComposeBlocked"
               @pick="onPickSuggestion"
             />
             <RecentSessions
