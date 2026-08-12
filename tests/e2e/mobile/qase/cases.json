@@ -4276,5 +4276,27 @@
       "free",
       "e2e"
     ]
+  },
+  "298": {
+    "suite_id": 8,
+    "automation": 2,
+    "title": "Notes search with no match shows a 'nothing found' state",
+    "description": "Offline. Types a string no seeded note contains into the Notes search box and asserts the page renders a 'nothing found' sticker instead of a blank list, then that clearing the box brings the notes back.",
+    "preconditions": "Seeded offline fixture with one or more notes on the Notes tab.",
+    "steps": [
+      {
+        "action": "Open the Notes tab and type a string that matches none of the notes into the search box.",
+        "expected": "The list empties and a sticker with a 'Nothing found' heading and an explanatory message renders in its place — the page is never blank."
+      },
+      {
+        "action": "Clear the search box.",
+        "expected": "The sticker disappears and the full notes list is restored."
+      }
+    ],
+    "tags": [
+      "notes",
+      "free",
+      "e2e"
+    ]
   }
 }
