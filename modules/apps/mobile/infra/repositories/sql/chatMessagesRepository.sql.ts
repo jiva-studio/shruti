@@ -96,6 +96,11 @@ export function createSqlChatMessageRepository(
       // so we only surface proactive rows once prep_state is
       // ready/degraded — same gate as `listUnseenSessionIds`. `dismissed`
       // / `superseded` rows stay hidden as before.
+      // The prep_state gate applies to scheduler-authored rows ONLY. The other
+      // tenant of that table is an inline-hint cooldown marker attached to an
+      // ordinary answer (`attach`, `scheduler_authored = 0`): its host was
+      // written by the normal chat flow, has a finished body, and must stay in
+      // the thread whatever the marker's state says (#1770).
       return queryMany<ChatMessageRow, ChatMessage>(
         db,
         `SELECT m.id, m.session_id, m.role, m.content, m.created_at, m.meta
@@ -103,7 +108,9 @@ export function createSqlChatMessageRepository(
            LEFT JOIN chat_messages_proactive_state p ON p.chat_message_id = m.id
           WHERE m.session_id = ?
             AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))
-            AND (p.prep_state IS NULL OR p.prep_state IN ('ready','degraded'))
+            AND (p.prep_state IS NULL
+                 OR p.scheduler_authored = 0
+                 OR p.prep_state IN ('ready','degraded'))
           ORDER BY m.created_at ASC`,
         [sessionId],
         rowToMessage

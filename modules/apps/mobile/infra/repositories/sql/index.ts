@@ -236,7 +236,12 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     unitOfWork,
     chatSessions: synced.chatSessions,
     chatMessages: synced.chatMessages,
-    proactiveState: createSqlProactiveStateRepository(deps.userDb),
+    // Handed the JOURNALED chatMessages: the terminal-state sweep deletes a
+    // proactive body through it, so a message that entered sync is tombstoned
+    // instead of vanishing on this device only (#1770).
+    proactiveState: createSqlProactiveStateRepository(deps.userDb, {
+      chatMessages: synced.chatMessages,
+    }),
     collections: createSqlCollectionRepository(deps.contentDb),
     settings: createSqlSettingsRepository(deps.contentDb),
     dailyWisdom: createSqlDailyWisdomRepository(deps.contentDb),
