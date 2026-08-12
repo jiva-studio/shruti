@@ -73,6 +73,8 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "Ваш прогрес у безпеці",
     signOut: "Вийти",
+    signOutWipeToast:
+      "Ви вийшли. Нотатки та листування зберігаються в акаунті й повернуться після наступного входу.",
     deleteAccount: {
       title: "Видалити обліковий запис",
       confirmWipe: "Видалити запис і стерти дані",

@@ -73,6 +73,8 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "Vaš napredak je bezbedan",
     signOut: "Odjavi se",
+    signOutWipeToast:
+      "Odjavljeni ste. Vaše beleške i razgovori ostaju na nalogu i vratiće se pri sledećoj prijavi.",
     deleteAccount: {
       title: "Obriši nalog",
       confirmWipe: "Obriši nalog i izbriši podatke",

@@ -58,6 +58,11 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "Your progress is safe",
     signOut: "Sign out",
+    // Silent-wipe notice (#1773). Signing out clears this device's copy of
+    // the account's data; the toast is the only notice the user gets, so it
+    // says where the data went instead of just confirming the sign-out.
+    signOutWipeToast:
+      "Signed out. Your notes and chats stay in your account and come back when you sign in.",
     deleteAccount: {
       title: "Delete account",
       confirmWipe: "Delete account and wipe data",

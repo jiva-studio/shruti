@@ -59,6 +59,8 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "Votre progression est en sécurité",
     signOut: "Se déconnecter",
+    signOutWipeToast:
+      "Déconnecté. Vos notes et conversations restent dans votre compte et reviendront à la prochaine connexion.",
     deleteAccount: {
       title: "Supprimer le compte",
       confirmWipe: "Supprimer le compte et effacer les données",

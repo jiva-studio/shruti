@@ -10,7 +10,7 @@
       :subscription-resolved="subscription.resolved"
       :server-items="serverItems"
       @sign-in-anonymous="triggerSignIn"
-      @sign-out="auth.signOut"
+      @sign-out="onSignOut"
       @open-paywall="paywall.requestOpen()"
       @manage-subscription="paywall.requestOpen()"
       @delete-account="onDeleteAccountConfirm"
@@ -220,6 +220,16 @@ const logsOpen = ref(false)
 const trackInfoOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
+
+// Signing out wipes this device's copy of the account's data (#1773) without
+// asking — see useAuthStore.signOut for why there is no dialog. The toast is
+// the only notice the user gets, so it says where the data went rather than
+// just confirming the sign-out. Skipped when nothing was wiped (an anonymous
+// session keeps its rows: there is nowhere to restore them from).
+async function onSignOut(): Promise<void> {
+  const wiped = await auth.signOut()
+  if (wiped) await toast.info(t("settings.account.signOutWipeToast"))
+}
 
 async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<void> {
   // The action sheet that produced this emit has already dismissed
