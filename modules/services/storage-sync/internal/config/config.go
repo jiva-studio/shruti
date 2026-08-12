@@ -108,8 +108,14 @@ func Load() (*Config, error) {
 		Env:            env("ENV", "dev"),
 		ServiceVersion: env("SERVICE_VERSION", "dev"),
 	}
-	if c.StorageZone == "" || c.StorageKey == "" || c.YandexBucket == "" {
-		return nil, fmt.Errorf("STORAGE_ZONE, STORAGE_KEY and YANDEX_BUCKET are required")
+	// The Yandex credentials used to be demanded by compose (`:?`), which
+	// failed the whole file — on every host, including a proxy that never
+	// runs this service. Demanding them here fails only the service that
+	// needs them, and does it at startup rather than at the first S3 call.
+	if c.StorageZone == "" || c.StorageKey == "" || c.YandexBucket == "" ||
+		c.YandexAccessKeyID == "" || c.YandexSecretKey == "" {
+		return nil, fmt.Errorf(
+			"STORAGE_ZONE, STORAGE_KEY, YANDEX_BUCKET, YANDEX_ACCESS_KEY_ID and YANDEX_SECRET_ACCESS_KEY are required")
 	}
 	return c, nil
 }
