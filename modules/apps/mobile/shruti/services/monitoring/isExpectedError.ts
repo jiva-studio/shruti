@@ -49,8 +49,23 @@ const DYNAMIC_IMPORT_FAILURE = /dynamically imported module|importing a module s
 // can race the DB open swallows the throw without logging. What the entry did
 // keep suppressing is the signal itself: `repositories()` throwing IS a
 // boot-ordering regression, and deny-listing it made those invisible.
+//
+// NB: "no such (table|column)" is deliberately NOT here either. It was added
+// for the old-catalog-DB probe — a binary shipping ahead of the published
+// schema — but that probe never reaches this filter: `collectionsRepository`
+// catches it at the source (`isMissingTable` / `isMissingColumn`), returns an
+// empty list and logs nothing. What the entry DID suppress is the observable
+// symptom of a user-DB migration that threw: `runMigrations` stops the ordered
+// list at the first failure, so every later migration stays unapplied and the
+// app reads a table that was never created. That made a broken migration
+// indistinguishable from a probe against an old DB (#1742).
+//
+// NB: "abort(ed|error)" is deliberately NOT here. Unanchored, it matched any
+// message containing "aborted" — SQLITE_ABORT, an IndexedDB transaction abort
+// — while every cancellation it was written for arrives as an AbortController
+// rejection carrying `name: "AbortError"`, already covered by EXPECTED_NAMES.
 const EXPECTED_MESSAGE =
-  /already exists|does not exist|no such (table|column)|no transaction is active|(start|begin) a transaction within a transaction|abort(ed|error)|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|Seek operation failed/i
+  /already exists|does not exist|no transaction is active|(start|begin) a transaction within a transaction|not allowed to make the purchase|Failed to fetch|servers are unreachable|network unreachable|network error has occurred|Сетевое соединение потеряно|The Internet connection appears to be offline|Seek operation failed/i
 
 // Error class names that are control-flow, not faults: request cancellation,
 // user-cancelled IAP, and a store-refused purchase (IAP disabled on this build

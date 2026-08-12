@@ -1,5 +1,4 @@
 export default {
-  search: "Pretraga | Pretraži među {count} numerom | Pretraži među {count} numera",
   specifySearchCriteria: "Unesite upit za pretragu ili izaberite filtere da biste pronašli više.",
   filtersButton: "Filteri",
   filtersSheetTitle: "Filteri",
