@@ -124,8 +124,9 @@ export async function wipeLocalUserData(
   await repos.mediaItems.clearAll()
   await repos.listeningSessions.clearAll()
   // Chat sessions + messages live in the user DB; `chat.clearAll()`
-  // also aborts any in-flight SSE stream and resets the in-memory
-  // store, so no separate refresh is needed below.
+  // also aborts any in-flight SSE stream, drops the preference-backed unread
+  // badge + scroll anchors (#1784) and resets the in-memory store, so no
+  // separate refresh is needed below.
   await chat.clearAll()
   // The sync journal, once every domain row it describes is gone. Present only
   // when the engine was wired (`getDeviceId`); without it nothing was ever
